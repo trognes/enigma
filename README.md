@@ -1,3 +1,6 @@
+> ⚠️  **This repository has been archived**
+> Future development will happen at https://github.com/trognes/enigma
+
 # Enigma cipher tool
 
 This is a tool to encrypt or decrypt messages using an Enigma cipher machine simulator.
