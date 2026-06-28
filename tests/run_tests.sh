@@ -179,6 +179,28 @@ case "$err" in
   *)         check "empty ciphertext rejected (message)" "$err" "*empty*" ;;
 esac
 
+# A wheel cannot be used in two positions: an explicit -w with a repeated digit
+# is rejected at validation time (otherwise bruteforce's permutation guard skips
+# every combination and the search silently finds nothing).
+err=$(printf 'BDZGOWCXLT' | "$ENIGMA" -i -u B -w 112 -r AAA -g AAA 2>&1 >/dev/null)
+code=$?
+check "duplicate wheels rejected (exit code)" "$code" "1"
+case "$err" in
+  *"two positions"*) check "duplicate wheels rejected (message)" "ok" "ok" ;;
+  *)                 check "duplicate wheels rejected (message)" "$err" "*two positions*" ;;
+esac
+
+# Usage/exit conventions: -h prints help to stdout and exits 0; running with no
+# arguments is a usage error (help to stderr, exit 1).
+hout=$("$ENIGMA" -h 2>/dev/null); hcode=$?
+check "-h exits 0" "$hcode" "0"
+case "$hout" in
+  *"Usage: enigma"*) check "-h writes help to stdout" "ok" "ok" ;;
+  *)                 check "-h writes help to stdout" "$hout" "*Usage: enigma*" ;;
+esac
+"$ENIGMA" </dev/null >/dev/null 2>&1
+check "no arguments exits 1" "$?" "1"
+
 # The settings echo (stderr) prints the plugboard as spaced pairs (AB CD),
 # not the internal de-spaced form (ABCD).
 pb_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF" 2>&1 >/dev/null)
