@@ -186,7 +186,16 @@ fi
 #                  is the case the old wheel-order-only scheme left serial.
 # Informational only (no pass/fail).
 if [ "$SCALE" = 1 ]; then
-  cores=$(nproc 2>/dev/null || echo 4)
+  # portable online-CPU count: getconf works on Linux and macOS, then fall back
+  # to nproc (Linux) / sysctl (macOS/BSD); default to 4 if all fail or the
+  # result is not a number
+  cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null \
+            || nproc 2>/dev/null \
+            || sysctl -n hw.ncpu 2>/dev/null \
+            || echo 4)
+  case "$cores" in
+    '' | *[!0-9]*) cores=4 ;;
+  esac
   ct_sc=$(encrypt "$(trunc 100)" "")
 
   sweep() {  # label  args...
