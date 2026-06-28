@@ -584,3 +584,80 @@ mode** (§5). Sharing the rotor *stepping* across start positions (§6, optimisa
 g++ / neutral on clang, because the notch branches are already near-free and the
 trajectory table only adds memory traffic. The per-key row copy is already gone,
 and the relative-path data-file issue is fixed via `-d`/`$ENIGMA_DATA`.
+
+---
+
+## 9. Plugboard hill-climb — algorithm and possible improvements
+
+This section documents how plugboard recovery currently works and the algorithmic
+alternatives, as reference for future cracking-quality work. Nothing here is a bug
+— the current climb is a correct, textbook method — so these are **deferred /
+optional** improvements, not findings.
+
+### How it works today (`hillclimb()`, `enigma.cc:643`)
+
+The plugboard (steckerbrett) is an **involution** on the 26 letters — disjoint
+swapped pairs, applied before and after the rotor stack — stored as
+`m.steckerbrett[26]` with `steck[steck[x]] == x`. It cannot be brute-forced (~1.5
+× 10¹⁴ ten-pair involutions), so for each rotor/ring/start key the tool
+hill-climbs a good plugboard. The climb is **steepest-ascent** over a single move:
+
+- **A pass** scores the current steckerbrett, then tries all `C(26,2) = 325`
+  letter pairs `(a,b)`. For each it applies one move, scores the whole message
+  (`score_iter`, default quadgrams), records the delta, and **restores** before
+  the next (`enigma.cc:678`–`:708`).
+- **The move** (`:681`–`:688`): force `a`–`b` to be a plug; if either endpoint was
+  already plugged, its old partner is ejected to self-steckered. So one move can
+  dissolve up to two existing plugs to form one new — the standard
+  Weierud/Gillogly plugboard move.
+- After all 325 pairs, only the **single best** improving move is committed
+  (`:714`–`:742`); passes repeat until one yields no improvement
+  (`do … while (best_score > last_best)`, `:746`).
+
+**Cost / placement:** with `-c`, `search_worker` runs a *full* climb on **every**
+key (`enigma.cc:892`), so the climb dominates runtime (~400× the bare scan per
+key per the bench notes); per-key cost ≈ passes × 325 × one full-message scoring.
+
+### Weaknesses
+
+- **Local optima** — single-move steepest ascent from one fixed start stops at the
+  nearest optimum; no restarts, no worsening moves.
+- **Scoring schedule** — quadgrams are used from the first plug, but with the wrong
+  key or zero plugs in, the quadgram surface is nearly flat, so early moves are
+  poorly guided.
+- **Climbs every key** — the dominant cost is structural: a full climb runs on the
+  ~99.99 % of keys that are wrong, not just promising ones.
+- **Steepest vs first-improvement** — best-of-325 per pass re-scans all pairs
+  between commits; first-improvement often reaches the same optimum with less work.
+
+### Alternatives (roughly by expected payoff for this tool)
+
+1. **Two-stage scoring schedule** (classic, cheap) — seed with a robust low-order
+   statistic (IC or bigrams) for the first few plugs, switch to tri/quadgrams once
+   enough plugs make higher-order models meaningful (Gillogly/Weierud). Directly
+   fixes the flat-early-surface weakness.
+2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
+   plugboard-free scan (IC/unigram) over the whole key space shortlists the best
+   few hundred keys; the expensive climb runs only on those. Attacks the real cost
+   driver and fits the existing parallel architecture; climb internals unchanged.
+3. **Random restarts** — climb from several random (or best-single-plug) starts and
+   keep the best. Embarrassingly parallel; simplest defence against local optima.
+4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
+   next given that, up to a budget, then refine with the swap climb. Better start
+   than identity.
+5. **Simulated annealing** — accept worsening moves with a decaying probability to
+   escape local optima (Weierud used it for hard/short messages). More robust but
+   needs a cooling schedule and more evaluations; best as a fallback, not default.
+6. **Tabu search** — short list of recently reversed moves to avoid cycling and
+   cross plateaus; modest deterministic robustness gain.
+7. **Richer move set** — add explicit "remove a plug" / "re-pair endpoint" moves as
+   distinct candidates; larger neighbourhood, reaches optima the single move misses.
+8. **Genetic / evolutionary** — population + crossover + mutation; generally overkill
+   here, rarely beats random-restart hill climbing or SA for plugboard recovery.
+
+**Bottom line:** the two changes most worth making if stronger/faster cracking is
+ever wanted are **(2)** a key pre-filter (throughput) and **(1)** a low→high-order
+scoring schedule plus **(3)** random restarts (robustness on short/noisy
+messages). SA/tabu/GA are worth it mainly as fallbacks for the hardest cases. All
+are deferred — the current climb is correct and effective when the rotor key is
+right and the message is long enough.
