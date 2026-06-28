@@ -61,6 +61,7 @@ static const char * notch_string[] =
   };
 
 static const int maxlen = 10240;
+static const int maxtextlen = 1024;
 static const int asize = 26;
 static const int wheels = 3;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
@@ -1061,7 +1062,7 @@ void bruteforce()
     }
 
   double best_score = -1e37;
-  char best_plaintext[1025];
+  char best_plaintext[maxtextlen+1];
 
   for (int u1 = u_min; u1 <= u_max; u1++)
     for (int w1 = w_min[0]; w1 <= w_max[0]; w1++)
@@ -1130,6 +1131,9 @@ void readciphertext()
     }
   ciphertext[j] = 0;
   textlength = j;
+
+  if (textlength > maxtextlen)
+    fatal("Ciphertext too long (maximum is 1024 letters)");
 }
 
 void readplaintext(char * filename)

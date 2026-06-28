@@ -13,7 +13,13 @@ Severity legend: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low / nit.
 
 ## 1. Memory-safety bugs
 
-### 1.1 🔴 Stack buffer overflow on long ciphertext (`best_plaintext[1025]`)
+### 1.1 🔴 Stack buffer overflow on long ciphertext (`best_plaintext[1025]`) — ✅ FIXED
+
+> **Resolved:** the ciphertext is now capped at `maxtextlen = 1024` letters and
+> `readciphertext()` rejects longer input with a fatal error, so the
+> `best_plaintext` buffer (sized `maxtextlen + 1`) can no longer overflow.
+
+
 
 In `bruteforce()`:
 
@@ -314,7 +320,7 @@ lookup, 16-byte blocking). Remaining opportunities:
 
 | # | Severity | Issue |
 |---|----------|-------|
-| 1.1 | 🔴 | `best_plaintext[1025]` overflow for ciphertext > 1024 letters |
+| 1.1 | 🔴 | ~~`best_plaintext[1025]` overflow for ciphertext > 1024 letters~~ ✅ fixed (input capped at 1024 + validated) |
 | 2.1 | 🔴 | Index of coincidence formula is wrong (`-i` broken) |
 | 7 | 🔴 | No tests / CI for subtle crypto logic |
 | 1.2 | 🟠 | `-l` can overflow `filename[100]`; no language allow-list |
