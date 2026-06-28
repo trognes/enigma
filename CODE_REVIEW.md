@@ -95,26 +95,41 @@ tail masked).
 
 ## 2. Correctness bugs
 
-### 2.1 🔴 Index of coincidence is computed incorrectly
+### 2.1 🔴 Index of coincidence is computed incorrectly — ✅ FIXED
 
-Both `ic_score()` and `ic_score_decode()` compute:
+Both `ic_score()` and `ic_score_decode()` computed:
 
 ```c
 for (int j = 1; j < 26; j++)
     score += freq[j-1] * freq[j];   // product of ADJACENT letters' counts
 ```
 
-This multiplies the frequency of each letter by the frequency of the *next
+This multiplied the frequency of each letter by the frequency of the *next
 letter in the alphabet* (A·B + B·C + …). The index of coincidence is
 
   IC = Σ_i f_i·(f_i − 1) / (N·(N − 1))
 
 i.e. each letter's count times itself, summed, normalized. The implemented
-formula is not IC at all and has no cryptanalytic meaning; the `-i` scoring mode
-is effectively broken. (It also skips the `j = 0` term and never normalizes.)
+formula was not IC at all and had no cryptanalytic meaning; the `-i` scoring mode
+was effectively broken. (It also skipped the `j = 0` term and never normalized.)
 
-**Fix direction:** `score += freq[j] * (freq[j] - 1);` over all 26 letters
-(normalization is optional since comparisons are same-length).
+**How bad it was — measured.** Comparing the old formula against a correct,
+normalized IC on a 297-letter English passage versus 2000 random strings of the
+same length:
+
+| metric | English | random mean | random max | random samples ≥ English |
+|--------|---------|-------------|------------|--------------------------|
+| old (adjacent-product) | 3483 | 3252 | 3509 | **3 / 2000** |
+| correct IC | 0.0624 | 0.0385 | 0.0425 | **0 / 2000** |
+
+The old metric put English only ~7 % above random noise with the distributions
+overlapping (a random string outscored the real English), whereas correct IC
+separates them cleanly (English sits far beyond the random maximum). End to end:
+with the old formula a brute-force start-position search under `-i` returned the
+**wrong** key on a no-plugboard test; with the corrected formula it recovers the
+plaintext. The corrected formula was applied to both functions, summed over all
+26 letters and normalized by `N·(N−1)` (so the value is the standard ≈0.067 for
+English), and is guarded by a new `-i` recovery test in the suite.
 
 ### 2.2 🟠 `fscanf` partial-match leaves variables uninitialized
 
@@ -321,15 +336,16 @@ lookup, 16-byte blocking). Remaining opportunities:
   (`tests/run_tests.sh`, run via `make test`) covering the canonical
   `AAAAA → BDZGO` known-answer vector, reciprocity, plugboard, ring/start
   offsets, the double-stepping anomaly, the Norway variant, input filtering and
-  the 1024-character limit, plus end-to-end cracking (hill-climb and
-  brute-force recovery). A GitHub Actions workflow
+  the 1024-character limit, plus end-to-end cracking (hill-climb, brute-force,
+  and index-of-coincidence recovery). A GitHub Actions workflow
   (`.github/workflows/ci.yml`) builds and runs `make test` on every push and
   pull request. The double-stepping anomaly is now covered by an
   externally-anchored known-answer test (see §2.4), alongside the authentic 1930
   instruction-manual message vector.
-- 🟢 **`Makefile`** has no `clean`, `install`, or `debug` target and does not
-  list the data files as dependencies. A debug build (`-O0 -g
-  -fsanitize=address,undefined`) target would immediately flag §1.1 and §1.4.
+- 🟢 **`Makefile`** now has `test` and `clean` targets but still no `install` or
+  `debug` target and does not list the data files as dependencies. A debug build
+  (`-O0 -g -fsanitize=address,undefined`) target would immediately flag §1.4 (and
+  would have flagged the now-fixed §1.1).
 
 ---
 
@@ -338,19 +354,21 @@ lookup, 16-byte blocking). Remaining opportunities:
 | # | Severity | Issue |
 |---|----------|-------|
 | 1.1 | 🔴 | ~~`best_plaintext[1025]` overflow for ciphertext > 1024 letters~~ ✅ fixed (input capped at 1024 + validated) |
-| 2.1 | 🔴 | Index of coincidence formula is wrong (`-i` broken) |
+| 2.1 | 🔴 | ~~Index of coincidence formula is wrong (`-i` broken)~~ ✅ fixed (Σ f·(f−1)/N(N−1) + recovery test) |
 | 7 | 🟢 | ~~No tests / CI~~ ✅ test suite (`make test`) + GitHub Actions CI added |
 | 1.2 | 🟠 | `-l` can overflow `filename[100]`; no language allow-list |
 | 2.2 | 🟠 | `fscanf` partial matches use uninitialized variables |
 | 3 | 🟠 | Large amount of dead/misleading code (`all_subst_score` = random, etc.) |
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
 | 1.3/1.4 | 🟡 | Single `read()` truncation; 16-byte block over-read past `textlength` |
-| 2.3/2.4 | 🟡 | Unused `total` (no normalization); stepping unverified |
+| 2.3/2.4 | 🟡/🟢 | Unused `total` (no normalization); ~~stepping unverified~~ ✅ double-step KAT added |
 | 4/5/6 | 🟡 | Legacy `index()`, `char` returns, duplicated readers/scorers, no parallelism |
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
-**Progress:** (1.1) the stack overflow and (7) the test suite are now done; the
-tests give confidence to safely tackle the remaining high-value items — (2.1)
-the IC formula, the dead-code cleanup (§3, including the `best_steckerbrett`
-out-of-bounds `memcpy` that the compiler already warns about), and eventually
-the global-state refactor that would unlock threading.
+**Progress:** (1.1) the stack overflow, (2.1) the IC formula, (2.4) stepping
+verification, and (7) the test suite + CI are now done. The tests give
+confidence to safely tackle the remaining high-value items — the dead-code
+cleanup (§3, including the `best_steckerbrett` out-of-bounds `memcpy` that the
+compiler already warns about), the `fscanf`/`-l` input-handling fixes
+(§1.2, §2.2), and eventually the global-state refactor that would unlock
+threading.

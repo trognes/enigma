@@ -382,9 +382,9 @@ double ic_score(char * text, int len)
   for(int i=0; i<len; i++)
     freq[char2num(text[i])] += 1.0;
   double score = 0.0;
-  for(int j=1; j<26; j++)
-    score += freq[j-1] * freq[j];
-  return score;
+  for(int j=0; j<26; j++)
+    score += freq[j] * (freq[j] - 1.0);
+  return (len > 1) ? score / ((double) len * (len - 1)) : 0.0;
 }
 
 void init()
@@ -705,9 +705,9 @@ double ic_score_decode(int textlength)
     freq[step_mapped(i, num_ciphertext[i])]++;
 
   double score = 0.0;
-  for(int j=1; j<26; j++)
-    score += freq[j-1] * freq[j];
-  return score;
+  for(int j=0; j<26; j++)
+    score += (double) freq[j] * (freq[j] - 1);
+  return (textlength > 1) ? score / ((double) textlength * (textlength - 1)) : 0.0;
 }
 
 void showsteckerbrett()

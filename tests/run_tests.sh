@@ -156,6 +156,16 @@ check "crack: brute-force recovers start position" \
   "$(run "$br_ct" -u B -w 123 -r AAA -g ... -l english -q)" \
   "$br_plain"
 
+# Index-of-coincidence scoring (-i) must recover the start position on its own.
+# This guards the IC formula: the previous (incorrect) formula summed products
+# of alphabetically-adjacent letter counts and could NOT distinguish the real
+# plaintext from gibberish, so this brute-force search returned the wrong key.
+ic_plain="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTEN"
+ic_ct=$(run "$ic_plain" -i -u B -w 123 -r AAA -g QXP)
+check "crack: index of coincidence recovers start position" \
+  "$(run "$ic_ct" -i -u B -w 123 -r AAA -g ...)" \
+  "$ic_plain"
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
