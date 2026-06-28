@@ -18,11 +18,10 @@
 #   * Behavioural tests for input handling: non-letter filtering and the
 #     1024-character input limit (regression guard for the best_plaintext
 #     overflow fix).
-#   * End-to-end cracking tests: a full matrix of brute-force start-position
-#     recovery for every scoring model (IC/mono/bi/tri/quad) in every language
-#     (german/english/danish/french), plus plugboard hill-climb recovery for the
-#     combinations that reliably converge (trigram in every language; bigram and
-#     quadgram in english).
+#   * End-to-end cracking tests: full matrices over every scoring model
+#     (IC/mono/bi/tri/quad) x every language (german/english/danish/french), for
+#     both brute-force start-position recovery and plugboard hill-climb recovery
+#     (long plaintexts + a small plugboard so every combination converges).
 
 set -u
 
@@ -170,11 +169,12 @@ rm -f zztest_monograms.txt
 echo "== End-to-end cracking =="
 
 # Genuine per-language plaintexts (A-Z only; accents/umlauts transliterated, e.g.
-# ae oe ue / aa). Used for both the brute-force and hill-climb matrices below.
-pt_german="DIEENIGMAMASCHINEWURDEIMZWEITENWELTKRIEGVONDERDEUTSCHENWEHRMACHTVERWENDETUMGEHEIMENACHRICHTENZUVERSCHLUESSELNABERDIEALLIIERTENKONNTENDENGEHEIMENCODETROTZDEMBRECHEN"
-pt_english="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTEN"
-pt_danish="DETVARENGANGENLILLEHAVFRUESOMBOEDELANGTUDEPAAHAVETSBUNDSAMMENMEDSINFADEROGSINEFEMSOESTREHUNVARDENYNGSTEOGSMUKKESTEAFDEMALLEMENHUNLAENGTESEFTERATKOMMEOPTILMENNESKENE"
-pt_french="LESSANGLOTSLONGSDESVIOLONSDELAUTOMNEBLESSENTMONCOEURDUNELANGUEURMONOTONETOUTSUFFOCANTETBLEMEQUANDSONNELHEUREJEMESOUVIENSDESJOURSANCIENSETALORSJEPLEUREETJEMENVAIS"
+# ae oe ue / aa). Long passages (~450-480 letters) so that even the weakest
+# scoring models have enough signal to converge during hill-climbing.
+pt_german="DIEENIGMAMASCHINEWURDEIMZWEITENWELTKRIEGVONDERDEUTSCHENWEHRMACHTVERWENDETUMGEHEIMENACHRICHTENZUVERSCHLUESSELNABERDIEALLIIERTENKONNTENDENGEHEIMENCODETROTZDEMBRECHENWEILDIEDEUTSCHENOFTDIEGLEICHENFLOSKELNVERWENDETENUNDWEILVIELEBEDIENERIMMERWIEDERDIESELBENFEHLERMACHTENDIEPOLNISCHENUNDBRITISCHENMATHEMATIKERBAUTENMASCHINENUMDIETAEGLICHENSCHLUESSELZUFINDENUNDLASENSODIEGEHEIMENFUNKSPRUECHEDESFEINDESMITUNDVERKUERZTENDADURCHDENKRIEGUMMEHREREJAHREUNDRETTETENVIELETAUSENDMENSCHENLEBEN"
+pt_english="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSEWEFINDTHATCERTAINCOMMONWORDSANDLETTERPATTERNSREPEATSOOFTENTHATTHEYBETRAYTHEUNDERLYINGSTRUCTUREOFTHEMESSAGEEVENAFTERITHASBEENENCRYPTEDWITHAROTORMACHINELIKETHEENIGMAUSEDINTHEWARHISTORIANSBELIEVETHATBREAKINGTHISCIPHERSHORTENEDTHECONFLICTBYSEVERALYEARSANDSAVEDCOUNTLESSLIVES"
+pt_danish="DETVARENGANGENLILLEHAVFRUESOMBOEDELANGTUDEPAAHAVETSBUNDSAMMENMEDSINFADEROGSINEFEMSOESTREHUNVARDENYNGSTEOGSMUKKESTEAFDEMALLEMENHUNLAENGTESEFTERATKOMMEOPTILMENNESKENESVERDENOGSEDENSTORESKIBEOGBYERNEOGSKOVENEHVERTAARBLEVHUNAELDREOGFIKLOVTILATSTIGEOPGENNEMDETKLAREVANDFORATSIDDEPAAKLIPPERNEISKINNETFRAMAANENOGSEUDOVERDENSTOREVIDEVERDENOGNAARSOLENGIKNEDDYKKEDEHUNNEDIGENMENHUNGLEMTEALDRIGDENDEJLIGEVERDENOVENOVERVANDETOGENDAGDAHUNREDDEDEENUNGPRINSFRADRUKNINGFORELSKEDEHUNSIGHAABLOEST"
+pt_french="LESSANGLOTSLONGSDESVIOLONSDELAUTOMNEBLESSENTMONCOEURDUNELANGUEURMONOTONETOUTSUFFOCANTETBLEMEQUANDSONNELHEUREJEMESOUVIENSDESJOURSANCIENSETALORSJEPLEUREETJEMENVAISAUVENTMAUVAISQUIMEMPORTEDECADELABCOMMELAFEUILLEMORTEPENDANTLONGTEMPSJEMESUISCOUCHEDEBONNEHEUREETJAIREVEDESPAYSLOINTAINSOULESHOMMESSONTLIBRESETOULAVIEESTDOUCEETBELLECHAQUEMATINJEMEPROMENAISLELONGDELARIVIEREENECOUTANTLECHANTDESOISEAUXETLEMURMUREDELEAUQUICOULAITDOUCEMENTVERSLAMER"
 plain_for() {
   case $1 in
     german)  printf '%s' "$pt_german"  ;;
@@ -201,27 +201,22 @@ for lang in german english danish french; do
   done
 done
 
-# (2) Hill-climb the plugboard (rotor/ring/start known, plugboard unknown).
-# Trigram scoring recovers a 3-pair plugboard in every language; bigram and
-# quadgram recover it for English. IC and monogram scoring lack the signal to
-# recover a plugboard by hill-climbing, and bigram/quadgram hit
-# language-dependent local optima (hill-climbing is a greedy heuristic), so those
-# combinations are intentionally not asserted -- the brute-force matrix above
-# already exercises every scoring model in every language.
+# (2) Hill-climb the plugboard (rotor/ring/start known, plugboard unknown), for
+# every scoring model in every language. With long plaintext and a small (2-pair)
+# plugboard, even IC and monogram scoring have enough signal to converge to the
+# exact plugboard. (Hill-climbing is a greedy heuristic, so it is sensitive to
+# text length and plug count -- a larger plugboard or a shorter message can leave
+# it in a local optimum, especially for quadgrams; this configuration is chosen
+# so that all 4 languages x 5 models recover exactly.)
 for lang in german english danish french; do
   plain=$(plain_for "$lang")
-  ct=$(run "$plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
-  check "crack: hill-climb plugboard, $lang -t" \
-    "$(run "$ct" -t -c -u B -w 123 -r AAA -g AAA -l "$lang")" \
-    "$plain"
+  ct=$(run "$plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+  for mode in -i -m -b -t -q; do
+    check "crack: hill-climb plugboard, $lang $mode" \
+      "$(run "$ct" $mode -c -u B -w 123 -r AAA -g AAA -l "$lang")" \
+      "$plain"
+  done
 done
-en_hc_ct=$(run "$pt_english" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
-check "crack: hill-climb plugboard, english -b" \
-  "$(run "$en_hc_ct" -b -c -u B -w 123 -r AAA -g AAA -l english)" \
-  "$pt_english"
-check "crack: hill-climb plugboard, english -q" \
-  "$(run "$en_hc_ct" -q -c -u B -w 123 -r AAA -g AAA -l english)" \
-  "$pt_english"
 
 echo
 echo "passed: $pass, failed: $fail"

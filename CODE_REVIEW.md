@@ -363,11 +363,11 @@ lookup, 16-byte blocking). Remaining opportunities:
   (`tests/run_tests.sh`, run via `make test`) covering the canonical
   `AAAAA → BDZGO` known-answer vector, reciprocity, plugboard, ring/start
   offsets, the double-stepping anomaly, the Norway variant, input filtering and
-  the 1024-character limit, plus end-to-end cracking — a brute-force
-  start-position matrix over every scoring model (IC/mono/bi/tri/quad) in every
-  language (german/english/danish/french), and plugboard hill-climb recovery for
-  the reliably-converging combinations (trigram in all languages; bigram and
-  quadgram in english). The double-stepping anomaly is covered by
+  the 1024-character limit, plus end-to-end cracking — brute-force start-position
+  and plugboard hill-climb matrices over every scoring model (IC/mono/bi/tri/quad)
+  in every language (german/english/danish/french); the hill-climb matrix uses
+  long plaintexts and a small (2-pair) plugboard so every model converges. The
+  double-stepping anomaly is covered by
   an externally-anchored known-answer test (see §2.4), alongside the authentic
   1930 instruction-manual message vector.
 
