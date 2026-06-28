@@ -64,6 +64,20 @@ static const int wheels = 3;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 
+static const int blocksize = 16;   /* letters decoded per block in decode_num */
+
+/* Layout of the reflector[] / rotor[] wiring tables for Norway Enigma mode:
+   reflector index 3 is UKW-N, rotor indices 8-12 are Norway wheels 1-5. */
+static const int norway_reflector_index = 3;
+static const int norway_rotor_base = 8;
+
+/* A score lower than any achievable plaintext score (all models score >= 0). */
+static const double score_min = -1e30;
+
+/* Plaintext scoring models; values match the scoring_name[] order and the
+   *_score_decode dispatch in score_iter(). */
+enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD };
+
 static const char * opt_ukw;
 static const char * opt_walzen;
 static const char * opt_ringstellung;
@@ -266,10 +280,10 @@ void init_walzen(int u, int a, int b, int c)
 {
   if (opt_norenigma)
     {
-      ukw = 3+u;
-      walzenlage[0] = 8+a;
-      walzenlage[1] = 8+b;
-      walzenlage[2] = 8+c;
+      ukw = norway_reflector_index + u;
+      walzenlage[0] = norway_rotor_base + a;
+      walzenlage[1] = norway_rotor_base + b;
+      walzenlage[2] = norway_rotor_base + c;
     }
   else
     {
@@ -414,7 +428,7 @@ inline void map16_step(unsigned char * source,
                        unsigned char * map,
                        unsigned char * dest)
 {
-  for (int i = 0; i < 16; i++)
+  for (int i = 0; i < blocksize; i++)
     dest[i] = map[26*i+source[i]];
 }
 
@@ -422,7 +436,7 @@ inline void map16_direct(unsigned char * source,
                          unsigned char * map,
                          unsigned char * dest)
 {
-  for (int i = 0; i < 16; i++)
+  for (int i = 0; i < blocksize; i++)
     dest[i] = map[source[i]];
 }
 
@@ -451,12 +465,12 @@ inline void decode_num()
   fprintf(stderr, "\n");
 #else
 
-  int blocks = textlength & ~15;
+  int blocks = (textlength / blocksize) * blocksize;
 
-  for (int i = 0; i < blocks; i += 16)
+  for (int i = 0; i < blocks; i += blocksize)
     {
-      unsigned char temp1[16];
-      unsigned char temp2[16];
+      unsigned char temp1[blocksize];
+      unsigned char temp2[blocksize];
       showit("cipher", num_ciphertext+i);
       map16_direct(num_ciphertext+i, steckerbrett, temp1);
       showit("steck ", temp1);
@@ -563,12 +577,16 @@ void showsteckerbrett()
 
 void showconfig()
 {
+  /* display wheel numbers 1..N: standard rotors are index+1, Norway wheels are
+     index - norway_rotor_base + 1; the reflector prints as its letter (N for
+     Norway, else A/B/C). */
+  int wheel_offset = opt_norenigma ? 1 - norway_rotor_base : 1;
   fprintf(stderr,
           "W: %c%d%d%d R: %c%c%c G: %c%c%c ",
-          num2char(ukw + (opt_norenigma ? 10 : 0)),
-          walzenlage[0] + (opt_norenigma ? -7 : 1),
-          walzenlage[1] + (opt_norenigma ? -7 : 1),
-          walzenlage[2] + (opt_norenigma ? -7 : 1),
+          opt_norenigma ? 'N' : num2char(ukw),
+          walzenlage[0] + wheel_offset,
+          walzenlage[1] + wheel_offset,
+          walzenlage[2] + wheel_offset,
           num2char(ringstellung[0]),
           num2char(ringstellung[1]),
           num2char(ringstellung[2]),
@@ -586,23 +604,23 @@ double score_iter(int iter, int textlength)
 
   switch(opt_scoring)
     {
-    case 0:
+    case SCORE_IC:
       score = ic_score_decode(textlength);
       break;
 
-    case 1:
+    case SCORE_MONO:
       score = monogram_score_decode(textlength);
       break;
 
-    case 2:
+    case SCORE_BI:
       score = bigram_score_decode(textlength);
       break;
 
-    case 3:
+    case SCORE_TRI:
       score = trigram_score_decode(textlength);
       break;
 
-    case 4:
+    case SCORE_QUAD:
       score = quadgram_score_decode(textlength);
       break;
 
@@ -656,12 +674,13 @@ double hillclimb(int textlength,
 {
   /* Try to find the optimal steckerbrett for the given other settings */
 
-  double best_score = -1e29;
-  double last_best = -1e30;
+  double best_score;
+  double last_best;
 
   int iter = 1;
 
-  while (best_score > last_best)
+  /* iterate until a full pass over all plug swaps yields no improvement */
+  do
     {
       best_score = score_iter(iter, textlength);
 
@@ -754,6 +773,7 @@ double hillclimb(int textlength,
 
       iter++;
     }
+  while (best_score > last_best);
 
   decode(textlength, ciphertext, plaintext);
 
@@ -822,7 +842,7 @@ void bruteforce()
         }
     }
 
-  double best_score = -1e37;
+  double best_score = score_min;
   char best_plaintext[maxlen+1];
 
   for (int u1 = u_min; u1 <= u_max; u1++)
@@ -1063,7 +1083,7 @@ int main(int argc, char * * argv)
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
-  opt_scoring = 4;
+  opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
 
   /* get arguments */
@@ -1097,19 +1117,19 @@ int main(int argc, char * * argv)
           opt_plaintext = optarg;
           break;
         case 'i':
-          opt_scoring = 0;
+          opt_scoring = SCORE_IC;
           break;
         case 'm':
-          opt_scoring = 1;
+          opt_scoring = SCORE_MONO;
           break;
         case 'b':
-          opt_scoring = 2;
+          opt_scoring = SCORE_BI;
           break;
         case 't':
-          opt_scoring = 3;
+          opt_scoring = SCORE_TRI;
           break;
         case 'q':
-          opt_scoring = 4;
+          opt_scoring = SCORE_QUAD;
           break;
         case 'c':
           opt_hillclimb = 1;
@@ -1183,7 +1203,7 @@ int main(int argc, char * * argv)
 
   /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no
      default; the index of coincidence (-i) is language-independent. */
-  if ((opt_scoring != 0) && (! opt_language))
+  if ((opt_scoring != SCORE_IC) && (! opt_language))
     fatal("A scoring language is required: add -l <language> "
           "(e.g. -l english), or use -i for the language-independent "
           "index of coincidence");
@@ -1210,18 +1230,18 @@ int main(int argc, char * * argv)
 
   switch (opt_scoring)
     {
-    case 0:
+    case SCORE_IC:
       break;
-    case 1:
+    case SCORE_MONO:
       ngrams_read(1, monograms, "monograms");
       break;
-    case 2:
+    case SCORE_BI:
       ngrams_read(2, & bigrams[0][0], "bigrams");
       break;
-    case 3:
+    case SCORE_TRI:
       ngrams_read(3, & trigrams[0][0][0], "trigrams");
       break;
-    case 4:
+    case SCORE_QUAD:
       ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams");
       break;
     default:

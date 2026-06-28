@@ -316,10 +316,15 @@ instrumentation rather than deleted.
   implementations of the same math; the non-`decode` variants appear unused in
   the hot path. (The four copy-paste n-gram *readers* have been unified into a
   single `ngrams_read(n, table, suffix)` ✅; the parallel *scorers* remain.)
-- 🟢 **Magic numbers** throughout: `65`, `26`, `1025`, `100`, `10000`,
-  offsets `+3`/`+8`/`+10`/`-7` for Norway indexing in `init_walzen` and
-  `showconfig`. The Norway offset logic in particular is duplicated and easy to
-  get out of sync.
+- 🟡 **Magic numbers.** The high-value semantic ones have been named ✅: the
+  scoring models are an `enum` (`SCORE_IC` … `SCORE_QUAD`), the Norway table
+  offsets are `norway_reflector_index` / `norway_rotor_base` (used by both
+  `init_walzen` and `showconfig`), the decode block width is `blocksize`, and
+  the search/hill-climb "−infinity" sentinel is a single `score_min` (hill-climb
+  was converted to a `do`/`while` so it no longer needs two priming values).
+  Still pending (a mechanical sweep): the pervasive literal `26` → `asize`,
+  wheel-count `3` → `wheels`, and `65` → the `'A'` character literal in
+  `char2num`/`num2char`.
 
 ---
 
