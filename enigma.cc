@@ -148,7 +148,8 @@ void monograms_read()
         break;
       if ((a >= 'A') && (a <= 'Z'))
         {
-          monograms[char2num(a)] = count + 1.0;        }
+          monograms[char2num(a)] = count + 1.0;
+        }
     }
 
   for(int i=0; i<26; i++)
@@ -189,7 +190,8 @@ void bigrams_read()
         break;
       if ((a >= 'A') && (a <= 'Z') && (b >= 'A') && (b <= 'Z'))
         {
-          bigrams[char2num(a)][char2num(b)] = count + 1;        }
+          bigrams[char2num(a)][char2num(b)] = count + 1;
+        }
     }
 
   for(int i=0; i<26; i++)
@@ -237,7 +239,8 @@ void trigrams_read()
           (b >= 'A') && (b <= 'Z') &&
           (c >= 'A') && (c <= 'Z'))
         {
-          trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;        }
+          trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;
+        }
     }
 
   fclose(f);
@@ -288,7 +291,8 @@ void quadgrams_read()
           (c >= 'A') && (c <= 'Z') &&
           (d >= 'A') && (d <= 'Z'))
         {
-          quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;        }
+          quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;
+        }
     }
 
   fclose(f);
