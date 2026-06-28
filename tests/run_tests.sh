@@ -238,6 +238,29 @@ check "n-gram parser tolerates messy file" \
   "AAAAAAAAAA"
 rm -f zztest_monograms.txt
 
+# Data directory: the n-gram files can live somewhere other than the current
+# directory, selected by -d or $ENIGMA_DATA (default "."). Run from a different
+# CWD (/) with an absolute binary so only the resolved data dir can find them.
+root=$(pwd)
+check "-d finds n-gram files from another CWD" \
+  "$( cd / && printf 'BDZGOWCXLT' | "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g AAA 2>/dev/null )" \
+  "AAAAAAAAAA"
+check "ENIGMA_DATA finds n-gram files from another CWD" \
+  "$( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA="$root" "$root/enigma" -m -l english -u B -w 123 -r AAA -g AAA 2>/dev/null )" \
+  "AAAAAAAAAA"
+check "-d overrides ENIGMA_DATA" \
+  "$( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA=/nonexistent "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g AAA 2>/dev/null )" \
+  "AAAAAAAAAA"
+
+# A missing data directory fails with the full path it tried (and before stdin).
+err=$(printf 'ABC' | "$root/enigma" -q -l english -d /nonexistent -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+code=$?
+check "missing data dir rejected (exit code)" "$code" "1"
+case "$err" in
+  */nonexistent/english_quadgrams.txt*) check "missing data dir names the path" "ok" "ok" ;;
+  *) check "missing data dir names the path" "$err" "*/nonexistent/english_quadgrams.txt*" ;;
+esac
+
 echo "== End-to-end cracking =="
 
 # Genuine per-language plaintexts (A-Z only; accents/umlauts transliterated, e.g.

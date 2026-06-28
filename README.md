@@ -39,6 +39,7 @@ Usage: enigma [OPTIONS]
   -t           Use trigram statistics to determine plaintext score
   -q           Use quadgram statistics to determine plaintext score [default]
   -p filename  Name of file containing plaintext to compare result with
+  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]
   -T integer   Number of worker threads for the search (1-256) [1]
 
 Defaults are indicated in [square brackets].
@@ -63,7 +64,9 @@ is printed to standard error.
 
 The files with the ngram frequencies for various languages have been obtained from the
 [Practical cryptograhy](http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/)
-website. Additional languages are available there.
+website. Additional languages are available there. By default they are read from
+the current directory; use `-d <directory>` (or set `ENIGMA_DATA`) to read them
+from elsewhere, so the tool can be run from any working directory.
 
 The hill climbing strategy is based on the algorithms described in the
 [publications by Frode Weierud et al.](http://cryptocellar.org/Enigma/)

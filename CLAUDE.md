@@ -67,8 +67,10 @@ refactor to confirm single-thread throughput hasn't regressed.
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
 are kept; everything else (spaces, punctuation, case) is stripped. The n-gram
-files must be present **in the current working directory** at runtime because
-filenames are built as `<language>_<ngram>.txt` and opened relative to the CWD.
+files are read from a **data directory** (filenames built as
+`<datadir>/<language>_<ngram>.txt`) resolved as `-d <dir>` → `$ENIGMA_DATA` →
+`.` (the current directory, the historical default) — so the tool can run from
+any working directory.
 
 ### Common invocations
 
@@ -101,9 +103,11 @@ filenames are built as `<language>_<ngram>.txt` and opened relative to the CWD.
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the
   default model)
 - `-p file` compare the recovered plaintext against a known plaintext file
+- `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`)
+- `-T N` worker threads for the search (default 1, max 256)
 
-Every run echoes the resolved configuration (scoring model, language, machine
-settings, plugboard, ciphertext length) to stderr.
+Every run echoes the resolved configuration (scoring model, language, n-gram data
+directory, machine settings, plugboard, ciphertext length) to stderr.
 
 > **Gotcha — match `-l` to the plaintext language, especially for `-q`.** There
 > is no default language: `-m/-b/-t/-q` require `-l`, and the n-gram tables are
