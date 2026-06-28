@@ -1,10 +1,8 @@
-#include <strings.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <sys/stat.h>
@@ -126,8 +124,6 @@ void monograms_read()
   for(int i=0; i<26; i++)
     monograms[i] = 1.0;
 
-  double total = 26;
-
   FILE * f;
 
   char filename[64];
@@ -152,9 +148,7 @@ void monograms_read()
         break;
       if ((a >= 'A') && (a <= 'Z'))
         {
-          monograms[char2num(a)] = count + 1.0;
-          total += count;
-        }
+          monograms[char2num(a)] = count + 1.0;        }
     }
 
   for(int i=0; i<26; i++)
@@ -169,8 +163,6 @@ void bigrams_read()
   for(int i=0; i<26; i++)
     for(int j=0; j<26; j++)
       bigrams[i][j] = 1.0;
-
-  double total = 26*26;
 
   FILE * f;
 
@@ -197,9 +189,7 @@ void bigrams_read()
         break;
       if ((a >= 'A') && (a <= 'Z') && (b >= 'A') && (b <= 'Z'))
         {
-          bigrams[char2num(a)][char2num(b)] = count + 1;
-          total += count;
-        }
+          bigrams[char2num(a)][char2num(b)] = count + 1;        }
     }
 
   for(int i=0; i<26; i++)
@@ -216,8 +206,6 @@ void trigrams_read()
     for(int j=0; j<26; j++)
       for(int k=0; k<26; k++)
         trigrams[i][j][k] = 1.0;
-
-  double total = 26*26*26;
 
   FILE * f;
 
@@ -249,9 +237,7 @@ void trigrams_read()
           (b >= 'A') && (b <= 'Z') &&
           (c >= 'A') && (c <= 'Z'))
         {
-          trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;
-          total += count;
-        }
+          trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;        }
     }
 
   fclose(f);
@@ -269,8 +255,6 @@ void quadgrams_read()
       for(int k=0; k<26; k++)
         for(int l=0; l<26; l++)
           quadgrams[i][j][k][l] = 1;
-
-  unsigned int total = 26*26*26*26;
 
   FILE * f;
 
@@ -304,9 +288,7 @@ void quadgrams_read()
           (c >= 'A') && (c <= 'Z') &&
           (d >= 'A') && (d <= 'Z'))
         {
-          quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;
-          total += count;
-        }
+          quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;        }
     }
 
   fclose(f);
@@ -375,8 +357,8 @@ void init()
     for (int j=0; j < asize; j++)
       {
         rotor_fwd[i][j] = char2num(rotor_string[i][j]);
-        rotor_rev[i][j] = index(rotor_string[i],num2char(j)) - rotor_string[i];
-        notch[i][j] = index(notch_string[i], num2char(j)) != NULL;
+        rotor_rev[i][j] = strchr(rotor_string[i],num2char(j)) - rotor_string[i];
+        notch[i][j] = strchr(notch_string[i], num2char(j)) != NULL;
       }
 
   for (int i=0; i < reflector_count; i++)
@@ -434,7 +416,7 @@ void init_ring_grund(int a, int b, int c, int x, int y, int z)
   grundstellung[2] = z;
 }
 
-char rotor_l(int x, int rotor_no)
+int rotor_l(int x, int rotor_no)
 {
   int y = grundstellung[rotor_no] - ringstellung[rotor_no];
   x = (x + asize + y) % asize;
@@ -443,7 +425,7 @@ char rotor_l(int x, int rotor_no)
   return x;
 }
 
-char rotor_r(int x, int rotor_no)
+int rotor_r(int x, int rotor_no)
 {
   int y = grundstellung[rotor_no] - ringstellung[rotor_no];
   x = (x + asize + y) % asize;

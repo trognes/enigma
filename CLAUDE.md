@@ -133,7 +133,6 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
   buffers (`ciphertext`, `plaintext`, `num_*`, `mapping`, `subst_array`), and
   the loaded n-gram tables are all file-scope globals. Most functions also take
   a `textlength` parameter even though a global of the same name exists.
-- The code uses legacy `index()` (from `<strings.h>`) rather than `strchr`.
 - Debug instrumentation is intentionally retained: `showit`, `showconfig`,
   `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
   compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/

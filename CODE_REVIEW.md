@@ -162,16 +162,17 @@ whitespace instead of misreading a newline as a letter, and the redundant
 `if (ret < 1) break;` / `if (ret > 0)` pair in the trigram/quadgram readers is
 gone. Guarded by a "messy file" parser test.
 
-### 2.3 🟡 `total` is accumulated but never used (no normalization)
+### 2.3 🟢 `total` is accumulated but never used (no normalization) — ✅ FIXED
 
-Every reader maintains a `total` (and the quadgram one uses `unsigned int
-total`) and increments it, but it is never divided into the counts. Scores are
-therefore `log10(count + 1)` of raw counts, not log-probabilities. For ranking
-candidate keys over a *fixed-length* ciphertext this is only a constant offset,
-so results are unaffected — but the variable is dead and misleading, and the
-code reads as if it intended Laplace-smoothed log-probabilities (the `+ 1` /
-seeding tables with `1.0` confirms that intent). Either finish the
-normalization or delete `total`.
+Every reader maintained a `total` (the quadgram one as `unsigned int total`) and
+incremented it, but never divided it into the counts. Scores are
+`log10(count + 1)` of raw counts, not log-probabilities — which for ranking
+candidate keys over a *fixed-length* ciphertext is only a constant offset, so
+results are unaffected.
+
+**Resolved.** The dead `total` variable was removed from all four readers. (The
+ranking is unchanged; normalization was never needed for same-length
+comparisons, so it was dropped rather than completed.)
 
 ### 2.4 🟢 Stepping model verified against a reference — ✅ ADDRESSED
 
@@ -254,14 +255,13 @@ instrumentation rather than deleted.
 
 ## 4. API misuse, portability, and modern-C++ concerns
 
-- 🟡 **Legacy `index()` from `<strings.h>`** is used in `init()` instead of the
-  standard `strchr`. `index` is removed in POSIX-2008 deprecation tracks and is
-  non-standard C++. Also `<sys/uio.h>`/`<sys/types.h>` are included but unused.
-- 🟡 **`rotor_l`/`rotor_r` return `char`** but compute and are consumed as
-  `int`s in 0–25. `char` may be signed; the values fit, but returning `int`
-  would be clearer and avoids any narrowing surprises. `substitute` chains these
-  through `steckerbrett[...]` indexing, so a stray negative would index out of
-  bounds.
+- 🟢 **Legacy `index()` from `<strings.h>`** ✅ replaced with the standard
+  `strchr` in `init()`; `<strings.h>` and the unused `<sys/uio.h>` includes were
+  dropped. (`<sys/types.h>` is now genuinely used for `ssize_t` in the read
+  loops, so it stays.)
+- 🟢 **`rotor_l`/`rotor_r` return `char`** but compute and are consumed as
+  `int`s in 0–25. ✅ Changed to return `int`, avoiding any signed-`char`
+  narrowing surprise on the values that later index `steckerbrett[...]`.
 - 🟡 **String-literal-to-`char*`** assignments (`opt_ukw = (char*) ".";` etc.)
   cast away `const`, then `alltoupper`/`removespaces` mutate `optarg` (i.e.
   `argv`) in place. Mutating `argv` and casting away `const` on literals is
@@ -376,16 +376,17 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
-| 2.3/2.4 | 🟡/🟢 | Unused `total` (no normalization); ~~stepping unverified~~ ✅ double-step KAT added |
-| 4/5/6 | 🟡 | Legacy `index()`, `char` returns, duplicated readers/scorers, no parallelism |
+| 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
+| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns~~ ✅ fixed; duplicated readers/scorers, no parallelism remain |
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
 **Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow,
 (1.3/1.4) the read-loop and block over-read, (2.1) the IC formula, (2.2) the
 `fscanf` partial-match bug, (2.4) stepping verification, (3) the
 dead/misleading-code cleanup (including the `best_steckerbrett` out-of-bounds
-`memcpy`), and (7) the test suite + CI are now done. The `-Wall` build is
-warning-free and the suite has 21 checks. Remaining items — the unused `total`
-(§2.3), the four duplicated readers and other §4–6 polish (legacy `index()`,
-`char` returns), and eventually the global-state refactor that would unlock
-threading (§5).
+`memcpy`), (2.3) the unused `total`, the §4 modernization (legacy `index()` →
+`strchr`, `int` rotor returns, stray includes), and (7) the test suite + CI are
+now done. The `-Wall` build is warning-free and the suite has 21 checks.
+Remaining items — factor the four duplicated n-gram readers / parallel scorers
+into one (§5/§6), the `const`-correctness of the string-literal option defaults
+(§4), and eventually the global-state refactor that would unlock threading (§5).
