@@ -91,25 +91,34 @@ static int opt_scoring;
 static int opt_hillclimb;
 
 static char ciphertext[maxlen+1];
-static char plaintext[maxlen+1];
 static char altplaintext[maxlen+1];
 static int textlength;
+static unsigned char num_ciphertext[maxlen];
 
+/* Read-only wiring tables, derived once by init() and shared by every search. */
 static unsigned char rotor_fwd[rotor_count][asize];
 static unsigned char rotor_rev[rotor_count][asize];
 static unsigned char notch[rotor_count][asize];
 static unsigned char reflector[reflector_count][asize];
-static unsigned char steckerbrett[asize];
 
-static int ukw;
-static int walzenlage[wheels];
-static unsigned char grundstellung[wheels];
-static unsigned char ringstellung[wheels];
+/* Per-search mutable machine state. Grouping it into one object (rather than
+   file-scope globals) makes the search reentrant: a future worker thread can own
+   its own machine while the read-only wiring tables, n-gram statistics and
+   ciphertext stay shared. */
+struct machine
+{
+  int ukw;                              /* reflector index */
+  int walzenlage[wheels];               /* wheel order (rotor indices) */
+  unsigned char grundstellung[wheels];  /* start positions */
+  unsigned char ringstellung[wheels];   /* ring positions */
+  unsigned char steckerbrett[asize];    /* plugboard permutation */
 
-static unsigned char num_ciphertext[maxlen];
-static unsigned char num_plaintext[maxlen];
-static unsigned char subst_array[asize][asize][asize][asize];
-static unsigned char mapping[maxlen][asize];
+  /* working tables, rebuilt as the search advances */
+  unsigned char subst_array[asize][asize][asize][asize]; /* rotor stack per g-r */
+  unsigned char mapping[maxlen][asize];                  /* per-position subst. */
+  unsigned char num_plaintext[maxlen];                   /* decode scratch */
+  char plaintext[maxlen+1];                              /* candidate / result */
+};
 
 static double monograms[asize];
 static double bigrams[asize][asize];
@@ -205,10 +214,10 @@ void init()
       reflector[i][j] = char2num(reflector_string[i][j]);
 }
 
-void init_steckerbrett(const char * steckerbrett_string)
+void init_steckerbrett(machine & m, const char * steckerbrett_string)
 {
   for (int j=0; j < asize; j++)
-    steckerbrett[j] = j;
+    m.steckerbrett[j] = j;
 
   int plug_count = static_cast<int>(strlen(steckerbrett_string) / 2);
 
@@ -216,59 +225,53 @@ void init_steckerbrett(const char * steckerbrett_string)
     {
       int a = char2num(steckerbrett_string[2*i+0]);
       int b = char2num(steckerbrett_string[2*i+1]);
-      steckerbrett[a] = b;
-      steckerbrett[b] = a;
+      m.steckerbrett[a] = b;
+      m.steckerbrett[b] = a;
     }
 }
 
-void init_steckerbrett_direct(const char * steckerbrett_string)
-{
-  for (int j=0; j < asize; j++)
-    steckerbrett[j] = char2num(steckerbrett_string[j]);
-}
-
-void init_walzen(int u, int a, int b, int c)
+void init_walzen(machine & m, int u, int a, int b, int c)
 {
   if (opt_norenigma)
     {
-      ukw = norway_reflector_index + u;
-      walzenlage[0] = norway_rotor_base + a;
-      walzenlage[1] = norway_rotor_base + b;
-      walzenlage[2] = norway_rotor_base + c;
+      m.ukw = norway_reflector_index + u;
+      m.walzenlage[0] = norway_rotor_base + a;
+      m.walzenlage[1] = norway_rotor_base + b;
+      m.walzenlage[2] = norway_rotor_base + c;
     }
   else
     {
-      ukw = u;
-      walzenlage[0] = a;
-      walzenlage[1] = b;
-      walzenlage[2] = c;
+      m.ukw = u;
+      m.walzenlage[0] = a;
+      m.walzenlage[1] = b;
+      m.walzenlage[2] = c;
     }
 }
 
-void init_ring_grund(int a, int b, int c, int x, int y, int z)
+void init_ring_grund(machine & m, int a, int b, int c, int x, int y, int z)
 {
-  ringstellung[0] = a;
-  ringstellung[1] = b;
-  ringstellung[2] = c;
-  grundstellung[0] = x;
-  grundstellung[1] = y;
-  grundstellung[2] = z;
+  m.ringstellung[0] = a;
+  m.ringstellung[1] = b;
+  m.ringstellung[2] = c;
+  m.grundstellung[0] = x;
+  m.grundstellung[1] = y;
+  m.grundstellung[2] = z;
 }
 
-int rotor_l(int x, int rotor_no)
+int rotor_l(machine & m, int x, int rotor_no)
 {
-  int y = grundstellung[rotor_no] - ringstellung[rotor_no];
+  int y = m.grundstellung[rotor_no] - m.ringstellung[rotor_no];
   x = (x + asize + y) % asize;
-  x = rotor_fwd[walzenlage[rotor_no]][x];
+  x = rotor_fwd[m.walzenlage[rotor_no]][x];
   x = (x + asize - y) % asize;
   return x;
 }
 
-int rotor_r(int x, int rotor_no)
+int rotor_r(machine & m, int x, int rotor_no)
 {
-  int y = grundstellung[rotor_no] - ringstellung[rotor_no];
+  int y = m.grundstellung[rotor_no] - m.ringstellung[rotor_no];
   x = (x + asize + y) % asize;
-  x = rotor_rev[walzenlage[rotor_no]][x];
+  x = rotor_rev[m.walzenlage[rotor_no]][x];
   x = (x + asize - y) % asize;
   return x;
 }
@@ -278,56 +281,35 @@ inline int mod26(int x)
   return (x+asize)%asize;
 }
 
-inline void step_rotors()
+inline void step_rotors(machine & m)
 {
-  if (notch[walzenlage[wheels-2]][grundstellung[wheels-2]])
+  if (notch[m.walzenlage[wheels-2]][m.grundstellung[wheels-2]])
     {
-      grundstellung[wheels-3] = mod26(1+grundstellung[wheels-3]);
-      grundstellung[wheels-2] = mod26(1+grundstellung[wheels-2]);
+      m.grundstellung[wheels-3] = mod26(1+m.grundstellung[wheels-3]);
+      m.grundstellung[wheels-2] = mod26(1+m.grundstellung[wheels-2]);
     }
-  else if (notch[walzenlage[wheels-1]][grundstellung[wheels-1]])
+  else if (notch[m.walzenlage[wheels-1]][m.grundstellung[wheels-1]])
     {
-      grundstellung[wheels-2] = mod26(1+grundstellung[wheels-2]);
+      m.grundstellung[wheels-2] = mod26(1+m.grundstellung[wheels-2]);
     }
 
-  grundstellung[wheels-1] = mod26(1+grundstellung[wheels-1]);
+  m.grundstellung[wheels-1] = mod26(1+m.grundstellung[wheels-1]);
 }
 
-inline int subst_rotors(int x)
+inline int subst_rotors(machine & m, int x)
 {
   for (int r = wheels - 1; r >= 0; r--)
-    x = rotor_l(x, r);
+    x = rotor_l(m, x, r);
 
-  x = reflector[ukw][x];
+  x = reflector[m.ukw][x];
 
   for(int r = 0; r < wheels; r++)
-    x = rotor_r(x, r);
+    x = rotor_r(m, x, r);
 
   return x;
 }
 
-inline int substitute(int x)
-{
-  return steckerbrett[subst_rotors(steckerbrett[x])];
-}
-
-inline int step(int x)
-{
-  step_rotors();
-  return substitute(x);
-}
-
-inline int step_precomputed(int x)
-{
-  step_rotors();
-  return steckerbrett[subst_array
-                      [mod26(grundstellung[0]-ringstellung[0])]
-                      [mod26(grundstellung[1]-ringstellung[1])]
-                      [mod26(grundstellung[2]-ringstellung[2])]
-                      [steckerbrett[x]]];
-}
-
-void precompute()
+void precompute(machine & m)
 {
   int r1 = 0;
   int r2 = 0;
@@ -336,40 +318,42 @@ void precompute()
     for (int g2 = 0; g2 < asize; g2++)
       for (int g3 = 0; g3 < asize; g3++)
         {
-          init_ring_grund(r1, r2, r3, g1, g2, g3);
+          init_ring_grund(m, r1, r2, r3, g1, g2, g3);
           for (int x = 0; x < asize; x++)
-            subst_array[g1][g2][g3][x] = subst_rotors(x);
+            m.subst_array[g1][g2][g3][x] = subst_rotors(m, x);
         }
 }
 
-void setup_mapping()
+void setup_mapping(machine & m)
 {
   if (textlength > maxlen)
     fatal("Ciphertext too long");
 
-  /* set up mapping trough the rotors for each character in the ciphertext */
+  /* set up mapping trough the rotors for each character in the ciphertext.
+     The rotor-stack row depends only on the (start - ring) offsets, which are
+     constant across the alphabet, so resolve it once and copy the 26 bytes
+     (also keeps the store to mapping[] from appearing to alias subst_array[]). */
   for (int i=0; i<textlength; i++)
     {
-      step_rotors();
-      for (int j=0; j<asize; j++)
-        mapping[i][j] = subst_array
-          [mod26(grundstellung[0]-ringstellung[0])]
-          [mod26(grundstellung[1]-ringstellung[1])]
-          [mod26(grundstellung[2]-ringstellung[2])]
-          [j];
+      step_rotors(m);
+      const unsigned char * row = m.subst_array
+        [mod26(m.grundstellung[0]-m.ringstellung[0])]
+        [mod26(m.grundstellung[1]-m.ringstellung[1])]
+        [mod26(m.grundstellung[2]-m.ringstellung[2])];
+      memcpy(m.mapping[i], row, asize);
     }
 }
 
-inline int step_mapped(int i, int x)
+inline int step_mapped(machine & m, int i, int x)
 {
-  return steckerbrett[mapping[i][steckerbrett[x]]];
+  return m.steckerbrett[m.mapping[i][m.steckerbrett[x]]];
 }
 
-inline void decode()
+inline void decode(machine & m)
 {
   for (int i = 0; i < textlength; i++)
-    plaintext[i] = num2char(step_mapped(i, num_ciphertext[i]));
-  plaintext[textlength] = 0;
+    m.plaintext[i] = num2char(step_mapped(m, i, num_ciphertext[i]));
+  m.plaintext[textlength] = 0;
 }
 
 inline void map16_step(unsigned char * source,
@@ -399,17 +383,18 @@ void showit(const char * msg, unsigned char * p)
 #endif
 }
 
-inline void decode_num()
+inline void decode_num(machine & m)
 {
 #if 0
   for (int i = 0; i < textlength; i++)
-    num_plaintext[i] = step_mapped(i, num_ciphertext[i]);
+    m.num_plaintext[i] = step_mapped(m, i, num_ciphertext[i]);
 #else
 #if 0
   showit("cipher", num_ciphertext);
   for (int i = 0; i < textlength; i++)
-    num_plaintext[i] = steckerbrett[mapping[i][steckerbrett[num_ciphertext[i]]]];
-  showit("plain ", num_plaintext);
+    m.num_plaintext[i] =
+      m.steckerbrett[m.mapping[i][m.steckerbrett[num_ciphertext[i]]]];
+  showit("plain ", m.num_plaintext);
   fprintf(stderr, "\n");
 #else
 
@@ -420,30 +405,30 @@ inline void decode_num()
       unsigned char temp1[blocksize];
       unsigned char temp2[blocksize];
       showit("cipher", num_ciphertext+i);
-      map16_direct(num_ciphertext+i, steckerbrett, temp1);
+      map16_direct(num_ciphertext+i, m.steckerbrett, temp1);
       showit("steck ", temp1);
-      map16_step(temp1, ((unsigned char *)(&mapping[i])), temp2);
+      map16_step(temp1, ((unsigned char *)(&m.mapping[i])), temp2);
       showit("mapped", temp2);
-      map16_direct(temp2, steckerbrett, num_plaintext+i);
-      showit("plain ", num_plaintext+i);
+      map16_direct(temp2, m.steckerbrett, m.num_plaintext+i);
+      showit("plain ", m.num_plaintext+i);
       //      fprintf(stderr, "\n");
     }
 
   /* remainder, when textlength is not a multiple of 16 (avoids reading
      mapping[] / num_ciphertext[] past textlength) */
   for (int i = blocks; i < textlength; i++)
-    num_plaintext[i] = step_mapped(i, num_ciphertext[i]);
+    m.num_plaintext[i] = step_mapped(m, i, num_ciphertext[i]);
 
 #endif
 #endif
 }
 
-double quadgram_score_decode()
+double quadgram_score_decode(machine & m)
 {
   /* This decode and scoring function uses 99% of the computation time
      when hill-climbing. */
 
-  decode_num();
+  decode_num(m);
 
   /*
 
@@ -460,49 +445,49 @@ double quadgram_score_decode()
 
   double score = 0.0;
   for (int i=0; i<textlength-3; i++)
-    score += quadgrams[num_plaintext[i]][num_plaintext[i+1]]
-      [num_plaintext[i+2]][num_plaintext[i+3]];
+    score += quadgrams[m.num_plaintext[i]][m.num_plaintext[i+1]]
+      [m.num_plaintext[i+2]][m.num_plaintext[i+3]];
   return score;
 }
 
-double trigram_score_decode()
+double trigram_score_decode(machine & m)
 {
-  decode_num();
+  decode_num(m);
 
   double score = 0.0;
   for (int i=0; i<textlength-2; i++)
-    score += trigrams[num_plaintext[i]][num_plaintext[i+1]][num_plaintext[i+2]];
+    score += trigrams[m.num_plaintext[i]][m.num_plaintext[i+1]][m.num_plaintext[i+2]];
   return score;
 }
 
-double bigram_score_decode()
+double bigram_score_decode(machine & m)
 {
-  decode_num();
+  decode_num(m);
 
   double score = 0.0;
   for (int i=0; i<textlength-1; i++)
-    score += bigrams[num_plaintext[i]][num_plaintext[i+1]];
+    score += bigrams[m.num_plaintext[i]][m.num_plaintext[i+1]];
   return score;
 }
 
-double monogram_score_decode()
+double monogram_score_decode(machine & m)
 {
-  decode_num();
+  decode_num(m);
 
   double score = 0.0;
   for (int i = 0; i < textlength; i++)
-    score += monograms[num_plaintext[i]];
+    score += monograms[m.num_plaintext[i]];
   return score;
 }
 
-double ic_score_decode()
+double ic_score_decode(machine & m)
 {
   int freq[asize];
   for(int j=0; j<asize; j++)
     freq[j] = 0;
 
   for (int i = 0; i < textlength; i++)
-    freq[step_mapped(i, num_ciphertext[i])]++;
+    freq[step_mapped(m, i, num_ciphertext[i])]++;
 
   double score = 0.0;
   for(int j=0; j<asize; j++)
@@ -510,20 +495,20 @@ double ic_score_decode()
   return (textlength > 1) ? score / ((double) textlength * (textlength - 1)) : 0.0;
 }
 
-void showsteckerbrett()
+void showsteckerbrett(machine & m)
 {
 #if 0
   for (int j=0; j<asize; j++)
-    putchar(num2char(steckerbrett[j]));
+    putchar(num2char(m.steckerbrett[j]));
 #else
   fprintf(stderr, "S:");
   for (int j=0; j<asize; j++)
-    if (steckerbrett[j] > j)
-      fprintf(stderr, " %c%c", num2char(j), num2char(steckerbrett[j]));
+    if (m.steckerbrett[j] > j)
+      fprintf(stderr, " %c%c", num2char(j), num2char(m.steckerbrett[j]));
 #endif
 }
 
-void showconfig()
+void showconfig(machine & m)
 {
   /* display wheel numbers 1..N: standard rotors are index+1, Norway wheels are
      index - norway_rotor_base + 1; the reflector prints as its letter (N for
@@ -531,21 +516,21 @@ void showconfig()
   int wheel_offset = opt_norenigma ? 1 - norway_rotor_base : 1;
   fprintf(stderr,
           "W: %c%d%d%d R: %c%c%c G: %c%c%c ",
-          opt_norenigma ? 'N' : num2char(ukw),
-          walzenlage[0] + wheel_offset,
-          walzenlage[1] + wheel_offset,
-          walzenlage[2] + wheel_offset,
-          num2char(ringstellung[0]),
-          num2char(ringstellung[1]),
-          num2char(ringstellung[2]),
-          num2char(grundstellung[0]),
-          num2char(grundstellung[1]),
-          num2char(grundstellung[2]));
-  showsteckerbrett();
+          opt_norenigma ? 'N' : num2char(m.ukw),
+          m.walzenlage[0] + wheel_offset,
+          m.walzenlage[1] + wheel_offset,
+          m.walzenlage[2] + wheel_offset,
+          num2char(m.ringstellung[0]),
+          num2char(m.ringstellung[1]),
+          num2char(m.ringstellung[2]),
+          num2char(m.grundstellung[0]),
+          num2char(m.grundstellung[1]),
+          num2char(m.grundstellung[2]));
+  showsteckerbrett(m);
   fprintf(stderr, "\n");
 }
 
-double score_iter(int iter)
+double score_iter(machine & m, int iter)
 {
   (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   double score = 0;
@@ -553,23 +538,23 @@ double score_iter(int iter)
   switch(opt_scoring)
     {
     case SCORE_IC:
-      score = ic_score_decode();
+      score = ic_score_decode(m);
       break;
 
     case SCORE_MONO:
-      score = monogram_score_decode();
+      score = monogram_score_decode(m);
       break;
 
     case SCORE_BI:
-      score = bigram_score_decode();
+      score = bigram_score_decode(m);
       break;
 
     case SCORE_TRI:
-      score = trigram_score_decode();
+      score = trigram_score_decode(m);
       break;
 
     case SCORE_QUAD:
-      score = quadgram_score_decode();
+      score = quadgram_score_decode(m);
       break;
 
     default:
@@ -616,7 +601,7 @@ void ciphertext_letterdist()
 #endif
 }
 
-double hillclimb()
+double hillclimb(machine & m)
 {
   /* Try to find the optimal steckerbrett for the given other settings */
 
@@ -628,7 +613,7 @@ double hillclimb()
   /* iterate until a full pass over all plug swaps yields no improvement */
   do
     {
-      best_score = score_iter(iter);
+      best_score = score_iter(m, iter);
 
       last_best = best_score;
 
@@ -654,16 +639,16 @@ double hillclimb()
         for(int b=a+1; b<asize; b++)
           {
             /* switch plugs */
-            int x = steckerbrett[a];
-            int y = steckerbrett[b];
-            int xx = steckerbrett[x];
-            int yy = steckerbrett[y];
-            steckerbrett[x] = x;
-            steckerbrett[y] = y;
-            steckerbrett[a] = b;
-            steckerbrett[b] = a;
+            int x = m.steckerbrett[a];
+            int y = m.steckerbrett[b];
+            int xx = m.steckerbrett[x];
+            int yy = m.steckerbrett[y];
+            m.steckerbrett[x] = x;
+            m.steckerbrett[y] = y;
+            m.steckerbrett[a] = b;
+            m.steckerbrett[b] = a;
 
-            double score = score_iter(iter);
+            double score = score_iter(m, iter);
 
 #ifdef SHOWHILLCLIMB
             fprintf(stderr, "%4.0f", (score - best_score)/10.0);
@@ -677,10 +662,10 @@ double hillclimb()
               }
 
             /* restore plugs */
-            steckerbrett[a] = x;
-            steckerbrett[b] = y;
-            steckerbrett[x] = xx;
-            steckerbrett[y] = yy;
+            m.steckerbrett[a] = x;
+            m.steckerbrett[b] = y;
+            m.steckerbrett[x] = xx;
+            m.steckerbrett[y] = yy;
           }
 #ifdef SHOWHILLCLIMB
         printf("\n");
@@ -696,12 +681,12 @@ double hillclimb()
           int b = switch_b;
 
           /* switch plugs */
-          int x = steckerbrett[a];
-          int y = steckerbrett[b];
-          steckerbrett[x] = x;
-          steckerbrett[y] = y;
-          steckerbrett[a] = b;
-          steckerbrett[b] = a;
+          int x = m.steckerbrett[a];
+          int y = m.steckerbrett[b];
+          m.steckerbrett[x] = x;
+          m.steckerbrett[y] = y;
+          m.steckerbrett[a] = b;
+          m.steckerbrett[b] = a;
 
 #ifdef SHOWHILLCLIMB
           fprintf(stderr,
@@ -710,7 +695,7 @@ double hillclimb()
                   num2char(a), num2char(b),
                   switch_score - best_score,
                   switch_score);
-          showsteckerbrett();
+          showsteckerbrett(m);
           fprintf(stderr, "\n");
 #endif
 
@@ -721,18 +706,18 @@ double hillclimb()
     }
   while (best_score > last_best);
 
-  decode();
+  decode(m);
 
 #ifdef SHOWHILLCLIMB
-  printf("Plaintext: %s\n", plaintext);
+  printf("Plaintext: %s\n", m.plaintext);
 #endif
-  return score_iter(0);
+  return score_iter(m, 0);
 }
 
 
 
 
-void bruteforce()
+void bruteforce(machine & m)
 {
   int u_min, u_max;
   int w_min[wheels], w_max[wheels];
@@ -797,9 +782,9 @@ void bruteforce()
         for (int w3 = w_min[2]; w3 <= w_max[2]; w3++)
           if ((w1 != w2) && (w1 != w3) && (w2 != w3))
             {
-              init_walzen(u1, w1, w2, w3);
+              init_walzen(m, u1, w1, w2, w3);
 
-              precompute();
+              precompute(m);
 
               for (int r1 = r_min[0]; r1 <= r_max[0]; r1++)
                 for (int r2 = r_min[1]; r2 <= r_max[1]; r2++)
@@ -808,36 +793,36 @@ void bruteforce()
                       for (int g2 = g_min[1]; g2 <= g_max[1]; g2++)
                         for (int g3 = g_min[2]; g3 <= g_max[2]; g3++)
                           {
-                            init_ring_grund(r1, r2, r3, g1, g2, g3);
+                            init_ring_grund(m, r1, r2, r3, g1, g2, g3);
 
-                            init_steckerbrett(opt_steckerbrett);
+                            init_steckerbrett(m, opt_steckerbrett);
 
-                            setup_mapping();
+                            setup_mapping(m);
 
                             double score;
                             if (opt_hillclimb)
                               {
-                                score = hillclimb();
+                                score = hillclimb(m);
                               }
                             else
                               {
-                                decode();
-                                score = score_iter(0);
+                                decode(m);
+                                score = score_iter(m, 0);
                               }
 
                             if (score > best_score)
                               {
                                 best_score = score;
-                                memcpy(best_plaintext, plaintext, textlength + 1);
+                                memcpy(best_plaintext, m.plaintext, textlength + 1);
 #if 1
-                                init_ring_grund(r1, r2, r3, g1, g2, g3);
+                                init_ring_grund(m, r1, r2, r3, g1, g2, g3);
                                 fprintf(stderr, "%10.4f ", score);
-                                showconfig();
+                                showconfig(m);
 #endif
                               }
                           }
             }
-  memcpy(plaintext, best_plaintext, textlength + 1);
+  memcpy(m.plaintext, best_plaintext, textlength + 1);
 }
 
 void readciphertext()
@@ -871,7 +856,7 @@ void readciphertext()
   textlength = j;
 }
 
-void readplaintext(char * filename)
+void readplaintext(char * filename, const char * result)
 {
   unsigned char buffer[65536];
   ssize_t len;
@@ -911,7 +896,7 @@ void readplaintext(char * filename)
 
   int identical = 0;
   for (int i=0; i<textlength; i++)
-    if (plaintext[i] == altplaintext[i])
+    if (result[i] == altplaintext[i])
       identical++;
 
   fprintf(stderr,
@@ -1208,19 +1193,25 @@ int main(int argc, char * * argv)
   ciphertext_letterdist();
 
   init();
-  init_steckerbrett("");
+
+  /* the per-search machine state lives in a single heap object (one today, one
+     per worker thread once the search is parallelised) */
+  machine * m = new machine();
+  init_steckerbrett(*m, "");
 
   /* try all combinations */
 
-  bruteforce();
+  bruteforce(*m);
 
   /* write plaintext */
 
   fprintf(stderr, "\n");
-  printf("%s\n", plaintext);
+  printf("%s\n", m->plaintext);
 
   /* read plaintext to compare to, if given */
 
   if (opt_plaintext)
-    readplaintext(opt_plaintext);
+    readplaintext(opt_plaintext, m->plaintext);
+
+  delete m;
 }

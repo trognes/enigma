@@ -143,9 +143,10 @@ A single pass through `main()`:
   `grundstellung - ringstellung` offset.
 - `step_rotors()` implements the stepping schedule including the Enigma
   double-stepping anomaly (checks the middle/right notches before advancing).
-- `substitute()` = plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
-  plugboard. The hot path replaces the rotor stack with precomputed
-  `subst_array` / `mapping` lookups.
+- The full substitution is plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
+  plugboard. `subst_rotors()` is the rotor-stack-and-reflector core; the hot path
+  replaces it with precomputed `subst_array` / `mapping` lookups wrapped in two
+  plugboard lookups (`step_mapped` / `decode` / `decode_num`).
 
 ### Performance notes
 
@@ -162,13 +163,18 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
   (e.g. wrapped parameter lists or `if` conditions) are aligned under the
   opening `(`. The only tabs in the repo are the recipe lines in the `Makefile`,
   which `make` requires.
-- **Single translation unit, heavy global state.** Machine settings
-  (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`),
-  buffers (`ciphertext`, `plaintext`, `num_*`, `mapping`, `subst_array`), and
-  the loaded n-gram tables are all file-scope globals. The search/scoring
-  functions read these globals directly (the redundant `textlength`/`ciphertext`/
-  `plaintext` parameters that used to shadow them have been removed; `-Wshadow`
-  is on to keep it that way).
+- **Single translation unit; per-search state in `struct machine`.** The
+  mutable per-search state — machine settings (`walzenlage`, `grundstellung`,
+  `ringstellung`, `ukw`, `steckerbrett`) and the working buffers
+  (`subst_array`, `mapping`, `num_plaintext`, the candidate `plaintext`) — is
+  bundled into `struct machine`, threaded through the search/scoring functions as
+  `machine & m`; `main()` owns one heap instance. This makes the search
+  reentrant (the precondition for multi-threading — see `CODE_REVIEW.md` §5/§6).
+  The read-only data stays file-scope global and shared: the wiring tables
+  (`rotor_fwd/rev`, `notch`, `reflector`) built by `init()`, the n-gram tables,
+  and the `ciphertext` / `num_ciphertext` / `textlength` input. (`-Wshadow` is on;
+  the redundant `textlength`/`ciphertext`/`plaintext` parameters that used to
+  shadow the globals were removed earlier.)
 - Debug instrumentation is intentionally retained: `showit`, `showconfig`,
   `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
   compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
@@ -192,8 +198,10 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 A detailed audit lives in `CODE_REVIEW.md`. Most findings have been fixed —
 the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
 overflow, the `fscanf`/read-handling bugs, dead code, the C-style
-modernization, and the `textlength` global/parameter shadowing — and the build
-is warning-free under
+modernization, the `textlength` global/parameter shadowing, and the
+encapsulation of the per-search state into `struct machine` (the search is now
+reentrant) — and the build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`. The main item still
-open is the larger global-state refactor that would unlock multithreading. Read
+open is **multi-threading** the search over reflector × wheel-order (now
+unblocked by `struct machine`, and guarded by `make bench`). Read
 `CODE_REVIEW.md` before changing the search or scoring code.

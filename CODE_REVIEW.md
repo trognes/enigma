@@ -293,15 +293,26 @@ instrumentation rather than deleted.
 
 ## 5. Structural / design issues
 
-- 🟠 **Pervasive global mutable state.** Machine configuration
-  (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`), the
-  big lookup tables (`subst_array`, `mapping`), I/O buffers, and the n-gram
-  tables are all file-scope globals. Consequences: the code is not reentrant or
-  thread-safe (so the dangling `opt_threads` could never have worked without a
-  rewrite), functions silently depend on global setup order
-  (`precompute()` clobbers `ringstellung`/`grundstellung`, relying on
-  `bruteforce` to reset them), and unit testing any piece in isolation is
-  impractical.
+- 🟡 **Global mutable state — per-search state now encapsulated; threading
+  still pending.** The per-search *mutable* state (`walzenlage`,
+  `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`, and the big working
+  tables `subst_array`, `mapping`, `num_plaintext`, plus the candidate
+  `plaintext`) has been gathered into a single `struct machine` that is threaded
+  through the search/scoring functions (`init_*`, `rotor_*`, `step_rotors`,
+  `subst_rotors`, `precompute`, `setup_mapping`, `decode`/`decode_num`, the
+  `*_score_decode` scorers, `score_iter`, `hillclimb`, `bruteforce`, `showconfig`).
+  `main()` owns one heap-allocated instance. The read-only data (the wiring
+  tables built by `init()`, the n-gram statistics, and the `ciphertext` /
+  `num_ciphertext` / `textlength` input) is intentionally left shared — it is
+  safe to read from many threads. This makes the search **reentrant**: a worker
+  thread can own its own `machine`. Four dead functions that only existed to read
+  the old globals (`step`, `substitute`, `step_precomputed`,
+  `init_steckerbrett_direct`) were removed in the process. **Still open:** the
+  actual multi-threading over the reflector × wheel-order loop (each worker its
+  own `machine`, merge the per-worker best). Verified perf-neutral via
+  `make bench BASE=<pre-refactor>` (search and hill-climb both within noise); a
+  `setup_mapping` tweak (resolve the rotor-stack row once and `memcpy` it)
+  recovered an ~8% search-path dip from the added struct indirection.
 - 🟢 **`textlength` global/parameter shadowing** ✅ resolved. Nearly every
   function used to take an `int textlength` parameter while a file-scope global
   `textlength` also existed; every call site already passed exactly that global
@@ -348,10 +359,12 @@ lookup, 16-byte blocking).
 
 Remaining opportunities:
 
-- 🟡 **No parallelism.** `bruteforce()` is embarrassingly parallel over
-  reflector × wheel-order (and ring/start). The scaffolding (`opt_threads`)
-  hints this was intended but the global state blocks it. Encapsulating machine
-  state into a struct would unlock multi-threading for a near-linear speedup.
+- 🟡 **No parallelism (now unblocked).** `bruteforce()` is embarrassingly
+  parallel over reflector × wheel-order (and ring/start). The per-search state is
+  now encapsulated in `struct machine` (see §5), so the remaining work is to give
+  each worker thread its own `machine`, partition the reflector × wheel-order
+  loop, and merge the per-worker best — a near-linear speedup. Guard it with
+  `make bench BASE=<ref>`.
 - 🟡 **`setup_mapping()` rebuilds the full per-position mapping for every
   ring/start combination**, including re-stepping the rotors from scratch. For
   long messages this is a large repeated cost; some of it could be shared across
@@ -416,10 +429,10 @@ Remaining opportunities:
 | 1.2 | 🟢 | ~~`-l` can overflow `filename[100]`; no language allow-list~~ ✅ fixed (snprintf + `-l` validation) |
 | 2.2 | 🟢 | ~~`fscanf` partial matches use uninitialized variables~~ ✅ fixed (require full field count) |
 | 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
-| 5 | 🟠 | Pervasive global state blocks testing and threading |
+| 5 | 🟡 | ~~Pervasive global *mutable* state blocks threading~~ ✅ per-search state encapsulated in `struct machine` (reentrant); multi-threading itself still pending |
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
-| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing~~ ✅ fixed; no parallelism remains |
+| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing; global mutable state~~ ✅ fixed; multi-threading remains |
 | 2.5/7 | 🟢 | ~~Empty-input div-by-zero~~ ✅ fixed; relative data paths; weak Makefile |
 
 **Progress:** nearly every finding is resolved — (1.1) the stack overflow,
@@ -430,7 +443,9 @@ dead/misleading-code cleanup, the §4 modernization (legacy `index()` → `strch
 `int` rotor returns, `const`-correct options, stray includes), the four n-gram
 readers unified into one and the dead `char*` scorer family removed (§5/§6),
 the `textlength` global/parameter shadowing removed and `-Wshadow` enabled (§5),
-and (7) the test suite + CI. The build is warning-free under
+the per-search state encapsulated into `struct machine` (reentrant; four dead
+functions removed), and (7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
-the suite has 63 checks. The main remaining item is the larger global-state
-refactor that would unlock multithreading (§5).
+the suite has 63 checks. The main remaining item is **multi-threading** the
+search over reflector × wheel-order — now unblocked by the `struct machine`
+encapsulation, and guarded by `make bench` (§5/§6).
