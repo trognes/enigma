@@ -56,8 +56,9 @@ make bench                # build, then run tests/bench.sh (performance)
 `search` (brute-force scan, no plugboard) and `hillclimb` (the `-c` plugboard
 loop) — because a change can regress one without touching the other. Each has a
 `quick` tier (default, a few seconds) and an opt-in `long` tier (`make bench
-LONG=1`, ≥15–30s each) for a stronger signal. Timing is the min of several
-repetitions (CPU-bound, single-threaded). The regression guard is a same-machine
+LONG=1`, ≥15–30s each) for a stronger signal; `make bench SCALE=1` additionally
+sweeps `-T` to show thread scaling. Timing is the min of several repetitions
+(the per-tier benchmarks are single-threaded). The regression guard is a same-machine
 A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>` in a throwaway
 git worktree and runs both, failing if any benchmark is >`THRESHOLD`% (default
 10) slower than BASE — run this around the planned global-state/threading
@@ -123,7 +124,11 @@ A single pass through `main()`:
 4. `init()` precomputes numeric forward/reverse rotor permutations, notch
    tables, and reflector permutations from the hard-coded wiring strings.
 5. `bruteforce()` is the main search:
-   - Iterates reflector × wheel-order combinations (skipping repeated wheels).
+   - Enumerates the reflector × wheel-order combinations (skipping repeated
+     wheels) as a task list, then runs them across `opt_threads` worker threads
+     (`-T N`, default 1) via an atomic task counter; each worker owns a private
+     `machine` and the best result is merged under a mutex (which also serialises
+     the live progress line). Per wheel-order task:
    - `precompute()` builds `subst_array[g1][g2][g3][x]` — the rotor-stack
      substitution for every (start-position-minus-ring-setting) triple, with
      ring fixed at 0 — once per wheel order.
@@ -228,14 +233,14 @@ fused loop is the current form.
 A detailed audit lives in `CODE_REVIEW.md`. Most findings have been fixed —
 the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
 overflow, the `fscanf`/read-handling bugs, dead code, the C-style
-modernization, the `textlength` global/parameter shadowing, and the
-encapsulation of the per-search state into `struct machine` (the search is now
-reentrant) — and the build is warning-free under
-`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`. The main item still
-open is **multi-threading** the search over reflector × wheel-order (now
-unblocked by `struct machine`, and guarded by `make bench`). A second planned
-feature is an **M4 (4-rotor naval) mode** — the wiring tables are already present
-and a design (static Greek wheel folded into an effective reflector; `-4` flag
-with `-u`/`-w`/`-r`/`-g` extended to the 4th wheel) is recorded in
-`CODE_REVIEW.md` §5; deferred for now. Read `CODE_REVIEW.md` before changing the
-search or scoring code.
+modernization, the `textlength` global/parameter shadowing, the encapsulation of
+the per-search state into `struct machine`, and **multi-threading** the search
+over reflector × wheel-order (`-T N`, default 1, max 256; each worker owns its
+own `machine`, results merged under a mutex) — and the build is warning-free
+under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`, and clean under
+ThreadSanitizer. Scaling is ~3× on 4 cores (`make bench SCALE=1`). The main
+remaining feature is an **M4 (4-rotor naval) mode** — the wiring tables are
+already present and a design (static Greek wheel folded into an effective
+reflector; `-4` flag with `-u`/`-w`/`-r`/`-g` extended to the 4th wheel) is
+recorded in `CODE_REVIEW.md` §5; deferred for now. Read `CODE_REVIEW.md` before
+changing the search or scoring code.

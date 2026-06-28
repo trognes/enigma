@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 -pthread
 
 # Appended after CXXFLAGS; used by CI to add e.g. -Werror or sanitizers
 # without dropping the base flags:  make EXTRA_CXXFLAGS=-Werror
@@ -16,6 +16,7 @@ test : enigma
 # Performance benchmark (isolates the search and hill-climb hot paths).
 #   make bench                       quick tiers, working-tree binary
 #   make bench LONG=1                add the >=15-30s long tiers
+#   make bench SCALE=1               also sweep -T to show thread scaling
 #   make bench BASE=<git-ref>        same-machine A/B vs <git-ref> (fails on
 #                                    >THRESHOLD% slowdown; default 10)
 bench : enigma

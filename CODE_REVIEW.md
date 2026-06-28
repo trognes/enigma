@@ -317,27 +317,27 @@ instrumentation rather than deleted.
 
 ## 5. Structural / design issues
 
-- 🟡 **Global mutable state — per-search state now encapsulated; threading
-  still pending.** The per-search *mutable* state (`walzenlage`,
-  `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`, and the big working
-  tables `subst_array`, `mapping`, plus the candidate `plaintext`) has been
-  gathered into a single `struct machine` that is threaded through the
-  search/scoring functions (`init_*`, `rotor_*`, `subst_rotors`, `precompute`,
-  `setup_mapping`, `decode`, the `*_score_decode` scorers, `score_iter`,
-  `hillclimb`, `bruteforce`, `showconfig`).
-  `main()` owns one heap-allocated instance. The read-only data (the wiring
-  tables built by `init()`, the n-gram statistics, and the `ciphertext` /
-  `num_ciphertext` / `textlength` input) is intentionally left shared — it is
-  safe to read from many threads. This makes the search **reentrant**: a worker
-  thread can own its own `machine`. Several dead/obsolete functions were removed
-  in the process (`step`, `substitute`, `step_precomputed`,
-  `init_steckerbrett_direct`, and the 16-byte-blocked decode helpers). **Still
-  open:** the actual multi-threading over the reflector × wheel-order loop (each
-  worker its own `machine`, merge the per-worker best). Verified perf-neutral
-  vs the pre-struct baseline on **both** g++ and clang via
-  `make bench BASE=<pre-refactor>` — but only after three layout/codegen
-  mitigations (see §6): the naive encapsulation cost ~20–60% on clang/ARM and
-  ~10–14% on the g++ search path.
+- 🟢 **Global mutable state encapsulated, and the search is multi-threaded** ✅.
+  The per-search *mutable* state (`walzenlage`, `grundstellung`, `ringstellung`,
+  `ukw`, `steckerbrett`, and the big working tables `subst_array`, `mapping`,
+  plus the candidate `plaintext`) was gathered into a single `struct machine`,
+  threaded through the search/scoring functions (`init_*`, `rotor_*`,
+  `subst_rotors`, `precompute`, `setup_mapping`, `decode`, the `*_score_decode`
+  scorers, `score_iter`, `hillclimb`, `search_worker`). The read-only data (the
+  wiring tables built by `init()`, the n-gram statistics, and the `ciphertext` /
+  `num_ciphertext` / `textlength` input) is intentionally left shared — safe to
+  read from many threads. Several dead/obsolete functions were removed in the
+  process (`step`, `substitute`, `step_precomputed`, `init_steckerbrett_direct`,
+  and the 16-byte-blocked decode helpers).
+  On top of that, `bruteforce()` now enumerates the reflector × wheel-order
+  combinations as a task list and runs them across `-T N` worker threads (default
+  1, max 256) via an atomic counter; each worker owns a private `machine` and the
+  global best is merged under a mutex (which also serialises the live progress
+  line). Clean under **ThreadSanitizer**; the result is independent of thread
+  count (a `-T 4` vs `-T 1` determinism check is in the suite). Scaling is ~3× on
+  4 cores (`make bench SCALE=1`). Getting the encapsulation perf-neutral first
+  took three layout/codegen mitigations (see §6); the naive version had cost
+  ~20–60% on clang/ARM and ~10–14% on the g++ search path.
 - 🟢 **`textlength` global/parameter shadowing** ✅ resolved. Nearly every
   function used to take an `int textlength` parameter while a file-scope global
   `textlength` also existed; every call site already passed exactly that global
@@ -384,12 +384,14 @@ lookup, 16-byte blocking).
 
 Remaining opportunities:
 
-- 🟡 **No parallelism (now unblocked).** `bruteforce()` is embarrassingly
-  parallel over reflector × wheel-order (and ring/start). The per-search state is
-  now encapsulated in `struct machine` (see §5), so the remaining work is to give
-  each worker thread its own `machine`, partition the reflector × wheel-order
-  loop, and merge the per-worker best — a near-linear speedup. Guard it with
-  `make bench BASE=<ref>`.
+- 🟢 **Parallelism** ✅ implemented. `bruteforce()` enumerates the reflector ×
+  wheel-order combinations as a task list and runs them across `-T N` worker
+  threads (default 1, max 256) pulling from an atomic counter; each worker owns
+  its own `machine` and the per-worker best is merged under a mutex. Measured ~3×
+  on 4 cores (search 3.3×, hill-climb 2.8×), plateauing past the physical core
+  count as expected; sweep with `make bench SCALE=1`. (Further gains would need a
+  finer task grain — e.g. splitting the ring/start sweep — but per-wheel-order is
+  already a good balance since every task does an equal-sized sweep.)
 - 🟡 **`setup_mapping()` rebuilds the full per-position mapping for every
   ring/start combination**, including re-stepping the rotors from scratch. For
   long messages this is a large repeated cost; some of it could be shared across
@@ -463,14 +465,17 @@ Remaining opportunities:
 
   CI (`.github/workflows/ci.yml`) runs, on every push and pull request: the
   suite built `-Werror` under **both g++ and clang++**; the suite under
-  **ASan + UBSan** (plus extra `-p` / scoring-mode coverage); representative
-  invocations under **valgrind** (catches uninitialised-memory use ASan misses);
+  **ASan + UBSan** (plus extra `-p` / scoring-mode coverage); the suite under
+  **ThreadSanitizer** plus an explicit multi-threaded crack (guards the `-T`
+  search); representative invocations under **valgrind** (catches
+  uninitialised-memory use ASan misses);
   **cppcheck**; **clang-tidy** (curated `bugprone`/`clang-analyzer`/`performance`
   checks via `.clang-tidy`); and **shellcheck** on the test harness. A separate
   **CodeQL** workflow (`.github/workflows/codeql.yml`) runs on PRs and weekly.
-- 🟢 **`Makefile`** has `test` and `clean` targets and an `EXTRA_CXXFLAGS` hook
-  (used by CI for `-Werror` and sanitizer builds). Still no `install` target and
-  the data files are not listed as dependencies.
+- 🟢 **`Makefile`** has `test`, `bench` and `clean` targets and an
+  `EXTRA_CXXFLAGS` hook (used by CI for `-Werror` and sanitizer builds; the base
+  flags include `-pthread`). Still no `install` target and the data files are not
+  listed as dependencies.
 
 ---
 
@@ -484,10 +489,10 @@ Remaining opportunities:
 | 1.2 | 🟢 | ~~`-l` can overflow `filename[100]`; no language allow-list~~ ✅ fixed (snprintf + `-l` validation) |
 | 2.2 | 🟢 | ~~`fscanf` partial matches use uninitialized variables~~ ✅ fixed (require full field count) |
 | 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
-| 5 | 🟡 | ~~Pervasive global *mutable* state blocks threading~~ ✅ per-search state encapsulated in `struct machine` (reentrant); multi-threading itself still pending |
+| 5/6 | 🟢 | ~~Pervasive global *mutable* state blocks threading; no parallelism~~ ✅ encapsulated in `struct machine` and the search is multi-threaded (`-T N`, TSan-clean, ~3× on 4 cores) |
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
-| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing; global mutable state~~ ✅ fixed; multi-threading remains |
+| 4/5/6 | 🟢 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing; global mutable state; no parallelism~~ ✅ all fixed |
 | 2.5/7 | 🟢 | ~~Empty-input div-by-zero~~ ✅ fixed; relative data paths; weak Makefile |
 
 **Progress:** nearly every finding is resolved — (1.1) the stack overflow,
@@ -498,9 +503,10 @@ dead/misleading-code cleanup, the §4 modernization (legacy `index()` → `strch
 `int` rotor returns, `const`-correct options, stray includes), the four n-gram
 readers unified into one and the dead `char*` scorer family removed (§5/§6),
 the `textlength` global/parameter shadowing removed and `-Wshadow` enabled (§5),
-the per-search state encapsulated into `struct machine` (reentrant; four dead
-functions removed), and (7) the test suite + CI. The build is warning-free under
+the per-search state encapsulated into `struct machine`, the search
+**multi-threaded** (`-T N`, default 1, max 256; TSan-clean; ~3× on 4 cores), and
+(7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
-the suite has 68 checks. The main remaining item is **multi-threading** the
-search over reflector × wheel-order — now unblocked by the `struct machine`
-encapsulation, and guarded by `make bench` (§5/§6).
+the suite has 71 checks. The main remaining feature is the planned **M4 (4-rotor)
+mode** (§5); smaller open items are the relative-path data files (§7) and sharing
+`setup_mapping` work across start positions (§6).
