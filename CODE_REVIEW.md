@@ -304,7 +304,7 @@ lookup, 16-byte blocking). Remaining opportunities:
 - 🟢 **Inconsistent exit/usage:** running with no args prints help and exits `1`;
   `-h` exits `0`. Errors go through `fatal()` (exit 1) but some validation
   messages are printed inline. Acceptable, but worth standardizing.
-- 🟠 **No CI (tests added).** For a cryptographic tool whose correctness is
+- 🟢 **Tests and CI added.** For a cryptographic tool whose correctness is
   subtle (stepping anomaly, ring/start offset arithmetic, plugboard
   involution), the absence of any round-trip or known-answer tests was the
   single biggest risk to long-term correctness. A test suite now exists
@@ -312,10 +312,11 @@ lookup, 16-byte blocking). Remaining opportunities:
   `AAAAA → BDZGO` known-answer vector, reciprocity, plugboard, ring/start
   offsets, the double-stepping anomaly, the Norway variant, input filtering and
   the 1024-character limit, plus end-to-end cracking (hill-climb and
-  brute-force recovery). **Still outstanding:** there is no CI to run it
-  automatically, and the suite does not yet include an externally-anchored
-  double-step KAT (it relies on round-trip consistency for that case, which
-  cannot catch a symmetric stepping bug — see §2.4).
+  brute-force recovery). A GitHub Actions workflow
+  (`.github/workflows/ci.yml`) builds and runs `make test` on every push and
+  pull request. **Still outstanding:** the suite does not yet include an
+  externally-anchored double-step KAT (it relies on round-trip consistency for
+  that case, which cannot catch a symmetric stepping bug — see §2.4).
 - 🟢 **`Makefile`** has no `clean`, `install`, or `debug` target and does not
   list the data files as dependencies. A debug build (`-O0 -g
   -fsanitize=address,undefined`) target would immediately flag §1.1 and §1.4.
@@ -328,7 +329,7 @@ lookup, 16-byte blocking). Remaining opportunities:
 |---|----------|-------|
 | 1.1 | 🔴 | ~~`best_plaintext[1025]` overflow for ciphertext > 1024 letters~~ ✅ fixed (input capped at 1024 + validated) |
 | 2.1 | 🔴 | Index of coincidence formula is wrong (`-i` broken) |
-| 7 | 🟠 | ~~No tests~~ ✅ test suite added (`make test`); CI still missing |
+| 7 | 🟢 | ~~No tests / CI~~ ✅ test suite (`make test`) + GitHub Actions CI added |
 | 1.2 | 🟠 | `-l` can overflow `filename[100]`; no language allow-list |
 | 2.2 | 🟠 | `fscanf` partial matches use uninitialized variables |
 | 3 | 🟠 | Large amount of dead/misleading code (`all_subst_score` = random, etc.) |

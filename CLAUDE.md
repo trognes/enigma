@@ -142,7 +142,8 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
   applies a +3 / +8 offset (see `init_walzen`).
 - Build is plain `make`. Tests live in `tests/run_tests.sh` and run via
   `make test` (known-answer vectors, round-trip properties, input-limit guards,
-  and end-to-end cracking). There is still **no CI**.
+  and end-to-end cracking). CI runs `make test` on every push and pull request
+  via `.github/workflows/ci.yml`.
 
 ## Known issues
 
