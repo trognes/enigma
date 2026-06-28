@@ -130,10 +130,9 @@ void monograms_read()
 
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_monograms.txt");
+  snprintf(filename, sizeof(filename), "%s_monograms.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -148,17 +147,14 @@ void monograms_read()
     {
       char a;
       int count;
-      int ret = fscanf(f, "%c %d\n", & a, & count);
-      if (ret > 0)
-        {
-          if ((a >= 'A') && (a <= 'Z'))
-            {
-              monograms[char2num(a)] = count + 1.0;
-              total += count;
-            }
-        }
-      else
+      int ret = fscanf(f, " %c %d", & a, & count);
+      if (ret != 2)
         break;
+      if ((a >= 'A') && (a <= 'Z'))
+        {
+          monograms[char2num(a)] = count + 1.0;
+          total += count;
+        }
     }
 
   for(int i=0; i<26; i++)
@@ -178,10 +174,9 @@ void bigrams_read()
 
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_bigrams.txt");
+  snprintf(filename, sizeof(filename), "%s_bigrams.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -197,17 +192,14 @@ void bigrams_read()
       char a;
       char b;
       int count;
-      int ret = fscanf(f, "%c%c %d\n", & a, & b, & count);
-      if (ret > 0)
-        {
-          if ((a >= 'A') && (a <= 'Z') && (b >= 'A') && (b <= 'Z'))
-            {
-              bigrams[char2num(a)][char2num(b)] = count + 1;
-              total += count;
-            }
-        }
-      else
+      int ret = fscanf(f, " %c%c %d", & a, & b, & count);
+      if (ret != 3)
         break;
+      if ((a >= 'A') && (a <= 'Z') && (b >= 'A') && (b <= 'Z'))
+        {
+          bigrams[char2num(a)][char2num(b)] = count + 1;
+          total += count;
+        }
     }
 
   for(int i=0; i<26; i++)
@@ -229,10 +221,9 @@ void trigrams_read()
 
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_trigrams.txt");
+  snprintf(filename, sizeof(filename), "%s_trigrams.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -249,20 +240,17 @@ void trigrams_read()
       char b;
       char c;
       int count;
-      int ret = fscanf(f, "%c%c%c %d\n", & a, & b, & c, & count);
+      int ret = fscanf(f, " %c%c%c %d", & a, & b, & c, & count);
 
-      if (ret < 1)
+      if (ret != 4)
         break;
 
-      if (ret > 0)
+      if ((a >= 'A') && (a <= 'Z') &&
+          (b >= 'A') && (b <= 'Z') &&
+          (c >= 'A') && (c <= 'Z'))
         {
-          if ((a >= 'A') && (a <= 'Z') &&
-              (b >= 'A') && (b <= 'Z') &&
-              (c >= 'A') && (c <= 'Z'))
-            {
-              trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;
-              total += count;
-            }
+          trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;
+          total += count;
         }
     }
 
@@ -286,10 +274,9 @@ void quadgrams_read()
 
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_quadgrams.txt");
+  snprintf(filename, sizeof(filename), "%s_quadgrams.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -307,21 +294,18 @@ void quadgrams_read()
       char c;
       char d;
       int count;
-      int ret = fscanf(f, "%c%c%c%c %d\n", & a, & b, & c, & d, & count);
+      int ret = fscanf(f, " %c%c%c%c %d", & a, & b, & c, & d, & count);
 
-      if (ret < 1)
+      if (ret != 5)
         break;
 
-      if (ret > 0)
+      if ((a >= 'A') && (a <= 'Z') &&
+          (b >= 'A') && (b <= 'Z') &&
+          (c >= 'A') && (c <= 'Z') &&
+          (d >= 'A') && (d <= 'Z'))
         {
-          if ((a >= 'A') && (a <= 'Z') &&
-              (b >= 'A') && (b <= 'Z') &&
-              (c >= 'A') && (c <= 'Z') &&
-              (d >= 'A') && (d <= 'Z'))
-            {
-              quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;
-              total += count;
-            }
+          quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;
+          total += count;
         }
     }
 
@@ -1280,6 +1264,13 @@ int main(int argc, char * * argv)
       (strspn(opt_steckerbrett, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") <
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
+
+  if ((strlen(opt_language) < 1) ||
+      (strlen(opt_language) > 32) ||
+      (strspn(opt_language,
+              "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") <
+       strlen(opt_language)))
+    fatal("Illegal language name (must be 1-32 letters, e.g. english)");
 
 
   /* read ciphertext */

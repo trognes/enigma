@@ -139,6 +139,24 @@ case "$err" in
   *)            check "1025-letter input rejected (message)" "$err" "*too long*" ;;
 esac
 
+# Illegal -l language names are rejected before any file is opened (guards the
+# fixed-size filename buffer against overflow and path traversal).
+err=$(printf 'ABC' | "$ENIGMA" -q -l "../../etc/passwd" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+code=$?
+check "illegal -l rejected (exit code)" "$code" "1"
+case "$err" in
+  *"Illegal language"*) check "illegal -l rejected (message)" "ok" "ok" ;;
+  *)                    check "illegal -l rejected (message)" "$err" "*Illegal language*" ;;
+esac
+
+# The n-gram parser tolerates blank lines and irregular whitespace without
+# hanging or erroring (guards the fscanf field-count / leading-space fix).
+printf '\n  E 529117365\n\nT 390965105\nA 374061888\n   \n' > zztest_monograms.txt
+check "n-gram parser tolerates messy file" \
+  "$(run 'BDZGOWCXLT' -m -l zztest -u B -w 123 -r AAA -g AAA)" \
+  "AAAAAAAAAA"
+rm -f zztest_monograms.txt
+
 echo "== End-to-end cracking =="
 
 # Encrypt with a known plugboard, then recover the plaintext with the rotor

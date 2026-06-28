@@ -42,7 +42,7 @@ corruption at worst, on entirely ordinary input.
 the same type/size as `plaintext`), and prefer `memcpy(..., textlength + 1)` or
 a bounded copy.
 
-### 1.2 🟠 Fixed `filename[100]` buffer overflowable via `-l`
+### 1.2 🟠 Fixed `filename[100]` buffer overflowable via `-l` — ✅ FIXED
 
 In every `*_read()` function:
 
@@ -52,14 +52,16 @@ strcpy(filename, opt_language);          // opt_language is user-controlled (-l)
 strcat(filename, "_quadgrams.txt");
 ```
 
-`opt_language` comes straight from `-l` with no length validation and no
-allow-list check. A language argument longer than ~85 characters overflows
-`filename`. Even short of overflow, an arbitrary `-l` value just produces a
-"file not found" fatal error. The same unchecked pattern is duplicated in four
-functions.
+`opt_language` came straight from `-l` with no length validation and no
+allow-list check. A language argument longer than ~85 characters overflowed
+`filename`.
 
-**Fix direction:** validate `-l` against the known set, use `snprintf` with the
-buffer size, and factor the four near-identical readers into one.
+**Resolved.** The four readers now build the filename with
+`snprintf(filename, sizeof(filename), "%s_quadgrams.txt", opt_language)` (a
+bounded write), and `main()` validates `-l` up front: 1–32 characters, letters
+only — which also blocks path-traversal names like `../../etc/passwd`. Guarded
+by an illegal-`-l` rejection test. (Factoring the four near-identical readers
+into one remains an open refactor — see §5.)
 
 ### 1.3 🟡 `readciphertext()` / `readplaintext()` do a single `read()`
 
@@ -131,7 +133,7 @@ plaintext. The corrected formula was applied to both functions, summed over all
 26 letters and normalized by `N·(N−1)` (so the value is the standard ≈0.067 for
 English), and is guarded by a new `-i` recovery test in the suite.
 
-### 2.2 🟠 `fscanf` partial-match leaves variables uninitialized
+### 2.2 🟠 `fscanf` partial-match leaves variables uninitialized — ✅ FIXED
 
 In all n-gram readers, e.g. monograms:
 
@@ -142,16 +144,17 @@ if (ret > 0) {                       // true even when ret == 1
         monograms[char2num(a)] = count + 1.0;   // count may be uninitialized
 ```
 
-`ret > 0` is taken whenever **any** field matched. If only `%c` matched
-(`ret == 1`), `count` is read uninitialized. For bigrams/trigrams/quadgrams the
-same applies to the later letters. The bigrams reader additionally treats
-`ret == 0` and EOF the same as a partial match boundary only via the `else
-break`. The correct guard is to require the **full** field count
-(`ret == 2`/`3`/`4`/`5`). The trigram/quadgram readers redundantly test both
-`if (ret < 1) break;` and `if (ret > 0)`.
+`ret > 0` was taken whenever **any** field matched. If only `%c` matched
+(`ret == 1`), `count` was read uninitialized; for bigrams/trigrams/quadgrams the
+same applied to the later letters.
 
-This rarely bites because the bundled files are well-formed, but it is a latent
-bug and makes the parser fragile to a trailing blank line or stray character.
+**Resolved.** Each reader now requires the **full** field count
+(`ret != 2`/`3`/`4`/`5` → `break`) before using any parsed value, so a partial
+match never feeds uninitialized data into the tables. The format strings also
+gained a leading space (`" %c%c …"`) so the parser skips blank lines and stray
+whitespace instead of misreading a newline as a letter, and the redundant
+`if (ret < 1) break;` / `if (ret > 0)` pair in the trigram/quadgram readers is
+gone. Guarded by a "messy file" parser test.
 
 ### 2.3 🟡 `total` is accumulated but never used (no normalization)
 
@@ -362,8 +365,8 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 1.1 | 🔴 | ~~`best_plaintext[1025]` overflow for ciphertext > 1024 letters~~ ✅ fixed (input capped at 1024 + validated) |
 | 2.1 | 🔴 | ~~Index of coincidence formula is wrong (`-i` broken)~~ ✅ fixed (Σ f·(f−1)/N(N−1) + recovery test) |
 | 7 | 🟢 | ~~No tests / CI~~ ✅ test suite (`make test`) + GitHub Actions CI added |
-| 1.2 | 🟠 | `-l` can overflow `filename[100]`; no language allow-list |
-| 2.2 | 🟠 | `fscanf` partial matches use uninitialized variables |
+| 1.2 | 🟢 | ~~`-l` can overflow `filename[100]`; no language allow-list~~ ✅ fixed (snprintf + `-l` validation) |
+| 2.2 | 🟢 | ~~`fscanf` partial matches use uninitialized variables~~ ✅ fixed (require full field count) |
 | 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
 | 1.3/1.4 | 🟡 | Single `read()` truncation; 16-byte block over-read past `textlength` |
@@ -371,9 +374,11 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 4/5/6 | 🟡 | Legacy `index()`, `char` returns, duplicated readers/scorers, no parallelism |
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
-**Progress:** (1.1) the stack overflow, (2.1) the IC formula, (2.4) stepping
+**Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow, (2.1)
+the IC formula, (2.2) the `fscanf` partial-match bug, (2.4) stepping
 verification, (3) the dead/misleading-code cleanup (including the
 `best_steckerbrett` out-of-bounds `memcpy`), and (7) the test suite + CI are now
-done. The `-Wall` build is warning-free. Remaining high-value items — the
-`fscanf`/`-l` input-handling fixes (§1.2, §2.2), and eventually the global-state
-refactor that would unlock threading.
+done. The `-Wall` build is warning-free and the suite has 20 checks. Remaining
+items — single-`read()` truncation and the block over-read (§1.3/1.4), the
+unused `total` (§2.3), the four duplicated readers and other §4–6 polish, and
+eventually the global-state refactor that would unlock threading (§5).
