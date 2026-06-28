@@ -134,9 +134,10 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
   the loaded n-gram tables are all file-scope globals. Most functions also take
   a `textlength` parameter even though a global of the same name exists.
 - The code uses legacy `index()` (from `<strings.h>`) rather than `strchr`.
-- There is dead/experimental code (e.g. `all_subst_score`, `map`, `map16_*`,
-  `showit`, several `#if 0` blocks, the unused `opt_threads`/`opt_logfilename`).
-  See `CODE_REVIEW.md` for a full inventory before relying on any of it.
+- Debug instrumentation is intentionally retained: `showit`, `showconfig`,
+  `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
+  compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
+  `opt_logfilename` code has been removed; see `CODE_REVIEW.md` §3.)
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).

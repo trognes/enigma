@@ -72,13 +72,11 @@ static char * opt_walzen;
 static char * opt_ringstellung;
 static char * opt_grundstellung;
 static char * opt_steckerbrett;
-static char * opt_logfilename;
 static char * opt_plaintext; /* plaintext to compare to */
 static char * opt_language; /* german (default), english, danish, french ... */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_maxwheel;
 static int opt_scoring;
-static int opt_threads;
 static int opt_hillclimb;
 
 static char ciphertext[maxlen+1];
@@ -557,15 +555,6 @@ void setup_mapping(int textlength)
     }
 }
 
-inline void map(int len,
-                unsigned char * source,
-                unsigned char * map,
-                unsigned char * dest)
-{
-  for (int i = 0; i < len; i++)
-    dest[i] = map[26*i + source[i]];
-}
-
 inline int step_mapped(int i, int x)
 {
   return steckerbrett[mapping[i][steckerbrett[x]]];
@@ -741,78 +730,6 @@ void showconfig()
   fprintf(stderr, "\n");
 }
 
-struct subst_score_s
-{
-  int a;
-  int b;
-  double score;
-} subst_scores[26*26];
-
-int subst_score_comp(const void * x, const void * y)
-{
-  struct subst_score_s * i = (struct subst_score_s *) x;
-  struct subst_score_s * j = (struct subst_score_s *) y;
-  if (i->score < j->score)
-    return +1;
-  else if (i->score > j->score)
-    return -1;
-  else
-    return 0;
-}
-
-void all_subst_score(int textlength)
-{
-  init_steckerbrett("");
-
-#if 0
-  double score;
-  //score = ic_score_decode(textlength);
-  //score = mgram_score_decode(textlength);
-  //score = bigram_score_decode(textlength);
-  //score = trigram_score_decode(textlength);
-  //score = quadgram_score_decode(textlength);
-  printf("Base score: %.4f\n", score);
-#endif
-
-  //  srandomdev();
-
-  for (int a=0; a<26; a++)
-    for (int b=0; b<26; b++)
-      {
-        double score = -1e30;
-        if (a<b)
-          {
-            /* insert one plug */
-            steckerbrett[a] = b;
-            steckerbrett[b] = a;
-            score = random() % 10000;
-            //score = ic_score_decode(textlength);
-            //score = mgram_score_decode(textlength);
-            //score = bigram_score_decode(textlength);
-            //score = trigram_score_decode(textlength);
-            //score = quadgram_score_decode(textlength);
-            steckerbrett[a] = a;
-            steckerbrett[b] = b;
-          }
-        subst_scores[26*a+b].a = a;
-        subst_scores[26*a+b].b = b;
-        subst_scores[26*a+b].score = score;
-      }
-
-  /* sort */
-  qsort(subst_scores, 26*26, sizeof(subst_score_s), subst_score_comp);
-
-#if 0
-  /* print */
-  for (int a=0; a<26*26; a++)
-    if (subst_scores[a].score > -1e30)
-      printf("%c%c: %8.4f\n",
-             num2char(subst_scores[a].a),
-             num2char(subst_scores[a].b),
-             subst_scores[a].score);
-#endif
-}
-
 double score_iter(int iter, int textlength)
 {
   double score = 0;
@@ -888,12 +805,6 @@ double hillclimb(int textlength,
                  char * plaintext)
 {
   /* Try to find the optimal steckerbrett for the given other settings */
-
-  int best_steckerbrett[26];
-  memcpy(best_steckerbrett, steckerbrett, 26*sizeof(int));
-
-  /* calc and sort best initial plug */
-  //  all_subst_score(textlength);
 
   double best_score = -1e29;
   double last_best = -1e30;
@@ -1250,8 +1161,6 @@ int main(int argc, char * * argv)
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_scoring = 4;
-  opt_logfilename = 0;
-  opt_threads = 1;
   opt_norenigma = 0;
 
   /* get arguments */

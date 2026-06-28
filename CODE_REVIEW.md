@@ -207,33 +207,39 @@ ciphertext.
 The file carries a lot of half-finished or abandoned code that obscures the
 working path:
 
-- 🟠 **`all_subst_score()`** computes plug "scores" as `random() % 10000` — pure
-  random numbers. It is never called (its call site in `hillclimb` is commented
-  out). The real scoring lines are all `#if 0`'d out. This function is entirely
-  vestigial and actively misleading.
-- 🟡 **`best_steckerbrett[26]`** in `hillclimb()` is filled via `memcpy` but
-  never read again — dead.
-- 🟡 **`map()`** (line ~559) is unused, and its parameter is named `map`,
-  shadowing the function name. **`map16_direct`/`map16_step`** are used only
-  inside `decode_num`; the simpler scalar paths next to them are `#if 0`'d.
+- 🟠 **`all_subst_score()`** computed plug "scores" as `random() % 10000` — pure
+  random numbers. Never called (its call site in `hillclimb` was commented out),
+  entirely vestigial and actively misleading. ✅ **Removed** (with its
+  `subst_score_s` struct, `subst_scores` global and `subst_score_comp`
+  comparator, the file's only use of `random()`).
+- 🟡 **`best_steckerbrett[26]`** in `hillclimb()` was filled via `memcpy` but
+  never read again — and the copy read `26*sizeof(int)` (104) bytes from the
+  26-byte `steckerbrett`, an out-of-bounds read the compiler warned about.
+  ✅ **Removed** (clears the only `-Wall` warning).
+- 🟡 **`map()`** was unused and its parameter was named `map`, shadowing the
+  function name. ✅ **Removed.** (`map16_direct`/`map16_step` are kept — they are
+  used inside `decode_num`.)
+- 🟡 **`opt_threads`** and **`opt_logfilename`** were declared and initialized but
+  never used (no `-T`/threading and no logging despite the names). ✅ **Removed.**
+  (The "load triplet scores …" comment inside `quadgram_score_decode` still
+  describes SIMD work that does not exist; git history shows SIMD code was added
+  then removed.)
 - 🟡 **`showit()`** is an entire function body wrapped in `#if 0` — a no-op.
-- 🟡 **`opt_threads`** and **`opt_logfilename`** are declared and initialized but
-  never used; there is no `-T`/threading and no logging despite the names. The
-  header comment block and the "load triplet scores …" comment inside
-  `quadgram_score_decode` describe SIMD/threading work that does not exist
-  (git history shows SIMD code was added then removed).
+  **Intentionally kept** as debug instrumentation (see note below).
 - 🟡 **Unreachable tables:** M4 thin reflectors (indices 4–5) and Beta/Gamma
   rotors (indices 13–14) exist in the wiring tables but cannot be selected via
-  any CLI option. Either wire up an M4/4-rotor mode or remove them and the
-  associated comments to avoid implying support that isn't there.
+  any CLI option. **Kept** (reserved for a future M4/4-rotor mode; the index
+  conventions are documented in `CLAUDE.md`). Wire them up or remove them later.
 - 🟢 Numerous `#if 0` / `#if 1` blocks (`showsteckerbrett`, debug prints,
   `SHOWHILLCLIMB`) scattered through the search and hill-climb code.
+  **Intentionally kept** as debug instrumentation.
 - 🟢 `score_iter(int iter, ...)` ignores its `iter` argument entirely; callers
-  pass `0` or `iter` inconsistently.
+  pass `0` or `iter` inconsistently. **Kept** (the `iter` plumbing feeds the
+  `SHOWHILLCLIMB` debug output).
 
-Recommendation: delete the vestigial code (or move genuinely useful debug
-output behind a real `-d/--verbose` flag) so the ~30% of the file that is noise
-stops competing with the parts that matter.
+The purely vestigial / buggy items above have been removed; the remaining
+`#if 0` / `SHOWHILLCLIMB` / `showit` blocks are deliberately retained as debug
+instrumentation rather than deleted.
 
 ---
 
@@ -358,7 +364,7 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 7 | 🟢 | ~~No tests / CI~~ ✅ test suite (`make test`) + GitHub Actions CI added |
 | 1.2 | 🟠 | `-l` can overflow `filename[100]`; no language allow-list |
 | 2.2 | 🟠 | `fscanf` partial matches use uninitialized variables |
-| 3 | 🟠 | Large amount of dead/misleading code (`all_subst_score` = random, etc.) |
+| 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
 | 1.3/1.4 | 🟡 | Single `read()` truncation; 16-byte block over-read past `textlength` |
 | 2.3/2.4 | 🟡/🟢 | Unused `total` (no normalization); ~~stepping unverified~~ ✅ double-step KAT added |
@@ -366,9 +372,8 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
 **Progress:** (1.1) the stack overflow, (2.1) the IC formula, (2.4) stepping
-verification, and (7) the test suite + CI are now done. The tests give
-confidence to safely tackle the remaining high-value items — the dead-code
-cleanup (§3, including the `best_steckerbrett` out-of-bounds `memcpy` that the
-compiler already warns about), the `fscanf`/`-l` input-handling fixes
-(§1.2, §2.2), and eventually the global-state refactor that would unlock
-threading.
+verification, (3) the dead/misleading-code cleanup (including the
+`best_steckerbrett` out-of-bounds `memcpy`), and (7) the test suite + CI are now
+done. The `-Wall` build is warning-free. Remaining high-value items — the
+`fscanf`/`-l` input-handling fixes (§1.2, §2.2), and eventually the global-state
+refactor that would unlock threading.
