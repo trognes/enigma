@@ -304,12 +304,18 @@ lookup, 16-byte blocking). Remaining opportunities:
 - 🟢 **Inconsistent exit/usage:** running with no args prints help and exits `1`;
   `-h` exits `0`. Errors go through `fatal()` (exit 1) but some validation
   messages are printed inline. Acceptable, but worth standardizing.
-- 🔴 **No tests and no CI.** For a cryptographic tool whose correctness is
+- 🟠 **No CI (tests added).** For a cryptographic tool whose correctness is
   subtle (stepping anomaly, ring/start offset arithmetic, plugboard
-  involution), the absence of any round-trip or known-answer tests is the single
-  biggest risk to long-term correctness. A handful of known-plaintext/known-key
-  vectors (including a Norway Enigma vector and a double-step boundary case)
-  would catch regressions in exactly the areas most likely to break.
+  involution), the absence of any round-trip or known-answer tests was the
+  single biggest risk to long-term correctness. A test suite now exists
+  (`tests/run_tests.sh`, run via `make test`) covering the canonical
+  `AAAAA → BDZGO` known-answer vector, reciprocity, plugboard, ring/start
+  offsets, the double-stepping anomaly, the Norway variant, input filtering and
+  the 1024-character limit, plus end-to-end cracking (hill-climb and
+  brute-force recovery). **Still outstanding:** there is no CI to run it
+  automatically, and the suite does not yet include an externally-anchored
+  double-step KAT (it relies on round-trip consistency for that case, which
+  cannot catch a symmetric stepping bug — see §2.4).
 - 🟢 **`Makefile`** has no `clean`, `install`, or `debug` target and does not
   list the data files as dependencies. A debug build (`-O0 -g
   -fsanitize=address,undefined`) target would immediately flag §1.1 and §1.4.
@@ -322,7 +328,7 @@ lookup, 16-byte blocking). Remaining opportunities:
 |---|----------|-------|
 | 1.1 | 🔴 | ~~`best_plaintext[1025]` overflow for ciphertext > 1024 letters~~ ✅ fixed (input capped at 1024 + validated) |
 | 2.1 | 🔴 | Index of coincidence formula is wrong (`-i` broken) |
-| 7 | 🔴 | No tests / CI for subtle crypto logic |
+| 7 | 🟠 | ~~No tests~~ ✅ test suite added (`make test`); CI still missing |
 | 1.2 | 🟠 | `-l` can overflow `filename[100]`; no language allow-list |
 | 2.2 | 🟠 | `fscanf` partial matches use uninitialized variables |
 | 3 | 🟠 | Large amount of dead/misleading code (`all_subst_score` = random, etc.) |
@@ -332,6 +338,8 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 4/5/6 | 🟡 | Legacy `index()`, `char` returns, duplicated readers/scorers, no parallelism |
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
-**If only three things are fixed:** (1.1) the stack overflow, (2.1) the IC
-formula, and (7) add known-answer round-trip tests — the tests will also give
-confidence to safely clean up the dead code and refactor the globals.
+**Progress:** (1.1) the stack overflow and (7) the test suite are now done; the
+tests give confidence to safely tackle the remaining high-value items — (2.1)
+the IC formula, the dead-code cleanup (§3, including the `best_steckerbrett`
+out-of-bounds `memcpy` that the compiler already warns about), and eventually
+the global-state refactor that would unlock threading.

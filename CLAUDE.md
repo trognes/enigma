@@ -46,6 +46,7 @@ and were sourced from the Practical Cryptography website.
 
 ```sh
 make                      # g++ -Wall -O3 -o enigma enigma.cc
+make test                 # build, then run tests/run_tests.sh
 ./enigma -h               # help / usage
 ```
 
@@ -139,7 +140,9 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).
-- Build is plain `make`. There is **no test suite and no CI**.
+- Build is plain `make`. Tests live in `tests/run_tests.sh` and run via
+  `make test` (known-answer vectors, round-trip properties, input-limit guards,
+  and end-to-end cracking). There is still **no CI**.
 
 ## Known issues
 
