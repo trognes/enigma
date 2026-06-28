@@ -119,19 +119,28 @@ inline char num2char(int x)
   return static_cast<char>(65 + x);
 }
 
-void monograms_read()
-{
-  for(int i=0; i<26; i++)
-    monograms[i] = 1.0;
+/* Read an n-gram statistics table from "<language>_<suffix>.txt".
 
-  FILE * f;
+   'table' is the flat backing store of the corresponding global array
+   (monograms / bigrams / trigrams / quadgrams). Those arrays are contiguous and
+   row-major, so the n letters of a record map to the single index
+   ((a*26 + b)*26 + ...) into 'table' of size 26^n. Each entry is seeded with 1
+   (Laplace smoothing, so unseen n-grams score log10(1) = 0) and finally stored
+   as log10(count + 1) for additive scoring. Parsing stops at end of file or the
+   first malformed record. */
+void ngrams_read(int n, double * table, const char * suffix)
+{
+  int size = 1;
+  for (int i = 0; i < n; i++)
+    size *= 26;
+
+  for (int i = 0; i < size; i++)
+    table[i] = 1.0;
 
   char filename[64];
+  snprintf(filename, sizeof(filename), "%s_%s.txt", opt_language, suffix);
 
-  snprintf(filename, sizeof(filename), "%s_monograms.txt", opt_language);
-
-  f = fopen(filename, "r");
-
+  FILE * f = fopen(filename, "r");
   if (!f)
     {
       fprintf(stderr, "Fatal error: Unable to open the language statistics file %s\n",
@@ -139,171 +148,33 @@ void monograms_read()
       exit(1);
     }
 
-  while(1)
+  while (1)
     {
-      char a;
-      int count;
-      int ret = fscanf(f, " %c %d", & a, & count);
-      if (ret != 2)
-        break;
-      if ((a >= 'A') && (a <= 'Z'))
+      int index = 0;
+      int ok = 1;
+      for (int k = 0; k < n; k++)
         {
-          monograms[char2num(a)] = count + 1.0;
+          char a;
+          if ((fscanf(f, " %c", & a) != 1) || (a < 'A') || (a > 'Z'))
+            {
+              ok = 0;
+              break;
+            }
+          index = index * 26 + char2num(a);
         }
-    }
 
-  for(int i=0; i<26; i++)
-    monograms[i] = log10(monograms[i]);
-
-  fclose(f);
-}
-
-
-void bigrams_read()
-{
-  for(int i=0; i<26; i++)
-    for(int j=0; j<26; j++)
-      bigrams[i][j] = 1.0;
-
-  FILE * f;
-
-  char filename[64];
-
-  snprintf(filename, sizeof(filename), "%s_bigrams.txt", opt_language);
-
-  f = fopen(filename, "r");
-
-  if (!f)
-    {
-      fprintf(stderr, "Fatal error: Unable to open the language statistics file %s\n",
-              filename);
-      exit(1);
-    }
-
-  while(1)
-    {
-      char a;
-      char b;
       int count;
-      int ret = fscanf(f, " %c%c %d", & a, & b, & count);
-      if (ret != 3)
-        break;
-      if ((a >= 'A') && (a <= 'Z') && (b >= 'A') && (b <= 'Z'))
-        {
-          bigrams[char2num(a)][char2num(b)] = count + 1;
-        }
-    }
-
-  for(int i=0; i<26; i++)
-    for(int j=0; j<26; j++)
-      bigrams[i][j] = log10(bigrams[i][j]);
-
-  fclose(f);
-}
-
-
-void trigrams_read()
-{
-  for(int i=0; i<26; i++)
-    for(int j=0; j<26; j++)
-      for(int k=0; k<26; k++)
-        trigrams[i][j][k] = 1.0;
-
-  FILE * f;
-
-  char filename[64];
-
-  snprintf(filename, sizeof(filename), "%s_trigrams.txt", opt_language);
-
-  f = fopen(filename, "r");
-
-  if (!f)
-    {
-      fprintf(stderr, "Fatal error: Unable to open the language statistics file %s\n",
-              filename);
-      exit(1);
-    }
-
-  while(1)
-    {
-      char a;
-      char b;
-      char c;
-      int count;
-      int ret = fscanf(f, " %c%c%c %d", & a, & b, & c, & count);
-
-      if (ret != 4)
+      if (! ok || (fscanf(f, " %d", & count) != 1))
         break;
 
-      if ((a >= 'A') && (a <= 'Z') &&
-          (b >= 'A') && (b <= 'Z') &&
-          (c >= 'A') && (c <= 'Z'))
-        {
-          trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;
-        }
+      table[index] = count + 1;
     }
 
   fclose(f);
 
-  for(int i=0; i<26; i++)
-    for(int j=0; j<26; j++)
-      for(int k=0; k<26; k++)
-        trigrams[i][j][k] = log10(trigrams[i][j][k]);
+  for (int i = 0; i < size; i++)
+    table[i] = log10(table[i]);
 }
-
-void quadgrams_read()
-{
-  for(int i=0; i<26; i++)
-    for(int j=0; j<26; j++)
-      for(int k=0; k<26; k++)
-        for(int l=0; l<26; l++)
-          quadgrams[i][j][k][l] = 1;
-
-  FILE * f;
-
-  char filename[64];
-
-  snprintf(filename, sizeof(filename), "%s_quadgrams.txt", opt_language);
-
-  f = fopen(filename, "r");
-
-  if (!f)
-    {
-      fprintf(stderr, "Fatal error: Unable to open the language statistics file %s\n",
-              filename);
-      exit(1);
-    }
-
-  while(1)
-    {
-      char a;
-      char b;
-      char c;
-      char d;
-      int count;
-      int ret = fscanf(f, " %c%c%c%c %d", & a, & b, & c, & d, & count);
-
-      if (ret != 5)
-        break;
-
-      if ((a >= 'A') && (a <= 'Z') &&
-          (b >= 'A') && (b <= 'Z') &&
-          (c >= 'A') && (c <= 'Z') &&
-          (d >= 'A') && (d <= 'Z'))
-        {
-          quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;
-        }
-    }
-
-  fclose(f);
-
-  for(int i=0; i<26; i++)
-    for(int j=0; j<26; j++)
-      for(int k=0; k<26; k++)
-        for(int l=0; l<26; l++)
-          quadgrams[i][j][k][l] = log10(quadgrams[i][j][k][l]);
-}
-
 
 
 double quadgram_score(char * text, int len)
@@ -1087,7 +958,7 @@ void alltoupper(char * text)
 void version()
 {
   printf("Enigma cipher tool version 1.1.0\n");
-  printf("Copyright (C) 2017 Torbjørn Rognes\n");
+  printf("Copyright (C) 2017-2026 Torbjørn Rognes\n");
   printf("\n");
 }
 
@@ -1333,6 +1204,9 @@ int main(int argc, char * * argv)
 
   show_settings();
 
+  if (textlength < 1)
+    fatal("Ciphertext is empty (no A-Z letters on standard input)");
+
   /* init */
 
   switch (opt_scoring)
@@ -1340,16 +1214,16 @@ int main(int argc, char * * argv)
     case 0:
       break;
     case 1:
-      monograms_read();
+      ngrams_read(1, monograms, "monograms");
       break;
     case 2:
-      bigrams_read();
+      ngrams_read(2, & bigrams[0][0], "bigrams");
       break;
     case 3:
-      trigrams_read();
+      ngrams_read(3, & trigrams[0][0][0], "trigrams");
       break;
     case 4:
-      quadgrams_read();
+      ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams");
       break;
     default:
       break;

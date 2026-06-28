@@ -18,7 +18,7 @@ All possible combinations of the other unspecified settings will be tried.
 
 ```
 Enigma cipher tool version 1.1.0
-Copyright (C) 2017 Torbjørn Rognes
+Copyright (C) 2017-2026 Torbjørn Rognes
 
 Usage: enigma [OPTIONS]
   -h           Show help information

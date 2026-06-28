@@ -60,8 +60,8 @@ allow-list check. A language argument longer than ~85 characters overflowed
 `snprintf(filename, sizeof(filename), "%s_quadgrams.txt", opt_language)` (a
 bounded write), and `main()` validates `-l` up front: 1–32 characters, letters
 only — which also blocks path-traversal names like `../../etc/passwd`. Guarded
-by an illegal-`-l` rejection test. (Factoring the four near-identical readers
-into one remains an open refactor — see §5.)
+by an illegal-`-l` rejection test. (The four near-identical readers have since
+been factored into one `ngrams_read()` — see §5.)
 
 ### 1.3 🟡 `readciphertext()` / `readplaintext()` do a single `read()` — ✅ FIXED
 
@@ -203,12 +203,13 @@ table handles fine. The Norway-wheel notch tables (indices 8–12) reuse the
 standard `Q/E/V/J/Z` turnover letters and remain covered only by round-trip
 consistency, not an external KAT.)
 
-### 2.5 🟢 Empty input causes division by zero / degenerate search
+### 2.5 🟢 Empty input causes division by zero / degenerate search — ✅ FIXED
 
-If stdin yields zero A–Z letters, `textlength == 0`: scoring loops are empty,
-`bruteforce()` reports a meaningless "best", and `readplaintext()` (with `-p`)
-divides by `textlength` → `100.0 * identical / 0`. There is no guard for empty
-ciphertext.
+If stdin yielded zero A–Z letters, `textlength == 0`: scoring loops were empty,
+`bruteforce()` reported a meaningless "best", and `readplaintext()` (with `-p`)
+divided by `textlength`. **Resolved:** `main()` now fails with
+"Ciphertext is empty …" when `textlength < 1` (after echoing the settings), so
+no downstream code runs on empty input. Guarded by a test.
 
 ---
 
@@ -312,7 +313,8 @@ instrumentation rather than deleted.
 - 🟡 **Duplicated scoring logic.** `quadgram_score`/`trigram_score`/… (operating
   on `char*`) and `*_score_decode` (operating on `num_plaintext`) are parallel
   implementations of the same math; the non-`decode` variants appear unused in
-  the hot path. Likewise the four n-gram readers are copy-paste of one another.
+  the hot path. (The four copy-paste n-gram *readers* have been unified into a
+  single `ngrams_read(n, table, suffix)` ✅; the parallel *scorers* remain.)
 - 🟢 **Magic numbers** throughout: `65`, `26`, `1025`, `100`, `10000`,
   offsets `+3`/`+8`/`+10`/`-7` for Norway indexing in `init_walzen` and
   `showconfig`. The Norway offset logic in particular is duplicated and easy to
@@ -398,15 +400,16 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
 | 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals~~ ✅ fixed; duplicated readers/scorers, no parallelism remain |
-| 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
+| 2.5/7 | 🟢 | ~~Empty-input div-by-zero~~ ✅ fixed; relative data paths; weak Makefile |
 
-**Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow,
-(1.3/1.4) the read-loop and block over-read, (2.1) the IC formula, (2.2) the
-`fscanf` partial-match bug, (2.4) stepping verification, (3) the
-dead/misleading-code cleanup (including the `best_steckerbrett` out-of-bounds
-`memcpy`), (2.3) the unused `total`, the §4 modernization (legacy `index()` →
-`strchr`, `int` rotor returns, stray includes), and (7) the test suite + CI are
-now done. The `-Wall` build is warning-free and the suite has 21 checks.
-Remaining items — factor the four duplicated n-gram readers / parallel scorers
-into one (§5/§6), and eventually the global-state refactor that would unlock
-threading and clear the `-Wshadow` noise (§5).
+**Progress:** nearly every finding is resolved — (1.1) the stack overflow,
+(1.2) the `-l`/filename overflow, (1.3/1.4) the read-loop and block over-read,
+(2.1) the IC formula, (2.2) the `fscanf` partial-match bug, (2.3) the unused
+`total`, (2.4) stepping verification, (2.5) the empty-input guard, (3) the
+dead/misleading-code cleanup, the §4 modernization (legacy `index()` → `strchr`,
+`int` rotor returns, `const`-correct options, stray includes), the four n-gram
+readers unified into one (§5/§6), and (7) the test suite + CI. The build is
+warning-free under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual` (g++ and
+clang++), and the suite has 63 checks. Remaining items — the parallel
+`*_score`/`*_score_decode` scorers, and the larger global-state refactor that
+would unlock threading and clear the `-Wshadow` noise (§5).

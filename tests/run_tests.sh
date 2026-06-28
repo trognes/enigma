@@ -169,6 +169,16 @@ case "$err" in
   *)                        check "n-gram scoring without -l rejected (message)" "$err" "*language is required*" ;;
 esac
 
+# Input with no A-Z letters is rejected rather than running a degenerate,
+# empty-ciphertext search (and dividing by zero in the -p comparison).
+err=$(printf '12345 .,!?' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+code=$?
+check "empty ciphertext rejected (exit code)" "$code" "1"
+case "$err" in
+  *"empty"*) check "empty ciphertext rejected (message)" "ok" "ok" ;;
+  *)         check "empty ciphertext rejected (message)" "$err" "*empty*" ;;
+esac
+
 # The settings echo (stderr) prints the plugboard as spaced pairs (AB CD),
 # not the internal de-spaced form (ABCD).
 pb_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF" 2>&1 >/dev/null)
