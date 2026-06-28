@@ -177,7 +177,8 @@ comparisons, so it was dropped rather than completed.)
 
 ### 2.4 🟢 Stepping model verified against a reference — ✅ ADDRESSED
 
-`step_rotors()` implements the double-stepping anomaly:
+The rotor stepping (inlined in `setup_mapping()`) implements the double-stepping
+anomaly:
 
 ```c
 if (notch[middle]) { step left; step middle; }     // double step
@@ -298,21 +299,22 @@ instrumentation rather than deleted.
   `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`, and the big working
   tables `subst_array`, `mapping`, `num_plaintext`, plus the candidate
   `plaintext`) has been gathered into a single `struct machine` that is threaded
-  through the search/scoring functions (`init_*`, `rotor_*`, `step_rotors`,
-  `subst_rotors`, `precompute`, `setup_mapping`, `decode`/`decode_num`, the
-  `*_score_decode` scorers, `score_iter`, `hillclimb`, `bruteforce`, `showconfig`).
+  through the search/scoring functions (`init_*`, `rotor_*`, `subst_rotors`,
+  `precompute`, `setup_mapping`, `decode`/`decode_num`, the `*_score_decode`
+  scorers, `score_iter`, `hillclimb`, `bruteforce`, `showconfig`).
   `main()` owns one heap-allocated instance. The read-only data (the wiring
   tables built by `init()`, the n-gram statistics, and the `ciphertext` /
   `num_ciphertext` / `textlength` input) is intentionally left shared — it is
   safe to read from many threads. This makes the search **reentrant**: a worker
-  thread can own its own `machine`. Four dead functions that only existed to read
-  the old globals (`step`, `substitute`, `step_precomputed`,
-  `init_steckerbrett_direct`) were removed in the process. **Still open:** the
-  actual multi-threading over the reflector × wheel-order loop (each worker its
-  own `machine`, merge the per-worker best). Verified perf-neutral via
-  `make bench BASE=<pre-refactor>` (search and hill-climb both within noise); a
-  `setup_mapping` tweak (resolve the rotor-stack row once and `memcpy` it)
-  recovered an ~8% search-path dip from the added struct indirection.
+  thread can own its own `machine`. Several dead/obsolete functions were removed
+  in the process (`step`, `substitute`, `step_precomputed`,
+  `init_steckerbrett_direct`, and the 16-byte-blocked decode helpers). **Still
+  open:** the actual multi-threading over the reflector × wheel-order loop (each
+  worker its own `machine`, merge the per-worker best). Verified perf-neutral
+  vs the pre-struct baseline on **both** g++ and clang via
+  `make bench BASE=<pre-refactor>` — but only after three layout/codegen
+  mitigations (see §6): the naive encapsulation cost ~20–60% on clang/ARM and
+  ~10–14% on the g++ search path.
 - 🟢 **`textlength` global/parameter shadowing** ✅ resolved. Nearly every
   function used to take an `int textlength` parameter while a file-scope global
   `textlength` also existed; every call site already passed exactly that global
@@ -381,15 +383,18 @@ Remaining opportunities:
   `struct machine`; it (and the `map16_*`/`showit` helpers and `blocksize`) was
   removed in favour of a single scalar loop over `__restrict` base pointers.
 - 🟡 **Struct encapsulation has an architecture-dependent hot-loop cost** worth
-  remembering. Collapsing the separate global arrays into `struct machine` is
-  ~free for g++ on the hill-climb path but, done naively, cost ~20–60% under
-  clang/Apple-silicon (large in-struct offsets past the 457 KB `subst_array`,
-  plus lost no-alias assumptions). Mitigated by heap-allocating `subst_array`
-  through its own pointer and hoisting `__restrict` base pointers in the decode/
-  score loops; clang is now at parity. A residual ~10% remains on the **g++**
-  *search* path (the no-plug brute-force scan, in `setup_mapping`/`step_rotors`);
-  hill-climb is at parity on both compilers. Always A/B with **both** compilers
-  (`make bench BASE=<ref>` and `make bench CXX=clang++ BASE=<ref>`).
+  remembering. Collapsing the separate global arrays into `struct machine`, done
+  naively, cost ~20–60% under clang/Apple-silicon and ~10–14% on the g++ search
+  path (large in-struct offsets past the 457 KB `subst_array`, lost no-alias
+  assumptions, and a per-character read/modify/write of the rotor positions
+  through the struct in the stepping loop). Three mitigations bring **both
+  compilers back to parity** vs the pre-struct baseline and must be preserved:
+  (1) `subst_array` is heap-allocated through its own pointer so the hot
+  per-character tables keep small struct offsets; (2) the decode/score loops
+  hoist member base pointers into `__restrict` locals; (3) `setup_mapping` holds
+  the rotor positions in locals across its loop, writing back once. Always A/B
+  with **both** compilers (`make bench BASE=<ref>` and
+  `make bench CXX=clang++ BASE=<ref>`).
 
 ---
 

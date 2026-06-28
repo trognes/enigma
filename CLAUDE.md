@@ -141,8 +141,10 @@ A single pass through `main()`:
 - `char2num`/`num2char` map A–Z ↔ 0–25.
 - `rotor_l` / `rotor_r` apply a single rotor forward/reverse with the
   `grundstellung - ringstellung` offset.
-- `step_rotors()` implements the stepping schedule including the Enigma
-  double-stepping anomaly (checks the middle/right notches before advancing).
+- The rotor stepping schedule — including the Enigma double-stepping anomaly
+  (the middle rotor advances on its own notch as well as the right rotor's
+  carry) — is implemented inline in `setup_mapping()`, which holds the rotor
+  positions in locals across the per-character loop (see the performance note).
 - The full substitution is plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
   plugboard. `subst_rotors()` is the rotor-stack-and-reflector core; the hot path
   replaces it with precomputed `subst_array` / `mapping` lookups wrapped in two
@@ -163,15 +165,20 @@ removed).
 > into `struct machine`, collapsing the formerly separate global arrays into one
 > object cost real throughput, and the size of the hit is compiler/arch
 > dependent (negligible for g++, but ~20–60% under clang/Apple-silicon if done
-> naively). Two things keep it in check and must be preserved: (1) the 457 KB
+> naively). Three things keep it in check and must be preserved: (1) the 457 KB
 > `subst_array` is **heap-allocated separately** and reached through its own
 > pointer, so it never pushes the hot per-character tables (`mapping`,
 > `num_plaintext`, `steckerbrett`) out to large struct offsets (large immediate
 > offsets are expensive on ARM); (2) the decode/score loops hoist the member
 > base pointers into `__restrict` locals so the compiler keeps the no-alias
-> guarantees the separate globals used to give. Always re-check `make bench
-> BASE=<ref>` under **both** g++ and clang (`make bench CXX=clang++ BASE=<ref>`)
-> after touching the hot path or the struct.
+> guarantees the separate globals used to give; (3) `setup_mapping` holds the
+> rotor positions (`grundstellung` etc.) in locals across its per-character loop
+> — stepping them through the struct member each character could not be proven
+> not to alias the `mapping[]` store and cost ~10–14% on the search path (worst
+> on ARM). With all three, both paths are at parity vs the pre-struct baseline on
+> g++ and clang. Always re-check `make bench BASE=<ref>` under **both** g++ and
+> clang (`make bench CXX=clang++ BASE=<ref>`) after touching the hot path or the
+> struct.
 
 ## Conventions & gotchas for contributors
 
