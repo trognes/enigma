@@ -1,7 +1,10 @@
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -O3
+
 all : enigma
 
 enigma : enigma.cc
-	g++ -Wall -O3 -o enigma enigma.cc
+	$(CXX) $(CXXFLAGS) -o enigma enigma.cc
 
 test : enigma
 	sh tests/run_tests.sh

@@ -528,6 +528,7 @@ inline int step_mapped(int i, int x)
 
 inline void decode(int textlength, char * ciphertext, char * plaintext)
 {
+  (void) ciphertext;   /* kept for symmetry; decode reads num_ciphertext[] */
   for (int i = 0; i < textlength; i++)
     plaintext[i] = num2char(step_mapped(i, num_ciphertext[i]));
   //plaintext[i] = num2char(step_precomputed(char2num(ciphertext[i])));
@@ -553,6 +554,7 @@ inline void map16_direct(unsigned char * source,
 
 void showit(const char * msg, unsigned char * p)
 {
+  (void) msg; (void) p;   /* used only when the debug block below is enabled */
 #if 0
   fprintf(stderr, "%s:", msg);
   for(int i=0; i<16; i++)
@@ -705,6 +707,7 @@ void showconfig()
 
 double score_iter(int iter, int textlength)
 {
+  (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   double score = 0;
 
   switch(opt_scoring)

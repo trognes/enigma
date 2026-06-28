@@ -265,16 +265,25 @@ instrumentation rather than deleted.
 - 🟡 **String-literal-to-`char*`** assignments (`opt_ukw = (char*) ".";` etc.)
   cast away `const`, then `alltoupper`/`removespaces` mutate `optarg` (i.e.
   `argv`) in place. Mutating `argv` and casting away `const` on literals is
-  legal-but-smelly; with `-Wwrite-strings` these would warn. Prefer `const
-  char*` defaults and copy before mutating.
+  legal-but-smelly; the explicit `(char*)` casts suppress `-Wwrite-strings` but
+  trip `-Wcast-qual`. Prefer `const char*` defaults and copy before mutating.
 - 🟢 **C++ written as C:** C stdio, raw global arrays, `qsort` with
   `void*` comparators, `struct subst_score_s { ... } subst_scores[...];`
   declared with a trailing global instance. No use of `std::` containers,
   `std::array`, RAII, or `constexpr`. This is a style/maintainability point, not
   a bug, but it forfeits a lot of compiler help.
-- 🟢 **Build flags** are only `-Wall -O3`. Adding `-Wextra -Wshadow
-  -Wconversion -Wwrite-strings` would surface several of the issues above
-  (shadowed `map`, signed/`char` returns, `const` literals, unused vars).
+- 🟢 **Build flags** ✅ now `-std=c++17 -Wall -Wextra -Wpedantic -O3`, and the
+  build is **warning-free** under them. Stronger optional flags were surveyed and
+  left off because they reflect the deliberate C-style / global-state design
+  rather than bugs, and would be noisy without a larger refactor:
+  - `-Wshadow` → ~14 (mostly the global `textlength` shadowed by the same-named
+    function parameters; see §5).
+  - `-Wconversion` → ~38 (implicit `int`/`char`/`double` narrowings throughout
+    the arithmetic).
+  - `-Wold-style-cast` → ~12 and `-Wcast-qual` → ~8 (the C-style `(char*)` casts
+    on string-literal option defaults — see the bullet above).
+  Enabling any of these would be a good ratchet once the corresponding cleanup
+  (global-state refactor, `const`-correct option defaults) is done.
 
 ---
 
