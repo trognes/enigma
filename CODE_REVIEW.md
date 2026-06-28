@@ -15,9 +15,10 @@ Severity legend: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low / nit.
 
 ### 1.1 🔴 Stack buffer overflow on long ciphertext (`best_plaintext[1025]`) — ✅ FIXED
 
-> **Resolved:** the ciphertext is now capped at `maxtextlen = 1024` letters and
-> `readciphertext()` rejects longer input with a fatal error, so the
-> `best_plaintext` buffer (sized `maxtextlen + 1`) can no longer overflow.
+> **Resolved:** the ciphertext is now capped at `maxlen = 1024` letters (the
+> single length constant, reduced from the old 10240) and `readciphertext()`
+> rejects longer input with a fatal error, so the `best_plaintext` buffer (sized
+> `maxlen + 1`, like every other length buffer) can no longer overflow.
 
 
 
@@ -60,8 +61,8 @@ allow-list check. A language argument longer than ~85 characters overflowed
 `snprintf(filename, sizeof(filename), "%s_quadgrams.txt", opt_language)` (a
 bounded write), and `main()` validates `-l` up front: 1–32 characters, letters
 only — which also blocks path-traversal names like `../../etc/passwd`. Guarded
-by an illegal-`-l` rejection test. (Factoring the four near-identical readers
-into one remains an open refactor — see §5.)
+by an illegal-`-l` rejection test. (The four near-identical readers have since
+been factored into one `ngrams_read()` — see §5.)
 
 ### 1.3 🟡 `readciphertext()` / `readplaintext()` do a single `read()` — ✅ FIXED
 
@@ -74,7 +75,7 @@ inputs), so ciphertext could be silently truncated, and anything past the first
 `maxlen` bytes was silently dropped.
 
 **Resolved.** Both functions now loop on `read()` until EOF, filtering A–Z as
-they go, and bound the letter count incrementally (fatal past `maxtextlen`).
+they go, and bound the letter count incrementally (fatal past `maxlen`).
 A read error is reported instead of ignored, and the buffers are `unsigned char`
 so `toupper()` is never handed a negative value. Guarded by a test that pipes
 input larger than the read buffer (70 000 bytes before the letters) and checks
@@ -203,12 +204,13 @@ table handles fine. The Norway-wheel notch tables (indices 8–12) reuse the
 standard `Q/E/V/J/Z` turnover letters and remain covered only by round-trip
 consistency, not an external KAT.)
 
-### 2.5 🟢 Empty input causes division by zero / degenerate search
+### 2.5 🟢 Empty input causes division by zero / degenerate search — ✅ FIXED
 
-If stdin yields zero A–Z letters, `textlength == 0`: scoring loops are empty,
-`bruteforce()` reports a meaningless "best", and `readplaintext()` (with `-p`)
-divides by `textlength` → `100.0 * identical / 0`. There is no guard for empty
-ciphertext.
+If stdin yielded zero A–Z letters, `textlength == 0`: scoring loops were empty,
+`bruteforce()` reported a meaningless "best", and `readplaintext()` (with `-p`)
+divided by `textlength`. **Resolved:** `main()` now fails with
+"Ciphertext is empty …" when `textlength < 1` (after echoing the settings), so
+no downstream code runs on empty input. Guarded by a test.
 
 ---
 
@@ -275,12 +277,11 @@ instrumentation rather than deleted.
   `std::array`, RAII, or `constexpr`. This is a style/maintainability point, not
   a bug, but it forfeits a lot of compiler help.
 - 🟢 **Build flags** ✅ now `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual
-  -O3`, and the build is **warning-free** under them. Stronger optional flags
-  were surveyed and left off because they reflect the deliberate C-style /
-  global-state design rather than bugs, and would be noisy without a larger
-  refactor:
-  - `-Wshadow` → ~14 (mostly the global `textlength` shadowed by the same-named
-    function parameters; see §5).
+  -Wshadow -O3`, and the build is **warning-free** under them. `-Wshadow` has
+  been enabled (see §5 — the `textlength` shadowing it flagged is fixed). The
+  remaining stronger optional flags were surveyed and left off because they
+  reflect the deliberate C-style design rather than bugs, and would be noisy
+  without a larger refactor:
   - `-Wconversion` → ~38 (implicit `int`/`char`/`double` narrowings throughout
     the arithmetic).
   - `-Wold-style-cast` → ~12 (the remaining C-style `(int*)`/pointer casts; would
@@ -301,22 +302,34 @@ instrumentation rather than deleted.
   (`precompute()` clobbers `ringstellung`/`grundstellung`, relying on
   `bruteforce` to reset them), and unit testing any piece in isolation is
   impractical.
-- 🟡 **`textlength` is both a global and a parameter.** Nearly every function
-  takes `int textlength` while a global `textlength` also exists. This shadowing
-  is confusing and invites bugs where the wrong one is used.
+- 🟢 **`textlength` global/parameter shadowing** ✅ resolved. Nearly every
+  function used to take an `int textlength` parameter while a file-scope global
+  `textlength` also existed; every call site already passed exactly that global
+  (likewise for the `ciphertext`/`plaintext` buffer parameters). The redundant
+  parameters were removed so these functions (`setup_mapping`, `decode`, the five
+  `*_score_decode` scorers, `score_iter`, `ciphertext_letterdist`, `hillclimb`)
+  read the globals directly, and `-Wshadow` is now on in the build to keep it
+  that way.
 - 🟡 **`bruteforce()` is a single ~110-line function with six nested loops** and
   inline result reporting. The wheel/ring/start range setup, the search, and the
   reporting should be separated; the deep nesting plus the
   `if ((w1!=w2)&&(w1!=w3)&&(w2!=w3))` permutation guard make it hard to follow
   and easy to break.
-- 🟡 **Duplicated scoring logic.** `quadgram_score`/`trigram_score`/… (operating
-  on `char*`) and `*_score_decode` (operating on `num_plaintext`) are parallel
-  implementations of the same math; the non-`decode` variants appear unused in
-  the hot path. Likewise the four n-gram readers are copy-paste of one another.
-- 🟢 **Magic numbers** throughout: `65`, `26`, `1025`, `100`, `10000`,
-  offsets `+3`/`+8`/`+10`/`-7` for Norway indexing in `init_walzen` and
-  `showconfig`. The Norway offset logic in particular is duplicated and easy to
-  get out of sync.
+- 🟢 **Duplicated scoring logic** ✅ resolved. The `char*`-based
+  `quadgram_score`/`trigram_score`/`bigram_score`/`monogram_score`/`ic_score`
+  family was a parallel, **unused** copy of the live `*_score_decode` family
+  (which `score_iter` calls); the dead `char*` scorers have been removed. The
+  four copy-paste n-gram *readers* were likewise unified into a single
+  `ngrams_read(n, table, suffix)`.
+- 🟢 **Magic numbers** ✅ named. Semantic ones: the scoring models are an `enum`
+  (`SCORE_IC` … `SCORE_QUAD`); the Norway table offsets are
+  `norway_reflector_index` / `norway_rotor_base` (used by both `init_walzen` and
+  `showconfig`); the decode block width is `blocksize`; and the search/hill-climb
+  "−infinity" sentinel is a single `score_min` (hill-climb was converted to a
+  `do`/`while` so it no longer needs two priming values). The mechanical sweep is
+  also done: the pervasive literal `26` is now `asize`, wheel-count `3` is
+  `wheels`, and `65` is the `'A'` character literal in `char2num`/`num2char`
+  (only the `asize` definition and explanatory comments keep the literal 26).
 
 ---
 
@@ -324,7 +337,16 @@ instrumentation rather than deleted.
 
 The hot path is already thoughtfully optimized (precompute the rotor stack into
 `subst_array`, fold stepping into a per-position `mapping`, score by table
-lookup, 16-byte blocking). Remaining opportunities:
+lookup, 16-byte blocking).
+
+> **Benchmark in place.** `tests/bench.sh` (`make bench`) now measures the two
+> hot paths separately — `search` (brute-force scan, no plugboard) and
+> `hillclimb` (the `-c` loop) — with a same-machine A/B mode
+> (`make bench BASE=<ref>`) that fails on a >10% slowdown. Run it around the
+> global-state/threading refactor below to guard single-thread throughput before
+> chasing the parallel speedup.
+
+Remaining opportunities:
 
 - 🟡 **No parallelism.** `bruteforce()` is embarrassingly parallel over
   reflector × wheel-order (and ring/start). The scaffolding (`opt_threads`)
@@ -363,8 +385,11 @@ lookup, 16-byte blocking). Remaining opportunities:
   (`tests/run_tests.sh`, run via `make test`) covering the canonical
   `AAAAA → BDZGO` known-answer vector, reciprocity, plugboard, ring/start
   offsets, the double-stepping anomaly, the Norway variant, input filtering and
-  the 1024-character limit, plus end-to-end cracking (hill-climb, brute-force,
-  and index-of-coincidence recovery). The double-stepping anomaly is covered by
+  the 1024-character limit, plus end-to-end cracking — brute-force start-position
+  and plugboard hill-climb matrices over every scoring model (IC/mono/bi/tri/quad)
+  in every language (german/english/danish/french); the hill-climb matrix uses
+  long plaintexts and a small (2-pair) plugboard so every model converges. The
+  double-stepping anomaly is covered by
   an externally-anchored known-answer test (see §2.4), alongside the authentic
   1930 instruction-manual message vector.
 
@@ -394,16 +419,18 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
-| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals~~ ✅ fixed; duplicated readers/scorers, no parallelism remain |
-| 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
+| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing~~ ✅ fixed; no parallelism remains |
+| 2.5/7 | 🟢 | ~~Empty-input div-by-zero~~ ✅ fixed; relative data paths; weak Makefile |
 
-**Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow,
-(1.3/1.4) the read-loop and block over-read, (2.1) the IC formula, (2.2) the
-`fscanf` partial-match bug, (2.4) stepping verification, (3) the
-dead/misleading-code cleanup (including the `best_steckerbrett` out-of-bounds
-`memcpy`), (2.3) the unused `total`, the §4 modernization (legacy `index()` →
-`strchr`, `int` rotor returns, stray includes), and (7) the test suite + CI are
-now done. The `-Wall` build is warning-free and the suite has 21 checks.
-Remaining items — factor the four duplicated n-gram readers / parallel scorers
-into one (§5/§6), and eventually the global-state refactor that would unlock
-threading and clear the `-Wshadow` noise (§5).
+**Progress:** nearly every finding is resolved — (1.1) the stack overflow,
+(1.2) the `-l`/filename overflow, (1.3/1.4) the read-loop and block over-read,
+(2.1) the IC formula, (2.2) the `fscanf` partial-match bug, (2.3) the unused
+`total`, (2.4) stepping verification, (2.5) the empty-input guard, (3) the
+dead/misleading-code cleanup, the §4 modernization (legacy `index()` → `strchr`,
+`int` rotor returns, `const`-correct options, stray includes), the four n-gram
+readers unified into one and the dead `char*` scorer family removed (§5/§6),
+the `textlength` global/parameter shadowing removed and `-Wshadow` enabled (§5),
+and (7) the test suite + CI. The build is warning-free under
+`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
+the suite has 63 checks. The main remaining item is the larger global-state
+refactor that would unlock multithreading (§5).

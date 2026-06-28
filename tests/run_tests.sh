@@ -18,8 +18,10 @@
 #   * Behavioural tests for input handling: non-letter filtering and the
 #     1024-character input limit (regression guard for the best_plaintext
 #     overflow fix).
-#   * End-to-end cracking tests: encrypt with known settings, then recover the
-#     plaintext via the brute-force search and plugboard hill-climb.
+#   * End-to-end cracking tests: full matrices over every scoring model
+#     (IC/mono/bi/tri/quad) x every language (german/english/danish/french), for
+#     both brute-force start-position recovery and plugboard hill-climb recovery
+#     (long plaintexts + a small plugboard so every combination converges).
 
 set -u
 
@@ -156,6 +158,35 @@ case "$err" in
   *)                    check "illegal -l rejected (message)" "$err" "*Illegal language*" ;;
 esac
 
+# There is no default language: n-gram scoring (-m/-b/-t/-q) requires -l, and
+# must fail loudly when it is missing. (-i needs no language and is exercised
+# throughout the known-answer tests above.)
+err=$(printf 'ABC' | "$ENIGMA" -q -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+code=$?
+check "n-gram scoring without -l rejected (exit code)" "$code" "1"
+case "$err" in
+  *"language is required"*) check "n-gram scoring without -l rejected (message)" "ok" "ok" ;;
+  *)                        check "n-gram scoring without -l rejected (message)" "$err" "*language is required*" ;;
+esac
+
+# Input with no A-Z letters is rejected rather than running a degenerate,
+# empty-ciphertext search (and dividing by zero in the -p comparison).
+err=$(printf '12345 .,!?' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+code=$?
+check "empty ciphertext rejected (exit code)" "$code" "1"
+case "$err" in
+  *"empty"*) check "empty ciphertext rejected (message)" "ok" "ok" ;;
+  *)         check "empty ciphertext rejected (message)" "$err" "*empty*" ;;
+esac
+
+# The settings echo (stderr) prints the plugboard as spaced pairs (AB CD),
+# not the internal de-spaced form (ABCD).
+pb_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF" 2>&1 >/dev/null)
+case "$pb_echo" in
+  *"AB CD EF"*) check "settings echo spaces plugboard pairs" "ok" "ok" ;;
+  *)            check "settings echo spaces plugboard pairs" "$pb_echo" "*AB CD EF*" ;;
+esac
+
 # The n-gram parser tolerates blank lines and irregular whitespace without
 # hanging or erroring (guards the fscanf field-count / leading-space fix).
 printf '\n  E 529117365\n\nT 390965105\nA 374061888\n   \n' > zztest_monograms.txt
@@ -166,30 +197,55 @@ rm -f zztest_monograms.txt
 
 echo "== End-to-end cracking =="
 
-# Encrypt with a known plugboard, then recover the plaintext with the rotor
-# settings known but the plugboard unknown (hill-climb).
-hc_plain="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGNOWISTHETIMEFORALLGOODMENTOCOMETOTHEAIDOFTHEIRCOUNTRYTHEENIGMAMACHINE"
-hc_ct=$(run "$hc_plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF GH IJ")
-check "crack: hill-climb recovers plugboard" \
-  "$(run "$hc_ct" -u B -w 123 -r AAA -g AAA -c -l english -q)" \
-  "$hc_plain"
+# Genuine per-language plaintexts (A-Z only; accents/umlauts transliterated, e.g.
+# ae oe ue / aa). Long passages (~450-480 letters) so that even the weakest
+# scoring models have enough signal to converge during hill-climbing.
+pt_german="DIEENIGMAMASCHINEWURDEIMZWEITENWELTKRIEGVONDERDEUTSCHENWEHRMACHTVERWENDETUMGEHEIMENACHRICHTENZUVERSCHLUESSELNABERDIEALLIIERTENKONNTENDENGEHEIMENCODETROTZDEMBRECHENWEILDIEDEUTSCHENOFTDIEGLEICHENFLOSKELNVERWENDETENUNDWEILVIELEBEDIENERIMMERWIEDERDIESELBENFEHLERMACHTENDIEPOLNISCHENUNDBRITISCHENMATHEMATIKERBAUTENMASCHINENUMDIETAEGLICHENSCHLUESSELZUFINDENUNDLASENSODIEGEHEIMENFUNKSPRUECHEDESFEINDESMITUNDVERKUERZTENDADURCHDENKRIEGUMMEHREREJAHREUNDRETTETENVIELETAUSENDMENSCHENLEBEN"
+pt_english="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSEWEFINDTHATCERTAINCOMMONWORDSANDLETTERPATTERNSREPEATSOOFTENTHATTHEYBETRAYTHEUNDERLYINGSTRUCTUREOFTHEMESSAGEEVENAFTERITHASBEENENCRYPTEDWITHAROTORMACHINELIKETHEENIGMAUSEDINTHEWARHISTORIANSBELIEVETHATBREAKINGTHISCIPHERSHORTENEDTHECONFLICTBYSEVERALYEARSANDSAVEDCOUNTLESSLIVES"
+pt_danish="DETVARENGANGENLILLEHAVFRUESOMBOEDELANGTUDEPAAHAVETSBUNDSAMMENMEDSINFADEROGSINEFEMSOESTREHUNVARDENYNGSTEOGSMUKKESTEAFDEMALLEMENHUNLAENGTESEFTERATKOMMEOPTILMENNESKENESVERDENOGSEDENSTORESKIBEOGBYERNEOGSKOVENEHVERTAARBLEVHUNAELDREOGFIKLOVTILATSTIGEOPGENNEMDETKLAREVANDFORATSIDDEPAAKLIPPERNEISKINNETFRAMAANENOGSEUDOVERDENSTOREVIDEVERDENOGNAARSOLENGIKNEDDYKKEDEHUNNEDIGENMENHUNGLEMTEALDRIGDENDEJLIGEVERDENOVENOVERVANDETOGENDAGDAHUNREDDEDEENUNGPRINSFRADRUKNINGFORELSKEDEHUNSIGHAABLOEST"
+pt_french="LESSANGLOTSLONGSDESVIOLONSDELAUTOMNEBLESSENTMONCOEURDUNELANGUEURMONOTONETOUTSUFFOCANTETBLEMEQUANDSONNELHEUREJEMESOUVIENSDESJOURSANCIENSETALORSJEPLEUREETJEMENVAISAUVENTMAUVAISQUIMEMPORTEDECADELABCOMMELAFEUILLEMORTEPENDANTLONGTEMPSJEMESUISCOUCHEDEBONNEHEUREETJAIREVEDESPAYSLOINTAINSOULESHOMMESSONTLIBRESETOULAVIEESTDOUCEETBELLECHAQUEMATINJEMEPROMENAISLELONGDELARIVIEREENECOUTANTLECHANTDESOISEAUXETLEMURMUREDELEAUQUICOULAITDOUCEMENTVERSLAMER"
+plain_for() {
+  case $1 in
+    german)  printf '%s' "$pt_german"  ;;
+    english) printf '%s' "$pt_english" ;;
+    danish)  printf '%s' "$pt_danish"  ;;
+    french)  printf '%s' "$pt_french"  ;;
+  esac
+}
 
-# Encrypt with an unknown start position, then recover it via brute-force search.
-br_plain="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGNOWISTHETIMEFORALLGOODMEN"
-br_ct=$(run "$br_plain" -i -u B -w 123 -r AAA -g QEN)
-check "crack: brute-force recovers start position" \
-  "$(run "$br_ct" -u B -w 123 -r AAA -g ... -l english -q)" \
-  "$br_plain"
+# (1) Brute-force the start position with every scoring model in every language.
+# Each plaintext is encrypted at start QXP (no plugboard) and recovered by
+# wildcarding the start (-g ...). All 4 languages x 5 models must recover when
+# -l matches the plaintext language. (This also guards the IC formula fix: the
+# old -i formula could not distinguish plaintext from gibberish and returned the
+# wrong key. Note quadgrams need the matching -l -- they are the most
+# language-specific model; see the gotcha in CLAUDE.md.)
+for lang in german english danish french; do
+  plain=$(plain_for "$lang")
+  ct=$(run "$plain" -i -u B -w 123 -r AAA -g QXP)
+  for mode in -i -m -b -t -q; do
+    check "crack: start position, $lang $mode" \
+      "$(run "$ct" $mode -u B -w 123 -r AAA -g ... -l "$lang")" \
+      "$plain"
+  done
+done
 
-# Index-of-coincidence scoring (-i) must recover the start position on its own.
-# This guards the IC formula: the previous (incorrect) formula summed products
-# of alphabetically-adjacent letter counts and could NOT distinguish the real
-# plaintext from gibberish, so this brute-force search returned the wrong key.
-ic_plain="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTEN"
-ic_ct=$(run "$ic_plain" -i -u B -w 123 -r AAA -g QXP)
-check "crack: index of coincidence recovers start position" \
-  "$(run "$ic_ct" -i -u B -w 123 -r AAA -g ...)" \
-  "$ic_plain"
+# (2) Hill-climb the plugboard (rotor/ring/start known, plugboard unknown), for
+# every scoring model in every language. With long plaintext and a small (2-pair)
+# plugboard, even IC and monogram scoring have enough signal to converge to the
+# exact plugboard. (Hill-climbing is a greedy heuristic, so it is sensitive to
+# text length and plug count -- a larger plugboard or a shorter message can leave
+# it in a local optimum, especially for quadgrams; this configuration is chosen
+# so that all 4 languages x 5 models recover exactly.)
+for lang in german english danish french; do
+  plain=$(plain_for "$lang")
+  ct=$(run "$plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+  for mode in -i -m -b -t -q; do
+    check "crack: hill-climb plugboard, $lang $mode" \
+      "$(run "$ct" $mode -c -u B -w 123 -r AAA -g AAA -l "$lang")" \
+      "$plain"
+  done
+done
 
 echo
 echo "passed: $pass, failed: $fail"

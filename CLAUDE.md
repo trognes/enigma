@@ -38,17 +38,30 @@ LICENSE                   GNU GPL v3.
 <lang>_quadgrams.txt       Four-letter frequencies.
 ```
 
-Languages provided: `german` (default), `english`, `danish`, `french`.
+Languages provided: `english`, `german`, `danish`, `french` (no default — the
+scoring language must be given with `-l` for the n-gram models).
 N-gram files use the format `<LETTERS> <count>` per line (e.g. `TION 13168375`)
 and were sourced from the Practical Cryptography website.
 
 ## Build & run
 
 ```sh
-make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -O3 ...
+make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 ...
 make test                 # build, then run tests/run_tests.sh
+make bench                # build, then run tests/bench.sh (performance)
 ./enigma -h               # help / usage
 ```
+
+`make bench` (`tests/bench.sh`) benchmarks the two hot paths **separately** —
+`search` (brute-force scan, no plugboard) and `hillclimb` (the `-c` plugboard
+loop) — because a change can regress one without touching the other. Each has a
+`quick` tier (default, a few seconds) and an opt-in `long` tier (`make bench
+LONG=1`, ≥15–30s each) for a stronger signal. Timing is the min of several
+repetitions (CPU-bound, single-threaded). The regression guard is a same-machine
+A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>` in a throwaway
+git worktree and runs both, failing if any benchmark is >`THRESHOLD`% (default
+10) slower than BASE — run this around the planned global-state/threading
+refactor to confirm single-thread throughput hasn't regressed.
 
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
@@ -60,8 +73,11 @@ filenames are built as `<language>_<ngram>.txt` and opened relative to the CWD.
 
 ```sh
 # Brute-force everything (all reflectors, wheels, ring & start positions),
-# scoring with quadgrams (default), German language:
-./enigma < cipher.txt
+# scoring with quadgrams (default model) against the English tables:
+./enigma -l english < cipher.txt
+
+# Language-independent: search with the index of coincidence (no -l needed):
+./enigma -i < cipher.txt
 
 # Specify some settings, wildcard the rest with '.', and hill-climb plugboard:
 ./enigma -u B -w 123 -r AAA -g ... -c -l english < cipher.txt
@@ -79,9 +95,22 @@ filenames are built as `<language>_<ngram>.txt` and opened relative to the CWD.
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
 - `-s AB...` fixed plugboard pairs
 - `-c` hill-climb the plugboard
-- `-l lang` scoring language
-- `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad default)
+- `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
+  used by `-i`
+- `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the
+  default model)
 - `-p file` compare the recovered plaintext against a known plaintext file
+
+Every run echoes the resolved configuration (scoring model, language, machine
+settings, plugboard, ciphertext length) to stderr.
+
+> **Gotcha — match `-l` to the plaintext language, especially for `-q`.** There
+> is no default language: `-m/-b/-t/-q` require `-l`, and the n-gram tables are
+> highly language-specific (most of all quadgrams). Scoring an English message
+> with, say, `-l german` typically fails — the german table scores ~0 for
+> English quadgrams and the correct key does not stand out. Lower-order models
+> (`-m/-b/-t`) tolerate a mismatch better, and `-i` (index of coincidence) is
+> language-independent and needs no `-l`. Use `-l` matching the plaintext.
 
 ## Architecture / how it works
 
@@ -136,8 +165,10 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 - **Single translation unit, heavy global state.** Machine settings
   (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`),
   buffers (`ciphertext`, `plaintext`, `num_*`, `mapping`, `subst_array`), and
-  the loaded n-gram tables are all file-scope globals. Most functions also take
-  a `textlength` parameter even though a global of the same name exists.
+  the loaded n-gram tables are all file-scope globals. The search/scoring
+  functions read these globals directly (the redundant `textlength`/`ciphertext`/
+  `plaintext` parameters that used to shadow them have been removed; `-Wshadow`
+  is on to keep it that way).
 - Debug instrumentation is intentionally retained: `showit`, `showconfig`,
   `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
   compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
@@ -148,15 +179,21 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 - Build is plain `make` (override `CXX`, or append `EXTRA_CXXFLAGS=` for e.g.
   `-Werror`/sanitizers). Tests live in `tests/run_tests.sh` and run via
   `make test` (known-answer vectors, round-trip properties, input-limit guards,
-  and end-to-end cracking). CI (`.github/workflows/ci.yml`) runs on every push
+  and end-to-end cracking — brute-force start-position and plugboard hill-climb
+  matrices over every scoring model × language). Performance is benchmarked
+  separately by `tests/bench.sh` (`make bench`; see "Build & run"). CI
+  (`.github/workflows/ci.yml`) runs on every push
   and PR: the suite `-Werror` under g++ and clang++, ASan+UBSan, valgrind,
   cppcheck, clang-tidy (config in `.clang-tidy`), and shellcheck; a separate
   CodeQL workflow runs on PRs and weekly. Keep all of these green.
 
-## Known issues
+## Status & remaining work
 
-A detailed audit lives in `CODE_REVIEW.md`. The most important things to know
-before editing: there is a stack buffer overflow risk for long inputs
-(`best_plaintext[1025]` vs `maxlen = 10240`), the index-of-coincidence scoring
-is mathematically incorrect, and the `-l` language string can overflow a fixed
-filename buffer. Read that document before changing the search or scoring code.
+A detailed audit lives in `CODE_REVIEW.md`. Most findings have been fixed —
+the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
+overflow, the `fscanf`/read-handling bugs, dead code, the C-style
+modernization, and the `textlength` global/parameter shadowing — and the build
+is warning-free under
+`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`. The main item still
+open is the larger global-state refactor that would unlock multithreading. Read
+`CODE_REVIEW.md` before changing the search or scoring code.
