@@ -407,10 +407,22 @@ Remaining opportunities:
   substantial job for **both** axes (`make bench SCALE=1`); a final stderr
   diagnostic reports wall-clock time, thread count, table count/size, and peak
   RSS.
-- 🟡 **`setup_mapping()` rebuilds the full per-position mapping for every
-  ring/start combination**, including re-stepping the rotors from scratch. For
-  long messages this is a large repeated cost; some of it could be shared across
-  start positions.
+- 🟢 **`setup_mapping()` no longer copies a full row per position for the scan**
+  ✅ (partial). It used to `memcpy` the 26-byte `subst_array` row into `mapping[i]`
+  for every (ring, start) — but the scan only ever reads one entry of each row
+  (the plugboard is fixed), so 25/26 of that copy was wasted. Now it stores a
+  *pointer* `rows[i]` to the row: the scan points straight into the shared
+  `subst_array` (no copy) and skips its per-key `decode()` pass (the plaintext is
+  materialised only when a new best is recorded), while hill-climbing — which
+  re-reads each row hundreds of times at varying indices as it permutes the
+  plugboard — still copies into the contiguous `mapping[]` for locality. Measured
+  ~12% faster scan on g++ / ~2–5% on clang, hill-climb neutral-to-faster, no
+  regression on either compiler.
+  **Still open:** the rotor *stepping* is still re-run per (ring, start). Stepping
+  is independent of the ring and the machine cycles through a fixed period of
+  26·25·26 = 16 900 states, so the stepped sequence could be precomputed once per
+  wheel order and every start/ring made a window into it (optimisation "B").
+  Deferred — stepping is cheap relative to the gather+score, so the win is modest.
 - 🟢 **n-gram tables are now `float`** ✅. The quadgram table was ~457 K×8 =
   3.6 MB of `double`s; storing the `log10` scores as `float` halves that to
   ~1.8 MB (and the trigram/bigram/monogram tables likewise), so it stays warmer
@@ -522,6 +534,7 @@ the per-search state encapsulated into `struct machine`, the search
 **multi-threaded** (`-T N`, default 1, max 256; TSan-clean; ~3× on 4 cores), and
 (7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
-the suite has 71 checks. The main remaining feature is the planned **M4 (4-rotor)
+the suite has 72 checks. The main remaining feature is the planned **M4 (4-rotor)
 mode** (§5); smaller open items are the relative-path data files (§7) and sharing
-`setup_mapping` work across start positions (§6).
+the rotor *stepping* across start positions (§6, optimisation "B" — the per-key
+row copy is already gone).

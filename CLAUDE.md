@@ -135,8 +135,11 @@ A single pass through `main()`:
      of the flat key space; each worker decodes a flat index → (wheel-order,
      ring, start) by mixed radix, points its private `machine` at that wheel
      order's shared table (swapped, never recomputed, on a boundary), and:
-   - `setup_mapping()` steps the rotors over the message length and records the
-     per-position substitution (`mapping[pos][letter]`), folding in the stepping;
+   - `setup_mapping()` steps the rotors over the message length and records, per
+     position, a pointer `rows[pos]` to that position's rotor-stack substitution
+     row (folding in the stepping). The scan points `rows[pos]` straight into the
+     shared `subst_array` (no copy); hill-climb copies the row into a contiguous
+     `mapping[]` first (it re-reads each row many times);
    - `decode()` + `score_iter()` produce and score the candidate (the n-gram
      scorers fuse the decode into their loop). The best is merged under a mutex
      (which also serialises the live progress line). Parallelising the flat key
@@ -165,8 +168,12 @@ A single pass through `main()`:
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
 spent when hill-climbing. That is why the rotor stack is precomputed into
-`subst_array` and folded into a per-position `mapping` so each character costs
-just two plugboard lookups plus a table lookup (`decode_at`). The four scorers
+`subst_array` and reached per position through `rows[pos]` so each character
+costs just two plugboard lookups plus a table lookup (`decode_at`). For the scan
+`rows[pos]` points straight into `subst_array` (no per-position copy, and the
+scan skips its `decode()` pass, materialising the plaintext only for a new best);
+hill-climb copies each row into a contiguous `mapping[]` for locality across its
+many re-reads. The four scorers
 **fuse decoding into the score loop**: each character is decoded once into a
 small sliding window of the last *n* decoded letters that indexes the n-gram
 table, so the decoded message is never written to / read back from a scratch
@@ -206,7 +213,8 @@ fused loop is the current form.
 - **Single translation unit; per-search state in `struct machine`.** The
   mutable per-search state — machine settings (`walzenlage`, `grundstellung`,
   `ringstellung`, `ukw`, `steckerbrett`) and the working buffers (`subst_array`,
-  `mapping`, the candidate `plaintext`) — is
+  the per-position row pointers `rows`, the contiguous `mapping`, the candidate
+  `plaintext`) — is
   bundled into `struct machine`, threaded through the search/scoring functions as
   `machine & m`; `main()` owns one heap instance. This makes the search
   reentrant (the precondition for multi-threading — see `CODE_REVIEW.md` §5/§6).

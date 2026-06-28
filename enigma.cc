@@ -116,7 +116,13 @@ static unsigned char reflector[reflector_count][asize];
 struct machine
 {
   unsigned char steckerbrett[asize];    /* plugboard permutation */
-  unsigned char mapping[maxlen][asize]; /* per-position substitution */
+  /* Per character position, the 26-byte rotor-stack substitution row. The
+     scorers read rows[i][k]; rows[i] either points straight into the shared
+     subst_array (the brute-force scan -- no copy) or into the contiguous
+     mapping[] below (hill-climbing, which re-reads each row hundreds of times
+     and benefits from the locality). */
+  const unsigned char * rows[maxlen];
+  unsigned char mapping[maxlen][asize]; /* hill-climb's contiguous row copies */
   char plaintext[maxlen+1];             /* candidate / result */
 
   int ukw;                              /* reflector index */
@@ -329,23 +335,30 @@ void precompute(machine & m)
         }
 }
 
-void setup_mapping(machine & m)
+/* Step the rotors over the message and record, per character position, a pointer
+   to its rotor-stack substitution row (which depends only on the start-minus-ring
+   offsets, so it is the same for all 26 input letters).
+
+   The scan (no plugboard hill-climb) reads each position's row at most a couple
+   of times and only ever at the single index steckerbrett[ciphertext[i]], so it
+   just points rows[i] straight into the shared subst_array -- no per-position
+   copy. Hill-climbing re-reads each row hundreds of times at varying indices as
+   it permutes the plugboard, so with `copy_rows` it copies the 26-byte row into
+   the contiguous mapping[] (better locality across the climb) and points there.
+
+   The stepping state is held in plain locals for the duration of the loop rather
+   than in m.grundstellung: the previous per-character read/modify/write through
+   the struct could not be proven not to alias the stores, which serialised the
+   loop and cost ~10-14% on the search path (worst on ARM). Locals let the
+   compiler keep the rotor positions in registers; the final positions are
+   written back once at the end. */
+void setup_mapping(machine & m, bool copy_rows)
 {
   if (textlength > maxlen)
     fatal("Ciphertext too long");
 
-  /* Step the rotors over the message and record, per character position, the
-     rotor-stack substitution row (which depends only on the start-minus-ring
-     offsets and so is the same for all 26 input letters -- resolve it once and
-     copy the 26 bytes).
-
-     The stepping state is held in plain locals for the duration of the loop
-     rather than in m.grundstellung: the previous per-character read/modify/write
-     through the struct could not be proven not to alias the m.mapping[] store,
-     which serialised the loop and cost ~10-14% on the search path (worst on
-     ARM). Locals let the compiler keep the rotor positions in registers; the
-     final positions are written back once at the end. */
   const unsigned char (* __restrict sa)[asize][asize][asize] = m.subst_array;
+  const unsigned char ** __restrict rows = m.rows;
   const int w1 = m.walzenlage[1];   /* middle rotor (notch checked for stepping) */
   const int w2 = m.walzenlage[2];   /* right rotor  */
   const int r0 = m.ringstellung[0];
@@ -373,7 +386,13 @@ void setup_mapping(machine & m)
 
       const unsigned char * row =
         sa[mod26(g0 - r0)][mod26(g1 - r1)][mod26(g2 - r2)];
-      memcpy(m.mapping[i], row, asize);
+      if (copy_rows)
+        {
+          memcpy(m.mapping[i], row, asize);
+          rows[i] = m.mapping[i];
+        }
+      else
+        rows[i] = row;
     }
 
   m.grundstellung[0] = static_cast<unsigned char>(g0);
@@ -381,27 +400,29 @@ void setup_mapping(machine & m)
   m.grundstellung[2] = static_cast<unsigned char>(g2);
 }
 
-/* Decode one ciphertext position: plugboard -> per-position rotor mapping ->
+/* Decode one ciphertext position: plugboard -> per-position rotor-stack row ->
    plugboard. A tiny inline so decode() and the scorers share one copy of the
-   formula. The scorers fuse it into their loops (see below) so the decoded text
-   is never materialised in a scratch array. The base pointers are __restrict
-   locals the callers have already hoisted out of struct machine. */
+   formula. rows[i] is the position's substitution row (in subst_array for the
+   scan, or the contiguous mapping[] for hill-climb). The scorers fuse this into
+   their loops (see below) so the decoded text is never materialised in a scratch
+   array. The base pointers are __restrict locals the callers have hoisted out of
+   struct machine. */
 inline int decode_at(const unsigned char * __restrict steck,
-                     const unsigned char * __restrict map,
+                     const unsigned char * const * __restrict rows,
                      const unsigned char * __restrict ct,
                      int i)
 {
-  return steck[map[asize * static_cast<size_t>(i) + steck[ct[i]]]];
+  return steck[rows[i][steck[ct[i]]]];
 }
 
 inline void decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
-  const unsigned char * __restrict map = & m.mapping[0][0];
+  const unsigned char * const * __restrict rows = m.rows;
   char * __restrict pt = m.plaintext;
   for (int i = 0; i < textlength; i++)
-    pt[i] = num2char(decode_at(steck, map, ct, i));
+    pt[i] = num2char(decode_at(steck, rows, ct, i));
   pt[textlength] = 0;
 }
 
@@ -417,18 +438,18 @@ double quadgram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
-  const unsigned char * __restrict map = & m.mapping[0][0];
+  const unsigned char * const * __restrict rows = m.rows;
 
   double score = 0.0;
   if (textlength < 4)
     return score;
 
-  int a = decode_at(steck, map, ct, 0);
-  int b = decode_at(steck, map, ct, 1);
-  int c = decode_at(steck, map, ct, 2);
+  int a = decode_at(steck, rows, ct, 0);
+  int b = decode_at(steck, rows, ct, 1);
+  int c = decode_at(steck, rows, ct, 2);
   for (int i = 3; i < textlength; i++)
     {
-      int d = decode_at(steck, map, ct, i);
+      int d = decode_at(steck, rows, ct, i);
       score += quadgrams[a][b][c][d];
       a = b;
       b = c;
@@ -441,17 +462,17 @@ double trigram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
-  const unsigned char * __restrict map = & m.mapping[0][0];
+  const unsigned char * const * __restrict rows = m.rows;
 
   double score = 0.0;
   if (textlength < 3)
     return score;
 
-  int a = decode_at(steck, map, ct, 0);
-  int b = decode_at(steck, map, ct, 1);
+  int a = decode_at(steck, rows, ct, 0);
+  int b = decode_at(steck, rows, ct, 1);
   for (int i = 2; i < textlength; i++)
     {
-      int c = decode_at(steck, map, ct, i);
+      int c = decode_at(steck, rows, ct, i);
       score += trigrams[a][b][c];
       a = b;
       b = c;
@@ -463,16 +484,16 @@ double bigram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
-  const unsigned char * __restrict map = & m.mapping[0][0];
+  const unsigned char * const * __restrict rows = m.rows;
 
   double score = 0.0;
   if (textlength < 2)
     return score;
 
-  int a = decode_at(steck, map, ct, 0);
+  int a = decode_at(steck, rows, ct, 0);
   for (int i = 1; i < textlength; i++)
     {
-      int b = decode_at(steck, map, ct, i);
+      int b = decode_at(steck, rows, ct, i);
       score += bigrams[a][b];
       a = b;
     }
@@ -483,11 +504,11 @@ double monogram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
-  const unsigned char * __restrict map = & m.mapping[0][0];
+  const unsigned char * const * __restrict rows = m.rows;
 
   double score = 0.0;
   for (int i = 0; i < textlength; i++)
-    score += monograms[decode_at(steck, map, ct, i)];
+    score += monograms[decode_at(steck, rows, ct, i)];
   return score;
 }
 
@@ -499,9 +520,9 @@ double ic_score_decode(machine & m)
 
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
-  const unsigned char * __restrict map = & m.mapping[0][0];
+  const unsigned char * const * __restrict rows = m.rows;
   for (int i = 0; i < textlength; i++)
-    freq[decode_at(steck, map, ct, i)]++;
+    freq[decode_at(steck, rows, ct, i)]++;
 
   double score = 0.0;
   for(int j=0; j<asize; j++)
@@ -856,16 +877,15 @@ void search_worker(machine & m,
 
           init_ring_grund(m, r1, r2, r3, g1, g2, g3);
           init_steckerbrett(m, opt_steckerbrett);
-          setup_mapping(m);
+          /* hill-climb re-reads each row many times -> copy into contiguous
+             mapping[]; the scan reads straight from the shared subst_array */
+          setup_mapping(m, opt_hillclimb != 0);
 
-          double score;
-          if (opt_hillclimb)
-            score = hillclimb(m);
-          else
-            {
-              decode(m);
-              score = score_iter(m, 0);
-            }
+          /* Score directly. The scan does not decode the plaintext per key
+             (the fused scorer reads each row once, straight from subst_array);
+             it is materialised only when a new best is recorded, below.
+             hillclimb() leaves m.plaintext set to its best plugboard's decode. */
+          double score = opt_hillclimb ? hillclimb(m) : score_iter(m, 0);
 
           if (score > local_best)
             {
@@ -873,6 +893,8 @@ void search_worker(machine & m,
               std::lock_guard<std::mutex> lock(best.mutex);
               if (score > best.score)
                 {
+                  if (! opt_hillclimb)
+                    decode(m);   /* fill m.plaintext for this winning key */
                   best.score = score;
                   best.found = true;
                   memcpy(best.plaintext, m.plaintext, textlength + 1);
