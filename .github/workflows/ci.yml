@@ -98,4 +98,4 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Run shellcheck on the test harness
-        run: shellcheck tests/run_tests.sh tests/bench.sh
+        run: shellcheck tests/run_tests.sh tests/bench.sh tests/crack_quality.sh

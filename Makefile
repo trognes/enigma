@@ -22,7 +22,15 @@ test : enigma
 bench : enigma
 	sh tests/bench.sh
 
+# Cracking-quality benchmark (recovery rate vs ciphertext length -- the hard,
+# short-message regime). Separate from `bench` (speed) and `test` (pass/fail).
+#   make crackquality                  working-tree binary
+#   make crackquality BASE=<git-ref>   same-machine A/B vs <git-ref>
+# Tunables (env): MODEL, CLANG, TRIALS, LENGTHS, PAIRS, SEED.
+crackquality : enigma
+	sh tests/crack_quality.sh
+
 clean :
 	rm -f enigma
 
-.PHONY : all test bench clean
+.PHONY : all test bench crackquality clean
