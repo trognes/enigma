@@ -1086,7 +1086,7 @@ void alltoupper(char * text)
 
 void version()
 {
-  printf("Enigma cipher tool version 1.0\n");
+  printf("Enigma cipher tool version 1.1.0\n");
   printf("Copyright (C) 2017 Torbjørn Rognes\n");
   printf("\n");
 }
@@ -1159,8 +1159,20 @@ void show_settings()
     fprintf(stderr, " (max wheel %d)", opt_maxwheel);
   fprintf(stderr, ", ring %s, start %s\n", opt_ringstellung, opt_grundstellung);
 
-  fprintf(stderr, "Plugboard:  %s\n",
-          opt_steckerbrett[0] ? opt_steckerbrett : "(none)");
+  fprintf(stderr, "Plugboard:  ");
+  if (opt_steckerbrett[0])
+    {
+      /* print the de-spaced pairs with a space between each pair (AB CD ...) */
+      for (int i = 0; opt_steckerbrett[i]; i++)
+        {
+          if ((i > 0) && (i % 2 == 0))
+            fputc(' ', stderr);
+          fputc(opt_steckerbrett[i], stderr);
+        }
+      fputc('\n', stderr);
+    }
+  else
+    fprintf(stderr, "(none)\n");
 }
 
 int main(int argc, char * * argv)

@@ -17,7 +17,7 @@ If specified (with the -c option), a hill-climbing algorithm will be used to ide
 All possible combinations of the other unspecified settings will be tried.
 
 ```
-Enigma cipher tool version 1.0
+Enigma cipher tool version 1.1.0
 Copyright (C) 2017 Torbjørn Rognes
 
 Usage: enigma [OPTIONS]

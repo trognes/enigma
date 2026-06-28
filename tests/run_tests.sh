@@ -169,6 +169,14 @@ case "$err" in
   *)                        check "n-gram scoring without -l rejected (message)" "$err" "*language is required*" ;;
 esac
 
+# The settings echo (stderr) prints the plugboard as spaced pairs (AB CD),
+# not the internal de-spaced form (ABCD).
+pb_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF" 2>&1 >/dev/null)
+case "$pb_echo" in
+  *"AB CD EF"*) check "settings echo spaces plugboard pairs" "ok" "ok" ;;
+  *)            check "settings echo spaces plugboard pairs" "$pb_echo" "*AB CD EF*" ;;
+esac
+
 # The n-gram parser tolerates blank lines and irregular whitespace without
 # hanging or erroring (guards the fscanf field-count / leading-space fix).
 printf '\n  E 529117365\n\nT 390965105\nA 374061888\n   \n' > zztest_monograms.txt
