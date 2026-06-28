@@ -158,6 +158,17 @@ case "$err" in
   *)                    check "illegal -l rejected (message)" "$err" "*Illegal language*" ;;
 esac
 
+# There is no default language: n-gram scoring (-m/-b/-t/-q) requires -l, and
+# must fail loudly when it is missing. (-i needs no language and is exercised
+# throughout the known-answer tests above.)
+err=$(printf 'ABC' | "$ENIGMA" -q -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+code=$?
+check "n-gram scoring without -l rejected (exit code)" "$code" "1"
+case "$err" in
+  *"language is required"*) check "n-gram scoring without -l rejected (message)" "ok" "ok" ;;
+  *)                        check "n-gram scoring without -l rejected (message)" "$err" "*language is required*" ;;
+esac
+
 # The n-gram parser tolerates blank lines and irregular whitespace without
 # hanging or erroring (guards the fscanf field-count / leading-space fix).
 printf '\n  E 529117365\n\nT 390965105\nA 374061888\n   \n' > zztest_monograms.txt

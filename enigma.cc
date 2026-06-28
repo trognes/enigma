@@ -71,7 +71,7 @@ static const char * opt_ringstellung;
 static const char * opt_grundstellung;
 static const char * opt_steckerbrett;
 static char * opt_plaintext; /* plaintext to compare to */
-static const char * opt_language; /* german (default), english, danish, french ... */
+static const char * opt_language; /* english, german, danish, french ...; no default */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_maxwheel;
 static int opt_scoring;
@@ -1105,7 +1105,8 @@ void help()
   printf("  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
   printf("  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
   printf("  -c           Perform hill climbing to determine plugboard settings\n");
-  printf("  -l language  Plaintext language (german, english, danish, french) [german]\n");
+  printf("  -l language  Scoring language (english, german, danish, french); required\n");
+  printf("               for -m/-b/-t/-q (no default), not used by -i\n");
   printf("  -i           Use index of coincidence (IC) to determine plaintext score\n");
   printf("  -m           Use monogram statistics to determine plaintext score\n");
   printf("  -b           Use bigram statistics to determine plaintext score\n");
@@ -1135,6 +1136,33 @@ void removespaces(char * p)
   *q=0;
 }
 
+/* Echo the resolved run configuration to stderr so it is never a mystery what
+   scoring model / language / settings a run is actually using. A dot (.) in the
+   reflector/wheels/ring/start fields means that position is being searched. */
+void show_settings()
+{
+  static const char * const scoring_name[] =
+    { "index of coincidence", "monograms", "bigrams", "trigrams", "quadgrams" };
+
+  fprintf(stderr, "Ciphertext: %d letters\n", textlength);
+
+  fprintf(stderr, "Scoring:    %s", scoring_name[opt_scoring]);
+  if (opt_scoring == 0)
+    fprintf(stderr, " (language-independent)");
+  else
+    fprintf(stderr, " (language: %s)", opt_language);
+  fprintf(stderr, "; plugboard hill-climb: %s\n", opt_hillclimb ? "yes" : "no");
+
+  fprintf(stderr, "Machine:    %s Enigma; reflector %s, wheels %s",
+          opt_norenigma ? "Norway" : "standard", opt_ukw, opt_walzen);
+  if (strchr(opt_walzen, '.'))
+    fprintf(stderr, " (max wheel %d)", opt_maxwheel);
+  fprintf(stderr, ", ring %s, start %s\n", opt_ringstellung, opt_grundstellung);
+
+  fprintf(stderr, "Plugboard:  %s\n",
+          opt_steckerbrett[0] ? opt_steckerbrett : "(none)");
+}
+
 int main(int argc, char * * argv)
 {
   if (argc == 1)
@@ -1149,7 +1177,7 @@ int main(int argc, char * * argv)
   opt_ringstellung = "AA.";
   opt_grundstellung = "...";
   opt_steckerbrett = "";
-  opt_language = "german";
+  opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q) */
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
@@ -1271,17 +1299,27 @@ int main(int argc, char * * argv)
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
 
-  if ((strlen(opt_language) < 1) ||
-      (strlen(opt_language) > 32) ||
-      (strspn(opt_language,
-              "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") <
-       strlen(opt_language)))
+  /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no
+     default; the index of coincidence (-i) is language-independent. */
+  if ((opt_scoring != 0) && (! opt_language))
+    fatal("A scoring language is required: add -l <language> "
+          "(e.g. -l english), or use -i for the language-independent "
+          "index of coincidence");
+
+  if (opt_language &&
+      ((strlen(opt_language) < 1) ||
+       (strlen(opt_language) > 32) ||
+       (strspn(opt_language,
+               "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") <
+        strlen(opt_language))))
     fatal("Illegal language name (must be 1-32 letters, e.g. english)");
 
 
   /* read ciphertext */
 
   readciphertext();
+
+  show_settings();
 
   /* init */
 

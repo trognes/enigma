@@ -31,7 +31,8 @@ Usage: enigma [OPTIONS]
   -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]
   -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]
   -c           Perform hill climbing to determine plugboard settings
-  -l language  Plaintext language (german, english, danish, french) [german]
+  -l language  Scoring language (english, german, danish, french); required
+               for -m/-b/-t/-q (no default), not used by -i
   -i           Use index of coincidence (IC) to determine plaintext score
   -m           Use monogram statistics to determine plaintext score
   -b           Use bigram statistics to determine plaintext score
