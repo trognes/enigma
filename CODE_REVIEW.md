@@ -15,9 +15,10 @@ Severity legend: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low / nit.
 
 ### 1.1 🔴 Stack buffer overflow on long ciphertext (`best_plaintext[1025]`) — ✅ FIXED
 
-> **Resolved:** the ciphertext is now capped at `maxtextlen = 1024` letters and
-> `readciphertext()` rejects longer input with a fatal error, so the
-> `best_plaintext` buffer (sized `maxtextlen + 1`) can no longer overflow.
+> **Resolved:** the ciphertext is now capped at `maxlen = 1024` letters (the
+> single length constant, reduced from the old 10240) and `readciphertext()`
+> rejects longer input with a fatal error, so the `best_plaintext` buffer (sized
+> `maxlen + 1`, like every other length buffer) can no longer overflow.
 
 
 
@@ -74,7 +75,7 @@ inputs), so ciphertext could be silently truncated, and anything past the first
 `maxlen` bytes was silently dropped.
 
 **Resolved.** Both functions now loop on `read()` until EOF, filtering A–Z as
-they go, and bound the letter count incrementally (fatal past `maxtextlen`).
+they go, and bound the letter count incrementally (fatal past `maxlen`).
 A read error is reported instead of ignored, and the buffers are `unsigned char`
 so `toupper()` is never handed a negative value. Guarded by a test that pipes
 input larger than the read buffer (70 000 bytes before the letters) and checks

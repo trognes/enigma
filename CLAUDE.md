@@ -171,10 +171,14 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
   cppcheck, clang-tidy (config in `.clang-tidy`), and shellcheck; a separate
   CodeQL workflow runs on PRs and weekly. Keep all of these green.
 
-## Known issues
+## Status & remaining work
 
-A detailed audit lives in `CODE_REVIEW.md`. The most important things to know
-before editing: there is a stack buffer overflow risk for long inputs
-(`best_plaintext[1025]` vs `maxlen = 10240`), the index-of-coincidence scoring
-is mathematically incorrect, and the `-l` language string can overflow a fixed
-filename buffer. Read that document before changing the search or scoring code.
+A detailed audit lives in `CODE_REVIEW.md`. Most findings have been fixed —
+the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
+overflow, the `fscanf`/read-handling bugs, dead code, and the C-style
+modernization — and the build is warning-free under
+`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual`. The main items still open are
+the parallel `*_score`/`*_score_decode` scorers (minor dedup) and the
+larger global-state refactor that would unlock multithreading and clear the
+`-Wshadow` noise. Read `CODE_REVIEW.md` before changing the search or scoring
+code.
