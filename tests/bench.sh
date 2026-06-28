@@ -179,23 +179,37 @@ if [ "$LONG" = 1 ]; then
 fi
 
 # --- thread scaling (opt in with SCALE=1) ------------------------------------
-# Sweep -T over powers of two up to ~2x the core count on a parallelisable
-# search workload (wildcard wheel order = many independent tasks) and report the
-# wall-clock speedup over a single thread. Informational only (no pass/fail).
+# Sweep -T over powers of two up to ~2x the core count and report the wall-clock
+# speedup over a single thread. Two workloads, to show both parallel axes:
+#   * wheel-order: wildcard wheels (many independent wheel-order tasks)
+#   * ring/start:  fixed wheels, wildcard rings+starts (ONE wheel order) -- this
+#                  is the case the old wheel-order-only scheme left serial.
+# Informational only (no pass/fail).
 if [ "$SCALE" = 1 ]; then
   cores=$(nproc 2>/dev/null || echo 4)
-  echo
-  echo "thread scaling (search: -w ... -x5 = 60 wheel-order tasks x 26^3 starts; ${cores} cores)"
-  ct_sc=$(encrypt "$(trunc 120)" "")
-  base=""
-  t=1
-  while [ "$t" -le $((cores * 2)) ] && [ "$t" -le 256 ]; do
-    secs=$(min_time "$HEAD_BIN" 2 0 "$ct_sc" -q -u B -w ... -r AAA -g ... -x 5 -l english -T "$t")
-    [ -z "$base" ] && base=$secs
-    awk -v s="$secs" -v b="$base" -v th="$t" \
-      'BEGIN { printf "  -T %-3d  %7.2fs   %.2fx\n", th, s, b / s }'
-    t=$((t * 2))
-  done
+  ct_sc=$(encrypt "$(trunc 100)" "")
+
+  sweep() {  # label  args...
+    _lbl=$1; shift
+    echo
+    echo "thread scaling -- $_lbl (${cores} cores):"
+    _base=""
+    _t=1
+    while [ "$_t" -le $((cores * 2)) ] && [ "$_t" -le 256 ]; do
+      _s=$(min_time "$HEAD_BIN" 2 0 "$ct_sc" "$@" -T "$_t")
+      [ -z "$_base" ] && _base=$_s
+      awk -v s="$_s" -v b="$_base" -v th="$_t" \
+        'BEGIN { printf "  -T %-3d  %7.2fs   %.2fx\n", th, s, b / s }'
+      _t=$((_t * 2))
+    done
+  }
+
+  # wheel-order axis: 60 wheel orders x 26^3 starts
+  sweep "wheel order (-w ... -x5 = 60 tasks x 26^3 starts)" \
+    -q -u B -w ... -r AAA -g ... -x 5 -l english
+  # ring/start axis: 1 wheel order x 26 rings x 26^3 starts (was serial before)
+  sweep "ring/start (-w 123, 26 rings x 26^3 starts, 1 wheel order)" \
+    -q -u B -w 123 -r AA. -g ... -l english
 fi
 
 echo

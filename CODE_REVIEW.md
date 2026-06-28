@@ -329,15 +329,16 @@ instrumentation rather than deleted.
   read from many threads. Several dead/obsolete functions were removed in the
   process (`step`, `substitute`, `step_precomputed`, `init_steckerbrett_direct`,
   and the 16-byte-blocked decode helpers).
-  On top of that, `bruteforce()` now enumerates the reflector × wheel-order
-  combinations as a task list and runs them across `-T N` worker threads (default
-  1, max 256) via an atomic counter; each worker owns a private `machine` and the
-  global best is merged under a mutex (which also serialises the live progress
-  line). Clean under **ThreadSanitizer**; the result is independent of thread
-  count (a `-T 4` vs `-T 1` determinism check is in the suite). Scaling is ~3× on
-  4 cores (`make bench SCALE=1`). Getting the encapsulation perf-neutral first
-  took three layout/codegen mitigations (see §6); the naive version had cost
-  ~20–60% on clang/ARM and ~10–14% on the g++ search path.
+  On top of that, `bruteforce()` runs `-T N` worker threads (default 1, max 256)
+  over the **flat reflector × wheel-order × ring × start key space** (see §6 for
+  the two-phase precompute-all-then-sweep structure); the global best is merged
+  under a mutex (which also serialises the live progress line). Clean under
+  **ThreadSanitizer**; the result is independent of thread count (determinism
+  checks for the wheel-order and ring/start axes are in the suite). Scaling is
+  ~3.3–3.5× on 4 cores for both axes (`make bench SCALE=1`). Getting the
+  encapsulation perf-neutral first took three layout/codegen mitigations (see
+  §6); the naive version had cost ~20–60% on clang/ARM and ~10–14% on the g++
+  search path.
 - 🟢 **`textlength` global/parameter shadowing** ✅ resolved. Nearly every
   function used to take an `int textlength` parameter while a file-scope global
   `textlength` also existed; every call site already passed exactly that global
@@ -384,14 +385,28 @@ lookup, 16-byte blocking).
 
 Remaining opportunities:
 
-- 🟢 **Parallelism** ✅ implemented. `bruteforce()` enumerates the reflector ×
-  wheel-order combinations as a task list and runs them across `-T N` worker
-  threads (default 1, max 256) pulling from an atomic counter; each worker owns
-  its own `machine` and the per-worker best is merged under a mutex. Measured ~3×
-  on 4 cores (search 3.3×, hill-climb 2.8×), plateauing past the physical core
-  count as expected; sweep with `make bench SCALE=1`. (Further gains would need a
-  finer task grain — e.g. splitting the ring/start sweep — but per-wheel-order is
-  already a good balance since every task does an equal-sized sweep.)
+- 🟢 **Parallelism** ✅ implemented, at the **flat key level** (reflector ×
+  wheel-order × ring × start), not just wheel order. `bruteforce()` runs `-T N`
+  worker threads (default 1, max 256) in two phases:
+  1. **Precompute every wheel order's rotor table once, in parallel**, into one
+     shared read-only block (a table depends only on reflector+wheel-order and
+     serves all rings/starts via the start−ring offset; no early exit, so all are
+     needed). Memory = `#wheel-orders × 457 KB` — bounded (~460 MB worst case for
+     standard Enigma at `-u . -x 8`, ~82 MB for the `-x 5` default), and tiny in
+     the fixed-wheels case. Guarded against absurd sizes.
+  2. **Sweep the whole flat key space**: an atomic counter hands out
+     adaptive-sized chunks (`≈ total/(threads·16)`); each worker decodes/scores
+     its keys against the shared tables with its own small private `machine`
+     (mixed-radix unflatten of the index → ring/start combo; the table pointer is
+     swapped, never recomputed, when a chunk crosses a wheel-order boundary).
+  This parallelises **rings and starts**, so a search with the wheels fixed but
+  ring/start wildcarded now uses every thread — the previous wheel-order-only
+  scheme left exactly that case single-threaded. Race-free (ThreadSanitizer);
+  result independent of `-T` (determinism checks for both the wheel-order and the
+  ring/start axis are in the suite). Scaling ~3.3–3.5× on 4 cores on a
+  substantial job for **both** axes (`make bench SCALE=1`); a final stderr
+  diagnostic reports wall-clock time, thread count, table count/size, and peak
+  RSS.
 - 🟡 **`setup_mapping()` rebuilds the full per-position mapping for every
   ring/start combination**, including re-stepping the rotors from scratch. For
   long messages this is a large repeated cost; some of it could be shared across

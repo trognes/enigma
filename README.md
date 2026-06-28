@@ -53,10 +53,13 @@ resulting in the highest plaintext score. If asked for, a hill climbing
 algorithm will be used to try to determine the plugboard settings.
 ```
 
-The search over reflector × wheel-order combinations is parallelised: pass
-`-T N` to use N worker threads (the default is a single thread). On a 4-core
-machine a wildcard-wheel search runs about 3× faster with `-T 4`; scaling can be
-measured with `make bench SCALE=1`.
+The search is parallelised over the whole key space — reflectors, wheel orders,
+ring settings and start positions — so `-T N` uses N worker threads even when the
+wheels are fixed and only the rings/starts are being searched. The default is a
+single thread; on a 4-core machine a search runs about 3× faster with `-T 4`, and
+scaling can be measured with `make bench SCALE=1`. When a run finishes, a short
+diagnostic (wall-clock time, thread count, precomputed-table memory, peak memory)
+is printed to standard error.
 
 The files with the ngram frequencies for various languages have been obtained from the
 [Practical cryptograhy](http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/)
