@@ -109,12 +109,12 @@ static unsigned char ringstellung[wheels];
 static unsigned char num_ciphertext[maxlen];
 static unsigned char num_plaintext[maxlen];
 static unsigned char subst_array[asize][asize][asize][asize];
-static unsigned char mapping[maxlen][26];
+static unsigned char mapping[maxlen][asize];
 
-static double monograms[26];
-static double bigrams[26][26];
-static double trigrams[26][26][26];
-static double quadgrams[26][26][26][26];
+static double monograms[asize];
+static double bigrams[asize][asize];
+static double trigrams[asize][asize][asize];
+static double quadgrams[asize][asize][asize][asize];
 
 void fatal(const char * message)
 {
@@ -124,12 +124,12 @@ void fatal(const char * message)
 
 inline int char2num(char x)
 {
-  return x - 65;
+  return x - 'A';
 }
 
 inline char num2char(int x)
 {
-  return static_cast<char>(65 + x);
+  return static_cast<char>('A' + x);
 }
 
 /* Read an n-gram statistics table from "<language>_<suffix>.txt".
@@ -145,7 +145,7 @@ void ngrams_read(int n, double * table, const char * suffix)
 {
   int size = 1;
   for (int i = 0; i < n; i++)
-    size *= 26;
+    size *= asize;
 
   for (int i = 0; i < size; i++)
     table[i] = 1.0;
@@ -173,7 +173,7 @@ void ngrams_read(int n, double * table, const char * suffix)
               ok = 0;
               break;
             }
-          index = index * 26 + char2num(a);
+          index = index * asize + char2num(a);
         }
 
       int count;
@@ -228,13 +228,13 @@ double monogram_score(char * text, int len)
 
 double ic_score(char * text, int len)
 {
-  double freq[26];
-  for(int j=0; j<26; j++)
+  double freq[asize];
+  for(int j=0; j<asize; j++)
     freq[j] = 0;
   for(int i=0; i<len; i++)
     freq[char2num(text[i])] += 1.0;
   double score = 0.0;
-  for(int j=0; j<26; j++)
+  for(int j=0; j<asize; j++)
     score += freq[j] * (freq[j] - 1.0);
   return (len > 1) ? score / ((double) len * (len - 1)) : 0.0;
 }
@@ -324,7 +324,7 @@ int rotor_r(int x, int rotor_no)
 
 inline int mod26(int x)
 {
-  return (x+26)%26;
+  return (x+asize)%asize;
 }
 
 inline void step_rotors()
@@ -400,7 +400,7 @@ void setup_mapping(int textlength)
   for (int i=0; i<textlength; i++)
     {
       step_rotors();
-      for (int j=0; j<26; j++)
+      for (int j=0; j<asize; j++)
         mapping[i][j] = subst_array
           [mod26(grundstellung[0]-ringstellung[0])]
           [mod26(grundstellung[1]-ringstellung[1])]
@@ -429,7 +429,7 @@ inline void map16_step(unsigned char * source,
                        unsigned char * dest)
 {
   for (int i = 0; i < blocksize; i++)
-    dest[i] = map[26*i+source[i]];
+    dest[i] = map[asize*i+source[i]];
 }
 
 inline void map16_direct(unsigned char * source,
@@ -549,15 +549,15 @@ double monogram_score_decode(int textlength)
 
 double ic_score_decode(int textlength)
 {
-  int freq[26];
-  for(int j=0; j<26; j++)
+  int freq[asize];
+  for(int j=0; j<asize; j++)
     freq[j] = 0;
 
   for (int i = 0; i < textlength; i++)
     freq[step_mapped(i, num_ciphertext[i])]++;
 
   double score = 0.0;
-  for(int j=0; j<26; j++)
+  for(int j=0; j<asize; j++)
     score += (double) freq[j] * (freq[j] - 1);
   return (textlength > 1) ? score / ((double) textlength * (textlength - 1)) : 0.0;
 }
@@ -565,11 +565,11 @@ double ic_score_decode(int textlength)
 void showsteckerbrett()
 {
 #if 0
-  for (int j=0; j<26; j++)
+  for (int j=0; j<asize; j++)
     putchar(num2char(steckerbrett[j]));
 #else
   fprintf(stderr, "S:");
-  for (int j=0; j<26; j++)
+  for (int j=0; j<asize; j++)
     if (steckerbrett[j] > j)
       fprintf(stderr, " %c%c", num2char(j), num2char(steckerbrett[j]));
 #endif
@@ -631,8 +631,8 @@ double score_iter(int iter, int textlength)
   return score;
 }
 
-int count[26];
-int order[26];
+int count[asize];
+int order[asize];
 
 int compare(const void * x, const void * y)
 {
@@ -649,7 +649,7 @@ int compare(const void * x, const void * y)
 
 void ciphertext_letterdist(int textlength, char * ciphertext)
 {
-  for(int j=0; j<26; j++)
+  for(int j=0; j<asize; j++)
     {
       count[j]=0;
       order[j] = j;
@@ -658,11 +658,11 @@ void ciphertext_letterdist(int textlength, char * ciphertext)
   for (int i=0; i<textlength; i++)
     count[char2num(ciphertext[i])]++;
 
-  qsort(order, 26, sizeof(int), compare);
+  qsort(order, asize, sizeof(int), compare);
 
 #if 0
   fprintf(stderr, "Ciphertext letter order: ");
-  for(int j=0; j<26; j++)
+  for(int j=0; j<asize; j++)
     fprintf(stderr, "%c", num2char(order[j]));
   fprintf(stderr, "\n");
 #endif
@@ -694,18 +694,18 @@ double hillclimb(int textlength,
 
 #ifdef SHOWHILLCLIMB
       fprintf(stderr, "  ");
-      for(int b=1; b<26; b++)
+      for(int b=1; b<asize; b++)
         fprintf(stderr, "   %c", num2char(b));
       fprintf(stderr, "\n");
 #endif
-      for(int a=0; a<26; a++)
+      for(int a=0; a<asize; a++)
       {
 #ifdef SHOWHILLCLIMB
         fprintf(stderr, "%c:", num2char(a));
         for(int b=1; b<a+1; b++)
           fprintf(stderr, "    ");
 #endif
-        for(int b=a+1; b<26; b++)
+        for(int b=a+1; b<asize; b++)
           {
             /* switch plugs */
             int x = steckerbrett[a];
@@ -789,9 +789,9 @@ double hillclimb(int textlength,
 void bruteforce()
 {
   int u_min, u_max;
-  int w_min[3], w_max[3];
-  int r_min[3], r_max[3];
-  int g_min[3], g_max[3];
+  int w_min[wheels], w_max[wheels];
+  int r_min[wheels], r_max[wheels];
+  int g_min[wheels], g_max[wheels];
 
   if (opt_norenigma)
     {
@@ -809,7 +809,7 @@ void bruteforce()
         u_min = u_max = char2num(opt_ukw[0]);
     }
 
-  for(int i=0; i<3; i++)
+  for(int i=0; i<wheels; i++)
     {
       if (opt_walzen[i] == '.')
         {
@@ -1167,11 +1167,11 @@ int main(int argc, char * * argv)
           (strspn(opt_ukw, "N.") != 1))
         fatal("Illegal ukw string (must be N or .)");
 
-      if ((strlen(opt_walzen) != 3) ||
-          (strspn(opt_walzen, "12345.") != 3))
+      if ((strlen(opt_walzen) != wheels) ||
+          (strspn(opt_walzen, "12345.") != wheels))
         fatal("Illegal walzen string (must be 3 digits (1-5) or .)");
 
-      if ((opt_maxwheel < 3) || (opt_maxwheel > 5))
+      if ((opt_maxwheel < wheels) || (opt_maxwheel > 5))
         fatal("Illegal max wheel (must be 3 to 5)");
     }
   else
@@ -1180,23 +1180,23 @@ int main(int argc, char * * argv)
           (strspn(opt_ukw, "ABC.") != 1))
         fatal("Illegal ukw string (must be A, B, C or .)");
 
-      if ((strlen(opt_walzen) != 3) ||
-          (strspn(opt_walzen, "12345678.") != 3))
+      if ((strlen(opt_walzen) != wheels) ||
+          (strspn(opt_walzen, "12345678.") != wheels))
         fatal("Illegal walzen string (must be 3 digits (1-8) or .)");
 
-      if ((opt_maxwheel < 3) || (opt_maxwheel > 8))
+      if ((opt_maxwheel < wheels) || (opt_maxwheel > 8))
         fatal("Illegal max wheel (must be 3-8)");
     }
 
-  if ((strlen(opt_ringstellung) != 3) ||
-      (strspn(opt_ringstellung, "ABCDEFGHIJKLMNOPQRSTUVWXYZ.") != 3))
+  if ((strlen(opt_ringstellung) != wheels) ||
+      (strspn(opt_ringstellung, "ABCDEFGHIJKLMNOPQRSTUVWXYZ.") != wheels))
     fatal("Illegal ringstellung string (must be 3 letters (A-Z) or .)");
 
-  if ((strlen(opt_grundstellung) != 3) ||
-      (strspn(opt_grundstellung, "ABCDEFGHIJKLMNOPQRSTUVWXYZ.") != 3))
+  if ((strlen(opt_grundstellung) != wheels) ||
+      (strspn(opt_grundstellung, "ABCDEFGHIJKLMNOPQRSTUVWXYZ.") != wheels))
     fatal("Illegal grundstellung string (must be 3 letters (A-Z) or .)");
 
-  if ((strlen(opt_steckerbrett) > 26) ||
+  if ((strlen(opt_steckerbrett) > asize) ||
       (strspn(opt_steckerbrett, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") <
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
