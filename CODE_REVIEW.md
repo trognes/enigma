@@ -311,11 +311,12 @@ instrumentation rather than deleted.
   reporting should be separated; the deep nesting plus the
   `if ((w1!=w2)&&(w1!=w3)&&(w2!=w3))` permutation guard make it hard to follow
   and easy to break.
-- 🟡 **Duplicated scoring logic.** `quadgram_score`/`trigram_score`/… (operating
-  on `char*`) and `*_score_decode` (operating on `num_plaintext`) are parallel
-  implementations of the same math; the non-`decode` variants appear unused in
-  the hot path. (The four copy-paste n-gram *readers* have been unified into a
-  single `ngrams_read(n, table, suffix)` ✅; the parallel *scorers* remain.)
+- 🟢 **Duplicated scoring logic** ✅ resolved. The `char*`-based
+  `quadgram_score`/`trigram_score`/`bigram_score`/`monogram_score`/`ic_score`
+  family was a parallel, **unused** copy of the live `*_score_decode` family
+  (which `score_iter` calls); the dead `char*` scorers have been removed. The
+  four copy-paste n-gram *readers* were likewise unified into a single
+  `ngrams_read(n, table, suffix)`.
 - 🟢 **Magic numbers** ✅ named. Semantic ones: the scoring models are an `enum`
   (`SCORE_IC` … `SCORE_QUAD`); the Norway table offsets are
   `norway_reflector_index` / `norway_rotor_base` (used by both `init_walzen` and
@@ -414,8 +415,8 @@ lookup, 16-byte blocking). Remaining opportunities:
 `total`, (2.4) stepping verification, (2.5) the empty-input guard, (3) the
 dead/misleading-code cleanup, the §4 modernization (legacy `index()` → `strchr`,
 `int` rotor returns, `const`-correct options, stray includes), the four n-gram
-readers unified into one (§5/§6), and (7) the test suite + CI. The build is
-warning-free under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual` (g++ and
-clang++), and the suite has 63 checks. Remaining items — the parallel
-`*_score`/`*_score_decode` scorers, and the larger global-state refactor that
-would unlock threading and clear the `-Wshadow` noise (§5).
+readers unified into one and the dead `char*` scorer family removed (§5/§6),
+and (7) the test suite + CI. The build is warning-free under
+`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual` (g++ and clang++), and the
+suite has 63 checks. The main remaining item is the larger global-state refactor
+that would unlock threading and clear the `-Wshadow` noise (§5).

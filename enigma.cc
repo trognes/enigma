@@ -190,55 +190,6 @@ void ngrams_read(int n, double * table, const char * suffix)
 }
 
 
-double quadgram_score(char * text, int len)
-{
-  double score = 0.0;
-  for (int i=0; i<len-3; i++)
-    score += quadgrams
-      [char2num(text[i])]
-      [char2num(text[i+1])]
-      [char2num(text[i+2])]
-      [char2num(text[i+3])];
-  return score;
-}
-
-double trigram_score(char * text, int len)
-{
-  double score = 0.0;
-  for (int i=0; i<len-2; i++)
-    score += trigrams[char2num(text[i])][char2num(text[i+1])][char2num(text[i+2])];
-  return score;
-}
-
-double bigram_score(char * text, int len)
-{
-  double score = 0.0;
-  for (int i=0; i<len-1; i++)
-    score += bigrams[char2num(text[i])][char2num(text[i+1])];
-  return score;
-}
-
-double monogram_score(char * text, int len)
-{
-  double score = 0.0;
-  for (int i=0; i<len; i++)
-    score += monograms[char2num(text[i])];
-  return score;
-}
-
-double ic_score(char * text, int len)
-{
-  double freq[asize];
-  for(int j=0; j<asize; j++)
-    freq[j] = 0;
-  for(int i=0; i<len; i++)
-    freq[char2num(text[i])] += 1.0;
-  double score = 0.0;
-  for(int j=0; j<asize; j++)
-    score += freq[j] * (freq[j] - 1.0);
-  return (len > 1) ? score / ((double) len * (len - 1)) : 0.0;
-}
-
 void init()
 {
   for (int i=0; i < rotor_count; i++)
