@@ -242,10 +242,30 @@ working path:
   then removed.)
 - 🟡 **`showit()`** is an entire function body wrapped in `#if 0` — a no-op.
   **Intentionally kept** as debug instrumentation (see note below).
-- 🟡 **Unreachable tables:** M4 thin reflectors (indices 4–5) and Beta/Gamma
-  rotors (indices 13–14) exist in the wiring tables but cannot be selected via
-  any CLI option. **Kept** (reserved for a future M4/4-rotor mode; the index
-  conventions are documented in `CLAUDE.md`). Wire them up or remove them later.
+- 🟡 **Unreachable tables → planned M4 (4-rotor naval) mode.** The M4 thin
+  reflectors (indices 4–5, UKW-b/c) and Beta/Gamma rotors (indices 13–14) exist
+  in the wiring tables but cannot yet be selected. They are reserved for an M4
+  mode, deferred for now but with the design agreed:
+  - **Modelling (cheap — leaves the hot path untouched):** the M4's 4th "Greek"
+    wheel (Beta/Gamma) is *static* — it does not step (note its empty notch), so
+    it folds into the reflector. Build a composite **effective reflector**
+    `greek ∘ thin ∘ greek⁻¹` (still an involution) from the chosen Greek wheel /
+    position / ring and thin reflector, and use it at the single
+    `reflector[m.ukw][x]` site in `subst_rotors`. The machine therefore stays a
+    *3-stepping-rotor* engine (`wheels` stays 3); `subst_array`, `setup_mapping`,
+    the stepping/double-step and the fused scorers are all unchanged.
+  - **Search:** add outer loops over thin reflector (×2), Greek wheel (×2) and
+    Greek position (×26, plus optional ring), recomputing the effective reflector
+    and re-running `precompute()` per Greek config. The Greek position being
+    wildcarded multiplies the 3-rotor search space by 26 — a strong motivator to
+    land threading first.
+  - **CLI (agreed):** an `-4` mode flag (mirroring `-n` for Norway); in M4 mode
+    `-u` selects the thin reflector (`b`/`c`/`.`) and `-w`/`-r`/`-g` take **four**
+    characters with the Greek wheel first. Add a validation branch alongside the
+    Norway one, and print the 4th wheel in `showconfig`/`show_settings`.
+  - **Testing:** anchor to a published M4 known-answer vector (e.g. a U-boat
+    message), cross-checked against an independent reference, plus a round-trip.
+  Estimated ~half-a-day to a day of self-contained work; revisit after threading.
 - 🟢 Numerous `#if 0` / `#if 1` blocks (`showsteckerbrett`, debug prints,
   `SHOWHILLCLIMB`) scattered through the search and hill-climb code.
   **Intentionally kept** as debug instrumentation.
