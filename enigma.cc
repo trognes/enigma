@@ -116,7 +116,7 @@ inline int char2num(char x)
 
 inline char num2char(int x)
 {
-  return 65 + x;
+  return static_cast<char>(65 + x);
 }
 
 void monograms_read()
@@ -375,7 +375,7 @@ void init_steckerbrett(const char * steckerbrett_string)
   for (int j=0; j < asize; j++)
     steckerbrett[j] = j;
 
-  int plug_count = strlen(steckerbrett_string) / 2;
+  int plug_count = static_cast<int>(strlen(steckerbrett_string) / 2);
 
   for (int i=0; i < plug_count; i++)
     {
@@ -994,7 +994,7 @@ void bruteforce()
                             if (score > best_score)
                               {
                                 best_score = score;
-                                strcpy(best_plaintext, plaintext);
+                                memcpy(best_plaintext, plaintext, textlength + 1);
 #if 1
                                 init_ring_grund(r1, r2, r3, g1, g2, g3);
                                 fprintf(stderr, "%10.4f ", score);
@@ -1003,7 +1003,7 @@ void bruteforce()
                               }
                           }
             }
-  strcpy(plaintext, best_plaintext);
+  memcpy(plaintext, best_plaintext, textlength + 1);
 }
 
 void readciphertext()
@@ -1229,9 +1229,6 @@ int main(int argc, char * * argv)
         }
     }
 
-  argc -= optind;
-  argv += optind;
-
   /* validate arguments */
 
   if (opt_norenigma)
@@ -1303,6 +1300,8 @@ int main(int argc, char * * argv)
       break;
     case 4:
       quadgrams_read();
+      break;
+    default:
       break;
     }
 

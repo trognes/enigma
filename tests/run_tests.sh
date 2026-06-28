@@ -23,7 +23,7 @@
 
 set -u
 
-cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
+cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
 
 ENIGMA=./enigma
 if [ ! -x "$ENIGMA" ]; then

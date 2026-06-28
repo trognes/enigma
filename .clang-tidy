@@ -1,0 +1,16 @@
+# clang-tidy configuration for the enigma tool.
+#
+# We run the bug-finding and performance check groups, but disable two checks
+# that are pure noise for this deliberately C-style codebase:
+#   * bugprone-easily-swappable-parameters - fires on the small-integer setting
+#     APIs (init_walzen, init_ring_grund, ...) by design, not a bug.
+#   * bugprone-narrowing-conversions - fires on every `char c = toupper(...)`
+#     and similar intentional char/int arithmetic.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions
+WarningsAsErrors: '*'

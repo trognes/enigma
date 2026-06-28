@@ -364,15 +364,20 @@ lookup, 16-byte blocking). Remaining opportunities:
   `AAAAA → BDZGO` known-answer vector, reciprocity, plugboard, ring/start
   offsets, the double-stepping anomaly, the Norway variant, input filtering and
   the 1024-character limit, plus end-to-end cracking (hill-climb, brute-force,
-  and index-of-coincidence recovery). A GitHub Actions workflow
-  (`.github/workflows/ci.yml`) builds and runs `make test` on every push and
-  pull request. The double-stepping anomaly is now covered by an
-  externally-anchored known-answer test (see §2.4), alongside the authentic 1930
-  instruction-manual message vector.
-- 🟢 **`Makefile`** now has `test` and `clean` targets but still no `install` or
-  `debug` target and does not list the data files as dependencies. A debug build
-  (`-O0 -g -fsanitize=address,undefined`) target would immediately flag §1.4 (and
-  would have flagged the now-fixed §1.1).
+  and index-of-coincidence recovery). The double-stepping anomaly is covered by
+  an externally-anchored known-answer test (see §2.4), alongside the authentic
+  1930 instruction-manual message vector.
+
+  CI (`.github/workflows/ci.yml`) runs, on every push and pull request: the
+  suite built `-Werror` under **both g++ and clang++**; the suite under
+  **ASan + UBSan** (plus extra `-p` / scoring-mode coverage); representative
+  invocations under **valgrind** (catches uninitialised-memory use ASan misses);
+  **cppcheck**; **clang-tidy** (curated `bugprone`/`clang-analyzer`/`performance`
+  checks via `.clang-tidy`); and **shellcheck** on the test harness. A separate
+  **CodeQL** workflow (`.github/workflows/codeql.yml`) runs on PRs and weekly.
+- 🟢 **`Makefile`** has `test` and `clean` targets and an `EXTRA_CXXFLAGS` hook
+  (used by CI for `-Werror` and sanitizer builds). Still no `install` target and
+  the data files are not listed as dependencies.
 
 ---
 

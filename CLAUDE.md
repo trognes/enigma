@@ -145,10 +145,13 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).
-- Build is plain `make`. Tests live in `tests/run_tests.sh` and run via
+- Build is plain `make` (override `CXX`, or append `EXTRA_CXXFLAGS=` for e.g.
+  `-Werror`/sanitizers). Tests live in `tests/run_tests.sh` and run via
   `make test` (known-answer vectors, round-trip properties, input-limit guards,
-  and end-to-end cracking). CI runs `make test` on every push and pull request
-  via `.github/workflows/ci.yml`.
+  and end-to-end cracking). CI (`.github/workflows/ci.yml`) runs on every push
+  and PR: the suite `-Werror` under g++ and clang++, ASan+UBSan, valgrind,
+  cppcheck, clang-tidy (config in `.clang-tidy`), and shellcheck; a separate
+  CodeQL workflow runs on PRs and weekly. Keep all of these green.
 
 ## Known issues
 
