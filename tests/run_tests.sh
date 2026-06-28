@@ -18,8 +18,11 @@
 #   * Behavioural tests for input handling: non-letter filtering and the
 #     1024-character input limit (regression guard for the best_plaintext
 #     overflow fix).
-#   * End-to-end cracking tests: encrypt with known settings, then recover the
-#     plaintext via the brute-force search and plugboard hill-climb.
+#   * End-to-end cracking tests: a full matrix of brute-force start-position
+#     recovery for every scoring model (IC/mono/bi/tri/quad) in every language
+#     (german/english/danish/french), plus plugboard hill-climb recovery for the
+#     combinations that reliably converge (trigram in every language; bigram and
+#     quadgram in english).
 
 set -u
 
@@ -166,42 +169,59 @@ rm -f zztest_monograms.txt
 
 echo "== End-to-end cracking =="
 
-# Encrypt with a known plugboard, then recover the plaintext with the rotor
-# settings known but the plugboard unknown (hill-climb).
-hc_plain="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGNOWISTHETIMEFORALLGOODMENTOCOMETOTHEAIDOFTHEIRCOUNTRYTHEENIGMAMACHINE"
-hc_ct=$(run "$hc_plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF GH IJ")
-check "crack: hill-climb recovers plugboard" \
-  "$(run "$hc_ct" -u B -w 123 -r AAA -g AAA -c -l english -q)" \
-  "$hc_plain"
+# Genuine per-language plaintexts (A-Z only; accents/umlauts transliterated, e.g.
+# ae oe ue / aa). Used for both the brute-force and hill-climb matrices below.
+pt_german="DIEENIGMAMASCHINEWURDEIMZWEITENWELTKRIEGVONDERDEUTSCHENWEHRMACHTVERWENDETUMGEHEIMENACHRICHTENZUVERSCHLUESSELNABERDIEALLIIERTENKONNTENDENGEHEIMENCODETROTZDEMBRECHEN"
+pt_english="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTEN"
+pt_danish="DETVARENGANGENLILLEHAVFRUESOMBOEDELANGTUDEPAAHAVETSBUNDSAMMENMEDSINFADEROGSINEFEMSOESTREHUNVARDENYNGSTEOGSMUKKESTEAFDEMALLEMENHUNLAENGTESEFTERATKOMMEOPTILMENNESKENE"
+pt_french="LESSANGLOTSLONGSDESVIOLONSDELAUTOMNEBLESSENTMONCOEURDUNELANGUEURMONOTONETOUTSUFFOCANTETBLEMEQUANDSONNELHEUREJEMESOUVIENSDESJOURSANCIENSETALORSJEPLEUREETJEMENVAIS"
+plain_for() {
+  case $1 in
+    german)  printf '%s' "$pt_german"  ;;
+    english) printf '%s' "$pt_english" ;;
+    danish)  printf '%s' "$pt_danish"  ;;
+    french)  printf '%s' "$pt_french"  ;;
+  esac
+}
 
-# Encrypt with an unknown start position, then recover it via brute-force search.
-br_plain="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGNOWISTHETIMEFORALLGOODMEN"
-br_ct=$(run "$br_plain" -i -u B -w 123 -r AAA -g QEN)
-check "crack: brute-force recovers start position" \
-  "$(run "$br_ct" -u B -w 123 -r AAA -g ... -l english -q)" \
-  "$br_plain"
-
-# Index-of-coincidence scoring (-i) must recover the start position on its own.
-# This guards the IC formula: the previous (incorrect) formula summed products
-# of alphabetically-adjacent letter counts and could NOT distinguish the real
-# plaintext from gibberish, so this brute-force search returned the wrong key.
-ic_plain="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTEN"
-ic_ct=$(run "$ic_plain" -i -u B -w 123 -r AAA -g QXP)
-check "crack: index of coincidence recovers start position" \
-  "$(run "$ic_ct" -i -u B -w 123 -r AAA -g ...)" \
-  "$ic_plain"
-
-# Every scoring model must recover the start position when the scoring language
-# matches the plaintext. Quadgrams are the most language-sensitive: english
-# quadgrams score english text, but the german table assigns ~0 to most english
-# quadgrams, so -q only works with the matching -l (lower-order models tolerate a
-# language mismatch, which is why -m/-b/-t/-i can still crack english under the
-# default german tables while -q cannot).
-for mode in -i -m -b -t -q; do
-  check "crack: scoring $mode recovers start position (-l english)" \
-    "$(run "$ic_ct" $mode -u B -w 123 -r AAA -g ... -l english)" \
-    "$ic_plain"
+# (1) Brute-force the start position with every scoring model in every language.
+# Each plaintext is encrypted at start QXP (no plugboard) and recovered by
+# wildcarding the start (-g ...). All 4 languages x 5 models must recover when
+# -l matches the plaintext language. (This also guards the IC formula fix: the
+# old -i formula could not distinguish plaintext from gibberish and returned the
+# wrong key. Note quadgrams need the matching -l -- they are the most
+# language-specific model; see the gotcha in CLAUDE.md.)
+for lang in german english danish french; do
+  plain=$(plain_for "$lang")
+  ct=$(run "$plain" -i -u B -w 123 -r AAA -g QXP)
+  for mode in -i -m -b -t -q; do
+    check "crack: start position, $lang $mode" \
+      "$(run "$ct" $mode -u B -w 123 -r AAA -g ... -l "$lang")" \
+      "$plain"
+  done
 done
+
+# (2) Hill-climb the plugboard (rotor/ring/start known, plugboard unknown).
+# Trigram scoring recovers a 3-pair plugboard in every language; bigram and
+# quadgram recover it for English. IC and monogram scoring lack the signal to
+# recover a plugboard by hill-climbing, and bigram/quadgram hit
+# language-dependent local optima (hill-climbing is a greedy heuristic), so those
+# combinations are intentionally not asserted -- the brute-force matrix above
+# already exercises every scoring model in every language.
+for lang in german english danish french; do
+  plain=$(plain_for "$lang")
+  ct=$(run "$plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
+  check "crack: hill-climb plugboard, $lang -t" \
+    "$(run "$ct" -t -c -u B -w 123 -r AAA -g AAA -l "$lang")" \
+    "$plain"
+done
+en_hc_ct=$(run "$pt_english" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
+check "crack: hill-climb plugboard, english -b" \
+  "$(run "$en_hc_ct" -b -c -u B -w 123 -r AAA -g AAA -l english)" \
+  "$pt_english"
+check "crack: hill-climb plugboard, english -q" \
+  "$(run "$en_hc_ct" -q -c -u B -w 123 -r AAA -g AAA -l english)" \
+  "$pt_english"
 
 echo
 echo "passed: $pass, failed: $fail"

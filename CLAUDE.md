@@ -157,7 +157,8 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 - Build is plain `make` (override `CXX`, or append `EXTRA_CXXFLAGS=` for e.g.
   `-Werror`/sanitizers). Tests live in `tests/run_tests.sh` and run via
   `make test` (known-answer vectors, round-trip properties, input-limit guards,
-  and end-to-end cracking). CI (`.github/workflows/ci.yml`) runs on every push
+  and end-to-end cracking — a brute-force start-position matrix over every
+  scoring model × language, plus plugboard hill-climb for the reliable combos). CI (`.github/workflows/ci.yml`) runs on every push
   and PR: the suite `-Werror` under g++ and clang++, ASan+UBSan, valgrind,
   cppcheck, clang-tidy (config in `.clang-tidy`), and shellcheck; a separate
   CodeQL workflow runs on PRs and weekly. Keep all of these green.
