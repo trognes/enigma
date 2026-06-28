@@ -13,7 +13,13 @@ Severity legend: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low / nit.
 
 ## 1. Memory-safety bugs
 
-### 1.1 🔴 Stack buffer overflow on long ciphertext (`best_plaintext[1025]`)
+### 1.1 🔴 Stack buffer overflow on long ciphertext (`best_plaintext[1025]`) — ✅ FIXED
+
+> **Resolved:** the ciphertext is now capped at `maxtextlen = 1024` letters and
+> `readciphertext()` rejects longer input with a fatal error, so the
+> `best_plaintext` buffer (sized `maxtextlen + 1`) can no longer overflow.
+
+
 
 In `bruteforce()`:
 
@@ -36,7 +42,7 @@ corruption at worst, on entirely ordinary input.
 the same type/size as `plaintext`), and prefer `memcpy(..., textlength + 1)` or
 a bounded copy.
 
-### 1.2 🟠 Fixed `filename[100]` buffer overflowable via `-l`
+### 1.2 🟠 Fixed `filename[100]` buffer overflowable via `-l` — ✅ FIXED
 
 In every `*_read()` function:
 
@@ -46,71 +52,94 @@ strcpy(filename, opt_language);          // opt_language is user-controlled (-l)
 strcat(filename, "_quadgrams.txt");
 ```
 
-`opt_language` comes straight from `-l` with no length validation and no
-allow-list check. A language argument longer than ~85 characters overflows
-`filename`. Even short of overflow, an arbitrary `-l` value just produces a
-"file not found" fatal error. The same unchecked pattern is duplicated in four
-functions.
+`opt_language` came straight from `-l` with no length validation and no
+allow-list check. A language argument longer than ~85 characters overflowed
+`filename`.
 
-**Fix direction:** validate `-l` against the known set, use `snprintf` with the
-buffer size, and factor the four near-identical readers into one.
+**Resolved.** The four readers now build the filename with
+`snprintf(filename, sizeof(filename), "%s_quadgrams.txt", opt_language)` (a
+bounded write), and `main()` validates `-l` up front: 1–32 characters, letters
+only — which also blocks path-traversal names like `../../etc/passwd`. Guarded
+by an illegal-`-l` rejection test. (Factoring the four near-identical readers
+into one remains an open refactor — see §5.)
 
-### 1.3 🟡 `readciphertext()` / `readplaintext()` do a single `read()`
+### 1.3 🟡 `readciphertext()` / `readplaintext()` do a single `read()` — ✅ FIXED
 
 ```c
 len = read(STDIN_FILENO, buffer, maxlen);
 ```
 
 `read()` may return fewer bytes than requested (pipes, terminals, large
-inputs), so ciphertext can be silently truncated. There is also no loop to
-consume input beyond `maxlen`; anything past the first `maxlen` bytes is
-silently dropped with no warning. Prefer a read loop (or `fread`) and warn on
-truncation.
+inputs), so ciphertext could be silently truncated, and anything past the first
+`maxlen` bytes was silently dropped.
 
-### 1.4 🟡 Block decoder reads past `textlength` (uninitialized reads)
+**Resolved.** Both functions now loop on `read()` until EOF, filtering A–Z as
+they go, and bound the letter count incrementally (fatal past `maxtextlen`).
+A read error is reported instead of ignored, and the buffers are `unsigned char`
+so `toupper()` is never handed a negative value. Guarded by a test that pipes
+input larger than the read buffer (70 000 bytes before the letters) and checks
+it is fully consumed.
 
-`decode_num()` processes the message in fixed 16-byte blocks:
+### 1.4 🟡 Block decoder reads past `textlength` (uninitialized reads) — ✅ FIXED
+
+`decode_num()` processed the message in fixed 16-byte blocks:
 
 ```c
 for (int i = 0; i < textlength; i += 16) { ... map16_* over 16 elements ... }
 ```
 
-When `textlength` is not a multiple of 16, the final block reads
-`num_ciphertext[]` and `mapping[]` rows beyond `textlength`. Those rows are
-within the static arrays (so no segfault), but `mapping[]` is only initialized
-up to `textlength - 1` by `setup_mapping()`, so this reads uninitialized data
-and writes junk into `num_plaintext[]` past `textlength`. The scoring loops stop
-at `textlength - k`, so the result is not corrupted, but this is undefined-ish
-behavior and a trap for anyone who later reads the full `num_plaintext`. The
-remainder should be handled explicitly (or the arrays zero-initialized and the
-tail masked).
+When `textlength` was not a multiple of 16, the final block read
+`num_ciphertext[]` and `mapping[]` rows beyond `textlength` (in-bounds of the
+static arrays, but uninitialized) and wrote junk into `num_plaintext[]` past
+`textlength`. Results were unaffected (scoring stops at `textlength - k`), but it
+was undefined-ish and a trap for anyone reading the full `num_plaintext`.
+
+**Resolved.** The block loop now runs over complete 16-byte blocks
+(`textlength & ~15`) and a scalar remainder loop handles the tail, so nothing
+past `textlength` is touched. Output is unchanged (the 25-letter `BDZGO` KAT
+already exercises a non-multiple-of-16 length).
 
 ---
 
 ## 2. Correctness bugs
 
-### 2.1 🔴 Index of coincidence is computed incorrectly
+### 2.1 🔴 Index of coincidence is computed incorrectly — ✅ FIXED
 
-Both `ic_score()` and `ic_score_decode()` compute:
+Both `ic_score()` and `ic_score_decode()` computed:
 
 ```c
 for (int j = 1; j < 26; j++)
     score += freq[j-1] * freq[j];   // product of ADJACENT letters' counts
 ```
 
-This multiplies the frequency of each letter by the frequency of the *next
+This multiplied the frequency of each letter by the frequency of the *next
 letter in the alphabet* (A·B + B·C + …). The index of coincidence is
 
   IC = Σ_i f_i·(f_i − 1) / (N·(N − 1))
 
 i.e. each letter's count times itself, summed, normalized. The implemented
-formula is not IC at all and has no cryptanalytic meaning; the `-i` scoring mode
-is effectively broken. (It also skips the `j = 0` term and never normalizes.)
+formula was not IC at all and had no cryptanalytic meaning; the `-i` scoring mode
+was effectively broken. (It also skipped the `j = 0` term and never normalized.)
 
-**Fix direction:** `score += freq[j] * (freq[j] - 1);` over all 26 letters
-(normalization is optional since comparisons are same-length).
+**How bad it was — measured.** Comparing the old formula against a correct,
+normalized IC on a 297-letter English passage versus 2000 random strings of the
+same length:
 
-### 2.2 🟠 `fscanf` partial-match leaves variables uninitialized
+| metric | English | random mean | random max | random samples ≥ English |
+|--------|---------|-------------|------------|--------------------------|
+| old (adjacent-product) | 3483 | 3252 | 3509 | **3 / 2000** |
+| correct IC | 0.0624 | 0.0385 | 0.0425 | **0 / 2000** |
+
+The old metric put English only ~7 % above random noise with the distributions
+overlapping (a random string outscored the real English), whereas correct IC
+separates them cleanly (English sits far beyond the random maximum). End to end:
+with the old formula a brute-force start-position search under `-i` returned the
+**wrong** key on a no-plugboard test; with the corrected formula it recovers the
+plaintext. The corrected formula was applied to both functions, summed over all
+26 letters and normalized by `N·(N−1)` (so the value is the standard ≈0.067 for
+English), and is guarded by a new `-i` recovery test in the suite.
+
+### 2.2 🟠 `fscanf` partial-match leaves variables uninitialized — ✅ FIXED
 
 In all n-gram readers, e.g. monograms:
 
@@ -121,29 +150,31 @@ if (ret > 0) {                       // true even when ret == 1
         monograms[char2num(a)] = count + 1.0;   // count may be uninitialized
 ```
 
-`ret > 0` is taken whenever **any** field matched. If only `%c` matched
-(`ret == 1`), `count` is read uninitialized. For bigrams/trigrams/quadgrams the
-same applies to the later letters. The bigrams reader additionally treats
-`ret == 0` and EOF the same as a partial match boundary only via the `else
-break`. The correct guard is to require the **full** field count
-(`ret == 2`/`3`/`4`/`5`). The trigram/quadgram readers redundantly test both
-`if (ret < 1) break;` and `if (ret > 0)`.
+`ret > 0` was taken whenever **any** field matched. If only `%c` matched
+(`ret == 1`), `count` was read uninitialized; for bigrams/trigrams/quadgrams the
+same applied to the later letters.
 
-This rarely bites because the bundled files are well-formed, but it is a latent
-bug and makes the parser fragile to a trailing blank line or stray character.
+**Resolved.** Each reader now requires the **full** field count
+(`ret != 2`/`3`/`4`/`5` → `break`) before using any parsed value, so a partial
+match never feeds uninitialized data into the tables. The format strings also
+gained a leading space (`" %c%c …"`) so the parser skips blank lines and stray
+whitespace instead of misreading a newline as a letter, and the redundant
+`if (ret < 1) break;` / `if (ret > 0)` pair in the trigram/quadgram readers is
+gone. Guarded by a "messy file" parser test.
 
-### 2.3 🟡 `total` is accumulated but never used (no normalization)
+### 2.3 🟢 `total` is accumulated but never used (no normalization) — ✅ FIXED
 
-Every reader maintains a `total` (and the quadgram one uses `unsigned int
-total`) and increments it, but it is never divided into the counts. Scores are
-therefore `log10(count + 1)` of raw counts, not log-probabilities. For ranking
-candidate keys over a *fixed-length* ciphertext this is only a constant offset,
-so results are unaffected — but the variable is dead and misleading, and the
-code reads as if it intended Laplace-smoothed log-probabilities (the `+ 1` /
-seeding tables with `1.0` confirms that intent). Either finish the
-normalization or delete `total`.
+Every reader maintained a `total` (the quadgram one as `unsigned int total`) and
+incremented it, but never divided it into the counts. Scores are
+`log10(count + 1)` of raw counts, not log-probabilities — which for ranking
+candidate keys over a *fixed-length* ciphertext is only a constant offset, so
+results are unaffected.
 
-### 2.4 🟡 Stepping model worth verifying against a reference
+**Resolved.** The dead `total` variable was removed from all four readers. (The
+ranking is unchanged; normalization was never needed for same-length
+comparisons, so it was dropped rather than completed.)
+
+### 2.4 🟢 Stepping model verified against a reference — ✅ ADDRESSED
 
 `step_rotors()` implements the double-stepping anomaly:
 
@@ -153,14 +184,24 @@ else if (notch[right]) { step middle; }
 step right;                                         // always
 ```
 
-This is the standard model and looks correct, but notch detection keys on the
-*current* `grundstellung` before stepping, and the Norway-wheel notch tables
-(indices 8–12) reuse the standard `Q/E/V/J/Z` turnover letters. There is no test
-verifying encrypt/decrypt round-trips against a known reference (e.g. a known
-Enigma message or another simulator). Given how subtle stepping is, this should
-be pinned down with tests rather than read-by-eye. (Note also: only single
-notches are modeled; wheels VI–VIII correctly carry `MZ` double notches in
-`notch_string`, which the position-based table handles fine.)
+This is the standard model. It is now anchored externally by the test suite:
+
+- A **double-stepping KAT** (`tests/run_tests.sh`) pinned to the documented
+  rotor-position sequence `KDO KDP KDQ KER LFS LFT LFU` (wheel order III II I).
+  Encrypting from `KDO` crosses the anomaly at the 4th letter, and the expected
+  ciphertext (`AAAAAAAAAAAA → ULMHJCJJCWBY`) differs from the 4th letter on for
+  any machine that omits the double step, so the test genuinely guards it.
+- The authentic **1930 instruction-manual message** KAT (reflector A, wheels
+  II I III, rings XMV, plugboard, start ABL) — a 90-letter external vector
+  exercising reflector A, ring offsets and the plugboard.
+
+Both were cross-checked with an independent reimplementation that reproduces the
+canonical `AAAAA → BDZGO` vector, the 1930 message, and the published double-step
+position sequence. (Note: only single notches are modeled; wheels VI–VIII
+correctly carry `MZ` double notches in `notch_string`, which the position-based
+table handles fine. The Norway-wheel notch tables (indices 8–12) reuse the
+standard `Q/E/V/J/Z` turnover letters and remain covered only by round-trip
+consistency, not an external KAT.)
 
 ### 2.5 🟢 Empty input causes division by zero / degenerate search
 
@@ -176,59 +217,76 @@ ciphertext.
 The file carries a lot of half-finished or abandoned code that obscures the
 working path:
 
-- 🟠 **`all_subst_score()`** computes plug "scores" as `random() % 10000` — pure
-  random numbers. It is never called (its call site in `hillclimb` is commented
-  out). The real scoring lines are all `#if 0`'d out. This function is entirely
-  vestigial and actively misleading.
-- 🟡 **`best_steckerbrett[26]`** in `hillclimb()` is filled via `memcpy` but
-  never read again — dead.
-- 🟡 **`map()`** (line ~559) is unused, and its parameter is named `map`,
-  shadowing the function name. **`map16_direct`/`map16_step`** are used only
-  inside `decode_num`; the simpler scalar paths next to them are `#if 0`'d.
+- 🟠 **`all_subst_score()`** computed plug "scores" as `random() % 10000` — pure
+  random numbers. Never called (its call site in `hillclimb` was commented out),
+  entirely vestigial and actively misleading. ✅ **Removed** (with its
+  `subst_score_s` struct, `subst_scores` global and `subst_score_comp`
+  comparator, the file's only use of `random()`).
+- 🟡 **`best_steckerbrett[26]`** in `hillclimb()` was filled via `memcpy` but
+  never read again — and the copy read `26*sizeof(int)` (104) bytes from the
+  26-byte `steckerbrett`, an out-of-bounds read the compiler warned about.
+  ✅ **Removed** (clears the only `-Wall` warning).
+- 🟡 **`map()`** was unused and its parameter was named `map`, shadowing the
+  function name. ✅ **Removed.** (`map16_direct`/`map16_step` are kept — they are
+  used inside `decode_num`.)
+- 🟡 **`opt_threads`** and **`opt_logfilename`** were declared and initialized but
+  never used (no `-T`/threading and no logging despite the names). ✅ **Removed.**
+  (The "load triplet scores …" comment inside `quadgram_score_decode` still
+  describes SIMD work that does not exist; git history shows SIMD code was added
+  then removed.)
 - 🟡 **`showit()`** is an entire function body wrapped in `#if 0` — a no-op.
-- 🟡 **`opt_threads`** and **`opt_logfilename`** are declared and initialized but
-  never used; there is no `-T`/threading and no logging despite the names. The
-  header comment block and the "load triplet scores …" comment inside
-  `quadgram_score_decode` describe SIMD/threading work that does not exist
-  (git history shows SIMD code was added then removed).
+  **Intentionally kept** as debug instrumentation (see note below).
 - 🟡 **Unreachable tables:** M4 thin reflectors (indices 4–5) and Beta/Gamma
   rotors (indices 13–14) exist in the wiring tables but cannot be selected via
-  any CLI option. Either wire up an M4/4-rotor mode or remove them and the
-  associated comments to avoid implying support that isn't there.
+  any CLI option. **Kept** (reserved for a future M4/4-rotor mode; the index
+  conventions are documented in `CLAUDE.md`). Wire them up or remove them later.
 - 🟢 Numerous `#if 0` / `#if 1` blocks (`showsteckerbrett`, debug prints,
   `SHOWHILLCLIMB`) scattered through the search and hill-climb code.
+  **Intentionally kept** as debug instrumentation.
 - 🟢 `score_iter(int iter, ...)` ignores its `iter` argument entirely; callers
-  pass `0` or `iter` inconsistently.
+  pass `0` or `iter` inconsistently. **Kept** (the `iter` plumbing feeds the
+  `SHOWHILLCLIMB` debug output).
 
-Recommendation: delete the vestigial code (or move genuinely useful debug
-output behind a real `-d/--verbose` flag) so the ~30% of the file that is noise
-stops competing with the parts that matter.
+The purely vestigial / buggy items above have been removed; the remaining
+`#if 0` / `SHOWHILLCLIMB` / `showit` blocks are deliberately retained as debug
+instrumentation rather than deleted.
 
 ---
 
 ## 4. API misuse, portability, and modern-C++ concerns
 
-- 🟡 **Legacy `index()` from `<strings.h>`** is used in `init()` instead of the
-  standard `strchr`. `index` is removed in POSIX-2008 deprecation tracks and is
-  non-standard C++. Also `<sys/uio.h>`/`<sys/types.h>` are included but unused.
-- 🟡 **`rotor_l`/`rotor_r` return `char`** but compute and are consumed as
-  `int`s in 0–25. `char` may be signed; the values fit, but returning `int`
-  would be clearer and avoids any narrowing surprises. `substitute` chains these
-  through `steckerbrett[...]` indexing, so a stray negative would index out of
-  bounds.
+- 🟢 **Legacy `index()` from `<strings.h>`** ✅ replaced with the standard
+  `strchr` in `init()`; `<strings.h>` and the unused `<sys/uio.h>` includes were
+  dropped. (`<sys/types.h>` is now genuinely used for `ssize_t` in the read
+  loops, so it stays.)
+- 🟢 **`rotor_l`/`rotor_r` return `char`** but compute and are consumed as
+  `int`s in 0–25. ✅ Changed to return `int`, avoiding any signed-`char`
+  narrowing surprise on the values that later index `steckerbrett[...]`.
 - 🟡 **String-literal-to-`char*`** assignments (`opt_ukw = (char*) ".";` etc.)
   cast away `const`, then `alltoupper`/`removespaces` mutate `optarg` (i.e.
-  `argv`) in place. Mutating `argv` and casting away `const` on literals is
-  legal-but-smelly; with `-Wwrite-strings` these would warn. Prefer `const
-  char*` defaults and copy before mutating.
+  `argv`) in place. ✅ **Fixed:** the option globals are now `const char *` with
+  uncast string-literal defaults, and the getopt cases call
+  `alltoupper`/`removespaces` on the mutable `optarg` before assigning it. The
+  `compare` qsort callback also casts `const void*` to `const int*` now. (Some
+  `argv` mutation remains, but no `const` is cast away.)
 - 🟢 **C++ written as C:** C stdio, raw global arrays, `qsort` with
   `void*` comparators, `struct subst_score_s { ... } subst_scores[...];`
   declared with a trailing global instance. No use of `std::` containers,
   `std::array`, RAII, or `constexpr`. This is a style/maintainability point, not
   a bug, but it forfeits a lot of compiler help.
-- 🟢 **Build flags** are only `-Wall -O3`. Adding `-Wextra -Wshadow
-  -Wconversion -Wwrite-strings` would surface several of the issues above
-  (shadowed `map`, signed/`char` returns, `const` literals, unused vars).
+- 🟢 **Build flags** ✅ now `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual
+  -O3`, and the build is **warning-free** under them. Stronger optional flags
+  were surveyed and left off because they reflect the deliberate C-style /
+  global-state design rather than bugs, and would be noisy without a larger
+  refactor:
+  - `-Wshadow` → ~14 (mostly the global `textlength` shadowed by the same-named
+    function parameters; see §5).
+  - `-Wconversion` → ~38 (implicit `int`/`char`/`double` narrowings throughout
+    the arithmetic).
+  - `-Wold-style-cast` → ~12 (the remaining C-style `(int*)`/pointer casts; would
+    want C++ `static_cast`/`reinterpret_cast` throughout).
+  Enabling either would be a good ratchet once the corresponding cleanup
+  (global-state refactor; C++-style casts) is done.
 
 ---
 
@@ -298,15 +356,28 @@ lookup, 16-byte blocking). Remaining opportunities:
 - 🟢 **Inconsistent exit/usage:** running with no args prints help and exits `1`;
   `-h` exits `0`. Errors go through `fatal()` (exit 1) but some validation
   messages are printed inline. Acceptable, but worth standardizing.
-- 🔴 **No tests and no CI.** For a cryptographic tool whose correctness is
+- 🟢 **Tests and CI added.** For a cryptographic tool whose correctness is
   subtle (stepping anomaly, ring/start offset arithmetic, plugboard
-  involution), the absence of any round-trip or known-answer tests is the single
-  biggest risk to long-term correctness. A handful of known-plaintext/known-key
-  vectors (including a Norway Enigma vector and a double-step boundary case)
-  would catch regressions in exactly the areas most likely to break.
-- 🟢 **`Makefile`** has no `clean`, `install`, or `debug` target and does not
-  list the data files as dependencies. A debug build (`-O0 -g
-  -fsanitize=address,undefined`) target would immediately flag §1.1 and §1.4.
+  involution), the absence of any round-trip or known-answer tests was the
+  single biggest risk to long-term correctness. A test suite now exists
+  (`tests/run_tests.sh`, run via `make test`) covering the canonical
+  `AAAAA → BDZGO` known-answer vector, reciprocity, plugboard, ring/start
+  offsets, the double-stepping anomaly, the Norway variant, input filtering and
+  the 1024-character limit, plus end-to-end cracking (hill-climb, brute-force,
+  and index-of-coincidence recovery). The double-stepping anomaly is covered by
+  an externally-anchored known-answer test (see §2.4), alongside the authentic
+  1930 instruction-manual message vector.
+
+  CI (`.github/workflows/ci.yml`) runs, on every push and pull request: the
+  suite built `-Werror` under **both g++ and clang++**; the suite under
+  **ASan + UBSan** (plus extra `-p` / scoring-mode coverage); representative
+  invocations under **valgrind** (catches uninitialised-memory use ASan misses);
+  **cppcheck**; **clang-tidy** (curated `bugprone`/`clang-analyzer`/`performance`
+  checks via `.clang-tidy`); and **shellcheck** on the test harness. A separate
+  **CodeQL** workflow (`.github/workflows/codeql.yml`) runs on PRs and weekly.
+- 🟢 **`Makefile`** has `test` and `clean` targets and an `EXTRA_CXXFLAGS` hook
+  (used by CI for `-Werror` and sanitizer builds). Still no `install` target and
+  the data files are not listed as dependencies.
 
 ---
 
@@ -314,18 +385,25 @@ lookup, 16-byte blocking). Remaining opportunities:
 
 | # | Severity | Issue |
 |---|----------|-------|
-| 1.1 | 🔴 | `best_plaintext[1025]` overflow for ciphertext > 1024 letters |
-| 2.1 | 🔴 | Index of coincidence formula is wrong (`-i` broken) |
-| 7 | 🔴 | No tests / CI for subtle crypto logic |
-| 1.2 | 🟠 | `-l` can overflow `filename[100]`; no language allow-list |
-| 2.2 | 🟠 | `fscanf` partial matches use uninitialized variables |
-| 3 | 🟠 | Large amount of dead/misleading code (`all_subst_score` = random, etc.) |
+| 1.1 | 🔴 | ~~`best_plaintext[1025]` overflow for ciphertext > 1024 letters~~ ✅ fixed (input capped at 1024 + validated) |
+| 2.1 | 🔴 | ~~Index of coincidence formula is wrong (`-i` broken)~~ ✅ fixed (Σ f·(f−1)/N(N−1) + recovery test) |
+| 7 | 🟢 | ~~No tests / CI~~ ✅ test suite (`make test`) + GitHub Actions CI added |
+| 1.2 | 🟢 | ~~`-l` can overflow `filename[100]`; no language allow-list~~ ✅ fixed (snprintf + `-l` validation) |
+| 2.2 | 🟢 | ~~`fscanf` partial matches use uninitialized variables~~ ✅ fixed (require full field count) |
+| 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
-| 1.3/1.4 | 🟡 | Single `read()` truncation; 16-byte block over-read past `textlength` |
-| 2.3/2.4 | 🟡 | Unused `total` (no normalization); stepping unverified |
-| 4/5/6 | 🟡 | Legacy `index()`, `char` returns, duplicated readers/scorers, no parallelism |
+| 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
+| 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
+| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals~~ ✅ fixed; duplicated readers/scorers, no parallelism remain |
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
-**If only three things are fixed:** (1.1) the stack overflow, (2.1) the IC
-formula, and (7) add known-answer round-trip tests — the tests will also give
-confidence to safely clean up the dead code and refactor the globals.
+**Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow,
+(1.3/1.4) the read-loop and block over-read, (2.1) the IC formula, (2.2) the
+`fscanf` partial-match bug, (2.4) stepping verification, (3) the
+dead/misleading-code cleanup (including the `best_steckerbrett` out-of-bounds
+`memcpy`), (2.3) the unused `total`, the §4 modernization (legacy `index()` →
+`strchr`, `int` rotor returns, stray includes), and (7) the test suite + CI are
+now done. The `-Wall` build is warning-free and the suite has 21 checks.
+Remaining items — factor the four duplicated n-gram readers / parallel scorers
+into one (§5/§6), and eventually the global-state refactor that would unlock
+threading and clear the `-Wshadow` noise (§5).

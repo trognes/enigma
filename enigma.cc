@@ -1,10 +1,8 @@
-#include <strings.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <sys/stat.h>
@@ -61,23 +59,22 @@ static const char * notch_string[] =
   };
 
 static const int maxlen = 10240;
+static const int maxtextlen = 1024;
 static const int asize = 26;
 static const int wheels = 3;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 
-static char * opt_ukw;
-static char * opt_walzen;
-static char * opt_ringstellung;
-static char * opt_grundstellung;
-static char * opt_steckerbrett;
-static char * opt_logfilename;
+static const char * opt_ukw;
+static const char * opt_walzen;
+static const char * opt_ringstellung;
+static const char * opt_grundstellung;
+static const char * opt_steckerbrett;
 static char * opt_plaintext; /* plaintext to compare to */
-static char * opt_language; /* german (default), english, danish, french ... */
+static const char * opt_language; /* german (default), english, danish, french ... */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_maxwheel;
 static int opt_scoring;
-static int opt_threads;
 static int opt_hillclimb;
 
 static char ciphertext[maxlen+1];
@@ -119,7 +116,7 @@ inline int char2num(char x)
 
 inline char num2char(int x)
 {
-  return 65 + x;
+  return static_cast<char>(65 + x);
 }
 
 void monograms_read()
@@ -127,14 +124,11 @@ void monograms_read()
   for(int i=0; i<26; i++)
     monograms[i] = 1.0;
 
-  double total = 26;
-
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_monograms.txt");
+  snprintf(filename, sizeof(filename), "%s_monograms.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -149,17 +143,13 @@ void monograms_read()
     {
       char a;
       int count;
-      int ret = fscanf(f, "%c %d\n", & a, & count);
-      if (ret > 0)
-        {
-          if ((a >= 'A') && (a <= 'Z'))
-            {
-              monograms[char2num(a)] = count + 1.0;
-              total += count;
-            }
-        }
-      else
+      int ret = fscanf(f, " %c %d", & a, & count);
+      if (ret != 2)
         break;
+      if ((a >= 'A') && (a <= 'Z'))
+        {
+          monograms[char2num(a)] = count + 1.0;
+        }
     }
 
   for(int i=0; i<26; i++)
@@ -175,14 +165,11 @@ void bigrams_read()
     for(int j=0; j<26; j++)
       bigrams[i][j] = 1.0;
 
-  double total = 26*26;
-
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_bigrams.txt");
+  snprintf(filename, sizeof(filename), "%s_bigrams.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -198,17 +185,13 @@ void bigrams_read()
       char a;
       char b;
       int count;
-      int ret = fscanf(f, "%c%c %d\n", & a, & b, & count);
-      if (ret > 0)
-        {
-          if ((a >= 'A') && (a <= 'Z') && (b >= 'A') && (b <= 'Z'))
-            {
-              bigrams[char2num(a)][char2num(b)] = count + 1;
-              total += count;
-            }
-        }
-      else
+      int ret = fscanf(f, " %c%c %d", & a, & b, & count);
+      if (ret != 3)
         break;
+      if ((a >= 'A') && (a <= 'Z') && (b >= 'A') && (b <= 'Z'))
+        {
+          bigrams[char2num(a)][char2num(b)] = count + 1;
+        }
     }
 
   for(int i=0; i<26; i++)
@@ -226,14 +209,11 @@ void trigrams_read()
       for(int k=0; k<26; k++)
         trigrams[i][j][k] = 1.0;
 
-  double total = 26*26*26;
-
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_trigrams.txt");
+  snprintf(filename, sizeof(filename), "%s_trigrams.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -250,20 +230,16 @@ void trigrams_read()
       char b;
       char c;
       int count;
-      int ret = fscanf(f, "%c%c%c %d\n", & a, & b, & c, & count);
+      int ret = fscanf(f, " %c%c%c %d", & a, & b, & c, & count);
 
-      if (ret < 1)
+      if (ret != 4)
         break;
 
-      if (ret > 0)
+      if ((a >= 'A') && (a <= 'Z') &&
+          (b >= 'A') && (b <= 'Z') &&
+          (c >= 'A') && (c <= 'Z'))
         {
-          if ((a >= 'A') && (a <= 'Z') &&
-              (b >= 'A') && (b <= 'Z') &&
-              (c >= 'A') && (c <= 'Z'))
-            {
-              trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;
-              total += count;
-            }
+          trigrams[char2num(a)][char2num(b)][char2num(c)] = count + 1;
         }
     }
 
@@ -283,14 +259,11 @@ void quadgrams_read()
         for(int l=0; l<26; l++)
           quadgrams[i][j][k][l] = 1;
 
-  unsigned int total = 26*26*26*26;
-
   FILE * f;
 
-  char filename[100];
+  char filename[64];
 
-  strcpy(filename, opt_language);
-  strcat(filename, "_quadgrams.txt");
+  snprintf(filename, sizeof(filename), "%s_quadgrams.txt", opt_language);
 
   f = fopen(filename, "r");
 
@@ -308,21 +281,17 @@ void quadgrams_read()
       char c;
       char d;
       int count;
-      int ret = fscanf(f, "%c%c%c%c %d\n", & a, & b, & c, & d, & count);
+      int ret = fscanf(f, " %c%c%c%c %d", & a, & b, & c, & d, & count);
 
-      if (ret < 1)
+      if (ret != 5)
         break;
 
-      if (ret > 0)
+      if ((a >= 'A') && (a <= 'Z') &&
+          (b >= 'A') && (b <= 'Z') &&
+          (c >= 'A') && (c <= 'Z') &&
+          (d >= 'A') && (d <= 'Z'))
         {
-          if ((a >= 'A') && (a <= 'Z') &&
-              (b >= 'A') && (b <= 'Z') &&
-              (c >= 'A') && (c <= 'Z') &&
-              (d >= 'A') && (d <= 'Z'))
-            {
-              quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;
-              total += count;
-            }
+          quadgrams[char2num(a)][char2num(b)][char2num(c)][char2num(d)] = count + 1;
         }
     }
 
@@ -381,9 +350,9 @@ double ic_score(char * text, int len)
   for(int i=0; i<len; i++)
     freq[char2num(text[i])] += 1.0;
   double score = 0.0;
-  for(int j=1; j<26; j++)
-    score += freq[j-1] * freq[j];
-  return score;
+  for(int j=0; j<26; j++)
+    score += freq[j] * (freq[j] - 1.0);
+  return (len > 1) ? score / ((double) len * (len - 1)) : 0.0;
 }
 
 void init()
@@ -392,8 +361,8 @@ void init()
     for (int j=0; j < asize; j++)
       {
         rotor_fwd[i][j] = char2num(rotor_string[i][j]);
-        rotor_rev[i][j] = index(rotor_string[i],num2char(j)) - rotor_string[i];
-        notch[i][j] = index(notch_string[i], num2char(j)) != NULL;
+        rotor_rev[i][j] = strchr(rotor_string[i],num2char(j)) - rotor_string[i];
+        notch[i][j] = strchr(notch_string[i], num2char(j)) != NULL;
       }
 
   for (int i=0; i < reflector_count; i++)
@@ -406,7 +375,7 @@ void init_steckerbrett(const char * steckerbrett_string)
   for (int j=0; j < asize; j++)
     steckerbrett[j] = j;
 
-  int plug_count = strlen(steckerbrett_string) / 2;
+  int plug_count = static_cast<int>(strlen(steckerbrett_string) / 2);
 
   for (int i=0; i < plug_count; i++)
     {
@@ -451,7 +420,7 @@ void init_ring_grund(int a, int b, int c, int x, int y, int z)
   grundstellung[2] = z;
 }
 
-char rotor_l(int x, int rotor_no)
+int rotor_l(int x, int rotor_no)
 {
   int y = grundstellung[rotor_no] - ringstellung[rotor_no];
   x = (x + asize + y) % asize;
@@ -460,7 +429,7 @@ char rotor_l(int x, int rotor_no)
   return x;
 }
 
-char rotor_r(int x, int rotor_no)
+int rotor_r(int x, int rotor_no)
 {
   int y = grundstellung[rotor_no] - ringstellung[rotor_no];
   x = (x + asize + y) % asize;
@@ -556,15 +525,6 @@ void setup_mapping(int textlength)
     }
 }
 
-inline void map(int len,
-                unsigned char * source,
-                unsigned char * map,
-                unsigned char * dest)
-{
-  for (int i = 0; i < len; i++)
-    dest[i] = map[26*i + source[i]];
-}
-
 inline int step_mapped(int i, int x)
 {
   return steckerbrett[mapping[i][steckerbrett[x]]];
@@ -572,6 +532,7 @@ inline int step_mapped(int i, int x)
 
 inline void decode(int textlength, char * ciphertext, char * plaintext)
 {
+  (void) ciphertext;   /* kept for symmetry; decode reads num_ciphertext[] */
   for (int i = 0; i < textlength; i++)
     plaintext[i] = num2char(step_mapped(i, num_ciphertext[i]));
   //plaintext[i] = num2char(step_precomputed(char2num(ciphertext[i])));
@@ -597,6 +558,7 @@ inline void map16_direct(unsigned char * source,
 
 void showit(const char * msg, unsigned char * p)
 {
+  (void) msg; (void) p;   /* used only when the debug block below is enabled */
 #if 0
   fprintf(stderr, "%s:", msg);
   for(int i=0; i<16; i++)
@@ -619,7 +581,9 @@ inline void decode_num()
   fprintf(stderr, "\n");
 #else
 
-  for (int i = 0; i < textlength; i += 16)
+  int blocks = textlength & ~15;
+
+  for (int i = 0; i < blocks; i += 16)
     {
       unsigned char temp1[16];
       unsigned char temp2[16];
@@ -632,6 +596,11 @@ inline void decode_num()
       showit("plain ", num_plaintext+i);
       //      fprintf(stderr, "\n");
     }
+
+  /* remainder, when textlength is not a multiple of 16 (avoids reading
+     mapping[] / num_ciphertext[] past textlength) */
+  for (int i = blocks; i < textlength; i++)
+    num_plaintext[i] = step_mapped(i, num_ciphertext[i]);
 
 #endif
 #endif
@@ -704,9 +673,9 @@ double ic_score_decode(int textlength)
     freq[step_mapped(i, num_ciphertext[i])]++;
 
   double score = 0.0;
-  for(int j=1; j<26; j++)
-    score += freq[j-1] * freq[j];
-  return score;
+  for(int j=0; j<26; j++)
+    score += (double) freq[j] * (freq[j] - 1);
+  return (textlength > 1) ? score / ((double) textlength * (textlength - 1)) : 0.0;
 }
 
 void showsteckerbrett()
@@ -740,80 +709,9 @@ void showconfig()
   fprintf(stderr, "\n");
 }
 
-struct subst_score_s
-{
-  int a;
-  int b;
-  double score;
-} subst_scores[26*26];
-
-int subst_score_comp(const void * x, const void * y)
-{
-  struct subst_score_s * i = (struct subst_score_s *) x;
-  struct subst_score_s * j = (struct subst_score_s *) y;
-  if (i->score < j->score)
-    return +1;
-  else if (i->score > j->score)
-    return -1;
-  else
-    return 0;
-}
-
-void all_subst_score(int textlength)
-{
-  init_steckerbrett("");
-
-#if 0
-  double score;
-  //score = ic_score_decode(textlength);
-  //score = mgram_score_decode(textlength);
-  //score = bigram_score_decode(textlength);
-  //score = trigram_score_decode(textlength);
-  //score = quadgram_score_decode(textlength);
-  printf("Base score: %.4f\n", score);
-#endif
-
-  //  srandomdev();
-
-  for (int a=0; a<26; a++)
-    for (int b=0; b<26; b++)
-      {
-        double score = -1e30;
-        if (a<b)
-          {
-            /* insert one plug */
-            steckerbrett[a] = b;
-            steckerbrett[b] = a;
-            score = random() % 10000;
-            //score = ic_score_decode(textlength);
-            //score = mgram_score_decode(textlength);
-            //score = bigram_score_decode(textlength);
-            //score = trigram_score_decode(textlength);
-            //score = quadgram_score_decode(textlength);
-            steckerbrett[a] = a;
-            steckerbrett[b] = b;
-          }
-        subst_scores[26*a+b].a = a;
-        subst_scores[26*a+b].b = b;
-        subst_scores[26*a+b].score = score;
-      }
-
-  /* sort */
-  qsort(subst_scores, 26*26, sizeof(subst_score_s), subst_score_comp);
-
-#if 0
-  /* print */
-  for (int a=0; a<26*26; a++)
-    if (subst_scores[a].score > -1e30)
-      printf("%c%c: %8.4f\n",
-             num2char(subst_scores[a].a),
-             num2char(subst_scores[a].b),
-             subst_scores[a].score);
-#endif
-}
-
 double score_iter(int iter, int textlength)
 {
+  (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   double score = 0;
 
   switch(opt_scoring)
@@ -850,8 +748,8 @@ int order[26];
 
 int compare(const void * x, const void * y)
 {
-  int a = count[*(int*)(x)];
-  int b = count[*(int*)(y)];
+  int a = count[*(const int*)(x)];
+  int b = count[*(const int*)(y)];
 
   if (a<b)
     return +1;
@@ -887,12 +785,6 @@ double hillclimb(int textlength,
                  char * plaintext)
 {
   /* Try to find the optimal steckerbrett for the given other settings */
-
-  int best_steckerbrett[26];
-  memcpy(best_steckerbrett, steckerbrett, 26*sizeof(int));
-
-  /* calc and sort best initial plug */
-  //  all_subst_score(textlength);
 
   double best_score = -1e29;
   double last_best = -1e30;
@@ -1061,7 +953,7 @@ void bruteforce()
     }
 
   double best_score = -1e37;
-  char best_plaintext[1025];
+  char best_plaintext[maxtextlen+1];
 
   for (int u1 = u_min; u1 <= u_max; u1++)
     for (int w1 = w_min[0]; w1 <= w_max[0]; w1++)
@@ -1102,7 +994,7 @@ void bruteforce()
                             if (score > best_score)
                               {
                                 best_score = score;
-                                strcpy(best_plaintext, plaintext);
+                                memcpy(best_plaintext, plaintext, textlength + 1);
 #if 1
                                 init_ring_grund(r1, r2, r3, g1, g2, g3);
                                 fprintf(stderr, "%10.4f ", score);
@@ -1111,47 +1003,63 @@ void bruteforce()
                               }
                           }
             }
-  strcpy(plaintext, best_plaintext);
+  memcpy(plaintext, best_plaintext, textlength + 1);
 }
 
 void readciphertext()
 {
-  long len = 0;
-  char buffer[maxlen+1];
+  unsigned char buffer[65536];
+  ssize_t len;
+  int j = 0;
 
-  len = read(STDIN_FILENO, buffer, maxlen);
+  /* read() may return short; loop until EOF, filtering as we go */
+  while ((len = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0)
+    for (ssize_t i = 0; i < len; i++)
+      {
+        char c = toupper(buffer[i]);
+        if ((c >= 'A') && (c <= 'Z'))
+          {
+            if (j >= maxtextlen)
+              fatal("Ciphertext too long (maximum is 1024 letters)");
+            ciphertext[j++] = c;
+          }
+      }
 
-  int j=0;
-  for(int i=0; i<len; i++)
-    {
-      char c = toupper(buffer[i]);
-      if ((c>='A') && (c<='Z'))
-        ciphertext[j++] = c;
-    }
+  if (len < 0)
+    fatal("Error reading ciphertext from standard input");
+
   ciphertext[j] = 0;
   textlength = j;
 }
 
 void readplaintext(char * filename)
 {
-  long len = 0;
-  char buffer[maxlen+1];
+  unsigned char buffer[65536];
+  ssize_t len;
+  int j = 0;
 
   int fd = open(filename, O_RDONLY);
   if (fd < 0)
     fatal("Unable to open plaintext file");
 
-  len = read(fd, buffer, maxlen);
+  /* read() may return short; loop until EOF, filtering as we go */
+  while ((len = read(fd, buffer, sizeof(buffer))) > 0)
+    for (ssize_t i = 0; i < len; i++)
+      {
+        char c = toupper(buffer[i]);
+        if ((c >= 'A') && (c <= 'Z'))
+          {
+            if (j >= maxtextlen)
+              fatal("Plaintext file too long (maximum is 1024 letters)");
+            altplaintext[j++] = c;
+          }
+      }
 
+  int read_error = (len < 0);
   close(fd);
+  if (read_error)
+    fatal("Error reading plaintext file");
 
-  int j=0;
-  for(int i=0; i<len; i++)
-    {
-      char c = toupper(buffer[i]);
-      if ((c>='A') && (c<='Z'))
-        altplaintext[j++] = c;
-    }
   altplaintext[j] = 0;
 
   if (textlength != j)
@@ -1236,18 +1144,16 @@ int main(int argc, char * * argv)
     }
 
   /* set default arguments */
-  opt_ukw = (char*) ".";
-  opt_walzen = (char*)"...";
-  opt_ringstellung = (char*) "AA.";
-  opt_grundstellung = (char*) "...";
-  opt_steckerbrett = (char*) "";
-  opt_language = (char*) "german";
+  opt_ukw = ".";
+  opt_walzen = "...";
+  opt_ringstellung = "AA.";
+  opt_grundstellung = "...";
+  opt_steckerbrett = "";
+  opt_language = "german";
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_scoring = 4;
-  opt_logfilename = 0;
-  opt_threads = 1;
   opt_norenigma = 0;
 
   /* get arguments */
@@ -1258,24 +1164,24 @@ int main(int argc, char * * argv)
       switch (c)
         {
         case 'u':
+          alltoupper(optarg);
           opt_ukw = optarg;
-          alltoupper(opt_ukw);
           break;
         case 'w':
           opt_walzen = optarg;
           break;
         case 'r':
+          alltoupper(optarg);
           opt_ringstellung = optarg;
-          alltoupper(opt_ringstellung);
           break;
         case 'g':
+          alltoupper(optarg);
           opt_grundstellung = optarg;
-          alltoupper(opt_grundstellung);
           break;
         case 's':
+          alltoupper(optarg);
+          removespaces(optarg);
           opt_steckerbrett = optarg;
-          alltoupper(opt_steckerbrett);
-          removespaces(opt_steckerbrett);
           break;
         case 'p':
           opt_plaintext = optarg;
@@ -1323,9 +1229,6 @@ int main(int argc, char * * argv)
         }
     }
 
-  argc -= optind;
-  argv += optind;
-
   /* validate arguments */
 
   if (opt_norenigma)
@@ -1368,6 +1271,13 @@ int main(int argc, char * * argv)
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
 
+  if ((strlen(opt_language) < 1) ||
+      (strlen(opt_language) > 32) ||
+      (strspn(opt_language,
+              "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") <
+       strlen(opt_language)))
+    fatal("Illegal language name (must be 1-32 letters, e.g. english)");
+
 
   /* read ciphertext */
 
@@ -1390,6 +1300,8 @@ int main(int argc, char * * argv)
       break;
     case 4:
       quadgrams_read();
+      break;
+    default:
       break;
     }
 

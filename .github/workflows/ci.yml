@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Fast gate: build with both compilers as -Werror and run the test suite.
+  test:
+    name: build & test (${{ matrix.cxx }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compiler version
+        run: ${{ matrix.cxx }} --version
+      - name: Build (-Werror)
+        run: make CXX=${{ matrix.cxx }} EXTRA_CXXFLAGS=-Werror
+      - name: Test
+        run: make test CXX=${{ matrix.cxx }} EXTRA_CXXFLAGS=-Werror
+
+  # AddressSanitizer + UndefinedBehaviorSanitizer over the whole suite.
+  sanitizers:
+    name: sanitizers (asan+ubsan)
+    runs-on: ubuntu-latest
+    env:
+      EXTRA_CXXFLAGS: "-fsanitize=address,undefined -fno-sanitize-recover=all -g"
+      UBSAN_OPTIONS: print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run suite under sanitizers
+        run: make test EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS"
+      - name: Extra coverage (-p compare, all scoring models)
+        run: |
+          printf 'AAAAAAAAAAAAAAAAAAAA' > pt.txt
+          printf 'BDZGOWCXLTKSBTMCDLPB' | ./enigma -i -u B -w 123 -r AAA -g AAA -p pt.txt
+          for s in -m -b -t -q; do
+            printf 'BDZGOWCXLT' | ./enigma $s -u B -w 123 -r AAA -g AAA -l english >/dev/null
+          done
+
+  # Valgrind adds detection of *uninitialised* memory use that ASan misses.
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+      - name: Build (debug)
+        run: make EXTRA_CXXFLAGS="-O1 -g"
+      - name: Run representative invocations under valgrind
+        run: |
+          VG="valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=definite -q"
+          printf 'BDZGOWCXLTKSBTMCDLPB' | $VG ./enigma -i -u B -w 123 -r AAA -g AAA >/dev/null
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' | $VG ./enigma -u B -w 123 -r AAA -g AAA -c -l english >/dev/null
+          printf 'AAAAAAAAAAAAAAAAAAAA' > pt.txt
+          printf 'BDZGOWCXLTKSBTMCDLPB' | $VG ./enigma -i -u B -w 123 -r AAA -g AAA -p pt.txt >/dev/null
+
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: Run cppcheck
+        run: cppcheck --enable=warning,performance,portability --inline-suppr --std=c++17 --error-exitcode=1 enigma.cc
+
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Run clang-tidy
+        run: clang-tidy enigma.cc -- -std=c++17   # checks come from .clang-tidy
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run shellcheck on the test harness
+        run: shellcheck tests/run_tests.sh

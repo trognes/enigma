@@ -45,7 +45,8 @@ and were sourced from the Practical Cryptography website.
 ## Build & run
 
 ```sh
-make                      # g++ -Wall -O3 -o enigma enigma.cc
+make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -O3 ...
+make test                 # build, then run tests/run_tests.sh
 ./enigma -h               # help / usage
 ```
 
@@ -127,19 +128,30 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 
 ## Conventions & gotchas for contributors
 
+- **Code style.** Allman braces (every `{` and `}` on its own line),
+  2-space indentation, and no tabs anywhere in `enigma.cc`. Continuation lines
+  (e.g. wrapped parameter lists or `if` conditions) are aligned under the
+  opening `(`. The only tabs in the repo are the recipe lines in the `Makefile`,
+  which `make` requires.
 - **Single translation unit, heavy global state.** Machine settings
   (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`),
   buffers (`ciphertext`, `plaintext`, `num_*`, `mapping`, `subst_array`), and
   the loaded n-gram tables are all file-scope globals. Most functions also take
   a `textlength` parameter even though a global of the same name exists.
-- The code uses legacy `index()` (from `<strings.h>`) rather than `strchr`.
-- There is dead/experimental code (e.g. `all_subst_score`, `map`, `map16_*`,
-  `showit`, several `#if 0` blocks, the unused `opt_threads`/`opt_logfilename`).
-  See `CODE_REVIEW.md` for a full inventory before relying on any of it.
+- Debug instrumentation is intentionally retained: `showit`, `showconfig`,
+  `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
+  compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
+  `opt_logfilename` code has been removed; see `CODE_REVIEW.md` §3.)
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).
-- Build is plain `make`. There is **no test suite and no CI**.
+- Build is plain `make` (override `CXX`, or append `EXTRA_CXXFLAGS=` for e.g.
+  `-Werror`/sanitizers). Tests live in `tests/run_tests.sh` and run via
+  `make test` (known-answer vectors, round-trip properties, input-limit guards,
+  and end-to-end cracking). CI (`.github/workflows/ci.yml`) runs on every push
+  and PR: the suite `-Werror` under g++ and clang++, ASan+UBSan, valgrind,
+  cppcheck, clang-tidy (config in `.clang-tidy`), and shellcheck; a separate
+  CodeQL workflow runs on PRs and weekly. Keep all of these green.
 
 ## Known issues
 
