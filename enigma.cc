@@ -8,6 +8,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <vector>
+
 /* uwwwrrrggg = 3*8*7*6*26*26*26*26*26*26 = 311 387 102 208 */
 
 static const char * reflector_string[] =
@@ -87,6 +92,8 @@ static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
+static int opt_threads;   /* worker threads for the search (default 1) */
+static const int max_threads = 256;
 
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
@@ -721,12 +728,106 @@ double hillclimb(machine & m)
 
 
 
-void bruteforce(machine & m)
+/* The reflector x wheel-order combinations are the unit of parallelism: each is
+   independent (its own precompute + ring/start sweep). The ring/start ranges are
+   identical for every task. */
+struct wheel_task
+{
+  int u;
+  int w[wheels];
+};
+
+struct search_range
+{
+  int r_min[wheels], r_max[wheels];
+  int g_min[wheels], g_max[wheels];
+};
+
+/* Best result so far, shared across worker threads. It is updated (and the live
+   progress line printed) under the mutex only when a worker beats the current
+   global best; improvements are rare, so contention is negligible. */
+struct best_result
+{
+  std::mutex mutex;
+  double score = score_min;
+  bool found = false;
+  char plaintext[maxlen+1];
+};
+
+/* One worker: pull wheel-order tasks off the shared atomic counter until they
+   are exhausted, running the full ring/start (and optional plugboard) sweep for
+   each on its own private machine. */
+void search_worker(machine & m,
+                   const std::vector<wheel_task> & tasks,
+                   std::atomic<size_t> & next_task,
+                   const search_range & range,
+                   best_result & best)
+{
+  double local_best = score_min;
+
+  size_t i;
+  while ((i = next_task.fetch_add(1)) < tasks.size())
+    {
+      const wheel_task & t = tasks[i];
+
+      init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
+
+      precompute(m);
+
+      for (int r1 = range.r_min[0]; r1 <= range.r_max[0]; r1++)
+        for (int r2 = range.r_min[1]; r2 <= range.r_max[1]; r2++)
+          for (int r3 = range.r_min[2]; r3 <= range.r_max[2]; r3++)
+            for (int g1 = range.g_min[0]; g1 <= range.g_max[0]; g1++)
+              for (int g2 = range.g_min[1]; g2 <= range.g_max[1]; g2++)
+                for (int g3 = range.g_min[2]; g3 <= range.g_max[2]; g3++)
+                  {
+                    init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+
+                    init_steckerbrett(m, opt_steckerbrett);
+
+                    setup_mapping(m);
+
+                    double score;
+                    if (opt_hillclimb)
+                      {
+                        score = hillclimb(m);
+                      }
+                    else
+                      {
+                        decode(m);
+                        score = score_iter(m, 0);
+                      }
+
+                    if (score > local_best)
+                      {
+                        local_best = score;
+                        std::lock_guard<std::mutex> lock(best.mutex);
+                        if (score > best.score)
+                          {
+                            best.score = score;
+                            best.found = true;
+                            memcpy(best.plaintext, m.plaintext, textlength + 1);
+#if 1
+                            /* setup_mapping stepped grundstellung; restore the
+                               start positions before echoing the config */
+                            init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+                            fprintf(stderr, "%10.4f ", score);
+                            showconfig(m);
+#endif
+                          }
+                      }
+                  }
+    }
+}
+
+/* Resolve the search ranges from the options, enumerate the reflector x
+   wheel-order tasks, and run them across opt_threads worker threads (each with
+   its own machine). The best decryption is written to 'result'. */
+void bruteforce(char * result)
 {
   int u_min, u_max;
   int w_min[wheels], w_max[wheels];
-  int r_min[wheels], r_max[wheels];
-  int g_min[wheels], g_max[wheels];
+  search_range range;
 
   if (opt_norenigma)
     {
@@ -758,83 +859,84 @@ void bruteforce(machine & m)
 
       if (opt_ringstellung[i] == '.')
         {
-          r_min[i] = 0;
-          r_max[i] = 25;
+          range.r_min[i] = 0;
+          range.r_max[i] = 25;
         }
       else
         {
-          r_min[i] = r_max[i] = char2num(opt_ringstellung[i]);
+          range.r_min[i] = range.r_max[i] = char2num(opt_ringstellung[i]);
         }
 
       if (opt_grundstellung[i] == '.')
         {
-          g_min[i] = 0;
-          g_max[i] = 25;
+          range.g_min[i] = 0;
+          range.g_max[i] = 25;
         }
       else
         {
-          g_min[i] = g_max[i] = char2num(opt_grundstellung[i]);
+          range.g_min[i] = range.g_max[i] = char2num(opt_grundstellung[i]);
         }
     }
 
-  double best_score = score_min;
-  char best_plaintext[maxlen+1];
-
+  std::vector<wheel_task> tasks;
   for (int u1 = u_min; u1 <= u_max; u1++)
     for (int w1 = w_min[0]; w1 <= w_max[0]; w1++)
       for (int w2 = w_min[1]; w2 <= w_max[1]; w2++)
         for (int w3 = w_min[2]; w3 <= w_max[2]; w3++)
           if ((w1 != w2) && (w1 != w3) && (w2 != w3))
-            {
-              init_walzen(m, u1, w1, w2, w3);
+            tasks.push_back(wheel_task{u1, {w1, w2, w3}});
 
-              precompute(m);
-
-              for (int r1 = r_min[0]; r1 <= r_max[0]; r1++)
-                for (int r2 = r_min[1]; r2 <= r_max[1]; r2++)
-                  for (int r3 = r_min[2]; r3 <= r_max[2]; r3++)
-                    for (int g1 = g_min[0]; g1 <= g_max[0]; g1++)
-                      for (int g2 = g_min[1]; g2 <= g_max[1]; g2++)
-                        for (int g3 = g_min[2]; g3 <= g_max[2]; g3++)
-                          {
-                            init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-
-                            init_steckerbrett(m, opt_steckerbrett);
-
-                            setup_mapping(m);
-
-                            double score;
-                            if (opt_hillclimb)
-                              {
-                                score = hillclimb(m);
-                              }
-                            else
-                              {
-                                decode(m);
-                                score = score_iter(m, 0);
-                              }
-
-                            if (score > best_score)
-                              {
-                                best_score = score;
-                                memcpy(best_plaintext, m.plaintext, textlength + 1);
-#if 1
-                                init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-                                fprintf(stderr, "%10.4f ", score);
-                                showconfig(m);
-#endif
-                              }
-                          }
-            }
-
-  /* Defensive: if no configuration was ever scored, best_plaintext is
-     uninitialised. The option validation should make this unreachable, but
-     never emit garbage. */
-  if (best_score <= score_min)
+  /* The option validation should make this unreachable, but never run an empty
+     search and emit uninitialised output. */
+  if (tasks.empty())
     fatal("No machine configuration was searched "
           "(check the -u / -w / -x settings)");
 
-  memcpy(m.plaintext, best_plaintext, textlength + 1);
+  /* one worker (and one private machine) per thread, never more than there are
+     tasks to hand out */
+  int nthreads = opt_threads;
+  if (nthreads > static_cast<int>(tasks.size()))
+    nthreads = static_cast<int>(tasks.size());
+  if (nthreads < 1)
+    nthreads = 1;
+
+  best_result best;
+  std::atomic<size_t> next_task{0};
+
+  std::vector<machine *> machines(static_cast<size_t>(nthreads));
+  for (int t = 0; t < nthreads; t++)
+    {
+      machines[t] = new machine();
+      machines[t]->subst_array = new unsigned char[asize][asize][asize][asize];
+    }
+
+  if (nthreads == 1)
+    {
+      /* run inline so the single-threaded path carries no thread overhead */
+      search_worker(*machines[0], tasks, next_task, range, best);
+    }
+  else
+    {
+      std::vector<std::thread> pool;
+      pool.reserve(static_cast<size_t>(nthreads));
+      for (int t = 0; t < nthreads; t++)
+        pool.emplace_back(search_worker, std::ref(*machines[t]),
+                          std::cref(tasks), std::ref(next_task),
+                          std::cref(range), std::ref(best));
+      for (std::thread & th : pool)
+        th.join();
+    }
+
+  for (int t = 0; t < nthreads; t++)
+    {
+      delete[] machines[t]->subst_array;
+      delete machines[t];
+    }
+
+  if (! best.found)
+    fatal("No machine configuration produced a score");
+
+  memcpy(result, best.plaintext, textlength + 1);
 }
 
 void readciphertext()
@@ -957,6 +1059,7 @@ void help(FILE * out)
   fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
   fprintf(out, "  -q           Use quadgram statistics to determine plaintext score [default]\n");
   fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
+  fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
@@ -995,7 +1098,8 @@ void show_settings()
     fprintf(stderr, " (language-independent)");
   else
     fprintf(stderr, " (language: %s)", opt_language);
-  fprintf(stderr, "; plugboard hill-climb: %s\n", opt_hillclimb ? "yes" : "no");
+  fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
+  fprintf(stderr, "; threads: %d\n", opt_threads);
 
   fprintf(stderr, "Machine:    %s Enigma; reflector %s, wheels %s",
           opt_norenigma ? "Norway" : "standard", opt_ukw, opt_walzen);
@@ -1039,11 +1143,12 @@ int main(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
+  opt_threads = 1;
 
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:imbtqcvhn")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:imbtqcvhn")) != -1)
     {
       switch (c)
         {
@@ -1090,6 +1195,9 @@ int main(int argc, char * * argv)
           break;
         case 'x':
           opt_maxwheel = atoi(optarg);
+          break;
+        case 'T':
+          opt_threads = atoi(optarg);
           break;
         case 'l':
           opt_language = optarg;
@@ -1164,6 +1272,9 @@ int main(int argc, char * * argv)
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
 
+  if ((opt_threads < 1) || (opt_threads > max_threads))
+    fatal("Illegal thread count (must be 1 to 256)");
+
   /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no
      default; the index of coincidence (-i) is language-independent. */
   if ((opt_scoring != SCORE_IC) && (! opt_language))
@@ -1220,26 +1331,18 @@ int main(int argc, char * * argv)
 
   init();
 
-  /* the per-search machine state lives in a single heap object (one today, one
-     per worker thread once the search is parallelised) */
-  machine * m = new machine();
-  m->subst_array = new unsigned char[asize][asize][asize][asize];
-  init_steckerbrett(*m, "");
+  /* try all combinations (bruteforce allocates one machine per worker thread) */
 
-  /* try all combinations */
-
-  bruteforce(*m);
+  char result[maxlen+1];
+  bruteforce(result);
 
   /* write plaintext */
 
   fprintf(stderr, "\n");
-  printf("%s\n", m->plaintext);
+  printf("%s\n", result);
 
   /* read plaintext to compare to, if given */
 
   if (opt_plaintext)
-    readplaintext(opt_plaintext, m->plaintext);
-
-  delete[] m->subst_array;
-  delete m;
+    readplaintext(opt_plaintext, result);
 }

@@ -190,6 +190,21 @@ case "$err" in
   *)                 check "duplicate wheels rejected (message)" "$err" "*two positions*" ;;
 esac
 
+# Threading: -T must not change the result. Crack the same ciphertext with 1 and
+# 4 worker threads (a wildcard-wheel search, so there are several parallel tasks)
+# and require identical recovered plaintext.
+t_pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERS"
+t_ct=$(run "$t_pt" -i -u B -w 123 -r AAA -g QXP)
+check "threads: -T 4 matches -T 1" \
+  "$(run "$t_ct" -q -l english -u B -w ... -r AAA -g QXP -T 4)" \
+  "$(run "$t_ct" -q -l english -u B -w ... -r AAA -g QXP -T 1)"
+
+# -T is validated: 0 and 257 (> max 256) are rejected.
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 0 >/dev/null 2>&1
+check "thread count 0 rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 257 >/dev/null 2>&1
+check "thread count 257 rejected (exit code)" "$?" "1"
+
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
 hout=$("$ENIGMA" -h 2>/dev/null); hcode=$?

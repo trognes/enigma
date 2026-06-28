@@ -41,6 +41,23 @@ jobs:
             printf 'BDZGOWCXLT' | ./enigma $s -u B -w 123 -r AAA -g AAA -l english >/dev/null
           done
 
+  # ThreadSanitizer over the multi-threaded search (the suite includes a -T 4
+  # determinism check; plus an explicit multi-threaded crack here).
+  tsan:
+    name: sanitizers (tsan)
+    runs-on: ubuntu-latest
+    env:
+      EXTRA_CXXFLAGS: "-fsanitize=thread -fno-sanitize-recover=all -g"
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run suite under ThreadSanitizer
+        run: make test EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS"
+      - name: Explicit multi-threaded search
+        run: |
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u B -w ... -r AAA -g AAA -T 4 >/dev/null
+
   # Valgrind adds detection of *uninitialised* memory use that ASan misses.
   valgrind:
     runs-on: ubuntu-latest

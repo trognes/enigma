@@ -53,6 +53,7 @@ if [ ! -x "$HEAD_BIN" ]; then
 fi
 
 LONG=${LONG:-0}
+SCALE=${SCALE:-0}
 THRESHOLD=${THRESHOLD:-10}
 QUICK_REPS=3
 LONG_REPS=2
@@ -151,7 +152,8 @@ if [ -n "$BASE_BIN" ]; then
 else
   echo "benchmark (working-tree binary)"
 fi
-printf 'LONG=%s  quick reps=%s  long reps=%s\n\n' "$LONG" "$QUICK_REPS" "$LONG_REPS"
+printf 'LONG=%s  SCALE=%s  quick reps=%s  long reps=%s\n\n' \
+  "$LONG" "$SCALE" "$QUICK_REPS" "$LONG_REPS"
 
 # --- search: brute-force scan, no plugboard (wildcard wheels + start) ---------
 ct_s=$(encrypt "$(trunc 80)" "")
@@ -174,6 +176,26 @@ if [ "$LONG" = 1 ]; then
   ct_hl=$(encrypt "$pt_hl" "$pb")
   # full 26^3 start positions, each a full climb
   bench hillclimb long 17576 climbs "$pt_hl" "$ct_hl" -q -c -u B -w 123 -r AAA -g ... -l english
+fi
+
+# --- thread scaling (opt in with SCALE=1) ------------------------------------
+# Sweep -T over powers of two up to ~2x the core count on a parallelisable
+# search workload (wildcard wheel order = many independent tasks) and report the
+# wall-clock speedup over a single thread. Informational only (no pass/fail).
+if [ "$SCALE" = 1 ]; then
+  cores=$(nproc 2>/dev/null || echo 4)
+  echo
+  echo "thread scaling (search: -w ... -x5 = 60 wheel-order tasks x 26^3 starts; ${cores} cores)"
+  ct_sc=$(encrypt "$(trunc 120)" "")
+  base=""
+  t=1
+  while [ "$t" -le $((cores * 2)) ] && [ "$t" -le 256 ]; do
+    secs=$(min_time "$HEAD_BIN" 2 0 "$ct_sc" -q -u B -w ... -r AAA -g ... -x 5 -l english -T "$t")
+    [ -z "$base" ] && base=$secs
+    awk -v s="$secs" -v b="$base" -v th="$t" \
+      'BEGIN { printf "  -T %-3d  %7.2fs   %.2fx\n", th, s, b / s }'
+    t=$((t * 2))
+  done
 fi
 
 echo
