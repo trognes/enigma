@@ -418,11 +418,33 @@ Remaining opportunities:
   plugboard — still copies into the contiguous `mapping[]` for locality. Measured
   ~12% faster scan on g++ / ~2–5% on clang, hill-climb neutral-to-faster, no
   regression on either compiler.
-  **Still open:** the rotor *stepping* is still re-run per (ring, start). Stepping
-  is independent of the ring and the machine cycles through a fixed period of
-  26·25·26 = 16 900 states, so the stepped sequence could be precomputed once per
-  wheel order and every start/ring made a window into it (optimisation "B").
-  Deferred — stepping is cheap relative to the gather+score, so the win is modest.
+  **Optimisation "B" — measured and rejected.** The rotor *stepping* is still
+  re-run per (ring, start). Stepping is independent of the ring, and the machine
+  cycles through a fixed period of 26·25·26 = 16 900 states, so in principle the
+  stepped sequence could be precomputed once per wheel order (really per
+  middle/right wheel pair) and reused across every start/ring. This was prototyped
+  and benchmarked: a per-(middle,right,start) trajectory table (`g1[i]` and the
+  left-rotor cumulative advance `g0Δ[i]`, with the right rotor `g2[i]` still
+  trivial), filled once and reused across all rings and left-start positions, so
+  the hot loop reads the trajectory instead of running the notch lookups,
+  double-step branch, and carries. The prototype recovered byte-identical
+  plaintext (the stepping is provably equivalent), but it was **slower**: a
+  ~11.9 M-key scan ran **+18% on g++** and **−1% (noise) on clang** versus the
+  current inline stepping. The win never materialises because (1) the notch
+  branches fire only ~1/26 and ~1/676 of the time, so they are extremely
+  well-predicted and nearly free, while (2) the trajectory table adds two L1 loads
+  per position that the register-resident inline stepping does not pay.
+
+  > **Note on the earlier "16–24 % ceiling" estimate.** A first, cruder spike
+  > bypassed stepping by *freezing* `g0`/`g1` to constants, which timed ~16 %
+  > (g++) / ~24 % (clang) faster — but that was a measurement artifact: with
+  > `g0`/`g1` constant the compiler hoists the 2-D address `sa[g0−r0][g1−r1]` out
+  > of the loop into one loop-invariant base pointer, collapsing the per-position
+  > gather to a 1-D lookup. Real B keeps `g0`/`g1` varying and cannot capture that.
+  > The refined spike above (genuinely varying positions, read from the reuse
+  > table) is the faithful measurement. Lesson: a bypass spike that changes the
+  > loop's invariants measures the wrong thing. Not worth revisiting unless the
+  > scan's branch/cache balance changes substantially.
 - 🟢 **n-gram tables are now `float`** ✅. The quadgram table was ~457 K×8 =
   3.6 MB of `double`s; storing the `log10` scores as `float` halves that to
   ~1.8 MB (and the trigram/bigram/monogram tables likewise), so it stays warmer
@@ -539,6 +561,8 @@ the per-search state encapsulated into `struct machine`, the search
 (7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
 the suite has 77 checks. The main remaining feature is the planned **M4 (4-rotor)
-mode** (§5); the only smaller open item is sharing the rotor *stepping* across
-start positions (§6, optimisation "B" — the per-key row copy is already gone, and
-the relative-path data-file issue is now fixed via `-d`/`$ENIGMA_DATA`).
+mode** (§5). Sharing the rotor *stepping* across start positions (§6, optimisation
+"B") was prototyped and **rejected** — it is byte-identical but ~18 % slower on
+g++ / neutral on clang, because the notch branches are already near-free and the
+trajectory table only adds memory traffic. The per-key row copy is already gone,
+and the relative-path data-file issue is fixed via `-d`/`$ENIGMA_DATA`.
