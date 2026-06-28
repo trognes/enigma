@@ -264,26 +264,29 @@ instrumentation rather than deleted.
   narrowing surprise on the values that later index `steckerbrett[...]`.
 - 🟡 **String-literal-to-`char*`** assignments (`opt_ukw = (char*) ".";` etc.)
   cast away `const`, then `alltoupper`/`removespaces` mutate `optarg` (i.e.
-  `argv`) in place. Mutating `argv` and casting away `const` on literals is
-  legal-but-smelly; the explicit `(char*)` casts suppress `-Wwrite-strings` but
-  trip `-Wcast-qual`. Prefer `const char*` defaults and copy before mutating.
+  `argv`) in place. ✅ **Fixed:** the option globals are now `const char *` with
+  uncast string-literal defaults, and the getopt cases call
+  `alltoupper`/`removespaces` on the mutable `optarg` before assigning it. The
+  `compare` qsort callback also casts `const void*` to `const int*` now. (Some
+  `argv` mutation remains, but no `const` is cast away.)
 - 🟢 **C++ written as C:** C stdio, raw global arrays, `qsort` with
   `void*` comparators, `struct subst_score_s { ... } subst_scores[...];`
   declared with a trailing global instance. No use of `std::` containers,
   `std::array`, RAII, or `constexpr`. This is a style/maintainability point, not
   a bug, but it forfeits a lot of compiler help.
-- 🟢 **Build flags** ✅ now `-std=c++17 -Wall -Wextra -Wpedantic -O3`, and the
-  build is **warning-free** under them. Stronger optional flags were surveyed and
-  left off because they reflect the deliberate C-style / global-state design
-  rather than bugs, and would be noisy without a larger refactor:
+- 🟢 **Build flags** ✅ now `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual
+  -O3`, and the build is **warning-free** under them. Stronger optional flags
+  were surveyed and left off because they reflect the deliberate C-style /
+  global-state design rather than bugs, and would be noisy without a larger
+  refactor:
   - `-Wshadow` → ~14 (mostly the global `textlength` shadowed by the same-named
     function parameters; see §5).
   - `-Wconversion` → ~38 (implicit `int`/`char`/`double` narrowings throughout
     the arithmetic).
-  - `-Wold-style-cast` → ~12 and `-Wcast-qual` → ~8 (the C-style `(char*)` casts
-    on string-literal option defaults — see the bullet above).
-  Enabling any of these would be a good ratchet once the corresponding cleanup
-  (global-state refactor, `const`-correct option defaults) is done.
+  - `-Wold-style-cast` → ~12 (the remaining C-style `(int*)`/pointer casts; would
+    want C++ `static_cast`/`reinterpret_cast` throughout).
+  Enabling either would be a good ratchet once the corresponding cleanup
+  (global-state refactor; C++-style casts) is done.
 
 ---
 
@@ -386,7 +389,7 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
-| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns~~ ✅ fixed; duplicated readers/scorers, no parallelism remain |
+| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals~~ ✅ fixed; duplicated readers/scorers, no parallelism remain |
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
 **Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow,
@@ -397,5 +400,5 @@ dead/misleading-code cleanup (including the `best_steckerbrett` out-of-bounds
 `strchr`, `int` rotor returns, stray includes), and (7) the test suite + CI are
 now done. The `-Wall` build is warning-free and the suite has 21 checks.
 Remaining items — factor the four duplicated n-gram readers / parallel scorers
-into one (§5/§6), the `const`-correctness of the string-literal option defaults
-(§4), and eventually the global-state refactor that would unlock threading (§5).
+into one (§5/§6), and eventually the global-state refactor that would unlock
+threading and clear the `-Wshadow` noise (§5).

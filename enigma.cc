@@ -65,13 +65,13 @@ static const int wheels = 3;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 
-static char * opt_ukw;
-static char * opt_walzen;
-static char * opt_ringstellung;
-static char * opt_grundstellung;
-static char * opt_steckerbrett;
+static const char * opt_ukw;
+static const char * opt_walzen;
+static const char * opt_ringstellung;
+static const char * opt_grundstellung;
+static const char * opt_steckerbrett;
 static char * opt_plaintext; /* plaintext to compare to */
-static char * opt_language; /* german (default), english, danish, french ... */
+static const char * opt_language; /* german (default), english, danish, french ... */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_maxwheel;
 static int opt_scoring;
@@ -744,8 +744,8 @@ int order[26];
 
 int compare(const void * x, const void * y)
 {
-  int a = count[*(int*)(x)];
-  int b = count[*(int*)(y)];
+  int a = count[*(const int*)(x)];
+  int b = count[*(const int*)(y)];
 
   if (a<b)
     return +1;
@@ -1140,12 +1140,12 @@ int main(int argc, char * * argv)
     }
 
   /* set default arguments */
-  opt_ukw = (char*) ".";
-  opt_walzen = (char*)"...";
-  opt_ringstellung = (char*) "AA.";
-  opt_grundstellung = (char*) "...";
-  opt_steckerbrett = (char*) "";
-  opt_language = (char*) "german";
+  opt_ukw = ".";
+  opt_walzen = "...";
+  opt_ringstellung = "AA.";
+  opt_grundstellung = "...";
+  opt_steckerbrett = "";
+  opt_language = "german";
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
@@ -1160,24 +1160,24 @@ int main(int argc, char * * argv)
       switch (c)
         {
         case 'u':
+          alltoupper(optarg);
           opt_ukw = optarg;
-          alltoupper(opt_ukw);
           break;
         case 'w':
           opt_walzen = optarg;
           break;
         case 'r':
+          alltoupper(optarg);
           opt_ringstellung = optarg;
-          alltoupper(opt_ringstellung);
           break;
         case 'g':
+          alltoupper(optarg);
           opt_grundstellung = optarg;
-          alltoupper(opt_grundstellung);
           break;
         case 's':
+          alltoupper(optarg);
+          removespaces(optarg);
           opt_steckerbrett = optarg;
-          alltoupper(opt_steckerbrett);
-          removespaces(opt_steckerbrett);
           break;
         case 'p':
           opt_plaintext = optarg;

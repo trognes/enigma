@@ -45,7 +45,7 @@ and were sourced from the Practical Cryptography website.
 ## Build & run
 
 ```sh
-make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -O3 -o enigma enigma.cc
+make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -O3 ...
 make test                 # build, then run tests/run_tests.sh
 ./enigma -h               # help / usage
 ```
