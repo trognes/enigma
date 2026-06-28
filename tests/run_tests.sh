@@ -78,6 +78,27 @@ check "golden: 50x A" \
   "$(run "$(rep 50 A)" -i -u B -w 123 -r AAA -g AAA)" \
   "BDZGOWCXLTKSBTMCDLPBMUQOFXYHCXTGYJFLINHNXSHIUNTHEO"
 
+# Double-stepping anomaly, anchored to the documented rotor-position sequence
+# for wheel order III II I:  KDO KDP KDQ KER LFS LFT LFU.  The middle rotor (II,
+# notch E) turns at KDQ->KER because the right rotor (I) is at its notch Q, and
+# then turns AGAIN at KER->LFS because it is now itself at its notch E, dragging
+# the left rotor with it -- the double step.  Starting at KDO, encrypting 12
+# letters crosses that double step at the 4th letter, so a machine that omits
+# the anomaly produces a different output from the 4th letter on (verified:
+# ULMHJCJJCWBY with the double step, ULMIBOYXWRWN without).
+check "KAT: double-stepping anomaly (III II I, start KDO)" \
+  "$(run "AAAAAAAAAAAA" -i -u B -w 321 -r AAA -g KDO)" \
+  "ULMHJCJJCWBY"
+
+# Authentic message from the 1930 Enigma instruction manual: reflector A, wheel
+# order II I III, ring settings XMV (24 13 22), plugboard AM FI NV PS TU WZ,
+# start position ABL.  A full external known-answer vector that exercises
+# reflector A, the ring offsets and the plugboard together (the German plaintext
+# uses Q for "ch" and X as a separator).
+check "KAT: 1930 instruction-manual message" \
+  "$(run 'GCDSEAHUGWTQGRKVLFGXUCALXVYMIGMMNMFDXTGNVHVRMMEVOUYFZSLRHDRRXFJWCFHUHMUNZEFRDISIKBGPMYVXUZ' -i -u A -w 213 -r XMV -g ABL -s 'AM FI NV PS TU WZ')" \
+  "FEINDLIQEINFANTERIEKOLONNEBEOBAQTETXANFANGSUEDAUSGANGBAERWALDEXENDEDREIKMOSTWAERTSNEUSTADT"
+
 echo "== Round-trip property tests =="
 
 roundtrip "reciprocity: plain settings" \
@@ -89,8 +110,9 @@ roundtrip "plugboard" \
 roundtrip "ring and start offsets" \
   "ATTACKATDAWNFROMTHENORTH" -i -u A -w 531 -r MNB -g VCX
 
-# 130 chars starting near a turnover crosses the double-stepping anomaly.
-roundtrip "double-stepping anomaly" \
+# 130 chars also crosses a (natural) double step; complements the KAT above by
+# checking reciprocity over a long message.
+roundtrip "double step (long round-trip)" \
   "$(rep 130 G)" -i -u B -w 123 -r AAA -g ADV
 
 roundtrip "Norway Enigma" \

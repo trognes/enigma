@@ -149,7 +149,7 @@ code reads as if it intended Laplace-smoothed log-probabilities (the `+ 1` /
 seeding tables with `1.0` confirms that intent). Either finish the
 normalization or delete `total`.
 
-### 2.4 🟡 Stepping model worth verifying against a reference
+### 2.4 🟢 Stepping model verified against a reference — ✅ ADDRESSED
 
 `step_rotors()` implements the double-stepping anomaly:
 
@@ -159,14 +159,24 @@ else if (notch[right]) { step middle; }
 step right;                                         // always
 ```
 
-This is the standard model and looks correct, but notch detection keys on the
-*current* `grundstellung` before stepping, and the Norway-wheel notch tables
-(indices 8–12) reuse the standard `Q/E/V/J/Z` turnover letters. There is no test
-verifying encrypt/decrypt round-trips against a known reference (e.g. a known
-Enigma message or another simulator). Given how subtle stepping is, this should
-be pinned down with tests rather than read-by-eye. (Note also: only single
-notches are modeled; wheels VI–VIII correctly carry `MZ` double notches in
-`notch_string`, which the position-based table handles fine.)
+This is the standard model. It is now anchored externally by the test suite:
+
+- A **double-stepping KAT** (`tests/run_tests.sh`) pinned to the documented
+  rotor-position sequence `KDO KDP KDQ KER LFS LFT LFU` (wheel order III II I).
+  Encrypting from `KDO` crosses the anomaly at the 4th letter, and the expected
+  ciphertext (`AAAAAAAAAAAA → ULMHJCJJCWBY`) differs from the 4th letter on for
+  any machine that omits the double step, so the test genuinely guards it.
+- The authentic **1930 instruction-manual message** KAT (reflector A, wheels
+  II I III, rings XMV, plugboard, start ABL) — a 90-letter external vector
+  exercising reflector A, ring offsets and the plugboard.
+
+Both were cross-checked with an independent reimplementation that reproduces the
+canonical `AAAAA → BDZGO` vector, the 1930 message, and the published double-step
+position sequence. (Note: only single notches are modeled; wheels VI–VIII
+correctly carry `MZ` double notches in `notch_string`, which the position-based
+table handles fine. The Norway-wheel notch tables (indices 8–12) reuse the
+standard `Q/E/V/J/Z` turnover letters and remain covered only by round-trip
+consistency, not an external KAT.)
 
 ### 2.5 🟢 Empty input causes division by zero / degenerate search
 
@@ -314,9 +324,9 @@ lookup, 16-byte blocking). Remaining opportunities:
   the 1024-character limit, plus end-to-end cracking (hill-climb and
   brute-force recovery). A GitHub Actions workflow
   (`.github/workflows/ci.yml`) builds and runs `make test` on every push and
-  pull request. **Still outstanding:** the suite does not yet include an
-  externally-anchored double-step KAT (it relies on round-trip consistency for
-  that case, which cannot catch a symmetric stepping bug — see §2.4).
+  pull request. The double-stepping anomaly is now covered by an
+  externally-anchored known-answer test (see §2.4), alongside the authentic 1930
+  instruction-manual message vector.
 - 🟢 **`Makefile`** has no `clean`, `install`, or `debug` target and does not
   list the data files as dependencies. A debug build (`-O0 -g
   -fsanitize=address,undefined`) target would immediately flag §1.1 and §1.4.
