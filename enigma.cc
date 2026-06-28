@@ -64,8 +64,6 @@ static const int wheels = 3;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 
-static const int blocksize = 16;   /* letters decoded per block in decode_num */
-
 /* Layout of the reflector[] / rotor[] wiring tables for Norway Enigma mode:
    reflector index 3 is UKW-N, rotor indices 8-12 are Norway wheels 1-5. */
 static const int norway_reflector_index = 3;
@@ -107,17 +105,24 @@ static unsigned char reflector[reflector_count][asize];
    ciphertext stay shared. */
 struct machine
 {
+  unsigned char steckerbrett[asize];    /* plugboard permutation */
+  unsigned char mapping[maxlen][asize]; /* per-position substitution */
+  unsigned char num_plaintext[maxlen];  /* decode scratch */
+  char plaintext[maxlen+1];             /* candidate / result */
+
   int ukw;                              /* reflector index */
   int walzenlage[wheels];               /* wheel order (rotor indices) */
   unsigned char grundstellung[wheels];  /* start positions */
   unsigned char ringstellung[wheels];   /* ring positions */
-  unsigned char steckerbrett[asize];    /* plugboard permutation */
 
-  /* working tables, rebuilt as the search advances */
-  unsigned char subst_array[asize][asize][asize][asize]; /* rotor stack per g-r */
-  unsigned char mapping[maxlen][asize];                  /* per-position subst. */
-  unsigned char num_plaintext[maxlen];                   /* decode scratch */
-  char plaintext[maxlen+1];                              /* candidate / result */
+  /* The 457 KB rotor-stack table (rebuilt once per wheel order by precompute,
+     read per ring/start by setup_mapping) is heap-allocated separately and
+     reached through its own base pointer. Keeping it out of the struct leaves
+     every member above at a small offset -- so both the hot decode tables and
+     subst_array itself get tight addressing on every compiler/target, rather
+     than whichever one lands past the big array paying for large offsets (which
+     ARM in particular handles poorly). */
+  unsigned char (* subst_array)[asize][asize][asize];
 };
 
 static double monograms[asize];
@@ -351,76 +356,31 @@ inline int step_mapped(machine & m, int i, int x)
 
 inline void decode(machine & m)
 {
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * __restrict map = & m.mapping[0][0];
+  char * __restrict pt = m.plaintext;
   for (int i = 0; i < textlength; i++)
-    m.plaintext[i] = num2char(step_mapped(m, i, num_ciphertext[i]));
-  m.plaintext[textlength] = 0;
-}
-
-inline void map16_step(unsigned char * source,
-                       unsigned char * map,
-                       unsigned char * dest)
-{
-  for (int i = 0; i < blocksize; i++)
-    dest[i] = map[asize*i+source[i]];
-}
-
-inline void map16_direct(unsigned char * source,
-                         unsigned char * map,
-                         unsigned char * dest)
-{
-  for (int i = 0; i < blocksize; i++)
-    dest[i] = map[source[i]];
-}
-
-void showit(const char * msg, unsigned char * p)
-{
-  (void) msg; (void) p;   /* used only when the debug block below is enabled */
-#if 0
-  fprintf(stderr, "%s:", msg);
-  for(int i=0; i<16; i++)
-    fprintf(stderr, " %2d", p[i]);
-  fprintf(stderr, "\n");
-#endif
+    pt[i] = num2char(steck[map[asize*i + steck[ct[i]]]]);
+  pt[textlength] = 0;
 }
 
 inline void decode_num(machine & m)
 {
-#if 0
+  /* Hoist the per-array base pointers into __restrict locals: once the working
+     tables live in one struct, the compiler must otherwise assume the
+     unsigned-char members may alias, which costs reloads of the plugboard and
+     blocks vectorisation. The no-alias locals restore the codegen the separate
+     globals used to get. (A previous 16-byte-blocked variant -- never shown to
+     beat this scalar loop -- measured slower under both g++ and clang once the
+     state moved into struct machine, so it was removed.) */
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * __restrict map = & m.mapping[0][0];
+  unsigned char * __restrict np = m.num_plaintext;
+
   for (int i = 0; i < textlength; i++)
-    m.num_plaintext[i] = step_mapped(m, i, num_ciphertext[i]);
-#else
-#if 0
-  showit("cipher", num_ciphertext);
-  for (int i = 0; i < textlength; i++)
-    m.num_plaintext[i] =
-      m.steckerbrett[m.mapping[i][m.steckerbrett[num_ciphertext[i]]]];
-  showit("plain ", m.num_plaintext);
-  fprintf(stderr, "\n");
-#else
-
-  int blocks = (textlength / blocksize) * blocksize;
-
-  for (int i = 0; i < blocks; i += blocksize)
-    {
-      unsigned char temp1[blocksize];
-      unsigned char temp2[blocksize];
-      showit("cipher", num_ciphertext+i);
-      map16_direct(num_ciphertext+i, m.steckerbrett, temp1);
-      showit("steck ", temp1);
-      map16_step(temp1, ((unsigned char *)(&m.mapping[i])), temp2);
-      showit("mapped", temp2);
-      map16_direct(temp2, m.steckerbrett, m.num_plaintext+i);
-      showit("plain ", m.num_plaintext+i);
-      //      fprintf(stderr, "\n");
-    }
-
-  /* remainder, when textlength is not a multiple of 16 (avoids reading
-     mapping[] / num_ciphertext[] past textlength) */
-  for (int i = blocks; i < textlength; i++)
-    m.num_plaintext[i] = step_mapped(m, i, num_ciphertext[i]);
-
-#endif
-#endif
+    np[i] = steck[map[asize*i + steck[ct[i]]]];
 }
 
 double quadgram_score_decode(machine & m)
@@ -443,10 +403,10 @@ double quadgram_score_decode(machine & m)
 
   */
 
+  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
   for (int i=0; i<textlength-3; i++)
-    score += quadgrams[m.num_plaintext[i]][m.num_plaintext[i+1]]
-      [m.num_plaintext[i+2]][m.num_plaintext[i+3]];
+    score += quadgrams[np[i]][np[i+1]][np[i+2]][np[i+3]];
   return score;
 }
 
@@ -454,9 +414,10 @@ double trigram_score_decode(machine & m)
 {
   decode_num(m);
 
+  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
   for (int i=0; i<textlength-2; i++)
-    score += trigrams[m.num_plaintext[i]][m.num_plaintext[i+1]][m.num_plaintext[i+2]];
+    score += trigrams[np[i]][np[i+1]][np[i+2]];
   return score;
 }
 
@@ -464,9 +425,10 @@ double bigram_score_decode(machine & m)
 {
   decode_num(m);
 
+  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
   for (int i=0; i<textlength-1; i++)
-    score += bigrams[m.num_plaintext[i]][m.num_plaintext[i+1]];
+    score += bigrams[np[i]][np[i+1]];
   return score;
 }
 
@@ -474,9 +436,10 @@ double monogram_score_decode(machine & m)
 {
   decode_num(m);
 
+  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
   for (int i = 0; i < textlength; i++)
-    score += monograms[m.num_plaintext[i]];
+    score += monograms[np[i]];
   return score;
 }
 
@@ -486,8 +449,11 @@ double ic_score_decode(machine & m)
   for(int j=0; j<asize; j++)
     freq[j] = 0;
 
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * __restrict map = & m.mapping[0][0];
   for (int i = 0; i < textlength; i++)
-    freq[step_mapped(m, i, num_ciphertext[i])]++;
+    freq[steck[map[asize*i + steck[ct[i]]]]]++;
 
   double score = 0.0;
   for(int j=0; j<asize; j++)
@@ -1197,6 +1163,7 @@ int main(int argc, char * * argv)
   /* the per-search machine state lives in a single heap object (one today, one
      per worker thread once the search is parallelised) */
   machine * m = new machine();
+  m->subst_array = new unsigned char[asize][asize][asize][asize];
   init_steckerbrett(*m, "");
 
   /* try all combinations */
@@ -1213,5 +1180,6 @@ int main(int argc, char * * argv)
   if (opt_plaintext)
     readplaintext(opt_plaintext, m->plaintext);
 
+  delete[] m->subst_array;
   delete m;
 }

@@ -370,12 +370,26 @@ Remaining opportunities:
   long messages this is a large repeated cost; some of it could be shared across
   start positions.
 - 🟢 **Quadgram table is ~457 KB×8 = 3.6 MB of `double`s** (`[26]^4 * 8`),
-  plus `subst_array` (~457 KB) and `mapping` (~266 KB) as zero-initialized BSS.
-  Using `float` for n-gram scores would halve the largest table and improve
-  cache behavior in the inner loop with negligible accuracy loss.
-- 🟢 The `decode_num()` "scalar vs blocked" choice is locked at compile time via
-  `#if 0`; there is no measured justification in-tree that the 16-byte blocking
-  actually wins for the relevant message lengths.
+  plus `subst_array` (~457 KB) and `mapping` (~26 KB). The n-gram tables stay
+  global; `subst_array`/`mapping`/`num_plaintext` are now per-`machine`
+  (`subst_array` heap-allocated, the rest in the struct). Using `float` for
+  n-gram scores would halve the largest table and improve cache behavior in the
+  inner loop with negligible accuracy loss.
+- 🟢 **`decode_num()` "scalar vs blocked"** ✅ resolved. The 16-byte-blocked
+  variant (gated behind `#if 0`) was never shown to beat the scalar loop and
+  measured *slower* under both g++ and clang once the state moved into
+  `struct machine`; it (and the `map16_*`/`showit` helpers and `blocksize`) was
+  removed in favour of a single scalar loop over `__restrict` base pointers.
+- 🟡 **Struct encapsulation has an architecture-dependent hot-loop cost** worth
+  remembering. Collapsing the separate global arrays into `struct machine` is
+  ~free for g++ on the hill-climb path but, done naively, cost ~20–60% under
+  clang/Apple-silicon (large in-struct offsets past the 457 KB `subst_array`,
+  plus lost no-alias assumptions). Mitigated by heap-allocating `subst_array`
+  through its own pointer and hoisting `__restrict` base pointers in the decode/
+  score loops; clang is now at parity. A residual ~10% remains on the **g++**
+  *search* path (the no-plug brute-force scan, in `setup_mapping`/`step_rotors`);
+  hill-climb is at parity on both compilers. Always A/B with **both** compilers
+  (`make bench BASE=<ref>` and `make bench CXX=clang++ BASE=<ref>`).
 
 ---
 

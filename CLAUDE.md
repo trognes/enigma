@@ -154,7 +154,24 @@ The hill-climb decode-and-score loop (`quadgram_score_decode` →
 `decode_num`) is where ~99% of runtime is spent (per the source comment).
 That is why the rotor stack is precomputed into `subst_array` and folded into a
 per-position `mapping` so the inner loop is just two plugboard lookups plus a
-table lookup per character. `decode_num` processes the text in 16-byte blocks.
+table lookup per character (`decode`/`decode_num` are scalar loops over
+`__restrict` base pointers — an earlier 16-byte-blocked variant was never shown
+to win and measured slower once the state moved into `struct machine`, so it was
+removed).
+
+> **Struct layout matters for the hot loop.** When the per-search state moved
+> into `struct machine`, collapsing the formerly separate global arrays into one
+> object cost real throughput, and the size of the hit is compiler/arch
+> dependent (negligible for g++, but ~20–60% under clang/Apple-silicon if done
+> naively). Two things keep it in check and must be preserved: (1) the 457 KB
+> `subst_array` is **heap-allocated separately** and reached through its own
+> pointer, so it never pushes the hot per-character tables (`mapping`,
+> `num_plaintext`, `steckerbrett`) out to large struct offsets (large immediate
+> offsets are expensive on ARM); (2) the decode/score loops hoist the member
+> base pointers into `__restrict` locals so the compiler keeps the no-alias
+> guarantees the separate globals used to give. Always re-check `make bench
+> BASE=<ref>` under **both** g++ and clang (`make bench CXX=clang++ BASE=<ref>`)
+> after touching the hot path or the struct.
 
 ## Conventions & gotchas for contributors
 
