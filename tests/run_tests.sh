@@ -195,9 +195,15 @@ esac
 # and require identical recovered plaintext.
 t_pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERS"
 t_ct=$(run "$t_pt" -i -u B -w 123 -r AAA -g QXP)
-check "threads: -T 4 matches -T 1" \
+check "threads: -T 4 matches -T 1 (wheel-order search)" \
   "$(run "$t_ct" -q -l english -u B -w ... -r AAA -g QXP -T 4)" \
   "$(run "$t_ct" -q -l english -u B -w ... -r AAA -g QXP -T 1)"
+
+# Fixed wheels + wildcard start: one wheel order, so parallelism comes entirely
+# from the ring/start sweep (the case the old scheme left single-threaded).
+check "threads: -T 4 matches -T 1 (ring/start search)" \
+  "$(run "$t_ct" -q -l english -u B -w 123 -r AAA -g ... -T 4)" \
+  "$(run "$t_ct" -q -l english -u B -w 123 -r AAA -g ... -T 1)"
 
 # -T is validated: 0 and 257 (> max 256) are rejected.
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 0 >/dev/null 2>&1

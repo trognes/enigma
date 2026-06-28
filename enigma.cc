@@ -8,7 +8,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <sys/resource.h>
+
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -754,75 +757,142 @@ struct best_result
   char plaintext[maxlen+1];
 };
 
-/* One worker: pull wheel-order tasks off the shared atomic counter until they
-   are exhausted, running the full ring/start (and optional plugboard) sweep for
-   each on its own private machine. */
-void search_worker(machine & m,
-                   const std::vector<wheel_task> & tasks,
-                   std::atomic<size_t> & next_task,
-                   const search_range & range,
-                   best_result & best)
-{
-  double local_best = score_min;
+/* --- parallel search -------------------------------------------------------
 
+   The search runs in two parallel phases over a fixed pool of per-thread
+   machines:
+
+   1. Precompute the rotor-stack table for every (reflector x wheel-order) once,
+      into one big shared read-only block. (A table depends only on the reflector
+      and wheel order, and serves every ring/start of that wheel order via the
+      start-minus-ring offset; brute force has no early exit, so every table is
+      needed anyway.)
+   2. Sweep the whole flat (wheel-order x ring x start) key space: an atomic
+      counter hands out adaptive-sized chunks, each worker decodes and scores its
+      keys against the shared tables using its own private mapping.
+
+   Parallelising the flat key space (not just the wheel order) means a search
+   with the wheels fixed but ring/start wildcarded uses every thread -- the old
+   wheel-order-only scheme left exactly that case single-threaded. */
+
+/* Memory accounting for the final diagnostic (set by bruteforce). */
+static size_t g_table_count = 0;
+static size_t g_table_bytes = 0;
+
+/* base pointer into the rotor-stack table block: the same type as
+   machine::subst_array, so 'all + i*asize' is task i's [asize]^4 table */
+typedef unsigned char (* subst_table)[asize][asize][asize];
+
+/* Phase 1: fill the table for each wheel-order task pulled off the counter.
+   all + i*asize is task i's table (asize rows of [asize][asize][asize]). */
+void precompute_worker(machine & m,
+                       const std::vector<wheel_task> & tasks,
+                       std::atomic<size_t> & next_task,
+                       subst_table all)
+{
   size_t i;
   while ((i = next_task.fetch_add(1)) < tasks.size())
     {
       const wheel_task & t = tasks[i];
-
       init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
-
+      m.subst_array = all + i * asize;
       precompute(m);
+    }
+}
 
-      for (int r1 = range.r_min[0]; r1 <= range.r_max[0]; r1++)
-        for (int r2 = range.r_min[1]; r2 <= range.r_max[1]; r2++)
-          for (int r3 = range.r_min[2]; r3 <= range.r_max[2]; r3++)
-            for (int g1 = range.g_min[0]; g1 <= range.g_max[0]; g1++)
-              for (int g2 = range.g_min[1]; g2 <= range.g_max[1]; g2++)
-                for (int g3 = range.g_min[2]; g3 <= range.g_max[2]; g3++)
-                  {
-                    init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+/* Phase 2: decode + score a slice of the flat key space. A flat index decodes to
+   (wheel-order, ring combo, start combo) by mixed radix over the per-position
+   ranges; the worker points its machine at the already-computed table for that
+   wheel order (no recompute) and re-reads the wheel order's settings only when
+   it changes from one key to the next. */
+void search_worker(machine & m,
+                   const std::vector<wheel_task> & tasks,
+                   const search_range & range,
+                   const int * rc, const int * gc,
+                   subst_table all,
+                   size_t rsize, size_t gsize,
+                   std::atomic<size_t> & next_key,
+                   size_t chunk,
+                   best_result & best)
+{
+  const size_t rg = rsize * gsize;
+  const size_t total = tasks.size() * rg;
+  const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
+  const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
 
-                    init_steckerbrett(m, opt_steckerbrett);
+  double local_best = score_min;
+  size_t cur_wo = static_cast<size_t>(-1);
 
-                    setup_mapping(m);
+  size_t start;
+  while ((start = next_key.fetch_add(chunk)) < total)
+    {
+      size_t end = start + chunk;
+      if (end > total)
+        end = total;
 
-                    double score;
-                    if (opt_hillclimb)
-                      {
-                        score = hillclimb(m);
-                      }
-                    else
-                      {
-                        decode(m);
-                        score = score_iter(m, 0);
-                      }
+      for (size_t idx = start; idx < end; idx++)
+        {
+          size_t wo = idx / rg;
+          size_t rem = idx % rg;
+          size_t rflat = rem / gsize;
+          size_t gflat = rem % gsize;
 
-                    if (score > local_best)
-                      {
-                        local_best = score;
-                        std::lock_guard<std::mutex> lock(best.mutex);
-                        if (score > best.score)
-                          {
-                            best.score = score;
-                            best.found = true;
-                            memcpy(best.plaintext, m.plaintext, textlength + 1);
+          if (wo != cur_wo)
+            {
+              cur_wo = wo;
+              const wheel_task & t = tasks[wo];
+              m.subst_array = all + wo * asize;
+              init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
+            }
+
+          int r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
+          int rr = static_cast<int>(rflat % rc12);
+          int r2 = range.r_min[1] + rr / rc[2];
+          int r3 = range.r_min[2] + rr % rc[2];
+          int g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
+          int gg = static_cast<int>(gflat % gc12);
+          int g2 = range.g_min[1] + gg / gc[2];
+          int g3 = range.g_min[2] + gg % gc[2];
+
+          init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+          init_steckerbrett(m, opt_steckerbrett);
+          setup_mapping(m);
+
+          double score;
+          if (opt_hillclimb)
+            score = hillclimb(m);
+          else
+            {
+              decode(m);
+              score = score_iter(m, 0);
+            }
+
+          if (score > local_best)
+            {
+              local_best = score;
+              std::lock_guard<std::mutex> lock(best.mutex);
+              if (score > best.score)
+                {
+                  best.score = score;
+                  best.found = true;
+                  memcpy(best.plaintext, m.plaintext, textlength + 1);
 #if 1
-                            /* setup_mapping stepped grundstellung; restore the
-                               start positions before echoing the config */
-                            init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-                            fprintf(stderr, "%10.4f ", score);
-                            showconfig(m);
+                  /* setup_mapping stepped grundstellung; restore the start
+                     positions before echoing the config */
+                  init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+                  fprintf(stderr, "%10.4f ", score);
+                  showconfig(m);
 #endif
-                          }
-                      }
-                  }
+                }
+            }
+        }
     }
 }
 
 /* Resolve the search ranges from the options, enumerate the reflector x
-   wheel-order tasks, and run them across opt_threads worker threads (each with
-   its own machine). The best decryption is written to 'result'. */
+   wheel-order tasks, precompute their rotor tables in parallel, then sweep the
+   flat (wheel-order x ring x start) key space in parallel. The best decryption
+   is written to 'result'. */
 void bruteforce(char * result)
 {
   int u_min, u_max;
@@ -878,6 +948,16 @@ void bruteforce(char * result)
         }
     }
 
+  /* per-position ring/start counts and their products */
+  int rc[wheels], gc[wheels];
+  for (int i = 0; i < wheels; i++)
+    {
+      rc[i] = range.r_max[i] - range.r_min[i] + 1;
+      gc[i] = range.g_max[i] - range.g_min[i] + 1;
+    }
+  size_t rsize = static_cast<size_t>(rc[0]) * rc[1] * rc[2];
+  size_t gsize = static_cast<size_t>(gc[0]) * gc[1] * gc[2];
+
   std::vector<wheel_task> tasks;
   for (int u1 = u_min; u1 <= u_max; u1++)
     for (int w1 = w_min[0]; w1 <= w_max[0]; w1++)
@@ -892,46 +972,74 @@ void bruteforce(char * result)
     fatal("No machine configuration was searched "
           "(check the -u / -w / -x settings)");
 
-  /* one worker (and one private machine) per thread, never more than there are
-     tasks to hand out */
+  size_t nwo = tasks.size();
+  size_t total_keys = nwo * rsize * gsize;
+
+  /* memory accounting: one [asize]^4 table per wheel order, all resident */
+  g_table_count = nwo;
+  g_table_bytes = nwo * static_cast<size_t>(asize) * asize * asize * asize;
+  if (g_table_bytes > static_cast<size_t>(8) * 1024 * 1024 * 1024)
+    fatal("Search space too large to precompute the rotor tables "
+          "(narrow -u / -w / -x)");
+
+  /* never start more threads than there is work to hand out */
   int nthreads = opt_threads;
-  if (nthreads > static_cast<int>(tasks.size()))
-    nthreads = static_cast<int>(tasks.size());
+  if (total_keys < static_cast<size_t>(nthreads))
+    nthreads = static_cast<int>(total_keys);
   if (nthreads < 1)
     nthreads = 1;
 
-  best_result best;
-  std::atomic<size_t> next_task{0};
+  /* the shared, read-only rotor-stack tables (one [asize]^4 block per wheel
+     order) and the per-thread machines (small: mapping/plaintext/settings) */
+  subst_table all = new unsigned char[nwo * asize][asize][asize][asize];
 
   std::vector<machine *> machines(static_cast<size_t>(nthreads));
   for (int t = 0; t < nthreads; t++)
+    machines[t] = new machine();   /* subst_array is pointed at 'all' per task */
+
+  /* phase 1: precompute every wheel order's table in parallel */
+  std::atomic<size_t> next_task{0};
+  if (nthreads == 1)
+    precompute_worker(*machines[0], tasks, next_task, all);
+  else
     {
-      machines[t] = new machine();
-      machines[t]->subst_array = new unsigned char[asize][asize][asize][asize];
+      std::vector<std::thread> pool;
+      pool.reserve(static_cast<size_t>(nthreads));
+      for (int t = 0; t < nthreads; t++)
+        pool.emplace_back(precompute_worker, std::ref(*machines[t]),
+                          std::cref(tasks), std::ref(next_task), all);
+      for (std::thread & th : pool)
+        th.join();
     }
 
+  /* phase 2: sweep the flat key space in parallel, adaptive chunks (each thread
+     gets ~16 chunks: enough to balance the tail, few enough to amortise the
+     atomic) */
+  best_result best;
+  std::atomic<size_t> next_key{0};
+  size_t chunk = total_keys / (static_cast<size_t>(nthreads) * 16);
+  if (chunk < 1)
+    chunk = 1;
+
   if (nthreads == 1)
-    {
-      /* run inline so the single-threaded path carries no thread overhead */
-      search_worker(*machines[0], tasks, next_task, range, best);
-    }
+    search_worker(*machines[0], tasks, range, rc, gc, all,
+                  rsize, gsize, next_key, chunk, best);
   else
     {
       std::vector<std::thread> pool;
       pool.reserve(static_cast<size_t>(nthreads));
       for (int t = 0; t < nthreads; t++)
         pool.emplace_back(search_worker, std::ref(*machines[t]),
-                          std::cref(tasks), std::ref(next_task),
-                          std::cref(range), std::ref(best));
+                          std::cref(tasks), std::cref(range), rc, gc, all,
+                          rsize, gsize, std::ref(next_key), chunk,
+                          std::ref(best));
       for (std::thread & th : pool)
         th.join();
     }
 
   for (int t = 0; t < nthreads; t++)
-    {
-      delete[] machines[t]->subst_array;
-      delete machines[t];
-    }
+    delete machines[t];
+  delete[] all;
 
   if (! best.found)
     fatal("No machine configuration produced a score");
@@ -1125,6 +1233,8 @@ void show_settings()
 
 int main(int argc, char * * argv)
 {
+  auto t_start = std::chrono::steady_clock::now();
+
   if (argc == 1)
     {
       help(stderr);
@@ -1345,4 +1455,25 @@ int main(int argc, char * * argv)
 
   if (opt_plaintext)
     readplaintext(opt_plaintext, result);
+
+  /* final diagnostic: wall-clock time and memory use */
+  double secs = std::chrono::duration<double>
+    (std::chrono::steady_clock::now() - t_start).count();
+  struct rusage ru;
+  double peak_mb = 0.0;
+  if (getrusage(RUSAGE_SELF, & ru) == 0)
+    {
+      /* ru_maxrss is kilobytes on Linux but bytes on macOS/BSD */
+#ifdef __APPLE__
+      peak_mb = ru.ru_maxrss / (1024.0 * 1024.0);
+#else
+      peak_mb = ru.ru_maxrss / 1024.0;
+#endif
+    }
+  fprintf(stderr,
+          "Finished in %.2f s using %d thread%s; "
+          "precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",
+          secs, opt_threads, (opt_threads == 1) ? "" : "s",
+          g_table_count, (g_table_count == 1) ? "" : "s",
+          g_table_bytes / (1024.0 * 1024.0), peak_mb);
 }

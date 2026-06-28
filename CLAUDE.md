@@ -123,24 +123,29 @@ A single pass through `main()`:
    count is stored as `log10(count + 1)` for additive scoring.
 4. `init()` precomputes numeric forward/reverse rotor permutations, notch
    tables, and reflector permutations from the hard-coded wiring strings.
-5. `bruteforce()` is the main search:
-   - Enumerates the reflector × wheel-order combinations (skipping repeated
-     wheels) as a task list, then runs them across `opt_threads` worker threads
-     (`-T N`, default 1) via an atomic task counter; each worker owns a private
-     `machine` and the best result is merged under a mutex (which also serialises
-     the live progress line). Per wheel-order task:
-   - `precompute()` builds `subst_array[g1][g2][g3][x]` — the rotor-stack
-     substitution for every (start-position-minus-ring-setting) triple, with
-     ring fixed at 0 — once per wheel order.
-   - For each ring/start combination, `setup_mapping()` steps the rotors over
-     the message length and records, per character position, the full 26-letter
-     substitution (`mapping[pos][letter]`), folding the stepping schedule in.
-   - `decode()` applies plugboard → mapping → plugboard to produce the candidate
-     plaintext; `score_iter()` scores it (the n-gram scorers fuse the same decode
-     into their loop rather than materialising the decoded text).
+5. `bruteforce()` is the main search, run across `opt_threads` worker threads
+   (`-T N`, default 1, max 256) in two parallel phases over the flat
+   reflector × wheel-order × ring × start key space:
+   - **Phase 1 (`precompute_worker`)**: build `subst_array[g1][g2][g3][x]` — the
+     rotor-stack substitution for every (start-minus-ring) triple, ring fixed at
+     0 — once **per reflector × wheel-order**, for *all* of them, into one shared
+     read-only block (`#wheel-orders × 457 KB`). A table serves every ring/start
+     of its wheel order via the start−ring offset.
+   - **Phase 2 (`search_worker`)**: an atomic counter hands out adaptive chunks
+     of the flat key space; each worker decodes a flat index → (wheel-order,
+     ring, start) by mixed radix, points its private `machine` at that wheel
+     order's shared table (swapped, never recomputed, on a boundary), and:
+   - `setup_mapping()` steps the rotors over the message length and records the
+     per-position substitution (`mapping[pos][letter]`), folding in the stepping;
+   - `decode()` + `score_iter()` produce and score the candidate (the n-gram
+     scorers fuse the decode into their loop). The best is merged under a mutex
+     (which also serialises the live progress line). Parallelising the flat key
+     space means rings/starts scale even when the wheels are fixed.
    - With `-c`, `hillclimb()` greedily swaps plugboard pairs to maximize score
      before recording the result.
-6. The best-scoring plaintext is printed; optionally compared to `-p` file.
+6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
+   final stderr diagnostic reports wall-clock time, thread count, the number/size
+   of precomputed rotor tables, and peak RSS (via `getrusage`).
 
 ### Core machine model
 
