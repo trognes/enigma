@@ -48,8 +48,20 @@ and were sourced from the Practical Cryptography website.
 ```sh
 make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 ...
 make test                 # build, then run tests/run_tests.sh
+make bench                # build, then run tests/bench.sh (performance)
 ./enigma -h               # help / usage
 ```
+
+`make bench` (`tests/bench.sh`) benchmarks the two hot paths **separately** —
+`search` (brute-force scan, no plugboard) and `hillclimb` (the `-c` plugboard
+loop) — because a change can regress one without touching the other. Each has a
+`quick` tier (default, a few seconds) and an opt-in `long` tier (`make bench
+LONG=1`, ≥15–30s each) for a stronger signal. Timing is the min of several
+repetitions (CPU-bound, single-threaded). The regression guard is a same-machine
+A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>` in a throwaway
+git worktree and runs both, failing if any benchmark is >`THRESHOLD`% (default
+10) slower than BASE — run this around the planned global-state/threading
+refactor to confirm single-thread throughput hasn't regressed.
 
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
@@ -153,8 +165,10 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 - **Single translation unit, heavy global state.** Machine settings
   (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`),
   buffers (`ciphertext`, `plaintext`, `num_*`, `mapping`, `subst_array`), and
-  the loaded n-gram tables are all file-scope globals. Most functions also take
-  a `textlength` parameter even though a global of the same name exists.
+  the loaded n-gram tables are all file-scope globals. The search/scoring
+  functions read these globals directly (the redundant `textlength`/`ciphertext`/
+  `plaintext` parameters that used to shadow them have been removed; `-Wshadow`
+  is on to keep it that way).
 - Debug instrumentation is intentionally retained: `showit`, `showconfig`,
   `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
   compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
@@ -166,7 +180,9 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
   `-Werror`/sanitizers). Tests live in `tests/run_tests.sh` and run via
   `make test` (known-answer vectors, round-trip properties, input-limit guards,
   and end-to-end cracking — brute-force start-position and plugboard hill-climb
-  matrices over every scoring model × language). CI (`.github/workflows/ci.yml`) runs on every push
+  matrices over every scoring model × language). Performance is benchmarked
+  separately by `tests/bench.sh` (`make bench`; see "Build & run"). CI
+  (`.github/workflows/ci.yml`) runs on every push
   and PR: the suite `-Werror` under g++ and clang++, ASan+UBSan, valgrind,
   cppcheck, clang-tidy (config in `.clang-tidy`), and shellcheck; a separate
   CodeQL workflow runs on PRs and weekly. Keep all of these green.

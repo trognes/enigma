@@ -337,7 +337,16 @@ instrumentation rather than deleted.
 
 The hot path is already thoughtfully optimized (precompute the rotor stack into
 `subst_array`, fold stepping into a per-position `mapping`, score by table
-lookup, 16-byte blocking). Remaining opportunities:
+lookup, 16-byte blocking).
+
+> **Benchmark in place.** `tests/bench.sh` (`make bench`) now measures the two
+> hot paths separately — `search` (brute-force scan, no plugboard) and
+> `hillclimb` (the `-c` loop) — with a same-machine A/B mode
+> (`make bench BASE=<ref>`) that fails on a >10% slowdown. Run it around the
+> global-state/threading refactor below to guard single-thread throughput before
+> chasing the parallel speedup.
+
+Remaining opportunities:
 
 - 🟡 **No parallelism.** `bruteforce()` is embarrassingly parallel over
   reflector × wheel-order (and ring/start). The scaffolding (`opt_threads`)
