@@ -593,7 +593,9 @@ inline void decode_num()
   fprintf(stderr, "\n");
 #else
 
-  for (int i = 0; i < textlength; i += 16)
+  int blocks = textlength & ~15;
+
+  for (int i = 0; i < blocks; i += 16)
     {
       unsigned char temp1[16];
       unsigned char temp2[16];
@@ -606,6 +608,11 @@ inline void decode_num()
       showit("plain ", num_plaintext+i);
       //      fprintf(stderr, "\n");
     }
+
+  /* remainder, when textlength is not a multiple of 16 (avoids reading
+     mapping[] / num_ciphertext[] past textlength) */
+  for (int i = blocks; i < textlength; i++)
+    num_plaintext[i] = step_mapped(i, num_ciphertext[i]);
 
 #endif
 #endif
@@ -1012,45 +1019,58 @@ void bruteforce()
 
 void readciphertext()
 {
-  long len = 0;
-  char buffer[maxlen+1];
+  unsigned char buffer[65536];
+  ssize_t len;
+  int j = 0;
 
-  len = read(STDIN_FILENO, buffer, maxlen);
+  /* read() may return short; loop until EOF, filtering as we go */
+  while ((len = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0)
+    for (ssize_t i = 0; i < len; i++)
+      {
+        char c = toupper(buffer[i]);
+        if ((c >= 'A') && (c <= 'Z'))
+          {
+            if (j >= maxtextlen)
+              fatal("Ciphertext too long (maximum is 1024 letters)");
+            ciphertext[j++] = c;
+          }
+      }
 
-  int j=0;
-  for(int i=0; i<len; i++)
-    {
-      char c = toupper(buffer[i]);
-      if ((c>='A') && (c<='Z'))
-        ciphertext[j++] = c;
-    }
+  if (len < 0)
+    fatal("Error reading ciphertext from standard input");
+
   ciphertext[j] = 0;
   textlength = j;
-
-  if (textlength > maxtextlen)
-    fatal("Ciphertext too long (maximum is 1024 letters)");
 }
 
 void readplaintext(char * filename)
 {
-  long len = 0;
-  char buffer[maxlen+1];
+  unsigned char buffer[65536];
+  ssize_t len;
+  int j = 0;
 
   int fd = open(filename, O_RDONLY);
   if (fd < 0)
     fatal("Unable to open plaintext file");
 
-  len = read(fd, buffer, maxlen);
+  /* read() may return short; loop until EOF, filtering as we go */
+  while ((len = read(fd, buffer, sizeof(buffer))) > 0)
+    for (ssize_t i = 0; i < len; i++)
+      {
+        char c = toupper(buffer[i]);
+        if ((c >= 'A') && (c <= 'Z'))
+          {
+            if (j >= maxtextlen)
+              fatal("Plaintext file too long (maximum is 1024 letters)");
+            altplaintext[j++] = c;
+          }
+      }
 
+  int read_error = (len < 0);
   close(fd);
+  if (read_error)
+    fatal("Error reading plaintext file");
 
-  int j=0;
-  for(int i=0; i<len; i++)
-    {
-      char c = toupper(buffer[i]);
-      if ((c>='A') && (c<='Z'))
-        altplaintext[j++] = c;
-    }
   altplaintext[j] = 0;
 
   if (textlength != j)

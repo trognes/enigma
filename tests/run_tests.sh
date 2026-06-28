@@ -129,6 +129,13 @@ check "non-letter filtering / case folding" \
 out1024=$(run "$(rep 1024 A)" -i -u B -w 123 -r AAA -g AAA)
 check "1024-letter input accepted (length)" "${#out1024}" "1024"
 
+# Input larger than the read buffer must be consumed across multiple read()
+# calls (guards the short-read loop): 70000 spaces then 10 letters, so the
+# letters only appear after the first 64 KiB chunk.
+check "input larger than read buffer is fully read" \
+  "$( { printf '%*s' 70000 ''; printf 'BDZGOWCXLT'; } | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA 2>/dev/null )" \
+  "AAAAAAAAAA"
+
 # 1025 letters must be rejected with a non-zero exit (best_plaintext overflow
 # regression guard).
 err=$(rep 1025 A | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)

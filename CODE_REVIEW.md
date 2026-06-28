@@ -63,35 +63,41 @@ only — which also blocks path-traversal names like `../../etc/passwd`. Guarded
 by an illegal-`-l` rejection test. (Factoring the four near-identical readers
 into one remains an open refactor — see §5.)
 
-### 1.3 🟡 `readciphertext()` / `readplaintext()` do a single `read()`
+### 1.3 🟡 `readciphertext()` / `readplaintext()` do a single `read()` — ✅ FIXED
 
 ```c
 len = read(STDIN_FILENO, buffer, maxlen);
 ```
 
 `read()` may return fewer bytes than requested (pipes, terminals, large
-inputs), so ciphertext can be silently truncated. There is also no loop to
-consume input beyond `maxlen`; anything past the first `maxlen` bytes is
-silently dropped with no warning. Prefer a read loop (or `fread`) and warn on
-truncation.
+inputs), so ciphertext could be silently truncated, and anything past the first
+`maxlen` bytes was silently dropped.
 
-### 1.4 🟡 Block decoder reads past `textlength` (uninitialized reads)
+**Resolved.** Both functions now loop on `read()` until EOF, filtering A–Z as
+they go, and bound the letter count incrementally (fatal past `maxtextlen`).
+A read error is reported instead of ignored, and the buffers are `unsigned char`
+so `toupper()` is never handed a negative value. Guarded by a test that pipes
+input larger than the read buffer (70 000 bytes before the letters) and checks
+it is fully consumed.
 
-`decode_num()` processes the message in fixed 16-byte blocks:
+### 1.4 🟡 Block decoder reads past `textlength` (uninitialized reads) — ✅ FIXED
+
+`decode_num()` processed the message in fixed 16-byte blocks:
 
 ```c
 for (int i = 0; i < textlength; i += 16) { ... map16_* over 16 elements ... }
 ```
 
-When `textlength` is not a multiple of 16, the final block reads
-`num_ciphertext[]` and `mapping[]` rows beyond `textlength`. Those rows are
-within the static arrays (so no segfault), but `mapping[]` is only initialized
-up to `textlength - 1` by `setup_mapping()`, so this reads uninitialized data
-and writes junk into `num_plaintext[]` past `textlength`. The scoring loops stop
-at `textlength - k`, so the result is not corrupted, but this is undefined-ish
-behavior and a trap for anyone who later reads the full `num_plaintext`. The
-remainder should be handled explicitly (or the arrays zero-initialized and the
-tail masked).
+When `textlength` was not a multiple of 16, the final block read
+`num_ciphertext[]` and `mapping[]` rows beyond `textlength` (in-bounds of the
+static arrays, but uninitialized) and wrote junk into `num_plaintext[]` past
+`textlength`. Results were unaffected (scoring stops at `textlength - k`), but it
+was undefined-ish and a trap for anyone reading the full `num_plaintext`.
+
+**Resolved.** The block loop now runs over complete 16-byte blocks
+(`textlength & ~15`) and a scalar remainder loop handles the tail, so nothing
+past `textlength` is touched. Output is unchanged (the 25-letter `BDZGO` KAT
+already exercises a non-multiple-of-16 length).
 
 ---
 
@@ -369,16 +375,17 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 2.2 | 🟢 | ~~`fscanf` partial matches use uninitialized variables~~ ✅ fixed (require full field count) |
 | 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
-| 1.3/1.4 | 🟡 | Single `read()` truncation; 16-byte block over-read past `textlength` |
+| 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟡/🟢 | Unused `total` (no normalization); ~~stepping unverified~~ ✅ double-step KAT added |
 | 4/5/6 | 🟡 | Legacy `index()`, `char` returns, duplicated readers/scorers, no parallelism |
 | 2.5/7 | 🟢 | Empty-input div-by-zero; relative data paths; weak Makefile |
 
-**Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow, (2.1)
-the IC formula, (2.2) the `fscanf` partial-match bug, (2.4) stepping
-verification, (3) the dead/misleading-code cleanup (including the
-`best_steckerbrett` out-of-bounds `memcpy`), and (7) the test suite + CI are now
-done. The `-Wall` build is warning-free and the suite has 20 checks. Remaining
-items — single-`read()` truncation and the block over-read (§1.3/1.4), the
-unused `total` (§2.3), the four duplicated readers and other §4–6 polish, and
-eventually the global-state refactor that would unlock threading (§5).
+**Progress:** (1.1) the stack overflow, (1.2) the `-l`/filename overflow,
+(1.3/1.4) the read-loop and block over-read, (2.1) the IC formula, (2.2) the
+`fscanf` partial-match bug, (2.4) stepping verification, (3) the
+dead/misleading-code cleanup (including the `best_steckerbrett` out-of-bounds
+`memcpy`), and (7) the test suite + CI are now done. The `-Wall` build is
+warning-free and the suite has 21 checks. Remaining items — the unused `total`
+(§2.3), the four duplicated readers and other §4–6 polish (legacy `index()`,
+`char` returns), and eventually the global-state refactor that would unlock
+threading (§5).
