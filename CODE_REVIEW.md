@@ -95,10 +95,12 @@ static arrays, but uninitialized) and wrote junk into `num_plaintext[]` past
 `textlength`. Results were unaffected (scoring stops at `textlength - k`), but it
 was undefined-ish and a trap for anyone reading the full `num_plaintext`.
 
-**Resolved.** The block loop now runs over complete 16-byte blocks
-(`textlength & ~15`) and a scalar remainder loop handles the tail, so nothing
-past `textlength` is touched. Output is unchanged (the 25-letter `BDZGO` KAT
-already exercises a non-multiple-of-16 length).
+**Resolved.** Originally fixed by running the block loop over complete 16-byte
+blocks (`textlength & ~15`) with a scalar remainder loop for the tail. The blocked
+decoder has since been **removed entirely** — the scorers now fuse a scalar
+decode into their loop (see §6), which has no block remainder to mishandle.
+Output is unchanged (the 25-letter `BDZGO` KAT exercises a non-multiple-of-16
+length).
 
 ---
 
@@ -230,8 +232,9 @@ working path:
   26-byte `steckerbrett`, an out-of-bounds read the compiler warned about.
   ✅ **Removed** (clears the only `-Wall` warning).
 - 🟡 **`map()`** was unused and its parameter was named `map`, shadowing the
-  function name. ✅ **Removed.** (`map16_direct`/`map16_step` are kept — they are
-  used inside `decode_num`.)
+  function name. ✅ **Removed.** (`map16_direct`/`map16_step` were later removed
+  too, when the blocked `decode_num` was dropped in favour of the fused scalar
+  scorers — see §6.)
 - 🟡 **`opt_threads`** and **`opt_logfilename`** were declared and initialized but
   never used (no `-T`/threading and no logging despite the names). ✅ **Removed.**
   (The "load triplet scores …" comment inside `quadgram_score_decode` still
@@ -297,11 +300,11 @@ instrumentation rather than deleted.
 - 🟡 **Global mutable state — per-search state now encapsulated; threading
   still pending.** The per-search *mutable* state (`walzenlage`,
   `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`, and the big working
-  tables `subst_array`, `mapping`, `num_plaintext`, plus the candidate
-  `plaintext`) has been gathered into a single `struct machine` that is threaded
-  through the search/scoring functions (`init_*`, `rotor_*`, `subst_rotors`,
-  `precompute`, `setup_mapping`, `decode`/`decode_num`, the `*_score_decode`
-  scorers, `score_iter`, `hillclimb`, `bruteforce`, `showconfig`).
+  tables `subst_array`, `mapping`, plus the candidate `plaintext`) has been
+  gathered into a single `struct machine` that is threaded through the
+  search/scoring functions (`init_*`, `rotor_*`, `subst_rotors`, `precompute`,
+  `setup_mapping`, `decode`, the `*_score_decode` scorers, `score_iter`,
+  `hillclimb`, `bruteforce`, `showconfig`).
   `main()` owns one heap-allocated instance. The read-only data (the wiring
   tables built by `init()`, the n-gram statistics, and the `ciphertext` /
   `num_ciphertext` / `textlength` input) is intentionally left shared — it is
@@ -373,15 +376,18 @@ Remaining opportunities:
   start positions.
 - 🟢 **Quadgram table is ~457 KB×8 = 3.6 MB of `double`s** (`[26]^4 * 8`),
   plus `subst_array` (~457 KB) and `mapping` (~26 KB). The n-gram tables stay
-  global; `subst_array`/`mapping`/`num_plaintext` are now per-`machine`
-  (`subst_array` heap-allocated, the rest in the struct). Using `float` for
-  n-gram scores would halve the largest table and improve cache behavior in the
-  inner loop with negligible accuracy loss.
-- 🟢 **`decode_num()` "scalar vs blocked"** ✅ resolved. The 16-byte-blocked
-  variant (gated behind `#if 0`) was never shown to beat the scalar loop and
-  measured *slower* under both g++ and clang once the state moved into
-  `struct machine`; it (and the `map16_*`/`showit` helpers and `blocksize`) was
-  removed in favour of a single scalar loop over `__restrict` base pointers.
+  global; `subst_array`/`mapping` are now per-`machine` (`subst_array`
+  heap-allocated, `mapping` in the struct). Using `float` for n-gram scores would
+  halve the largest table and improve cache behavior in the inner loop with
+  negligible accuracy loss.
+- 🟢 **Decode/score is now a single fused pass** ✅. The n-gram scorers decode
+  each character once (`decode_at`) into a sliding window that indexes the n-gram
+  table, instead of the old `decode_num` → `num_plaintext[]` scratch array →
+  re-read two-pass. This removed `decode_num`, the `num_plaintext` member, and
+  (earlier) the never-justified 16-byte-blocked decode (`map16_*`/`showit`/
+  `blocksize`). Fusion is byte-identical to the two-pass version and ~3% faster
+  on clang *search* and ~14% faster on clang *hill-climb* (less memory traffic;
+  parity on g++).
 - 🟡 **Struct encapsulation has an architecture-dependent hot-loop cost** worth
   remembering. Collapsing the separate global arrays into `struct machine`, done
   naively, cost ~20–60% under clang/Apple-silicon and ~10–14% on the g++ search

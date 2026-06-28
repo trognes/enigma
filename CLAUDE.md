@@ -130,8 +130,9 @@ A single pass through `main()`:
    - For each ring/start combination, `setup_mapping()` steps the rotors over
      the message length and records, per character position, the full 26-letter
      substitution (`mapping[pos][letter]`), folding the stepping schedule in.
-   - `decode()` / `decode_num()` apply plugboard → mapping → plugboard to
-     produce candidate plaintext; `score_iter()` scores it.
+   - `decode()` applies plugboard → mapping → plugboard to produce the candidate
+     plaintext; `score_iter()` scores it (the n-gram scorers fuse the same decode
+     into their loop rather than materialising the decoded text).
    - With `-c`, `hillclimb()` greedily swaps plugboard pairs to maximize score
      before recording the result.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file.
@@ -148,18 +149,21 @@ A single pass through `main()`:
 - The full substitution is plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
   plugboard. `subst_rotors()` is the rotor-stack-and-reflector core; the hot path
   replaces it with precomputed `subst_array` / `mapping` lookups wrapped in two
-  plugboard lookups (`step_mapped` / `decode` / `decode_num`).
+  plugboard lookups (`decode_at`, shared by `decode()` and the fused scorers).
 
 ### Performance notes
 
-The hill-climb decode-and-score loop (`quadgram_score_decode` →
-`decode_num`) is where ~99% of runtime is spent (per the source comment).
-That is why the rotor stack is precomputed into `subst_array` and folded into a
-per-position `mapping` so the inner loop is just two plugboard lookups plus a
-table lookup per character (`decode`/`decode_num` are scalar loops over
-`__restrict` base pointers — an earlier 16-byte-blocked variant was never shown
-to win and measured slower once the state moved into `struct machine`, so it was
-removed).
+The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
+spent when hill-climbing. That is why the rotor stack is precomputed into
+`subst_array` and folded into a per-position `mapping` so each character costs
+just two plugboard lookups plus a table lookup (`decode_at`). The four scorers
+**fuse decoding into the score loop**: each character is decoded once into a
+small sliding window of the last *n* decoded letters that indexes the n-gram
+table, so the decoded message is never written to / read back from a scratch
+array (this is faster than the previous `decode_num` → `num_plaintext` → score
+two-pass on both compilers, markedly so on clang/ARM). An even earlier
+16-byte-blocked decode was never shown to win and was removed too; the scalar
+fused loop is the current form.
 
 > **Struct layout matters for the hot loop.** When the per-search state moved
 > into `struct machine`, collapsing the formerly separate global arrays into one
@@ -168,10 +172,12 @@ removed).
 > naively). Three things keep it in check and must be preserved: (1) the 457 KB
 > `subst_array` is **heap-allocated separately** and reached through its own
 > pointer, so it never pushes the hot per-character tables (`mapping`,
-> `num_plaintext`, `steckerbrett`) out to large struct offsets (large immediate
-> offsets are expensive on ARM); (2) the decode/score loops hoist the member
-> base pointers into `__restrict` locals so the compiler keeps the no-alias
-> guarantees the separate globals used to give; (3) `setup_mapping` holds the
+> `steckerbrett`) out to large struct offsets (large immediate offsets are
+> expensive on ARM); (2) the decode/score loops hoist the member base pointers
+> into `__restrict` locals so the compiler keeps the no-alias guarantees the
+> separate globals used to give, and the scorers fuse the decode so no
+> `num_plaintext` scratch array round-trips through memory; (3) `setup_mapping`
+> holds the
 > rotor positions (`grundstellung` etc.) in locals across its per-character loop
 > — stepping them through the struct member each character could not be proven
 > not to alias the `mapping[]` store and cost ~10–14% on the search path (worst
@@ -189,8 +195,8 @@ removed).
   which `make` requires.
 - **Single translation unit; per-search state in `struct machine`.** The
   mutable per-search state — machine settings (`walzenlage`, `grundstellung`,
-  `ringstellung`, `ukw`, `steckerbrett`) and the working buffers
-  (`subst_array`, `mapping`, `num_plaintext`, the candidate `plaintext`) — is
+  `ringstellung`, `ukw`, `steckerbrett`) and the working buffers (`subst_array`,
+  `mapping`, the candidate `plaintext`) — is
   bundled into `struct machine`, threaded through the search/scoring functions as
   `machine & m`; `main()` owns one heap instance. This makes the search
   reentrant (the precondition for multi-threading — see `CODE_REVIEW.md` §5/§6).

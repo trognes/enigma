@@ -107,7 +107,6 @@ struct machine
 {
   unsigned char steckerbrett[asize];    /* plugboard permutation */
   unsigned char mapping[maxlen][asize]; /* per-position substitution */
-  unsigned char num_plaintext[maxlen];  /* decode scratch */
   char plaintext[maxlen+1];             /* candidate / result */
 
   int ukw;                              /* reflector index */
@@ -366,9 +365,17 @@ void setup_mapping(machine & m)
   m.grundstellung[2] = static_cast<unsigned char>(g2);
 }
 
-inline int step_mapped(machine & m, int i, int x)
+/* Decode one ciphertext position: plugboard -> per-position rotor mapping ->
+   plugboard. A tiny inline so decode() and the scorers share one copy of the
+   formula. The scorers fuse it into their loops (see below) so the decoded text
+   is never materialised in a scratch array. The base pointers are __restrict
+   locals the callers have already hoisted out of struct machine. */
+inline int decode_at(const unsigned char * __restrict steck,
+                     const unsigned char * __restrict map,
+                     const unsigned char * __restrict ct,
+                     int i)
 {
-  return m.steckerbrett[m.mapping[i][m.steckerbrett[x]]];
+  return steck[map[asize * static_cast<size_t>(i) + steck[ct[i]]]];
 }
 
 inline void decode(machine & m)
@@ -378,85 +385,93 @@ inline void decode(machine & m)
   const unsigned char * __restrict map = & m.mapping[0][0];
   char * __restrict pt = m.plaintext;
   for (int i = 0; i < textlength; i++)
-    pt[i] = num2char(steck[map[asize*i + steck[ct[i]]]]);
+    pt[i] = num2char(decode_at(steck, map, ct, i));
   pt[textlength] = 0;
 }
 
-inline void decode_num(machine & m)
-{
-  /* Hoist the per-array base pointers into __restrict locals: once the working
-     tables live in one struct, the compiler must otherwise assume the
-     unsigned-char members may alias, which costs reloads of the plugboard and
-     blocks vectorisation. The no-alias locals restore the codegen the separate
-     globals used to get. (A previous 16-byte-blocked variant -- never shown to
-     beat this scalar loop -- measured slower under both g++ and clang once the
-     state moved into struct machine, so it was removed.) */
-  const unsigned char * __restrict ct = num_ciphertext;
-  const unsigned char * __restrict steck = m.steckerbrett;
-  const unsigned char * __restrict map = & m.mapping[0][0];
-  unsigned char * __restrict np = m.num_plaintext;
-
-  for (int i = 0; i < textlength; i++)
-    np[i] = steck[map[asize*i + steck[ct[i]]]];
-}
+/* The four n-gram scorers fuse decoding into the score loop: each character is
+   decoded once, on the fly, into a small sliding window of the last n decoded
+   letters that indexes the n-gram table -- so the decoded message is never
+   written to and re-read from a scratch array. The quadgram scorer is ~99% of
+   hill-climb runtime. The short-text guards (textlength < n) keep the n-1
+   pre-roll decodes in bounds and reproduce the old `i < textlength-(n-1)` loops
+   (which simply ran zero times for shorter input). */
 
 double quadgram_score_decode(machine & m)
 {
-  /* This decode and scoring function uses 99% of the computation time
-     when hill-climbing. */
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * __restrict map = & m.mapping[0][0];
 
-  decode_num(m);
-
-  /*
-
-  load triplet scores
-    load 16 bytes at adr
-    load 16 bytes at adr+1
-    load 16 bytes at adr+2
-    unpack low and high of each of these
-    shift 0, 5 or 10 bits left
-    add/or together
-    gather from triplet score table
-
-  */
-
-  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
-  for (int i=0; i<textlength-3; i++)
-    score += quadgrams[np[i]][np[i+1]][np[i+2]][np[i+3]];
+  if (textlength < 4)
+    return score;
+
+  int a = decode_at(steck, map, ct, 0);
+  int b = decode_at(steck, map, ct, 1);
+  int c = decode_at(steck, map, ct, 2);
+  for (int i = 3; i < textlength; i++)
+    {
+      int d = decode_at(steck, map, ct, i);
+      score += quadgrams[a][b][c][d];
+      a = b;
+      b = c;
+      c = d;
+    }
   return score;
 }
 
 double trigram_score_decode(machine & m)
 {
-  decode_num(m);
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * __restrict map = & m.mapping[0][0];
 
-  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
-  for (int i=0; i<textlength-2; i++)
-    score += trigrams[np[i]][np[i+1]][np[i+2]];
+  if (textlength < 3)
+    return score;
+
+  int a = decode_at(steck, map, ct, 0);
+  int b = decode_at(steck, map, ct, 1);
+  for (int i = 2; i < textlength; i++)
+    {
+      int c = decode_at(steck, map, ct, i);
+      score += trigrams[a][b][c];
+      a = b;
+      b = c;
+    }
   return score;
 }
 
 double bigram_score_decode(machine & m)
 {
-  decode_num(m);
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * __restrict map = & m.mapping[0][0];
 
-  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
-  for (int i=0; i<textlength-1; i++)
-    score += bigrams[np[i]][np[i+1]];
+  if (textlength < 2)
+    return score;
+
+  int a = decode_at(steck, map, ct, 0);
+  for (int i = 1; i < textlength; i++)
+    {
+      int b = decode_at(steck, map, ct, i);
+      score += bigrams[a][b];
+      a = b;
+    }
   return score;
 }
 
 double monogram_score_decode(machine & m)
 {
-  decode_num(m);
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * __restrict map = & m.mapping[0][0];
 
-  const unsigned char * __restrict np = m.num_plaintext;
   double score = 0.0;
   for (int i = 0; i < textlength; i++)
-    score += monograms[np[i]];
+    score += monograms[decode_at(steck, map, ct, i)];
   return score;
 }
 
@@ -470,7 +485,7 @@ double ic_score_decode(machine & m)
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * __restrict map = & m.mapping[0][0];
   for (int i = 0; i < textlength; i++)
-    freq[steck[map[asize*i + steck[ct[i]]]]]++;
+    freq[decode_at(steck, map, ct, i)]++;
 
   double score = 0.0;
   for(int j=0; j<asize; j++)
