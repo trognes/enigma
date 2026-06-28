@@ -69,7 +69,10 @@ if [ -n "${BASE:-}" ]; then
     echo "error: could not create worktree for BASE='$BASE'" >&2
     exit 1
   fi
-  if ! make -C "$base_dir" >/dev/null 2>&1; then
+  # Build BASE with the same compiler as the working-tree binary, so the A/B
+  # compares like for like. `make bench CXX=clang++ BASE=...` exports CXX into
+  # this script's environment; otherwise fall back to the Makefile default.
+  if ! make -C "$base_dir" CXX="${CXX:-g++}" >/dev/null 2>&1; then
     echo "error: could not build BASE='$BASE'" >&2
     exit 1
   fi

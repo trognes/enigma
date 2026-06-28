@@ -130,8 +130,9 @@ A single pass through `main()`:
    - For each ring/start combination, `setup_mapping()` steps the rotors over
      the message length and records, per character position, the full 26-letter
      substitution (`mapping[pos][letter]`), folding the stepping schedule in.
-   - `decode()` / `decode_num()` apply plugboard → mapping → plugboard to
-     produce candidate plaintext; `score_iter()` scores it.
+   - `decode()` applies plugboard → mapping → plugboard to produce the candidate
+     plaintext; `score_iter()` scores it (the n-gram scorers fuse the same decode
+     into their loop rather than materialising the decoded text).
    - With `-c`, `hillclimb()` greedily swaps plugboard pairs to maximize score
      before recording the result.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file.
@@ -141,19 +142,49 @@ A single pass through `main()`:
 - `char2num`/`num2char` map A–Z ↔ 0–25.
 - `rotor_l` / `rotor_r` apply a single rotor forward/reverse with the
   `grundstellung - ringstellung` offset.
-- `step_rotors()` implements the stepping schedule including the Enigma
-  double-stepping anomaly (checks the middle/right notches before advancing).
-- `substitute()` = plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
-  plugboard. The hot path replaces the rotor stack with precomputed
-  `subst_array` / `mapping` lookups.
+- The rotor stepping schedule — including the Enigma double-stepping anomaly
+  (the middle rotor advances on its own notch as well as the right rotor's
+  carry) — is implemented inline in `setup_mapping()`, which holds the rotor
+  positions in locals across the per-character loop (see the performance note).
+- The full substitution is plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
+  plugboard. `subst_rotors()` is the rotor-stack-and-reflector core; the hot path
+  replaces it with precomputed `subst_array` / `mapping` lookups wrapped in two
+  plugboard lookups (`decode_at`, shared by `decode()` and the fused scorers).
 
 ### Performance notes
 
-The hill-climb decode-and-score loop (`quadgram_score_decode` →
-`decode_num`) is where ~99% of runtime is spent (per the source comment).
-That is why the rotor stack is precomputed into `subst_array` and folded into a
-per-position `mapping` so the inner loop is just two plugboard lookups plus a
-table lookup per character. `decode_num` processes the text in 16-byte blocks.
+The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
+spent when hill-climbing. That is why the rotor stack is precomputed into
+`subst_array` and folded into a per-position `mapping` so each character costs
+just two plugboard lookups plus a table lookup (`decode_at`). The four scorers
+**fuse decoding into the score loop**: each character is decoded once into a
+small sliding window of the last *n* decoded letters that indexes the n-gram
+table, so the decoded message is never written to / read back from a scratch
+array (this is faster than the previous `decode_num` → `num_plaintext` → score
+two-pass on both compilers, markedly so on clang/ARM). An even earlier
+16-byte-blocked decode was never shown to win and was removed too; the scalar
+fused loop is the current form.
+
+> **Struct layout matters for the hot loop.** When the per-search state moved
+> into `struct machine`, collapsing the formerly separate global arrays into one
+> object cost real throughput, and the size of the hit is compiler/arch
+> dependent (negligible for g++, but ~20–60% under clang/Apple-silicon if done
+> naively). Three things keep it in check and must be preserved: (1) the 457 KB
+> `subst_array` is **heap-allocated separately** and reached through its own
+> pointer, so it never pushes the hot per-character tables (`mapping`,
+> `steckerbrett`) out to large struct offsets (large immediate offsets are
+> expensive on ARM); (2) the decode/score loops hoist the member base pointers
+> into `__restrict` locals so the compiler keeps the no-alias guarantees the
+> separate globals used to give, and the scorers fuse the decode so no
+> `num_plaintext` scratch array round-trips through memory; (3) `setup_mapping`
+> holds the
+> rotor positions (`grundstellung` etc.) in locals across its per-character loop
+> — stepping them through the struct member each character could not be proven
+> not to alias the `mapping[]` store and cost ~10–14% on the search path (worst
+> on ARM). With all three, both paths are at parity vs the pre-struct baseline on
+> g++ and clang. Always re-check `make bench BASE=<ref>` under **both** g++ and
+> clang (`make bench CXX=clang++ BASE=<ref>`) after touching the hot path or the
+> struct.
 
 ## Conventions & gotchas for contributors
 
@@ -162,13 +193,18 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
   (e.g. wrapped parameter lists or `if` conditions) are aligned under the
   opening `(`. The only tabs in the repo are the recipe lines in the `Makefile`,
   which `make` requires.
-- **Single translation unit, heavy global state.** Machine settings
-  (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`),
-  buffers (`ciphertext`, `plaintext`, `num_*`, `mapping`, `subst_array`), and
-  the loaded n-gram tables are all file-scope globals. The search/scoring
-  functions read these globals directly (the redundant `textlength`/`ciphertext`/
-  `plaintext` parameters that used to shadow them have been removed; `-Wshadow`
-  is on to keep it that way).
+- **Single translation unit; per-search state in `struct machine`.** The
+  mutable per-search state — machine settings (`walzenlage`, `grundstellung`,
+  `ringstellung`, `ukw`, `steckerbrett`) and the working buffers (`subst_array`,
+  `mapping`, the candidate `plaintext`) — is
+  bundled into `struct machine`, threaded through the search/scoring functions as
+  `machine & m`; `main()` owns one heap instance. This makes the search
+  reentrant (the precondition for multi-threading — see `CODE_REVIEW.md` §5/§6).
+  The read-only data stays file-scope global and shared: the wiring tables
+  (`rotor_fwd/rev`, `notch`, `reflector`) built by `init()`, the n-gram tables,
+  and the `ciphertext` / `num_ciphertext` / `textlength` input. (`-Wshadow` is on;
+  the redundant `textlength`/`ciphertext`/`plaintext` parameters that used to
+  shadow the globals were removed earlier.)
 - Debug instrumentation is intentionally retained: `showit`, `showconfig`,
   `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
   compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
@@ -192,8 +228,10 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 A detailed audit lives in `CODE_REVIEW.md`. Most findings have been fixed —
 the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
 overflow, the `fscanf`/read-handling bugs, dead code, the C-style
-modernization, and the `textlength` global/parameter shadowing — and the build
-is warning-free under
+modernization, the `textlength` global/parameter shadowing, and the
+encapsulation of the per-search state into `struct machine` (the search is now
+reentrant) — and the build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`. The main item still
-open is the larger global-state refactor that would unlock multithreading. Read
+open is **multi-threading** the search over reflector × wheel-order (now
+unblocked by `struct machine`, and guarded by `make bench`). Read
 `CODE_REVIEW.md` before changing the search or scoring code.

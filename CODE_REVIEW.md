@@ -95,10 +95,12 @@ static arrays, but uninitialized) and wrote junk into `num_plaintext[]` past
 `textlength`. Results were unaffected (scoring stops at `textlength - k`), but it
 was undefined-ish and a trap for anyone reading the full `num_plaintext`.
 
-**Resolved.** The block loop now runs over complete 16-byte blocks
-(`textlength & ~15`) and a scalar remainder loop handles the tail, so nothing
-past `textlength` is touched. Output is unchanged (the 25-letter `BDZGO` KAT
-already exercises a non-multiple-of-16 length).
+**Resolved.** Originally fixed by running the block loop over complete 16-byte
+blocks (`textlength & ~15`) with a scalar remainder loop for the tail. The blocked
+decoder has since been **removed entirely** — the scorers now fuse a scalar
+decode into their loop (see §6), which has no block remainder to mishandle.
+Output is unchanged (the 25-letter `BDZGO` KAT exercises a non-multiple-of-16
+length).
 
 ---
 
@@ -177,7 +179,8 @@ comparisons, so it was dropped rather than completed.)
 
 ### 2.4 🟢 Stepping model verified against a reference — ✅ ADDRESSED
 
-`step_rotors()` implements the double-stepping anomaly:
+The rotor stepping (inlined in `setup_mapping()`) implements the double-stepping
+anomaly:
 
 ```c
 if (notch[middle]) { step left; step middle; }     // double step
@@ -229,8 +232,9 @@ working path:
   26-byte `steckerbrett`, an out-of-bounds read the compiler warned about.
   ✅ **Removed** (clears the only `-Wall` warning).
 - 🟡 **`map()`** was unused and its parameter was named `map`, shadowing the
-  function name. ✅ **Removed.** (`map16_direct`/`map16_step` are kept — they are
-  used inside `decode_num`.)
+  function name. ✅ **Removed.** (`map16_direct`/`map16_step` were later removed
+  too, when the blocked `decode_num` was dropped in favour of the fused scalar
+  scorers — see §6.)
 - 🟡 **`opt_threads`** and **`opt_logfilename`** were declared and initialized but
   never used (no `-T`/threading and no logging despite the names). ✅ **Removed.**
   (The "load triplet scores …" comment inside `quadgram_score_decode` still
@@ -293,15 +297,27 @@ instrumentation rather than deleted.
 
 ## 5. Structural / design issues
 
-- 🟠 **Pervasive global mutable state.** Machine configuration
-  (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`), the
-  big lookup tables (`subst_array`, `mapping`), I/O buffers, and the n-gram
-  tables are all file-scope globals. Consequences: the code is not reentrant or
-  thread-safe (so the dangling `opt_threads` could never have worked without a
-  rewrite), functions silently depend on global setup order
-  (`precompute()` clobbers `ringstellung`/`grundstellung`, relying on
-  `bruteforce` to reset them), and unit testing any piece in isolation is
-  impractical.
+- 🟡 **Global mutable state — per-search state now encapsulated; threading
+  still pending.** The per-search *mutable* state (`walzenlage`,
+  `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`, and the big working
+  tables `subst_array`, `mapping`, plus the candidate `plaintext`) has been
+  gathered into a single `struct machine` that is threaded through the
+  search/scoring functions (`init_*`, `rotor_*`, `subst_rotors`, `precompute`,
+  `setup_mapping`, `decode`, the `*_score_decode` scorers, `score_iter`,
+  `hillclimb`, `bruteforce`, `showconfig`).
+  `main()` owns one heap-allocated instance. The read-only data (the wiring
+  tables built by `init()`, the n-gram statistics, and the `ciphertext` /
+  `num_ciphertext` / `textlength` input) is intentionally left shared — it is
+  safe to read from many threads. This makes the search **reentrant**: a worker
+  thread can own its own `machine`. Several dead/obsolete functions were removed
+  in the process (`step`, `substitute`, `step_precomputed`,
+  `init_steckerbrett_direct`, and the 16-byte-blocked decode helpers). **Still
+  open:** the actual multi-threading over the reflector × wheel-order loop (each
+  worker its own `machine`, merge the per-worker best). Verified perf-neutral
+  vs the pre-struct baseline on **both** g++ and clang via
+  `make bench BASE=<pre-refactor>` — but only after three layout/codegen
+  mitigations (see §6): the naive encapsulation cost ~20–60% on clang/ARM and
+  ~10–14% on the g++ search path.
 - 🟢 **`textlength` global/parameter shadowing** ✅ resolved. Nearly every
   function used to take an `int textlength` parameter while a file-scope global
   `textlength` also existed; every call site already passed exactly that global
@@ -324,7 +340,7 @@ instrumentation rather than deleted.
 - 🟢 **Magic numbers** ✅ named. Semantic ones: the scoring models are an `enum`
   (`SCORE_IC` … `SCORE_QUAD`); the Norway table offsets are
   `norway_reflector_index` / `norway_rotor_base` (used by both `init_walzen` and
-  `showconfig`); the decode block width is `blocksize`; and the search/hill-climb
+  `showconfig`); and the search/hill-climb
   "−infinity" sentinel is a single `score_min` (hill-climb was converted to a
   `do`/`while` so it no longer needs two priming values). The mechanical sweep is
   also done: the pervasive literal `26` is now `asize`, wheel-count `3` is
@@ -348,21 +364,43 @@ lookup, 16-byte blocking).
 
 Remaining opportunities:
 
-- 🟡 **No parallelism.** `bruteforce()` is embarrassingly parallel over
-  reflector × wheel-order (and ring/start). The scaffolding (`opt_threads`)
-  hints this was intended but the global state blocks it. Encapsulating machine
-  state into a struct would unlock multi-threading for a near-linear speedup.
+- 🟡 **No parallelism (now unblocked).** `bruteforce()` is embarrassingly
+  parallel over reflector × wheel-order (and ring/start). The per-search state is
+  now encapsulated in `struct machine` (see §5), so the remaining work is to give
+  each worker thread its own `machine`, partition the reflector × wheel-order
+  loop, and merge the per-worker best — a near-linear speedup. Guard it with
+  `make bench BASE=<ref>`.
 - 🟡 **`setup_mapping()` rebuilds the full per-position mapping for every
   ring/start combination**, including re-stepping the rotors from scratch. For
   long messages this is a large repeated cost; some of it could be shared across
   start positions.
 - 🟢 **Quadgram table is ~457 KB×8 = 3.6 MB of `double`s** (`[26]^4 * 8`),
-  plus `subst_array` (~457 KB) and `mapping` (~266 KB) as zero-initialized BSS.
-  Using `float` for n-gram scores would halve the largest table and improve
-  cache behavior in the inner loop with negligible accuracy loss.
-- 🟢 The `decode_num()` "scalar vs blocked" choice is locked at compile time via
-  `#if 0`; there is no measured justification in-tree that the 16-byte blocking
-  actually wins for the relevant message lengths.
+  plus `subst_array` (~457 KB) and `mapping` (~26 KB). The n-gram tables stay
+  global; `subst_array`/`mapping` are now per-`machine` (`subst_array`
+  heap-allocated, `mapping` in the struct). Using `float` for n-gram scores would
+  halve the largest table and improve cache behavior in the inner loop with
+  negligible accuracy loss.
+- 🟢 **Decode/score is now a single fused pass** ✅. The n-gram scorers decode
+  each character once (`decode_at`) into a sliding window that indexes the n-gram
+  table, instead of the old `decode_num` → `num_plaintext[]` scratch array →
+  re-read two-pass. This removed `decode_num`, the `num_plaintext` member, and
+  (earlier) the never-justified 16-byte-blocked decode (`map16_*`/`showit`/
+  `blocksize`). Fusion is byte-identical to the two-pass version and ~3% faster
+  on clang *search* and ~14% faster on clang *hill-climb* (less memory traffic;
+  parity on g++).
+- 🟡 **Struct encapsulation has an architecture-dependent hot-loop cost** worth
+  remembering. Collapsing the separate global arrays into `struct machine`, done
+  naively, cost ~20–60% under clang/Apple-silicon and ~10–14% on the g++ search
+  path (large in-struct offsets past the 457 KB `subst_array`, lost no-alias
+  assumptions, and a per-character read/modify/write of the rotor positions
+  through the struct in the stepping loop). Three mitigations bring **both
+  compilers back to parity** vs the pre-struct baseline and must be preserved:
+  (1) `subst_array` is heap-allocated through its own pointer so the hot
+  per-character tables keep small struct offsets; (2) the decode/score loops
+  hoist member base pointers into `__restrict` locals; (3) `setup_mapping` holds
+  the rotor positions in locals across its loop, writing back once. Always A/B
+  with **both** compilers (`make bench BASE=<ref>` and
+  `make bench CXX=clang++ BASE=<ref>`).
 
 ---
 
@@ -416,10 +454,10 @@ Remaining opportunities:
 | 1.2 | 🟢 | ~~`-l` can overflow `filename[100]`; no language allow-list~~ ✅ fixed (snprintf + `-l` validation) |
 | 2.2 | 🟢 | ~~`fscanf` partial matches use uninitialized variables~~ ✅ fixed (require full field count) |
 | 3 | 🟢 | ~~Dead/misleading code (`all_subst_score` = random, OOB `memcpy`, etc.)~~ ✅ vestigial/buggy code removed; debug kept |
-| 5 | 🟠 | Pervasive global state blocks testing and threading |
+| 5 | 🟡 | ~~Pervasive global *mutable* state blocks threading~~ ✅ per-search state encapsulated in `struct machine` (reentrant); multi-threading itself still pending |
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
-| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing~~ ✅ fixed; no parallelism remains |
+| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing; global mutable state~~ ✅ fixed; multi-threading remains |
 | 2.5/7 | 🟢 | ~~Empty-input div-by-zero~~ ✅ fixed; relative data paths; weak Makefile |
 
 **Progress:** nearly every finding is resolved — (1.1) the stack overflow,
@@ -430,7 +468,9 @@ dead/misleading-code cleanup, the §4 modernization (legacy `index()` → `strch
 `int` rotor returns, `const`-correct options, stray includes), the four n-gram
 readers unified into one and the dead `char*` scorer family removed (§5/§6),
 the `textlength` global/parameter shadowing removed and `-Wshadow` enabled (§5),
-and (7) the test suite + CI. The build is warning-free under
+the per-search state encapsulated into `struct machine` (reentrant; four dead
+functions removed), and (7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
-the suite has 63 checks. The main remaining item is the larger global-state
-refactor that would unlock multithreading (§5).
+the suite has 63 checks. The main remaining item is **multi-threading** the
+search over reflector × wheel-order — now unblocked by the `struct machine`
+encapsulation, and guarded by `make bench` (§5/§6).
