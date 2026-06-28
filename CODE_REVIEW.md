@@ -340,7 +340,7 @@ instrumentation rather than deleted.
 - 🟢 **Magic numbers** ✅ named. Semantic ones: the scoring models are an `enum`
   (`SCORE_IC` … `SCORE_QUAD`); the Norway table offsets are
   `norway_reflector_index` / `norway_rotor_base` (used by both `init_walzen` and
-  `showconfig`); the decode block width is `blocksize`; and the search/hill-climb
+  `showconfig`); and the search/hill-climb
   "−infinity" sentinel is a single `score_min` (hill-climb was converted to a
   `do`/`while` so it no longer needs two priming values). The mechanical sweep is
   also done: the pervasive literal `26` is now `asize`, wheel-count `3` is
