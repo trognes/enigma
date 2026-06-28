@@ -265,6 +265,24 @@ working path:
     Norway one, and print the 4th wheel in `showconfig`/`show_settings`.
   - **Testing:** anchor to a published M4 known-answer vector (e.g. a U-boat
     message), cross-checked against an independent reference, plus a round-trip.
+  - **Memory / time cost (analysed).** The effective-reflector design leaves the
+    hot engine untouched, so each precomputed table stays `26⁴ = 456 976 B`
+    (≈0.457 MB) — and `struct machine` grows only by the 4th wheel position/ring
+    plus a 26-byte effective-reflector buffer (negligible). What grows is the
+    *number* of tables: wildcarding the thin reflector (×2), the Greek wheel (×2)
+    and the Greek position−ring **offset** (×26 — only the offset matters, the same
+    folding `subst_array` uses for start−ring, so 26 and not 676) adds up to ×104
+    distinct effective reflectors. Whether that ×104 lands on memory or time is a
+    design choice:
+    - *Precompute-everything-up-front* (today's model, one `new`-ed block guarded
+      at 8 GB): peak memory scales by the ×104. Fixed wheels + full Greek wildcard
+      is ~48 MB (fine); also wildcarding the wheel order (336 orders of I–VIII)
+      is `336 × 104 × 0.457 MB ≈ 16 GB`, which trips the 8 GB guard and aborts.
+    - *Greek config as an outer loop* (recommended — re-run `precompute()` per
+      Greek setting, reusing the buffer): peak memory stays essentially flat vs
+      today (a full wheel-order search is ~82 MB today and stays ~82 MB), and the
+      ×104 becomes recomputation **time** instead. This is the real reason to land
+      threading first — to absorb the time cost, not a memory cost.
   Estimated ~half-a-day to a day of self-contained work; revisit after threading.
 - 🟢 Numerous `#if 0` / `#if 1` blocks (`showsteckerbrett`, debug prints,
   `SHOWHILLCLIMB`) scattered through the search and hill-climb code.
