@@ -242,10 +242,30 @@ working path:
   then removed.)
 - 🟡 **`showit()`** is an entire function body wrapped in `#if 0` — a no-op.
   **Intentionally kept** as debug instrumentation (see note below).
-- 🟡 **Unreachable tables:** M4 thin reflectors (indices 4–5) and Beta/Gamma
-  rotors (indices 13–14) exist in the wiring tables but cannot be selected via
-  any CLI option. **Kept** (reserved for a future M4/4-rotor mode; the index
-  conventions are documented in `CLAUDE.md`). Wire them up or remove them later.
+- 🟡 **Unreachable tables → planned M4 (4-rotor naval) mode.** The M4 thin
+  reflectors (indices 4–5, UKW-b/c) and Beta/Gamma rotors (indices 13–14) exist
+  in the wiring tables but cannot yet be selected. They are reserved for an M4
+  mode, deferred for now but with the design agreed:
+  - **Modelling (cheap — leaves the hot path untouched):** the M4's 4th "Greek"
+    wheel (Beta/Gamma) is *static* — it does not step (note its empty notch), so
+    it folds into the reflector. Build a composite **effective reflector**
+    `greek ∘ thin ∘ greek⁻¹` (still an involution) from the chosen Greek wheel /
+    position / ring and thin reflector, and use it at the single
+    `reflector[m.ukw][x]` site in `subst_rotors`. The machine therefore stays a
+    *3-stepping-rotor* engine (`wheels` stays 3); `subst_array`, `setup_mapping`,
+    the stepping/double-step and the fused scorers are all unchanged.
+  - **Search:** add outer loops over thin reflector (×2), Greek wheel (×2) and
+    Greek position (×26, plus optional ring), recomputing the effective reflector
+    and re-running `precompute()` per Greek config. The Greek position being
+    wildcarded multiplies the 3-rotor search space by 26 — a strong motivator to
+    land threading first.
+  - **CLI (agreed):** an `-4` mode flag (mirroring `-n` for Norway); in M4 mode
+    `-u` selects the thin reflector (`b`/`c`/`.`) and `-w`/`-r`/`-g` take **four**
+    characters with the Greek wheel first. Add a validation branch alongside the
+    Norway one, and print the 4th wheel in `showconfig`/`show_settings`.
+  - **Testing:** anchor to a published M4 known-answer vector (e.g. a U-boat
+    message), cross-checked against an independent reference, plus a round-trip.
+  Estimated ~half-a-day to a day of self-contained work; revisit after threading.
 - 🟢 Numerous `#if 0` / `#if 1` blocks (`showsteckerbrett`, debug prints,
   `SHOWHILLCLIMB`) scattered through the search and hill-climb code.
   **Intentionally kept** as debug instrumentation.
@@ -374,12 +394,14 @@ Remaining opportunities:
   ring/start combination**, including re-stepping the rotors from scratch. For
   long messages this is a large repeated cost; some of it could be shared across
   start positions.
-- 🟢 **Quadgram table is ~457 KB×8 = 3.6 MB of `double`s** (`[26]^4 * 8`),
-  plus `subst_array` (~457 KB) and `mapping` (~26 KB). The n-gram tables stay
-  global; `subst_array`/`mapping` are now per-`machine` (`subst_array`
-  heap-allocated, `mapping` in the struct). Using `float` for n-gram scores would
-  halve the largest table and improve cache behavior in the inner loop with
-  negligible accuracy loss.
+- 🟢 **n-gram tables are now `float`** ✅. The quadgram table was ~457 K×8 =
+  3.6 MB of `double`s; storing the `log10` scores as `float` halves that to
+  ~1.8 MB (and the trigram/bigram/monogram tables likewise), so it stays warmer
+  in cache during the inner loop. The scorers accumulate the looked-up values
+  into a `double`, so the score sum keeps full precision; cracking results are
+  unchanged (the full `make test` cracking matrices still pass). The n-gram
+  tables stay global; `subst_array`/`mapping` are per-`machine` (`subst_array`
+  heap-allocated, `mapping` in the struct).
 - 🟢 **Decode/score is now a single fused pass** ✅. The n-gram scorers decode
   each character once (`decode_at`) into a sliding window that indexes the n-gram
   table, instead of the old `decode_num` → `num_plaintext[]` scratch array →
@@ -410,12 +432,20 @@ Remaining opportunities:
   (`fopen("german_quadgrams.txt")`). Running the binary from anywhere but the
   repo root fails. Consider a data-directory option/env var or installing the
   tables to a known prefix.
-- 🟡 **No validation of `-l`** against the known languages (see 1.2), and no
-  validation that `-x` is consistent with the selected wheel set beyond the
-  range check.
-- 🟢 **Inconsistent exit/usage:** running with no args prints help and exits `1`;
-  `-h` exits `0`. Errors go through `fatal()` (exit 1) but some validation
-  messages are printed inline. Acceptable, but worth standardizing.
+- 🟢 **Option validation hardened** ✅. The n-gram table for the chosen model is
+  now loaded **before** standard input is read, so a missing/mistyped `-l` fails
+  immediately with the offending filename instead of after consuming stdin.
+  Explicitly named wheels are checked for duplicates (`-w 112`, `-w 11.`, …):
+  previously a repeated wheel passed validation but made `bruteforce`'s
+  permutation guard skip every combination, silently emitting garbage — it is now
+  rejected at validation time, and `bruteforce` additionally fails loudly if it
+  ever scores zero configurations. (Validating `-l` against a *fixed* language
+  list was deliberately avoided — arbitrary `<lang>_<type>.txt` files are a
+  supported, documented extension point and the test suite relies on it.)
+- 🟢 **Consistent exit/usage** ✅. `version()`/`help()` take an output stream:
+  explicit `-h`/`-v` print to **stdout** and exit `0`, while usage errors (no
+  arguments, bad option) print to **stderr** and exit `1`. Other errors continue
+  to go through `fatal()` (stderr, exit 1).
 - 🟢 **Tests and CI added.** For a cryptographic tool whose correctness is
   subtle (stepping anomaly, ring/start offset arithmetic, plugboard
   involution), the absence of any round-trip or known-answer tests was the
@@ -471,6 +501,6 @@ the `textlength` global/parameter shadowing removed and `-Wshadow` enabled (§5)
 the per-search state encapsulated into `struct machine` (reentrant; four dead
 functions removed), and (7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
-the suite has 63 checks. The main remaining item is **multi-threading** the
+the suite has 68 checks. The main remaining item is **multi-threading** the
 search over reflector × wheel-order — now unblocked by the `struct machine`
 encapsulation, and guarded by `make bench` (§5/§6).

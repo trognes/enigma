@@ -233,5 +233,9 @@ encapsulation of the per-search state into `struct machine` (the search is now
 reentrant) — and the build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`. The main item still
 open is **multi-threading** the search over reflector × wheel-order (now
-unblocked by `struct machine`, and guarded by `make bench`). Read
-`CODE_REVIEW.md` before changing the search or scoring code.
+unblocked by `struct machine`, and guarded by `make bench`). A second planned
+feature is an **M4 (4-rotor naval) mode** — the wiring tables are already present
+and a design (static Greek wheel folded into an effective reflector; `-4` flag
+with `-u`/`-w`/`-r`/`-g` extended to the 4th wheel) is recorded in
+`CODE_REVIEW.md` §5; deferred for now. Read `CODE_REVIEW.md` before changing the
+search or scoring code.

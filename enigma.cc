@@ -124,10 +124,14 @@ struct machine
   unsigned char (* subst_array)[asize][asize][asize];
 };
 
-static double monograms[asize];
-static double bigrams[asize][asize];
-static double trigrams[asize][asize][asize];
-static double quadgrams[asize][asize][asize][asize];
+/* n-gram log-scores stored as float (half the memory of double, so the 457 KB
+   quadgram table is ~1.8 MB instead of 3.6 MB and stays warmer in cache); the
+   scorers accumulate the looked-up values into a double, so precision of the sum
+   is unaffected. */
+static float monograms[asize];
+static float bigrams[asize][asize];
+static float trigrams[asize][asize][asize];
+static float quadgrams[asize][asize][asize][asize];
 
 void fatal(const char * message)
 {
@@ -154,14 +158,14 @@ inline char num2char(int x)
    (Laplace smoothing, so unseen n-grams score log10(1) = 0) and finally stored
    as log10(count + 1) for additive scoring. Parsing stops at end of file or the
    first malformed record. */
-void ngrams_read(int n, double * table, const char * suffix)
+void ngrams_read(int n, float * table, const char * suffix)
 {
   int size = 1;
   for (int i = 0; i < n; i++)
     size *= asize;
 
   for (int i = 0; i < size; i++)
-    table[i] = 1.0;
+    table[i] = 1.0f;
 
   char filename[64];
   snprintf(filename, sizeof(filename), "%s_%s.txt", opt_language, suffix);
@@ -193,13 +197,15 @@ void ngrams_read(int n, double * table, const char * suffix)
       if (! ok || (fscanf(f, " %d", & count) != 1))
         break;
 
-      table[index] = count + 1;
+      table[index] = static_cast<float>(count + 1);
     }
 
   fclose(f);
 
+  /* compute the log in double and store as float (one rounding, ~7 sig. digits;
+     the score sum is still accumulated in double by the scorers) */
   for (int i = 0; i < size; i++)
-    table[i] = log10(table[i]);
+    table[i] = static_cast<float>(log10(table[i]));
 }
 
 
@@ -820,6 +826,14 @@ void bruteforce(machine & m)
                               }
                           }
             }
+
+  /* Defensive: if no configuration was ever scored, best_plaintext is
+     uninitialised. The option validation should make this unreachable, but
+     never emit garbage. */
+  if (best_score <= score_min)
+    fatal("No machine configuration was searched "
+          "(check the -u / -w / -x settings)");
+
   memcpy(m.plaintext, best_plaintext, textlength + 1);
 }
 
@@ -911,47 +925,50 @@ void alltoupper(char * text)
     text[i] = toupper(text[i]);
 }
 
-void version()
+/* version()/help() take the output stream: explicit -h/-v write to stdout and
+   exit 0, while usage errors (no arguments, bad option) write to stderr and
+   exit 1. */
+void version(FILE * out)
 {
-  printf("Enigma cipher tool version 1.1.0\n");
-  printf("Copyright (C) 2017-2026 Torbjørn Rognes\n");
-  printf("\n");
+  fprintf(out, "Enigma cipher tool version 1.1.0\n");
+  fprintf(out, "Copyright (C) 2017-2026 Torbjørn Rognes\n");
+  fprintf(out, "\n");
 }
 
-void help()
+void help(FILE * out)
 {
-  version();
-  printf("Usage: enigma [OPTIONS]\n");
-  printf("  -h           Show help information\n");
-  printf("  -v           Show version information\n");
-  printf("  -u X         Reflector (umkehrwalze) X (A-C, N or .) [.]\n");
-  printf("  -w XYZ       Wheels (walzen) XYZ (1-8 or .) [...]\n");
-  printf("  -x integer   Highest wheel number to use (3-8) [5]\n");
-  printf("  -n           Use the Norway Enigma reflector (N) and wheels (1-5)\n");
-  printf("  -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]\n");
-  printf("  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
-  printf("  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
-  printf("  -c           Perform hill climbing to determine plugboard settings\n");
-  printf("  -l language  Scoring language (english, german, danish, french); required\n");
-  printf("               for -m/-b/-t/-q (no default), not used by -i\n");
-  printf("  -i           Use index of coincidence (IC) to determine plaintext score\n");
-  printf("  -m           Use monogram statistics to determine plaintext score\n");
-  printf("  -b           Use bigram statistics to determine plaintext score\n");
-  printf("  -t           Use trigram statistics to determine plaintext score\n");
-  printf("  -q           Use quadgram statistics to determine plaintext score [default]\n");
-  printf("  -p filename  Name of file containing plaintext to compare result with\n");
-  printf("\n");
-  printf("Defaults are indicated in [square brackets].\n");
-  printf("\n");
-  printf("The ciphertext is read from standard input. The final plaintext is written\n");
-  printf("to standard output.\n");
-  printf("\n");
-  printf("For the reflector, wheels, ring position and start position, a dot (.)\n");
-  printf("works as a wild card, leaving it unspecified. When these settings are not\n");
-  printf("specified, the program will try all combinations to find the settings\n");
-  printf("resulting in the highest plaintext score. If asked for, a hill climbing\n");
-  printf("algorithm will be used to try to determine the plugboard settings.\n");
-  printf("\n");
+  version(out);
+  fprintf(out, "Usage: enigma [OPTIONS]\n");
+  fprintf(out, "  -h           Show help information\n");
+  fprintf(out, "  -v           Show version information\n");
+  fprintf(out, "  -u X         Reflector (umkehrwalze) X (A-C, N or .) [.]\n");
+  fprintf(out, "  -w XYZ       Wheels (walzen) XYZ (1-8 or .) [...]\n");
+  fprintf(out, "  -x integer   Highest wheel number to use (3-8) [5]\n");
+  fprintf(out, "  -n           Use the Norway Enigma reflector (N) and wheels (1-5)\n");
+  fprintf(out, "  -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]\n");
+  fprintf(out, "  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
+  fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
+  fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
+  fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
+  fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
+  fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
+  fprintf(out, "  -m           Use monogram statistics to determine plaintext score\n");
+  fprintf(out, "  -b           Use bigram statistics to determine plaintext score\n");
+  fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
+  fprintf(out, "  -q           Use quadgram statistics to determine plaintext score [default]\n");
+  fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
+  fprintf(out, "\n");
+  fprintf(out, "Defaults are indicated in [square brackets].\n");
+  fprintf(out, "\n");
+  fprintf(out, "The ciphertext is read from standard input. The final plaintext is written\n");
+  fprintf(out, "to standard output.\n");
+  fprintf(out, "\n");
+  fprintf(out, "For the reflector, wheels, ring position and start position, a dot (.)\n");
+  fprintf(out, "works as a wild card, leaving it unspecified. When these settings are not\n");
+  fprintf(out, "specified, the program will try all combinations to find the settings\n");
+  fprintf(out, "resulting in the highest plaintext score. If asked for, a hill climbing\n");
+  fprintf(out, "algorithm will be used to try to determine the plugboard settings.\n");
+  fprintf(out, "\n");
 }
 
 void removespaces(char * p)
@@ -1006,7 +1023,7 @@ int main(int argc, char * * argv)
 {
   if (argc == 1)
     {
-      help();
+      help(stderr);
       exit(1);
     }
 
@@ -1078,11 +1095,11 @@ int main(int argc, char * * argv)
           opt_language = optarg;
           break;
         case 'v':
-          version();
+          version(stdout);
           exit(0);
           break;
         case 'h':
-          help();
+          help(stdout);
           exit(0);
           break;
         case 'n':
@@ -1090,7 +1107,7 @@ int main(int argc, char * * argv)
           break;
         default:
           fprintf(stderr, "\n");
-          help();
+          help(stderr);
           exit(1);
           break;
         }
@@ -1125,6 +1142,15 @@ int main(int argc, char * * argv)
         fatal("Illegal max wheel (must be 3-8)");
     }
 
+  /* A wheel cannot occupy two positions at once. Reject any explicitly named
+     (non-'.') wheel repeated across positions: otherwise the permutation guard
+     in bruteforce() skips every combination and the search silently finds
+     nothing. */
+  for (int i = 0; i < wheels; i++)
+    for (int j = i + 1; j < wheels; j++)
+      if ((opt_walzen[i] != '.') && (opt_walzen[i] == opt_walzen[j]))
+        fatal("Illegal walzen string (a wheel cannot be used in two positions)");
+
   if ((strlen(opt_ringstellung) != wheels) ||
       (strspn(opt_ringstellung, "ABCDEFGHIJKLMNOPQRSTUVWXYZ.") != wheels))
     fatal("Illegal ringstellung string (must be 3 letters (A-Z) or .)");
@@ -1154,16 +1180,9 @@ int main(int argc, char * * argv)
     fatal("Illegal language name (must be 1-32 letters, e.g. english)");
 
 
-  /* read ciphertext */
-
-  readciphertext();
-
-  show_settings();
-
-  if (textlength < 1)
-    fatal("Ciphertext is empty (no A-Z letters on standard input)");
-
-  /* init */
+  /* Load the n-gram table for the chosen scoring model first, so a missing or
+     mistyped -l fails immediately (with the offending filename) before we read
+     and consume standard input. */
 
   switch (opt_scoring)
     {
@@ -1184,6 +1203,15 @@ int main(int argc, char * * argv)
     default:
       break;
     }
+
+  /* read ciphertext */
+
+  readciphertext();
+
+  show_settings();
+
+  if (textlength < 1)
+    fatal("Ciphertext is empty (no A-Z letters on standard input)");
 
   for(int i=0; i< textlength; i++)
     num_ciphertext[i] = char2num(ciphertext[i]);
