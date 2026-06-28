@@ -91,6 +91,7 @@ static const char * opt_grundstellung;
 static const char * opt_steckerbrett;
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french ...; no default */
+static const char * opt_datadir;  /* directory holding the n-gram files (default ".") */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_maxwheel;
 static int opt_scoring;
@@ -183,8 +184,11 @@ void ngrams_read(int n, float * table, const char * suffix)
   for (int i = 0; i < size; i++)
     table[i] = 1.0f;
 
-  char filename[64];
-  snprintf(filename, sizeof(filename), "%s_%s.txt", opt_language, suffix);
+  char filename[1024];
+  int len = snprintf(filename, sizeof(filename), "%s/%s_%s.txt",
+                     opt_datadir, opt_language, suffix);
+  if ((len < 0) || (len >= static_cast<int>(sizeof(filename))))
+    fatal("Data directory / language path too long");
 
   FILE * f = fopen(filename, "r");
   if (!f)
@@ -1189,6 +1193,7 @@ void help(FILE * out)
   fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
   fprintf(out, "  -q           Use quadgram statistics to determine plaintext score [default]\n");
   fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
+  fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]\n");
   fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
@@ -1227,7 +1232,8 @@ void show_settings()
   if (opt_scoring == 0)
     fprintf(stderr, " (language-independent)");
   else
-    fprintf(stderr, " (language: %s)", opt_language);
+    fprintf(stderr, " (language: %s; n-gram files in %s)",
+            opt_language, opt_datadir);
   fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
@@ -1270,6 +1276,7 @@ int main(int argc, char * * argv)
   opt_grundstellung = "...";
   opt_steckerbrett = "";
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q) */
+  opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "." */
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
@@ -1280,7 +1287,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:imbtqcvhn")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:d:imbtqcvhn")) != -1)
     {
       switch (c)
         {
@@ -1334,6 +1341,9 @@ int main(int argc, char * * argv)
         case 'l':
           opt_language = optarg;
           break;
+        case 'd':
+          opt_datadir = optarg;
+          break;
         case 'v':
           version(stdout);
           exit(0);
@@ -1352,6 +1362,13 @@ int main(int argc, char * * argv)
           break;
         }
     }
+
+  /* resolve the n-gram data directory: -d wins, else $ENIGMA_DATA, else the
+     current directory (the historical behaviour) */
+  if (! opt_datadir)
+    opt_datadir = getenv("ENIGMA_DATA");
+  if ((! opt_datadir) || (! opt_datadir[0]))
+    opt_datadir = ".";
 
   /* validate arguments */
 

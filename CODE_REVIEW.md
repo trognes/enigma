@@ -457,10 +457,14 @@ Remaining opportunities:
 
 ## 7. Robustness, UX, and tooling
 
-- 🟡 **Relative-path data files.** N-gram files are opened relative to the CWD
-  (`fopen("german_quadgrams.txt")`). Running the binary from anywhere but the
-  repo root fails. Consider a data-directory option/env var or installing the
-  tables to a known prefix.
+- 🟢 **Relative-path data files** ✅ resolved. N-gram files are now read from a
+  data directory built as `<datadir>/<lang>_<ngram>.txt`, with `datadir` resolved
+  by strict precedence `-d <dir>` → `$ENIGMA_DATA` → `.` (the historical CWD
+  default, so existing usage is unchanged). The binary can be run from any working
+  directory; a missing/mistyped dir fails fast (before stdin) with the full path
+  it tried, and the resolved dir is echoed in the settings. (A compile-time
+  install prefix + `make install`, and executable-relative resolution, were
+  considered and deferred — not needed until the tool is packaged.)
 - 🟢 **Option validation hardened** ✅. The n-gram table for the chosen model is
   now loaded **before** standard input is read, so a missing/mistyped `-l` fails
   immediately with the offending filename instead of after consuming stdin.
@@ -520,7 +524,7 @@ Remaining opportunities:
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
 | 4/5/6 | 🟢 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing; global mutable state; no parallelism~~ ✅ all fixed |
-| 2.5/7 | 🟢 | ~~Empty-input div-by-zero~~ ✅ fixed; relative data paths; weak Makefile |
+| 2.5/7 | 🟢 | ~~Empty-input div-by-zero; relative data paths~~ ✅ fixed (`-d`/`$ENIGMA_DATA`); weak Makefile remains |
 
 **Progress:** nearly every finding is resolved — (1.1) the stack overflow,
 (1.2) the `-l`/filename overflow, (1.3/1.4) the read-loop and block over-read,
@@ -534,7 +538,7 @@ the per-search state encapsulated into `struct machine`, the search
 **multi-threaded** (`-T N`, default 1, max 256; TSan-clean; ~3× on 4 cores), and
 (7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
-the suite has 72 checks. The main remaining feature is the planned **M4 (4-rotor)
-mode** (§5); smaller open items are the relative-path data files (§7) and sharing
-the rotor *stepping* across start positions (§6, optimisation "B" — the per-key
-row copy is already gone).
+the suite has 77 checks. The main remaining feature is the planned **M4 (4-rotor)
+mode** (§5); the only smaller open item is sharing the rotor *stepping* across
+start positions (§6, optimisation "B" — the per-key row copy is already gone, and
+the relative-path data-file issue is now fixed via `-d`/`$ENIGMA_DATA`).
