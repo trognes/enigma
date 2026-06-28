@@ -277,12 +277,11 @@ instrumentation rather than deleted.
   `std::array`, RAII, or `constexpr`. This is a style/maintainability point, not
   a bug, but it forfeits a lot of compiler help.
 - 🟢 **Build flags** ✅ now `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual
-  -O3`, and the build is **warning-free** under them. Stronger optional flags
-  were surveyed and left off because they reflect the deliberate C-style /
-  global-state design rather than bugs, and would be noisy without a larger
-  refactor:
-  - `-Wshadow` → ~14 (mostly the global `textlength` shadowed by the same-named
-    function parameters; see §5).
+  -Wshadow -O3`, and the build is **warning-free** under them. `-Wshadow` has
+  been enabled (see §5 — the `textlength` shadowing it flagged is fixed). The
+  remaining stronger optional flags were surveyed and left off because they
+  reflect the deliberate C-style design rather than bugs, and would be noisy
+  without a larger refactor:
   - `-Wconversion` → ~38 (implicit `int`/`char`/`double` narrowings throughout
     the arithmetic).
   - `-Wold-style-cast` → ~12 (the remaining C-style `(int*)`/pointer casts; would
@@ -303,9 +302,14 @@ instrumentation rather than deleted.
   (`precompute()` clobbers `ringstellung`/`grundstellung`, relying on
   `bruteforce` to reset them), and unit testing any piece in isolation is
   impractical.
-- 🟡 **`textlength` is both a global and a parameter.** Nearly every function
-  takes `int textlength` while a global `textlength` also exists. This shadowing
-  is confusing and invites bugs where the wrong one is used.
+- 🟢 **`textlength` global/parameter shadowing** ✅ resolved. Nearly every
+  function used to take an `int textlength` parameter while a file-scope global
+  `textlength` also existed; every call site already passed exactly that global
+  (likewise for the `ciphertext`/`plaintext` buffer parameters). The redundant
+  parameters were removed so these functions (`setup_mapping`, `decode`, the five
+  `*_score_decode` scorers, `score_iter`, `ciphertext_letterdist`, `hillclimb`)
+  read the globals directly, and `-Wshadow` is now on in the build to keep it
+  that way.
 - 🟡 **`bruteforce()` is a single ~110-line function with six nested loops** and
   inline result reporting. The wheel/ring/start range setup, the search, and the
   reporting should be separated; the deep nesting plus the
@@ -406,7 +410,7 @@ lookup, 16-byte blocking). Remaining opportunities:
 | 5 | 🟠 | Pervasive global state blocks testing and threading |
 | 1.3/1.4 | 🟢 | ~~Single `read()` truncation; 16-byte block over-read past `textlength`~~ ✅ fixed (read loop + scalar remainder) |
 | 2.3/2.4 | 🟢 | ~~Unused `total`~~ ✅ removed; ~~stepping unverified~~ ✅ double-step KAT added |
-| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals~~ ✅ fixed; duplicated readers/scorers, no parallelism remain |
+| 4/5/6 | 🟡 | ~~Legacy `index()`, `char` returns, `const` literals; `textlength` shadowing~~ ✅ fixed; no parallelism remains |
 | 2.5/7 | 🟢 | ~~Empty-input div-by-zero~~ ✅ fixed; relative data paths; weak Makefile |
 
 **Progress:** nearly every finding is resolved — (1.1) the stack overflow,
@@ -416,7 +420,8 @@ lookup, 16-byte blocking). Remaining opportunities:
 dead/misleading-code cleanup, the §4 modernization (legacy `index()` → `strchr`,
 `int` rotor returns, `const`-correct options, stray includes), the four n-gram
 readers unified into one and the dead `char*` scorer family removed (§5/§6),
+the `textlength` global/parameter shadowing removed and `-Wshadow` enabled (§5),
 and (7) the test suite + CI. The build is warning-free under
-`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual` (g++ and clang++), and the
-suite has 63 checks. The main remaining item is the larger global-state refactor
-that would unlock threading and clear the `-Wshadow` noise (§5).
+`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
+the suite has 63 checks. The main remaining item is the larger global-state
+refactor that would unlock multithreading (§5).

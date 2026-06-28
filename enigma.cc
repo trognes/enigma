@@ -342,7 +342,7 @@ void precompute()
         }
 }
 
-void setup_mapping(int textlength)
+void setup_mapping()
 {
   if (textlength > maxlen)
     fatal("Ciphertext too long");
@@ -365,13 +365,10 @@ inline int step_mapped(int i, int x)
   return steckerbrett[mapping[i][steckerbrett[x]]];
 }
 
-inline void decode(int textlength, char * ciphertext, char * plaintext)
+inline void decode()
 {
-  (void) ciphertext;   /* kept for symmetry; decode reads num_ciphertext[] */
   for (int i = 0; i < textlength; i++)
     plaintext[i] = num2char(step_mapped(i, num_ciphertext[i]));
-  //plaintext[i] = num2char(step_precomputed(char2num(ciphertext[i])));
-  //plaintext[i] = num2char(step(char2num(ciphertext[i])));
   plaintext[textlength] = 0;
 }
 
@@ -441,7 +438,7 @@ inline void decode_num()
 #endif
 }
 
-double quadgram_score_decode(int textlength)
+double quadgram_score_decode()
 {
   /* This decode and scoring function uses 99% of the computation time
      when hill-climbing. */
@@ -468,7 +465,7 @@ double quadgram_score_decode(int textlength)
   return score;
 }
 
-double trigram_score_decode(int textlength)
+double trigram_score_decode()
 {
   decode_num();
 
@@ -478,7 +475,7 @@ double trigram_score_decode(int textlength)
   return score;
 }
 
-double bigram_score_decode(int textlength)
+double bigram_score_decode()
 {
   decode_num();
 
@@ -488,7 +485,7 @@ double bigram_score_decode(int textlength)
   return score;
 }
 
-double monogram_score_decode(int textlength)
+double monogram_score_decode()
 {
   decode_num();
 
@@ -498,7 +495,7 @@ double monogram_score_decode(int textlength)
   return score;
 }
 
-double ic_score_decode(int textlength)
+double ic_score_decode()
 {
   int freq[asize];
   for(int j=0; j<asize; j++)
@@ -548,7 +545,7 @@ void showconfig()
   fprintf(stderr, "\n");
 }
 
-double score_iter(int iter, int textlength)
+double score_iter(int iter)
 {
   (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   double score = 0;
@@ -556,23 +553,23 @@ double score_iter(int iter, int textlength)
   switch(opt_scoring)
     {
     case SCORE_IC:
-      score = ic_score_decode(textlength);
+      score = ic_score_decode();
       break;
 
     case SCORE_MONO:
-      score = monogram_score_decode(textlength);
+      score = monogram_score_decode();
       break;
 
     case SCORE_BI:
-      score = bigram_score_decode(textlength);
+      score = bigram_score_decode();
       break;
 
     case SCORE_TRI:
-      score = trigram_score_decode(textlength);
+      score = trigram_score_decode();
       break;
 
     case SCORE_QUAD:
-      score = quadgram_score_decode(textlength);
+      score = quadgram_score_decode();
       break;
 
     default:
@@ -598,7 +595,7 @@ int compare(const void * x, const void * y)
     return 0;
 }
 
-void ciphertext_letterdist(int textlength, char * ciphertext)
+void ciphertext_letterdist()
 {
   for(int j=0; j<asize; j++)
     {
@@ -619,9 +616,7 @@ void ciphertext_letterdist(int textlength, char * ciphertext)
 #endif
 }
 
-double hillclimb(int textlength,
-                 char * ciphertext,
-                 char * plaintext)
+double hillclimb()
 {
   /* Try to find the optimal steckerbrett for the given other settings */
 
@@ -633,7 +628,7 @@ double hillclimb(int textlength,
   /* iterate until a full pass over all plug swaps yields no improvement */
   do
     {
-      best_score = score_iter(iter, textlength);
+      best_score = score_iter(iter);
 
       last_best = best_score;
 
@@ -668,7 +663,7 @@ double hillclimb(int textlength,
             steckerbrett[a] = b;
             steckerbrett[b] = a;
 
-            double score = score_iter(iter, textlength);
+            double score = score_iter(iter);
 
 #ifdef SHOWHILLCLIMB
             fprintf(stderr, "%4.0f", (score - best_score)/10.0);
@@ -726,12 +721,12 @@ double hillclimb(int textlength,
     }
   while (best_score > last_best);
 
-  decode(textlength, ciphertext, plaintext);
+  decode();
 
 #ifdef SHOWHILLCLIMB
   printf("Plaintext: %s\n", plaintext);
 #endif
-  return score_iter(0, textlength);
+  return score_iter(0);
 }
 
 
@@ -817,19 +812,17 @@ void bruteforce()
 
                             init_steckerbrett(opt_steckerbrett);
 
-                            setup_mapping(textlength);
+                            setup_mapping();
 
                             double score;
                             if (opt_hillclimb)
                               {
-                                score = hillclimb(textlength,
-                                                  ciphertext,
-                                                  plaintext);
+                                score = hillclimb();
                               }
                             else
                               {
-                                decode(textlength, ciphertext, plaintext);
-                                score = score_iter(0, textlength);
+                                decode();
+                                score = score_iter(0);
                               }
 
                             if (score > best_score)
@@ -1212,7 +1205,7 @@ int main(int argc, char * * argv)
   for(int i=0; i< textlength; i++)
     num_ciphertext[i] = char2num(ciphertext[i]);
 
-  ciphertext_letterdist(textlength, ciphertext);
+  ciphertext_letterdist();
 
   init();
   init_steckerbrett("");

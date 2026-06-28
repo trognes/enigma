@@ -46,7 +46,7 @@ and were sourced from the Practical Cryptography website.
 ## Build & run
 
 ```sh
-make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -O3 ...
+make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 ...
 make test                 # build, then run tests/run_tests.sh
 ./enigma -h               # help / usage
 ```
@@ -175,10 +175,9 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 
 A detailed audit lives in `CODE_REVIEW.md`. Most findings have been fixed —
 the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
-overflow, the `fscanf`/read-handling bugs, dead code, and the C-style
-modernization — and the build is warning-free under
-`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual`. The main items still open are
-the parallel `*_score`/`*_score_decode` scorers (minor dedup) and the
-larger global-state refactor that would unlock multithreading and clear the
-`-Wshadow` noise. Read `CODE_REVIEW.md` before changing the search or scoring
-code.
+overflow, the `fscanf`/read-handling bugs, dead code, the C-style
+modernization, and the `textlength` global/parameter shadowing — and the build
+is warning-free under
+`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`. The main item still
+open is the larger global-state refactor that would unlock multithreading. Read
+`CODE_REVIEW.md` before changing the search or scoring code.
