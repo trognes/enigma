@@ -128,6 +128,11 @@ table lookup per character. `decode_num` processes the text in 16-byte blocks.
 
 ## Conventions & gotchas for contributors
 
+- **Code style.** Allman braces (every `{` and `}` on its own line),
+  2-space indentation, and no tabs anywhere in `enigma.cc`. Continuation lines
+  (e.g. wrapped parameter lists or `if` conditions) are aligned under the
+  opening `(`. The only tabs in the repo are the recipe lines in the `Makefile`,
+  which `make` requires.
 - **Single translation unit, heavy global state.** Machine settings
   (`walzenlage`, `grundstellung`, `ringstellung`, `ukw`, `steckerbrett`),
   buffers (`ciphertext`, `plaintext`, `num_*`, `mapping`, `subst_array`), and
