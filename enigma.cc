@@ -910,7 +910,12 @@ void readciphertext()
         if ((c >= 'A') && (c <= 'Z'))
           {
             if (j >= maxlen)
-              fatal("Ciphertext too long (maximum is 1024 letters)");
+              {
+                char msg[64];
+                snprintf(msg, sizeof(msg),
+                         "Ciphertext too long (maximum is %d letters)", maxlen);
+                fatal(msg);
+              }
             ciphertext[j++] = c;
           }
       }
@@ -940,7 +945,12 @@ void readplaintext(char * filename)
         if ((c >= 'A') && (c <= 'Z'))
           {
             if (j >= maxlen)
-              fatal("Plaintext file too long (maximum is 1024 letters)");
+              {
+                char msg[64];
+                snprintf(msg, sizeof(msg),
+                         "Plaintext file too long (maximum is %d letters)", maxlen);
+                fatal(msg);
+              }
             altplaintext[j++] = c;
           }
       }
