@@ -79,9 +79,18 @@ filenames are built as `<language>_<ngram>.txt` and opened relative to the CWD.
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
 - `-s AB...` fixed plugboard pairs
 - `-c` hill-climb the plugboard
-- `-l lang` scoring language
+- `-l lang` scoring language (default `german`)
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad default)
 - `-p file` compare the recovered plaintext against a known plaintext file
+
+> **Gotcha — match `-l` to the plaintext language, especially for `-q`.** The
+> default scoring is quadgrams with the **german** tables. Quadgrams are highly
+> language-specific, so cracking an English message with the default
+> (`-q` + german) typically fails — the german table scores ~0 for English
+> quadgrams and the correct key does not stand out. Lower-order models
+> (`-m/-b/-t/-i`) tolerate a language mismatch and may still crack it, which can
+> make `-q` look "broken" when it is really just the wrong `-l`. Use
+> `-l english` (etc.) for non-German text.
 
 ## Architecture / how it works
 

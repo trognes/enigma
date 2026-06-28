@@ -191,6 +191,18 @@ check "crack: index of coincidence recovers start position" \
   "$(run "$ic_ct" -i -u B -w 123 -r AAA -g ...)" \
   "$ic_plain"
 
+# Every scoring model must recover the start position when the scoring language
+# matches the plaintext. Quadgrams are the most language-sensitive: english
+# quadgrams score english text, but the german table assigns ~0 to most english
+# quadgrams, so -q only works with the matching -l (lower-order models tolerate a
+# language mismatch, which is why -m/-b/-t/-i can still crack english under the
+# default german tables while -q cannot).
+for mode in -i -m -b -t -q; do
+  check "crack: scoring $mode recovers start position (-l english)" \
+    "$(run "$ic_ct" $mode -u B -w 123 -r AAA -g ... -l english)" \
+    "$ic_plain"
+done
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
