@@ -75,8 +75,12 @@ headline `L50`/`L90` (the shortest length reaching that recovery rate — lower 
 better). A fixed `SEED` makes the trial set deterministic, so `make crackquality
 BASE=<git-ref>` is a same-machine A/B that solves identical problems with both
 binaries. Use this — not `make bench` — to tell whether a scoring/search change
-actually helps short-message cracking. (See `CODE_REVIEW.md` §9 for the
-algorithmic ideas this is meant to measure.)
+actually helps short-message cracking. `make crackquality SPLIT=1` additionally
+classifies each non-recovered trial as a **scoring** failure (the true plugboard
+does not score highest) or a **search** failure (it does, but the climb stuck in
+a local optimum) via an oracle run — telling you which lever to pull. (See
+`CODE_REVIEW.md` §9 for the algorithmic ideas this is meant to measure; on the
+v1.1.0 baseline every miss is a *search* failure.)
 
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters

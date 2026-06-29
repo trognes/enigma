@@ -595,15 +595,29 @@ alternatives, as reference for future cracking-quality work. Nothing here is a b
 optional** improvements, not findings.
 
 > **Measuring stick in place.** `tests/crack_quality.sh` (`make crackquality`)
-> now measures recovery quality vs ciphertext length on the hard (short) regime,
-> so any change below can be evaluated before/after on the same problems
-> (`BASE=<ref>` same-machine A/B). It currently implements the cheap
-> *plugboard-recovery* tier (true rotor key fixed, only the plugboard climbed)
-> and reports mean %-correct (graded) + exact-recovery rate + `L50`/`L90`. Not
-> yet built: the *full-crack* tier (wildcard the rotor key too) and the
-> failure-mode split (oracle run forcing the true key to separate **scoring**
-> failure from **search** failure — see below). Build those out alongside the
-> first algorithm change so gains are attributable.
+> measures recovery quality vs ciphertext length on the hard (short) regime, so
+> any change below can be evaluated before/after on the same problems
+> (`BASE=<ref>` same-machine A/B). It implements the cheap *plugboard-recovery*
+> tier (true rotor key fixed, only the plugboard climbed) and reports mean
+> %-correct (graded) + exact-recovery rate + `L50`/`L90`. `SPLIT=1` adds the
+> **failure-mode split**: an oracle scores the decrypt under the *known* true
+> plugboard and compares it to the climb's score, labelling each non-recovered
+> trial **scoring** failure (true plugboard does not score highest — only better
+> scoring helps) vs **search** failure (true scores higher, the climb stuck in a
+> local optimum — only better search helps).
+>
+> **What it found (v1.1.0 baseline, english/quad, 10 pairs).** Scoring failure is
+> **0 % at every length, down to 40 characters** — every miss is a *search*
+> failure: the true plugboard always out-scores what the single-start
+> steepest-ascent climb reaches. So for plugboard recovery the quadgram score is
+> *not* the bottleneck; the lever is the **search** (random restarts, better
+> seeding, simulated annealing — items 1/3/4/5 below), not a better scoring
+> schedule. (This overturned the initial guess that the flat short-text quadgram
+> surface was the problem — hence building the split before changing any code.)
+>
+> Not yet built: the *full-crack* tier (wildcard the rotor key too), where
+> rotor-key discrimination may surface genuine *scoring* failures the
+> plugboard-only tier cannot.
 
 ### How it works today (`hillclimb()`, `enigma.cc:643`)
 
