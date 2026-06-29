@@ -304,6 +304,17 @@ check "restarts: -R 8 result is -T-independent" \
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
 check "restart count 0 rejected (exit code)" "$?" "1"
 
+# Staged plugboard climb (-S: bigram pre-pass, then the target model). It must
+# stay -T-independent, and recover a small plugboard on a long message (where the
+# bigram pre-pass reliably steers the quadgram climb to the true board).
+s_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+check "staged: -S -R 4 result is -T-independent" \
+  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S -R 4 -T 1)" \
+  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S -R 4 -T 4)"
+check "staged: -S recovers plugboard (long message)" \
+  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -S)" \
+  "$r_pt"
+
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
 hout=$("$ENIGMA" -h 2>/dev/null); hcode=$?

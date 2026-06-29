@@ -110,6 +110,7 @@ static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
+static int opt_staged;    /* staged plugboard climb: bigram pre-pass then target */
 static const int max_restarts = 100000;
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
@@ -153,6 +154,9 @@ struct machine
   unsigned char reflector_eff[asize];
   int greek;          /* M4 Greek rotor index (Beta/Gamma), else -1 */
   int greek_offset;   /* M4 (Greek start - ring) mod 26, else 0 */
+  int scoring;        /* active scoring model (= opt_scoring; varied per stage by
+                         the staged plugboard climb, so it is per-machine not the
+                         global -- a shared global would race across worker threads) */
 
   /* The 457 KB rotor-stack table (rebuilt once per wheel order by precompute,
      read per ring/start by setup_mapping) is heap-allocated separately and
@@ -650,7 +654,7 @@ double score_iter(machine & m, int iter)
   (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   double score = 0;
 
-  switch(opt_scoring)
+  switch(m.scoring)
     {
     case SCORE_IC:
       score = ic_score_decode(m);
@@ -865,15 +869,38 @@ void set_random_steckerbrett(machine & m, uint64_t * rng)
     }
 }
 
+/* Staged plugboard climb (-S): first climb under a lower-order, smoother model
+   (bigram) to steer the early plugs into a good basin, then climb under the target
+   model to refine. With only a plug or two set the bigram surface is far less
+   rugged than the quadgram one, which the single-model climb navigates poorly;
+   staging reshapes the *search* landscape (complementary to random restarts). The
+   returned score and m.plaintext are in the target model, so cross-key comparison
+   is unaffected. With -S off this is exactly the single-model climb. The bigram
+   pre-pass only helps when the target is a higher order (trigram/quadgram). */
+double hillclimb_staged(machine & m)
+{
+  if (! opt_staged)
+    return hillclimb(m);
+
+  if (SCORE_BI < opt_scoring)
+    {
+      m.scoring = SCORE_BI;
+      hillclimb(m);            /* keeps m.steckerbrett; smoother early surface */
+    }
+  m.scoring = opt_scoring;
+  return hillclimb(m);         /* refine in the target model */
+}
+
 /* Hill-climb the plugboard with optional random restarts: restart 0 uses the
    configured seed (identity or -s pairs) -- exactly the opt_restarts==1 behaviour
    -- then opt_restarts-1 further climbs start from random plugboards, keeping the
    best. The rotor-stack mapping[] depends only on the key (not the plugboard), so
    it is reused across restarts; only the steckerbrett is reset each time. The RNG
-   is seeded from the flat key index, so the result is independent of -T. */
+   is seeded from the flat key index, so the result is independent of -T. Each
+   start runs the (optionally staged) climb. */
 double hillclimb_restarts(machine & m, uint64_t key_index)
 {
-  double best = hillclimb(m);
+  double best = hillclimb_staged(m);
   if (opt_restarts <= 1)
     return best;
 
@@ -884,7 +911,7 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
   for (int r = 1; r < opt_restarts; r++)
     {
       set_random_steckerbrett(m, & rng);
-      double s = hillclimb(m);
+      double s = hillclimb_staged(m);
       if (s > best)
         {
           best = s;
@@ -991,6 +1018,8 @@ void search_worker(machine & m,
   const size_t total = tasks.size() * rg;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
+
+  m.scoring = opt_scoring;   /* per-machine; the staged climb varies it transiently */
 
   double local_best = score_min;
   size_t cur_wo = static_cast<size_t>(-1);
@@ -1407,6 +1436,7 @@ void help(FILE * out)
   fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
+  fprintf(out, "  -S           Staged plugboard climb: bigram pre-pass, then the target model\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
   fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
@@ -1459,6 +1489,8 @@ void show_settings()
   fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
   if (opt_hillclimb && (opt_restarts > 1))
     fprintf(stderr, " (%d restarts)", opt_restarts);
+  if (opt_hillclimb && opt_staged)
+    fprintf(stderr, " (staged)");
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
   if (opt_m4)
@@ -1524,6 +1556,7 @@ int main(int argc, char * * argv)
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_restarts = 1;
+  opt_staged = 0;
   opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
   opt_m4 = 0;
@@ -1532,7 +1565,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:d:imbtqcvhn4S")) != -1)
     {
       switch (c)
         {
@@ -1576,6 +1609,9 @@ int main(int argc, char * * argv)
           break;
         case 'c':
           opt_hillclimb = 1;
+          break;
+        case 'S':
+          opt_staged = 1;
           break;
         case 'x':
           opt_maxwheel = atoi(optarg);
@@ -1776,6 +1812,12 @@ int main(int argc, char * * argv)
     default:
       break;
     }
+
+  /* The staged plugboard climb (-S) runs a bigram pre-pass before the target
+     model, so it also needs the bigram table (unless the target is bigram or
+     lower, where the pre-pass is skipped). */
+  if (opt_staged && (SCORE_BI < opt_scoring))
+    ngrams_read(2, & bigrams[0][0], "bigrams");
 
   /* read ciphertext */
 

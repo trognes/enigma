@@ -128,6 +128,9 @@ any working directory.
 - `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
   the rest start from random involutions, best kept). Per-key RNG seeded from the
   flat key index, so the result stays independent of `-T`. ~`N`× the `-c` cost.
+- `-S` staged plugboard climb — a bigram pre-pass (smoother early surface) before
+  the target model, to steer the early plugs into a better basin. Per-`machine`
+  `scoring` field (never a global → race-free); deterministic; stacks with `-R`.
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
   used by `-i`
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the

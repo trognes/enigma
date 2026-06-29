@@ -695,16 +695,28 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 
 ### Alternatives (roughly by expected payoff for this tool)
 
-1. **Two-stage scoring schedule** (classic, cheap) — seed with a robust low-order
-   statistic (IC or bigrams) for the first few plugs, switch to tri/quadgrams once
-   enough plugs make higher-order models meaningful (Gillogly/Weierud). Directly
-   fixes the flat-early-surface weakness.
+1. **Staged scoring schedule — ✅ IMPLEMENTED (`-S`).** A bigram pre-pass climbs to
+   convergence, then the target (quad) model refines from there. The bigram surface
+   is far smoother when only a plug or two are set, so it steers the early plugs
+   into a better basin (Gillogly/Weierud). Note this is a *search* lever, not a
+   scoring one — the SPLIT metric (final-model ranking of the truth) does not see
+   it; the recovery curve does. It is per-`machine` (`m.scoring`, never a global →
+   race-free) and `-T`-deterministic. **Measured** (english/quad, 10 pairs, 25
+   trials) it helps both alone and stacked on restarts (table below). A naive full
+   bigram climb *can* over-fit and hurt an individual easy case (bigrams don't
+   constrain the board tightly), but on average it wins, and restarts absorb the
+   variance.
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost
    driver and fits the existing parallel architecture; climb internals unchanged.
-3. **Random restarts** — climb from several random (or best-single-plug) starts and
-   keep the best. Embarrassingly parallel; simplest defence against local optima.
+   Still open.
+3. **Random restarts — ✅ IMPLEMENTED (`-R N`).** Restart 0 is the configured seed
+   (= the old behaviour); restarts 1..N-1 start from random involutions (per-key
+   splitmix64, so `-T`-deterministic), best kept. The simplest defence against the
+   local optima the single-start climb got stuck in — and the diagnosis said every
+   miss was a *search* failure, so this was the first lever pulled. Roughly doubles
+   short-message exact-recovery (table below).
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start
    than identity.
@@ -718,12 +730,21 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 8. **Genetic / evolutionary** — population + crossover + mutation; generally overkill
    here, rarely beats random-restart hill climbing or SA for plugboard recovery.
 
-**Bottom line:** the two changes most worth making if stronger/faster cracking is
-ever wanted are **(2)** a key pre-filter (throughput) and **(1)** a low→high-order
-scoring schedule plus **(3)** random restarts (robustness on short/noisy
-messages). SA/tabu/GA are worth it mainly as fallbacks for the hardest cases. All
-are deferred — the current climb is correct and effective when the rotor key is
-right and the message is long enough.
+**Measured (exact-recovery %, english/quad, 10-pair plugboard, 25 trials):**
+
+| config | L140 | L190 | L250 |
+|--------|-----:|-----:|-----:|
+| plain (`-R 1`)        | 16 | 32 | 56 |
+| staged (`-S`)         | 28 | 56 | 72 |
+| restarts (`-R 10`)    | 36 | 76 | 88 |
+| **both** (`-R 10 -S`) | **64** | **88** | **96** |
+
+**Bottom line:** **(3)** random restarts and **(1)** the staged schedule are both
+**shipped** and **stack** — `-R 10 -S` lifts L140 from 16 % to 64 %. Still open:
+**(2)** a key pre-filter (the big *throughput* win, so more restarts are
+affordable per surviving key), and the heavier metaheuristics (SA/tabu/GA, items
+5–8) as fallbacks for the hardest cases. The default (`-R 1`, no `-S`) is the
+unchanged single-start climb.
 
 ### Scoring data and smoothing (the other lever — and what it can/can't help)
 
