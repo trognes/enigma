@@ -172,14 +172,18 @@ check "M4: -n with -4 rejected (exit code)" "$?" "1"
 # cleanly with exit 1 and a helpful message rather than a std::terminate, when the
 # allocator refuses the block. Forced with a tight virtual-memory cap.
 #
-# This check is pass-or-SKIP, never a hard fail, because the environment can
-# legitimately prevent a clean failure: `ulimit -v` is a no-op on macOS, and
-# sanitizer builds (ASan/TSan) reserve a huge virtual address space so the capped
-# process aborts at startup (ASLR-dependent) instead of reaching our handler. We
-# only assert success when we actually observed the clean exit-1 + message;
-# anything else is reported as a skip.
+# This check is pass-or-SKIP, never a hard fail. It is skipped when `ulimit -v` is
+# a no-op (e.g. macOS), and -- importantly -- on SANITIZER builds: ASan/TSan/etc.
+# reserve a huge virtual address space, so running them under the cap crashes at
+# startup (SIGSEGV / core dump) before reaching our handler. We detect an
+# instrumented binary by its sanitizer runtime markers and skip WITHOUT invoking
+# it under the cap, so no crash is triggered.
+sanitized=no
+if LC_ALL=C grep -qaE 'libasan|libtsan|libubsan|libmsan|__asan_|__tsan_|AddressSanitizer|ThreadSanitizer' "$ENIGMA" 2>/dev/null; then
+  sanitized=yes
+fi
 # shellcheck disable=SC3045  # ulimit -v is non-POSIX but works where this guard passes (Linux)
-if [ "$( (ulimit -v 524288 2>/dev/null; ulimit -v) )" = 524288 ]; then
+if [ "$sanitized" = no ] && [ "$( (ulimit -v 524288 2>/dev/null; ulimit -v) )" = 524288 ]; then
   # shellcheck disable=SC3045
   alloc_err=$( (ulimit -v 524288
     printf 'ABCDEFGHIJKL' | "$ENIGMA" -i -4 -u . -w .... -r AAAA -g .AAA -x 4 2>&1 >/dev/null) )
@@ -194,7 +198,7 @@ if [ "$( (ulimit -v 524288 2>/dev/null; ulimit -v) )" = 524288 ]; then
     printf 'skip M4 oversized-allocation test (no clean failure under cap: code=%s)\n' "$alloc_code"
   fi
 else
-  printf 'skip M4 oversized-allocation test (ulimit -v not effective here)\n'
+  printf 'skip M4 oversized-allocation test (sanitizer build, or ulimit -v not effective)\n'
 fi
 
 echo "== Input handling =="
@@ -287,6 +291,18 @@ printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 0 >/dev/null 2>&1
 check "thread count 0 rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 257 >/dev/null 2>&1
 check "thread count 257 rejected (exit code)" "$?" "1"
+
+# Plugboard hill-climb random restarts (-R): the per-key RNG is seeded from the
+# flat key index, so a restarting search must still be independent of -T. Recover
+# a plugboard with a wildcard start (several parallel keys) using -c -R 8.
+r_pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERS"
+r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
+check "restarts: -R 8 result is -T-independent" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 4)"
+# -R is validated: 0 is rejected.
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
+check "restart count 0 rejected (exit code)" "$?" "1"
 
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
