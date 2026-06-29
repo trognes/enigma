@@ -13,11 +13,11 @@ against per-language n-gram statistics (monograms, bigrams, trigrams,
 quadgrams) so that the configuration producing the most "language-like"
 plaintext wins.
 
-The tool supports both the standard 3-wheel Wehrmacht Enigma (wheels I–VIII,
-reflectors A/B/C) and the special **Norway Enigma (Norenigma)** variant
-(reflector N, wheels 1–5). Tables for M4 thin reflectors (b/c) and the
-Beta/Gamma rotors are present in the source but are not currently reachable
-through the CLI.
+The tool supports the standard 3-wheel Wehrmacht Enigma (wheels I–VIII,
+reflectors A/B/C), the special **Norway Enigma (Norenigma)** variant (reflector
+N, wheels 1–5), and the four-rotor naval **M4** (`-4`): thin reflectors UKW-b/c
+plus the static Beta/Gamma Greek wheel, which folds into an effective reflector so
+the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 
 - **Author:** Torbjørn Rognes
 - **License:** GNU GPL v3 (see `LICENSE`)
@@ -105,6 +105,10 @@ any working directory.
 
 # Norway Enigma:
 ./enigma -n -c -l english < cipher.txt
+
+# M4 (4-rotor naval): thin reflector b, Greek Beta, wheels III-I-VII, wildcard
+# the Greek position (first char of -g) and hill-climb the plugboard:
+./enigma -4 -u b -w B317 -r AAAA -g .QXP -c -l english < cipher.txt
 ```
 
 ### Key CLI options (see `help()` in source for the full list)
@@ -113,6 +117,8 @@ any working directory.
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
 - `-x N` highest wheel number to consider when wildcarding (default 5)
 - `-n` Norway Enigma mode
+- `-4` M4 (4-rotor) mode: `-u` selects thin reflector `b`/`c`; `-w`/`-r`/`-g` take
+  **four** characters with the Greek wheel (`B`=Beta/`G`=Gamma) / ring / start first
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
 - `-s AB...` fixed plugboard pairs
 - `-c` hill-climb the plugboard
@@ -185,6 +191,37 @@ A single pass through `main()`:
   plugboard. `subst_rotors()` is the rotor-stack-and-reflector core; the hot path
   replaces it with precomputed `subst_array` / `mapping` lookups wrapped in two
   plugboard lookups (`decode_at`, shared by `decode()` and the fused scorers).
+- The reflector applied in `subst_rotors()` is `m.reflector_eff`, resolved once
+  per task by `set_effective_reflector()` (never per character). Standard/Norway
+  just copy the wired reflector; **M4** composes `greek ∘ thin ∘ greek⁻¹`.
+
+### M4 mode (4-rotor naval)
+
+The M4's 4th "Greek" wheel (Beta/Gamma) is **static** — it never steps — so it
+folds into the reflector: `set_effective_reflector()` builds an effective
+reflector `greek ∘ thin ∘ greek⁻¹` at the Greek wheel's fixed offset
+`(start − ring) mod 26` (an involution, since conjugation preserves it), used at
+the single reflector site. The machine therefore stays a **3-stepping-rotor**
+engine (`wheels` stays 3) and the entire hot path (`subst_array`, `setup_mapping`,
+stepping, scorers) is unchanged — the fold is paid only in `precompute()`.
+
+- CLI: `-4` mode flag; `-u` is the thin reflector `b`/`c`/`.`; `-w`/`-r`/`-g` take
+  **four** characters with the Greek wheel (`B`/`G`/`.`) / ring / start first. The
+  Greek char is split off in validation so the shared 3-char checks and the
+  3-rotor search run unchanged on the tail. `-n` and `-4` are mutually exclusive.
+- Search: `wheel_task` carries the Greek wheel + offset; `bruteforce()` enumerates
+  thin × Greek wheel × **distinct Greek offsets** (only the `start − ring` offset
+  is identifiable, so the pos/ring ranges collapse to ≤26 offsets, not 26×26) ×
+  wheel orders. Each task precomputes its own effective reflector, then the
+  existing two-phase precompute + flat ring/start sweep runs unmodified
+  (threading/determinism preserved). A full M4 wildcard is ~15 GB of tables, hence
+  the precompute guard is **16 GiB**.
+- Correctness is anchored (KAT) on the documented backward-compatibility
+  equivalence: thin `b` + Beta at ring/pos A ≡ standard reflector B, and `c` +
+  Gamma@A ≡ C (`tests/run_tests.sh`), plus round-trip and search-recovery checks.
+- Reflector indices 4–5 = UKW-b/c, rotor indices 13–14 = Beta/Gamma (already in
+  the wiring tables). Only the `(start − ring)` offset of the Greek wheel is
+  recoverable, so `showconfig` reports it as start = offset, ring = A.
 
 ### Performance notes
 
@@ -273,9 +310,11 @@ the per-search state into `struct machine`, and **multi-threading** the search
 over reflector × wheel-order (`-T N`, default 1, max 256; each worker owns its
 own `machine`, results merged under a mutex) — and the build is warning-free
 under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`, and clean under
-ThreadSanitizer. Scaling is ~3× on 4 cores (`make bench SCALE=1`). The main
-remaining feature is an **M4 (4-rotor naval) mode** — the wiring tables are
-already present and a design (static Greek wheel folded into an effective
-reflector; `-4` flag with `-u`/`-w`/`-r`/`-g` extended to the 4th wheel) is
-recorded in `CODE_REVIEW.md` §5; deferred for now. Read `CODE_REVIEW.md` before
-changing the search or scoring code.
+ThreadSanitizer. Scaling is ~3× on 4 cores (`make bench SCALE=1`). **M4 (4-rotor
+naval) mode** is now implemented (`-4`; static Greek wheel folded into an
+effective reflector, so the hot path is untouched — see "M4 mode" above and
+`CODE_REVIEW.md` §5). The remaining open direction is **cracking quality on short
+messages**: the `make crackquality` harness shows every miss is a *search*
+failure (the plugboard hill-climb sticking in local optima), so the next lever is
+the search — random restarts / better seeding / annealing (`CODE_REVIEW.md` §9).
+Read `CODE_REVIEW.md` before changing the search or scoring code.

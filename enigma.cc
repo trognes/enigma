@@ -93,6 +93,16 @@ static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french ...; no default */
 static const char * opt_datadir;  /* directory holding the n-gram files (default ".") */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
+static int opt_m4;        /* use M4 (4-rotor naval) mode */
+/* M4 mode: 4th "Greek" wheel (Beta/Gamma, rotor indices 13-14) is static (never
+   steps) and folds into a thin reflector (UKW-b/c, reflector indices 4-5) to form
+   an effective reflector -- so the machine stays a 3-stepping-rotor engine. The
+   Greek wheel and ring/start are taken from the first character of -w/-r/-g. */
+static const int m4_thin_base = 4;   /* reflector index of UKW-b; UKW-c is +1 */
+static const int greek_base = 13;    /* rotor index of Beta; Gamma is +1 */
+static char opt_greek_walzen = '.';      /* Greek wheel: B (Beta), G (Gamma) or . */
+static char opt_greek_ringstellung = '.';   /* Greek ring letter or . */
+static char opt_greek_grundstellung = '.';  /* Greek start letter or . */
 static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
@@ -126,10 +136,18 @@ struct machine
   unsigned char mapping[maxlen][asize]; /* hill-climb's contiguous row copies */
   char plaintext[maxlen+1];             /* candidate / result */
 
-  int ukw;                              /* reflector index */
+  int ukw;                              /* reflector index (thin UKW-b/c in M4) */
   int walzenlage[wheels];               /* wheel order (rotor indices) */
   unsigned char grundstellung[wheels];  /* start positions */
   unsigned char ringstellung[wheels];   /* ring positions */
+
+  /* effective reflector actually applied by subst_rotors: a plain copy of
+     reflector[ukw] normally, or greek-folded thin reflector in M4 mode (set once
+     per task by set_effective_reflector, before precompute -- never in the hot
+     loop, which reads the precomputed subst_array). */
+  unsigned char reflector_eff[asize];
+  int greek;          /* M4 Greek rotor index (Beta/Gamma), else -1 */
+  int greek_offset;   /* M4 (Greek start - ring) mod 26, else 0 */
 
   /* The 457 KB rotor-stack table (rebuilt once per wheel order by precompute,
      read per ring/start by setup_mapping) is heap-allocated separately and
@@ -316,12 +334,40 @@ inline int subst_rotors(machine & m, int x)
   for (int r = wheels - 1; r >= 0; r--)
     x = rotor_l(m, x, r);
 
-  x = reflector[m.ukw][x];
+  x = m.reflector_eff[x];
 
   for(int r = 0; r < wheels; r++)
     x = rotor_r(m, x, r);
 
   return x;
+}
+
+/* Resolve the effective reflector for this machine's reflector / Greek wheel.
+   Called once per task (before precompute), never per character. Standard and
+   Norway modes just copy the wired reflector. In M4 the static Greek wheel folds
+   into the thin reflector: the signal passes through the Greek wheel (at its fixed
+   offset, forward like rotor_l), the thin reflector, then back through the Greek
+   wheel (reverse like rotor_r). greek o thin o greek^-1 is the conjugate of an
+   involution, so it is still a valid (involutory) reflector. */
+void set_effective_reflector(machine & m)
+{
+  if (! opt_m4)
+    {
+      memcpy(m.reflector_eff, reflector[m.ukw], asize);
+      return;
+    }
+
+  const int o = m.greek_offset;
+  const unsigned char * thin = reflector[m.ukw];      /* ukw = thin index 4/5 */
+  const unsigned char * gf = rotor_fwd[m.greek];
+  const unsigned char * gr = rotor_rev[m.greek];
+  for (int x = 0; x < asize; x++)
+    {
+      int a = mod26(gf[mod26(x + o)] - o);   /* Greek forward  (rotor_l style) */
+      int b = thin[a];                       /* thin reflector                 */
+      int c = mod26(gr[mod26(b + o)] - o);   /* Greek reverse  (rotor_r style) */
+      m.reflector_eff[x] = static_cast<unsigned char>(c);
+    }
 }
 
 void precompute(machine & m)
@@ -553,6 +599,31 @@ void showconfig(machine & m)
      index - norway_rotor_base + 1; the reflector prints as its letter (N for
      Norway, else A/B/C). */
   int wheel_offset = opt_norenigma ? 1 - norway_rotor_base : 1;
+
+  if (opt_m4)
+    {
+      /* M4: thin reflector (b/c) + static Greek wheel (B/G). Only the Greek
+         (start - ring) offset is identifiable, so it is shown as start=offset,
+         ring=A. The reflector/Greek/ring/start fields list the Greek first. */
+      fprintf(stderr,
+              "W: %c%c%d%d%d R: A%c%c%c G: %c%c%c%c ",
+              (m.ukw == m4_thin_base) ? 'b' : 'c',
+              (m.greek == greek_base) ? 'B' : 'G',
+              m.walzenlage[0] + 1,
+              m.walzenlage[1] + 1,
+              m.walzenlage[2] + 1,
+              num2char(m.ringstellung[0]),
+              num2char(m.ringstellung[1]),
+              num2char(m.ringstellung[2]),
+              num2char(m.greek_offset),
+              num2char(m.grundstellung[0]),
+              num2char(m.grundstellung[1]),
+              num2char(m.grundstellung[2]));
+      showsteckerbrett(m);
+      fprintf(stderr, "\n");
+      return;
+    }
+
   fprintf(stderr,
           "W: %c%d%d%d R: %c%c%c G: %c%c%c ",
           opt_norenigma ? 'N' : num2char(m.ukw),
@@ -763,6 +834,8 @@ struct wheel_task
 {
   int u;
   int w[wheels];
+  int greek;        /* M4 Greek rotor index, else -1 */
+  int greek_off;    /* M4 (Greek start - ring) mod 26, else 0 */
 };
 
 struct search_range
@@ -820,6 +893,9 @@ void precompute_worker(machine & m,
     {
       const wheel_task & t = tasks[i];
       init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
+      m.greek = t.greek;
+      m.greek_offset = t.greek_off;
+      set_effective_reflector(m);   /* fold in the Greek wheel (M4) once per task */
       m.subst_array = all + i * asize;
       precompute(m);
     }
@@ -868,6 +944,8 @@ void search_worker(machine & m,
               const wheel_task & t = tasks[wo];
               m.subst_array = all + wo * asize;
               init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
+              m.greek = t.greek;            /* for showconfig of a new best (M4) */
+              m.greek_offset = t.greek_off;
             }
 
           int r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
@@ -930,6 +1008,17 @@ void bruteforce(char * result)
       u_min = 0;
       u_max = 0;
     }
+  else if (opt_m4)
+    {
+      /* thin reflector index: B -> m4_thin_base (UKW-b), C -> +1 (UKW-c) */
+      if (opt_ukw[0] == '.')
+        {
+          u_min = m4_thin_base;
+          u_max = m4_thin_base + 1;
+        }
+      else
+        u_min = u_max = m4_thin_base + char2num(opt_ukw[0]) - 1;
+    }
   else
     {
       if (opt_ukw[0] == '.')
@@ -984,13 +1073,53 @@ void bruteforce(char * result)
   size_t rsize = static_cast<size_t>(rc[0]) * rc[1] * rc[2];
   size_t gsize = static_cast<size_t>(gc[0]) * gc[1] * gc[2];
 
+  /* M4 adds two outer dimensions: the Greek wheel (Beta/Gamma) and its fixed
+     offset. Only the (start - ring) offset of the static Greek wheel is
+     identifiable, so the pos/ring ranges collapse to the set of distinct offsets
+     (<= 26, not 26x26). Non-M4 searches use the single sentinels {-1} / {0}. */
+  std::vector<int> greek_list;
+  std::vector<int> offset_list;
+  if (opt_m4)
+    {
+      if (opt_greek_walzen == '.')
+        {
+          greek_list.push_back(greek_base);
+          greek_list.push_back(greek_base + 1);
+        }
+      else
+        greek_list.push_back(greek_base + (opt_greek_walzen == 'B' ? 0 : 1));
+
+      int gp_min, gp_max, gr_min, gr_max;
+      if (opt_greek_grundstellung == '.') { gp_min = 0; gp_max = 25; }
+      else gp_min = gp_max = char2num(opt_greek_grundstellung);
+      if (opt_greek_ringstellung == '.') { gr_min = 0; gr_max = 25; }
+      else gr_min = gr_max = char2num(opt_greek_ringstellung);
+
+      bool seen[asize];
+      for (int i = 0; i < asize; i++)
+        seen[i] = false;
+      for (int gp = gp_min; gp <= gp_max; gp++)
+        for (int gr = gr_min; gr <= gr_max; gr++)
+          seen[mod26(gp - gr)] = true;
+      for (int off = 0; off < asize; off++)   /* ascending: deterministic order */
+        if (seen[off])
+          offset_list.push_back(off);
+    }
+  else
+    {
+      greek_list.push_back(-1);
+      offset_list.push_back(0);
+    }
+
   std::vector<wheel_task> tasks;
   for (int u1 = u_min; u1 <= u_max; u1++)
-    for (int w1 = w_min[0]; w1 <= w_max[0]; w1++)
-      for (int w2 = w_min[1]; w2 <= w_max[1]; w2++)
-        for (int w3 = w_min[2]; w3 <= w_max[2]; w3++)
-          if ((w1 != w2) && (w1 != w3) && (w2 != w3))
-            tasks.push_back(wheel_task{u1, {w1, w2, w3}});
+    for (int gi : greek_list)
+      for (int off : offset_list)
+        for (int w1 = w_min[0]; w1 <= w_max[0]; w1++)
+          for (int w2 = w_min[1]; w2 <= w_max[1]; w2++)
+            for (int w3 = w_min[2]; w3 <= w_max[2]; w3++)
+              if ((w1 != w2) && (w1 != w3) && (w2 != w3))
+                tasks.push_back(wheel_task{u1, {w1, w2, w3}, gi, off});
 
   /* The option validation should make this unreachable, but never run an empty
      search and emit uninitialised output. */
@@ -1001,12 +1130,15 @@ void bruteforce(char * result)
   size_t nwo = tasks.size();
   size_t total_keys = nwo * rsize * gsize;
 
-  /* memory accounting: one [asize]^4 table per wheel order, all resident */
+  /* memory accounting: one [asize]^4 table per task (reflector x wheel order,
+     plus the Greek wheel x offset in M4), all resident. A full M4 wildcard
+     (2 thin x 2 Greek x 26 offsets x 336 wheel orders) is ~15 GB, hence the
+     16 GiB ceiling. */
   g_table_count = nwo;
   g_table_bytes = nwo * static_cast<size_t>(asize) * asize * asize * asize;
-  if (g_table_bytes > static_cast<size_t>(8) * 1024 * 1024 * 1024)
+  if (g_table_bytes > static_cast<size_t>(16) * 1024 * 1024 * 1024)
     fatal("Search space too large to precompute the rotor tables "
-          "(narrow -u / -w / -x)");
+          "(narrow -u / -w / -x, or fix the M4 Greek wheel/position)");
 
   /* never start more threads than there is work to hand out */
   int nthreads = opt_threads;
@@ -1177,10 +1309,12 @@ void help(FILE * out)
   fprintf(out, "Usage: enigma [OPTIONS]\n");
   fprintf(out, "  -h           Show help information\n");
   fprintf(out, "  -v           Show version information\n");
-  fprintf(out, "  -u X         Reflector (umkehrwalze) X (A-C, N or .) [.]\n");
+  fprintf(out, "  -u X         Reflector (umkehrwalze) X (A-C, N, M4 b/c, or .) [.]\n");
   fprintf(out, "  -w XYZ       Wheels (walzen) XYZ (1-8 or .) [...]\n");
   fprintf(out, "  -x integer   Highest wheel number to use (3-8) [5]\n");
   fprintf(out, "  -n           Use the Norway Enigma reflector (N) and wheels (1-5)\n");
+  fprintf(out, "  -4           M4 (4-rotor naval) mode: -u selects thin reflector b/c;\n");
+  fprintf(out, "               -w/-r/-g take 4 chars, Greek wheel (B/G) / ring / start first\n");
   fprintf(out, "  -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]\n");
   fprintf(out, "  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
   fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
@@ -1237,11 +1371,28 @@ void show_settings()
   fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
-  fprintf(stderr, "Machine:    %s Enigma; reflector %s, wheels %s",
-          opt_norenigma ? "Norway" : "standard", opt_ukw, opt_walzen);
-  if (strchr(opt_walzen, '.'))
-    fprintf(stderr, " (max wheel %d)", opt_maxwheel);
-  fprintf(stderr, ", ring %s, start %s\n", opt_ringstellung, opt_grundstellung);
+  if (opt_m4)
+    {
+      /* opt_ukw is upper-cased (B/C); echo the thin reflector in lower case */
+      fprintf(stderr,
+              "Machine:    M4 Enigma; thin reflector %c, Greek wheel %c, wheels %s",
+              (opt_ukw[0] == '.') ? '.' : (opt_ukw[0] == 'B' ? 'b' : 'c'),
+              opt_greek_walzen, opt_walzen);
+      if (strchr(opt_walzen, '.'))
+        fprintf(stderr, " (max wheel %d)", opt_maxwheel);
+      fprintf(stderr, ", Greek ring %c start %c, ring %s, start %s\n",
+              opt_greek_ringstellung, opt_greek_grundstellung,
+              opt_ringstellung, opt_grundstellung);
+    }
+  else
+    {
+      fprintf(stderr, "Machine:    %s Enigma; reflector %s, wheels %s",
+              opt_norenigma ? "Norway" : "standard", opt_ukw, opt_walzen);
+      if (strchr(opt_walzen, '.'))
+        fprintf(stderr, " (max wheel %d)", opt_maxwheel);
+      fprintf(stderr, ", ring %s, start %s\n",
+              opt_ringstellung, opt_grundstellung);
+    }
 
   fprintf(stderr, "Plugboard:  ");
   if (opt_steckerbrett[0])
@@ -1269,11 +1420,13 @@ int main(int argc, char * * argv)
       exit(1);
     }
 
-  /* set default arguments */
-  opt_ukw = ".";
-  opt_walzen = "...";
-  opt_ringstellung = "AA.";
-  opt_grundstellung = "...";
+  /* set default arguments. The reflector/wheels/ring/start defaults depend on the
+     mode (standard vs M4's extra Greek position), so they are left null here and
+     resolved after parsing, once -4 is known. */
+  opt_ukw = 0;
+  opt_walzen = 0;
+  opt_ringstellung = 0;
+  opt_grundstellung = 0;
   opt_steckerbrett = "";
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q) */
   opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "." */
@@ -1282,12 +1435,13 @@ int main(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
+  opt_m4 = 0;
   opt_threads = 1;
 
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:d:imbtqcvhn")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -1355,12 +1509,37 @@ int main(int argc, char * * argv)
         case 'n':
           opt_norenigma = 1;
           break;
+        case '4':
+          opt_m4 = 1;
+          break;
         default:
           fprintf(stderr, "\n");
           help(stderr);
           exit(1);
           break;
         }
+    }
+
+  if (opt_norenigma && opt_m4)
+    fatal("-n (Norway) and -4 (M4) are mutually exclusive");
+
+  /* resolve the mode-dependent reflector/wheels/ring/start defaults now that the
+     mode flags are known. M4 takes a 4th (Greek) character first in -w/-r/-g; the
+     Greek ring defaults to A and its position is wildcarded, so all 26 effective
+     reflectors are tried. */
+  if (opt_m4)
+    {
+      if (! opt_ukw)           opt_ukw = ".";
+      if (! opt_walzen)        opt_walzen = "....";
+      if (! opt_ringstellung)  opt_ringstellung = "AAA.";
+      if (! opt_grundstellung) opt_grundstellung = "....";
+    }
+  else
+    {
+      if (! opt_ukw)           opt_ukw = ".";
+      if (! opt_walzen)        opt_walzen = "...";
+      if (! opt_ringstellung)  opt_ringstellung = "AA.";
+      if (! opt_grundstellung) opt_grundstellung = "...";
     }
 
   /* resolve the n-gram data directory: -d wins, else $ENIGMA_DATA, else the
@@ -1384,6 +1563,43 @@ int main(int argc, char * * argv)
 
       if ((opt_maxwheel < wheels) || (opt_maxwheel > 5))
         fatal("Illegal max wheel (must be 3 to 5)");
+    }
+  else if (opt_m4)
+    {
+      /* M4: thin reflector (b/c, case-insensitive -> B/C), and a 4-character
+         -w/-r/-g whose first character is the static Greek wheel/ring/start. */
+      if ((strlen(opt_ukw) != 1) ||
+          (strspn(opt_ukw, "BC.") != 1))
+        fatal("Illegal ukw string (M4: must be b, c or .)");
+
+      if (strlen(opt_walzen) != wheels + 1)
+        fatal("Illegal walzen string (M4: 4 chars: Greek (B/G/.) + 3 wheels "
+              "(1-8/.))");
+      if (! strchr("BGbg.", opt_walzen[0]))
+        fatal("Illegal Greek wheel (M4: must be B (Beta), G (Gamma) or .)");
+      if (strspn(opt_walzen + 1, "12345678.") != wheels)
+        fatal("Illegal walzen string (M4: the 3 wheels must be digits (1-8) "
+              "or .)");
+
+      if (strlen(opt_ringstellung) != wheels + 1)
+        fatal("Illegal ringstellung string (M4: 4 letters (A-Z) or .)");
+      if (strlen(opt_grundstellung) != wheels + 1)
+        fatal("Illegal grundstellung string (M4: 4 letters (A-Z) or .)");
+
+      if ((opt_maxwheel < wheels) || (opt_maxwheel > 8))
+        fatal("Illegal max wheel (must be 3-8)");
+
+      /* split off the Greek (first) char of -w/-r/-g; the remaining 3-character
+         tails then pass through the shared checks below exactly like a standard
+         machine. -r/-g were already upper-cased; normalise the Greek wheel. */
+      opt_greek_walzen = (opt_walzen[0] == 'b') ? 'B'
+                       : (opt_walzen[0] == 'g') ? 'G'
+                       : opt_walzen[0];
+      opt_greek_ringstellung = opt_ringstellung[0];
+      opt_greek_grundstellung = opt_grundstellung[0];
+      opt_walzen += 1;
+      opt_ringstellung += 1;
+      opt_grundstellung += 1;
     }
   else
     {
