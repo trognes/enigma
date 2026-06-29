@@ -78,7 +78,9 @@ static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 static const int norway_reflector_index = 3;
 static const int norway_rotor_base = 8;
 
-/* A score lower than any achievable plaintext score (all models score >= 0). */
+/* A score lower than any achievable plaintext score. The n-gram models score in
+   negative log10 probabilities (floor ~ -11 per n-gram); IC scores >= 0. -1e30 is
+   far below either. */
 static const double score_min = -1e30;
 
 /* Plaintext scoring models; values match the scoring_name[] order and the
@@ -190,10 +192,15 @@ inline char num2char(int x)
    'table' is the flat backing store of the corresponding global array
    (monograms / bigrams / trigrams / quadgrams). Those arrays are contiguous and
    row-major, so the n letters of a record map to the single index
-   ((a*26 + b)*26 + ...) into 'table' of size 26^n. Each entry is seeded with 1
-   (Laplace smoothing, so unseen n-grams score log10(1) = 0) and finally stored
-   as log10(count + 1) for additive scoring. Parsing stops at end of file or the
-   first malformed record. */
+   ((a*26 + b)*26 + ...) into 'table' of size 26^n.
+
+   Entries are stored as log10 probabilities for additive (log-likelihood)
+   scoring: an observed n-gram with 'count' occurrences out of 'total' gets
+   log10(count / total); an UNSEEN n-gram gets a floor log10(0.01 / total) -- a
+   small but strongly negative value, so a candidate carrying many impossible
+   n-grams is penalised rather than scored neutrally (this is the standard
+   "quadgram fitness" of Practical Cryptography). Parsing stops at end of file or
+   the first malformed record. */
 void ngrams_read(int n, float * table, const char * suffix)
 {
   int size = 1;
@@ -201,7 +208,7 @@ void ngrams_read(int n, float * table, const char * suffix)
     size *= asize;
 
   for (int i = 0; i < size; i++)
-    table[i] = 1.0f;
+    table[i] = 0.0f;   /* 0 = unseen (gets the floor below); observed get count */
 
   char filename[1024];
   int len = snprintf(filename, sizeof(filename), "%s/%s_%s.txt",
@@ -217,6 +224,7 @@ void ngrams_read(int n, float * table, const char * suffix)
       exit(1);
     }
 
+  double total = 0.0;   /* sum of all counts, for the probability denominator */
   while (1)
     {
       int index = 0;
@@ -236,15 +244,23 @@ void ngrams_read(int n, float * table, const char * suffix)
       if (! ok || (fscanf(f, " %d", & count) != 1))
         break;
 
-      table[index] = static_cast<float>(count + 1);
+      table[index] = static_cast<float>(count);
+      total += count;
     }
 
   fclose(f);
 
-  /* compute the log in double and store as float (one rounding, ~7 sig. digits;
-     the score sum is still accumulated in double by the scorers) */
+  if (total <= 0.0)
+    fatal("Language statistics file contained no usable counts");
+
+  /* convert counts to log10 probabilities; unseen (count 0) get a floor of
+     log10(0.01 / total). Computed in double, stored as float (one rounding; the
+     score sum is still accumulated in double by the scorers). */
+  float floor = static_cast<float>(log10(0.01 / total));
   for (int i = 0; i < size; i++)
-    table[i] = static_cast<float>(log10(table[i]));
+    table[i] = (table[i] > 0.0f)
+               ? static_cast<float>(log10(table[i] / total))
+               : floor;
 }
 
 
