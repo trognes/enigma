@@ -50,8 +50,23 @@
 # differs across awk implementations, so absolute numbers are only comparable on
 # the same machine -- like bench timings -- but an A/B on one machine is valid.)
 #
+# --- Failure-mode split (SPLIT=1) --------------------------------------------
+#
+# A non-recovered short message fails for one of two reasons, which need OPPOSITE
+# fixes, so SPLIT=1 labels each non-exact trial:
+#   * SCORING failure -- the true plugboard does NOT score highest, so even a
+#     perfect search could not pick it; only a better SCORING function helps.
+#   * SEARCH failure  -- the true plugboard scores higher than what the climb
+#     found, i.e. the hill-climb stuck in a local optimum; a better SEARCH
+#     (restarts, simulated annealing, ...) helps.
+# It is decided by an oracle: score the decrypt under the KNOWN true plugboard
+# (one extra fixed-config run, no `-c`) and compare to the climb's achieved score.
+# true > found => search failure; otherwise scoring failure. This tells you which
+# lever to pull at each length. Adds one run per trial (roughly 2x slower); not
+# combined with BASE (SPLIT is ignored when an A/B is requested).
+#
 # Tunables (environment): MODEL (i/m/b/t/q, default q), CLANG (crack language,
-# default english), TRIALS, LENGTHS, PAIRS, SEED, BASE.
+# default english), TRIALS, LENGTHS, PAIRS, SEED, BASE, SPLIT.
 
 set -u
 
@@ -69,6 +84,7 @@ TRIALS=${TRIALS:-40}
 LENGTHS=${LENGTHS:-"40 70 100 140 190 250 320"}
 PAIRS=${PAIRS:-10}
 SEED=${SEED:-1}
+SPLIT=${SPLIT:-0}    # 1 = classify each non-recovered trial as scoring vs search failure
 
 # --- per-language corpora (A-Z only); excerpts are drawn from these -----------
 # Shared with the cracking tests in run_tests.sh.
@@ -138,6 +154,28 @@ crack_pct() {
     | awk -F'[()%]' '/identical/ { print $2; exit }'
 }
 
+# crack_run BIN U WHEELS RING GRUND CT TRUTHFILE -> "<pct> <climb-score>"
+# (one climb run; harvest both the -p %-correct and the final best score line)
+crack_run() {
+  _e=$(printf '%s' "$6" | "$1" "-$MODEL" -l "$CLANG" -u "$2" -w "$3" -r "$4" -g "$5" -c -p "$7" 2>&1 >/dev/null)
+  _p=$(printf '%s\n' "$_e" | awk -F'[()%]' '/identical/ { print $2; exit }')
+  _s=$(printf '%s\n' "$_e" | awk '/W: / { s = $1 } END { print s }')
+  printf '%s %s' "${_p:-0}" "${_s:-0}"
+}
+
+# oracle_score BIN U WHEELS RING GRUND CT PLUGBOARD -> score of the TRUE plugboard
+# (fixed config, no -c: scores the one decrypt the true settings produce)
+oracle_score() {
+  printf '%s' "$6" | "$1" "-$MODEL" -l "$CLANG" -u "$2" -w "$3" -r "$4" -g "$5" -s "$7" 2>&1 >/dev/null \
+    | awk '/W: / { s = $1 } END { print (s == "" ? 0 : s) }'
+}
+
+# SPLIT and BASE are mutually exclusive (SPLIT diagnoses the working tree).
+if [ "$SPLIT" = 1 ] && [ -n "$BASE_BIN" ]; then
+  echo "note: SPLIT ignored because BASE (A/B) was requested" >&2
+  SPLIT=0
+fi
+
 if [ -n "$BASE_BIN" ]; then
   echo "crack quality A/B: BASE=$BASE vs working tree"
 else
@@ -148,6 +186,8 @@ printf 'model=-%s  lang=%s  trials=%s  pairs=%s  seed=%s  corpus=%s chars\n\n' \
 
 if [ -n "$BASE_BIN" ]; then
   printf '%4s  %18s  %18s\n' "len" "head mean% exact%" "base mean% exact%"
+elif [ "$SPLIT" = 1 ]; then
+  printf '%4s  %8s  %8s  %12s  %12s\n' "len" "mean%" "exact%" "search-fail%" "scoring-fail%"
 else
   printf '%4s  %8s  %8s\n' "len" "mean%" "exact%"
 fi
@@ -162,7 +202,7 @@ for L in $LENGTHS; do
   fi
   gen_trials "$L" "$((SEED * 1000003 + L))" > "$trials_f"
 
-  hp=""; bp=""
+  hp=""; bp=""; cls=""
   while IFS= read -r line; do
     # shellcheck disable=SC2086
     set -- $line
@@ -171,11 +211,23 @@ for L in $LENGTHS; do
     printf '%s' "$excerpt" > "$truth"
     ct=$(printf '%s' "$excerpt" | "$HEAD_BIN" -i -u "$u" -w "$ww" -r "$rr" -g "$gg" -s "$pb" 2>/dev/null)
 
-    p=$(crack_pct "$HEAD_BIN" "$u" "$ww" "$rr" "$gg" "$ct" "$truth")
-    hp="$hp ${p:-0}"
-    if [ -n "$BASE_BIN" ]; then
-      q=$(crack_pct "$BASE_BIN" "$u" "$ww" "$rr" "$gg" "$ct" "$truth")
-      bp="$bp ${q:-0}"
+    if [ "$SPLIT" = 1 ]; then
+      run=$(crack_run "$HEAD_BIN" "$u" "$ww" "$rr" "$gg" "$ct" "$truth")
+      p=${run% *}; csc=${run#* }
+      hp="$hp ${p:-0}"
+      if awk -v p="${p:-0}" 'BEGIN { exit !(p >= 99.95) }'; then
+        cls="$cls exact"
+      else
+        osc=$(oracle_score "$HEAD_BIN" "$u" "$ww" "$rr" "$gg" "$ct" "$pb")
+        cls="$cls $(awk -v o="${osc:-0}" -v c="${csc:-0}" 'BEGIN { print (o > c + 0.01) ? "search" : "scoring" }')"
+      fi
+    else
+      p=$(crack_pct "$HEAD_BIN" "$u" "$ww" "$rr" "$gg" "$ct" "$truth")
+      hp="$hp ${p:-0}"
+      if [ -n "$BASE_BIN" ]; then
+        q=$(crack_pct "$BASE_BIN" "$u" "$ww" "$rr" "$gg" "$ct" "$truth")
+        bp="$bp ${q:-0}"
+      fi
     fi
   done < "$trials_f"
 
@@ -189,6 +241,11 @@ for L in $LENGTHS; do
     bstat=$(printf '%s\n' $bp | awk '{ s += $1; if ($1 >= 99.95) e++ } END { printf "%.1f %.1f", s/NR, 100.0*e/NR }')
     bmean=${bstat% *}; bexact=${bstat#* }
     printf '%4s  %8s %8s   %8s %8s\n' "$L" "$hmean" "$hexact" "$bmean" "$bexact"
+  elif [ "$SPLIT" = 1 ]; then
+    # shellcheck disable=SC2086
+    fstat=$(printf '%s\n' $cls | awk '{ n++; c[$1]++ } END { printf "%.1f %.1f", 100.0*c["search"]/n, 100.0*c["scoring"]/n }')
+    fsearch=${fstat% *}; fscoring=${fstat#* }
+    printf '%4s  %8s  %8s  %12s  %12s\n' "$L" "$hmean" "$hexact" "$fsearch" "$fscoring"
   else
     printf '%4s  %8s  %8s\n' "$L" "$hmean" "$hexact"
   fi
