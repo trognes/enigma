@@ -520,6 +520,25 @@ Remaining opportunities:
   it tried, and the resolved dir is echoed in the settings. (A compile-time
   install prefix + `make install`, and executable-relative resolution, were
   considered and deferred — not needed until the tool is packaged.)
+
+  **Considered and declined — embedding the n-gram tables into the binary.**
+  Baking the language statistics into the executable (a single self-contained
+  binary, no data files to ship) was weighed and **not pursued**. If done, the
+  thing to embed is the processed *dense `float` tables* (~7.25 MiB for all four
+  languages × four orders) — smaller than the ~12 MB of source text and skipping
+  the startup parse — which would grow the binary from ~62 KB to ~7.5 MB. It was
+  declined because: (1) `-d`/`$ENIGMA_DATA` already removed the only practical
+  pain (running from any directory), leaving only single-file *distribution* as a
+  benefit, which is not a goal; (2) it would carry all four languages even though a
+  run uses one, and would hard-code the language set, regressing the deliberately
+  *open* `<lang>_<type>.txt` extension point (§ validation note) unless the file
+  loader were kept as a `-d` override (a hybrid); and (3) every embedding mechanism
+  has friction — C23 `#embed` needs bumping past the pinned `-std=c++17` and a very
+  new compiler; a generated multi-MB array literal compiles slowly; and an
+  `objcopy`/`ld -r -b binary` blob is toolchain/platform-specific and bakes in
+  `float` endianness. If single-file distribution ever *does* become a goal, the
+  hybrid (generated dense-`float` built-ins + retained `-d` override) is the form
+  to revisit.
 - 🟢 **Option validation hardened** ✅. The n-gram table for the chosen model is
   now loaded **before** standard input is read, so a missing/mistyped `-l` fails
   immediately with the offending filename instead of after consuming stdin.
