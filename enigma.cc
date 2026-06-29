@@ -857,9 +857,9 @@ void set_random_steckerbrett(machine & m, uint64_t * rng)
     m.steckerbrett[i] = static_cast<unsigned char>(i);
 
   int pairs = 1 + static_cast<int>(splitmix64(rng) % (asize / 2));   /* 1..13 */
-  for (int p = 0; p < pairs; p++)
+  for (int p = 0, k = 0; p < pairs; p++, k += 2)
     {
-      int a = perm[2 * p], b = perm[2 * p + 1];
+      int a = perm[k], b = perm[k + 1];
       m.steckerbrett[a] = static_cast<unsigned char>(b);
       m.steckerbrett[b] = static_cast<unsigned char>(a);
     }
