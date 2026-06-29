@@ -10,7 +10,9 @@ The settings include the reflector (umkehrwalze) and wheels (walzen) used,
 the ring positions (ringstellung) and start positions (grundstellung),
 as well as the position of the plugs in the plugboard (steckerbrett).
 
-Both the common three-wheel Enigma as well as the special Norway Enigma (Norenigma) is supported.
+The common three-wheel Enigma, the special Norway Enigma (Norenigma), and the
+four-rotor naval **M4** (with the thin UKW-b/c reflectors and the Beta/Gamma Greek
+wheel) are all supported.
 
 If specified (with the -c option), a hill-climbing algorithm will be used to identify the optimal plugboard configuration.
 
@@ -23,10 +25,12 @@ Copyright (C) 2017-2026 Torbjørn Rognes
 Usage: enigma [OPTIONS]
   -h           Show help information
   -v           Show version information
-  -u X         Reflector (umkehrwalze) X (A-C, N or .) [.]
+  -u X         Reflector (umkehrwalze) X (A-C, N, M4 b/c, or .) [.]
   -w XYZ       Wheels (walzen) XYZ (1-8 or .) [...]
   -x integer   Highest wheel number to use (3-8) [5]
   -n           Use the Norway Enigma reflector (N) and wheels (1-5)
+  -4           M4 (4-rotor naval) mode: -u selects thin reflector b/c;
+               -w/-r/-g take 4 chars, Greek wheel (B/G) / ring / start first
   -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]
   -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]
   -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]

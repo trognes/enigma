@@ -242,10 +242,10 @@ working path:
   then removed.)
 - 🟡 **`showit()`** is an entire function body wrapped in `#if 0` — a no-op.
   **Intentionally kept** as debug instrumentation (see note below).
-- 🟡 **Unreachable tables → planned M4 (4-rotor naval) mode.** The M4 thin
-  reflectors (indices 4–5, UKW-b/c) and Beta/Gamma rotors (indices 13–14) exist
-  in the wiring tables but cannot yet be selected. They are reserved for an M4
-  mode, deferred for now but with the design agreed:
+- 🟢 **M4 (4-rotor naval) mode — ✅ IMPLEMENTED** (`-4`). The M4 thin reflectors
+  (indices 4–5, UKW-b/c) and Beta/Gamma rotors (indices 13–14), previously present
+  in the wiring tables but unreachable, are now selectable. The implementation
+  follows the design below exactly; the as-built notes are summarised after it:
   - **Modelling (cheap — leaves the hot path untouched):** the M4's 4th "Greek"
     wheel (Beta/Gamma) is *static* — it does not step (note its empty notch), so
     it folds into the reflector. Build a composite **effective reflector**
@@ -283,7 +283,22 @@ working path:
       today (a full wheel-order search is ~82 MB today and stays ~82 MB), and the
       ×104 becomes recomputation **time** instead. This is the real reason to land
       threading first — to absorb the time cost, not a memory cost.
-  Estimated ~half-a-day to a day of self-contained work; revisit after threading.
+  - **As built.** Folded the Greek wheel into a per-task **effective reflector**
+    `m.reflector_eff`, resolved once per task by `set_effective_reflector()` (so
+    `subst_rotors` reads it and the hot `subst_array`/`setup_mapping`/scorer path
+    is byte-for-byte unchanged — confirmed by `make bench BASE=dev` parity under
+    g++ and clang). The search **folds the Greek config into the task list** (the
+    chosen option): `wheel_task` carries the Greek wheel + offset, and
+    `bruteforce()` enumerates thin × Greek wheel × *distinct* Greek offsets ×
+    wheel orders (the pos/ring ranges collapse to ≤26 offsets). The precompute
+    guard was raised to **16 GiB** to admit a full M4 wildcard (~15 GB). CLI: the
+    Greek wheel is denoted **B/G** (Beta/Gamma) as the first character of `-w`;
+    `-n` and `-4` are mutually exclusive. Correctness is anchored on the
+    documented backward-compatibility equivalence (thin `b` + Beta@A ≡ reflector
+    B, `c` + Gamma@A ≡ C) plus round-trip, offset/wheel-sensitivity, search
+    recovery, and `-T` determinism tests (`tests/run_tests.sh`, 9 new checks).
+    Verified clean under g++/clang `-Werror`, ASan/UBSan, TSan, valgrind, cppcheck,
+    clang-tidy. Took ~the estimated half-day.
 - 🟢 Numerous `#if 0` / `#if 1` blocks (`showsteckerbrett`, debug prints,
   `SHOWHILLCLIMB`) scattered through the search and hill-climb code.
   **Intentionally kept** as debug instrumentation.
@@ -578,8 +593,12 @@ the per-search state encapsulated into `struct machine`, the search
 **multi-threaded** (`-T N`, default 1, max 256; TSan-clean; ~3× on 4 cores), and
 (7) the test suite + CI. The build is warning-free under
 `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow` (g++ and clang++), and
-the suite has 77 checks. The main remaining feature is the planned **M4 (4-rotor)
-mode** (§5). Sharing the rotor *stepping* across start positions (§6, optimisation
+the suite has 86 checks. **M4 (4-rotor naval) mode is now implemented** (`-4`;
+§5) — the Greek wheel folds into an effective reflector, leaving the hot path
+untouched. The open direction now is short-message **cracking quality**: the
+`make crackquality` harness (with `SPLIT=1`) shows every miss is a *search*
+failure, so the next lever is the plugboard search (§9), not scoring. Sharing the
+rotor *stepping* across start positions (§6, optimisation
 "B") was prototyped and **rejected** — it is byte-identical but ~18 % slower on
 g++ / neutral on clang, because the notch branches are already near-free and the
 trajectory table only adds memory traffic. The per-key row copy is already gone,

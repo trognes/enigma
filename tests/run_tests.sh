@@ -120,6 +120,54 @@ roundtrip "double step (long round-trip)" \
 roundtrip "Norway Enigma" \
   "DETTEERENHEMMELIGMELDING" -i -n -u N -w 123 -r AAA -g AAA
 
+echo "== M4 (4-rotor naval) =="
+
+# Backward-compatibility KAT (externally anchored): the M4 thin reflector b with
+# the Greek wheel Beta at ring/position A is wiring-equivalent to the standard
+# 3-rotor reflector B; likewise thin c + Gamma at A == reflector C. This ties the
+# Greek-folding effective-reflector composition to the standard reflector path,
+# which is itself pinned by the BDZGO KAT above (so the check is not circular).
+m4kat="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGENIGMA"
+check "M4: thin b + Beta@A == reflector B" \
+  "$(run "$m4kat" -i -4 -u b -w B142 -r AAAA -g AAAA)" \
+  "$(run "$m4kat" -i -u B -w 142 -r AAA -g AAA)"
+check "M4: thin c + Gamma@A == reflector C" \
+  "$(run "$m4kat" -i -4 -u c -w G142 -r AAAA -g AAAA)" \
+  "$(run "$m4kat" -i -u C -w 142 -r AAA -g AAA)"
+
+# Reciprocity with a non-zero Greek offset and a plugboard.
+roundtrip "M4: round-trip (Greek offset + plugboard)" \
+  "ENIGMAMFOURNAVALCIPHERMACHINETEST" -i -4 -u c -w G317 -r AQXP -g BMNL -s "AB CD"
+
+# Distinct Greek positions and Greek wheels must produce distinct ciphertext
+# (guards against the Greek offset / wheel silently not being applied).
+m4a=$(run "$m4kat" -i -4 -u b -w B317 -r AAAA -g AQXP)
+m4b=$(run "$m4kat" -i -4 -u b -w B317 -r AAAA -g KQXP)
+check "M4: Greek position changes output" "$([ "$m4a" != "$m4b" ] && echo differ)" "differ"
+m4g=$(run "$m4kat" -i -4 -u b -w G317 -r AAAA -g AQXP)
+check "M4: Greek wheel changes output" "$([ "$m4a" != "$m4g" ] && echo differ)" "differ"
+
+# End-to-end: encrypt at a known Greek position (K), recover it by wildcarding the
+# Greek position (quad scoring); must return the exact plaintext.
+m4pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCE"
+m4ct=$(run "$m4pt" -i -4 -u b -w B317 -r AAAA -g KQXP)
+check "M4: crack the Greek position" \
+  "$(run "$m4ct" -4 -u b -w B317 -r AAAA -g .QXP -l english)" \
+  "$m4pt"
+
+# M4 -T determinism: a wildcard (thin x Greek x Greek-position) search must give
+# the same result with 1 and 4 threads.
+check "M4: -T1 == -T4" \
+  "$(run "$m4ct" -4 -u . -w .317 -r AAAA -g .QXP -l english -T 1)" \
+  "$(run "$m4ct" -4 -u . -w .317 -r AAAA -g .QXP -l english -T 4)"
+
+# Validation: M4 requires 4-character -w; a 3-character -w is rejected.
+printf 'ABCDEFGHIJ' | "$ENIGMA" -i -4 -u b -w 123 -r AAAA -g AAAA >/dev/null 2>&1
+check "M4: 3-char -w rejected (exit code)" "$?" "1"
+# -n and -4 together is rejected.
+printf 'ABCDEFGHIJ' | "$ENIGMA" -i -n -4 >/dev/null 2>&1
+check "M4: -n with -4 rejected (exit code)" "$?" "1"
+
 echo "== Input handling =="
 
 # Non-letters are stripped and input is upper-cased before encryption.
