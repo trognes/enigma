@@ -110,7 +110,9 @@ static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
-static int opt_staged;    /* staged plugboard climb: bigram pre-pass then target */
+static const char * opt_staged;  /* staged climb pre-pass schedule (e.g. "b", "ib"),
+                                    a sequence of model letters i/m/b/t/q climbed in
+                                    order before the target model; 0 = off */
 static const int max_restarts = 100000;
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
@@ -869,26 +871,53 @@ void set_random_steckerbrett(machine & m, uint64_t * rng)
     }
 }
 
-/* Staged plugboard climb (-S): first climb under a lower-order, smoother model
-   (bigram) to steer the early plugs into a good basin, then climb under the target
-   model to refine. With only a plug or two set the bigram surface is far less
-   rugged than the quadgram one, which the single-model climb navigates poorly;
-   staging reshapes the *search* landscape (complementary to random restarts). The
-   returned score and m.plaintext are in the target model, so cross-key comparison
-   is unaffected. With -S off this is exactly the single-model climb. The bigram
-   pre-pass only helps when the target is a higher order (trigram/quadgram). */
+/* Load the n-gram table backing a scoring model (IC needs none). */
+void load_table(int model)
+{
+  switch (model)
+    {
+    case SCORE_MONO: ngrams_read(1, monograms, "monograms"); break;
+    case SCORE_BI:   ngrams_read(2, & bigrams[0][0], "bigrams"); break;
+    case SCORE_TRI:  ngrams_read(3, & trigrams[0][0][0], "trigrams"); break;
+    case SCORE_QUAD: ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams"); break;
+    default: break;   /* IC: no table */
+    }
+}
+
+/* Map a scoring-model letter (i/m/b/t/q) to its SCORE_* value. */
+int model_of(char c)
+{
+  switch (c)
+    {
+    case 'i': return SCORE_IC;
+    case 'm': return SCORE_MONO;
+    case 'b': return SCORE_BI;
+    case 't': return SCORE_TRI;
+    case 'q': return SCORE_QUAD;
+    default:  return SCORE_IC;
+    }
+}
+
+/* Staged plugboard climb (-S <schedule>): climb under each pre-pass model in the
+   schedule (e.g. "b" = bigram, "ib" = IC then bigram), in order, then climb under
+   the target model to refine. A lower-order model has a far smoother surface when
+   only a plug or two are set, so it steers the early plugs into a good basin that
+   the single-model climb navigates poorly -- staging reshapes the *search*
+   landscape (complementary to random restarts). The returned score and m.plaintext
+   are in the target model, so cross-key comparison is unaffected. With -S off this
+   is exactly the single-model climb. */
 double hillclimb_staged(machine & m)
 {
   if (! opt_staged)
     return hillclimb(m);
 
-  if (SCORE_BI < opt_scoring)
+  for (const char * p = opt_staged; *p; p++)
     {
-      m.scoring = SCORE_BI;
-      hillclimb(m);            /* keeps m.steckerbrett; smoother early surface */
+      m.scoring = model_of(*p);
+      hillclimb(m);             /* keeps m.steckerbrett; smoother early surface */
     }
   m.scoring = opt_scoring;
-  return hillclimb(m);         /* refine in the target model */
+  return hillclimb(m);          /* refine in the target model */
 }
 
 /* Hill-climb the plugboard with optional random restarts: restart 0 uses the
@@ -1436,7 +1465,8 @@ void help(FILE * out)
   fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
-  fprintf(out, "  -S           Staged plugboard climb: bigram pre-pass, then the target model\n");
+  fprintf(out, "  -S schedule  Staged plugboard climb: pre-pass model letters (i/m/b/t/q)\n");
+  fprintf(out, "               climbed before the target model, e.g. -S b or -S ib\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
   fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
@@ -1490,7 +1520,7 @@ void show_settings()
   if (opt_hillclimb && (opt_restarts > 1))
     fprintf(stderr, " (%d restarts)", opt_restarts);
   if (opt_hillclimb && opt_staged)
-    fprintf(stderr, " (staged)");
+    fprintf(stderr, " (staged: %s)", opt_staged);
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
   if (opt_m4)
@@ -1556,7 +1586,7 @@ int main(int argc, char * * argv)
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_restarts = 1;
-  opt_staged = 0;
+  opt_staged = 0;   /* pre-pass schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
   opt_m4 = 0;
@@ -1565,7 +1595,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:d:imbtqcvhn4S")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -1611,7 +1641,7 @@ int main(int argc, char * * argv)
           opt_hillclimb = 1;
           break;
         case 'S':
-          opt_staged = 1;
+          opt_staged = optarg;
           break;
         case 'x':
           opt_maxwheel = atoi(optarg);
@@ -1770,6 +1800,18 @@ int main(int argc, char * * argv)
   if ((opt_restarts < 1) || (opt_restarts > max_restarts))
     fatal("Illegal restart count (must be 1 to 100000)");
 
+  if (opt_staged)
+    {
+      size_t slen = strlen(opt_staged);
+      if ((slen < 1) || (slen > 8) || (strspn(opt_staged, "imbtq") != slen))
+        fatal("Illegal -S schedule (use model letters i/m/b/t/q, e.g. -S b "
+              "or -S ib)");
+      /* an n-gram pre-pass reads its language table, so -l is required if the
+         schedule names any of m/b/t/q (the target's own -l need is checked below) */
+      if ((! opt_language) && strpbrk(opt_staged, "mbtq"))
+        fatal("A staged n-gram pre-pass (-S) needs a language: add -l <language>");
+    }
+
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
 
@@ -1793,31 +1835,21 @@ int main(int argc, char * * argv)
      mistyped -l fails immediately (with the offending filename) before we read
      and consume standard input. */
 
-  switch (opt_scoring)
-    {
-    case SCORE_IC:
-      break;
-    case SCORE_MONO:
-      ngrams_read(1, monograms, "monograms");
-      break;
-    case SCORE_BI:
-      ngrams_read(2, & bigrams[0][0], "bigrams");
-      break;
-    case SCORE_TRI:
-      ngrams_read(3, & trigrams[0][0][0], "trigrams");
-      break;
-    case SCORE_QUAD:
-      ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams");
-      break;
-    default:
-      break;
-    }
-
-  /* The staged plugboard climb (-S) runs a bigram pre-pass before the target
-     model, so it also needs the bigram table (unless the target is bigram or
-     lower, where the pre-pass is skipped). */
-  if (opt_staged && (SCORE_BI < opt_scoring))
-    ngrams_read(2, & bigrams[0][0], "bigrams");
+  /* Load the target model's table first (so a missing or mistyped -l fails
+     immediately on it), then any extra tables the staged pre-pass (-S) needs. */
+  bool table_loaded[5] = { false, false, false, false, false };
+  load_table(opt_scoring);
+  table_loaded[opt_scoring] = true;
+  if (opt_staged)
+    for (const char * p = opt_staged; *p; p++)
+      {
+        int model = model_of(*p);
+        if (! table_loaded[model])
+          {
+            load_table(model);
+            table_loaded[model] = true;
+          }
+      }
 
   /* read ciphertext */
 

@@ -308,12 +308,15 @@ check "restart count 0 rejected (exit code)" "$?" "1"
 # stay -T-independent, and recover a small plugboard on a long message (where the
 # bigram pre-pass reliably steers the quadgram climb to the true board).
 s_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
-check "staged: -S -R 4 result is -T-independent" \
-  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S -R 4 -T 1)" \
-  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S -R 4 -T 4)"
-check "staged: -S recovers plugboard (long message)" \
-  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -S)" \
+check "staged: -S b -R 4 result is -T-independent" \
+  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S b -R 4 -T 1)" \
+  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S b -R 4 -T 4)"
+check "staged: -S b recovers plugboard (long message)" \
+  "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -S b)" \
   "$r_pt"
+# -S schedule is validated: a non-model letter is rejected.
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S z >/dev/null 2>&1
+check "staged: bad -S schedule rejected (exit code)" "$?" "1"
 
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).

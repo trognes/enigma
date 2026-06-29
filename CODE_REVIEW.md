@@ -695,17 +695,27 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 
 ### Alternatives (roughly by expected payoff for this tool)
 
-1. **Staged scoring schedule — ✅ IMPLEMENTED (`-S`).** A bigram pre-pass climbs to
-   convergence, then the target (quad) model refines from there. The bigram surface
-   is far smoother when only a plug or two are set, so it steers the early plugs
-   into a better basin (Gillogly/Weierud). Note this is a *search* lever, not a
-   scoring one — the SPLIT metric (final-model ranking of the truth) does not see
-   it; the recovery curve does. It is per-`machine` (`m.scoring`, never a global →
-   race-free) and `-T`-deterministic. **Measured** (english/quad, 10 pairs, 25
-   trials) it helps both alone and stacked on restarts (table below). A naive full
-   bigram climb *can* over-fit and hurt an individual easy case (bigrams don't
-   constrain the board tightly), but on average it wins, and restarts absorb the
-   variance.
+1. **Staged scoring schedule — ✅ IMPLEMENTED (`-S <schedule>`).** Climb under each
+   pre-pass model in the schedule (a string of letters `i`/`m`/`b`/`t`/`q`) in
+   order, then refine under the target. A lower-order surface is far smoother when
+   only a plug or two are set, so it steers the early plugs into a good basin
+   (Gillogly/Weierud). This is a *search* lever, not a scoring one — the SPLIT
+   metric (final-model ranking of the truth) does not see it; the recovery curve
+   does. Per-`machine` (`m.scoring`, never a global → race-free) and
+   `-T`-deterministic. **Schedule matters a lot** (english/quad, 10 pairs, 40
+   trials, with `-R 10`):
+
+   | pre-pass | L100 | L140 | L190 | L250 |
+   |----------|-----:|-----:|-----:|-----:|
+   | none           | 15.0 | 40.0 | 70.0 | 90.0 |
+   | bigram (`-S b`)| 35.0 | 70.0 | 90.0 | 97.5 |
+   | **IC (`-S i`)**| **57.5** | **90.0** | **92.5** | **100.0** |
+
+   **`-S i` (IC pre-pass) is the clear winner** — IC is the smoothest possible
+   surface (distribution peakedness, no n-gram over-fitting), so it gives the
+   cleanest early gradient. `tri→q` barely helps (trigram is nearly as rugged as
+   quad), and stacking stages after IC (`ib`/`im`/`it`) adds nothing. A naive full
+   bigram pre-pass can over-fit an individual easy case; IC does not.
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost
@@ -730,17 +740,17 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 8. **Genetic / evolutionary** — population + crossover + mutation; generally overkill
    here, rarely beats random-restart hill climbing or SA for plugboard recovery.
 
-**Measured (exact-recovery %, english/quad, 10-pair plugboard, 25 trials):**
+**Measured (exact-recovery %, english/quad, 10-pair plugboard, 40 trials):**
 
-| config | L140 | L190 | L250 |
-|--------|-----:|-----:|-----:|
-| plain (`-R 1`)        | 16 | 32 | 56 |
-| staged (`-S`)         | 28 | 56 | 72 |
-| restarts (`-R 10`)    | 36 | 76 | 88 |
-| **both** (`-R 10 -S`) | **64** | **88** | **96** |
+| config | L100 | L140 | L190 | L250 |
+|--------|-----:|-----:|-----:|-----:|
+| plain (`-R 1`)              |  — |  16 |  32 |  56 |
+| restarts (`-R 10`)          | 15 |  40 |  70 |  90 |
+| **restarts + IC stage** (`-R 10 -S i`) | **57** | **90** | **92** | **100** |
 
 **Bottom line:** **(3)** random restarts and **(1)** the staged schedule are both
-**shipped** and **stack** — `-R 10 -S` lifts L140 from 16 % to 64 %. Still open:
+**shipped** and **stack**, and the best combination found is **`-R 10 -S i`**
+(restarts + an IC pre-pass), which lifts L140 from 16 % (plain) → 90 %. Still open:
 **(2)** a key pre-filter (the big *throughput* win, so more restarts are
 affordable per surviving key), and the heavier metaheuristics (SA/tabu/GA, items
 5–8) as fallbacks for the hardest cases. The default (`-R 1`, no `-S`) is the
