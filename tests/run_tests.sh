@@ -288,6 +288,18 @@ check "thread count 0 rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 257 >/dev/null 2>&1
 check "thread count 257 rejected (exit code)" "$?" "1"
 
+# Plugboard hill-climb random restarts (-R): the per-key RNG is seeded from the
+# flat key index, so a restarting search must still be independent of -T. Recover
+# a plugboard with a wildcard start (several parallel keys) using -c -R 8.
+r_pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERS"
+r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
+check "restarts: -R 8 result is -T-independent" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 4)"
+# -R is validated: 0 is rejected.
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
+check "restart count 0 rejected (exit code)" "$?" "1"
+
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
 hout=$("$ENIGMA" -h 2>/dev/null); hcode=$?
