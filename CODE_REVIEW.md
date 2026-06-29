@@ -756,3 +756,32 @@ so better data/smoothing is unlikely to move that tier much — its value would 
 up in the not-yet-built *full-crack* tier (recovering the rotor key on short
 messages). Net: the search items above remain the bigger short-message lever;
 revisit scoring data/smoothing alongside the full-crack tier.
+
+#### Where a German telegraphic corpus would come from (assessment)
+
+If domain-matched German is ever pursued, the findings from looking into it:
+
+- **No large, clean, download-ready "telegraphic Enigma-style" German corpus is
+  known.** The closest *authentic* sources are decrypted-message archives, not a
+  corpus: **Frode Weierud's CryptoCellar** (cryptocellar.org), message sets
+  published in *Cryptologia* (Erskine / Marks / Weierud), and the **TNA HW series**
+  (Bletchley Park / GC&CS). These are domain-perfect but only hundreds–thousands of
+  messages — enough to populate **bi/trigrams**, **too sparse for quadgrams**
+  (26⁴ ≈ 457 K cells). (Provenance/availability here is from memory, not verified.)
+- **The biggest surface-statistics mismatch is `X`, not vocabulary.** Real
+  Wehrmacht plaintext uses **`X` as the word/sentence separator** (and spells out
+  digits: `EINS`, `ZWO`, …), so genuine decrypts are full of word-boundary
+  quadgrams containing `X` (`…XEIN`, `GXNA`). The current tables come from prose
+  with spaces *removed* (words concatenated), so they never see `X`-as-separator —
+  a real mismatch for cracking authentic intercepts. (It does *not* affect the
+  `crack_quality` harness, which encrypts space-stripped prose and is
+  self-consistent; testing the `X` effect would need the harness to encrypt
+  `X`-substituted text.)
+- **Pragmatic path — synthesise the register.** Rather than find a scarce corpus,
+  take a large general German corpus (Leipzig, Wikipedia dump, Gutenberg) and apply
+  the cipher's own preprocessing: uppercase, A–Z only, **substitute `X` for
+  spaces/punctuation, spell out digits**. That yields quadgram-scale data with the
+  right orthography even if vocabulary stays generic; optionally blend in the
+  authentic archives to nudge phrasing. A synthesis pipeline (general corpus →
+  `X`-substituted/number-spelled A–Z text → n-gram tables) is the form to build if
+  real-traffic cracking is ever tackled.
