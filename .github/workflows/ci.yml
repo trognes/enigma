@@ -97,5 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Run shellcheck on the test harness
-        run: shellcheck tests/run_tests.sh tests/bench.sh tests/crack_quality.sh
+      - name: Run shellcheck on the shell harness
+        run: shellcheck tests/run_tests.sh tests/bench.sh
+      - name: Byte-compile the Python harness
+        run: python3 -m py_compile tests/crack_quality.py

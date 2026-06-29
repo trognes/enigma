@@ -49,7 +49,7 @@ and were sourced from the Practical Cryptography website.
 make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 ...
 make test                 # build, then run tests/run_tests.sh
 make bench                # build, then run tests/bench.sh (performance)
-make crackquality         # build, then run tests/crack_quality.sh (cracking quality)
+make crackquality         # build, then run tests/crack_quality.py (cracking quality)
 ./enigma -h               # help / usage
 ```
 
@@ -65,16 +65,19 @@ git worktree and runs both, failing if any benchmark is >`THRESHOLD`% (default
 10) slower than BASE — run this around the planned global-state/threading
 refactor to confirm single-thread throughput hasn't regressed.
 
-`make crackquality` (`tests/crack_quality.sh`) measures something different again
+`make crackquality` (`tests/crack_quality.py`) measures something different again
 — **cracking quality on hard (short) messages**, not speed. For each ciphertext
 length it runs many random trials (random excerpt + rotor key + 10-pair
 plugboard), recovers each with the true rotor key fixed and only the plugboard
 hill-climbed (the cheap "plugboard-recovery" tier), and reports per length the
 mean %-of-letters-correct (a graded signal) and the exact-recovery rate, plus
 headline `L50`/`L90` (the shortest length reaching that recovery rate — lower is
-better). A fixed `SEED` makes the trial set deterministic, so `make crackquality
+better). A fixed `SEED` makes the trial set deterministic (Python's
+`random.Random(seed)`, reproducible across machines), so `make crackquality
 BASE=<git-ref>` is a same-machine A/B that solves identical problems with both
-binaries. Use this — not `make bench` — to tell whether a scoring/search change
+binaries. (It was rewritten from shell+awk to Python: awk's seeded `rand()` is not
+reproducible in every awk, e.g. mawk, which silently broke the deterministic-A/B
+premise.) Use this — not `make bench` — to tell whether a scoring/search change
 actually helps short-message cracking. `make crackquality SPLIT=1` additionally
 classifies each non-recovered trial as a **scoring** failure (the true plugboard
 does not score highest) or a **search** failure (it does, but the climb stuck in

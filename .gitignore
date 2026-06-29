@@ -1,3 +1,5 @@
 *~
 cipher*.txt
 /enigma
+__pycache__/
+*.pyc

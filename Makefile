@@ -28,7 +28,7 @@ bench : enigma
 #   make crackquality BASE=<git-ref>   same-machine A/B vs <git-ref>
 # Tunables (env): MODEL, CLANG, TRIALS, LENGTHS, PAIRS, SEED.
 crackquality : enigma
-	sh tests/crack_quality.sh
+	python3 tests/crack_quality.py
 
 clean :
 	rm -f enigma

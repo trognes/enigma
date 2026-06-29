@@ -632,7 +632,7 @@ alternatives, as reference for future cracking-quality work. Nothing here is a b
 — the current climb is a correct, textbook method — so these are **deferred /
 optional** improvements, not findings.
 
-> **Measuring stick in place.** `tests/crack_quality.sh` (`make crackquality`)
+> **Measuring stick in place.** `tests/crack_quality.py` (`make crackquality`)
 > measures recovery quality vs ciphertext length on the hard (short) regime, so
 > any change below can be evaluated before/after on the same problems
 > (`BASE=<ref>` same-machine A/B). It implements the cheap *plugboard-recovery*
