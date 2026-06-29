@@ -49,6 +49,7 @@ and were sourced from the Practical Cryptography website.
 make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 ...
 make test                 # build, then run tests/run_tests.sh
 make bench                # build, then run tests/bench.sh (performance)
+make crackquality         # build, then run tests/crack_quality.sh (cracking quality)
 ./enigma -h               # help / usage
 ```
 
@@ -63,6 +64,19 @@ A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>` in a throwaway
 git worktree and runs both, failing if any benchmark is >`THRESHOLD`% (default
 10) slower than BASE — run this around the planned global-state/threading
 refactor to confirm single-thread throughput hasn't regressed.
+
+`make crackquality` (`tests/crack_quality.sh`) measures something different again
+— **cracking quality on hard (short) messages**, not speed. For each ciphertext
+length it runs many random trials (random excerpt + rotor key + 10-pair
+plugboard), recovers each with the true rotor key fixed and only the plugboard
+hill-climbed (the cheap "plugboard-recovery" tier), and reports per length the
+mean %-of-letters-correct (a graded signal) and the exact-recovery rate, plus
+headline `L50`/`L90` (the shortest length reaching that recovery rate — lower is
+better). A fixed `SEED` makes the trial set deterministic, so `make crackquality
+BASE=<git-ref>` is a same-machine A/B that solves identical problems with both
+binaries. Use this — not `make bench` — to tell whether a scoring/search change
+actually helps short-message cracking. (See `CODE_REVIEW.md` §9 for the
+algorithmic ideas this is meant to measure.)
 
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters

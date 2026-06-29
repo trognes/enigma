@@ -594,6 +594,17 @@ alternatives, as reference for future cracking-quality work. Nothing here is a b
 — the current climb is a correct, textbook method — so these are **deferred /
 optional** improvements, not findings.
 
+> **Measuring stick in place.** `tests/crack_quality.sh` (`make crackquality`)
+> now measures recovery quality vs ciphertext length on the hard (short) regime,
+> so any change below can be evaluated before/after on the same problems
+> (`BASE=<ref>` same-machine A/B). It currently implements the cheap
+> *plugboard-recovery* tier (true rotor key fixed, only the plugboard climbed)
+> and reports mean %-correct (graded) + exact-recovery rate + `L50`/`L90`. Not
+> yet built: the *full-crack* tier (wildcard the rotor key too) and the
+> failure-mode split (oracle run forcing the true key to separate **scoring**
+> failure from **search** failure — see below). Build those out alongside the
+> first algorithm change so gains are attributable.
+
 ### How it works today (`hillclimb()`, `enigma.cc:643`)
 
 The plugboard (steckerbrett) is an **involution** on the 26 letters — disjoint
