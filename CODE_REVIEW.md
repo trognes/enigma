@@ -730,14 +730,24 @@ right and the message is long enough.
 The n-gram tables come from the Practical Cryptography site. Two ways the *scoring
 side* could in principle be improved, distinct from the search items above:
 
-- **Better smoothing (model, not data) — the higher-leverage one.** Counts are
+- **Better smoothing (model, not data) — tried, measured NEUTRAL.** Counts are
   stored as `log10(count + 1)`, so an *unseen* n-gram scores 0 (neutral). The
   community-standard "quadgram fitness" instead uses `log10(count/total)` with a
-  small floor for unseen n-grams (e.g. `log10(0.01/total)`), which *penalises*
-  gibberish carrying many unseen quadgrams rather than ignoring it. Because all
-  candidates share the table, the `+1`-vs-`/total` difference is ~a constant
-  offset; the real change is the unseen-n-gram floor. This is the scoring tweak
-  most likely to sharpen very short messages.
+  small floor for unseen n-grams (`log10(0.01/total)`), which *penalises* gibberish
+  carrying many unseen quadgrams rather than ignoring it. Because all candidates
+  share the table, the `+1`-vs-`/total` difference is ~a constant offset; the real
+  change is the unseen-n-gram floor. This was **implemented and A/B'd** against the
+  current scheme (`make crackquality BASE=dev`, identical seeded problems,
+  english/quad, 10 pairs): **statistically neutral** — 80-trial aggregate
+  exact-recovery 36.0 % (floor) vs 35.2 % (current), within noise, lengths swinging
+  both ways; the scorers and hot path are untouched so there is no runtime cost.
+  `SPLIT=1` explains it: scoring failures stay **0 %** at every length under *both*
+  schemes (the true plugboard already scores highest), so the plugboard tier is
+  entirely search-bound and a better scoring *shape* cannot move it. **Dropped**
+  for now (no measured win, same bar that rejected optimisation B). Its plausible
+  payoff is the not-yet-built *full-crack* tier (rotor-key discrimination, where
+  wrong keys generate many unseen quadgrams and the floor would bite) — revisit and
+  re-run this exact A/B once that tier exists.
 - **Different / domain-matched data (source).** Alternatives to Practical
   Cryptography: the Leipzig Corpora Collection, or build tables from a large public
   corpus (Gutenberg, a Wikipedia dump, news-crawl, OpenSubtitles). The plausible
