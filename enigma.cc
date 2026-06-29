@@ -10,6 +10,8 @@
 
 #include <sys/resource.h>
 
+#include <stdint.h>
+
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -107,6 +109,8 @@ static char opt_greek_grundstellung = '.';  /* Greek start letter or . */
 static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
+static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
+static const int max_restarts = 100000;
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 
@@ -825,6 +829,72 @@ double hillclimb(machine & m)
   return score_iter(m, 0);
 }
 
+/* splitmix64: a tiny, well-distributed deterministic PRNG. Seeded per key (not
+   from the clock or thread id) so a random-restart search stays reproducible and
+   independent of the thread count. */
+static inline uint64_t splitmix64(uint64_t * s)
+{
+  uint64_t z = (*s += 0x9e3779b97f4a7c15ULL);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+  return z ^ (z >> 31);
+}
+
+/* Seed the plugboard with a random involution: shuffle the 26 letters and connect
+   a random number of disjoint pairs (1..13). Used as a restart start point. */
+void set_random_steckerbrett(machine & m, uint64_t * rng)
+{
+  unsigned char perm[asize];
+  for (int i = 0; i < asize; i++)
+    perm[i] = static_cast<unsigned char>(i);
+  for (int i = asize - 1; i > 0; i--)
+    {
+      int j = static_cast<int>(splitmix64(rng) % static_cast<uint64_t>(i + 1));
+      unsigned char t = perm[i]; perm[i] = perm[j]; perm[j] = t;
+    }
+
+  for (int i = 0; i < asize; i++)
+    m.steckerbrett[i] = static_cast<unsigned char>(i);
+
+  int pairs = 1 + static_cast<int>(splitmix64(rng) % (asize / 2));   /* 1..13 */
+  for (int p = 0; p < pairs; p++)
+    {
+      int a = perm[2 * p], b = perm[2 * p + 1];
+      m.steckerbrett[a] = static_cast<unsigned char>(b);
+      m.steckerbrett[b] = static_cast<unsigned char>(a);
+    }
+}
+
+/* Hill-climb the plugboard with optional random restarts: restart 0 uses the
+   configured seed (identity or -s pairs) -- exactly the opt_restarts==1 behaviour
+   -- then opt_restarts-1 further climbs start from random plugboards, keeping the
+   best. The rotor-stack mapping[] depends only on the key (not the plugboard), so
+   it is reused across restarts; only the steckerbrett is reset each time. The RNG
+   is seeded from the flat key index, so the result is independent of -T. */
+double hillclimb_restarts(machine & m, uint64_t key_index)
+{
+  double best = hillclimb(m);
+  if (opt_restarts <= 1)
+    return best;
+
+  char best_pt[maxlen + 1];
+  memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+
+  uint64_t rng = key_index + 0x0123456789abcdefULL;
+  for (int r = 1; r < opt_restarts; r++)
+    {
+      set_random_steckerbrett(m, & rng);
+      double s = hillclimb(m);
+      if (s > best)
+        {
+          best = s;
+          memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+        }
+    }
+  memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+  return best;
+}
+
 
 
 
@@ -968,7 +1038,8 @@ void search_worker(machine & m,
              (the fused scorer reads each row once, straight from subst_array);
              it is materialised only when a new best is recorded, below.
              hillclimb() leaves m.plaintext set to its best plugboard's decode. */
-          double score = opt_hillclimb ? hillclimb(m) : score_iter(m, 0);
+          double score = opt_hillclimb ? hillclimb_restarts(m, idx)
+                                       : score_iter(m, 0);
 
           if (score > local_best)
             {
@@ -1335,6 +1406,7 @@ void help(FILE * out)
   fprintf(out, "  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
   fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
+  fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
   fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
@@ -1385,6 +1457,8 @@ void show_settings()
     fprintf(stderr, " (language: %s; n-gram files in %s)",
             opt_language, opt_datadir);
   fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
+  if (opt_hillclimb && (opt_restarts > 1))
+    fprintf(stderr, " (%d restarts)", opt_restarts);
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
   if (opt_m4)
@@ -1449,6 +1523,7 @@ int main(int argc, char * * argv)
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
+  opt_restarts = 1;
   opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
   opt_m4 = 0;
@@ -1457,7 +1532,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -1507,6 +1582,9 @@ int main(int argc, char * * argv)
           break;
         case 'T':
           opt_threads = atoi(optarg);
+          break;
+        case 'R':
+          opt_restarts = atoi(optarg);
           break;
         case 'l':
           opt_language = optarg;
@@ -1652,6 +1730,9 @@ int main(int argc, char * * argv)
       (strspn(opt_steckerbrett, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") <
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
+
+  if ((opt_restarts < 1) || (opt_restarts > max_restarts))
+    fatal("Illegal restart count (must be 1 to 100000)");
 
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
