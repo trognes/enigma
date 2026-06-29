@@ -520,6 +520,25 @@ Remaining opportunities:
   it tried, and the resolved dir is echoed in the settings. (A compile-time
   install prefix + `make install`, and executable-relative resolution, were
   considered and deferred — not needed until the tool is packaged.)
+
+  **Considered and declined — embedding the n-gram tables into the binary.**
+  Baking the language statistics into the executable (a single self-contained
+  binary, no data files to ship) was weighed and **not pursued**. If done, the
+  thing to embed is the processed *dense `float` tables* (~7.25 MiB for all four
+  languages × four orders) — smaller than the ~12 MB of source text and skipping
+  the startup parse — which would grow the binary from ~62 KB to ~7.5 MB. It was
+  declined because: (1) `-d`/`$ENIGMA_DATA` already removed the only practical
+  pain (running from any directory), leaving only single-file *distribution* as a
+  benefit, which is not a goal; (2) it would carry all four languages even though a
+  run uses one, and would hard-code the language set, regressing the deliberately
+  *open* `<lang>_<type>.txt` extension point (§ validation note) unless the file
+  loader were kept as a `-d` override (a hybrid); and (3) every embedding mechanism
+  has friction — C23 `#embed` needs bumping past the pinned `-std=c++17` and a very
+  new compiler; a generated multi-MB array literal compiles slowly; and an
+  `objcopy`/`ld -r -b binary` blob is toolchain/platform-specific and bakes in
+  `float` endianness. If single-file distribution ever *does* become a goal, the
+  hybrid (generated dense-`float` built-ins + retained `-d` override) is the form
+  to revisit.
 - 🟢 **Option validation hardened** ✅. The n-gram table for the chosen model is
   now loaded **before** standard input is read, so a missing/mistyped `-l` fails
   immediately with the offending filename instead of after consuming stdin.
@@ -705,3 +724,35 @@ scoring schedule plus **(3)** random restarts (robustness on short/noisy
 messages). SA/tabu/GA are worth it mainly as fallbacks for the hardest cases. All
 are deferred — the current climb is correct and effective when the rotor key is
 right and the message is long enough.
+
+### Scoring data and smoothing (the other lever — and what it can/can't help)
+
+The n-gram tables come from the Practical Cryptography site. Two ways the *scoring
+side* could in principle be improved, distinct from the search items above:
+
+- **Better smoothing (model, not data) — the higher-leverage one.** Counts are
+  stored as `log10(count + 1)`, so an *unseen* n-gram scores 0 (neutral). The
+  community-standard "quadgram fitness" instead uses `log10(count/total)` with a
+  small floor for unseen n-grams (e.g. `log10(0.01/total)`), which *penalises*
+  gibberish carrying many unseen quadgrams rather than ignoring it. Because all
+  candidates share the table, the `+1`-vs-`/total` difference is ~a constant
+  offset; the real change is the unseen-n-gram floor. This is the scoring tweak
+  most likely to sharpen very short messages.
+- **Different / domain-matched data (source).** Alternatives to Practical
+  Cryptography: the Leipzig Corpora Collection, or build tables from a large public
+  corpus (Gutenberg, a Wikipedia dump, news-crawl, OpenSubtitles). The plausible
+  *win* is not a bigger corpus but a **domain-matched** one: authentic Wehrmacht
+  traffic is telegraphic German (`X` for spaces/punctuation, spelled-out numbers,
+  abbreviations), so tables built from period/telegraphic text — or from text
+  preprocessed the way the cipher input is — model real messages better than
+  generic prose. Higher-order 5-grams are not worth it (26⁵ ≈ 12 M entries, too
+  sparse for short text).
+
+Both are **cheap to try and measurable**: the tool already loads any
+`<lang>_<type>.txt` via `-d`, and `make crackquality` (`BASE=…` / `SPLIT=1`) A/Bs
+two table sets on identical problems. **But temper expectations:** the failure-mode
+split shows plugboard-recovery misses are *search* failures, not scoring failures,
+so better data/smoothing is unlikely to move that tier much — its value would show
+up in the not-yet-built *full-crack* tier (recovering the rotor key on short
+messages). Net: the search items above remain the bigger short-message lever;
+revisit scoring data/smoothing alongside the full-crack tier.
