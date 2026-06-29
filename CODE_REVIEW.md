@@ -724,3 +724,35 @@ scoring schedule plus **(3)** random restarts (robustness on short/noisy
 messages). SA/tabu/GA are worth it mainly as fallbacks for the hardest cases. All
 are deferred — the current climb is correct and effective when the rotor key is
 right and the message is long enough.
+
+### Scoring data and smoothing (the other lever — and what it can/can't help)
+
+The n-gram tables come from the Practical Cryptography site. Two ways the *scoring
+side* could in principle be improved, distinct from the search items above:
+
+- **Better smoothing (model, not data) — the higher-leverage one.** Counts are
+  stored as `log10(count + 1)`, so an *unseen* n-gram scores 0 (neutral). The
+  community-standard "quadgram fitness" instead uses `log10(count/total)` with a
+  small floor for unseen n-grams (e.g. `log10(0.01/total)`), which *penalises*
+  gibberish carrying many unseen quadgrams rather than ignoring it. Because all
+  candidates share the table, the `+1`-vs-`/total` difference is ~a constant
+  offset; the real change is the unseen-n-gram floor. This is the scoring tweak
+  most likely to sharpen very short messages.
+- **Different / domain-matched data (source).** Alternatives to Practical
+  Cryptography: the Leipzig Corpora Collection, or build tables from a large public
+  corpus (Gutenberg, a Wikipedia dump, news-crawl, OpenSubtitles). The plausible
+  *win* is not a bigger corpus but a **domain-matched** one: authentic Wehrmacht
+  traffic is telegraphic German (`X` for spaces/punctuation, spelled-out numbers,
+  abbreviations), so tables built from period/telegraphic text — or from text
+  preprocessed the way the cipher input is — model real messages better than
+  generic prose. Higher-order 5-grams are not worth it (26⁵ ≈ 12 M entries, too
+  sparse for short text).
+
+Both are **cheap to try and measurable**: the tool already loads any
+`<lang>_<type>.txt` via `-d`, and `make crackquality` (`BASE=…` / `SPLIT=1`) A/Bs
+two table sets on identical problems. **But temper expectations:** the failure-mode
+split shows plugboard-recovery misses are *search* failures, not scoring failures,
+so better data/smoothing is unlikely to move that tier much — its value would show
+up in the not-yet-built *full-crack* tier (recovering the rotor key on short
+messages). Net: the search items above remain the bigger short-message lever;
+revisit scoring data/smoothing alongside the full-crack tier.
