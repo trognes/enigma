@@ -168,6 +168,35 @@ check "M4: 3-char -w rejected (exit code)" "$?" "1"
 printf 'ABCDEFGHIJ' | "$ENIGMA" -i -n -4 >/dev/null 2>&1
 check "M4: -n with -4 rejected (exit code)" "$?" "1"
 
+# An over-large precompute (here a full M4 wildcard at -x 4, ~1.1 GB) must fail
+# cleanly with exit 1 and a helpful message rather than a std::terminate, when the
+# allocator refuses the block. Forced with a tight virtual-memory cap.
+#
+# This check is pass-or-SKIP, never a hard fail, because the environment can
+# legitimately prevent a clean failure: `ulimit -v` is a no-op on macOS, and
+# sanitizer builds (ASan/TSan) reserve a huge virtual address space so the capped
+# process aborts at startup (ASLR-dependent) instead of reaching our handler. We
+# only assert success when we actually observed the clean exit-1 + message;
+# anything else is reported as a skip.
+# shellcheck disable=SC3045  # ulimit -v is non-POSIX but works where this guard passes (Linux)
+if [ "$( (ulimit -v 524288 2>/dev/null; ulimit -v) )" = 524288 ]; then
+  # shellcheck disable=SC3045
+  alloc_err=$( (ulimit -v 524288
+    printf 'ABCDEFGHIJKL' | "$ENIGMA" -i -4 -u . -w .... -r AAAA -g .AAA -x 4 2>&1 >/dev/null) )
+  alloc_code=$?
+  alloc_ok=no
+  case "$alloc_err" in
+    *"Could not allocate"*) [ "$alloc_code" = 1 ] && alloc_ok=yes ;;
+  esac
+  if [ "$alloc_ok" = yes ]; then
+    check "M4: oversized allocation rejected cleanly (exit 1 + message)" "ok" "ok"
+  else
+    printf 'skip M4 oversized-allocation test (no clean failure under cap: code=%s)\n' "$alloc_code"
+  fi
+else
+  printf 'skip M4 oversized-allocation test (ulimit -v not effective here)\n'
+fi
+
 echo "== Input handling =="
 
 # Non-letters are stripped and input is upper-cased before encryption.

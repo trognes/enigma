@@ -13,6 +13,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <new>
 #include <thread>
 #include <vector>
 
@@ -1130,15 +1131,14 @@ void bruteforce(char * result)
   size_t nwo = tasks.size();
   size_t total_keys = nwo * rsize * gsize;
 
-  /* memory accounting: one [asize]^4 table per task (reflector x wheel order,
-     plus the Greek wheel x offset in M4), all resident. A full M4 wildcard
-     (2 thin x 2 Greek x 26 offsets x 336 wheel orders) is ~15 GB, hence the
-     16 GiB ceiling. */
+  /* memory accounting: one [asize]^4 (457 KB) table per task (reflector x wheel
+     order, plus the Greek wheel x offset in M4), all resident. The biggest
+     possible search is a full M4 wildcard (2 thin x 2 Greek x 26 offsets x 336
+     wheel orders = 34 944 tasks ~= 14.9 GiB); every other mode is far smaller. No
+     fixed ceiling is enforced -- the allocation below just fails gracefully if the
+     machine cannot provide the memory. */
   g_table_count = nwo;
   g_table_bytes = nwo * static_cast<size_t>(asize) * asize * asize * asize;
-  if (g_table_bytes > static_cast<size_t>(16) * 1024 * 1024 * 1024)
-    fatal("Search space too large to precompute the rotor tables "
-          "(narrow -u / -w / -x, or fix the M4 Greek wheel/position)");
 
   /* never start more threads than there is work to hand out */
   int nthreads = opt_threads;
@@ -1148,8 +1148,24 @@ void bruteforce(char * result)
     nthreads = 1;
 
   /* the shared, read-only rotor-stack tables (one [asize]^4 block per wheel
-     order) and the per-thread machines (small: mapping/plaintext/settings) */
-  subst_table all = new unsigned char[nwo * asize][asize][asize][asize];
+     order) and the per-thread machines (small: mapping/plaintext/settings). A
+     clean message beats a std::terminate if the allocator refuses the block
+     (note: under Linux memory overcommit a too-large request may instead succeed
+     here and be OOM-killed later while precompute touches the pages). */
+  subst_table all;
+  try
+    {
+      all = new unsigned char[nwo * asize][asize][asize][asize];
+    }
+  catch (const std::bad_alloc &)
+    {
+      char msg[160];
+      snprintf(msg, sizeof msg,
+               "Could not allocate %.1f GB for the rotor tables "
+               "(narrow -u / -w / -x, or fix the M4 Greek wheel/position)",
+               g_table_bytes / 1e9);
+      fatal(msg);
+    }
 
   std::vector<machine *> machines(static_cast<size_t>(nthreads));
   for (int t = 0; t < nthreads; t++)
