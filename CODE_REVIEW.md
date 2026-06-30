@@ -696,37 +696,49 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 ### Alternatives (roughly by expected payoff for this tool)
 
 1. **Staged scoring schedule — ✅ IMPLEMENTED (`-S <schedule>`).** Climb under each
-   pre-pass model in the schedule (a string of letters `i`/`m`/`b`/`t`/`q`) in
-   order, then refine under the target. A lower-order surface is far smoother when
-   only a plug or two are set, so it steers the early plugs into a good basin
-   (Gillogly/Weierud). This is a *search* lever, not a scoring one — the SPLIT
-   metric (final-model ranking of the truth) does not see it; the recovery curve
-   does. Per-`machine` (`m.scoring`, never a global → race-free) and
-   `-T`-deterministic. **Schedule matters a lot** (english/quad, 10 pairs, 40
-   trials, with `-R 10`):
+   pre-pass model in the schedule in order, then refine under the target. A
+   lower-order surface is far smoother when only a plug or two are set, so it steers
+   the early plugs into a good basin (Gillogly/Weierud). This is a *search* lever,
+   not a scoring one — the SPLIT metric (final-model ranking of the truth) does not
+   see it; the recovery curve does. Per-`machine` (`m.scoring`, never a global →
+   race-free) and `-T`-deterministic. **Schedule matters a lot** (english/quad, 10
+   pairs, 40 trials, with `-R 10`):
 
    | pre-pass | L100 | L140 | L190 | L250 |
    |----------|-----:|-----:|-----:|-----:|
-   | none           | 15.0 | 40.0 | 70.0 | 90.0 |
-   | bigram (`-S b`)| 35.0 | 70.0 | 90.0 | 97.5 |
-   | **IC (`-S i`)**| **57.5** | **90.0** | **92.5** | **100.0** |
+   | none            | 15.0 | 40.0 | 70.0 | 90.0 |
+   | bigram (`-S bq`)| 35.0 | 70.0 | 90.0 | 97.5 |
+   | **IC (`-S iq`)**| **57.5** | **90.0** | **92.5** | **100.0** |
 
-   **`-S i` (IC pre-pass) is the clear winner** — IC is the smoothest possible
+   **Grammar (redesigned).** `-S` takes `<letter><optional number>` tokens: model
+   tokens `i`/`m`/`b`/`t`/`q` are climb stages run in order, the number capping the
+   **plug pairs** that stage may set (omitted = uncapped); the **last** model token
+   is the target/ranking model, so the target lives in the string (`-S i6q` = IC
+   capped at 6 pairs, then quad uncapped). The optional `r` token sets the
+   per-restart random perturbation (`rN` = inject `N` random pairs each restart;
+   `r0` = no-op; bare `r`/no token = full random involution). This replaced the
+   earlier "pre-pass letters only" `-S` plus the separate `-L` single cap — each
+   stage now carries its own cap, and the restart strength is a first-class knob.
+   (Earlier recipes `-S i`/`-S b` meant "pre-pass then the `-q` target"; the
+   equivalents are now `-S iq`/`-S bq`.)
+
+   **An IC pre-pass (`-S iq`) is the clear winner** — IC is the smoothest possible
    surface (distribution peakedness, no n-gram over-fitting), so it gives the
    cleanest early gradient. `tri→q` barely helps (trigram is nearly as rugged as
-   quad), and stacking stages after IC (`ib`/`im`/`it`) adds nothing. A naive full
-   bigram pre-pass can over-fit an individual easy case; IC does not. At 200 trials
-   IC and `ib` are a statistical tie and **mono is clearly worse**, so plain IC is
-   the pick (simplest, no table, no language needed for the pre-pass).
+   quad), and stacking stages after IC (`ibq`/`imq`/`itq`) adds nothing. A naive
+   full bigram pre-pass can over-fit an individual easy case; IC does not. At 200
+   trials IC and `ibq` are a statistical tie and **mono is clearly worse**, so a
+   plain IC pre-pass is the pick (simplest, no table, no language needed for it).
 
-   *Capping the pre-pass at the first N plug pairs (`-L N`, 1–13; 13 = no cap) is a
-   tuning knob: the low-order pre-pass sets at most N plugs, then the target model
-   refines uncapped.* The Gillogly/Weierud "first few plugs only" rule targets
-   models that **over-fit** (bigram), so capping is theorised to help bigram more
-   than IC. (An earlier sweep used a *move* budget rather than a *pair* cap and was
-   too thin to trust; the knob now caps pairs, so `-L 13` ≡ uncapped exactly.) A
-   thorough sweep — caps 1–13 × {IC, mono, bigram} pre-pass × several lengths
-   including short (<100) messages — is recorded below.
+   *Capping a pre-pass at the first N plug pairs is a tuning knob (now the number on
+   that stage's token, e.g. `-S i6q`; formerly the separate `-L N`): the low-order
+   pre-pass sets at most N plugs, then the target model refines uncapped.* The
+   Gillogly/Weierud "first few plugs only" rule targets models that **over-fit**
+   (bigram), so capping is theorised to help bigram more than IC. (An earlier sweep
+   used a *move* budget rather than a *pair* cap and was too thin to trust; the knob
+   caps pairs, so an uncapped stage ≡ cap 13 exactly.) A thorough sweep — caps 1–13
+   × {IC, mono, bigram} pre-pass × several lengths including short (<100) messages —
+   is recorded below.
 
    **Sweep result — capping *does* help (overturns an earlier hasty call).** Caps
    1–13 × {IC, mono, bigram} pre-pass × lengths {40,70,100,140,190}, `R 1` (a single
@@ -753,11 +765,12 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    for IC/mono, with the optimum nearer 6–10 than 1–5.
 
    Caveats: this is `R 1` (the cap is only cleanly defined from an identity start;
-   at `-R 10` the random restart boards already carry pairs, muddying it — a
-   separate question). At 100 trials a single point has a ~±9 % CI, but the
-   rise-then-fall shape is consistent across L140/L190, so the *pattern* is solid;
-   the exact best cap and whether to fold a default `-L` into the `-R 10 -S i`
-   recipe should be confirmed at higher trials. Full data: `tests/cap_sweep.csv`.
+   under restarts the old full-random board already carried ~7 pairs, muddying it).
+   That muddle is now directly addressed by the controllable `r` token — restarts
+   can inject a *few* random pairs instead of a near-saturated involution, so the
+   cap and the restart perturbation compose cleanly (sweep below). At 100 trials a
+   single point has a ~±9 % CI, but the rise-then-fall shape is consistent across
+   L140/L190, so the *pattern* is solid. Full data: `tests/cap_sweep.csv`.
 
    **IC vs mono on very short texts.** A focused follow-up (caps 4–8 × {40,70,100}
    × {IC, mono} × {R 1, R 10}, 500 trials, **mean %-correct**; plus a paired test,
@@ -778,11 +791,16 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    driver and fits the existing parallel architecture; climb internals unchanged.
    Still open.
 3. **Random restarts — ✅ IMPLEMENTED (`-R N`).** Restart 0 is the configured seed
-   (= the old behaviour); restarts 1..N-1 start from random involutions (per-key
-   splitmix64, so `-T`-deterministic), best kept. The simplest defence against the
-   local optima the single-start climb got stuck in — and the diagnosis said every
-   miss was a *search* failure, so this was the first lever pulled. Roughly doubles
-   short-message exact-recovery (table below).
+   (= the old behaviour); restarts 1..N-1 start from a perturbed board (per-key
+   splitmix64, so `-T`-deterministic), best kept. The perturbation is either a full
+   random involution (no `r` token) or a reset-to-seed plus `k` random plugs (the
+   `-S rk…` token), so a staged climb is no longer forced to tear down a
+   near-saturated board — the strength `k` and count `N` are independent knobs. The
+   simplest defence against the local optima the single-start climb got stuck in —
+   and the diagnosis said every miss was a *search* failure, so this was the first
+   lever pulled. Roughly doubles short-message exact-recovery (table below). *The
+   optimal `k` (small, ~0–4) and the `N` at which gains flatten, on L40/L70, are
+   being swept (`tests/restart_sweep.py`); verdict to follow.*
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start
    than identity.
@@ -802,10 +820,10 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 |--------|-----:|-----:|-----:|-----:|
 | plain (`-R 1`)              |  — |  16 |  32 |  56 |
 | restarts (`-R 10`)          | 15 |  40 |  70 |  90 |
-| **restarts + IC stage** (`-R 10 -S i`) | **57** | **90** | **92** | **100** |
+| **restarts + IC stage** (`-R 10 -S iq`) | **57** | **90** | **92** | **100** |
 
 **Bottom line:** **(3)** random restarts and **(1)** the staged schedule are both
-**shipped** and **stack**, and the best combination found is **`-R 10 -S i`**
+**shipped** and **stack**, and the best combination found is **`-R 10 -S iq`**
 (restarts + an IC pre-pass), which lifts L140 from 16 % (plain) → 90 %. Still open:
 **(2)** a key pre-filter (the big *throughput* win, so more restarts are
 affordable per surviving key), and the heavier metaheuristics (SA/tabu/GA, items
