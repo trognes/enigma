@@ -118,10 +118,11 @@ static const int pairs_uncapped = asize / 2;   /* 13: a board holds at most this
 /* A parsed -S schedule is an ordered list of climb stages -- each a scoring model
    and a cap on the plug pairs it may set -- plus the per-restart random
    perturbation strength. Tokens are <letter><optional number>: model letters
-   i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped) and r (the random
-   perturbation, number = plug pairs injected per restart). The last model stage is
-   the target/ranking model. With no -S, the schedule is the single -i/-m/.../-q
-   target, uncapped, and the restart perturbation is a full random involution. */
+   i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped) and rN (the random
+   perturbation: N plug pairs injected per restart). The last model stage is the
+   target/ranking model. With no r token (including no -S at all) the perturbation is
+   a fixed default_perturb plug pairs -- the sweep's best kick, near the typical plug
+   count (CODE_REVIEW §9). */
 static const int max_stages = 16;
 struct climbstage
 {
@@ -130,9 +131,9 @@ struct climbstage
 };
 static struct climbstage opt_stages[max_stages];
 static int opt_nstages;    /* number of model stages in opt_stages[] */
-static int opt_perturb;    /* random plug pairs injected per restart: -1 = a full
-                              random involution (the -S-less default), 0..13 = exact
-                              count from an r token */
+static int opt_perturb;    /* random plug pairs injected per restart: 0..13 (an rN
+                              token; default_perturb when no r token; r0 = no-op) */
+static const int default_perturb = 8;   /* no-r-token kick: best in the §9 sweep */
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 
@@ -879,38 +880,12 @@ static inline uint64_t splitmix64(uint64_t * s)
   return z ^ (z >> 31);
 }
 
-/* Seed the plugboard with a random involution: shuffle the 26 letters and connect
-   a random number of disjoint pairs (1..13). The full-random restart start point
-   used when -S names no r token (the historical behaviour). */
-void set_random_steckerbrett(machine & m, uint64_t * rng)
-{
-  unsigned char perm[asize];
-  for (int i = 0; i < asize; i++)
-    perm[i] = static_cast<unsigned char>(i);
-  for (int i = asize - 1; i > 0; i--)
-    {
-      int j = static_cast<int>(splitmix64(rng) % static_cast<uint64_t>(i + 1));
-      unsigned char t = perm[i]; perm[i] = perm[j]; perm[j] = t;
-    }
-
-  for (int i = 0; i < asize; i++)
-    m.steckerbrett[i] = static_cast<unsigned char>(i);
-
-  int pairs = 1 + static_cast<int>(splitmix64(rng) % (asize / 2));   /* 1..13 */
-  for (int p = 0, k = 0; p < pairs; p++, k += 2)
-    {
-      int a = perm[k], b = perm[k + 1];
-      m.steckerbrett[a] = static_cast<unsigned char>(b);
-      m.steckerbrett[b] = static_cast<unsigned char>(a);
-    }
-}
-
 /* Inject exactly k random plug pairs into the current plugboard, drawing only from
    letters that are still unplugged (so any fixed -s pairs are preserved). This is
-   the controlled per-restart perturbation selected by an r token in -S: a gentle
-   kick of a few random plugs into a new basin, rather than set_random_steckerbrett's
-   near-saturated involution that the staged climb would then have to tear down.
-   With k=0 it is a no-op (so r0 makes restarts identical -- a useful control). */
+   the per-restart perturbation: a kick of k random plugs (default_perturb, or an rN
+   token) into a new basin, near the typical plug count so the staged climb need not
+   tear down a near-saturated board (CODE_REVIEW §9). With k=0 it is a no-op (so r0
+   makes restarts identical -- a useful control). */
 void perturb_steckerbrett(machine & m, uint64_t * rng, int k)
 {
   unsigned char freelet[asize];
@@ -968,14 +943,14 @@ int model_of(char c)
 /* Parse the -S schedule string into opt_stages[]/opt_nstages/opt_perturb, and set
    opt_scoring to the target (last model stage). Tokens are <letter><optional int>:
    model letters i/m/b/t/q (a climb stage; the number caps its plug pairs, omitted =
-   uncapped) and r (the random perturbation; the number is plug pairs injected per
-   restart, omitted = full random involution). On a syntax error it calls fatal().
-   With no -S the schedule is the single -i/-m/.../-q target, uncapped, and the
-   perturbation stays at the full-random default (opt_perturb = -1). */
+   uncapped) and rN (the random perturbation; N plug pairs injected per restart). On
+   a syntax error it calls fatal(). With no -S the schedule is the single -i/-m/.../-q
+   target, uncapped; with no r token the perturbation stays at the fixed
+   default_perturb kick. */
 void parse_schedule()
 {
   opt_nstages = 0;
-  opt_perturb = -1;
+  opt_perturb = default_perturb;   /* fixed kick unless an r token overrides it */
 
   if (! opt_staged)
     {
@@ -985,6 +960,7 @@ void parse_schedule()
       return;
     }
 
+  bool seen_r = false;
   for (const char * p = opt_staged; *p; )
     {
       char letter = *p++;
@@ -1002,11 +978,14 @@ void parse_schedule()
 
       if (letter == 'r')
         {
-          if (opt_perturb >= 0)
+          if (seen_r)
             fatal("Illegal -S schedule: at most one r (random) token");
-          opt_perturb = (n < 0) ? pairs_uncapped : n;
-          if ((opt_perturb < 0) || (opt_perturb > pairs_uncapped))
+          seen_r = true;
+          if (n < 0)
+            fatal("Illegal -S r token: a count is required (e.g. r8; r0 = no-op)");
+          if (n > pairs_uncapped)
             fatal("Illegal -S r token (0 to 13 random plug pairs)");
+          opt_perturb = n;              /* rN = fixed N (r0 = a no-op control) */
         }
       else if (strchr("imbtq", letter))
         {
@@ -1051,13 +1030,12 @@ double hillclimb_schedule(machine & m)
 
 /* Hill-climb the plugboard with optional random restarts: restart 0 uses the
    configured seed (identity or -s pairs) -- exactly the opt_restarts==1 behaviour
-   -- then opt_restarts-1 further climbs start from a perturbed plugboard, keeping
-   the best. The perturbation is either a full random involution (no r token) or a
-   reset-to-seed plus k random plugs (an r token), so the staged climb is not forced
-   to tear down a near-saturated board. The rotor-stack mapping[] depends only on
-   the key (not the plugboard), so it is reused across restarts; only the
-   steckerbrett is reset each time. The RNG is seeded from the flat key index, so
-   the result is independent of -T. Each start runs the staged climb. */
+   -- then opt_restarts-1 further climbs start from the seed plus opt_perturb random
+   plugs (a moderate kick, near the typical plug count), keeping the best. The
+   rotor-stack mapping[] depends only on the key (not the plugboard), so it is reused
+   across restarts; only the steckerbrett is reset each time. The RNG is seeded from
+   the flat key index, so the result is independent of -T. Each start runs the staged
+   climb. */
 double hillclimb_restarts(machine & m, uint64_t key_index)
 {
   double best = hillclimb_schedule(m);
@@ -1070,13 +1048,8 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
   uint64_t rng = key_index + 0x0123456789abcdefULL;
   for (int r = 1; r < opt_restarts; r++)
     {
-      if (opt_perturb < 0)
-        set_random_steckerbrett(m, & rng);          /* full random involution */
-      else
-        {
-          init_steckerbrett(m, opt_steckerbrett);   /* reset to the fixed seed */
-          perturb_steckerbrett(m, & rng, opt_perturb);
-        }
+      init_steckerbrett(m, opt_steckerbrett);   /* reset to the fixed seed */
+      perturb_steckerbrett(m, & rng, opt_perturb);
       double s = hillclimb_schedule(m);
       if (s > best)
         {
@@ -1604,8 +1577,8 @@ void help(FILE * out)
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
-  fprintf(out, "               r = per-restart random plugs. E.g. -S r2i6q (2 random, IC\n");
-  fprintf(out, "               to 6 pairs, then quad uncapped)\n");
+  fprintf(out, "               rN = per-restart random plugs (N pairs, default 8).\n");
+  fprintf(out, "               E.g. -S r2i6q\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
   fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
@@ -1657,7 +1630,7 @@ void show_settings()
             opt_language, opt_datadir);
   fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
   if (opt_hillclimb && (opt_restarts > 1))
-    fprintf(stderr, " (%d restarts)", opt_restarts);
+    fprintf(stderr, " (%d restarts, %d-pair kick)", opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged)
     fprintf(stderr, " (staged: %s)", opt_staged);
   fprintf(stderr, "; threads: %d\n", opt_threads);

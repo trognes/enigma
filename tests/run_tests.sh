@@ -300,6 +300,14 @@ r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
 check "restarts: -R 8 result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 1)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 4)"
+# The no-r-token default kick is a fixed 8 pairs (CODE_REVIEW §9): a plain -R run
+# must equal an explicit -S r8 run.
+check "restarts: default kick == -S r8 (fixed 8 pairs)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S r8q)"
+# A bare r token (no count) is rejected: rN requires a number.
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S riq >/dev/null 2>&1
+check "staged: bare r (no count) rejected (exit code)" "$?" "1"
 # -R is validated: 0 is rejected.
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
 check "restart count 0 rejected (exit code)" "$?" "1"
