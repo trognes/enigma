@@ -144,10 +144,13 @@ and is a good cheap model for the rotor-key search.
 | `-c` | Hill-climb the plugboard for each candidate key |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
+| `-F N` | Key pre-filter: full climb only the top `N` keys (needs `-c`; `0` = off) `[0]` |
 
 The plugboard climb gets stuck in local optima on short messages, so `-R N`
 restarts it `N` times from perturbed boards and keeps the best, and `-S` runs the
-climb in stages. See **Cracking strategy** below.
+climb in stages. When you are also brute-forcing rotor settings, `-F N` shortlists
+the most promising keys with a cheap pass so the expensive climb runs only on
+those. See **Cracking strategy** below.
 
 ### Data and performance
 
@@ -187,6 +190,8 @@ Usage: enigma [OPTIONS]
   -t           Use trigram statistics to determine plaintext score
   -q           Use quadgram statistics to determine plaintext score [default]
   -p filename  Name of file containing plaintext to compare result with
+  -F integer   Key pre-filter: rank keys by a cheap IC climb, then run
+               the full -c climb on only the top N keys (needs -c) [off]
   -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]
   -T integer   Number of worker threads for the search (1-256) [1]
 ```
@@ -215,14 +220,30 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   coincidence pre-pass works best**: `-S iq` climbs IC, then refines under
   quadgrams.
 
+- **`-F N` — key pre-filter.** With `-c` the full `-R`/`-S` climb is paid on
+  *every* candidate key, which dominates runtime when you wildcard rotor settings.
+  `-F N` instead runs a single **cheap index-of-coincidence climb** on every key,
+  keeps the top `N`, and pays the full climb on only those — a ~8–20× throughput
+  win, so you can afford more restarts per surviving key. (A plugboard-free IC
+  *scan* does not work here: under a full plugboard the rotor-only decrypt is
+  almost entirely scrambled, so it cannot rank keys; a cheap IC *climb* partially
+  recovers the plugboard and does.) Pick `N` as a generous slice of the keyspace —
+  too tight an `N` on a weakly-discriminated wildcard can drop the true key.
+
 A good general recipe for a hard (short) message with a known rotor key:
 
 ```sh
 ./enigma -c -R 20 -S iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
-Increase `-R` for harder messages; add threads with `-T` when you are also
-brute-forcing rotor settings.
+When you also brute-force the rotor key, add `-F` to shortlist keys and `-T` for
+threads:
+
+```sh
+./enigma -c -R 20 -S iq -F 200 -T 4 -l english -u . -w ... -r AAA -g ... < cipher.txt
+```
+
+Increase `-R` for harder messages.
 
 ## Input, output and diagnostics
 

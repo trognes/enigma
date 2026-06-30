@@ -12,10 +12,12 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <mutex>
 #include <new>
+#include <queue>
 #include <thread>
 #include <vector>
 
@@ -138,6 +140,9 @@ static int opt_nstages;    /* number of model stages in opt_stages[] */
 static int opt_perturb;    /* random plug pairs injected per restart: 0..13 (an rN
                               token; default_perturb when no r token; r0 = no-op) */
 static const int default_perturb = 8;   /* no-r-token kick: best in the §9 sweep */
+static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
+                             run the full -c climb on only the top opt_prefilter keys
+                             (0 = off; requires -c) */
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 
@@ -1349,6 +1354,168 @@ void search_worker(machine & m,
     }
 }
 
+/* --- key pre-filter (-F) ---------------------------------------------------
+
+   With -c, the full plugboard climb (-R restarts x -S stages) is paid on *every*
+   key. The pre-filter instead ranks all keys by a single cheap index-of-coincidence
+   climb -- which, unlike a plugboard-free IC scan, partially recovers the stecker
+   and so discriminates the true rotor key even under a full 10-pair board -- and
+   then runs the expensive climb only on the top -F keys. */
+
+/* Decode a flat key index and configure the machine for it: switch to the wheel
+   order's table only when it changes from cur_wo, set ring/start, reset the
+   plugboard and build mapping[]. Fills rg6 = {r1,r2,r3,g1,g2,g3} for showconfig. */
+static void key_to_machine(machine & m, size_t idx,
+                           const std::vector<wheel_task> & tasks,
+                           const search_range & range, const int * rc, const int * gc,
+                           subst_table all, size_t rg, size_t gsize,
+                           size_t rc12, size_t gc12, size_t & cur_wo, int rg6[6])
+{
+  size_t wo = idx / rg;
+  size_t rem = idx % rg;
+  size_t rflat = rem / gsize;
+  size_t gflat = rem % gsize;
+
+  if (wo != cur_wo)
+    {
+      cur_wo = wo;
+      const wheel_task & t = tasks[wo];
+      m.subst_array = all + wo * asize;
+      init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
+      m.greek = t.greek;
+      m.greek_offset = t.greek_off;
+    }
+
+  int r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
+  int rr = static_cast<int>(rflat % rc12);
+  int r2 = range.r_min[1] + rr / rc[2];
+  int r3 = range.r_min[2] + rr % rc[2];
+  int g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
+  int gg = static_cast<int>(gflat % gc12);
+  int g2 = range.g_min[1] + gg / gc[2];
+  int g3 = range.g_min[2] + gg % gc[2];
+
+  init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+  init_steckerbrett(m, opt_steckerbrett);
+  setup_mapping(m, true);   /* both the filter climb and the finish climb need it */
+  rg6[0] = r1; rg6[1] = r2; rg6[2] = r3; rg6[3] = g1; rg6[4] = g2; rg6[5] = g3;
+}
+
+struct scored_key { double score; size_t idx; };
+
+/* A min-heap that keeps the top-N keys: top() is the eviction candidate -- the
+   lowest score, ties broken by the largest idx (so equal scores keep the lower idx,
+   which makes the kept set deterministic and -T-independent). */
+struct keep_worse
+{
+  bool operator()(const scored_key & a, const scored_key & b) const
+  {
+    if (a.score != b.score)
+      return a.score > b.score;   /* top() = smallest score */
+    return a.idx < b.idx;         /* tie: top() = largest idx */
+  }
+};
+
+/* Tier 1: rank a slice of the flat key space by a cheap IC climb; keep the
+   thread-local top-N, then merge into the shared candidate list. No printing. */
+void filter_worker(machine & m,
+                   const std::vector<wheel_task> & tasks,
+                   const search_range & range, const int * rc, const int * gc,
+                   subst_table all, size_t rsize, size_t gsize,
+                   std::atomic<size_t> & next_key, size_t chunk, size_t topn,
+                   std::mutex & cand_mutex, std::vector<scored_key> & cand)
+{
+  const size_t rg = rsize * gsize;
+  const size_t total = tasks.size() * rg;
+  const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
+  const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
+
+  m.scoring = SCORE_IC;   /* the cheap, smooth-surface filter model */
+
+  std::priority_queue<scored_key, std::vector<scored_key>, keep_worse> heap;
+  size_t cur_wo = static_cast<size_t>(-1);
+  int rg6[6];
+
+  size_t start;
+  while ((start = next_key.fetch_add(chunk)) < total)
+    {
+      size_t end = start + chunk;
+      if (end > total)
+        end = total;
+
+      for (size_t idx = start; idx < end; idx++)
+        {
+          key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
+                         rc12, gc12, cur_wo, rg6);
+          double s = hillclimb(m, pairs_uncapped);   /* single IC climb */
+
+          if (heap.size() < topn)
+            heap.push(scored_key{s, idx});
+          else
+            {
+              const scored_key & w = heap.top();
+              if ((s > w.score) || ((s == w.score) && (idx < w.idx)))
+                {
+                  heap.pop();
+                  heap.push(scored_key{s, idx});
+                }
+            }
+        }
+    }
+
+  std::lock_guard<std::mutex> lock(cand_mutex);
+  while (! heap.empty())
+    {
+      cand.push_back(heap.top());
+      heap.pop();
+    }
+}
+
+/* Tier 2: run the full -R/-S plugboard climb on the shortlisted keys only, merging
+   the global best exactly like search_worker's hill-climb path. */
+void finish_worker(machine & m,
+                   const std::vector<wheel_task> & tasks,
+                   const search_range & range, const int * rc, const int * gc,
+                   subst_table all, size_t rsize, size_t gsize,
+                   const std::vector<size_t> & shortlist,
+                   std::atomic<size_t> & next, best_result & best)
+{
+  const size_t rg = rsize * gsize;
+  const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
+  const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
+
+  m.scoring = opt_scoring;
+
+  double local_best = score_min;
+  size_t cur_wo = static_cast<size_t>(-1);
+  int rg6[6];
+
+  size_t k;
+  while ((k = next.fetch_add(1)) < shortlist.size())
+    {
+      size_t idx = shortlist[k];
+      key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
+                     rc12, gc12, cur_wo, rg6);
+
+      double score = hillclimb_restarts(m, idx);
+
+      if (score > local_best)
+        {
+          local_best = score;
+          std::lock_guard<std::mutex> lock(best.mutex);
+          if (score > best.score)
+            {
+              best.score = score;
+              best.found = true;
+              memcpy(best.plaintext, m.plaintext, textlength + 1);
+              init_ring_grund(m, rg6[0], rg6[1], rg6[2], rg6[3], rg6[4], rg6[5]);
+              fprintf(stderr, "%10.4f ", score);
+              showconfig(m);
+            }
+        }
+    }
+}
+
 /* Resolve the search ranges from the options, enumerate the reflector x
    wheel-order tasks, precompute their rotor tables in parallel, then sweep the
    flat (wheel-order x ring x start) key space in parallel. The best decryption
@@ -1545,25 +1712,91 @@ void bruteforce(char * result)
      gets ~16 chunks: enough to balance the tail, few enough to amortise the
      atomic) */
   best_result best;
-  std::atomic<size_t> next_key{0};
   size_t chunk = total_keys / (static_cast<size_t>(nthreads) * 16);
   if (chunk < 1)
     chunk = 1;
 
-  if (nthreads == 1)
-    search_worker(*machines[0], tasks, range, rc, gc, all,
-                  rsize, gsize, next_key, chunk, best);
+  if (opt_prefilter > 0)
+    {
+      /* Tier 1: rank every key by a cheap IC climb, keep the top -F. */
+      size_t topn = static_cast<size_t>(opt_prefilter);
+      if (topn > total_keys)
+        topn = total_keys;
+
+      std::vector<scored_key> cand;
+      std::mutex cand_mutex;
+      std::atomic<size_t> fnext{0};
+      if (nthreads == 1)
+        filter_worker(*machines[0], tasks, range, rc, gc, all, rsize, gsize,
+                      fnext, chunk, topn, cand_mutex, cand);
+      else
+        {
+          std::vector<std::thread> pool;
+          pool.reserve(static_cast<size_t>(nthreads));
+          for (int t = 0; t < nthreads; t++)
+            pool.emplace_back(filter_worker, std::ref(*machines[t]),
+                              std::cref(tasks), std::cref(range), rc, gc, all,
+                              rsize, gsize, std::ref(fnext), chunk, topn,
+                              std::ref(cand_mutex), std::ref(cand));
+          for (std::thread & th : pool)
+            th.join();
+        }
+
+      /* deterministic global top-N: highest score first, ties by lowest idx */
+      std::sort(cand.begin(), cand.end(),
+                [](const scored_key & a, const scored_key & b)
+                {
+                  if (a.score != b.score) return a.score > b.score;
+                  return a.idx < b.idx;
+                });
+      if (cand.size() > topn)
+        cand.resize(topn);
+      std::vector<size_t> shortlist;
+      shortlist.reserve(cand.size());
+      for (const scored_key & sk : cand)
+        shortlist.push_back(sk.idx);
+
+      fprintf(stderr,
+              "Pre-filter: ranked %zu keys by a cheap IC climb, "
+              "running the full climb on the top %zu\n",
+              total_keys, shortlist.size());
+
+      /* Tier 2: full -R / -S climb on the shortlist only. */
+      std::atomic<size_t> snext{0};
+      if (nthreads == 1)
+        finish_worker(*machines[0], tasks, range, rc, gc, all, rsize, gsize,
+                      shortlist, snext, best);
+      else
+        {
+          std::vector<std::thread> pool;
+          pool.reserve(static_cast<size_t>(nthreads));
+          for (int t = 0; t < nthreads; t++)
+            pool.emplace_back(finish_worker, std::ref(*machines[t]),
+                              std::cref(tasks), std::cref(range), rc, gc, all,
+                              rsize, gsize, std::cref(shortlist),
+                              std::ref(snext), std::ref(best));
+          for (std::thread & th : pool)
+            th.join();
+        }
+    }
   else
     {
-      std::vector<std::thread> pool;
-      pool.reserve(static_cast<size_t>(nthreads));
-      for (int t = 0; t < nthreads; t++)
-        pool.emplace_back(search_worker, std::ref(*machines[t]),
-                          std::cref(tasks), std::cref(range), rc, gc, all,
-                          rsize, gsize, std::ref(next_key), chunk,
-                          std::ref(best));
-      for (std::thread & th : pool)
-        th.join();
+      std::atomic<size_t> next_key{0};
+      if (nthreads == 1)
+        search_worker(*machines[0], tasks, range, rc, gc, all,
+                      rsize, gsize, next_key, chunk, best);
+      else
+        {
+          std::vector<std::thread> pool;
+          pool.reserve(static_cast<size_t>(nthreads));
+          for (int t = 0; t < nthreads; t++)
+            pool.emplace_back(search_worker, std::ref(*machines[t]),
+                              std::cref(tasks), std::cref(range), rc, gc, all,
+                              rsize, gsize, std::ref(next_key), chunk,
+                              std::ref(best));
+          for (std::thread & th : pool)
+            th.join();
+        }
     }
 
   for (int t = 0; t < nthreads; t++)
@@ -1703,6 +1936,8 @@ void help(FILE * out)
   fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
   fprintf(out, "  -q           Use quadgram statistics to determine plaintext score [default]\n");
   fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
+  fprintf(out, "  -F integer   Key pre-filter: rank keys by a cheap IC climb, then run\n");
+  fprintf(out, "               the full -c climb on only the top N keys (needs -c) [off]\n");
   fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]\n");
   fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
   fprintf(out, "\n");
@@ -1749,6 +1984,8 @@ void show_settings()
     fprintf(stderr, " (%d restarts, %d-pair kick)", opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged)
     fprintf(stderr, " (staged: %s)", opt_staged);
+  if (opt_prefilter > 0)
+    fprintf(stderr, "; pre-filter: top %d keys", opt_prefilter);
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
   if (opt_m4)
@@ -1819,11 +2056,12 @@ int main(int argc, char * * argv)
   opt_norenigma = 0;
   opt_m4 = 0;
   opt_threads = 1;
+  opt_prefilter = 0;
 
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -1879,6 +2117,9 @@ int main(int argc, char * * argv)
           break;
         case 'R':
           opt_restarts = atoi(optarg);
+          break;
+        case 'F':
+          opt_prefilter = atoi(optarg);
           break;
         case 'l':
           opt_language = optarg;
@@ -2035,6 +2276,13 @@ int main(int argc, char * * argv)
 
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
+
+  /* The key pre-filter ranks every key by a cheap plugboard climb and runs the full
+     climb only on the top -F keys, so it is only meaningful with -c. */
+  if (opt_prefilter < 0)
+    fatal("Illegal pre-filter count (-F must be >= 1)");
+  if ((opt_prefilter > 0) && (! opt_hillclimb))
+    fatal("The key pre-filter (-F) needs the plugboard hill-climb (-c)");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully

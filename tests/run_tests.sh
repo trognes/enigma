@@ -375,6 +375,30 @@ check "staged: -S r token over max (r99) rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S rir >/dev/null 2>&1
 check "staged: -S two r tokens rejected (exit code)" "$?" "1"
 
+# Key pre-filter (-F N): tier 1 ranks every key by a cheap IC climb and keeps the
+# top N; tier 2 runs the full -c/-R/-S climb on only those keys. On a long message
+# the true rotor key sits comfortably inside a generous top-N, so the pre-filter
+# must recover the same plaintext as the full crack, and (like every search path)
+# stay independent of -T. Wildcard two start positions (-g A.. = 676 keys) so the
+# filter has a real keyspace to rank; F=50 keeps the top ~7%.
+f_pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSE"
+f_ct=$(run "$f_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
+check "pre-filter: -F 50 recovers plaintext like the full crack" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 50)" \
+  "$f_pt"
+check "pre-filter: -F 50 result is -T-independent" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 50 -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 50 -T 4)"
+# -F is validated: it needs -c, a negative count is rejected, and 0 just means "off"
+# (so -F 0 must match a plain run with no -F).
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 10 >/dev/null 2>&1
+check "pre-filter: -F without -c rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -F -1 >/dev/null 2>&1
+check "pre-filter: -F negative rejected (exit code)" "$?" "1"
+check "pre-filter: -F 0 is off (matches no -F)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 0)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq)"
+
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
 hout=$("$ENIGMA" -h 2>/dev/null); hcode=$?

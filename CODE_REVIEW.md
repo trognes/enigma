@@ -790,11 +790,39 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    survive a graded metric at 500–1000 trials. Likely cause: at 40 letters IC is
    estimated from too few samples to be reliable, so monogram frequencies are
    marginally more robust; by 70 letters IC's smoother surface wins again.
-2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
-   plugboard-free scan (IC/unigram) over the whole key space shortlists the best
-   few hundred keys; the expensive climb runs only on those. Attacks the real cost
-   driver and fits the existing parallel architecture; climb internals unchanged.
-   Still open.
+2. **Pre-filter keys, climb only the top-N — ✅ IMPLEMENTED (`-F N`).** With `-c`
+   the full `-R`/`-S` climb is paid on *every* key, so the climb is ~all the
+   runtime; the pre-filter pays it only on the most promising keys. Two tiers, both
+   parallel and `-T`-deterministic:
+   - **Tier 1 (`filter_worker`)** ranks *every* key by a single **cheap IC climb**
+     and keeps the global top-`N` (a per-thread top-N min-heap with a deterministic
+     tie-break — score desc, idx asc — merged and re-sorted, so the kept set is
+     independent of `-T`).
+   - **Tier 2 (`finish_worker`)** runs the full `-R`/`-S` climb on only those `N`
+     keys (the plugboard restarts from the configured seed, *not* warm-started from
+     tier 1 — second phase from scratch).
+
+   **Why an IC *climb*, not a plugboard-free IC scan.** The original idea was a
+   plugboard-free IC/unigram scan, on the textbook premise that IC is plugboard-
+   invariant. It is **not, in practice**: a rotor-only decrypt under a full 10-pair
+   board is ~95 % scrambled (a position is right only if the letter *and* its rotor
+   image are both unplugged ≈ (6/26)² ≈ 5 %), so a raw plugboard-free IC scan has
+   **~0 % top-1 recall** at 10 plugs (`tests/prefilter_probe.py`). A cheap IC
+   *climb* — which partially recovers the stecker — restores discrimination
+   (~77.5 % top-1 at 10 plugs), so that is what tier 1 uses.
+
+   **Measured (`tests/prefilter_quality.py`, 676-key wildcard, L=190):** the pre-filter
+   recovers identically to the full crack at 3/5/8 plugs while running **~8×**
+   faster; the speedup grows with the keyspace (~15× at 17 k keys) and asymptotes
+   to ~20× (the IC-climb : full-recipe per-key cost ratio).
+
+   **Picking `N`.** `N` trades recall (true key kept) for throughput. Recall is high
+   when the keyspace is large and the message is not too short — a few-hundred-key
+   top-N over a real wildcard is robust. The footgun is a *small, low-discrimination*
+   keyspace: wildcarding only the fast rotor gives weakly-separated IC scores, so a
+   tight `N` (e.g. top-10 of 26) can drop the true key even though the full crack
+   finds it. Rule of thumb: keep a generous fraction (≥ ~7–15 %) of a genuine
+   wildcard, and lean larger on very short messages.
 3. **Random restarts — ✅ IMPLEMENTED (`-R N`).** Restart 0 is the configured seed
    (= the old behaviour); restarts 1..N-1 start from a perturbed board (per-key
    splitmix64, so `-T`-deterministic), best kept. Each restart resets to the seed and
@@ -935,13 +963,13 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 | restarts (`-R 10`)          | 15 |  40 |  70 |  90 |
 | **restarts + IC stage** (`-R 10 -S iq`) | **57** | **90** | **92** | **100** |
 
-**Bottom line:** **(3)** random restarts and **(1)** the staged schedule are both
-**shipped** and **stack**, and the best combination found is **`-R 10 -S iq`**
-(restarts + an IC pre-pass), which lifts L140 from 16 % (plain) → 90 %. Still open:
-**(2)** a key pre-filter (the big *throughput* win, so more restarts are
-affordable per surviving key), and the heavier metaheuristics (SA/tabu/GA, items
-5–8) as fallbacks for the hardest cases. The default (`-R 1`, no `-S`) is the
-unchanged single-start climb.
+**Bottom line:** **(3)** random restarts, **(1)** the staged schedule, and **(2)**
+the key pre-filter are all **shipped** and **stack**: the best quality combination
+is **`-R 10 -S iq`** (restarts + an IC pre-pass), which lifts L140 from 16 %
+(plain) → 90 %, and **`-F N`** then buys back most of the cost (~8–20×) so more
+restarts are affordable per surviving key. Still open: the heavier metaheuristics
+(SA/tabu/GA, items 5–8) as fallbacks for the hardest cases. The default (`-R 1`,
+no `-S`, no `-F`) is the unchanged single-start climb on every key.
 
 ### Scoring data and smoothing (the other lever — and what it can/can't help)
 
