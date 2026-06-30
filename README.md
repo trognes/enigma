@@ -36,8 +36,9 @@ Usage: enigma [OPTIONS]
   -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]
   -c           Perform hill climbing to determine plugboard settings
   -R integer   Plugboard hill-climb random restarts (1 = none) [1]
-  -S schedule  Staged plugboard climb: pre-pass model letters (i/m/b/t/q)
-  -L integer   Cap each staged pre-pass at N plug pairs (1-13; 13 = no cap) [13]
+  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.
+               Models i/m/b/t/q (number caps plug pairs; last = target),
+               r = per-restart random plugs. E.g. -S r2i6q
   -l language  Scoring language (english, german, danish, french); required
                for -m/-b/-t/-q (no default), not used by -i
   -i           Use index of coincidence (IC) to determine plaintext score

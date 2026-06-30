@@ -126,18 +126,27 @@ any working directory.
 - `-s AB...` fixed plugboard pairs
 - `-c` hill-climb the plugboard
 - `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
-  the rest start from random involutions, best kept). Per-key RNG seeded from the
+  the rest start from a perturbed board, best kept). Per-key RNG seeded from the
   flat key index, so the result stays independent of `-T`. ~`N`× the `-c` cost.
-- `-S <schedule>` staged plugboard climb — a string of pre-pass model letters
-  (`i`/`m`/`b`/`t`/`q`) climbed in order before the target model, to steer the
-  early plugs into a better basin (the lower-order surface is smoother when few
-  plugs are set). **`-S i` (IC pre-pass) is the best measured** — much better than
-  bigram, and extra stages after IC add nothing. Per-`machine` `scoring` field
-  (never a global → race-free); deterministic; stacks with `-R`.
-- `-L N` cap each staged pre-pass at `N` plug pairs (1–13; `13` = no cap, the
-  default). A tuning knob for the staged climb: the low-order pre-pass sets at most
-  `N` plugs before the target model refines (uncapped). Under investigation — see
-  `CODE_REVIEW.md` §9 for the cap sweep across IC/mono/bigram pre-passes.
+  The restart count is separate from the schedule string (`-S`).
+- `-S <schedule>` staged plugboard climb — a string of `<letter><optional number>`
+  tokens parsed by `parse_schedule()` into `opt_stages[]`:
+  - **model tokens** `i`/`m`/`b`/`t`/`q` are climb stages run in order; the number
+    caps the **plug pairs** that stage may set (1–13; omitted = uncapped, 13). The
+    **last** model token is the target/ranking model (sets `opt_scoring`), so the
+    target lives *in* the string — e.g. `-S i6q` = IC capped at 6 pairs, then quad
+    uncapped. A lower-order early stage steers the first plugs into a better basin
+    (its surface is smoother when few plugs are set); **`-S i…q` (IC pre-pass) is
+    the best measured** — much better than bigram, extra stages after IC add little.
+  - **the `r` token** (at most one) sets the **per-restart random perturbation**:
+    `rN` injects `N` random plug pairs from the seed each restart (`r0` = no-op, so
+    restarts collapse — a useful control; a bare `r` = the legacy full random
+    involution). Small `N` (a few plugs) keeps later stages from having to tear
+    down a near-saturated board. With no `r` token the perturbation defaults to the
+    full random involution, so `-c -R N` (no `-S`) still does random restarts.
+  Per-`machine` `scoring` field (never a global → race-free); deterministic; the
+  `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
+  was folded into the per-stage numbers — see `CODE_REVIEW.md` §9.)
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
   used by `-i`
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the
