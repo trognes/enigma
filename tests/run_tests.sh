@@ -331,9 +331,15 @@ check "restarts: default kick == -S r8 (fixed 8 pairs)" \
 check "restarts: bare r == default kick (-S riq == -S r8iq)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S riq)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S r8iq)"
-# -R is validated: 0 is rejected.
+# -R is validated: 0 is rejected, the count may be large (well past the old 100000
+# guard), but an absurd value over the 1000000000 cap is still rejected. The accept
+# case omits -c so only the validation runs (no actual restart climbs).
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
 check "restart count 0 rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -R 200000 >/dev/null 2>&1
+check "restart count past old 100000 cap accepted (exit code)" "$?" "0"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 1000000001 >/dev/null 2>&1
+check "restart count over 1000000000 rejected (exit code)" "$?" "1"
 
 # Staged plugboard climb (-S schedule: a bigram pre-pass, then the quad target as
 # the last token). It must stay -T-independent, and recover a small plugboard on a
