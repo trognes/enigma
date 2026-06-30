@@ -1920,10 +1920,29 @@ int main(int argc, char * * argv)
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
 
+  /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
+     reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully
+     specified machine with no -c just enciphers its input: there is a single
+     candidate and its decode is the output, so no score, and hence no scoring
+     language, is needed. In that case fall back to the index of coincidence (which
+     needs neither a table nor -l) so plain encryption/decryption works with no
+     scoring options at all. (Note the default ring is "AA.", so an explicit -r is
+     needed to encrypt -- otherwise the wildcard makes it a search.) */
+  bool has_wildcard =
+      strchr(opt_ukw, '.') || strchr(opt_walzen, '.') ||
+      strchr(opt_ringstellung, '.') || strchr(opt_grundstellung, '.') ||
+      (opt_m4 && (opt_greek_walzen == '.' ||
+                  opt_greek_ringstellung == '.' ||
+                  opt_greek_grundstellung == '.'));
+  bool needs_scoring = has_wildcard || opt_hillclimb;
+  if (! needs_scoring)
+    opt_scoring = SCORE_IC;
+
   /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no default;
      the index of coincidence (-i) and the r token are language-independent. Every
-     stage that reads an n-gram table -- pre-pass or target -- needs -l. */
-  if (! opt_language)
+     stage that reads an n-gram table -- pre-pass or target -- needs -l. Only enforce
+     this when scoring actually runs. */
+  if (needs_scoring && ! opt_language)
     for (int i = 0; i < opt_nstages; i++)
       if (opt_stages[i].model != SCORE_IC)
         fatal("A scoring language is required: add -l <language> "
@@ -1939,22 +1958,22 @@ int main(int argc, char * * argv)
     fatal("Illegal language name (must be 1-32 letters, e.g. english)");
 
 
-  /* Load the n-gram table for the chosen scoring model first, so a missing or
-     mistyped -l fails immediately (with the offending filename) before we read
-     and consume standard input. */
-
-  /* Load the target model's table first (so a missing or mistyped -l fails
-     immediately on it), then any extra tables the staged pre-pass (-S) needs. */
-  bool table_loaded[5] = { false, false, false, false, false };
-  load_table(opt_scoring);
-  table_loaded[opt_scoring] = true;
-  for (int i = 0; i < opt_nstages; i++)
+  /* Load the n-gram tables scoring will use (none for IC), target first, so a
+     missing or mistyped -l fails immediately (with the offending filename) before
+     we read and consume standard input. Skipped entirely when just enciphering. */
+  if (needs_scoring)
     {
-      int model = opt_stages[i].model;
-      if (! table_loaded[model])
+      bool table_loaded[5] = { false, false, false, false, false };
+      load_table(opt_scoring);
+      table_loaded[opt_scoring] = true;
+      for (int i = 0; i < opt_nstages; i++)
         {
-          load_table(model);
-          table_loaded[model] = true;
+          int model = opt_stages[i].model;
+          if (! table_loaded[model])
+            {
+              load_table(model);
+              table_loaded[model] = true;
+            }
         }
     }
 
