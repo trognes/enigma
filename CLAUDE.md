@@ -143,10 +143,11 @@ any working directory.
     restarts collapse — a useful control; a bare `r` = the legacy full random
     involution). With no `r` token the perturbation defaults to the full random
     involution, so `-c -R N` (no `-S`) still does random restarts. **The sweep
-    (§9) found a *strong* kick is best: small `N` (1–4) caps the restart ceiling and
-    underperforms the full involution even on few-plug boards; `r0`/small `N` are
-    mainly controls, not a recipe.** The first-order lever is the restart count
-    `-R N`, which never plateaus through 256.
+    (§9, 500 trials, R 1→256) found the best kick is near the true plug count
+    (`k≈8–10`): `-S r8iq` is the best single default — significantly beats the legacy
+    involution at high `-R` on the shortest texts, never worse. Small `k` (1–2) is a
+    footgun at high `-R`; `r0` is a no-op control.** The first-order lever is the
+    restart count `-R N`, which never plateaus through 256.
   Per-`machine` `scoring` field (never a global → race-free); deterministic; the
   `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
   was folded into the per-stage numbers — see `CODE_REVIEW.md` §9.)

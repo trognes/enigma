@@ -800,40 +800,49 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    and the diagnosis said every miss was a *search* failure, so this was the first
    lever pulled. Roughly doubles short-message exact-recovery (table below).
 
-   **Restart-strength sweep — verdict (`tests/restart_sweep.py`, 200 trials, L40/L70,
-   10-pair board, mean %-correct; `tests/restart_sweep.png`).** Two questions: how
-   strong should each restart's random perturbation be (the `r` token's `k` plug
-   pairs), and how many restarts `N` before it flattens? Both answers were
-   surprising:
+   **Restart-strength sweep — verdict (`tests/restart_sweep.py`; 500 trials over the
+   full grid k∈{2..10,legacy} × R∈{1..256}, L40/L70, 10-pair board, mean %-correct;
+   plot `tests/restart_sweep_full500.png`).** Two questions: how strong should each
+   restart's random perturbation be (the `r` token's `k` plug pairs), and how many
+   restarts `N` before it flattens?
 
    - **`N` (restart count) never plateaus in the tested range [1, 256].** Each
      *doubling* of `N` adds roughly a constant ~8–11 %-correct at L70 (legacy:
-     17 % at R1 → 50 % at R32 → 82 % at R256; exact 7 % → 75 %), and L40 climbs
-     10 % → 24 % likewise. There is **no knee** — restarts are a near-log-linear
-     quality/compute trade (cost is linear in `N`), so "how many restarts" is purely
-     a budget decision for short messages, not a point of diminishing returns.
-   - **Perturbation strength: bigger is better; small `k` is a footgun.** Against
-     the full-random involution (the no-`r` default, mean ~7 pairs), a *small* kick
-     **caps the restart ceiling**: at L70/R32, `k=1` is −12 %-correct (paired
-     t = −4.4), `k=2` is −6.6 (t = −2.2); `k≈8` ties or marginally beats legacy and
-     `k=4` even slips behind it at very high `N` (L70/R256: −4.1). The plot shows
-     small-`k` curves saturating early while legacy/`k8` keep rising. `k=0` is a
-     flat no-op at every `N` (the determinism anchor).
-   - **It is *not* "match `k` to the true plug count."** A 3-pair confirmation
-     (`tests/restart_sweep_p3.csv`, 300 trials) was meant to show small `k` winning
-     when the board has few plugs — it did the opposite: even at 3 true pairs,
-     `k=8`/legacy beat small `k` (R32: `k1` −6.5 t = −5.9, `k2` −3.8, `k3` −3.2, all
-     legacy > `k`; `k8` a tie). So the mechanism is simply: **a strong random kick
-     diversifies the restart, and the IC→quad staged climb walks tear-down back down
-     cheaply, so under-diversification (small `k`) only lowers the ceiling.** The
-     user's "keep it to a few plugs so later stages need not tear down many" intuition
-     does not hold — the staged climb makes tear-down nearly free.
+     17 % at R1 → 52 % at R32 → 83 % at R256; exact 7 % → 76 %), and L40 climbs
+     ~10 % → 24 % likewise. **No knee** — restarts are a near-log-linear
+     quality/compute trade (cost linear in `N`), so "how many restarts" is purely a
+     budget decision for short messages, not a point of diminishing returns. `N` is
+     the dominant lever; `k` is second-order.
+   - **The best `k` shifts with `N` (a crossover), peaking near the true plug
+     count.** At `R=1` every `k` is identical (restart 0 is the unperturbed seed, so
+     no kick is applied). Through `R≈16` the curves stay bunched: on L40 *no* `k`
+     differs significantly from legacy; on L70 a *moderate* kick gives a modest, real
+     boost in spots (R8: `k3` +4.5 t = 2.6, `k5` +4.0 t = 2.3 vs legacy). From
+     `R≳64` a **strong** kick wins decisively and small `k` falls significantly
+     behind (L40/R256: `k2` −3.9 t = −3.3 vs legacy; L70/R256: `k≤6` all
+     significantly below legacy, down to `k2` −14.8). The optimum sits at the **true
+     plug count (~10)**: L40 peaks at `k≈8–9` (`k9` +2.9 t = 2.2 over legacy; `k10`
+     over-plugs the short text and drops back), L70 at `k≈10` (`k10` +3.6 t = 2.1 at
+     R128). Mechanism: few restarts → a moderate kick lands the best single
+     improvement (and on L40 the seed climb already does most of the work, so `k`
+     hardly matters); many restarts → the moderate-`k` neighbourhood is exhausted, so
+     kicks ≈ the true plug count are needed to keep reaching fresh basins.
+   - The legacy uniform-1..13 involution (mean ~7) is **consistently a little below**
+     the `k≈8–10` plateau at high `N` (its weak low draws waste restarts) and never
+     significantly better anywhere. (`r0` is a flat no-op at every `N` — the
+     determinism anchor; small `k` 1–2 is the genuine footgun at high `N`.) An
+     earlier 200-trial pass with only `k∈{4,8}` extended past R32 wrongly read this
+     as "legacy/`k8` just win"; the powered full-`k` grid shows the crossover and the
+     `k≈8–10` peak instead — the interior-`k` lead the user flagged at R32 is real at
+     low `N`, just within noise there, and it is the *high-`N`* regime (where recovery
+     is actually good) that wants the stronger kick.
 
-   **Takeaway:** keep the full-random involution default (do **not** bake a small-`k`
-   default into the recipe); spend the budget on `N` (no plateau through 256). The
-   `r` token's practical value is `r0` (a deterministic no-restart control) and the
-   option to spell a strong fixed kick (`k≈8`); small `k` is a documented footgun.
-   Full data: `tests/restart_sweep{,_hiR,_p3}.csv`.
+   **Takeaway:** spend the budget on `N` (no plateau through 256); set the kick near
+   the expected plug count. A fixed `k≈8` (`-S r8iq`) is the best single default —
+   significantly better than the legacy involution at high `N` on L40, tied or better
+   on L70, and never worse — robust across lengths (just below the true count, so it
+   does not over-plug the shortest texts). Full data:
+   `tests/restart_sweep{,_hiR,_p3,_fillk,_k910,_lowR,_full500}.csv`.
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start
    than identity.
