@@ -719,16 +719,17 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    IC and `ib` are a statistical tie and **mono is clearly worse**, so plain IC is
    the pick (simplest, no table, no language needed for the pre-pass).
 
-   *Capping the pre-pass at the first few plugs (`-L N`, a per-stage move budget)
-   is provided as a tuning knob.* A **preliminary** sweep on the IC pre-pass
-   (`-R 10 -S i`, only 50 trials, L100/L140) found capping IC *hurts*, monotonically
-   — cap 1 → 28/62 %, 3 → 42/84, 8 → 54/88, uncapped → 60/92 — consistent with the
-   theory that the Gillogly/Weierud "first few plugs only" rule targets models that
-   **over-fit** (bigram), whereas IC does not over-fit, so its fully-converged board
-   is the best quad seed. **This is not yet a thorough result** (single model, two
-   lengths, low trial count); a proper investigation should sweep `-L` against the
-   *bigram* pre-pass (where capping is theorised to *help*), at more lengths, more
-   trials, and other plug counts. The `-L` knob is retained for that work.
+   *Capping the pre-pass at the first N plug pairs (`-L N`, 1–13; 13 = no cap) is a
+   tuning knob: the low-order pre-pass sets at most N plugs, then the target model
+   refines uncapped.* The Gillogly/Weierud "first few plugs only" rule targets
+   models that **over-fit** (bigram), so capping is theorised to help bigram more
+   than IC. (An earlier sweep used a *move* budget rather than a *pair* cap and was
+   too thin to trust; the knob now caps pairs, so `-L 13` ≡ uncapped exactly.) A
+   thorough sweep — caps 1–13 × {IC, mono, bigram} pre-pass × several lengths
+   including short (<100) messages — is recorded below.
+
+   <!-- CAP-SWEEP-RESULTS -->
+   *(sweep results pending)*
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost

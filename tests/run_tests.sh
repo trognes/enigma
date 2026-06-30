@@ -323,8 +323,10 @@ check "staged: bad -S schedule rejected (exit code)" "$?" "1"
 check "staged: -S i -L 3 -R 4 result is -T-independent" \
   "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S i -L 3 -R 4 -T 1)" \
   "$(run "$s_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -S i -L 3 -R 4 -T 4)"
-printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S i -L 1001 >/dev/null 2>&1
-check "staged: -L over max rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S i -L 14 >/dev/null 2>&1
+check "staged: -L over max (14) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S i -L 0 >/dev/null 2>&1
+check "staged: -L 0 rejected (exit code)" "$?" "1"
 
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
