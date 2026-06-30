@@ -1041,3 +1041,59 @@ If domain-matched German is ever pursued, the findings from looking into it:
   authentic archives to nudge phrasing. A synthesis pipeline (general corpus →
   `X`-substituted/number-spelled A–Z text → n-gram tables) is the form to build if
   real-traffic cracking is ever tackled.
+
+### Alternative scoring / fitness functions (beyond IC / mono / bi / tri / quad)
+
+The five shipped scorers (`-i` index of coincidence, `-m/-b/-t/-q` log-weighted
+mono/bi/tri/quad sums — the latter four are essentially the **Sinkov statistic**)
+are not the only options. The useful framing is **per tier**, because they are
+bound by different things:
+
+- the **plugboard climb** is *search-bound* (the SPLIT metric shows 0 % scoring
+  failures down to 40 chars), so a better scorer barely moves it;
+- the **`-F` tier-1 key ranking** and the not-yet-built **full-crack tier** are
+  *discrimination* problems — there a different scorer can genuinely help.
+
+Candidates, grouped, with where each would pay off:
+
+1. **Log-likelihood with an unseen-gram floor ("quadgram fitness").** Replace the
+   `log10(count+1)` (unseen → neutral 0) with `log10(count/total)` + a floor
+   (`log10(0.01/total)`) for unseen grams, so gibberish carrying impossible grams
+   is *penalised*. Implemented + A/B'd once: **neutral on the plugboard tier**
+   (search-bound), but the right shape for the **full-crack tier** (wrong rotor keys
+   emit many unseen quadgrams). See "Scoring data and smoothing" above. Parked until
+   that tier exists.
+2. **Interpolated / back-off n-gram model** (blend orders, or Kneser-Ney). On
+   *short* messages the quadgram surface is sparse and flat; falling back to lower
+   orders where quadgrams are unseen gives a smoother, better-guided surface. The
+   most principled n-gram improvement for the short-text regime this tool targets.
+   Unbuilt.
+3. **Chi-squared of the letter (or bigram) frequency distribution vs the language's
+   expected frequencies.** Cheap, language-specific, a *different statistic* from the
+   Sinkov log-sum. Strongest candidate **as an `-F` tier-1 filter / ranking model**:
+   IC is language-independent and weak and was measured to *overfit* under a free
+   plugboard (tier-1 recall loss at large keyspaces, this session), so a chi-squared
+   or **capped-bigram** filter is the concrete thing to try alongside the tier-1 plug
+   cap. Unbuilt.
+4. **Crib / known-plaintext objective.** Score by match to a suspected word/phrase.
+   This is *how Enigma was historically broken*; the no-self-encipherment property
+   tightly constrains where a crib can sit, a very strong signal. `-p` exists for
+   *comparison* but not as a *search objective*. The orthogonal high-value addition
+   whenever a crib is plausible. Unbuilt.
+5. **Compression / PPM perplexity** (shorter compressed length ≈ more language-like;
+   PPM ≈ an adaptive high-order n-gram). Strong but slow, and not obviously better
+   than quadgrams for the cost. **Dictionary / word-hit** scoring is hard without
+   word boundaries (telegraphic traffic has none). A **char-level neural LM**
+   perplexity is the high end — overkill and against the single-file/no-deps ethos.
+   Named to dismiss.
+6. **5-grams** — 26⁵ ≈ 12 M cells, too sparse for short text. Rejected (also above).
+   *(Mutual IC / kappa align two ciphertexts at "depth" — not single-candidate
+   scoring, so not applicable here.)*
+
+**Net:** for the plugboard tier, no scoring change is expected to help (it is
+search-bound). The immediate, measurable payoff is a better **`-F` tier-1 ranking
+model** (chi-squared or capped bigram, vs IC's overfitting); the floor model and an
+interpolated model are for the **full-crack tier** and can only be honestly judged
+once that evaluation tier is built; **crib scoring** is the orthogonal high-value
+feature. All slot in behind the existing `-i/-m/-b/-t/-q` switch and are measurable
+with `make crackquality`.
