@@ -716,7 +716,8 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    is the target/ranking model, so the target lives in the string (`-S i6q` = IC
    capped at 6 pairs, then quad uncapped). The optional `rN` token sets the
    per-restart random perturbation (inject `N` random pairs each restart; `r0` =
-   no-op; no token = a fixed `default_perturb` kick, see below). This replaced the
+   no-op; a bare `r` or no token = a fixed `default_perturb` kick, see below). This
+   replaced the
    earlier "pre-pass letters only" `-S` plus the separate `-L` single cap — each
    stage now carries its own cap, and the restart strength is a first-class knob.
    (Earlier recipes `-S i`/`-S b` meant "pre-pass then the `-q` target"; the
@@ -844,8 +845,8 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    does not over-plug the shortest texts). **This is now the implemented default**
    (`default_perturb = 8`): a no-`r`-token `-c -R N` injects a fixed 8-pair kick and
    `rN` sets any fixed strength (`r0` = no-op). The old uniform-`1..13` involution was
-   removed — it was never significantly best — so a bare `r` with no count is now
-   rejected. Full data:
+   removed — it was never significantly best — so a bare `r` now takes the default
+   kick (consistent with a bare model token being uncapped). Full data:
    `tests/restart_sweep{,_hiR,_p3,_fillk,_k910,_lowR,_full500}.csv`.
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start

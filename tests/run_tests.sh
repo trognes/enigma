@@ -305,9 +305,11 @@ check "restarts: -R 8 result is -T-independent" \
 check "restarts: default kick == -S r8 (fixed 8 pairs)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S r8q)"
-# A bare r token (no count) is rejected: rN requires a number.
-printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S riq >/dev/null 2>&1
-check "staged: bare r (no count) rejected (exit code)" "$?" "1"
+# A bare r token (no count) takes the default kick, just as a bare model token is
+# uncapped: with the model stages held equal, -S riq must equal -S r8iq.
+check "restarts: bare r == default kick (-S riq == -S r8iq)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S riq)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S r8iq)"
 # -R is validated: 0 is rejected.
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
 check "restart count 0 rejected (exit code)" "$?" "1"

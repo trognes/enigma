@@ -140,13 +140,15 @@ any working directory.
     the best measured** — much better than bigram, extra stages after IC add little.
   - **the `rN` token** (at most one) sets the **per-restart random perturbation**:
     `rN` injects `N` random plug pairs from the seed each restart (`r0` = no-op, so
-    restarts collapse — a useful control; a bare `r` with no count is rejected).
+    restarts collapse — a useful control; a bare `r` with no count takes the default
+    kick, just as a bare model token is uncapped).
     **With no `r` token the perturbation is a fixed `default_perturb` (= 8) pairs** —
     so `-c -R N` (no `-S`) does an 8-pair-kick restart. The sweep (§9, 500 trials,
     R 1→256) found the best kick is near the true plug count (`k≈8–10`): a fixed
     `k=8` significantly beats the old uniform-`1..13` involution at high `-R` on the
     shortest texts and is never worse, so it is the default (the uniform involution
-    was removed). Small `k` (1–2) is a footgun at high `-R`; `r0` is a no-op control.
+    was removed, so a bare `r` now means this default too). Small `k` (1–2) is a
+    footgun at high `-R`; `r0` is a no-op control.
     The first-order lever is the restart count `-R N`, which never plateaus through
     256.
   Per-`machine` `scoring` field (never a global → race-free); deterministic; the

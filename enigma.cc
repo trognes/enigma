@@ -118,11 +118,11 @@ static const int pairs_uncapped = asize / 2;   /* 13: a board holds at most this
 /* A parsed -S schedule is an ordered list of climb stages -- each a scoring model
    and a cap on the plug pairs it may set -- plus the per-restart random
    perturbation strength. Tokens are <letter><optional number>: model letters
-   i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped) and rN (the random
-   perturbation: N plug pairs injected per restart). The last model stage is the
-   target/ranking model. With no r token (including no -S at all) the perturbation is
-   a fixed default_perturb plug pairs -- the sweep's best kick, near the typical plug
-   count (CODE_REVIEW §9). */
+   i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped) and r (the random
+   perturbation, number = plug pairs injected per restart, omitted = default_perturb).
+   The last model stage is the target/ranking model. With no r token (including no -S
+   at all) the perturbation is a fixed default_perturb plug pairs -- the sweep's best
+   kick, near the typical plug count (CODE_REVIEW §9). */
 static const int max_stages = 16;
 struct climbstage
 {
@@ -943,10 +943,10 @@ int model_of(char c)
 /* Parse the -S schedule string into opt_stages[]/opt_nstages/opt_perturb, and set
    opt_scoring to the target (last model stage). Tokens are <letter><optional int>:
    model letters i/m/b/t/q (a climb stage; the number caps its plug pairs, omitted =
-   uncapped) and rN (the random perturbation; N plug pairs injected per restart). On
-   a syntax error it calls fatal(). With no -S the schedule is the single -i/-m/.../-q
-   target, uncapped; with no r token the perturbation stays at the fixed
-   default_perturb kick. */
+   uncapped) and r (the random perturbation; the number is plug pairs injected per
+   restart, omitted = the default_perturb kick). On a syntax error it calls fatal().
+   With no -S the schedule is the single -i/-m/.../-q target, uncapped; with no r
+   token the perturbation stays at the fixed default_perturb kick. */
 void parse_schedule()
 {
   opt_nstages = 0;
@@ -981,11 +981,11 @@ void parse_schedule()
           if (seen_r)
             fatal("Illegal -S schedule: at most one r (random) token");
           seen_r = true;
-          if (n < 0)
-            fatal("Illegal -S r token: a count is required (e.g. r8; r0 = no-op)");
           if (n > pairs_uncapped)
             fatal("Illegal -S r token (0 to 13 random plug pairs)");
-          opt_perturb = n;              /* rN = fixed N (r0 = a no-op control) */
+          /* omitted number = the default kick, just as a bare model token is
+             uncapped; rN sets a fixed N (r0 = a no-op control) */
+          opt_perturb = (n < 0) ? default_perturb : n;
         }
       else if (strchr("imbtq", letter))
         {
