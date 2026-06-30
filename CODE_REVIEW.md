@@ -728,8 +728,36 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    thorough sweep — caps 1–13 × {IC, mono, bigram} pre-pass × several lengths
    including short (<100) messages — is recorded below.
 
-   <!-- CAP-SWEEP-RESULTS -->
-   *(sweep results pending)*
+   **Sweep result — capping *does* help (overturns an earlier hasty call).** Caps
+   1–13 × {IC, mono, bigram} pre-pass × lengths {40,70,100,140,190}, `R 1` (a single
+   staged climb from identity, so the pair cap cleanly = "pre-pass sets ≤N pairs"),
+   100 trials, 10-pair true board (`tests/cap_sweep.sh`). IC exact-recovery %:
+
+   | cap | L100 | L140 | L190 |
+   |----:|-----:|-----:|-----:|
+   |  2  | 20 | 33 | 64 |
+   |  4  | 21 | 60 | 72 |
+   |  6  | 26 | **66** | 80 |
+   |  8  | 28 | 65 | **83** |
+   | 10  | **34** | 58 | 79 |
+   | 13 (uncapped) | 32 | 59 | 74 |
+
+   There is a real **interior optimum** (~6–10 pairs) that beats uncapped — e.g. at
+   L190, cap 8 → 83 % vs uncapped 74 %; at L140, cap 6 → 66 % vs 59 %. Mechanism:
+   IC run to convergence over-plugs (it sets ~13 pairs, favouring a flat
+   distribution), and the quad climb then has to *remove* the wrong ones — hard for
+   a greedy climb; a cap leaves IC under-plugged so quad *adds* the last couple of
+   correct plugs instead, which is easier. mono behaves similarly (peak ~8);
+   **bigram plateaus** (its best is uncapped); below ~70 letters everything is near
+   zero regardless. So the user's "first few plugs only" intuition is **confirmed**
+   for IC/mono, with the optimum nearer 6–10 than 1–5.
+
+   Caveats: this is `R 1` (the cap is only cleanly defined from an identity start;
+   at `-R 10` the random restart boards already carry pairs, muddying it — a
+   separate question). At 100 trials a single point has a ~±9 % CI, but the
+   rise-then-fall shape is consistent across L140/L190, so the *pattern* is solid;
+   the exact best cap and whether to fold a default `-L` into the `-R 10 -S i`
+   recipe should be confirmed at higher trials. Full data: `tests/cap_sweep.csv`.
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost
