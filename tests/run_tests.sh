@@ -101,6 +101,25 @@ check "KAT: 1930 instruction-manual message" \
   "$(run 'GCDSEAHUGWTQGRKVLFGXUCALXVYMIGMMNMFDXTGNVHVRMMEVOUYFZSLRHDRRXFJWCFHUHMUNZEFRDISIKBGPMYVXUZ' -i -u A -w 213 -r XMV -g ABL -s 'AM FI NV PS TU WZ')" \
   "FEINDLIQEINFANTERIEKOLONNEBEOBAQTETXANFANGSUEDAUSGANGBAERWALDEXENDEDREIKMOSTWAERTSNEUSTADT"
 
+echo "== Scoring-language requirement =="
+
+# A fully specified machine with no -c just enciphers its input -- nothing is
+# ranked or hill-climbed -- so no scoring model/language is required: encryption
+# works with NO -i/-l/-q at all, and matches the explicit -i result.
+check "encrypt needs no -l/-i (fixed machine)" \
+  "$(run "$(rep 25 A)" -u B -w 123 -r AAA -g AAA)" \
+  "BDZGOWCXLTKSBTMCDLPBMUQOF"
+roundtrip "round-trip with no scoring flags" \
+  "ATTACKATDAWNFROMTHENORTH" -u A -w 531 -r MNB -g VCX -s "AB CD"
+roundtrip "M4 round-trip with no scoring flags" \
+  "WETTERBERICHT" -4 -u b -w B123 -r AAAA -g AAAA
+# But scoring IS required when the run actually scores: a wildcard search or a
+# plugboard hill-climb without -l (and not -i) must still be rejected.
+printf 'ABCDE' | "$ENIGMA" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "wildcard search without -l rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -c -u B -w 123 -r AAA -g AAA >/dev/null 2>&1
+check "hill-climb without -l rejected (exit code)" "$?" "1"
+
 echo "== Round-trip property tests =="
 
 roundtrip "reciprocity: plain settings" \
@@ -239,10 +258,12 @@ case "$err" in
   *)                    check "illegal -l rejected (message)" "$err" "*Illegal language*" ;;
 esac
 
-# There is no default language: n-gram scoring (-m/-b/-t/-q) requires -l, and
-# must fail loudly when it is missing. (-i needs no language and is exercised
-# throughout the known-answer tests above.)
-err=$(printf 'ABC' | "$ENIGMA" -q -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+# There is no default language: n-gram scoring (-m/-b/-t/-q) requires -l when
+# scoring actually runs, and must fail loudly when it is missing. (A wildcard makes
+# this a real search; a fully fixed machine with no -c needs no score -- see the
+# "Scoring-language requirement" section above. -i needs no language and is
+# exercised throughout the known-answer tests.)
+err=$(printf 'ABC' | "$ENIGMA" -q -u B -w 123 -r AAA -g ..A 2>&1 >/dev/null)
 code=$?
 check "n-gram scoring without -l rejected (exit code)" "$code" "1"
 case "$err" in
@@ -378,19 +399,19 @@ rm -f zztest_monograms.txt
 # Data directory: the n-gram files can live somewhere other than the current
 # directory, selected by -d or $ENIGMA_DATA (default "."). Run from a different
 # CWD (/) with an absolute binary so only the resolved data dir can find them.
+# A small wildcard search (-g ..A) forces the n-gram table to be loaded from the
+# resolved data dir -- a fully fixed machine would not score, so it would not load
+# anything. A successful exit means the files were found there.
 root=$(pwd)
-check "-d finds n-gram files from another CWD" \
-  "$( cd / && printf 'BDZGOWCXLT' | "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g AAA 2>/dev/null )" \
-  "AAAAAAAAAA"
-check "ENIGMA_DATA finds n-gram files from another CWD" \
-  "$( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA="$root" "$root/enigma" -m -l english -u B -w 123 -r AAA -g AAA 2>/dev/null )" \
-  "AAAAAAAAAA"
-check "-d overrides ENIGMA_DATA" \
-  "$( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA=/nonexistent "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g AAA 2>/dev/null )" \
-  "AAAAAAAAAA"
+( cd / && printf 'BDZGOWCXLT' | "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+check "-d finds n-gram files from another CWD (exit code)" "$?" "0"
+( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA="$root" "$root/enigma" -m -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+check "ENIGMA_DATA finds n-gram files from another CWD (exit code)" "$?" "0"
+( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA=/nonexistent "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+check "-d overrides ENIGMA_DATA (exit code)" "$?" "0"
 
 # A missing data directory fails with the full path it tried (and before stdin).
-err=$(printf 'ABC' | "$root/enigma" -q -l english -d /nonexistent -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+err=$(printf 'ABC' | "$root/enigma" -q -l english -d /nonexistent -u B -w 123 -r AAA -g ..A 2>&1 >/dev/null)
 code=$?
 check "missing data dir rejected (exit code)" "$code" "1"
 case "$err" in
