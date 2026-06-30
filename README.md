@@ -1,27 +1,166 @@
 # Enigma cipher tool
 
-This is a tool to encrypt or decrypt messages using an Enigma cipher machine simulator.
+A command-line tool that **simulates** an Enigma cipher machine and, more
+usefully, attempts to **break** Enigma ciphertext when the settings are unknown —
+by brute-forcing the rotor/reflector/ring/start settings and hill-climbing the
+plugboard, scoring each candidate decryption against per-language letter
+statistics so the most language-like plaintext wins.
 
-If you do not know the correct settings for decryption, it can also be used to try out
-a large number of settings and look for plaintext messages that look similar to
-text written in a selected language, i.e. crack the code.
+It supports three machines:
 
-The settings include the reflector (umkehrwalze) and wheels (walzen) used,
-the ring positions (ringstellung) and start positions (grundstellung),
-as well as the position of the plugs in the plugboard (steckerbrett).
+- the common **three-wheel Enigma** (wheels I–VIII, reflectors A/B/C),
+- the **Norway Enigma** (Norenigma) variant (reflector N, wheels 1–5), and
+- the four-rotor naval **M4** (thin reflectors UKW-b/c plus the Beta/Gamma Greek
+  wheel).
 
-The common three-wheel Enigma, the special Norway Enigma (Norenigma), and the
-four-rotor naval **M4** (with the thin UKW-b/c reflectors and the Beta/Gamma Greek
-wheel) are all supported.
+The settings are the reflector (*umkehrwalze*), the wheels (*walzen*) and their
+order, the ring positions (*ringstellung*), the start positions
+(*grundstellung*), and the plugboard (*steckerbrett*).
 
-If specified (with the -c option), a hill-climbing algorithm will be used to identify the optimal plugboard configuration.
+## Building
 
-All possible combinations of the other unspecified settings will be tried.
+You need a C++17 compiler (g++ or clang++) and `make`. There are no external
+dependencies; the n-gram data files ship in this repository.
+
+```sh
+make                 # builds the ./enigma binary (g++ -O3 -pthread)
+make CXX=clang++     # build with clang instead
+make test            # build, then run the test suite
+make bench           # build, then run the performance benchmarks
+make crackquality    # build, then measure short-message cracking quality
+```
+
+## Quick start
+
+The ciphertext (or plaintext) is read from **standard input**; the result is
+written to **standard output**. Only the letters A–Z are processed — spaces,
+punctuation and case are stripped on input.
+
+```sh
+# Encrypt. With every setting fixed there is nothing to search, but the program
+# always runs its scoring pass, so a scoring model is still required: -i (index
+# of coincidence) is the simplest as it needs no language.
+echo "ATTACK AT DAWN" | ./enigma -i -u B -w 531 -r ABC -g XYZ
+#   -> YYHISFEPIWUP
+
+# Decrypt. Enigma is reciprocal: the SAME settings turn ciphertext back into
+# plaintext.
+echo "YYHISFEPIWUP" | ./enigma -i -u B -w 531 -r ABC -g XYZ
+#   -> ATTACKATDAWN
+
+# Encrypt with a plugboard (pairs A<->B and C<->D):
+echo "THE QUICK BROWN FOX" | ./enigma -i -u B -w 123 -r AAA -g AAA -s "AB CD"
+```
+
+### Cracking
+
+```sh
+# You know the rotor key but not the plugboard: hill-climb the plugboard (-c),
+# scoring English quadgrams (the default model).
+./enigma -c -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+
+# You don't know the start positions either: wildcard them with '.' and the
+# program brute-forces all 26x26x26 of them, on 4 threads, while still
+# hill-climbing the plugboard.
+./enigma -c -l english -u B -w 123 -r AAA -g ... -T 4 < cipher.txt
+
+# You know almost nothing: wildcard the reflector, wheels, ring and start, and
+# let it try everything. (This is a large search — use as many threads as you
+# have cores, and see "Cracking strategy" below for the recommended options.)
+./enigma -c -l english -u . -w ... -r ... -g ... -T 8 < cipher.txt
+```
+
+### Other machines
+
+```sh
+# Norway Enigma (reflector N, wheels 1-5):
+echo "GODDAG" | ./enigma -i -n -u N -w 123 -r AAA -g AAA
+
+# M4 (4-rotor naval): -u is the thin reflector b/c, and -w/-r/-g take FOUR
+# characters with the Greek wheel (B=Beta / G=Gamma) / ring / start first.
+echo "DERFUEHRER" | ./enigma -i -4 -u b -w B123 -r AAAA -g AAAA
+```
+
+## How it works
+
+For a fully specified machine the tool just enciphers the input. When some
+settings are left unspecified (a dot `.` wildcard), it searches:
+
+1. For every combination of the unspecified reflector / wheel order / ring /
+   start positions, it decrypts the ciphertext.
+2. Each candidate plaintext is **scored** against the chosen statistical model
+   (index of coincidence, or mono/bi/tri/quad-gram frequencies for a language).
+   Real plaintext scores far higher than gibberish, so the highest-scoring
+   settings are almost always the correct ones.
+3. If `-c` is given, for each candidate key the plugboard is recovered by a
+   **hill-climbing** search (greedily adding/swapping plug pairs to raise the
+   score) before the key is scored.
+
+The search is exhaustive over the rotor settings and heuristic over the
+plugboard (whose ~150-trillion 10-pair configurations are far too many to
+enumerate). The best plaintext found is printed to stdout; progress and a final
+diagnostic (timing, threads, memory) go to stderr.
+
+## Options
+
+Defaults are shown in `[brackets]`. A dot `.` is the wildcard for the reflector,
+wheels, ring and start positions — any position left as `.` is brute-forced.
+
+### Machine settings
+
+| Option | Meaning |
+| --- | --- |
+| `-u X` | Reflector (*umkehrwalze*): `A`/`B`/`C`, `N` for Norway, `b`/`c` for M4 thin, or `.` `[.]` |
+| `-w XYZ` | Wheel order, left to right: digits `1`–`8` (`1`–`5` for Norway) or `.` per position `[...]` |
+| `-x N` | Highest wheel number to consider when a wheel is wildcarded `[5]` |
+| `-n` | Norway Enigma mode (reflector `N`, wheels 1–5) |
+| `-4` | M4 mode; `-u` is the thin reflector `b`/`c`, and `-w`/`-r`/`-g` take **four** characters, Greek wheel (`B`/`G`) / ring / start first |
+| `-r XYZ` | Ring positions (*ringstellung*), letters `A`–`Z` or `.` `[AA.]` |
+| `-g XYZ` | Start positions (*grundstellung*), letters `A`–`Z` or `.` `[...]` |
+| `-s AB…` | Fixed plugboard pairs, e.g. `-s "AB CD EF"` `[none]` |
+
+`-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's
+`start − ring` offset is recoverable, so a full M4 wildcard search enumerates the
+distinct offsets rather than every ring×start pair.
+
+### Scoring (which plaintext "looks like a language")
+
+| Option | Meaning |
+| --- | --- |
+| `-i` | Index of coincidence — language-independent, needs no `-l` |
+| `-m` / `-b` / `-t` / `-q` | Mono- / bi- / tri- / quad-gram statistics (`-q` is the default) |
+| `-l lang` | Scoring language: `english`, `german`, `danish`, `french`. **Required** for `-m`/`-b`/`-t`/`-q`; ignored by `-i` |
+
+Quadgrams (`-q`) discriminate the correct key most sharply and are the default.
+The n-gram tables are highly language-specific — **`-l` must match the language
+of the plaintext**, especially for `-q` (scoring an English message with `-l
+german` typically fails). The index of coincidence (`-i`) is language-independent
+and is a good cheap model for the rotor-key search.
+
+### Plugboard cracking
+
+| Option | Meaning |
+| --- | --- |
+| `-c` | Hill-climb the plugboard for each candidate key |
+| `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
+| `-S sched` | Staged climb schedule (see below) |
+
+The plugboard climb gets stuck in local optima on short messages, so `-R N`
+restarts it `N` times from perturbed boards and keeps the best, and `-S` runs the
+climb in stages. See **Cracking strategy** below.
+
+### Data and performance
+
+| Option | Meaning |
+| --- | --- |
+| `-d dir` | Directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`) `[.]` |
+| `-T N` | Worker threads for the search, 1–256 `[1]` |
+| `-p file` | Compare the recovered plaintext against a known plaintext file |
+| `-v` / `-h` | Version / help |
+
+The full usage message (`./enigma -h`):
 
 ```
-Enigma cipher tool version 1.1.0
-Copyright (C) 2017-2026 Torbjørn Rognes
-
 Usage: enigma [OPTIONS]
   -h           Show help information
   -v           Show version information
@@ -50,34 +189,79 @@ Usage: enigma [OPTIONS]
   -p filename  Name of file containing plaintext to compare result with
   -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]
   -T integer   Number of worker threads for the search (1-256) [1]
-
-Defaults are indicated in [square brackets].
-
-The ciphertext is read from standard input. The final plaintext is written
-to standard output.
-
-For the reflector, wheels, ring position and start position, a dot (.)
-works as a wild card, leaving it unspecified. When these settings are not
-specified, the program will try all combinations to find the settings
-resulting in the highest plaintext score. If asked for, a hill climbing
-algorithm will be used to try to determine the plugboard settings.
 ```
+
+## Cracking strategy
+
+A plain `-c` climb recovers the plugboard reliably on long messages but gets
+stuck in local optima on short ones. Two options improve this and **compose**:
+
+- **`-R N` — random restarts.** Runs the climb `N` times, each restart kicking
+  the board with a few random plugs, and keeps the best result. This is the
+  biggest lever for short messages, and it keeps paying as `N` grows (there is no
+  practical plateau) — at the cost of roughly `N`× the work. The restart kick
+  defaults to 8 random pairs (close to a typical plug count, which works best).
+
+- **`-S <schedule>` — staged climb.** A schedule is a string of
+  `<letter><optional number>` tokens:
+  - model tokens `i`/`m`/`b`/`t`/`q` are climb stages run in order; an optional
+    number caps how many plug pairs that stage may set (omitted = uncapped). The
+    **last** model token is the target/ranking model.
+  - an `rN` token sets the per-restart random kick to `N` pairs (omitted = the
+    default 8).
+
+  Climbing a low-order model first (its scoring surface is smoother when only a
+  few plugs are set) steers the early plugs into a better basin. An **index-of-
+  coincidence pre-pass works best**: `-S iq` climbs IC, then refines under
+  quadgrams.
+
+A good general recipe for a hard (short) message with a known rotor key:
+
+```sh
+./enigma -c -R 20 -S iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+```
+
+Increase `-R` for harder messages; add threads with `-T` when you are also
+brute-forcing rotor settings.
+
+## Input, output and diagnostics
+
+- **Input** comes from stdin; only A–Z are kept (case, spaces and punctuation are
+  stripped).
+- **Output** is the single best-scoring plaintext, on stdout.
+- **Diagnostics** go to stderr: the resolved configuration is echoed at the
+  start, the running best is shown during the search, and a final line reports
+  wall-clock time, thread count, the precomputed-table memory and peak memory.
+- Every run needs a scoring model. For pure encryption/decryption (nothing to
+  search) the scoring is irrelevant but still required — add `-i` (no language
+  needed) or `-l <language>`.
+
+## n-gram data files
+
+Scoring uses letter-frequency tables read from `<datadir>/<language>_<ngram>.txt`,
+where `<ngram>` is `monograms`/`bigrams`/`trigrams`/`quadgrams`. Each line is
+`<LETTERS> <count>`, e.g. `TION 13168375`. The data directory is resolved as
+`-d <dir>` → `$ENIGMA_DATA` → `.` (the current directory), so the tool can run
+from any working directory.
+
+Tables for `english`, `german`, `danish` and `french` ship in this repository.
+They were obtained from the
+[Practical Cryptography](http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/)
+website, where additional languages are available in the same format.
+
+## Performance
 
 The search is parallelised over the whole key space — reflectors, wheel orders,
 ring settings and start positions — so `-T N` uses N worker threads even when the
 wheels are fixed and only the rings/starts are being searched. The default is a
 single thread; on a 4-core machine a search runs about 3× faster with `-T 4`, and
-scaling can be measured with `make bench SCALE=1`. When a run finishes, a short
-diagnostic (wall-clock time, thread count, precomputed-table memory, peak memory)
-is printed to standard error.
+scaling can be measured with `make bench SCALE=1`. Results are independent of the
+thread count (`-T` does not change which plaintext is found).
 
-The files with the ngram frequencies for various languages have been obtained from the
-[Practical cryptograhy](http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/)
-website. Additional languages are available there. By default they are read from
-the current directory; use `-d <directory>` (or set `ENIGMA_DATA`) to read them
-from elsewhere, so the tool can be run from any working directory.
+## References
 
-The hill climbing strategy is based on the algorithms described in the
+The hill-climbing strategy is based on the algorithms described in the
 [publications by Frode Weierud et al.](http://cryptocellar.org/Enigma/)
 
 The software is available under the GNU GPL version 3 license.
+Copyright (C) 2017–2026 Torbjørn Rognes.
