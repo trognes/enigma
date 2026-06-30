@@ -112,7 +112,11 @@ static int opt_hillclimb;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
-static const int max_restarts = 100000;
+/* Upper bound on -R, purely a sanity guard against a typo (each restart just
+   re-runs the hill-climb from a fresh perturbed board -- no extra memory -- so the
+   only real limit is patience). One billion is effectively unlimited for any real
+   run yet stays well within int; raise it if you ever need more. */
+static const int max_restarts = 1000000000;
 static const int pairs_uncapped = asize / 2;   /* 13: a board holds at most this */
 
 /* A parsed -S schedule is an ordered list of climb stages -- each a scoring model
@@ -1910,7 +1914,7 @@ int main(int argc, char * * argv)
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
 
   if ((opt_restarts < 1) || (opt_restarts > max_restarts))
-    fatal("Illegal restart count (must be 1 to 100000)");
+    fatal("Illegal restart count (must be 1 to 1000000000)");
 
   /* Expand the -S schedule into opt_stages[]/opt_perturb and set opt_scoring to the
      target (last) stage. Validates the schedule syntax; fatal() on error. With no
