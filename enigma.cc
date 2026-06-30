@@ -113,7 +113,10 @@ static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* staged climb pre-pass schedule (e.g. "b", "ib"),
                                     a sequence of model letters i/m/b/t/q climbed in
                                     order before the target model; 0 = off */
+static int opt_stagelimit; /* cap on committed moves per staged pre-pass stage
+                              (~ first N plugs); 0 = uncapped */
 static const int max_restarts = 100000;
+static const int moves_unlimited = 1 << 20;   /* effectively no move cap */
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 
@@ -722,14 +725,17 @@ void ciphertext_letterdist()
 #endif
 }
 
-double hillclimb(machine & m)
+/* Climb the steckerbrett for the current scoring model. Stops when a full pass
+   yields no improvement, or after max_moves committed moves (a cap used by the
+   staged climb to limit the low-order pre-pass to the first few plugs before it
+   over-fits; pass moves_unlimited for an uncapped climb). */
+double hillclimb(machine & m, int max_moves)
 {
-  /* Try to find the optimal steckerbrett for the given other settings */
-
   double best_score;
   double last_best;
 
   int iter = 1;
+  int moves = 0;
 
   /* iterate until a full pass over all plug swaps yields no improvement */
   do
@@ -821,6 +827,8 @@ double hillclimb(machine & m)
 #endif
 
           best_score = switch_score;
+          if (++moves >= max_moves)
+            break;   /* pre-pass move budget reached (staged climb) */
         }
 
       iter++;
@@ -909,15 +917,16 @@ int model_of(char c)
 double hillclimb_staged(machine & m)
 {
   if (! opt_staged)
-    return hillclimb(m);
+    return hillclimb(m, moves_unlimited);
 
+  int prelimit = (opt_stagelimit > 0) ? opt_stagelimit : moves_unlimited;
   for (const char * p = opt_staged; *p; p++)
     {
       m.scoring = model_of(*p);
-      hillclimb(m);             /* keeps m.steckerbrett; smoother early surface */
+      hillclimb(m, prelimit);   /* capped pre-pass: only the first few plugs */
     }
   m.scoring = opt_scoring;
-  return hillclimb(m);          /* refine in the target model */
+  return hillclimb(m, moves_unlimited);   /* refine in the target model, uncapped */
 }
 
 /* Hill-climb the plugboard with optional random restarts: restart 0 uses the
@@ -1467,6 +1476,7 @@ void help(FILE * out)
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: pre-pass model letters (i/m/b/t/q)\n");
   fprintf(out, "               climbed before the target model, e.g. -S b or -S ib\n");
+  fprintf(out, "  -L integer   Cap each staged pre-pass at N moves (~first N plugs; 0 = none) [0]\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
   fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
@@ -1520,7 +1530,12 @@ void show_settings()
   if (opt_hillclimb && (opt_restarts > 1))
     fprintf(stderr, " (%d restarts)", opt_restarts);
   if (opt_hillclimb && opt_staged)
-    fprintf(stderr, " (staged: %s)", opt_staged);
+    {
+      fprintf(stderr, " (staged: %s", opt_staged);
+      if (opt_stagelimit > 0)
+        fprintf(stderr, ", limit %d", opt_stagelimit);
+      fprintf(stderr, ")");
+    }
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
   if (opt_m4)
@@ -1587,6 +1602,7 @@ int main(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* pre-pass schedule string, or 0 for the single-model climb */
+  opt_stagelimit = 0;   /* uncapped pre-pass */
   opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
   opt_m4 = 0;
@@ -1595,7 +1611,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:L:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -1639,6 +1655,9 @@ int main(int argc, char * * argv)
           break;
         case 'c':
           opt_hillclimb = 1;
+          break;
+        case 'L':
+          opt_stagelimit = atoi(optarg);
           break;
         case 'S':
           opt_staged = optarg;
@@ -1811,6 +1830,9 @@ int main(int argc, char * * argv)
       if ((! opt_language) && strpbrk(opt_staged, "mbtq"))
         fatal("A staged n-gram pre-pass (-S) needs a language: add -l <language>");
     }
+
+  if ((opt_stagelimit < 0) || (opt_stagelimit > 1000))
+    fatal("Illegal -L pre-pass limit (must be 0 to 1000; 0 = uncapped)");
 
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");

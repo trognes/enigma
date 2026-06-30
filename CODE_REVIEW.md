@@ -719,13 +719,16 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    IC and `ib` are a statistical tie and **mono is clearly worse**, so plain IC is
    the pick (simplest, no table, no language needed for the pre-pass).
 
-   *Capping the IC pre-pass at the first few plugs (tried via a move-budget knob)
-   only **hurts** — recovery rises monotonically with the cap, optimum = uncapped
-   (`-R 10 -S i`, 50 trials, L100/L140): cap 1 → 28/62 %, 3 → 42/84, 8 → 54/88,
-   uncapped → 60/92.* The Gillogly/Weierud "only the first few plugs from the
-   low-order model" rule is aimed at models that **over-fit** (bigram); IC does not
-   over-fit, so its fully-converged board is the best quad seed and truncating it
-   discards good plugs. The knob was prototyped and dropped (no win at any setting).
+   *Capping the pre-pass at the first few plugs (`-L N`, a per-stage move budget)
+   is provided as a tuning knob.* A **preliminary** sweep on the IC pre-pass
+   (`-R 10 -S i`, only 50 trials, L100/L140) found capping IC *hurts*, monotonically
+   — cap 1 → 28/62 %, 3 → 42/84, 8 → 54/88, uncapped → 60/92 — consistent with the
+   theory that the Gillogly/Weierud "first few plugs only" rule targets models that
+   **over-fit** (bigram), whereas IC does not over-fit, so its fully-converged board
+   is the best quad seed. **This is not yet a thorough result** (single model, two
+   lengths, low trial count); a proper investigation should sweep `-L` against the
+   *bigram* pre-pass (where capping is theorised to *help*), at more lengths, more
+   trials, and other plug counts. The `-L` knob is retained for that work.
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost

@@ -134,6 +134,10 @@ any working directory.
   plugs are set). **`-S i` (IC pre-pass) is the best measured** — much better than
   bigram, and extra stages after IC add nothing. Per-`machine` `scoring` field
   (never a global → race-free); deterministic; stacks with `-R`.
+- `-L N` cap each staged pre-pass at `N` committed moves (≈ first `N` plugs);
+  `0` = uncapped (default). A tuning knob for the staged climb — a preliminary
+  sweep found capping the *IC* pre-pass only hurts (IC doesn't over-fit), but it is
+  retained to investigate capping an over-fitting pre-pass (bigram) thoroughly.
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
   used by `-i`
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the
