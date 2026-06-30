@@ -38,6 +38,12 @@ def klabel(k):
     return "legacy (full random)" if k < 0 else ("k=%d" % k)
 
 
+# colour the numeric k by rank along a sequential map (so small->large k reads as a
+# gradient); legacy (full random) is a thick dashed black reference.
+pos_ks = [k for k in ks if k >= 0]
+cmap = matplotlib.colormaps["viridis"]
+kcolor = {k: cmap(i / max(1, len(pos_ks) - 1)) for i, k in enumerate(pos_ks)}
+
 fig, axes = plt.subplots(1, len(lengths), figsize=(6.4 * len(lengths), 5.0), squeeze=False)
 for ax, L in zip(axes[0], lengths):
     for k in ks:
@@ -46,9 +52,12 @@ for ax, L in zip(axes[0], lengths):
             continue
         Rs = sorted(series)
         ys = [series[R][0] for R in Rs]
-        style = "--" if k < 0 else "-"
-        lw = 2.4 if k in (-1, 4) else 1.3
-        ax.plot(Rs, ys, style, marker="o", markersize=3.5, linewidth=lw, label=klabel(k))
+        if k < 0:
+            ax.plot(Rs, ys, "--", marker="o", markersize=4, linewidth=2.6,
+                    color="black", label=klabel(k), zorder=5)
+        else:
+            ax.plot(Rs, ys, "-", marker="o", markersize=3.5, linewidth=1.8,
+                    color=kcolor[k], label=klabel(k))
     ax.set_xscale("log", base=2)
     ax.set_xlabel("restarts  R  (log2)")
     ax.set_ylabel("mean %-correct")
@@ -57,7 +66,7 @@ for ax, L in zip(axes[0], lengths):
     ax.legend(fontsize=8, title="perturbation")
 
 fig.suptitle("Restart sweep: mean %-correct vs R, by random-perturbation strength k\n"
-             "schedule -S {iq | r<k>iq}, IC->quad; english/quad, 10-pair board, 200 trials",
+             "schedule -S {iq | r<k>iq}, IC->quad; english/quad, 10-pair board",
              fontsize=11)
 fig.tight_layout(rect=(0, 0, 1, 0.93))
 fig.savefig(out_png, dpi=130)
