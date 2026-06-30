@@ -906,6 +906,24 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    Under restarts (`-S iq -R 10`) it still adds ~+1.3–2.0 pp (restarts cover part of
    the same barrier-crossing). Deterministic (it fires at a fixed convergence point
    and picks the single best re-pair), so `-T`-independence holds.
+
+   **3-plug re-pair — ❌ measured, not worth it (the diminishing-returns rung).** The
+   next neighbourhood up: take *three* existing plugs to a different matching of their
+   six letters (of the 15 matchings, 7 keep ≥1 original pair and are reachable by the
+   2-plug move, so only the 8 genuinely-new ones need evaluating). Implemented as the
+   very last resort — fired only once switch/remove *and* the 2-plug re-pair have all
+   converged — and A/B'd vs the remove + 2-plug baseline (500 trials, exact-recovery
+   %): plain `-q` +1.8/+1.4/+1.4 at L140/190/250, staged `-S iq` +2.6/+1.4/+0.0. The
+   gain is real but ~half the 2-plug move's, while the cost is **+12.6 % hillclimb**
+   (past the 10 % regression guard). The `O(plugs³)` cost is inherent: even gated,
+   each fire scans up to `C(13,3)×8 ≈ 2300` candidates, and the terminal
+   find-nothing scan runs once per climb and dominates (~10× the quadratic 2-plug
+   move). Spending that +12.6 % on ~12 % more restarts almost certainly beats
+   +1.4–2.6 pp, and under `-R N` restarts already cover most of the barrier-crossing.
+   **Conclusion: this is the rung where richer neighbourhoods stop paying — remove
+   and 2-plug re-pair were the worthwhile moves; 3-opt (and higher) is not worth its
+   cost.** (Benchmarked in the closed draft PR "3-plug re-pair", kept for the record;
+   the code was not merged.)
 8. **Genetic / evolutionary** — population + crossover + mutation; generally overkill
    here, rarely beats random-restart hill climbing or SA for plugboard recovery.
 
