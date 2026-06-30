@@ -669,13 +669,14 @@ hill-climbs a good plugboard. The climb is **steepest-ascent** over a single mov
   letter pairs `(a,b)`. For each it applies one move, scores the whole message
   (`score_iter`, default quadgrams), records the delta, and **restores** before
   the next (`enigma.cc:678`–`:708`).
-- **The move** (`:681`–`:688`): force `a`–`b` to be a plug; if either endpoint was
-  already plugged, its old partner is ejected to self-steckered. So one move can
-  dissolve up to two existing plugs to form one new — the standard
-  Weierud/Gillogly plugboard move.
-- After all 325 pairs, only the **single best** improving move is committed
-  (`:714`–`:742`); passes repeat until one yields no improvement
-  (`do … while (best_score > last_best)`, `:746`).
+- **The moves**: (a) the *switch* — force `a`–`b` to be a plug; if either endpoint
+  was already plugged, its old partner is ejected to self-steckered, so one move can
+  dissolve up to two existing plugs to form one new (the standard Weierud/Gillogly
+  move); and (b) the *removal* — for each of the ≤13 existing pairs, free both ends,
+  adding nothing (a switch can never do this; see §9 item 7).
+- After all the swap and removal candidates, only the **single best** improving move
+  is committed; passes repeat until one yields no improvement
+  (`do … while (best_score > last_best)`).
 
 **Cost / placement:** with `-c`, `search_worker` runs a *full* climb on **every**
 key (`enigma.cc:892`), so the climb dominates runtime (~400× the bare scan per
@@ -856,8 +857,30 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    needs a cooling schedule and more evaluations; best as a fallback, not default.
 6. **Tabu search** — short list of recently reversed moves to avoid cycling and
    cross plateaus; modest deterministic robustness gain.
-7. **Richer move set** — add explicit "remove a plug" / "re-pair endpoint" moves as
-   distinct candidates; larger neighbourhood, reaches optima the single move misses.
+7. **Richer move set — ✅ "remove a plug" IMPLEMENTED.** The single "force `a`–`b`"
+   move can *add*, *re-pair* or *merge* (dissolve two plugs to form one) but never
+   simply **delete** a plug, freeing both ends. So a staged climb that switched to a
+   sharper model could not shed a plug the previous model set. Each pass now also
+   tries removing every existing pair (≤13, so ~1 % extra work — the bench shows
+   hillclimb +0.9 %) and commits it if it is the single best move. **It is a clear,
+   cheap win for the staged climb and neutral for the plain one** (the plain climb
+   adds plugs greedily and rarely over-plugs; it is the IC→quad *switch* that leaves
+   plugs for quad to remove — exactly the case the cap finding attacks from the
+   other side). A/B vs the no-removal baseline (`-S iq`, english/quad, 10 pairs,
+   500 trials, exact-recovery %):
+
+   | length | with removal | baseline | Δ |
+   |-------:|----:|----:|----:|
+   | 140 | 58.4 | 54.2 | **+4.2** |
+   | 190 | 81.8 | 77.0 | **+4.8** |
+   | 250 | 97.2 | 90.6 | **+6.6** |
+   | 320 | 98.6 | 96.6 | **+2.0** |
+
+   The gain grows with length (longer messages let IC set more — and more wrong —
+   plugs) until recovery saturates near 100 %. Plain `-q` (no `-S`) is unchanged
+   within noise. Deterministic (removal candidates are scanned after the swaps, so a
+   swap wins any tie), so `-T`-independence holds. *Re-pair endpoint* as a distinct
+   move is still open.
 8. **Genetic / evolutionary** — population + crossover + mutation; generally overkill
    here, rarely beats random-restart hill climbing or SA for plugboard recovery.
 

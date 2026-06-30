@@ -771,9 +771,13 @@ double hillclimb(machine & m, int max_pairs)
         if (m.steckerbrett[j] > j)
           pairs++;
 
-      double switch_score = best_score;
-      int switch_a = 0;
-      int switch_b = 0;
+      /* Best improving move this pass: a plug "switch" (force a-b, ejecting any
+         conflicts -- this adds / re-pairs / merges) or a plug "removal" (free an
+         existing pair, adding nothing). move_remove distinguishes the two. */
+      double move_score = best_score;
+      int move_a = 0;
+      int move_b = 0;
+      bool move_remove = false;
 
       //#define SHOWHILLCLIMB
 
@@ -813,11 +817,12 @@ double hillclimb(machine & m, int max_pairs)
             fprintf(stderr, "%4.0f", (score - best_score)/10.0);
 #endif
 
-            if (score > switch_score)
+            if (score > move_score)
               {
-                switch_score = score;
-                switch_a = a;
-                switch_b = b;
+                move_score = score;
+                move_a = a;
+                move_b = b;
+                move_remove = false;
               }
 
             /* restore plugs */
@@ -831,34 +836,69 @@ double hillclimb(machine & m, int max_pairs)
 #endif
         }
 
-      if (switch_score - best_score > 0)
+      /* Removal moves: drop an existing plug pair, freeing both ends. The switch
+         moves above can add, re-pair or merge plugs but never simply delete one, so
+         a staged climb that moved to a sharper model cannot shed a plug the previous
+         model set without this. At most 13 pairs are plugged, so it is cheap. */
+      for(int a=0; a<asize; a++)
+        if (m.steckerbrett[a] > a)
+          {
+            int b = m.steckerbrett[a];
+            m.steckerbrett[a] = a;
+            m.steckerbrett[b] = b;
+
+            double score = score_iter(m, iter);
+
+            if (score > move_score)
+              {
+                move_score = score;
+                move_a = a;
+                move_b = b;
+                move_remove = true;
+              }
+
+            m.steckerbrett[a] = b;
+            m.steckerbrett[b] = a;
+          }
+
+      if (move_score - best_score > 0)
         {
 
           /* good move */
 
-          int a = switch_a;
-          int b = switch_b;
+          int a = move_a;
+          int b = move_b;
 
-          /* switch plugs */
-          int x = m.steckerbrett[a];
-          int y = m.steckerbrett[b];
-          m.steckerbrett[x] = x;
-          m.steckerbrett[y] = y;
-          m.steckerbrett[a] = b;
-          m.steckerbrett[b] = a;
+          if (move_remove)
+            {
+              /* remove the a-b plug, freeing both ends */
+              m.steckerbrett[a] = a;
+              m.steckerbrett[b] = b;
+            }
+          else
+            {
+              /* switch plugs */
+              int x = m.steckerbrett[a];
+              int y = m.steckerbrett[b];
+              m.steckerbrett[x] = x;
+              m.steckerbrett[y] = y;
+              m.steckerbrett[a] = b;
+              m.steckerbrett[b] = a;
+            }
 
 #ifdef SHOWHILLCLIMB
           fprintf(stderr,
-                  "%2d %c%c Imp: %10.4f Score: %10.4f ",
+                  "%2d %c%c %s Imp: %10.4f Score: %10.4f ",
                   iter,
                   num2char(a), num2char(b),
-                  switch_score - best_score,
-                  switch_score);
+                  move_remove ? "del" : "set",
+                  move_score - best_score,
+                  move_score);
           showsteckerbrett(m);
           fprintf(stderr, "\n");
 #endif
 
-          best_score = switch_score;
+          best_score = move_score;
         }
 
       iter++;

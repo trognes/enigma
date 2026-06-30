@@ -204,8 +204,10 @@ A single pass through `main()`:
      scorers fuse the decode into their loop). The best is merged under a mutex
      (which also serialises the live progress line). Parallelising the flat key
      space means rings/starts scale even when the wheels are fixed.
-   - With `-c`, `hillclimb()` greedily swaps plugboard pairs to maximize score
-     before recording the result.
+   - With `-c`, `hillclimb()` greedily improves the plugboard (each pass takes the
+     single best of all "switch a–b" moves and all "remove an existing pair" moves)
+     to maximize score before recording the result. The removal move lets a staged
+     climb shed plugs an earlier model set — see `CODE_REVIEW.md` §9 item 7.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
    final stderr diagnostic reports wall-clock time, thread count, the number/size
    of precomputed rotor tables, and peak RSS (via `getrusage`).
