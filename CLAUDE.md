@@ -204,10 +204,13 @@ A single pass through `main()`:
      scorers fuse the decode into their loop). The best is merged under a mutex
      (which also serialises the live progress line). Parallelising the flat key
      space means rings/starts scale even when the wheels are fixed.
-   - With `-c`, `hillclimb()` greedily improves the plugboard (each pass takes the
-     single best of all "switch a–b" moves and all "remove an existing pair" moves)
-     to maximize score before recording the result. The removal move lets a staged
-     climb shed plugs an earlier model set — see `CODE_REVIEW.md` §9 item 7.
+   - With `-c`, `hillclimb()` greedily improves the plugboard: each pass takes the
+     single best "switch a–b" or "remove an existing pair" move, run to convergence;
+     then one "re-pair" move (`try_repair()`, re-match two plugs into the other
+     pairing) is tried as a barrier-cross, and if it improves the cheap climb resumes.
+     Removal lets a staged climb shed plugs an earlier model set; re-pair is a general
+     local-optima escape gated to fire only at convergence (~zero cost). See
+     `CODE_REVIEW.md` §9 item 7.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
    final stderr diagnostic reports wall-clock time, thread count, the number/size
    of precomputed rotor tables, and peak RSS (via `getrusage`).

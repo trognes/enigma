@@ -746,164 +746,236 @@ void ciphertext_letterdist()
 #endif
 }
 
-/* Climb the steckerbrett for the current scoring model until a full pass yields no
-   improvement, but never letting the board exceed max_pairs plug pairs (the staged
-   climb caps the low-order pre-pass to its first few plugs; pass pairs_uncapped for
-   an unconstrained climb -- a board can hold at most 13 pairs anyway). */
+/* Last-resort "re-pair" move: take two existing plugs {a-x},{b-y} to the OTHER
+   pairing of their four letters ({a-b,x-y} or {a-y,x-b}), keeping the plug count. A
+   single switch cannot reach these (it would first drop to one plug, often a worse
+   intermediate the greedy climb never takes), so this crosses a barrier two single
+   moves cannot. It is run only once the cheap swap/remove moves have converged -- a
+   handful of times per climb, not every pass -- so its O(plugs^2) cost is small.
+   Applies and returns true iff the single best re-pair strictly beats cur_score. */
+static bool try_repair(machine & m, int iter, double cur_score)
+{
+  int plo[asize / 2];
+  int phi[asize / 2];
+  int np = 0;
+  for (int a = 0; a < asize; a++)
+    if (m.steckerbrett[a] > a)
+      {
+        plo[np] = a;
+        phi[np] = m.steckerbrett[a];
+        np++;
+      }
+
+  double best = cur_score;
+  int rp_pos[4] = { 0, 0, 0, 0 };
+  int rp_val[4] = { 0, 0, 0, 0 };
+  bool found = false;
+
+  for (int i = 0; i < np; i++)
+    for (int j = i + 1; j < np; j++)
+      {
+        int a = plo[i], x = phi[i], b = plo[j], y = phi[j];
+
+        /* M1: {a-b, x-y} */
+        m.steckerbrett[a] = b; m.steckerbrett[b] = a;
+        m.steckerbrett[x] = y; m.steckerbrett[y] = x;
+        double s1 = score_iter(m, iter);
+        if (s1 > best)
+          {
+            best = s1; found = true;
+            rp_pos[0] = a; rp_val[0] = b; rp_pos[1] = b; rp_val[1] = a;
+            rp_pos[2] = x; rp_val[2] = y; rp_pos[3] = y; rp_val[3] = x;
+          }
+
+        /* M2: {a-y, x-b} */
+        m.steckerbrett[a] = y; m.steckerbrett[y] = a;
+        m.steckerbrett[x] = b; m.steckerbrett[b] = x;
+        double s2 = score_iter(m, iter);
+        if (s2 > best)
+          {
+            best = s2; found = true;
+            rp_pos[0] = a; rp_val[0] = y; rp_pos[1] = y; rp_val[1] = a;
+            rp_pos[2] = x; rp_val[2] = b; rp_pos[3] = b; rp_val[3] = x;
+          }
+
+        /* restore {a-x, b-y} */
+        m.steckerbrett[a] = x; m.steckerbrett[x] = a;
+        m.steckerbrett[b] = y; m.steckerbrett[y] = b;
+      }
+
+  if (found)
+    for (int k = 0; k < 4; k++)
+      m.steckerbrett[rp_pos[k]] = static_cast<unsigned char>(rp_val[k]);
+  return found;
+}
+
+/* Climb the steckerbrett for the current scoring model until no move improves it,
+   but never letting the board exceed max_pairs plug pairs (the staged climb caps the
+   low-order pre-pass to its first few plugs; pass pairs_uncapped for an unconstrained
+   climb -- a board can hold at most 13 pairs anyway). The cheap "switch" and "remove"
+   moves are run to convergence; then a single best "re-pair" is tried as a barrier
+   cross, and if it improves the cheap climb resumes from the new board. */
 double hillclimb(machine & m, int max_pairs)
 {
-  double best_score;
-  double last_best;
-
   int iter = 1;
 
-  /* iterate until a full pass over all plug swaps yields no improvement */
+  bool progress;
   do
     {
-      best_score = score_iter(m, iter);
+      progress = false;
 
-      last_best = best_score;
+      double best_score;
+      double last_best;
 
-      /* current plug-pair count: at the cap, moves that would add a brand-new
-         pair (both endpoints currently unplugged) are skipped below */
-      int pairs = 0;
-      for (int j = 0; j < asize; j++)
-        if (m.steckerbrett[j] > j)
-          pairs++;
-
-      /* Best improving move this pass: a plug "switch" (force a-b, ejecting any
-         conflicts -- this adds / re-pairs / merges) or a plug "removal" (free an
-         existing pair, adding nothing). move_remove distinguishes the two. */
-      double move_score = best_score;
-      int move_a = 0;
-      int move_b = 0;
-      bool move_remove = false;
-
-      //#define SHOWHILLCLIMB
-
-#ifdef SHOWHILLCLIMB
-      fprintf(stderr, "  ");
-      for(int b=1; b<asize; b++)
-        fprintf(stderr, "   %c", num2char(b));
-      fprintf(stderr, "\n");
-#endif
-      for(int a=0; a<asize; a++)
-      {
-#ifdef SHOWHILLCLIMB
-        fprintf(stderr, "%c:", num2char(a));
-        for(int b=1; b<a+1; b++)
-          fprintf(stderr, "    ");
-#endif
-        for(int b=a+1; b<asize; b++)
-          {
-            /* at the pair cap, do not add a brand-new pair (both ends unplugged) */
-            if ((pairs >= max_pairs) &&
-                (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b))
-              continue;
-
-            /* switch plugs */
-            int x = m.steckerbrett[a];
-            int y = m.steckerbrett[b];
-            int xx = m.steckerbrett[x];
-            int yy = m.steckerbrett[y];
-            m.steckerbrett[x] = x;
-            m.steckerbrett[y] = y;
-            m.steckerbrett[a] = b;
-            m.steckerbrett[b] = a;
-
-            double score = score_iter(m, iter);
-
-#ifdef SHOWHILLCLIMB
-            fprintf(stderr, "%4.0f", (score - best_score)/10.0);
-#endif
-
-            if (score > move_score)
-              {
-                move_score = score;
-                move_a = a;
-                move_b = b;
-                move_remove = false;
-              }
-
-            /* restore plugs */
-            m.steckerbrett[a] = x;
-            m.steckerbrett[b] = y;
-            m.steckerbrett[x] = xx;
-            m.steckerbrett[y] = yy;
-          }
-#ifdef SHOWHILLCLIMB
-        printf("\n");
-#endif
-        }
-
-      /* Removal moves: drop an existing plug pair, freeing both ends. The switch
-         moves above can add, re-pair or merge plugs but never simply delete one, so
-         a staged climb that moved to a sharper model cannot shed a plug the previous
-         model set without this. At most 13 pairs are plugged, so it is cheap. */
-      for(int a=0; a<asize; a++)
-        if (m.steckerbrett[a] > a)
-          {
-            int b = m.steckerbrett[a];
-            m.steckerbrett[a] = a;
-            m.steckerbrett[b] = b;
-
-            double score = score_iter(m, iter);
-
-            if (score > move_score)
-              {
-                move_score = score;
-                move_a = a;
-                move_b = b;
-                move_remove = true;
-              }
-
-            m.steckerbrett[a] = b;
-            m.steckerbrett[b] = a;
-          }
-
-      if (move_score - best_score > 0)
+      /* Cheap moves to convergence: each pass takes the single best of all "switch
+         a-b" moves (force a-b, ejecting conflicts -- adds / moves an endpoint /
+         merges two plugs into one) and all "remove" moves (free an existing pair). */
+      do
         {
+          best_score = score_iter(m, iter);
+          last_best = best_score;
 
-          /* good move */
+          /* current plug-pair count: at the cap, moves that would add a brand-new
+             pair (both endpoints currently unplugged) are skipped below */
+          int pairs = 0;
+          for (int j = 0; j < asize; j++)
+            if (m.steckerbrett[j] > j)
+              pairs++;
 
-          int a = move_a;
-          int b = move_b;
+          double move_score = best_score;
+          int move_kind = 0;        /* 0 = switch, 1 = remove */
+          int move_a = 0;
+          int move_b = 0;
 
-          if (move_remove)
-            {
-              /* remove the a-b plug, freeing both ends */
-              m.steckerbrett[a] = a;
-              m.steckerbrett[b] = b;
-            }
-          else
-            {
-              /* switch plugs */
-              int x = m.steckerbrett[a];
-              int y = m.steckerbrett[b];
-              m.steckerbrett[x] = x;
-              m.steckerbrett[y] = y;
-              m.steckerbrett[a] = b;
-              m.steckerbrett[b] = a;
-            }
+          //#define SHOWHILLCLIMB
 
 #ifdef SHOWHILLCLIMB
-          fprintf(stderr,
-                  "%2d %c%c %s Imp: %10.4f Score: %10.4f ",
-                  iter,
-                  num2char(a), num2char(b),
-                  move_remove ? "del" : "set",
-                  move_score - best_score,
-                  move_score);
-          showsteckerbrett(m);
+          fprintf(stderr, "  ");
+          for(int b=1; b<asize; b++)
+            fprintf(stderr, "   %c", num2char(b));
           fprintf(stderr, "\n");
 #endif
+          for(int a=0; a<asize; a++)
+          {
+#ifdef SHOWHILLCLIMB
+            fprintf(stderr, "%c:", num2char(a));
+            for(int b=1; b<a+1; b++)
+              fprintf(stderr, "    ");
+#endif
+            for(int b=a+1; b<asize; b++)
+              {
+                /* at the cap, do not add a brand-new pair (both ends unplugged) */
+                if ((pairs >= max_pairs) &&
+                    (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b))
+                  continue;
 
-          best_score = move_score;
+                /* switch plugs */
+                int x = m.steckerbrett[a];
+                int y = m.steckerbrett[b];
+                int xx = m.steckerbrett[x];
+                int yy = m.steckerbrett[y];
+                m.steckerbrett[x] = x;
+                m.steckerbrett[y] = y;
+                m.steckerbrett[a] = b;
+                m.steckerbrett[b] = a;
+
+                double score = score_iter(m, iter);
+
+#ifdef SHOWHILLCLIMB
+                fprintf(stderr, "%4.0f", (score - best_score)/10.0);
+#endif
+
+                if (score > move_score)
+                  {
+                    move_score = score;
+                    move_kind = 0;
+                    move_a = a;
+                    move_b = b;
+                  }
+
+                /* restore plugs */
+                m.steckerbrett[a] = x;
+                m.steckerbrett[b] = y;
+                m.steckerbrett[x] = xx;
+                m.steckerbrett[y] = yy;
+              }
+#ifdef SHOWHILLCLIMB
+            printf("\n");
+#endif
+            }
+
+          /* Removal moves: drop an existing plug pair, freeing both ends. The switch
+             moves can add, re-pair or merge plugs but never simply delete one, so a
+             staged climb that moved to a sharper model cannot shed a plug the previous
+             model set without this. At most 13 pairs are plugged, so it is cheap. */
+          for(int a=0; a<asize; a++)
+            if (m.steckerbrett[a] > a)
+              {
+                int b = m.steckerbrett[a];
+                m.steckerbrett[a] = a;
+                m.steckerbrett[b] = b;
+
+                double score = score_iter(m, iter);
+
+                if (score > move_score)
+                  {
+                    move_score = score;
+                    move_kind = 1;
+                    move_a = a;
+                    move_b = b;
+                  }
+
+                m.steckerbrett[a] = b;
+                m.steckerbrett[b] = a;
+              }
+
+          if (move_score - best_score > 0)
+            {
+              int a = move_a;
+              int b = move_b;
+
+              if (move_kind == 1)
+                {
+                  /* remove the a-b plug, freeing both ends */
+                  m.steckerbrett[a] = a;
+                  m.steckerbrett[b] = b;
+                }
+              else
+                {
+                  /* switch plugs */
+                  int x = m.steckerbrett[a];
+                  int y = m.steckerbrett[b];
+                  m.steckerbrett[x] = x;
+                  m.steckerbrett[y] = y;
+                  m.steckerbrett[a] = b;
+                  m.steckerbrett[b] = a;
+                }
+
+#ifdef SHOWHILLCLIMB
+              fprintf(stderr,
+                      "%2d %s Imp: %10.4f Score: %10.4f ",
+                      iter,
+                      move_kind == 1 ? "del" : "set",
+                      move_score - best_score,
+                      move_score);
+              showsteckerbrett(m);
+              fprintf(stderr, "\n");
+#endif
+
+              best_score = move_score;
+            }
+
+          iter++;
         }
+      while (best_score > last_best);
 
+      /* Cheap moves converged: one last-resort re-pair barrier cross. If it
+         improves, loop back and let the cheap climb resume from the new board. */
+      if (try_repair(m, iter, best_score))
+        progress = true;
       iter++;
     }
-  while (best_score > last_best);
+  while (progress);
 
   decode(m);
 
