@@ -809,6 +809,90 @@ static bool try_repair(machine & m, int iter, double cur_score)
   return found;
 }
 
+/* Three-plug re-pair: take three existing plugs to a different matching of their six
+   letters. Of the 15 matchings of six letters, 7 keep at least one of the original
+   pairs -- those are reachable by try_repair (a 2-plug re-pair) and were just tried,
+   so only the 8 that share NO pair with the original are evaluated here. A deeper
+   barrier cross than the 2-plug move; the most expensive (O(plugs^3) x 8), so it is
+   the very last resort -- run only once switch/remove AND the 2-plug re-pair have all
+   converged. Applies and returns true iff the single best beats cur_score. */
+static bool try_repair3(machine & m, int iter, double cur_score)
+{
+  int plo[asize / 2];
+  int phi[asize / 2];
+  int np = 0;
+  for (int a = 0; a < asize; a++)
+    if (m.steckerbrett[a] > a)
+      {
+        plo[np] = a;
+        phi[np] = m.steckerbrett[a];
+        np++;
+      }
+
+  double best = cur_score;
+  int best_pos[6] = { 0, 0, 0, 0, 0, 0 };   /* winning matching: 3 pairs */
+  bool found = false;
+
+  for (int i = 0; i < np; i++)
+    for (int j = i + 1; j < np; j++)
+      for (int k = j + 1; k < np; k++)
+        {
+          /* the six letters; original pairs are the index buckets {0,1},{2,3},{4,5}
+             (two indices share a pair iff idx/2 is equal) */
+          int c[6] = { plo[i], phi[i], plo[j], phi[j], plo[k], phi[k] };
+
+          /* enumerate matchings: partner of index 0, then of the next free index */
+          for (int p = 1; p < 6; p++)
+            {
+              int rem[4], nr = 0;
+              for (int t = 1; t < 6; t++)
+                if (t != p)
+                  rem[nr++] = t;
+              for (int q = 1; q < 4; q++)
+                {
+                  int i1 = rem[0], j1 = rem[q];
+                  int o0 = -1, o1 = -1;
+                  for (int t = 1; t < 4; t++)
+                    if (t != q)
+                      {
+                        if (o0 < 0) o0 = rem[t]; else o1 = rem[t];
+                      }
+
+                  /* skip any matching that keeps an original pair (handled by the
+                     2-plug re-pair already); leaves the 8 genuine 3-plug moves */
+                  if ((0 / 2 == p / 2) || (i1 / 2 == j1 / 2) || (o0 / 2 == o1 / 2))
+                    continue;
+
+                  m.steckerbrett[c[0]] = c[p];  m.steckerbrett[c[p]] = c[0];
+                  m.steckerbrett[c[i1]] = c[j1]; m.steckerbrett[c[j1]] = c[i1];
+                  m.steckerbrett[c[o0]] = c[o1]; m.steckerbrett[c[o1]] = c[o0];
+
+                  double s = score_iter(m, iter);
+                  if (s > best)
+                    {
+                      best = s; found = true;
+                      best_pos[0] = c[0]; best_pos[1] = c[p];
+                      best_pos[2] = c[i1]; best_pos[3] = c[j1];
+                      best_pos[4] = c[o0]; best_pos[5] = c[o1];
+                    }
+
+                  /* restore the original three plugs */
+                  m.steckerbrett[c[0]] = c[1]; m.steckerbrett[c[1]] = c[0];
+                  m.steckerbrett[c[2]] = c[3]; m.steckerbrett[c[3]] = c[2];
+                  m.steckerbrett[c[4]] = c[5]; m.steckerbrett[c[5]] = c[4];
+                }
+            }
+        }
+
+  if (found)
+    for (int t = 0; t < 6; t += 2)
+      {
+        m.steckerbrett[best_pos[t]] = static_cast<unsigned char>(best_pos[t + 1]);
+        m.steckerbrett[best_pos[t + 1]] = static_cast<unsigned char>(best_pos[t]);
+      }
+  return found;
+}
+
 /* Climb the steckerbrett for the current scoring model until no move improves it,
    but never letting the board exceed max_pairs plug pairs (the staged climb caps the
    low-order pre-pass to its first few plugs; pass pairs_uncapped for an unconstrained
@@ -969,9 +1053,12 @@ double hillclimb(machine & m, int max_pairs)
         }
       while (best_score > last_best);
 
-      /* Cheap moves converged: one last-resort re-pair barrier cross. If it
-         improves, loop back and let the cheap climb resume from the new board. */
+      /* Cheap moves converged: try a 2-plug re-pair barrier cross, and only if that
+         too fails, the deeper (more expensive) 3-plug re-pair. Either improving makes
+         the cheap climb resume from the new board. */
       if (try_repair(m, iter, best_score))
+        progress = true;
+      else if (try_repair3(m, iter, best_score))
         progress = true;
       iter++;
     }
