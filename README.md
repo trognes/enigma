@@ -37,19 +37,19 @@ written to **standard output**. Only the letters A–Z are processed — spaces,
 punctuation and case are stripped on input.
 
 ```sh
-# Encrypt. With every setting fixed there is nothing to search, but the program
-# always runs its scoring pass, so a scoring model is still required: -i (index
-# of coincidence) is the simplest as it needs no language.
-echo "ATTACK AT DAWN" | ./enigma -i -u B -w 531 -r ABC -g XYZ
+# Encrypt. A fully specified machine with no -c just enciphers its input -- nothing
+# is searched -- so no scoring options are needed. (Give an explicit -r: the default
+# ring is "AA.", whose wildcard would otherwise turn this into a search.)
+echo "ATTACK AT DAWN" | ./enigma -u B -w 531 -r ABC -g XYZ
 #   -> YYHISFEPIWUP
 
 # Decrypt. Enigma is reciprocal: the SAME settings turn ciphertext back into
 # plaintext.
-echo "YYHISFEPIWUP" | ./enigma -i -u B -w 531 -r ABC -g XYZ
+echo "YYHISFEPIWUP" | ./enigma -u B -w 531 -r ABC -g XYZ
 #   -> ATTACKATDAWN
 
 # Encrypt with a plugboard (pairs A<->B and C<->D):
-echo "THE QUICK BROWN FOX" | ./enigma -i -u B -w 123 -r AAA -g AAA -s "AB CD"
+echo "THE QUICK BROWN FOX" | ./enigma -u B -w 123 -r AAA -g AAA -s "AB CD"
 ```
 
 ### Cracking
@@ -74,11 +74,11 @@ echo "THE QUICK BROWN FOX" | ./enigma -i -u B -w 123 -r AAA -g AAA -s "AB CD"
 
 ```sh
 # Norway Enigma (reflector N, wheels 1-5):
-echo "GODDAG" | ./enigma -i -n -u N -w 123 -r AAA -g AAA
+echo "GODDAG" | ./enigma -n -u N -w 123 -r AAA -g AAA
 
 # M4 (4-rotor naval): -u is the thin reflector b/c, and -w/-r/-g take FOUR
 # characters with the Greek wheel (B=Beta / G=Gamma) / ring / start first.
-echo "WETTERBERICHT" | ./enigma -i -4 -u b -w B123 -r AAAA -g AAAA
+echo "WETTERBERICHT" | ./enigma -4 -u b -w B123 -r AAAA -g AAAA
 ```
 
 ## How it works
@@ -232,9 +232,11 @@ brute-forcing rotor settings.
 - **Diagnostics** go to stderr: the resolved configuration is echoed at the
   start, the running best is shown during the search, and a final line reports
   wall-clock time, thread count, the precomputed-table memory and peak memory.
-- Every run needs a scoring model. For pure encryption/decryption (nothing to
-  search) the scoring is irrelevant but still required — add `-i` (no language
-  needed) or `-l <language>`.
+- A scoring model is needed only when the run actually scores — a wildcard search
+  or a plugboard hill-climb (`-c`). Those require `-l` (or `-i`). Pure
+  encryption/decryption — a fully specified machine with no `-c` — needs no scoring
+  options at all. (The default ring is `AA.`, so give an explicit `-r` to encrypt;
+  otherwise the wildcard makes it a search and `-l`/`-i` is required again.)
 
 ## n-gram data files
 
