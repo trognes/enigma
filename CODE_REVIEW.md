@@ -695,16 +695,159 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 
 ### Alternatives (roughly by expected payoff for this tool)
 
-1. **Two-stage scoring schedule** (classic, cheap) — seed with a robust low-order
-   statistic (IC or bigrams) for the first few plugs, switch to tri/quadgrams once
-   enough plugs make higher-order models meaningful (Gillogly/Weierud). Directly
-   fixes the flat-early-surface weakness.
+1. **Staged scoring schedule — ✅ IMPLEMENTED (`-S <schedule>`).** Climb under each
+   pre-pass model in the schedule in order, then refine under the target. A
+   lower-order surface is far smoother when only a plug or two are set, so it steers
+   the early plugs into a good basin (Gillogly/Weierud). This is a *search* lever,
+   not a scoring one — the SPLIT metric (final-model ranking of the truth) does not
+   see it; the recovery curve does. Per-`machine` (`m.scoring`, never a global →
+   race-free) and `-T`-deterministic. **Schedule matters a lot** (english/quad, 10
+   pairs, 40 trials, with `-R 10`):
+
+   | pre-pass | L100 | L140 | L190 | L250 |
+   |----------|-----:|-----:|-----:|-----:|
+   | none            | 15.0 | 40.0 | 70.0 | 90.0 |
+   | bigram (`-S bq`)| 35.0 | 70.0 | 90.0 | 97.5 |
+   | **IC (`-S iq`)**| **57.5** | **90.0** | **92.5** | **100.0** |
+
+   **Grammar (redesigned).** `-S` takes `<letter><optional number>` tokens: model
+   tokens `i`/`m`/`b`/`t`/`q` are climb stages run in order, the number capping the
+   **plug pairs** that stage may set (omitted = uncapped); the **last** model token
+   is the target/ranking model, so the target lives in the string (`-S i6q` = IC
+   capped at 6 pairs, then quad uncapped). The optional `rN` token sets the
+   per-restart random perturbation (inject `N` random pairs each restart; `r0` =
+   no-op; a bare `r` or no token = a fixed `default_perturb` kick, see below). This
+   replaced the
+   earlier "pre-pass letters only" `-S` plus the separate `-L` single cap — each
+   stage now carries its own cap, and the restart strength is a first-class knob.
+   (Earlier recipes `-S i`/`-S b` meant "pre-pass then the `-q` target"; the
+   equivalents are now `-S iq`/`-S bq`.)
+
+   **An IC pre-pass (`-S iq`) is the clear winner** — IC is the smoothest possible
+   surface (distribution peakedness, no n-gram over-fitting), so it gives the
+   cleanest early gradient. `tri→q` barely helps (trigram is nearly as rugged as
+   quad), and stacking stages after IC (`ibq`/`imq`/`itq`) adds nothing. A naive
+   full bigram pre-pass can over-fit an individual easy case; IC does not. At 200
+   trials IC and `ibq` are a statistical tie and **mono is clearly worse**, so a
+   plain IC pre-pass is the pick (simplest, no table, no language needed for it).
+
+   *Capping a pre-pass at the first N plug pairs is a tuning knob (now the number on
+   that stage's token, e.g. `-S i6q`; formerly the separate `-L N`): the low-order
+   pre-pass sets at most N plugs, then the target model refines uncapped.* The
+   Gillogly/Weierud "first few plugs only" rule targets models that **over-fit**
+   (bigram), so capping is theorised to help bigram more than IC. (An earlier sweep
+   used a *move* budget rather than a *pair* cap and was too thin to trust; the knob
+   caps pairs, so an uncapped stage ≡ cap 13 exactly.) A thorough sweep — caps 1–13
+   × {IC, mono, bigram} pre-pass × several lengths including short (<100) messages —
+   is recorded below.
+
+   **Sweep result — capping *does* help (overturns an earlier hasty call).** Caps
+   1–13 × {IC, mono, bigram} pre-pass × lengths {40,70,100,140,190}, `R 1` (a single
+   staged climb from identity, so the pair cap cleanly = "pre-pass sets ≤N pairs"),
+   100 trials, 10-pair true board (`tests/cap_sweep.sh`). IC exact-recovery %:
+
+   | cap | L100 | L140 | L190 |
+   |----:|-----:|-----:|-----:|
+   |  2  | 20 | 33 | 64 |
+   |  4  | 21 | 60 | 72 |
+   |  6  | 26 | **66** | 80 |
+   |  8  | 28 | 65 | **83** |
+   | 10  | **34** | 58 | 79 |
+   | 13 (uncapped) | 32 | 59 | 74 |
+
+   There is a real **interior optimum** (~6–10 pairs) that beats uncapped — e.g. at
+   L190, cap 8 → 83 % vs uncapped 74 %; at L140, cap 6 → 66 % vs 59 %. Mechanism:
+   IC run to convergence over-plugs (it sets ~13 pairs, favouring a flat
+   distribution), and the quad climb then has to *remove* the wrong ones — hard for
+   a greedy climb; a cap leaves IC under-plugged so quad *adds* the last couple of
+   correct plugs instead, which is easier. mono behaves similarly (peak ~8);
+   **bigram plateaus** (its best is uncapped); below ~70 letters everything is near
+   zero regardless. So the user's "first few plugs only" intuition is **confirmed**
+   for IC/mono, with the optimum nearer 6–10 than 1–5.
+
+   Caveats: this is `R 1` (the cap is only cleanly defined from an identity start;
+   under restarts the old full-random board already carried ~7 pairs, muddying it).
+   That muddle is now directly addressed by the controllable `r` token — restarts
+   can inject a *few* random pairs instead of a near-saturated involution, so the
+   cap and the restart perturbation compose cleanly (sweep below). At 100 trials a
+   single point has a ~±9 % CI, but the rise-then-fall shape is consistent across
+   L140/L190, so the *pattern* is solid. Full data: `tests/cap_sweep.csv`.
+
+   **IC vs mono on very short texts.** A focused follow-up (caps 4–8 × {40,70,100}
+   × {IC, mono} × {R 1, R 10}, 500 trials, **mean %-correct**; plus a paired test,
+   N = 1000, same trials per model, `tests/cap_paired.py`, `tests/cap_short.csv`)
+   answered whether mono beats IC on the shortest messages. Verdict: **IC wins
+   wherever there is meaningful recovery.** mono is significantly better **only at
+   40 letters with no restarts** (+0.88 %-correct, 95 % CI [+0.12, +1.64]) — a real
+   but sub-1 % effect that disappears with restarts (L40/R10 a dead tie). At 70
+   letters IC is significantly *better*, not worse (R 1: −2.0 %, CI [−3.9, −0.2];
+   R 10: −6.0 %, CI [−8.9, −3.2]) — so the earlier "mono looks better at ≤70"
+   impression was an artifact of a noisy 100-trial *exact-match* read, and does not
+   survive a graded metric at 500–1000 trials. Likely cause: at 40 letters IC is
+   estimated from too few samples to be reliable, so monogram frequencies are
+   marginally more robust; by 70 letters IC's smoother surface wins again.
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost
    driver and fits the existing parallel architecture; climb internals unchanged.
-3. **Random restarts** — climb from several random (or best-single-plug) starts and
-   keep the best. Embarrassingly parallel; simplest defence against local optima.
+   Still open.
+3. **Random restarts — ✅ IMPLEMENTED (`-R N`).** Restart 0 is the configured seed
+   (= the old behaviour); restarts 1..N-1 start from a perturbed board (per-key
+   splitmix64, so `-T`-deterministic), best kept. Each restart resets to the seed and
+   injects `k` random plugs (the `-S rk…` token, or a fixed `default_perturb` with no
+   token), making the strength `k` and the count `N` independent knobs (the sweep
+   below settles where each should sit). The
+   simplest defence against the local optima the single-start climb got stuck in —
+   and the diagnosis said every miss was a *search* failure, so this was the first
+   lever pulled. Roughly doubles short-message exact-recovery (table below).
+
+   **Restart-strength sweep — verdict (`tests/restart_sweep.py`; 500 trials over the
+   full grid k∈{2..10,legacy} × R∈{1..256}, L40/L70, 10-pair board, mean %-correct;
+   plot `tests/restart_sweep_full500.png`).** Two questions: how strong should each
+   restart's random perturbation be (the `r` token's `k` plug pairs), and how many
+   restarts `N` before it flattens?
+
+   - **`N` (restart count) never plateaus in the tested range [1, 256].** Each
+     *doubling* of `N` adds roughly a constant ~8–11 %-correct at L70 (legacy:
+     17 % at R1 → 52 % at R32 → 83 % at R256; exact 7 % → 76 %), and L40 climbs
+     ~10 % → 24 % likewise. **No knee** — restarts are a near-log-linear
+     quality/compute trade (cost linear in `N`), so "how many restarts" is purely a
+     budget decision for short messages, not a point of diminishing returns. `N` is
+     the dominant lever; `k` is second-order.
+   - **The best `k` shifts with `N` (a crossover), peaking near the true plug
+     count.** At `R=1` every `k` is identical (restart 0 is the unperturbed seed, so
+     no kick is applied). Through `R≈16` the curves stay bunched: on L40 *no* `k`
+     differs significantly from legacy; on L70 a *moderate* kick gives a modest, real
+     boost in spots (R8: `k3` +4.5 t = 2.6, `k5` +4.0 t = 2.3 vs legacy). From
+     `R≳64` a **strong** kick wins decisively and small `k` falls significantly
+     behind (L40/R256: `k2` −3.9 t = −3.3 vs legacy; L70/R256: `k≤6` all
+     significantly below legacy, down to `k2` −14.8). The optimum sits at the **true
+     plug count (~10)**: L40 peaks at `k≈8–9` (`k9` +2.9 t = 2.2 over legacy; `k10`
+     over-plugs the short text and drops back), L70 at `k≈10` (`k10` +3.6 t = 2.1 at
+     R128). Mechanism: few restarts → a moderate kick lands the best single
+     improvement (and on L40 the seed climb already does most of the work, so `k`
+     hardly matters); many restarts → the moderate-`k` neighbourhood is exhausted, so
+     kicks ≈ the true plug count are needed to keep reaching fresh basins.
+   - The legacy uniform-1..13 involution (mean ~7) is **consistently a little below**
+     the `k≈8–10` plateau at high `N` (its weak low draws waste restarts) and never
+     significantly better anywhere. (`r0` is a flat no-op at every `N` — the
+     determinism anchor; small `k` 1–2 is the genuine footgun at high `N`.) An
+     earlier 200-trial pass with only `k∈{4,8}` extended past R32 wrongly read this
+     as "legacy/`k8` just win"; the powered full-`k` grid shows the crossover and the
+     `k≈8–10` peak instead — the interior-`k` lead the user flagged at R32 is real at
+     low `N`, just within noise there, and it is the *high-`N`* regime (where recovery
+     is actually good) that wants the stronger kick.
+
+   **Takeaway:** spend the budget on `N` (no plateau through 256); set the kick near
+   the expected plug count. A fixed `k≈8` is the best single default —
+   significantly better than the legacy involution at high `N` on L40, tied or better
+   on L70, and never worse — robust across lengths (just below the true count, so it
+   does not over-plug the shortest texts). **This is now the implemented default**
+   (`default_perturb = 8`): a no-`r`-token `-c -R N` injects a fixed 8-pair kick and
+   `rN` sets any fixed strength (`r0` = no-op). The old uniform-`1..13` involution was
+   removed — it was never significantly best — so a bare `r` now takes the default
+   kick (consistent with a bare model token being uncapped). Full data:
+   `tests/restart_sweep{,_hiR,_p3,_fillk,_k910,_lowR,_full500}.csv`.
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start
    than identity.
@@ -718,12 +861,21 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 8. **Genetic / evolutionary** — population + crossover + mutation; generally overkill
    here, rarely beats random-restart hill climbing or SA for plugboard recovery.
 
-**Bottom line:** the two changes most worth making if stronger/faster cracking is
-ever wanted are **(2)** a key pre-filter (throughput) and **(1)** a low→high-order
-scoring schedule plus **(3)** random restarts (robustness on short/noisy
-messages). SA/tabu/GA are worth it mainly as fallbacks for the hardest cases. All
-are deferred — the current climb is correct and effective when the rotor key is
-right and the message is long enough.
+**Measured (exact-recovery %, english/quad, 10-pair plugboard, 40 trials):**
+
+| config | L100 | L140 | L190 | L250 |
+|--------|-----:|-----:|-----:|-----:|
+| plain (`-R 1`)              |  — |  16 |  32 |  56 |
+| restarts (`-R 10`)          | 15 |  40 |  70 |  90 |
+| **restarts + IC stage** (`-R 10 -S iq`) | **57** | **90** | **92** | **100** |
+
+**Bottom line:** **(3)** random restarts and **(1)** the staged schedule are both
+**shipped** and **stack**, and the best combination found is **`-R 10 -S iq`**
+(restarts + an IC pre-pass), which lifts L140 from 16 % (plain) → 90 %. Still open:
+**(2)** a key pre-filter (the big *throughput* win, so more restarts are
+affordable per surviving key), and the heavier metaheuristics (SA/tabu/GA, items
+5–8) as fallbacks for the hardest cases. The default (`-R 1`, no `-S`) is the
+unchanged single-start climb.
 
 ### Scoring data and smoothing (the other lever — and what it can/can't help)
 

@@ -126,8 +126,34 @@ any working directory.
 - `-s AB...` fixed plugboard pairs
 - `-c` hill-climb the plugboard
 - `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
-  the rest start from random involutions, best kept). Per-key RNG seeded from the
+  the rest start from a perturbed board, best kept). Per-key RNG seeded from the
   flat key index, so the result stays independent of `-T`. ~`N`× the `-c` cost.
+  The restart count is separate from the schedule string (`-S`).
+- `-S <schedule>` staged plugboard climb — a string of `<letter><optional number>`
+  tokens parsed by `parse_schedule()` into `opt_stages[]`:
+  - **model tokens** `i`/`m`/`b`/`t`/`q` are climb stages run in order; the number
+    caps the **plug pairs** that stage may set (1–13; omitted = uncapped, 13). The
+    **last** model token is the target/ranking model (sets `opt_scoring`), so the
+    target lives *in* the string — e.g. `-S i6q` = IC capped at 6 pairs, then quad
+    uncapped. A lower-order early stage steers the first plugs into a better basin
+    (its surface is smoother when few plugs are set); **`-S i…q` (IC pre-pass) is
+    the best measured** — much better than bigram, extra stages after IC add little.
+  - **the `rN` token** (at most one) sets the **per-restart random perturbation**:
+    `rN` injects `N` random plug pairs from the seed each restart (`r0` = no-op, so
+    restarts collapse — a useful control; a bare `r` with no count takes the default
+    kick, just as a bare model token is uncapped).
+    **With no `r` token the perturbation is a fixed `default_perturb` (= 8) pairs** —
+    so `-c -R N` (no `-S`) does an 8-pair-kick restart. The sweep (§9, 500 trials,
+    R 1→256) found the best kick is near the true plug count (`k≈8–10`): a fixed
+    `k=8` significantly beats the old uniform-`1..13` involution at high `-R` on the
+    shortest texts and is never worse, so it is the default (the uniform involution
+    was removed, so a bare `r` now means this default too). Small `k` (1–2) is a
+    footgun at high `-R`; `r0` is a no-op control.
+    The first-order lever is the restart count `-R N`, which never plateaus through
+    256.
+  Per-`machine` `scoring` field (never a global → race-free); deterministic; the
+  `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
+  was folded into the per-stage numbers — see `CODE_REVIEW.md` §9.)
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
   used by `-i`
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the

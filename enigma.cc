@@ -110,7 +110,30 @@ static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
+static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
+                                    parse_schedule() expands it into opt_stages[] */
 static const int max_restarts = 100000;
+static const int pairs_uncapped = asize / 2;   /* 13: a board holds at most this */
+
+/* A parsed -S schedule is an ordered list of climb stages -- each a scoring model
+   and a cap on the plug pairs it may set -- plus the per-restart random
+   perturbation strength. Tokens are <letter><optional number>: model letters
+   i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped) and r (the random
+   perturbation, number = plug pairs injected per restart, omitted = default_perturb).
+   The last model stage is the target/ranking model. With no r token (including no -S
+   at all) the perturbation is a fixed default_perturb plug pairs -- the sweep's best
+   kick, near the typical plug count (CODE_REVIEW §9). */
+static const int max_stages = 16;
+struct climbstage
+{
+  int model;   /* SCORE_* */
+  int cap;     /* max plug pairs this stage may set (1..13; 13 = uncapped) */
+};
+static struct climbstage opt_stages[max_stages];
+static int opt_nstages;    /* number of model stages in opt_stages[] */
+static int opt_perturb;    /* random plug pairs injected per restart: 0..13 (an rN
+                              token; default_perturb when no r token; r0 = no-op) */
+static const int default_perturb = 8;   /* no-r-token kick: best in the §9 sweep */
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 
@@ -153,6 +176,9 @@ struct machine
   unsigned char reflector_eff[asize];
   int greek;          /* M4 Greek rotor index (Beta/Gamma), else -1 */
   int greek_offset;   /* M4 (Greek start - ring) mod 26, else 0 */
+  int scoring;        /* active scoring model (= opt_scoring; varied per stage by
+                         the staged plugboard climb, so it is per-machine not the
+                         global -- a shared global would race across worker threads) */
 
   /* The 457 KB rotor-stack table (rebuilt once per wheel order by precompute,
      read per ring/start by setup_mapping) is heap-allocated separately and
@@ -650,7 +676,7 @@ double score_iter(machine & m, int iter)
   (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   double score = 0;
 
-  switch(opt_scoring)
+  switch(m.scoring)
     {
     case SCORE_IC:
       score = ic_score_decode(m);
@@ -716,10 +742,12 @@ void ciphertext_letterdist()
 #endif
 }
 
-double hillclimb(machine & m)
+/* Climb the steckerbrett for the current scoring model until a full pass yields no
+   improvement, but never letting the board exceed max_pairs plug pairs (the staged
+   climb caps the low-order pre-pass to its first few plugs; pass pairs_uncapped for
+   an unconstrained climb -- a board can hold at most 13 pairs anyway). */
+double hillclimb(machine & m, int max_pairs)
 {
-  /* Try to find the optimal steckerbrett for the given other settings */
-
   double best_score;
   double last_best;
 
@@ -731,6 +759,13 @@ double hillclimb(machine & m)
       best_score = score_iter(m, iter);
 
       last_best = best_score;
+
+      /* current plug-pair count: at the cap, moves that would add a brand-new
+         pair (both endpoints currently unplugged) are skipped below */
+      int pairs = 0;
+      for (int j = 0; j < asize; j++)
+        if (m.steckerbrett[j] > j)
+          pairs++;
 
       double switch_score = best_score;
       int switch_a = 0;
@@ -753,6 +788,11 @@ double hillclimb(machine & m)
 #endif
         for(int b=a+1; b<asize; b++)
           {
+            /* at the pair cap, do not add a brand-new pair (both ends unplugged) */
+            if ((pairs >= max_pairs) &&
+                (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b))
+              continue;
+
             /* switch plugs */
             int x = m.steckerbrett[a];
             int y = m.steckerbrett[b];
@@ -840,40 +880,165 @@ static inline uint64_t splitmix64(uint64_t * s)
   return z ^ (z >> 31);
 }
 
-/* Seed the plugboard with a random involution: shuffle the 26 letters and connect
-   a random number of disjoint pairs (1..13). Used as a restart start point. */
-void set_random_steckerbrett(machine & m, uint64_t * rng)
+/* Inject exactly k random plug pairs into the current plugboard, drawing only from
+   letters that are still unplugged (so any fixed -s pairs are preserved). This is
+   the per-restart perturbation: a kick of k random plugs (default_perturb, or an rN
+   token) into a new basin, near the typical plug count so the staged climb need not
+   tear down a near-saturated board (CODE_REVIEW §9). With k=0 it is a no-op (so r0
+   makes restarts identical -- a useful control). */
+void perturb_steckerbrett(machine & m, uint64_t * rng, int k)
 {
-  unsigned char perm[asize];
+  unsigned char freelet[asize];
+  int nfree = 0;
   for (int i = 0; i < asize; i++)
-    perm[i] = static_cast<unsigned char>(i);
-  for (int i = asize - 1; i > 0; i--)
+    if (m.steckerbrett[i] == i)
+      freelet[nfree++] = static_cast<unsigned char>(i);
+
+  int want = k * 2;                  /* free letters to pair up */
+  if (want > nfree)
+    want = nfree - (nfree & 1);      /* clamp to an even count of free letters */
+
+  /* partial Fisher-Yates: shuffle the first `want` free letters, then pair them */
+  for (int i = 0; i < want; i++)
     {
-      int j = static_cast<int>(splitmix64(rng) % static_cast<uint64_t>(i + 1));
-      unsigned char t = perm[i]; perm[i] = perm[j]; perm[j] = t;
+      int j = i + static_cast<int>(splitmix64(rng) %
+                                   static_cast<uint64_t>(nfree - i));
+      unsigned char t = freelet[i]; freelet[i] = freelet[j]; freelet[j] = t;
     }
-
-  for (int i = 0; i < asize; i++)
-    m.steckerbrett[i] = static_cast<unsigned char>(i);
-
-  int pairs = 1 + static_cast<int>(splitmix64(rng) % (asize / 2));   /* 1..13 */
-  for (int p = 0, k = 0; p < pairs; p++, k += 2)
+  for (int i = 0; i + 1 < want; i += 2)
     {
-      int a = perm[k], b = perm[k + 1];
+      int a = freelet[i], b = freelet[i + 1];
       m.steckerbrett[a] = static_cast<unsigned char>(b);
       m.steckerbrett[b] = static_cast<unsigned char>(a);
     }
 }
 
+/* Load the n-gram table backing a scoring model (IC needs none). */
+void load_table(int model)
+{
+  switch (model)
+    {
+    case SCORE_MONO: ngrams_read(1, monograms, "monograms"); break;
+    case SCORE_BI:   ngrams_read(2, & bigrams[0][0], "bigrams"); break;
+    case SCORE_TRI:  ngrams_read(3, & trigrams[0][0][0], "trigrams"); break;
+    case SCORE_QUAD: ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams"); break;
+    default: break;   /* IC: no table */
+    }
+}
+
+/* Map a scoring-model letter (i/m/b/t/q) to its SCORE_* value. */
+int model_of(char c)
+{
+  switch (c)
+    {
+    case 'i': return SCORE_IC;
+    case 'm': return SCORE_MONO;
+    case 'b': return SCORE_BI;
+    case 't': return SCORE_TRI;
+    case 'q': return SCORE_QUAD;
+    default:  return SCORE_IC;
+    }
+}
+
+/* Parse the -S schedule string into opt_stages[]/opt_nstages/opt_perturb, and set
+   opt_scoring to the target (last model stage). Tokens are <letter><optional int>:
+   model letters i/m/b/t/q (a climb stage; the number caps its plug pairs, omitted =
+   uncapped) and r (the random perturbation; the number is plug pairs injected per
+   restart, omitted = the default_perturb kick). On a syntax error it calls fatal().
+   With no -S the schedule is the single -i/-m/.../-q target, uncapped; with no r
+   token the perturbation stays at the fixed default_perturb kick. */
+void parse_schedule()
+{
+  opt_nstages = 0;
+  opt_perturb = default_perturb;   /* fixed kick unless an r token overrides it */
+
+  if (! opt_staged)
+    {
+      opt_stages[0].model = opt_scoring;
+      opt_stages[0].cap = pairs_uncapped;
+      opt_nstages = 1;
+      return;
+    }
+
+  bool seen_r = false;
+  for (const char * p = opt_staged; *p; )
+    {
+      char letter = *p++;
+      int n = -1;                       /* -1 = no explicit number */
+      if (isdigit(static_cast<unsigned char>(*p)))
+        {
+          n = 0;
+          while (isdigit(static_cast<unsigned char>(*p)))
+            {
+              n = n * 10 + (*p++ - '0');
+              if (n > pairs_uncapped)
+                break;                  /* range-checked below; avoid overflow */
+            }
+        }
+
+      if (letter == 'r')
+        {
+          if (seen_r)
+            fatal("Illegal -S schedule: at most one r (random) token");
+          seen_r = true;
+          if (n > pairs_uncapped)
+            fatal("Illegal -S r token (0 to 13 random plug pairs)");
+          /* omitted number = the default kick, just as a bare model token is
+             uncapped; rN sets a fixed N (r0 = a no-op control) */
+          opt_perturb = (n < 0) ? default_perturb : n;
+        }
+      else if (strchr("imbtq", letter))
+        {
+          if (opt_nstages >= max_stages)
+            fatal("Illegal -S schedule: too many stages (max 16)");
+          int cap = (n < 0) ? pairs_uncapped : n;
+          if ((cap < 1) || (cap > pairs_uncapped))
+            fatal("Illegal -S stage cap (1 to 13 plug pairs; omit for no cap)");
+          opt_stages[opt_nstages].model = model_of(letter);
+          opt_stages[opt_nstages].cap = cap;
+          opt_nstages++;
+        }
+      else
+        fatal("Illegal -S schedule (tokens are r/i/m/b/t/q + optional number, "
+              "e.g. -S r2i6q)");
+    }
+
+  if (opt_nstages < 1)
+    fatal("Illegal -S schedule: needs at least one model stage (i/m/b/t/q)");
+
+  /* the last model stage is the target/ranking model */
+  opt_scoring = opt_stages[opt_nstages - 1].model;
+}
+
+/* Staged plugboard climb: run each schedule stage in order, capping the plug pairs
+   it may set. A lower-order model has a far smoother surface when only a plug or two
+   are set, so an early stage steers the first plugs into a good basin that a
+   single-model climb navigates poorly -- staging reshapes the *search* landscape
+   (complementary to random restarts). The returned score and m.plaintext are in the
+   target (last) model, so cross-key comparison is unaffected. With no -S this is a
+   single uncapped climb in the -i/-m/.../-q model. */
+double hillclimb_schedule(machine & m)
+{
+  double s = 0.0;
+  for (int i = 0; i < opt_nstages; i++)
+    {
+      m.scoring = opt_stages[i].model;
+      s = hillclimb(m, opt_stages[i].cap);
+    }
+  return s;   /* opt_nstages >= 1, so s is the target-model score */
+}
+
 /* Hill-climb the plugboard with optional random restarts: restart 0 uses the
    configured seed (identity or -s pairs) -- exactly the opt_restarts==1 behaviour
-   -- then opt_restarts-1 further climbs start from random plugboards, keeping the
-   best. The rotor-stack mapping[] depends only on the key (not the plugboard), so
-   it is reused across restarts; only the steckerbrett is reset each time. The RNG
-   is seeded from the flat key index, so the result is independent of -T. */
+   -- then opt_restarts-1 further climbs start from the seed plus opt_perturb random
+   plugs (a moderate kick, near the typical plug count), keeping the best. The
+   rotor-stack mapping[] depends only on the key (not the plugboard), so it is reused
+   across restarts; only the steckerbrett is reset each time. The RNG is seeded from
+   the flat key index, so the result is independent of -T. Each start runs the staged
+   climb. */
 double hillclimb_restarts(machine & m, uint64_t key_index)
 {
-  double best = hillclimb(m);
+  double best = hillclimb_schedule(m);
   if (opt_restarts <= 1)
     return best;
 
@@ -883,8 +1048,9 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
   uint64_t rng = key_index + 0x0123456789abcdefULL;
   for (int r = 1; r < opt_restarts; r++)
     {
-      set_random_steckerbrett(m, & rng);
-      double s = hillclimb(m);
+      init_steckerbrett(m, opt_steckerbrett);   /* reset to the fixed seed */
+      perturb_steckerbrett(m, & rng, opt_perturb);
+      double s = hillclimb_schedule(m);
       if (s > best)
         {
           best = s;
@@ -991,6 +1157,8 @@ void search_worker(machine & m,
   const size_t total = tasks.size() * rg;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
+
+  m.scoring = opt_scoring;   /* per-machine; the staged climb varies it transiently */
 
   double local_best = score_min;
   size_t cur_wo = static_cast<size_t>(-1);
@@ -1407,6 +1575,10 @@ void help(FILE * out)
   fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
+  fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
+  fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
+  fprintf(out, "               rN = per-restart random plugs (N pairs, default 8).\n");
+  fprintf(out, "               E.g. -S r2i6q\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
   fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
@@ -1458,7 +1630,9 @@ void show_settings()
             opt_language, opt_datadir);
   fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
   if (opt_hillclimb && (opt_restarts > 1))
-    fprintf(stderr, " (%d restarts)", opt_restarts);
+    fprintf(stderr, " (%d restarts, %d-pair kick)", opt_restarts, opt_perturb);
+  if (opt_hillclimb && opt_staged)
+    fprintf(stderr, " (staged: %s)", opt_staged);
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
   if (opt_m4)
@@ -1524,6 +1698,7 @@ int main(int argc, char * * argv)
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_restarts = 1;
+  opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_QUAD;
   opt_norenigma = 0;
   opt_m4 = 0;
@@ -1532,7 +1707,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -1576,6 +1751,9 @@ int main(int argc, char * * argv)
           break;
         case 'c':
           opt_hillclimb = 1;
+          break;
+        case 'S':
+          opt_staged = optarg;
           break;
         case 'x':
           opt_maxwheel = atoi(optarg);
@@ -1734,15 +1912,23 @@ int main(int argc, char * * argv)
   if ((opt_restarts < 1) || (opt_restarts > max_restarts))
     fatal("Illegal restart count (must be 1 to 100000)");
 
+  /* Expand the -S schedule into opt_stages[]/opt_perturb and set opt_scoring to the
+     target (last) stage. Validates the schedule syntax; fatal() on error. With no
+     -S this builds the single -i/-m/.../-q stage. */
+  parse_schedule();
+
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
 
-  /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no
-     default; the index of coincidence (-i) is language-independent. */
-  if ((opt_scoring != SCORE_IC) && (! opt_language))
-    fatal("A scoring language is required: add -l <language> "
-          "(e.g. -l english), or use -i for the language-independent "
-          "index of coincidence");
+  /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no default;
+     the index of coincidence (-i) and the r token are language-independent. Every
+     stage that reads an n-gram table -- pre-pass or target -- needs -l. */
+  if (! opt_language)
+    for (int i = 0; i < opt_nstages; i++)
+      if (opt_stages[i].model != SCORE_IC)
+        fatal("A scoring language is required: add -l <language> "
+              "(e.g. -l english), or use -i for the language-independent "
+              "index of coincidence");
 
   if (opt_language &&
       ((strlen(opt_language) < 1) ||
@@ -1757,24 +1943,19 @@ int main(int argc, char * * argv)
      mistyped -l fails immediately (with the offending filename) before we read
      and consume standard input. */
 
-  switch (opt_scoring)
+  /* Load the target model's table first (so a missing or mistyped -l fails
+     immediately on it), then any extra tables the staged pre-pass (-S) needs. */
+  bool table_loaded[5] = { false, false, false, false, false };
+  load_table(opt_scoring);
+  table_loaded[opt_scoring] = true;
+  for (int i = 0; i < opt_nstages; i++)
     {
-    case SCORE_IC:
-      break;
-    case SCORE_MONO:
-      ngrams_read(1, monograms, "monograms");
-      break;
-    case SCORE_BI:
-      ngrams_read(2, & bigrams[0][0], "bigrams");
-      break;
-    case SCORE_TRI:
-      ngrams_read(3, & trigrams[0][0][0], "trigrams");
-      break;
-    case SCORE_QUAD:
-      ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams");
-      break;
-    default:
-      break;
+      int model = opt_stages[i].model;
+      if (! table_loaded[model])
+        {
+          load_table(model);
+          table_loaded[model] = true;
+        }
     }
 
   /* read ciphertext */

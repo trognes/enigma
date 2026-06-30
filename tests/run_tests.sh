@@ -300,9 +300,53 @@ r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
 check "restarts: -R 8 result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 1)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 4)"
+# The no-r-token default kick is a fixed 8 pairs (CODE_REVIEW §9): a plain -R run
+# must equal an explicit -S r8 run.
+check "restarts: default kick == -S r8 (fixed 8 pairs)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S r8q)"
+# A bare r token (no count) takes the default kick, just as a bare model token is
+# uncapped: with the model stages held equal, -S riq must equal -S r8iq.
+check "restarts: bare r == default kick (-S riq == -S r8iq)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S riq)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -S r8iq)"
 # -R is validated: 0 is rejected.
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
 check "restart count 0 rejected (exit code)" "$?" "1"
+
+# Staged plugboard climb (-S schedule: a bigram pre-pass, then the quad target as
+# the last token). It must stay -T-independent, and recover a small plugboard on a
+# long message (where the bigram pre-pass reliably steers the quad climb to the true
+# board). The restart perturbation here is the full-random default (no r token).
+s_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+check "staged: -S bq -R 4 result is -T-independent" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g A.. -c -S bq -R 4 -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g A.. -c -S bq -R 4 -T 4)"
+check "staged: -S bq recovers plugboard (long message)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g AAA -c -S bq)" \
+  "$r_pt"
+# -S schedule is validated: a non-model/-r letter is rejected.
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S z >/dev/null 2>&1
+check "staged: bad -S schedule rejected (exit code)" "$?" "1"
+
+# Per-stage plug-pair caps (the number after a model letter) and the per-restart
+# random token (r). Both must stay -T-independent.
+check "staged: -S r2i3q -R 4 result is -T-independent" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g A.. -c -S r2i3q -R 4 -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g A.. -c -S r2i3q -R 4 -T 4)"
+# r0 injects no plugs, so restarts are a no-op: -S r0iq -R 8 == -S iq -R 1.
+check "staged: -S r0 makes restarts a no-op" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g A.. -c -S r0iq -R 8)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g A.. -c -S iq -R 1)"
+# Schedule grammar is validated: out-of-range stage cap and r token are rejected.
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S q14 >/dev/null 2>&1
+check "staged: -S stage cap over max (q14) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S q0 >/dev/null 2>&1
+check "staged: -S stage cap 0 (q0) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S r99 >/dev/null 2>&1
+check "staged: -S r token over max (r99) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S rir >/dev/null 2>&1
+check "staged: -S two r tokens rejected (exit code)" "$?" "1"
 
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
