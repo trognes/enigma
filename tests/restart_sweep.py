@@ -49,6 +49,7 @@ SEED = int(env("SEED", "1"))
 KS = [int(x) for x in env("KS", "-1 0 1 2 3 4 8").split()]
 RS = [int(x) for x in env("RS", "1 2 4 8 16 32").split()]
 LENGTHS = [int(x) for x in env("LENGTHS", "40 70").split()]
+OUT = env("OUT", "tests/restart_sweep.csv")
 
 
 def run(args, text):
@@ -153,11 +154,11 @@ def main():
                       % (L, klabel, R, mean, lo, hi, exact))
                 sys.stdout.flush()
 
-    with open("tests/restart_sweep.csv", "w") as f:
+    with open(OUT, "w") as f:
         f.write("len,k,R,mean,lo95,hi95,exact,n\n")
         for L, k, R, mean, lo, hi, exact, n in rows:
             f.write("%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%d\n" % (L, k, R, mean, lo, hi, exact, n))
-    print("\nwrote tests/restart_sweep.csv")
+    print("\nwrote %s" % OUT)
 
     # paired: at each R, small-k vs legacy full involution (k=-1)
     if -1 in KS:
