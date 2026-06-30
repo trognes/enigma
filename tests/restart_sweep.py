@@ -28,7 +28,6 @@ import sys
 BIN = "./enigma"
 CLANG = "english"
 MODEL = "q"
-PAIRS = 10
 
 CORPUS = ("THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEX"
           "OFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMO"
@@ -45,6 +44,7 @@ def env(name, default):
 
 
 TRIALS = int(env("TRIALS", "200"))
+PAIRS = int(env("PAIRS", "10"))
 SEED = int(env("SEED", "1"))
 KS = [int(x) for x in env("KS", "-1 0 1 2 3 4 8").split()]
 RS = [int(x) for x in env("RS", "1 2 4 8 16 32").split()]

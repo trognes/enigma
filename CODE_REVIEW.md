@@ -794,13 +794,46 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    (= the old behaviour); restarts 1..N-1 start from a perturbed board (per-key
    splitmix64, so `-T`-deterministic), best kept. The perturbation is either a full
    random involution (no `r` token) or a reset-to-seed plus `k` random plugs (the
-   `-S rk…` token), so a staged climb is no longer forced to tear down a
-   near-saturated board — the strength `k` and count `N` are independent knobs. The
+   `-S rk…` token), making the strength `k` and the count `N` independent knobs
+   (the sweep below settles where each should sit). The
    simplest defence against the local optima the single-start climb got stuck in —
    and the diagnosis said every miss was a *search* failure, so this was the first
-   lever pulled. Roughly doubles short-message exact-recovery (table below). *The
-   optimal `k` (small, ~0–4) and the `N` at which gains flatten, on L40/L70, are
-   being swept (`tests/restart_sweep.py`); verdict to follow.*
+   lever pulled. Roughly doubles short-message exact-recovery (table below).
+
+   **Restart-strength sweep — verdict (`tests/restart_sweep.py`, 200 trials, L40/L70,
+   10-pair board, mean %-correct; `tests/restart_sweep.png`).** Two questions: how
+   strong should each restart's random perturbation be (the `r` token's `k` plug
+   pairs), and how many restarts `N` before it flattens? Both answers were
+   surprising:
+
+   - **`N` (restart count) never plateaus in the tested range [1, 256].** Each
+     *doubling* of `N` adds roughly a constant ~8–11 %-correct at L70 (legacy:
+     17 % at R1 → 50 % at R32 → 82 % at R256; exact 7 % → 75 %), and L40 climbs
+     10 % → 24 % likewise. There is **no knee** — restarts are a near-log-linear
+     quality/compute trade (cost is linear in `N`), so "how many restarts" is purely
+     a budget decision for short messages, not a point of diminishing returns.
+   - **Perturbation strength: bigger is better; small `k` is a footgun.** Against
+     the full-random involution (the no-`r` default, mean ~7 pairs), a *small* kick
+     **caps the restart ceiling**: at L70/R32, `k=1` is −12 %-correct (paired
+     t = −4.4), `k=2` is −6.6 (t = −2.2); `k≈8` ties or marginally beats legacy and
+     `k=4` even slips behind it at very high `N` (L70/R256: −4.1). The plot shows
+     small-`k` curves saturating early while legacy/`k8` keep rising. `k=0` is a
+     flat no-op at every `N` (the determinism anchor).
+   - **It is *not* "match `k` to the true plug count."** A 3-pair confirmation
+     (`tests/restart_sweep_p3.csv`, 300 trials) was meant to show small `k` winning
+     when the board has few plugs — it did the opposite: even at 3 true pairs,
+     `k=8`/legacy beat small `k` (R32: `k1` −6.5 t = −5.9, `k2` −3.8, `k3` −3.2, all
+     legacy > `k`; `k8` a tie). So the mechanism is simply: **a strong random kick
+     diversifies the restart, and the IC→quad staged climb walks tear-down back down
+     cheaply, so under-diversification (small `k`) only lowers the ceiling.** The
+     user's "keep it to a few plugs so later stages need not tear down many" intuition
+     does not hold — the staged climb makes tear-down nearly free.
+
+   **Takeaway:** keep the full-random involution default (do **not** bake a small-`k`
+   default into the recipe); spend the budget on `N` (no plateau through 256). The
+   `r` token's practical value is `r0` (a deterministic no-restart control) and the
+   option to spell a strong fixed kick (`k≈8`); small `k` is a documented footgun.
+   Full data: `tests/restart_sweep{,_hiR,_p3}.csv`.
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start
    than identity.

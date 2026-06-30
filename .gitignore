@@ -3,6 +3,3 @@ cipher*.txt
 /enigma
 __pycache__/
 *.pyc
-
-# transient: high-R extension artifacts, committed explicitly when complete
-tests/restart_sweep_hiR.*

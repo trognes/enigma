@@ -141,9 +141,12 @@ any working directory.
   - **the `r` token** (at most one) sets the **per-restart random perturbation**:
     `rN` injects `N` random plug pairs from the seed each restart (`r0` = no-op, so
     restarts collapse — a useful control; a bare `r` = the legacy full random
-    involution). Small `N` (a few plugs) keeps later stages from having to tear
-    down a near-saturated board. With no `r` token the perturbation defaults to the
-    full random involution, so `-c -R N` (no `-S`) still does random restarts.
+    involution). With no `r` token the perturbation defaults to the full random
+    involution, so `-c -R N` (no `-S`) still does random restarts. **The sweep
+    (§9) found a *strong* kick is best: small `N` (1–4) caps the restart ceiling and
+    underperforms the full involution even on few-plug boards; `r0`/small `N` are
+    mainly controls, not a recipe.** The first-order lever is the restart count
+    `-R N`, which never plateaus through 256.
   Per-`machine` `scoring` field (never a global → race-free); deterministic; the
   `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
   was folded into the per-stage numbers — see `CODE_REVIEW.md` §9.)
