@@ -758,6 +758,20 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    rise-then-fall shape is consistent across L140/L190, so the *pattern* is solid;
    the exact best cap and whether to fold a default `-L` into the `-R 10 -S i`
    recipe should be confirmed at higher trials. Full data: `tests/cap_sweep.csv`.
+
+   **IC vs mono on very short texts.** A focused follow-up (caps 4–8 × {40,70,100}
+   × {IC, mono} × {R 1, R 10}, 500 trials, **mean %-correct**; plus a paired test,
+   N = 1000, same trials per model, `tests/cap_paired.py`, `tests/cap_short.csv`)
+   answered whether mono beats IC on the shortest messages. Verdict: **IC wins
+   wherever there is meaningful recovery.** mono is significantly better **only at
+   40 letters with no restarts** (+0.88 %-correct, 95 % CI [+0.12, +1.64]) — a real
+   but sub-1 % effect that disappears with restarts (L40/R10 a dead tie). At 70
+   letters IC is significantly *better*, not worse (R 1: −2.0 %, CI [−3.9, −0.2];
+   R 10: −6.0 %, CI [−8.9, −3.2]) — so the earlier "mono looks better at ≤70"
+   impression was an artifact of a noisy 100-trial *exact-match* read, and does not
+   survive a graded metric at 500–1000 trials. Likely cause: at 40 letters IC is
+   estimated from too few samples to be reliable, so monogram frequencies are
+   marginally more robust; by 70 letters IC's smoother surface wins again.
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost
