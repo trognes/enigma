@@ -715,7 +715,17 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    surface (distribution peakedness, no n-gram over-fitting), so it gives the
    cleanest early gradient. `tri→q` barely helps (trigram is nearly as rugged as
    quad), and stacking stages after IC (`ib`/`im`/`it`) adds nothing. A naive full
-   bigram pre-pass can over-fit an individual easy case; IC does not.
+   bigram pre-pass can over-fit an individual easy case; IC does not. At 200 trials
+   IC and `ib` are a statistical tie and **mono is clearly worse**, so plain IC is
+   the pick (simplest, no table, no language needed for the pre-pass).
+
+   *Capping the IC pre-pass at the first few plugs (tried via a move-budget knob)
+   only **hurts** — recovery rises monotonically with the cap, optimum = uncapped
+   (`-R 10 -S i`, 50 trials, L100/L140): cap 1 → 28/62 %, 3 → 42/84, 8 → 54/88,
+   uncapped → 60/92.* The Gillogly/Weierud "only the first few plugs from the
+   low-order model" rule is aimed at models that **over-fit** (bigram); IC does not
+   over-fit, so its fully-converged board is the best quad seed and truncating it
+   discards good plugs. The knob was prototyped and dropped (no win at any setting).
 2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
    plugboard-free scan (IC/unigram) over the whole key space shortlists the best
    few hundred keys; the expensive climb runs only on those. Attacks the real cost
