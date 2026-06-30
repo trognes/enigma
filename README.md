@@ -78,7 +78,7 @@ echo "GODDAG" | ./enigma -i -n -u N -w 123 -r AAA -g AAA
 
 # M4 (4-rotor naval): -u is the thin reflector b/c, and -w/-r/-g take FOUR
 # characters with the Greek wheel (B=Beta / G=Gamma) / ring / start first.
-echo "DERFUEHRER" | ./enigma -i -4 -u b -w B123 -r AAAA -g AAAA
+echo "WETTERBERICHT" | ./enigma -i -4 -u b -w B123 -r AAAA -g AAAA
 ```
 
 ## How it works
