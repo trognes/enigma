@@ -213,6 +213,12 @@ struct machine
      than whichever one lands past the big array paying for large offsets (which
      ARM in particular handles poorly). */
   unsigned char (* subst_array)[asize][asize][asize];
+
+  /* Diagnostic counter: number of plugboards scored (score_iter calls) by this
+     worker. Bumped once per whole-message score -- not per character -- so it is
+     out of the hot per-character loop, and placed last so it never pushes the hot
+     tables above to large struct offsets. Summed across workers for the final line. */
+  uint64_t plugboards_scored;
 };
 
 /* n-gram log-scores stored as float (half the memory of double, so the 457 KB
@@ -718,6 +724,7 @@ void showconfig(machine & m)
 double score_iter(machine & m, int iter)
 {
   (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
+  m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
 
@@ -1212,8 +1219,15 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
   if (opt_restarts <= 1)
     return best;
 
+  /* Keep the best restart's plaintext AND its plugboard together: each restart leaves
+     m.steckerbrett at its own converged board, so without saving/restoring the board
+     the machine would end up holding the LAST restart's plugboard while the returned
+     score and plaintext are the best restart's -- showconfig() would then print a
+     plugboard that does not match the winning decrypt (the reported bug). */
   char best_pt[maxlen + 1];
+  unsigned char best_steck[asize];
   memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+  memcpy(best_steck, m.steckerbrett, asize);
 
   uint64_t rng = key_index + 0x0123456789abcdefULL;
   for (int r = 1; r < opt_restarts; r++)
@@ -1225,9 +1239,11 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
         {
           best = s;
           memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+          memcpy(best_steck, m.steckerbrett, asize);
         }
     }
   memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+  memcpy(m.steckerbrett, best_steck, asize);   /* restore the best board to match */
   return best;
 }
 
@@ -1280,9 +1296,11 @@ struct best_result
    with the wheels fixed but ring/start wildcarded uses every thread -- the old
    wheel-order-only scheme left exactly that case single-threaded. */
 
-/* Memory accounting for the final diagnostic (set by bruteforce). */
+/* Accounting for the final diagnostic (set by bruteforce). */
 static size_t g_table_count = 0;
 static size_t g_table_bytes = 0;
+static size_t g_keys_analysed = 0;       /* rotor combinations examined */
+static uint64_t g_plugboards_scored = 0; /* total score_iter calls across workers */
 
 /* base pointer into the rotor-stack table block: the same type as
    machine::subst_array, so 'all + i*asize' is task i's [asize]^4 table */
@@ -1466,18 +1484,24 @@ struct keep_worse
 };
 
 /* Tier 1: rank a slice of the flat key space by a cheap IC climb; keep the
-   thread-local top-N, then merge into the shared candidate list. No printing. */
+   thread-local top-N, then merge into the shared candidate list. When show_progress
+   is set (stderr is a terminal) it also updates a live "\r" progress line: the shared
+   'progress' counter tracks keys ranked, and because each atomic add owns a disjoint
+   range of that counter, exactly one thread crosses each 1%-of-total boundary and
+   prints it -- so the line advances once per percent with no races or duplicates. */
 void filter_worker(machine & m,
                    const std::vector<wheel_task> & tasks,
                    const search_range & range, const int * rc, const int * gc,
                    subst_table all, size_t rsize, size_t gsize,
                    std::atomic<size_t> & next_key, size_t chunk, size_t topn,
-                   std::mutex & cand_mutex, std::vector<scored_key> & cand)
+                   std::mutex & cand_mutex, std::vector<scored_key> & cand,
+                   std::atomic<size_t> & progress, bool show_progress)
 {
   const size_t rg = rsize * gsize;
   const size_t total = tasks.size() * rg;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
+  const size_t step = (total >= 100) ? total / 100 : 1;   /* progress granularity */
 
   m.scoring = SCORE_IC;   /* the cheap, smooth-surface filter model */
   const int cap = filter_climb_cap;
@@ -1509,6 +1533,20 @@ void filter_worker(machine & m,
                   heap.pop();
                   heap.push(scored_key{s, idx});
                 }
+            }
+        }
+
+      if (show_progress)
+        {
+          size_t before = progress.fetch_add(end - start);
+          size_t after = before + (end - start);
+          /* print on each 1% boundary, and always on the final key so it reaches 100% */
+          if (((after / step) != (before / step)) || (after == total))
+            {
+              std::lock_guard<std::mutex> lock(cand_mutex);
+              fprintf(stderr, "\rPre-filter: ranking %3zu%% (%zu / %zu keys)",
+                      (after * 100) / total, after, total);
+              fflush(stderr);
             }
         }
     }
@@ -1782,9 +1820,11 @@ void bruteforce(char * result)
       std::vector<scored_key> cand;
       std::mutex cand_mutex;
       std::atomic<size_t> fnext{0};
+      std::atomic<size_t> fprogress{0};
+      bool show_progress = isatty(fileno(stderr)) != 0;   /* live line only on a TTY */
       if (nthreads == 1)
         filter_worker(*machines[0], tasks, range, rc, gc, all, rsize, gsize,
-                      fnext, chunk, topn, cand_mutex, cand);
+                      fnext, chunk, topn, cand_mutex, cand, fprogress, show_progress);
       else
         {
           std::vector<std::thread> pool;
@@ -1793,10 +1833,13 @@ void bruteforce(char * result)
             pool.emplace_back(filter_worker, std::ref(*machines[t]),
                               std::cref(tasks), std::cref(range), rc, gc, all,
                               rsize, gsize, std::ref(fnext), chunk, topn,
-                              std::ref(cand_mutex), std::ref(cand));
+                              std::ref(cand_mutex), std::ref(cand),
+                              std::ref(fprogress), show_progress);
           for (std::thread & th : pool)
             th.join();
         }
+      if (show_progress)
+        fprintf(stderr, "\n");   /* finish the live \r progress line */
 
       /* deterministic global top-N: highest score first, ties by lowest idx */
       std::sort(cand.begin(), cand.end(),
@@ -1854,6 +1897,13 @@ void bruteforce(char * result)
             th.join();
         }
     }
+
+  /* diagnostics: every rotor combination is analysed (brute force has no early
+     exit), and each worker counted the plugboards it scored -- sum them up */
+  g_keys_analysed = total_keys;
+  g_plugboards_scored = 0;
+  for (int t = 0; t < nthreads; t++)
+    g_plugboards_scored += machines[t]->plugboards_scored;
 
   for (int t = 0; t < nthreads; t++)
     delete machines[t];
@@ -1988,11 +2038,11 @@ void help(FILE * out)
   fprintf(out, "               E.g. -S r2i6q\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
-  fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
+  fprintf(out, "  -i           Use index of coincidence (IC) to score; needs no -l [default]\n");
   fprintf(out, "  -m           Use monogram statistics to determine plaintext score\n");
   fprintf(out, "  -b           Use bigram statistics to determine plaintext score\n");
   fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
-  fprintf(out, "  -q           Use quadgram statistics to determine plaintext score [default]\n");
+  fprintf(out, "  -q           Use quadgram statistics to determine plaintext score\n");
   fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
   fprintf(out, "  -F N[%%]      Key pre-filter: rank keys by a cheap IC climb, then run\n");
   fprintf(out, "               the full -c climb on only the top N keys, or top N%% of\n");
@@ -2113,7 +2163,7 @@ int main(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
-  opt_scoring = SCORE_QUAD;
+  opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
   opt_norenigma = 0;
   opt_m4 = 0;
   opt_threads = 1;
@@ -2373,7 +2423,12 @@ int main(int argc, char * * argv)
                   opt_greek_ringstellung == '.' ||
                   opt_greek_grundstellung == '.'));
   bool needs_scoring = has_wildcard || opt_hillclimb;
-  if (! needs_scoring)
+  /* A fully specified machine with no search still scores its single decrypt for the
+     diagnostic line. Honour the requested model when it can be satisfied -- an n-gram
+     model needs -l -- but fall back to IC (which needs no table) so a bare decrypt
+     needs no scoring options at all (the default model is quad, yet `enigma -u B -w
+     123 -r AAA -g AAA` must work with no -l). */
+  if (! needs_scoring && (opt_scoring != SCORE_IC) && ! opt_language)
     opt_scoring = SCORE_IC;
 
   /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no default;
@@ -2398,8 +2453,10 @@ int main(int argc, char * * argv)
 
   /* Load the n-gram tables scoring will use (none for IC), target first, so a
      missing or mistyped -l fails immediately (with the offending filename) before
-     we read and consume standard input. Skipped entirely when just enciphering. */
-  if (needs_scoring)
+     we read and consume standard input. Also loads when a fully specified decrypt
+     asked for an n-gram model (opt_scoring left non-IC above); skipped for a bare
+     decrypt (which fell back to IC and needs no table). */
+  if (needs_scoring || (opt_scoring != SCORE_IC))
     {
       bool table_loaded[5] = { false, false, false, false, false };
       load_table(opt_scoring);
@@ -2460,6 +2517,11 @@ int main(int argc, char * * argv)
       peak_mb = ru.ru_maxrss / 1024.0;
 #endif
     }
+  fprintf(stderr,
+          "Analysed %zu rotor combination%s, scored %llu plugboard%s\n",
+          g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
+          static_cast<unsigned long long>(g_plugboards_scored),
+          (g_plugboards_scored == 1) ? "" : "s");
   fprintf(stderr,
           "Finished in %.2f s using %d thread%s; "
           "precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",

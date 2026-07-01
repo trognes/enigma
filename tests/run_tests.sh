@@ -113,12 +113,39 @@ roundtrip "round-trip with no scoring flags" \
   "ATTACKATDAWNFROMTHENORTH" -u A -w 531 -r MNB -g VCX -s "AB CD"
 roundtrip "M4 round-trip with no scoring flags" \
   "WETTERBERICHT" -4 -u b -w B123 -r AAAA -g AAAA
-# But scoring IS required when the run actually scores: a wildcard search or a
-# plugboard hill-climb without -l (and not -i) must still be rejected.
+# The default scoring model is the index of coincidence, which needs no language, so
+# a wildcard search or a plugboard hill-climb with NO scoring flags now runs (scoring
+# by IC) rather than being rejected.
 printf 'ABCDE' | "$ENIGMA" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
-check "wildcard search without -l rejected (exit code)" "$?" "1"
+check "wildcard search with no scoring flags runs (default IC)" "$?" "0"
 printf 'ABCDE' | "$ENIGMA" -c -u B -w 123 -r AAA -g AAA >/dev/null 2>&1
-check "hill-climb without -l rejected (exit code)" "$?" "1"
+check "hill-climb with no scoring flags runs (default IC)" "$?" "0"
+# But an EXPLICIT n-gram model without -l is still rejected (also checked below).
+printf 'ABCDE' | "$ENIGMA" -q -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "wildcard search with -q but no -l rejected" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -c -u B -w 123 -r AAA -g AAA >/dev/null 2>&1
+check "hill-climb with -q but no -l rejected" "$?" "1"
+
+# A fully specified machine still scores its single decrypt for the diagnostic line,
+# and must honour the requested scoring model when its prerequisites are met (an
+# n-gram model needs -l) -- it used to always fall back to IC, ignoring -q/-m/etc.
+q_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$q_echo" in
+  *quadgrams*) check "fixed machine honours -q scoring model" "ok" "ok" ;;
+  *)           check "fixed machine honours -q scoring model" "$q_echo" "*quadgrams*" ;;
+esac
+m_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -m -l english -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$m_echo" in
+  *monograms*) check "fixed machine honours -m scoring model" "ok" "ok" ;;
+  *)           check "fixed machine honours -m scoring model" "$m_echo" "*monograms*" ;;
+esac
+# But a bare fixed decrypt (no scoring opts: default quad, no -l) still falls back to
+# IC so it needs no -l -- the fallback only kicks in when the n-gram model lacks -l.
+bare_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$bare_echo" in
+  *"index of coincidence"*) check "bare fixed decrypt falls back to IC (no -l needed)" "ok" "ok" ;;
+  *)                        check "bare fixed decrypt falls back to IC (no -l needed)" "$bare_echo" "*index of coincidence*" ;;
+esac
 
 echo "== Round-trip property tests =="
 
@@ -321,6 +348,17 @@ r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
 check "restarts: -R 8 result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 1)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 4)"
+# After random restarts the machine must hold the BEST restart's plugboard, not the
+# last one's -- showconfig() prints m.steckerbrett, so decrypting the ciphertext with
+# the displayed rotor + -s <plugboard> must reproduce the recovered plaintext. (It
+# used to leave the last restart's board, printing a plugboard that did not match.)
+pbv_ct=$(run "$r_pt" -i -u B -w 241 -r AAA -g QEW -s "AB CD EF GH IJ KL")
+pbv_rec=$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq)
+pbv_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq 2>&1 >/dev/null)
+pbv_pb=$(printf '%s\n' "$pbv_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | grep -oE '[A-Z][A-Z]' | tr '\n' ' ')
+check "restart climb: displayed plugboard matches the recovered plaintext" \
+  "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pbv_pb")" \
+  "$pbv_rec"
 # The no-r-token default kick is a fixed 8 pairs (CODE_REVIEW §9): a plain -R run
 # must equal an explicit -S r8 run.
 check "restarts: default kick == -S r8 (fixed 8 pairs)" \
@@ -416,6 +454,29 @@ printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -F 150% >/dev/null 2>
 check "pre-filter: -F over 100% rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 8% >/dev/null 2>&1
 check "pre-filter: -F N% without -c rejected (exit code)" "$?" "1"
+
+# The final diagnostic reports how many rotor combinations were analysed and how many
+# plugboards were scored. A pure scan (no -c) scores exactly one plugboard per key...
+d_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+d_scan=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AA. 2>&1 >/dev/null)
+case "$d_scan" in
+  *"Analysed 26 rotor combinations, scored 26 plugboards"*)
+    check "diagnostic: scan scores one plugboard per key" "ok" "ok" ;;
+  *) check "diagnostic: scan scores one plugboard per key" "$d_scan" \
+       "*Analysed 26 rotor combinations, scored 26 plugboards*" ;;
+esac
+# ...a fully specified decrypt is one combination, one plugboard (singular grammar)...
+d_one=$(printf '%s' "$d_ct" | "$ENIGMA" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$d_one" in
+  *"Analysed 1 rotor combination, scored 1 plugboard"*)
+    check "diagnostic: fixed decrypt is 1 combination, 1 plugboard" "ok" "ok" ;;
+  *) check "diagnostic: fixed decrypt is 1 combination, 1 plugboard" "$d_one" \
+       "*Analysed 1 rotor combination, scored 1 plugboard*" ;;
+esac
+# ...and the plugboard-scored count is the same regardless of thread count (same work).
+d_c1=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -T 1 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
+d_c4=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -T 4 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
+check "diagnostic: plugboard-scored count is -T-independent" "$d_c1" "$d_c4"
 
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
