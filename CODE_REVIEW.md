@@ -790,11 +790,92 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    survive a graded metric at 500–1000 trials. Likely cause: at 40 letters IC is
    estimated from too few samples to be reliable, so monogram frequencies are
    marginally more robust; by 70 letters IC's smoother surface wins again.
-2. **Pre-filter keys, climb only the top-N** (biggest *throughput* win) — a fast
-   plugboard-free scan (IC/unigram) over the whole key space shortlists the best
-   few hundred keys; the expensive climb runs only on those. Attacks the real cost
-   driver and fits the existing parallel architecture; climb internals unchanged.
-   Still open.
+2. **Pre-filter keys, climb only the top-N — ✅ IMPLEMENTED (`-F N`).** With `-c`
+   the full `-R`/`-S` climb is paid on *every* key, so the climb is ~all the
+   runtime; the pre-filter pays it only on the most promising keys. Two tiers, both
+   parallel and `-T`-deterministic:
+   - **Tier 1 (`filter_worker`)** ranks *every* key by a single **cheap IC climb**,
+     **capped at `filter_climb_cap = 5` plug pairs**, and keeps the global top-`N`
+     (a per-thread top-N min-heap with a deterministic tie-break — score desc, idx asc
+     — merged and re-sorted, so the kept set is independent of `-T`).
+   - **Tier 2 (`finish_worker`)** runs the full `-R`/`-S` climb on only those `N`
+     keys (the plugboard restarts from the configured seed, *not* warm-started from
+     tier 1 — second phase from scratch).
+
+   **`-F N` or `-F N%`.** `N` is an absolute count; `N%` keeps the top `N%` of the
+   *resolved* keyspace (resolved once `total_keys` is known, clamped to `[1, total]`).
+   The percentage form is the natural knob because recall tracks the *fraction* kept,
+   not the absolute count — `-F 300` is 44 % of 676 keys but only 1.7 % of 17 k, and
+   behaves completely differently. Absolute still bounds tier-2 *cost* directly (useful
+   on giant wildcards), so both forms are kept.
+
+   **Why the tier-1 climb is capped (measured, both-axes win).** Tier 1 dominates
+   `-F` runtime, and an *uncapped* IC climb is both slower (more passes/key) and a
+   *worse* discriminator: with 13 free plugs, wrong keys overfit IC and bury the true
+   key. Capping near the true plug count denies that overfit. Sweep (17 576-key
+   wildcard, L130, 10-pair, `-R 10 -S iq`, full crack recovers 23/24, so a miss = true
+   key dropped from the shortlist):
+
+   | tier-1 cap | recall@N=600 | time | recall@N=1200 | time |
+   |-----------:|-------------:|-----:|--------------:|-----:|
+   | 3          | 45.8 % | 3.3 s | 50.0 % | 5.6 s |
+   | **5**      | **54.2 %** | **4.0 s** | **58.3 %** | **6.2 s** |
+   | 13 (uncapped) | 37.5 % | 5.9 s | 41.7 % | 8.1 s |
+
+   `cap = 5` beats uncapped by **+16.7 pp recall and ~1.45× faster**; there is a real
+   optimum near the true plug count (cap 3 is faster but recalls less — too few plugs
+   and the true key's own structure can't emerge). The cap is a *bigger* lever than
+   `N` here (13→5 adds ~16 pp; 600→1200 adds ~4). Safety-checked: on easy regimes
+   (676 keys, 3–5 plugs, generous `N`) `cap = 5` matches uncapped at 30/30, so it costs
+   nothing where the filter was already reliable. It does **not** fully close the
+   large-keyspace recall gap (best ~55 %) — the remaining lever would be a stronger
+   tier-1 *model*, but chi-squared was measured and rejected for that (see below).
+
+   **Chi-squared as the tier-1 model — measured, REJECTED.** Hypothesis: a
+   language-specific statistic (chi-squared of the mono/bigram distribution vs the
+   language) would discriminate the rotor key better than the language-independent IC.
+   Benched as the tier-1 model (17 576 keys, L130, 10-pair, cap 5, N 600, 16 trials,
+   full crack 16/16):
+
+   | tier-1 model | recall | time |
+   |--------------|-------:|-----:|
+   | **IC**       | **68.8 %** | 4.7 s |
+   | χ²-monogram  | 12.5 % | 4.8 s |
+   | χ²-bigram    | 18.8 % | 12.4 s |
+
+   Both χ² variants are **far worse**. The reason is structural: tier 1 *climbs the
+   plugboard* under the filter model, and the plugboard is a letter *permutation*, so a
+   monogram objective is trivially gameable — on almost any wrong key the climb picks
+   plugs that relabel decoded letters to English-frequent ones, matching the profile
+   without the text being real. IC survives because its converged value reflects
+   structure the plugboard can't manufacture on wrong keys. χ²-bigram additionally has
+   a rugged climbing surface (produced gibberish even on an easy case) and a 676-cell
+   loop that makes it 2.7× slower. **IC stays the tier-1 model; χ² was not shipped**
+   (benchmark scripts kept ad-hoc, not in the tree).
+
+   **Why an IC *climb*, not a plugboard-free IC scan.** The original idea was a
+   plugboard-free IC/unigram scan, on the textbook premise that IC is plugboard-
+   invariant. It is **not, in practice**: a rotor-only decrypt under a full 10-pair
+   board is ~95 % scrambled (a position is right only if the letter *and* its rotor
+   image are both unplugged ≈ (6/26)² ≈ 5 %), so a raw plugboard-free IC scan has
+   **~0 % top-1 recall** at 10 plugs (`tests/prefilter_probe.py`). A cheap IC
+   *climb* — which partially recovers the stecker — restores discrimination
+   (~77.5 % top-1 at 10 plugs), so that is what tier 1 uses.
+
+   **Measured (`tests/prefilter_quality.py`, 676-key wildcard, L=190):** the pre-filter
+   recovers identically to the full crack at 3/5/8 plugs while running **~8×**
+   faster; the speedup grows with the keyspace (~15× at 17 k keys) and asymptotes
+   to ~20× (the IC-climb : full-recipe per-key cost ratio).
+
+   **Picking `N`.** `N` trades recall (true key kept) for throughput. Recall is high
+   when the keyspace is large and the message is not too short — a few-hundred-key
+   top-N over a real wildcard is robust. The footgun is a *small, low-discrimination*
+   keyspace: wildcarding only the fast rotor gives weakly-separated IC scores, so a
+   tight `N` (e.g. top-10 of 26) can drop the true key even though the full crack
+   finds it. Rule of thumb: keep a generous fraction (≥ ~7–15 %) of a genuine
+   wildcard, and lean larger on very short messages — which is exactly what the `N%`
+   form expresses directly. Even so, at a large keyspace with a 10-pair board recall
+   tops out around half (see the cap table); `-F` is a throughput tool, not lossless.
 3. **Random restarts — ✅ IMPLEMENTED (`-R N`).** Restart 0 is the configured seed
    (= the old behaviour); restarts 1..N-1 start from a perturbed board (per-key
    splitmix64, so `-T`-deterministic), best kept. Each restart resets to the seed and
@@ -935,13 +1016,13 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 | restarts (`-R 10`)          | 15 |  40 |  70 |  90 |
 | **restarts + IC stage** (`-R 10 -S iq`) | **57** | **90** | **92** | **100** |
 
-**Bottom line:** **(3)** random restarts and **(1)** the staged schedule are both
-**shipped** and **stack**, and the best combination found is **`-R 10 -S iq`**
-(restarts + an IC pre-pass), which lifts L140 from 16 % (plain) → 90 %. Still open:
-**(2)** a key pre-filter (the big *throughput* win, so more restarts are
-affordable per surviving key), and the heavier metaheuristics (SA/tabu/GA, items
-5–8) as fallbacks for the hardest cases. The default (`-R 1`, no `-S`) is the
-unchanged single-start climb.
+**Bottom line:** **(3)** random restarts, **(1)** the staged schedule, and **(2)**
+the key pre-filter are all **shipped** and **stack**: the best quality combination
+is **`-R 10 -S iq`** (restarts + an IC pre-pass), which lifts L140 from 16 %
+(plain) → 90 %, and **`-F N`** then buys back most of the cost (~8–20×) so more
+restarts are affordable per surviving key. Still open: the heavier metaheuristics
+(SA/tabu/GA, items 5–8) as fallbacks for the hardest cases. The default (`-R 1`,
+no `-S`, no `-F`) is the unchanged single-start climb on every key.
 
 ### Scoring data and smoothing (the other lever — and what it can/can't help)
 
@@ -1013,3 +1094,67 @@ If domain-matched German is ever pursued, the findings from looking into it:
   authentic archives to nudge phrasing. A synthesis pipeline (general corpus →
   `X`-substituted/number-spelled A–Z text → n-gram tables) is the form to build if
   real-traffic cracking is ever tackled.
+
+### Alternative scoring / fitness functions (beyond IC / mono / bi / tri / quad)
+
+The five shipped scorers (`-i` index of coincidence, `-m/-b/-t/-q` log-weighted
+mono/bi/tri/quad sums — the latter four are essentially the **Sinkov statistic**)
+are not the only options. The useful framing is **per tier**, because they are
+bound by different things:
+
+- the **plugboard climb** is *search-bound* (the SPLIT metric shows 0 % scoring
+  failures down to 40 chars), so a better scorer barely moves it;
+- the **`-F` tier-1 key ranking** and the not-yet-built **full-crack tier** are
+  *discrimination* problems — there a different scorer can genuinely help.
+
+Candidates, grouped, with where each would pay off:
+
+1. **Log-likelihood with an unseen-gram floor ("quadgram fitness").** Replace the
+   `log10(count+1)` (unseen → neutral 0) with `log10(count/total)` + a floor
+   (`log10(0.01/total)`) for unseen grams, so gibberish carrying impossible grams
+   is *penalised*. Implemented + A/B'd once: **neutral on the plugboard tier**
+   (search-bound), but the right shape for the **full-crack tier** (wrong rotor keys
+   emit many unseen quadgrams). See "Scoring data and smoothing" above. Parked until
+   that tier exists.
+2. **Interpolated / back-off n-gram model** (blend orders, or Kneser-Ney). On
+   *short* messages the quadgram surface is sparse and flat; falling back to lower
+   orders where quadgrams are unseen gives a smoother, better-guided surface. The
+   most principled n-gram improvement for the short-text regime this tool targets.
+   Unbuilt.
+3. **Chi-squared of the letter (or bigram) frequency distribution vs the language's
+   expected frequencies — measured as the `-F` tier-1 model, REJECTED.** Cheap,
+   language-specific, a *different statistic* from the Sinkov log-sum; the hypothesis
+   was that it would out-discriminate the language-independent IC. It does the
+   opposite: benched as the tier-1 ranking model (17 576 keys, L130, 10-pair, cap 5,
+   N 600), **IC 68.8 % recall vs χ²-mono 12.5 % vs χ²-bigram 18.8 %** (bigram also
+   2.7× slower). The tier-1 climb *optimises the plugboard* under the filter model,
+   and the plugboard is a letter permutation, so a monogram objective is trivially
+   *gameable* — the climb relabels decoded letters to look English-frequent on almost
+   any wrong key. χ²-bigram additionally has a rugged climbing surface (gibberish on
+   easy cases). See §9 item 2 for the full table. Note the identity subtlety: this
+   uses the *identity-aware* χ² (each observed letter compared to its own expected
+   frequency); a *sorted/shape-only* χ² would be identity-blind like IC and no better.
+   **IC stays the tier-1 model.**
+4. **Crib / known-plaintext objective.** Score by match to a suspected word/phrase.
+   This is *how Enigma was historically broken*; the no-self-encipherment property
+   tightly constrains where a crib can sit, a very strong signal. `-p` exists for
+   *comparison* but not as a *search objective*. The orthogonal high-value addition
+   whenever a crib is plausible. Unbuilt.
+5. **Compression / PPM perplexity** (shorter compressed length ≈ more language-like;
+   PPM ≈ an adaptive high-order n-gram). Strong but slow, and not obviously better
+   than quadgrams for the cost. **Dictionary / word-hit** scoring is hard without
+   word boundaries (telegraphic traffic has none). A **char-level neural LM**
+   perplexity is the high end — overkill and against the single-file/no-deps ethos.
+   Named to dismiss.
+6. **5-grams** — 26⁵ ≈ 12 M cells, too sparse for short text. Rejected (also above).
+   *(Mutual IC / kappa align two ciphertexts at "depth" — not single-candidate
+   scoring, so not applicable here.)*
+
+**Net:** for the plugboard tier, no scoring change is expected to help (it is
+search-bound). The tier-1 `-F` ranking model was the one place a swap looked
+promising, but **chi-squared was measured and lost to IC** (item 3) — the tier-1
+recall lever turned out to be the *plug cap* (item 2), not the model. That leaves
+the floor model and an interpolated model for the **full-crack tier** (judgeable
+only once that evaluation tier is built), and **crib scoring** as the orthogonal
+high-value feature. All slot in behind the existing `-i/-m/-b/-t/-q` switch and are
+measurable with `make crackquality`.

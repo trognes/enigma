@@ -159,6 +159,23 @@ any working directory.
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the
   default model)
 - `-p file` compare the recovered plaintext against a known plaintext file
+- `-F N` / `-F N%` key pre-filter (needs `-c`; `0` = off): a two-tier search — tier 1
+  ranks *every* key by a single **cheap IC climb** and keeps the top `N` (or top `N%`
+  of the resolved keyspace); tier 2 runs the full `-R`/`-S` climb on only those. The
+  big *throughput* win (~8–20× over climbing every key), so more restarts are
+  affordable per surviving key. Both tiers are parallel and `-T`-deterministic
+  (per-thread top-N min-heap, deterministic tie-break). Details worth knowing:
+  - **Tier 1 is a *climb*, not a plugboard-free scan.** A raw IC *scan* fails
+    (rotor-only decrypt is ~95% scrambled under a full board, ~0% top-1 recall); an IC
+    *climb* partially recovers the stecker and discriminates.
+  - **Tier 1 climb is capped at `filter_climb_cap = 5` plug pairs.** Capping both
+    speeds tier 1 up and *improves* recall — an uncapped climb lets wrong keys overfit
+    IC and bury the true key. Measured both-axes win (+~16pp recall, ~1.4× faster;
+    harmless on easy keyspaces). `cap≈5` (near the true plug count) is the optimum.
+  - **`N%` scales with the keyspace** (recall tracks the *fraction* kept, not the
+    absolute count); absolute `N` bounds tier-2 cost. Both forms are supported.
+  - **Chi-squared was benched as the tier-1 model and lost to IC** (χ² is gameable by
+    the plugboard permutation) — IC stays. See `CODE_REVIEW.md` §9 item 2.
 - `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`)
 - `-T N` worker threads for the search (default 1, max 256)
 
@@ -350,8 +367,11 @@ under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`, and clean unde
 ThreadSanitizer. Scaling is ~3× on 4 cores (`make bench SCALE=1`). **M4 (4-rotor
 naval) mode** is now implemented (`-4`; static Greek wheel folded into an
 effective reflector, so the hot path is untouched — see "M4 mode" above and
-`CODE_REVIEW.md` §5). The remaining open direction is **cracking quality on short
-messages**: the `make crackquality` harness shows every miss is a *search*
-failure (the plugboard hill-climb sticking in local optima), so the next lever is
-the search — random restarts / better seeding / annealing (`CODE_REVIEW.md` §9).
+`CODE_REVIEW.md` §5). On **cracking quality for short messages** the
+`make crackquality` harness shows every miss is a *search* failure (the plugboard
+hill-climb sticking in local optima); the search levers shipped so far are random
+restarts (`-R N`), the staged climb (`-S`), and the **key pre-filter** (`-F N`, a
+cheap-IC-climb tier that shortlists keys so the full climb runs only on the top
+`N` — ~8–20× throughput, see `CODE_REVIEW.md` §9 item 2). Remaining open: the
+heavier metaheuristics (simulated annealing / tabu / GA) for the hardest cases.
 Read `CODE_REVIEW.md` before changing the search or scoring code.
