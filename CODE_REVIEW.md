@@ -948,7 +948,11 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    `toggle-connect` move set, acceptance-ratio temperature auto-calibration, IC
    pre-pass + greedy quench, per-key deterministic RNG (`-T`-independent). Full rescore
    per move was fast enough (L ≤ ~150) that the planned incremental delta-scorer was not
-   needed. **The tuning sweep decided the ship:** the design's guessed `χ0 = 0.8` lost
+   needed — and when the delta-scorer was later prototyped (assert-gated, on the greedy
+   candidate loop) it measured **~2× slower** for quad on short L and was rejected, so
+   full rescore is now the *measured* choice, not just the simple one
+   (`SIMULATED_ANNEALING.md` §6.2). **The tuning sweep decided the ship:** the design's
+   guessed `χ0 = 0.8` lost
    ~2× (a too-hot random walk), but tuning `χ0` down to **0.12** made SA match-or-beat
    greedy `-R -S iq` at equal climb time (`SIMULATED_ANNEALING.md` §15). It is a peer of
    comparable strength, not a strict improvement — worth having as a second
