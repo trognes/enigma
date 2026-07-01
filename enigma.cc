@@ -1251,10 +1251,24 @@ static inline void random_pair(uint64_t * rng, int & a, int & b)
     b++;
 }
 
+/* Number of plug pairs currently set on the involution board. */
+static inline int plug_count(const machine & m)
+{
+  int n = 0;
+  for (int i = 0; i < asize; i++)
+    if (m.steckerbrett[i] > i)
+      n++;
+  return n;
+}
+
 /* The single SA move: toggle the plug between a and b on the involution steckerbrett.
    If a-b is already a plug, remove it; otherwise force a-b, ejecting each endpoint's
-   old partner to self-steckered. Reaches any involution from any other (ergodic). */
-static inline void apply_toggle(machine & m, int a, int b)
+   old partner to self-steckered. Reaches any involution from any other (ergodic).
+   When cap < 13 (a known plug count, from the -S target-stage cap), a *connect* that
+   would raise the pair count above cap is a no-op -- a connect grows the count only
+   when both endpoints are currently self-steckered; removes and re-pairings never do,
+   so every board with <= cap pairs stays reachable. */
+static inline void apply_toggle(machine & m, int a, int b, int cap)
 {
   if (m.steckerbrett[a] == b)                 /* already paired -> remove */
     {
@@ -1263,6 +1277,9 @@ static inline void apply_toggle(machine & m, int a, int b)
     }
   else                                        /* connect, ejecting old partners */
     {
+      bool grows = (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b);
+      if (grows && (plug_count(m) >= cap))
+        return;                               /* would exceed the cap -> no-op */
       int ap = m.steckerbrett[a];
       int bp = m.steckerbrett[b];
       m.steckerbrett[ap] = static_cast<unsigned char>(ap);
@@ -1280,6 +1297,15 @@ static inline void apply_toggle(machine & m, int a, int b)
    All randomness comes from the per-key *rng stream, so it is -T-independent. */
 static double anneal_once(machine & m, uint64_t * rng)
 {
+  /* The whole trajectory honours the -S target-stage plug cap (uncapped = 13 by
+     default). When you know the true plug count is below the maximum (e.g. -S q8 for
+     an 8-plug board), capping keeps SA from adding spurious plugs that a short, noisy
+     quad score would otherwise reward -- a measured win on short messages at modest
+     budgets, neutral once the message/budget is large enough to recover the true board
+     unaided. Set below the true count it clips and hurts, so it is a user-supplied
+     prior (SIMULATED_ANNEALING.md §16). */
+  int cap = opt_stages[opt_nstages - 1].cap;
+
   /* IC pre-pass: greedy-climb under the index of coincidence to seed a decent board
      before annealing the target model. The quad surface is nearly flat with only a
      plug or two set, so annealing it from an empty board wanders; IC is far smoother
@@ -1288,7 +1314,7 @@ static double anneal_once(machine & m, uint64_t * rng)
   if (target_model != SCORE_IC)
     {
       m.scoring = SCORE_IC;
-      hillclimb(m, pairs_uncapped);
+      hillclimb(m, cap);
       m.scoring = target_model;
     }
 
@@ -1308,7 +1334,7 @@ static double anneal_once(machine & m, uint64_t * rng)
       int a, b;
       random_pair(rng, a, b);
       memcpy(saved, m.steckerbrett, asize);
-      apply_toggle(m, a, b);
+      apply_toggle(m, a, b, cap);
       double d = score_iter(m, 0) - cur;
       memcpy(m.steckerbrett, saved, asize);   /* sampling only -- always restore */
       if (d < 0.0)
@@ -1337,7 +1363,7 @@ static double anneal_once(machine & m, uint64_t * rng)
           int a, b;
           random_pair(rng, a, b);
           memcpy(saved, m.steckerbrett, asize);
-          apply_toggle(m, a, b);
+          apply_toggle(m, a, b, cap);
           double d = score_iter(m, 0) - cur;
           if ((d >= 0.0) || (uniform01(rng) < exp(d / T)))
             {
@@ -1356,7 +1382,7 @@ static double anneal_once(machine & m, uint64_t * rng)
     }
 
   memcpy(m.steckerbrett, best_board, asize);
-  hillclimb(m, pairs_uncapped);   /* greedy quench under the target model */
+  hillclimb(m, cap);   /* greedy quench under the target model, same cap */
   return score_iter(m, 0);
 }
 
@@ -2193,7 +2219,8 @@ void help(FILE * out)
   fprintf(out, "               rN = per-restart random plugs (N pairs, default 8).\n");
   fprintf(out, "               E.g. -S r2i6q\n");
   fprintf(out, "  -A integer   Recover the plugboard by simulated annealing instead of the\n");
-  fprintf(out, "               greedy climb; integer = move budget (needs -c) [off]\n");
+  fprintf(out, "               greedy climb; integer = move budget (needs -c) [off].\n");
+  fprintf(out, "               Honours the -S target cap: -A N -S qK caps it at K plugs\n");
   fprintf(out, "  -e integer   Random seed for the restart perturbation (also $ENIGMA_SEED);\n");
   fprintf(out, "               default is a fresh random seed each run, echoed for repeating\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
