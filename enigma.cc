@@ -2398,7 +2398,12 @@ int main(int argc, char * * argv)
                   opt_greek_ringstellung == '.' ||
                   opt_greek_grundstellung == '.'));
   bool needs_scoring = has_wildcard || opt_hillclimb;
-  if (! needs_scoring)
+  /* A fully specified machine with no search still scores its single decrypt for the
+     diagnostic line. Honour the requested model when it can be satisfied -- an n-gram
+     model needs -l -- but fall back to IC (which needs no table) so a bare decrypt
+     needs no scoring options at all (the default model is quad, yet `enigma -u B -w
+     123 -r AAA -g AAA` must work with no -l). */
+  if (! needs_scoring && (opt_scoring != SCORE_IC) && ! opt_language)
     opt_scoring = SCORE_IC;
 
   /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no default;
@@ -2423,8 +2428,10 @@ int main(int argc, char * * argv)
 
   /* Load the n-gram tables scoring will use (none for IC), target first, so a
      missing or mistyped -l fails immediately (with the offending filename) before
-     we read and consume standard input. Skipped entirely when just enciphering. */
-  if (needs_scoring)
+     we read and consume standard input. Also loads when a fully specified decrypt
+     asked for an n-gram model (opt_scoring left non-IC above); skipped for a bare
+     decrypt (which fell back to IC and needs no table). */
+  if (needs_scoring || (opt_scoring != SCORE_IC))
     {
       bool table_loaded[5] = { false, false, false, false, false };
       load_table(opt_scoring);

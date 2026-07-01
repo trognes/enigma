@@ -120,6 +120,27 @@ check "wildcard search without -l rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -c -u B -w 123 -r AAA -g AAA >/dev/null 2>&1
 check "hill-climb without -l rejected (exit code)" "$?" "1"
 
+# A fully specified machine still scores its single decrypt for the diagnostic line,
+# and must honour the requested scoring model when its prerequisites are met (an
+# n-gram model needs -l) -- it used to always fall back to IC, ignoring -q/-m/etc.
+q_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$q_echo" in
+  *quadgrams*) check "fixed machine honours -q scoring model" "ok" "ok" ;;
+  *)           check "fixed machine honours -q scoring model" "$q_echo" "*quadgrams*" ;;
+esac
+m_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -m -l english -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$m_echo" in
+  *monograms*) check "fixed machine honours -m scoring model" "ok" "ok" ;;
+  *)           check "fixed machine honours -m scoring model" "$m_echo" "*monograms*" ;;
+esac
+# But a bare fixed decrypt (no scoring opts: default quad, no -l) still falls back to
+# IC so it needs no -l -- the fallback only kicks in when the n-gram model lacks -l.
+bare_echo=$(printf 'BDZGOWCXLT' | "$ENIGMA" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$bare_echo" in
+  *"index of coincidence"*) check "bare fixed decrypt falls back to IC (no -l needed)" "ok" "ok" ;;
+  *)                        check "bare fixed decrypt falls back to IC (no -l needed)" "$bare_echo" "*index of coincidence*" ;;
+esac
+
 echo "== Round-trip property tests =="
 
 roundtrip "reciprocity: plain settings" \

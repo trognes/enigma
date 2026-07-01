@@ -265,7 +265,11 @@ Increase `-R` for harder messages.
   or a plugboard hill-climb (`-c`). Those require `-l` (or `-i`). Pure
   encryption/decryption — a fully specified machine with no `-c` — needs no scoring
   options at all. (The default ring is `AA.`, so give an explicit `-r` to encrypt;
-  otherwise the wildcard makes it a search and `-l`/`-i` is required again.)
+  otherwise the wildcard makes it a search and `-l`/`-i` is required again.) A fully
+  specified run still prints a single-candidate score on stderr, and it honours the
+  model you ask for: `-q -l english` scores that one decrypt with quadgrams; with no
+  scoring options (or an n-gram model but no `-l`) it falls back to the index of
+  coincidence, which needs no language.
 
 ## n-gram data files
 
