@@ -127,9 +127,16 @@ any working directory.
 - `-s AB...` fixed plugboard pairs
 - `-c` hill-climb the plugboard
 - `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
-  the rest start from a perturbed board, best kept). Per-key RNG seeded from the
-  flat key index, so the result stays independent of `-T`. ~`N`× the `-c` cost.
-  The restart count is separate from the schedule string (`-S`).
+  the rest start from a perturbed board, best kept). Per-key RNG seeded from
+  `opt_seed + flat key index`, so the result stays independent of `-T`. ~`N`× the
+  `-c` cost. The restart count is separate from the schedule string (`-S`).
+- `-e N` random seed for the restart perturbation. Resolved as `-e` > `$ENIGMA_SEED`
+  > a fresh `std::random_device` draw, so **by default every run explores different
+  restarts**; the chosen seed is echoed by `show_settings()` (when restarts are
+  active) so a random run can be reproduced with `-e`. `opt_seed == 0` reproduces the
+  historical pre-seed behaviour exactly (the RNG mixes `opt_seed + key_index`), which
+  is why `tests/` and the `crackquality`/`bench` harnesses pin `ENIGMA_SEED=0` for
+  deterministic, cross-ref-comparable runs.
 - `-S <schedule>` staged plugboard climb — a string of `<letter><optional number>`
   tokens parsed by `parse_schedule()` into `opt_stages[]`:
   - **model tokens** `i`/`m`/`b`/`t`/`q` are climb stages run in order; the number

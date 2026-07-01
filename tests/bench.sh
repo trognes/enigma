@@ -46,6 +46,10 @@ set -u
 
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
 
+# Pin the restart RNG so the hill-climb timing is stable and the A/B is fair (the
+# default is a fresh random seed each run). Seed 0 matches pre-seed BASE refs too.
+export ENIGMA_SEED=0
+
 HEAD_BIN=./enigma
 if [ ! -x "$HEAD_BIN" ]; then
   echo "error: $HEAD_BIN not built; run 'make' first" >&2
