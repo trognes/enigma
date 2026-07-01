@@ -1212,8 +1212,15 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
   if (opt_restarts <= 1)
     return best;
 
+  /* Keep the best restart's plaintext AND its plugboard together: each restart leaves
+     m.steckerbrett at its own converged board, so without saving/restoring the board
+     the machine would end up holding the LAST restart's plugboard while the returned
+     score and plaintext are the best restart's -- showconfig() would then print a
+     plugboard that does not match the winning decrypt (the reported bug). */
   char best_pt[maxlen + 1];
+  unsigned char best_steck[asize];
   memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+  memcpy(best_steck, m.steckerbrett, asize);
 
   uint64_t rng = key_index + 0x0123456789abcdefULL;
   for (int r = 1; r < opt_restarts; r++)
@@ -1225,9 +1232,11 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
         {
           best = s;
           memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+          memcpy(best_steck, m.steckerbrett, asize);
         }
     }
   memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+  memcpy(m.steckerbrett, best_steck, asize);   /* restore the best board to match */
   return best;
 }
 

@@ -348,6 +348,17 @@ r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
 check "restarts: -R 8 result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 1)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -T 4)"
+# After random restarts the machine must hold the BEST restart's plugboard, not the
+# last one's -- showconfig() prints m.steckerbrett, so decrypting the ciphertext with
+# the displayed rotor + -s <plugboard> must reproduce the recovered plaintext. (It
+# used to leave the last restart's board, printing a plugboard that did not match.)
+pbv_ct=$(run "$r_pt" -i -u B -w 241 -r AAA -g QEW -s "AB CD EF GH IJ KL")
+pbv_rec=$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq)
+pbv_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq 2>&1 >/dev/null)
+pbv_pb=$(printf '%s\n' "$pbv_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | grep -oE '[A-Z][A-Z]' | tr '\n' ' ')
+check "restart climb: displayed plugboard matches the recovered plaintext" \
+  "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pbv_pb")" \
+  "$pbv_rec"
 # The no-r-token default kick is a fixed 8 pairs (CODE_REVIEW §9): a plain -R run
 # must equal an explicit -S r8 run.
 check "restarts: default kick == -S r8 (fixed 8 pairs)" \
