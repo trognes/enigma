@@ -27,6 +27,12 @@ set -u
 
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
 
+# Pin the restart RNG seed so the determinism/equivalence checks are stable (the
+# binary's default is a fresh random seed each run). Seed 0 also reproduces the
+# historical pre-seed behaviour exactly, so the recovery KATs are unchanged. A few
+# checks below pass an explicit -e to test the seed option itself.
+export ENIGMA_SEED=0
+
 ENIGMA=./enigma
 if [ ! -x "$ENIGMA" ]; then
   echo "error: $ENIGMA not built; run 'make' first" >&2
@@ -378,6 +384,24 @@ printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -R 200000 >/dev/null 2>&
 check "restart count past old 100000 cap accepted (exit code)" "$?" "0"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 1000000001 >/dev/null 2>&1
 check "restart count over 1000000000 rejected (exit code)" "$?" "1"
+
+# Random seed (-e / $ENIGMA_SEED): the restart perturbation is seeded from it mixed
+# with the key index, so a fixed seed is reproducible and stays -T-independent, an
+# explicit -e overrides $ENIGMA_SEED, and the seed is echoed so a run can be repeated.
+check "seed: -e 777 is reproducible and -T-independent" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -e 777 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -e 777 -T 4)"
+# Different explicit seeds drive different restart perturbations, so the shown seed
+# tracks -e; and -e overrides the pinned $ENIGMA_SEED=0.
+seed_echo=$(printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -e 424242 2>&1 >/dev/null)
+case "$seed_echo" in
+  *"seed 424242"*) check "seed: -e is echoed (overrides ENIGMA_SEED)" "ok" "ok" ;;
+  *)               check "seed: -e is echoed (overrides ENIGMA_SEED)" "$seed_echo" "*seed 424242*" ;;
+esac
+# A run with the harness's pinned ENIGMA_SEED=0 equals an explicit -e 0 (same seed).
+check "seed: pinned ENIGMA_SEED=0 equals -e 0" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 8 -e 0)"
 
 # Staged plugboard climb (-S schedule: a bigram pre-pass, then the quad target as
 # the last token). It must stay -T-independent, and recover a small plugboard on a

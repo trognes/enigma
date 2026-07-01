@@ -18,6 +18,7 @@
 #include <mutex>
 #include <new>
 #include <queue>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -159,6 +160,12 @@ static double opt_prefilter_frac; /* -F N% form: fraction of the resolved keyspa
 static const int filter_climb_cap = 5;
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
+/* Random seed for the plugboard restart perturbation. Mixed with the flat key index
+   per key, so the restart RNG stays a pure function of (opt_seed, key) -- reproducible
+   and independent of -T. Resolved as: -e <seed> > $ENIGMA_SEED > a fresh random draw.
+   opt_seed == 0 reproduces the historical (pre-seed) behaviour exactly. */
+static uint64_t opt_seed;
+static bool opt_seed_set;
 
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
@@ -1229,7 +1236,7 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
   memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
   memcpy(best_steck, m.steckerbrett, asize);
 
-  uint64_t rng = key_index + 0x0123456789abcdefULL;
+  uint64_t rng = opt_seed + key_index + 0x0123456789abcdefULL;
   for (int r = 1; r < opt_restarts; r++)
     {
       init_steckerbrett(m, opt_steckerbrett);   /* reset to the fixed seed */
@@ -2036,6 +2043,8 @@ void help(FILE * out)
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
   fprintf(out, "               rN = per-restart random plugs (N pairs, default 8).\n");
   fprintf(out, "               E.g. -S r2i6q\n");
+  fprintf(out, "  -e integer   Random seed for the restart perturbation (also $ENIGMA_SEED);\n");
+  fprintf(out, "               default is a fresh random seed each run, echoed for repeating\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
   fprintf(out, "  -i           Use index of coincidence (IC) to score; needs no -l [default]\n");
@@ -2084,20 +2093,25 @@ void show_settings()
 
   fprintf(stderr, "Scoring:    %s", scoring_name[opt_scoring]);
   if (opt_scoring == 0)
-    fprintf(stderr, " (language-independent)");
+    fprintf(stderr, " (language-independent)\n");
   else
-    fprintf(stderr, " (language: %s; n-gram files in %s)",
+    fprintf(stderr, " (language: %s; n-gram files in %s)\n",
             opt_language, opt_datadir);
-  fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
+
+  fprintf(stderr, "Hillclimb:  %s", opt_hillclimb ? "yes" : "no");
   if (opt_hillclimb && (opt_restarts > 1))
-    fprintf(stderr, " (%d restarts, %d-pair kick)", opt_restarts, opt_perturb);
+    fprintf(stderr, " (%d restarts, %d-pair kick, seed %llu)",
+            opt_restarts, opt_perturb, static_cast<unsigned long long>(opt_seed));
   if (opt_hillclimb && opt_staged)
     fprintf(stderr, " (staged: %s)", opt_staged);
+  fprintf(stderr, "\n");
+
   if (opt_prefilter_frac > 0.0)
-    fprintf(stderr, "; pre-filter: top %g%% of keys", opt_prefilter_frac * 100.0);
+    fprintf(stderr, "Pre-filter: top %g%% of keys\n", opt_prefilter_frac * 100.0);
   else if (opt_prefilter > 0)
-    fprintf(stderr, "; pre-filter: top %d keys", opt_prefilter);
-  fprintf(stderr, "; threads: %d\n", opt_threads);
+    fprintf(stderr, "Pre-filter: top %d keys\n", opt_prefilter);
+
+  fprintf(stderr, "Threads:    %d\n", opt_threads);
 
   if (opt_m4)
     {
@@ -2169,11 +2183,13 @@ int main(int argc, char * * argv)
   opt_threads = 1;
   opt_prefilter = 0;
   opt_prefilter_frac = 0.0;
+  opt_seed = 0;
+  opt_seed_set = false;
 
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2229,6 +2245,10 @@ int main(int argc, char * * argv)
           break;
         case 'R':
           opt_restarts = atoi(optarg);
+          break;
+        case 'e':
+          opt_seed = strtoull(optarg, nullptr, 10);
+          opt_seed_set = true;
           break;
         case 'F':
           {
@@ -2396,6 +2416,22 @@ int main(int argc, char * * argv)
 
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
+
+  /* Resolve the restart RNG seed: an explicit -e wins; otherwise $ENIGMA_SEED (handy
+     for reproducible tests/benchmarks without a flag); otherwise a fresh random draw,
+     so by default every run explores different restarts. The chosen seed is echoed by
+     show_settings() when restarts are active, so a random run can be reproduced. */
+  if (! opt_seed_set)
+    {
+      const char * seed_env = getenv("ENIGMA_SEED");
+      if (seed_env && *seed_env)
+        opt_seed = strtoull(seed_env, nullptr, 10);
+      else
+        {
+          std::random_device rd;
+          opt_seed = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+        }
+    }
 
   /* The key pre-filter ranks every key by a cheap plugboard climb and runs the full
      climb only on the top -F keys, so it is only meaningful with -c. -F takes either
