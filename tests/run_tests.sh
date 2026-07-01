@@ -455,6 +455,29 @@ check "pre-filter: -F over 100% rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 8% >/dev/null 2>&1
 check "pre-filter: -F N% without -c rejected (exit code)" "$?" "1"
 
+# The final diagnostic reports how many rotor combinations were analysed and how many
+# plugboards were scored. A pure scan (no -c) scores exactly one plugboard per key...
+d_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+d_scan=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AA. 2>&1 >/dev/null)
+case "$d_scan" in
+  *"Analysed 26 rotor combinations, scored 26 plugboards"*)
+    check "diagnostic: scan scores one plugboard per key" "ok" "ok" ;;
+  *) check "diagnostic: scan scores one plugboard per key" "$d_scan" \
+       "*Analysed 26 rotor combinations, scored 26 plugboards*" ;;
+esac
+# ...a fully specified decrypt is one combination, one plugboard (singular grammar)...
+d_one=$(printf '%s' "$d_ct" | "$ENIGMA" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+case "$d_one" in
+  *"Analysed 1 rotor combination, scored 1 plugboard"*)
+    check "diagnostic: fixed decrypt is 1 combination, 1 plugboard" "ok" "ok" ;;
+  *) check "diagnostic: fixed decrypt is 1 combination, 1 plugboard" "$d_one" \
+       "*Analysed 1 rotor combination, scored 1 plugboard*" ;;
+esac
+# ...and the plugboard-scored count is the same regardless of thread count (same work).
+d_c1=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -T 1 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
+d_c4=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -T 4 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
+check "diagnostic: plugboard-scored count is -T-independent" "$d_c1" "$d_c4"
+
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
 hout=$("$ENIGMA" -h 2>/dev/null); hcode=$?

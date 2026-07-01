@@ -261,8 +261,9 @@ Increase `-R` for harder messages.
   stripped).
 - **Output** is the single best-scoring plaintext, on stdout.
 - **Diagnostics** go to stderr: the resolved configuration is echoed at the
-  start, the running best is shown during the search, and a final line reports
-  wall-clock time, thread count, the precomputed-table memory and peak memory.
+  start, the running best is shown during the search, and two final lines report
+  the number of rotor combinations analysed and plugboards scored, then wall-clock
+  time, thread count, the precomputed-table memory and peak memory.
   With `-F`, the pre-filter's ranking phase shows a live progress line (percentage
   of keys ranked) when stderr is a terminal.
 - A scoring model is needed only when the run actually scores — a wildcard search

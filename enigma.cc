@@ -213,6 +213,12 @@ struct machine
      than whichever one lands past the big array paying for large offsets (which
      ARM in particular handles poorly). */
   unsigned char (* subst_array)[asize][asize][asize];
+
+  /* Diagnostic counter: number of plugboards scored (score_iter calls) by this
+     worker. Bumped once per whole-message score -- not per character -- so it is
+     out of the hot per-character loop, and placed last so it never pushes the hot
+     tables above to large struct offsets. Summed across workers for the final line. */
+  uint64_t plugboards_scored;
 };
 
 /* n-gram log-scores stored as float (half the memory of double, so the 457 KB
@@ -718,6 +724,7 @@ void showconfig(machine & m)
 double score_iter(machine & m, int iter)
 {
   (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
+  m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
 
@@ -1289,9 +1296,11 @@ struct best_result
    with the wheels fixed but ring/start wildcarded uses every thread -- the old
    wheel-order-only scheme left exactly that case single-threaded. */
 
-/* Memory accounting for the final diagnostic (set by bruteforce). */
+/* Accounting for the final diagnostic (set by bruteforce). */
 static size_t g_table_count = 0;
 static size_t g_table_bytes = 0;
+static size_t g_keys_analysed = 0;       /* rotor combinations examined */
+static uint64_t g_plugboards_scored = 0; /* total score_iter calls across workers */
 
 /* base pointer into the rotor-stack table block: the same type as
    machine::subst_array, so 'all + i*asize' is task i's [asize]^4 table */
@@ -1888,6 +1897,13 @@ void bruteforce(char * result)
             th.join();
         }
     }
+
+  /* diagnostics: every rotor combination is analysed (brute force has no early
+     exit), and each worker counted the plugboards it scored -- sum them up */
+  g_keys_analysed = total_keys;
+  g_plugboards_scored = 0;
+  for (int t = 0; t < nthreads; t++)
+    g_plugboards_scored += machines[t]->plugboards_scored;
 
   for (int t = 0; t < nthreads; t++)
     delete machines[t];
@@ -2501,6 +2517,11 @@ int main(int argc, char * * argv)
       peak_mb = ru.ru_maxrss / 1024.0;
 #endif
     }
+  fprintf(stderr,
+          "Analysed %zu rotor combination%s, scored %llu plugboard%s\n",
+          g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
+          static_cast<unsigned long long>(g_plugboards_scored),
+          (g_plugboards_scored == 1) ? "" : "s");
   fprintf(stderr,
           "Finished in %.2f s using %d thread%s; "
           "precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",

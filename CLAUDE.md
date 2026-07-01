@@ -240,7 +240,10 @@ A single pass through `main()`:
      local-optima escape gated to fire only at convergence (~zero cost). See
      `CODE_REVIEW.md` §9 item 7.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
-   final stderr diagnostic reports wall-clock time, thread count, the number/size
+   final stderr diagnostic reports the number of rotor combinations analysed
+   (`= total_keys`, brute force has no early exit) and plugboards scored (total
+   `score_iter` calls, summed from a per-`machine` counter so the hot path stays
+   lock-free; `-T`-independent), then wall-clock time, thread count, the number/size
    of precomputed rotor tables, and peak RSS (via `getrusage`).
 
 ### Core machine model
