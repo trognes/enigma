@@ -941,15 +941,18 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start
    than identity.
-5. **Simulated annealing — detailed design drafted (`SIMULATED_ANNEALING.md`).**
+5. **Simulated annealing (`-A`) — IMPLEMENTED (`SIMULATED_ANNEALING.md`).**
    Accept worsening moves with probability `exp(Δscore/T)`, cooling `T` over a single
    trajectory, to escape the local optima that the SPLIT metric shows are *the* miss
-   mode. More robust but needs a cooling schedule, per-problem temperature
-   calibration, and more evaluations; best as a fallback, not the default. A full
-   plan — state space, involution move set, acceptance-ratio temperature
-   auto-calibration, incremental delta-scoring, determinism, CLI, and a phased
-   roadmap gated on a compute-normalised A/B vs `-R 10 -S iq` — lives in
-   `SIMULATED_ANNEALING.md`. Not yet built.
+   mode. Shipped as `-A N` (N = move budget, SA's `-R`), needs `-c`; involution
+   `toggle-connect` move set, acceptance-ratio temperature auto-calibration, IC
+   pre-pass + greedy quench, per-key deterministic RNG (`-T`-independent). Full rescore
+   per move was fast enough (L ≤ ~150) that the planned incremental delta-scorer was not
+   needed. **The tuning sweep decided the ship:** the design's guessed `χ0 = 0.8` lost
+   ~2× (a too-hot random walk), but tuning `χ0` down to **0.12** made SA match-or-beat
+   greedy `-R -S iq` at equal climb time (`SIMULATED_ANNEALING.md` §15). It is a peer of
+   comparable strength, not a strict improvement — worth having as a second
+   metaheuristic. Reheating and chain-length sweeps did not help and were dropped.
 6. **Tabu search** — short list of recently reversed moves to avoid cycling and
    cross plateaus; modest deterministic robustness gain.
 7. **Richer move set — ✅ "remove a plug" IMPLEMENTED.** The single "force `a`–`b`"
@@ -1032,10 +1035,12 @@ the key pre-filter are all **shipped** and **stack**: the best quality combinati
 is **`-R 10 -S iq`** (restarts + an IC pre-pass), which lifts L140 from 16 %
 (plain) → 90 %, and **`-F N`** (now with a capped tier-1 climb and an `N%` form)
 then buys back most of the cost (~8–20×) so more restarts are affordable per
-surviving key. Still open: the heavier metaheuristics (SA/tabu/GA, items 5–8) as
-fallbacks for the hardest cases — **simulated annealing has a detailed design in
-`SIMULATED_ANNEALING.md`** and is the next candidate to build and A/B. The default
-(`-R 1`, no `-S`, no `-F`) is the unchanged single-start climb on every key.
+surviving key. **(5)** simulated annealing (`-A`) is now **shipped** too — a peer of
+the greedy restart climb at equal compute (`SIMULATED_ANNEALING.md` §15), an
+alternative metaheuristic rather than a strict improvement. Still open: the other
+heavier metaheuristics (tabu/GA, items 6–8) as fallbacks for the hardest cases. The
+default (`-R 1`, no `-S`, no `-F`, no `-A`) is the unchanged single-start climb on
+every key.
 
 ### Scoring data and smoothing (the other lever — and what it can/can't help)
 

@@ -47,6 +47,9 @@ jobs:
           for s in -m -b -t -q; do
             printf 'BDZGOWCXLT' | ./enigma $s -u B -w 123 -r AAA -g AAA -l english >/dev/null
           done
+          # Simulated-annealing plugboard climb (-A): its own RNG/toggle/quench path.
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u B -w 123 -r AAA -g AAA -c -A 5000 >/dev/null
 
   # ThreadSanitizer targets DATA RACES in the threaded search only, so it runs a
   # small, high-concurrency workload rather than the whole suite. The single-
@@ -80,6 +83,12 @@ jobs:
           # staged IC->quad climb on top of the same parallel key space.
           printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
             | ./enigma -q -l english -u . -w 12. -x 4 -r AAA -g .AA -c -R 3 -S r2iq -T 8 >/dev/null
+      - name: Threaded simulated-annealing climb is race-free (-T 8)
+        run: |
+          # -A path: per-key SA RNG stream + toggle moves + greedy quench across the
+          # same parallel key space; must stay race-free and -T-deterministic.
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u . -w 12. -x 4 -r AAA -g .AA -c -A 8000 -T 8 >/dev/null
 
   # Valgrind adds detection of *uninitialised* memory use that ASan misses.
   valgrind:

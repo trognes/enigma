@@ -148,14 +148,17 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | `-c` | Hill-climb the plugboard for each candidate key |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
+| `-A N` | Recover the plugboard by simulated annealing (move budget `N`) instead of the greedy climb (needs `-c`; `0` = off) `[0]` |
 | `-F N` / `-F N%` | Key pre-filter: full climb only the top `N` keys, or top `N%` of the keyspace (needs `-c`; `0` = off) `[0]` |
 | `-e N` | Random seed for the restart perturbation (also `$ENIGMA_SEED`); default is a fresh random seed each run |
 
 The plugboard climb gets stuck in local optima on short messages, so `-R N`
 restarts it `N` times from perturbed boards and keeps the best, and `-S` runs the
-climb in stages. When you are also brute-forcing rotor settings, `-F N` shortlists
-the most promising keys with a cheap pass so the expensive climb runs only on
-those. See **Cracking strategy** below.
+climb in stages. `-A N` is an alternative recovery method that anneals the plugboard
+(accepting some worsening moves early to escape local optima, cooling to a greedy
+finish); at equal compute it is a peer of `-R … -S iq`. When you are also
+brute-forcing rotor settings, `-F N` shortlists the most promising keys with a cheap
+pass so the expensive climb runs only on those. See **Cracking strategy** below.
 
 The restarts are seeded from a **fresh random seed each run** (`/dev/urandom` via
 `std::random_device`), so repeated runs explore different perturbations. The seed is
@@ -193,6 +196,8 @@ Usage: enigma [OPTIONS]
                Models i/m/b/t/q (number caps plug pairs; last = target),
                rN = per-restart random plugs (N pairs, default 8).
                E.g. -S r2i6q
+  -A integer   Recover the plugboard by simulated annealing instead of the
+               greedy climb; integer = move budget (needs -c) [off]
   -e integer   Random seed for the restart perturbation (also $ENIGMA_SEED);
                default is a fresh random seed each run, echoed for repeating
   -l language  Scoring language (english, german, danish, french); required
