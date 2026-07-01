@@ -143,6 +143,14 @@ static const int default_perturb = 8;   /* no-r-token kick: best in the §9 swee
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
+static double opt_prefilter_frac; /* -F N% form: fraction of the resolved keyspace to
+                             keep (0 = not used; when > 0 it overrides opt_prefilter) */
+/* Plug-pair cap for the tier-1 IC filter climb. Capping the climb both speeds tier 1
+   up (fewer passes per key) and improves rotor-key discrimination: an uncapped climb
+   lets wrong keys overfit IC with surplus plugs and bury the true key, so a cap near
+   the true plug count ranks it better. ~5 is the measured optimum (both-axes win vs
+   uncapped; harmless on easy keyspaces) -- see CODE_REVIEW.md §9 item 2. */
+static const int filter_climb_cap = 5;
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 
@@ -1431,6 +1439,7 @@ void filter_worker(machine & m,
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
 
   m.scoring = SCORE_IC;   /* the cheap, smooth-surface filter model */
+  const int cap = filter_climb_cap;
 
   std::priority_queue<scored_key, std::vector<scored_key>, keep_worse> heap;
   size_t cur_wo = static_cast<size_t>(-1);
@@ -1447,7 +1456,7 @@ void filter_worker(machine & m,
         {
           key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                          rc12, gc12, cur_wo, rg6);
-          double s = hillclimb(m, pairs_uncapped);   /* single IC climb */
+          double s = hillclimb(m, cap);   /* single capped IC climb */
 
           if (heap.size() < topn)
             heap.push(scored_key{s, idx});
@@ -1716,10 +1725,16 @@ void bruteforce(char * result)
   if (chunk < 1)
     chunk = 1;
 
-  if (opt_prefilter > 0)
+  if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
     {
-      /* Tier 1: rank every key by a cheap IC climb, keep the top -F. */
-      size_t topn = static_cast<size_t>(opt_prefilter);
+      /* Tier 1: rank every key by a cheap IC climb, keep the top -F. The -F N% form
+         resolves to a fraction of the (now known) keyspace; the absolute form is used
+         as given. Either way keep at least 1 key and at most the whole keyspace. */
+      size_t topn = (opt_prefilter_frac > 0.0)
+        ? static_cast<size_t>(ceil(opt_prefilter_frac * static_cast<double>(total_keys)))
+        : static_cast<size_t>(opt_prefilter);
+      if (topn < 1)
+        topn = 1;
       if (topn > total_keys)
         topn = total_keys;
 
@@ -1936,8 +1951,9 @@ void help(FILE * out)
   fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
   fprintf(out, "  -q           Use quadgram statistics to determine plaintext score [default]\n");
   fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
-  fprintf(out, "  -F integer   Key pre-filter: rank keys by a cheap IC climb, then run\n");
-  fprintf(out, "               the full -c climb on only the top N keys (needs -c) [off]\n");
+  fprintf(out, "  -F N[%%]      Key pre-filter: rank keys by a cheap IC climb, then run\n");
+  fprintf(out, "               the full -c climb on only the top N keys, or top N%% of\n");
+  fprintf(out, "               the keyspace (needs -c) [off]\n");
   fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]\n");
   fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
   fprintf(out, "\n");
@@ -1984,7 +2000,9 @@ void show_settings()
     fprintf(stderr, " (%d restarts, %d-pair kick)", opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged)
     fprintf(stderr, " (staged: %s)", opt_staged);
-  if (opt_prefilter > 0)
+  if (opt_prefilter_frac > 0.0)
+    fprintf(stderr, "; pre-filter: top %g%% of keys", opt_prefilter_frac * 100.0);
+  else if (opt_prefilter > 0)
     fprintf(stderr, "; pre-filter: top %d keys", opt_prefilter);
   fprintf(stderr, "; threads: %d\n", opt_threads);
 
@@ -2057,6 +2075,7 @@ int main(int argc, char * * argv)
   opt_m4 = 0;
   opt_threads = 1;
   opt_prefilter = 0;
+  opt_prefilter_frac = 0.0;
 
   /* get arguments */
 
@@ -2119,7 +2138,15 @@ int main(int argc, char * * argv)
           opt_restarts = atoi(optarg);
           break;
         case 'F':
-          opt_prefilter = atoi(optarg);
+          {
+            /* -F N keeps the top N keys; -F N% keeps the top N% of the resolved
+               keyspace (atof stops at the '%'). The fraction, if given, wins. */
+            size_t flen = strlen(optarg);
+            if ((flen > 0) && (optarg[flen - 1] == '%'))
+              opt_prefilter_frac = atof(optarg) / 100.0;
+            else
+              opt_prefilter = atoi(optarg);
+          }
           break;
         case 'l':
           opt_language = optarg;
@@ -2278,10 +2305,14 @@ int main(int argc, char * * argv)
     fatal("Illegal thread count (must be 1 to 256)");
 
   /* The key pre-filter ranks every key by a cheap plugboard climb and runs the full
-     climb only on the top -F keys, so it is only meaningful with -c. */
+     climb only on the top -F keys, so it is only meaningful with -c. -F takes either
+     an absolute count (opt_prefilter) or a percentage of the resolved keyspace
+     (opt_prefilter_frac, which overrides). */
   if (opt_prefilter < 0)
     fatal("Illegal pre-filter count (-F must be >= 1)");
-  if ((opt_prefilter > 0) && (! opt_hillclimb))
+  if ((opt_prefilter_frac < 0.0) || (opt_prefilter_frac > 1.0))
+    fatal("Illegal pre-filter percentage (-F N% must be 0 < N <= 100)");
+  if (((opt_prefilter > 0) || (opt_prefilter_frac > 0.0)) && (! opt_hillclimb))
     fatal("The key pre-filter (-F) needs the plugboard hill-climb (-c)");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the

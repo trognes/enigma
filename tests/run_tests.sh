@@ -399,6 +399,24 @@ check "pre-filter: -F 0 is off (matches no -F)" \
   "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 0)" \
   "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq)"
 
+# -F N% keeps the top N% of the resolved keyspace instead of an absolute count. On
+# 676 keys, -F 100% keeps every key, so it must equal a plain run with no -F; a
+# generous percentage must still recover like the full crack and stay -T-independent.
+check "pre-filter: -F 100% keeps all keys (matches no -F)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 100%)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq)"
+check "pre-filter: -F 15% recovers plaintext like the full crack" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 15%)" \
+  "$f_pt"
+check "pre-filter: -F 15% result is -T-independent" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 15% -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g A.. -c -R 4 -S iq -F 15% -T 4)"
+# -F percentage is validated: over 100% and (like the count form) without -c reject.
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -F 150% >/dev/null 2>&1
+check "pre-filter: -F over 100% rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 8% >/dev/null 2>&1
+check "pre-filter: -F N% without -c rejected (exit code)" "$?" "1"
+
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
 # arguments is a usage error (help to stderr, exit 1).
 hout=$("$ENIGMA" -h 2>/dev/null); hcode=$?
