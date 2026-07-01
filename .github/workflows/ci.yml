@@ -22,13 +22,20 @@ jobs:
       - name: Test
         run: make test CXX=${{ matrix.cxx }} EXTRA_CXXFLAGS=-Werror
 
-  # AddressSanitizer + UndefinedBehaviorSanitizer over the whole suite.
+  # AddressSanitizer + UndefinedBehaviorSanitizer over the suite. TEST_QUICK=1 shrinks
+  # the end-to-end cracking checks (one language, a 26-key wildcard instead of the full
+  # 26^3, so no 676-key x restart hill-climbs): ASan slows every key-scan ~10x, and the
+  # full matrix took ~8 min for zero extra *memory-safety* coverage (recovery and
+  # determinism are already verified by the fast g++/clang jobs). This still exercises
+  # every code path -- all scorers, scan, hill-climb, restarts, staging, pre-filter, M4,
+  # Norway, input handling -- in well under a minute.
   sanitizers:
     name: sanitizers (asan+ubsan)
     runs-on: ubuntu-latest
     env:
       EXTRA_CXXFLAGS: "-fsanitize=address,undefined -fno-sanitize-recover=all -g"
       UBSAN_OPTIONS: print_stacktrace=1
+      TEST_QUICK: "1"
     steps:
       - uses: actions/checkout@v5
       - name: Run suite under sanitizers
