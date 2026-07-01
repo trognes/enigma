@@ -23,6 +23,8 @@
 
 /* uwwwrrrggg = 3*8*7*6*26*26*26*26*26*26 = 311 387 102 208 */
 
+/* --- Enigma wiring tables (reflectors, rotors, notches) ----------------- */
+
 static const char * reflector_string[] =
   {
     "EJMZALYXVBWFCRQUONTSPIKHGD",    // A
@@ -70,6 +72,8 @@ static const char * notch_string[] =
     "",
     ""
   };
+
+/* --- machine constants, command-line options, and global state ---------- */
 
 static const int maxlen = 1024;   /* maximum ciphertext length (letters) */
 static const int asize = 26;
@@ -165,6 +169,8 @@ static unsigned char rotor_rev[rotor_count][asize];
 static unsigned char notch[rotor_count][asize];
 static unsigned char reflector[reflector_count][asize];
 
+/* --- per-search state: struct machine ----------------------------------- */
+
 /* Per-search mutable machine state. Grouping it into one object (rather than
    file-scope globals) makes the search reentrant: a future worker thread can own
    its own machine while the read-only wiring tables, n-gram statistics and
@@ -215,6 +221,8 @@ static float monograms[asize];
 static float bigrams[asize][asize];
 static float trigrams[asize][asize][asize];
 static float quadgrams[asize][asize][asize][asize];
+
+/* --- diagnostics and n-gram table loading ------------------------------- */
 
 void fatal(const char * message)
 {
@@ -294,6 +302,8 @@ void ngrams_read(int n, float * table, const char * suffix)
     table[i] = static_cast<float>(log10(table[i]));
 }
 
+
+/* --- machine model: setup, rotor stepping, precompute ------------------- */
 
 void init()
 {
@@ -523,6 +533,8 @@ inline void decode(machine & m)
     pt[i] = num2char(decode_at(steck, rows, ct, i));
   pt[textlength] = 0;
 }
+
+/* --- plaintext scoring models ------------------------------------------- */
 
 /* The four n-gram scorers fuse decoding into the score loop: each character is
    decoded once, on the fly, into a small sliding window of the last n decoded
@@ -758,6 +770,8 @@ void ciphertext_letterdist()
   fprintf(stderr, "\n");
 #endif
 }
+
+/* --- plugboard hill-climb (steckerbrett) -------------------------------- */
 
 /* Last-resort "re-pair" move: take two existing plugs {a-x},{b-y} to the OTHER
    pairing of their four letters ({a-b,x-y} or {a-y,x-b}), keeping the plug count. A
@@ -1823,6 +1837,8 @@ void bruteforce(char * result)
 
   memcpy(result, best.plaintext, textlength + 1);
 }
+
+/* --- input, output, help, and CLI --------------------------------------- */
 
 void readciphertext()
 {
