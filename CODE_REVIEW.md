@@ -1225,10 +1225,43 @@ search does, but several *planned* items do:
    n-gram terms are correlated (overlapping windows), so estimate σ empirically by
    sampling random decrypts once per run (cheap, O(a few·L)).
 
+   **Disadvantages (why its niche is narrower than it looks):**
+   - **Estimating the null is the soft underbelly.** Unlike (1)/(2) — closed-form
+     transforms of the existing score — z needs `μ_rand, σ_rand` from a sampled null
+     distribution: an extra pass, sampling noise in the constant, and a determinism
+     obligation (the sampling must use the per-key `splitmix64` stream to keep `-T`
+     independence).
+   - **"What is random?" is ambiguous** (random letters vs random plugboard on the true
+     key vs random rotor key) and each choice shifts the scale; z is only as meaningful
+     as that null-model choice.
+   - **The null isn't Gaussian at short L**, so `z = 3 ⇒ p ≈ 0.001` fails exactly in the
+     short-message regime we care about (n-gram log-sums are skewed/heavy-tailed with
+     few terms). A z-threshold tuned at one length/model won't transfer cleanly — which
+     undercuts the *absolute-threshold / stopping* use that was z's best justification.
+   - **σ can be small or noisily estimated**, blowing z up; needs a σ floor or robust
+     (median/MAD) estimators.
+   - **Largely redundant for SA.** Acceptance uses `Δscore/T`; z-scaling gives
+     `Δz = Δscore/σ_rand`, i.e. `T` in σ-units — which the acceptance-ratio calibration
+     already does, and better (it samples the actual *move-delta* distribution). Also
+     the μ-subtraction cancels in any difference, so mean-centering adds nothing to
+     ranking or SA — it is purely absolute-level interpretability.
+   - **Wrong tool for blending.** Combining models wants additive *log-likelihoods*
+     (cross-entropy, scheme 2); z-scores are standardized deviations, not log-probs, so
+     summing them across models is ad hoc.
+   - **May under-resolve near-optimal candidates**, since the differences among good
+     plugboards on the true key sit far in the tail of the random null (harmless for
+     ranking, weak if z were used as a fine-grained guidance signal).
+   Net: reach for z **only** when the specific need is a unified, human-readable
+   "signal strength" axis across heterogeneous scorers; for blending prefer
+   cross-entropy, for SA prefer the empirical calibration, and don't trust its tail as
+   a true p-value.
+
 **Recommendation.** Do **not** implement normalization as a standalone "improvement" —
 it will not move recovery. Implement it only as the enabling step for whichever
-downstream feature needs it: **z-score (σ)** when the goal is comparability / absolute
-thresholds / a unified SA-or-stop criterion (handles IC *and* the n-grams uniformly);
+downstream feature needs it: **z-score (σ)** when the goal is cross-model /
+cross-length *comparability and interpretability* (a unified "signal strength" axis;
+handles IC *and* the n-grams uniformly — but see its disadvantages: shaky as an
+absolute p-value at short L, and redundant for SA);
 **cross-entropy** (floor model) when the goal is blending or a full-crack LM. That
 keeps it measurable — the payoff shows up in the *feature*, not in the normalization.
 Two invariants worth banking if it is ever built: (a) a test asserting the normalised
