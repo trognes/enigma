@@ -86,7 +86,9 @@ static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 static const int norway_reflector_index = 3;
 static const int norway_rotor_base = 8;
 
-/* A score lower than any achievable plaintext score (all models score >= 0). */
+/* A score lower than any achievable plaintext score. IC scores in [0, ~0.08]; the
+   n-gram models now score a per-symbol log10-probability (cross-entropy), which is
+   <= 0 but bounded well above -1e30 by the unseen-gram floor. */
 static const double score_min = -1e30;
 
 /* Plaintext scoring models; values match the scoring_name[] order and the
@@ -245,10 +247,13 @@ inline char num2char(int x)
    'table' is the flat backing store of the corresponding global array
    (monograms / bigrams / trigrams / quadgrams). Those arrays are contiguous and
    row-major, so the n letters of a record map to the single index
-   ((a*26 + b)*26 + ...) into 'table' of size 26^n. Each entry is seeded with 1
-   (Laplace smoothing, so unseen n-grams score log10(1) = 0) and finally stored
-   as log10(count + 1) for additive scoring. Parsing stops at end of file or the
-   first malformed record. */
+   ((a*26 + b)*26 + ...) into 'table' of size 26^n. Each entry is stored as the
+   log10 probability log10(count / total), i.e. a per-gram log-likelihood, so that
+   the additive scorers sum a log-probability and the per-symbol average
+   (score_iter) is a cross-entropy (dits/char). Unseen n-grams are floored at
+   log10(floor_count / total) with floor_count < 1 (the community-standard 0.01),
+   so gibberish carrying impossible grams is *penalised* rather than ignored.
+   Parsing stops at end of file or the first malformed record. */
 void ngrams_read(int n, float * table, const char * suffix)
 {
   int size = 1;
@@ -256,7 +261,7 @@ void ngrams_read(int n, float * table, const char * suffix)
     size *= asize;
 
   for (int i = 0; i < size; i++)
-    table[i] = 1.0f;
+    table[i] = 0.0f;   /* unseen: count 0 until floored below */
 
   char filename[1024];
   int len = snprintf(filename, sizeof(filename), "%s/%s_%s.txt",
@@ -272,6 +277,7 @@ void ngrams_read(int n, float * table, const char * suffix)
       exit(1);
     }
 
+  double total = 0.0;   /* sum of all counts, in double (can exceed int range) */
   while (1)
     {
       int index = 0;
@@ -291,15 +297,24 @@ void ngrams_read(int n, float * table, const char * suffix)
       if (! ok || (fscanf(f, " %d", & count) != 1))
         break;
 
-      table[index] = static_cast<float>(count + 1);
+      table[index] = static_cast<float>(count);
+      total += count;
     }
 
   fclose(f);
 
-  /* compute the log in double and store as float (one rounding, ~7 sig. digits;
-     the score sum is still accumulated in double by the scorers) */
+  /* Store log10(count / total), flooring unseen grams at log10(floor_count/total)
+     so they carry a penalty rather than a neutral 0. log in double, one rounding
+     into float (~7 sig. digits); the scorers still accumulate in double. */
+  const double floor_count = 0.01;   /* community-standard unseen-gram floor */
+  if (total <= 0.0)
+    total = 1.0;                      /* empty/degenerate table: avoid div-by-zero */
+  const double log_total = log10(total);
   for (int i = 0; i < size; i++)
-    table[i] = static_cast<float>(log10(table[i]));
+    {
+      double c = table[i];
+      table[i] = static_cast<float>((c > 0.0 ? log10(c) : log10(floor_count)) - log_total);
+    }
 }
 
 
@@ -704,32 +719,44 @@ double score_iter(machine & m, int iter)
 {
   (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   double score = 0;
+  int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
 
   switch(m.scoring)
     {
     case SCORE_IC:
-      score = ic_score_decode(m);
+      score = ic_score_decode(m);   /* already a normalised ratio; left as-is */
       break;
 
     case SCORE_MONO:
       score = monogram_score_decode(m);
+      nterms = textlength;
       break;
 
     case SCORE_BI:
       score = bigram_score_decode(m);
+      nterms = textlength - 1;
       break;
 
     case SCORE_TRI:
       score = trigram_score_decode(m);
+      nterms = textlength - 2;
       break;
 
     case SCORE_QUAD:
       score = quadgram_score_decode(m);
+      nterms = textlength - 3;
       break;
 
     default:
       fatal("Illegal scoring type");
     }
+
+  /* Per-symbol average turns the summed log-probability into a cross-entropy
+     (dits/char): length-independent and comparable across models. It is a constant
+     factor within a run (nterms is fixed), so it does not change which key/plugboard
+     ranks highest -- only the scale of the reported score. */
+  if (nterms > 0)
+    score /= nterms;
 
   return score;
 }

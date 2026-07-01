@@ -1042,24 +1042,26 @@ fallbacks for the hardest cases — **simulated annealing has a detailed design 
 The n-gram tables come from the Practical Cryptography site. Two ways the *scoring
 side* could in principle be improved, distinct from the search items above:
 
-- **Better smoothing (model, not data) — tried, measured NEUTRAL.** Counts are
-  stored as `log10(count + 1)`, so an *unseen* n-gram scores 0 (neutral). The
-  community-standard "quadgram fitness" instead uses `log10(count/total)` with a
-  small floor for unseen n-grams (`log10(0.01/total)`), which *penalises* gibberish
-  carrying many unseen quadgrams rather than ignoring it. Because all candidates
-  share the table, the `+1`-vs-`/total` difference is ~a constant offset; the real
-  change is the unseen-n-gram floor. This was **implemented and A/B'd** against the
-  current scheme (`make crackquality BASE=dev`, identical seeded problems,
-  english/quad, 10 pairs): **statistically neutral** — 80-trial aggregate
-  exact-recovery 36.0 % (floor) vs 35.2 % (current), within noise, lengths swinging
-  both ways; the scorers and hot path are untouched so there is no runtime cost.
-  `SPLIT=1` explains it: scoring failures stay **0 %** at every length under *both*
-  schemes (the true plugboard already scores highest), so the plugboard tier is
-  entirely search-bound and a better scoring *shape* cannot move it. **Dropped**
-  for now (no measured win, same bar that rejected optimisation B). Its plausible
-  payoff is the not-yet-built *full-crack* tier (rotor-key discrimination, where
-  wrong keys generate many unseen quadgrams and the floor would bite) — revisit and
-  re-run this exact A/B once that tier exists.
+- **Better smoothing (model, not data) — ✅ ADOPTED as the default (the floor
+  model, now cross-entropy).** Counts *used* to be stored as `log10(count + 1)`, so
+  an *unseen* n-gram scored 0 (neutral). The default now stores `log10(count/total)`
+  with unseen grams floored at `log10(0.01/total)` (the community-standard "quadgram
+  fitness"), which *penalises* gibberish carrying many unseen grams rather than
+  ignoring it — and `score_iter` then averages per symbol, so the score is a
+  per-character cross-entropy (see the normalization subsection below, scheme 2). It
+  was first **A/B'd and measured statistically neutral** on the plugboard tier
+  (80-trial aggregate exact-recovery 36.0 % floor vs 35.2 % old, within noise;
+  `SPLIT=1` shows scoring failures stay **0 %** under both, i.e. the tier is
+  search-bound so a better scoring *shape* cannot move it there), and re-confirmed
+  neutral before shipping (40-trial × 7-length `make crackquality BASE=dev`:
+  aggregate 27.5 % vs 26.4 % exact, 34.6 % vs 33.4 % mean, lengths swinging both
+  ways; g++/clang `-Werror`, ASan/UBSan/TSan clean, `make bench` within threshold —
+  the only hot-path cost is one division per `score_iter`). It was adopted (rather
+  than left opt-in) because it is neutral on the plugboard tier *and* the more
+  principled, comparable scale, and it is the substrate the not-yet-built
+  *full-crack* tier needs (rotor-key discrimination, where wrong keys generate many
+  unseen grams and the floor bites). Revisit its *magnitude* of benefit once that
+  tier exists.
 - **Different / domain-matched data (source).** Alternatives to Practical
   Cryptography: the Leipzig Corpora Collection, or build tables from a large public
   corpus (Gutenberg, a Wikipedia dump, news-crawl, OpenSubtitles). The plausible
@@ -1122,12 +1124,14 @@ bound by different things:
 
 Candidates, grouped, with where each would pay off:
 
-1. **Log-likelihood with an unseen-gram floor ("quadgram fitness").** Replace the
-   `log10(count+1)` (unseen → neutral 0) with `log10(count/total)` + a floor
-   (`log10(0.01/total)`) for unseen grams, so gibberish carrying impossible grams
-   is *penalised*. Implemented + A/B'd once: **neutral on the plugboard tier**
-   (search-bound), but the right shape for the **full-crack tier** (wrong rotor keys
-   emit many unseen quadgrams). See "Scoring data and smoothing" above. Parked until
+1. **Log-likelihood with an unseen-gram floor ("quadgram fitness") — ✅ SHIPPED as the
+   default.** Replaced the old `log10(count+1)` (unseen → neutral 0) with
+   `log10(count/total)` + a floor (`log10(0.01/total)`) for unseen grams, so gibberish
+   carrying impossible grams is *penalised*; combined with the per-symbol average it is
+   now the default cross-entropy scoring (see "Scoring data and smoothing" and the
+   normalization subsection, scheme 2). **Neutral on the plugboard tier** (search-bound,
+   confirmed by two A/Bs), and the right shape for the **full-crack tier** (wrong rotor
+   keys emit many unseen grams) — its *magnitude* of benefit is to be re-measured once
    that tier exists.
 2. **Interpolated / back-off n-gram model** (blend orders, or Kneser-Ney). On
    *short* messages the quadgram surface is sparse and flat; falling back to lower
@@ -1211,27 +1215,26 @@ search does, but several *planned* items do:
    giving mean `log10(count)` per position. But IC (~0.05) and mean-log-count (~6) are
    still different *quantities* on different scales — this fixes length, not
    comparability. Mostly a readability win and a building block.
-2. **Per-symbol cross-entropy / mean log-probability** — switch to probability tables
-   (`log10(count/total)`, the floor model) and average → a per-character log-likelihood
-   (dits/char). The information-theoretic "right" scale, comparable across n-gram
-   orders and the natural basis for **blending** and a **full-crack LM**. IC does not
-   fit this frame (not a per-symbol log-prob), so it stays separate.
+2. **Per-symbol cross-entropy / mean log-probability — ✅ IMPLEMENTED (the default).**
+   Probability tables (`log10(count/total)`, the floor model) averaged per symbol → a
+   per-character log-likelihood (dits/char). The information-theoretic "right" scale,
+   comparable across n-gram orders and the natural basis for **blending** and a
+   **full-crack LM**. IC does not fit this frame (not a per-symbol log-prob), so it
+   stays a separate normalised ratio.
 
-   **Cheapest and lowest-risk of the three to implement.** It is two changes, and the
-   hot path is untouched by either: (a) **probability tables** — change only the final
-   transform loop in `ngrams_read` to compute `total = Σ count` and store
-   `log10(count/total)` (floor `log10(floor/total)` for unseen), ~5 lines; the fused
-   scorers (`quadgram_score_decode` etc.) just *sum table entries*, so they need **no**
-   change. (b) **per-symbol division** by the term count `N` (`L` or `L−n+1`) — one
-   division at the report/compare site. No hot-path edit, no determinism obligation, no
-   `make bench` risk (unlike z-score's sampled null). Half of it — the floor tables —
-   is already prototyped and **A/B'd neutral** for the plugboard tier. Caveats: it is
-   ranking-invariant within a run (so no standalone payoff — build it only for a
-   downstream consumer), and it changes global scoring semantics, so add it as a
-   **mode/flag** (or compute the normalised value only for reporting/blending) rather
-   than silently replacing the tuned `log10(count+1)` default. Note (b) alone on the
-   *current* tables gives "mean log-count per symbol" — length-normalised but not a true
-   cross-entropy; the true quantity needs the (a) probability tables too.
+   **As shipped**, it was two changes, the hot path untouched by either: (a)
+   **probability tables** — `ngrams_read` computes `total = Σ count` and stores
+   `log10(count/total)` (floor `log10(0.01/total)` for unseen); the fused scorers
+   (`quadgram_score_decode` etc.) just *sum table entries*, so they were **not**
+   touched. (b) **per-symbol division** in `score_iter` by the term count `N` (`L`,
+   `L−1`, `L−2`, `L−3`) — one division per call; IC skips it. No determinism obligation
+   and `make bench` stayed within threshold (only that one division). It is
+   ranking-invariant within a run (the division and the `−log10(total)` shift are
+   per-model constants), so the *floor* is the only behaviour change — measured neutral
+   twice (see "Better smoothing" above), which is why adopting it as the default was
+   safe rather than opt-in. Note (b) alone on the old `log10(count+1)` tables would give
+   "mean log-count per symbol" — length-normalised but not a true cross-entropy; the
+   true quantity needs the (a) probability tables, which is what shipped.
 3. **Z-score / "σ over random"** — `z = (score − μ_rand) / σ_rand`. The most powerful
    for *comparability*: makes IC and quadgrams both read as "how many σ above random,"
    dimensionless and length/model-independent, and directly interpretable as signal
@@ -1271,18 +1274,16 @@ search does, but several *planned* items do:
    cross-entropy, for SA prefer the empirical calibration, and don't trust its tail as
    a true p-value.
 
-**Recommendation.** Do **not** implement normalization as a standalone "improvement" —
-it will not move recovery. Implement it only as the enabling step for whichever
-downstream feature needs it: **z-score (σ)** when the goal is cross-model /
-cross-length *comparability and interpretability* (a unified "signal strength" axis;
-handles IC *and* the n-grams uniformly — but see its disadvantages: shaky as an
-absolute p-value at short L, and redundant for SA);
-**cross-entropy** (floor model) when the goal is blending or a full-crack LM — and
-note it is the **cheapest and lowest-risk** of the three (hot path untouched, no
-sampled null, floor half already prototyped), so if in doubt it is the one to reach
-for first. That keeps it measurable — the payoff shows up in the *feature*, not in
-the normalization.
-Two invariants worth banking if it is ever built: (a) a test asserting the normalised
-ranking equals the raw ranking per model (proving search behaviour is unchanged), and
-(b) a downstream test that the normalised scale actually separates real-vs-gibberish
-across lengths.
+**Recommendation / status.** Normalization does **not** move recovery on its own —
+so it was worth doing only because it is neutral *and* the enabling substrate for
+later work. **Scheme 2 (cross-entropy) is now shipped as the default** (the cheapest,
+lowest-risk of the three: hot path untouched, no sampled null; the floor half was
+already A/B'd neutral). That gives the n-gram models a per-character, length-
+independent, cross-model-comparable log-likelihood — the substrate a future
+interpolated/blended model or full-crack LM needs. Still unbuilt: **z-score (σ)** —
+reach for it *only* if a unified, human-readable "signal strength" axis across
+heterogeneous scorers is specifically needed (but see its disadvantages: shaky as an
+absolute p-value at short L, redundant for SA). One invariant worth banking if
+z-score is ever added: a downstream test that the normalised scale actually separates
+real-vs-gibberish across lengths. (The ranking-invariance of cross-entropy is already
+implied by the neutral A/B — the floor is its only behaviour change.)
