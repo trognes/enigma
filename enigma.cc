@@ -2013,11 +2013,11 @@ void help(FILE * out)
   fprintf(out, "               E.g. -S r2i6q\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
   fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
-  fprintf(out, "  -i           Use index of coincidence (IC) to determine plaintext score\n");
+  fprintf(out, "  -i           Use index of coincidence (IC) to score; needs no -l [default]\n");
   fprintf(out, "  -m           Use monogram statistics to determine plaintext score\n");
   fprintf(out, "  -b           Use bigram statistics to determine plaintext score\n");
   fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
-  fprintf(out, "  -q           Use quadgram statistics to determine plaintext score [default]\n");
+  fprintf(out, "  -q           Use quadgram statistics to determine plaintext score\n");
   fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
   fprintf(out, "  -F N[%%]      Key pre-filter: rank keys by a cheap IC climb, then run\n");
   fprintf(out, "               the full -c climb on only the top N keys, or top N%% of\n");
@@ -2138,7 +2138,7 @@ int main(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
-  opt_scoring = SCORE_QUAD;
+  opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
   opt_norenigma = 0;
   opt_m4 = 0;
   opt_threads = 1;

@@ -56,18 +56,19 @@ echo "THE QUICK BROWN FOX" | ./enigma -u B -w 123 -r AAA -g AAA -s "AB CD"
 
 ```sh
 # You know the rotor key but not the plugboard: hill-climb the plugboard (-c),
-# scoring English quadgrams (the default model).
-./enigma -c -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+# scoring English quadgrams (-q, the sharpest model; -l gives the language). The
+# default model is the index of coincidence, so pass -q to use quadgrams.
+./enigma -c -q -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 
 # You don't know the start positions either: wildcard them with '.' and the
 # program brute-forces all 26x26x26 of them, on 4 threads, while still
 # hill-climbing the plugboard.
-./enigma -c -l english -u B -w 123 -r AAA -g ... -T 4 < cipher.txt
+./enigma -c -q -l english -u B -w 123 -r AAA -g ... -T 4 < cipher.txt
 
 # You know almost nothing: wildcard the reflector, wheels, ring and start, and
 # let it try everything. (This is a large search — use as many threads as you
 # have cores, and see "Cracking strategy" below for the recommended options.)
-./enigma -c -l english -u . -w ... -r ... -g ... -T 8 < cipher.txt
+./enigma -c -q -l english -u . -w ... -r ... -g ... -T 8 < cipher.txt
 ```
 
 ### Other machines
@@ -127,15 +128,18 @@ distinct offsets rather than every ring×start pair.
 
 | Option | Meaning |
 | --- | --- |
-| `-i` | Index of coincidence — language-independent, needs no `-l` |
-| `-m` / `-b` / `-t` / `-q` | Mono- / bi- / tri- / quad-gram statistics (`-q` is the default) |
+| `-i` | Index of coincidence — language-independent, needs no `-l` (**default**) |
+| `-m` / `-b` / `-t` / `-q` | Mono- / bi- / tri- / quad-gram statistics |
 | `-l lang` | Scoring language: `english`, `german`, `danish`, `french`. **Required** for `-m`/`-b`/`-t`/`-q`; ignored by `-i` |
 
-Quadgrams (`-q`) discriminate the correct key most sharply and are the default.
-The n-gram tables are highly language-specific — **`-l` must match the language
-of the plaintext**, especially for `-q` (scoring an English message with `-l
-german` typically fails). The index of coincidence (`-i`) is language-independent
-and is a good cheap model for the rotor-key search.
+The **default model is the index of coincidence** (`-i`) — the only one that needs
+no language, so the tool runs out of the box with no scoring options. Quadgrams
+(`-q`) discriminate the correct key most sharply and are the recommended model when
+you know the language; pass `-q -l <lang>` to use them. The n-gram tables are highly
+language-specific — **`-l` must match the language of the plaintext**, especially
+for `-q` (scoring an English message with `-l german` typically fails). Note that
+`-l` on its own does nothing: it only takes effect with an n-gram model, so it is
+`-q -l english`, not `-l english`, that scores with English quadgrams.
 
 ### Plugboard cracking
 
@@ -184,11 +188,11 @@ Usage: enigma [OPTIONS]
                E.g. -S r2i6q
   -l language  Scoring language (english, german, danish, french); required
                for -m/-b/-t/-q (no default), not used by -i
-  -i           Use index of coincidence (IC) to determine plaintext score
+  -i           Use index of coincidence (IC) to score; needs no -l [default]
   -m           Use monogram statistics to determine plaintext score
   -b           Use bigram statistics to determine plaintext score
   -t           Use trigram statistics to determine plaintext score
-  -q           Use quadgram statistics to determine plaintext score [default]
+  -q           Use quadgram statistics to determine plaintext score
   -p filename  Name of file containing plaintext to compare result with
   -F N[%]      Key pre-filter: rank keys by a cheap IC climb, then run
                the full -c climb on only the top N keys, or top N% of

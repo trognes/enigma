@@ -113,12 +113,18 @@ roundtrip "round-trip with no scoring flags" \
   "ATTACKATDAWNFROMTHENORTH" -u A -w 531 -r MNB -g VCX -s "AB CD"
 roundtrip "M4 round-trip with no scoring flags" \
   "WETTERBERICHT" -4 -u b -w B123 -r AAAA -g AAAA
-# But scoring IS required when the run actually scores: a wildcard search or a
-# plugboard hill-climb without -l (and not -i) must still be rejected.
+# The default scoring model is the index of coincidence, which needs no language, so
+# a wildcard search or a plugboard hill-climb with NO scoring flags now runs (scoring
+# by IC) rather than being rejected.
 printf 'ABCDE' | "$ENIGMA" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
-check "wildcard search without -l rejected (exit code)" "$?" "1"
+check "wildcard search with no scoring flags runs (default IC)" "$?" "0"
 printf 'ABCDE' | "$ENIGMA" -c -u B -w 123 -r AAA -g AAA >/dev/null 2>&1
-check "hill-climb without -l rejected (exit code)" "$?" "1"
+check "hill-climb with no scoring flags runs (default IC)" "$?" "0"
+# But an EXPLICIT n-gram model without -l is still rejected (also checked below).
+printf 'ABCDE' | "$ENIGMA" -q -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "wildcard search with -q but no -l rejected" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -c -u B -w 123 -r AAA -g AAA >/dev/null 2>&1
+check "hill-climb with -q but no -l rejected" "$?" "1"
 
 # A fully specified machine still scores its single decrypt for the diagnostic line,
 # and must honour the requested scoring model when its prerequisites are met (an

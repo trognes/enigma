@@ -96,22 +96,23 @@ any working directory.
 ### Common invocations
 
 ```sh
-# Brute-force everything (all reflectors, wheels, ring & start positions),
-# scoring with quadgrams (default model) against the English tables:
-./enigma -l english < cipher.txt
+# Brute-force everything with the DEFAULT model, the index of coincidence
+# (language-independent, no -l needed):
+./enigma < cipher.txt
 
-# Language-independent: search with the index of coincidence (no -l needed):
-./enigma -i < cipher.txt
+# Same, but score with quadgrams against the English tables (-q selects quadgrams;
+# -l gives the language -- -l on its own does nothing, the default stays IC):
+./enigma -q -l english < cipher.txt
 
 # Specify some settings, wildcard the rest with '.', and hill-climb plugboard:
-./enigma -u B -w 123 -r AAA -g ... -c -l english < cipher.txt
+./enigma -u B -w 123 -r AAA -g ... -c -q -l english < cipher.txt
 
 # Norway Enigma:
-./enigma -n -c -l english < cipher.txt
+./enigma -n -c -q -l english < cipher.txt
 
 # M4 (4-rotor naval): thin reflector b, Greek Beta, wheels III-I-VII, wildcard
 # the Greek position (first char of -g) and hill-climb the plugboard:
-./enigma -4 -u b -w B317 -r AAAA -g .QXP -c -l english < cipher.txt
+./enigma -4 -u b -w B317 -r AAAA -g .QXP -c -q -l english < cipher.txt
 ```
 
 ### Key CLI options (see `help()` in source for the full list)
@@ -155,9 +156,12 @@ any working directory.
   `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
   was folded into the per-stage numbers — see `CODE_REVIEW.md` §9.)
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
-  used by `-i`
-- `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad (quad is the
-  default model)
+  used by `-i`. `-l` alone does nothing: it takes effect only with an n-gram model,
+  so it is `-q -l english`, not `-l english`, that scores with English quadgrams.
+- `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad. **IC is the default**
+  — the only model needing no `-l`, so the tool runs with no scoring options (an
+  n-gram default would be inconsistent: it requires a language, which has no default).
+  Quad is the sharpest and the recommended model when the language is known.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (needs `-c`; `0` = off): a two-tier search — tier 1
   ranks *every* key by a single **cheap IC climb** and keeps the top `N` (or top `N%`
