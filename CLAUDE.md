@@ -126,6 +126,20 @@ any working directory.
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
 - `-s AB...` fixed plugboard pairs
 - `-c` hill-climb the plugboard
+- `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
+  (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
+  cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
+  pre-pass seeds the board (mirrors `-S iq`), acceptance-ratio calibration sets the
+  temperature from a warm-up sample (`anneal_once()`), the walk accepts worsening
+  `toggle-connect` moves with probability `exp(Δ/T)`, and a final greedy quench lands
+  on a local optimum. `χ0 = 0.12` (a *cool* start) was tuned by a quality-per-climb-time
+  sweep — the surface is greedy-friendly, so a mostly-downhill walk with occasional
+  escapes matches or beats greedy `-R -S iq` at equal compute (the guessed `χ0 = 0.8`
+  lost ~2×; reheating and chain-length sweeps didn't help). All randomness is from the
+  per-key RNG stream (same `opt_seed + key_index` mix as `-R`), so `-A` is
+  `-T`-independent. It composes with `-R` (each restart is an independent SA trajectory)
+  and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb, not a strict
+  win — see `CODE_REVIEW.md` §9 item 5 and `SIMULATED_ANNEALING.md` §15.
 - `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
   the rest start from a perturbed board, best kept). Per-key RNG seeded from
   `opt_seed + flat key index`, so the result stays independent of `-T`. ~`N`× the
@@ -391,8 +405,10 @@ effective reflector, so the hot path is untouched — see "M4 mode" above and
 `CODE_REVIEW.md` §5). On **cracking quality for short messages** the
 `make crackquality` harness shows every miss is a *search* failure (the plugboard
 hill-climb sticking in local optima); the search levers shipped so far are random
-restarts (`-R N`), the staged climb (`-S`), and the **key pre-filter** (`-F N`, a
+restarts (`-R N`), the staged climb (`-S`), the **key pre-filter** (`-F N`, a
 cheap-IC-climb tier that shortlists keys so the full climb runs only on the top
-`N` — ~8–20× throughput, see `CODE_REVIEW.md` §9 item 2). Remaining open: the
-heavier metaheuristics (simulated annealing / tabu / GA) for the hardest cases.
-Read `CODE_REVIEW.md` before changing the search or scoring code.
+`N` — ~8–20× throughput, see `CODE_REVIEW.md` §9 item 2), and **simulated annealing**
+(`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute —
+`SIMULATED_ANNEALING.md` §15). Remaining open: the other heavier metaheuristics
+(tabu / GA) for the hardest cases. Read `CODE_REVIEW.md` before changing the search or
+scoring code.

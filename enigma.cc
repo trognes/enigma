@@ -158,6 +158,22 @@ static double opt_prefilter_frac; /* -F N% form: fraction of the resolved keyspa
    the true plug count ranks it better. ~5 is the measured optimum (both-axes win vs
    uncapped; harmless on easy keyspaces) -- see CODE_REVIEW.md §9 item 2. */
 static const int filter_climb_cap = 5;
+/* Simulated-annealing plugboard optimiser (-A N): N = total move budget (0 = off,
+   use the greedy climb). An alternative to the greedy hill-climb that accepts
+   worsening moves with a cooling probability to escape local optima. Needs -c; the
+   move budget is SA's cost/quality knob (like -R for the greedy climb). See
+   SIMULATED_ANNEALING.md. */
+static int opt_anneal;
+static const int anneal_chain = 208;      /* moves per temperature level (8*26) */
+static const int anneal_warmup = 200;     /* warm-up samples for T calibration */
+/* chi0 is the initial worsening-move acceptance target; chi_end the final (near-greedy)
+   one. chi0 = 0.12 was tuned by a quality-per-climb-time sweep (SIMULATED_ANNEALING.md
+   §15): the surface here is greedy-friendly, so a *cool* start (a mostly-downhill walk
+   with occasional uphill escapes) matches or beats the greedy restart climb, whereas a
+   hot start (chi0 = 0.8) wanders and loses ~2x. Higher chi0 and reheating were both
+   measured worse and dropped. */
+static const double anneal_chi0 = 0.12;
+static const double anneal_chi_end = 0.001;
 static int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 /* Random seed for the plugboard restart perturbation. Mixed with the flat key index
@@ -1220,9 +1236,143 @@ double hillclimb_schedule(machine & m)
    across restarts; only the steckerbrett is reset each time. The RNG is seeded from
    the flat key index, so the result is independent of -T. Each start runs the staged
    climb. */
+/* A uniform double in [0, 1) from the splitmix64 stream (top 53 bits). */
+static inline double uniform01(uint64_t * rng)
+{
+  return (splitmix64(rng) >> 11) * (1.0 / 9007199254740992.0);   /* 2^53 */
+}
+
+/* Draw two distinct letters a != b uniformly in 0..25 (two RNG draws). */
+static inline void random_pair(uint64_t * rng, int & a, int & b)
+{
+  a = static_cast<int>(splitmix64(rng) % asize);
+  b = static_cast<int>(splitmix64(rng) % (asize - 1));
+  if (b >= a)
+    b++;
+}
+
+/* The single SA move: toggle the plug between a and b on the involution steckerbrett.
+   If a-b is already a plug, remove it; otherwise force a-b, ejecting each endpoint's
+   old partner to self-steckered. Reaches any involution from any other (ergodic). */
+static inline void apply_toggle(machine & m, int a, int b)
+{
+  if (m.steckerbrett[a] == b)                 /* already paired -> remove */
+    {
+      m.steckerbrett[a] = static_cast<unsigned char>(a);
+      m.steckerbrett[b] = static_cast<unsigned char>(b);
+    }
+  else                                        /* connect, ejecting old partners */
+    {
+      int ap = m.steckerbrett[a];
+      int bp = m.steckerbrett[b];
+      m.steckerbrett[ap] = static_cast<unsigned char>(ap);
+      m.steckerbrett[bp] = static_cast<unsigned char>(bp);
+      m.steckerbrett[a] = static_cast<unsigned char>(b);
+      m.steckerbrett[b] = static_cast<unsigned char>(a);
+    }
+}
+
+/* One simulated-annealing trajectory on the current board (Phase 1: full rescore per
+   move, flat target model). Calibrates the temperature from a warm-up sample so it is
+   length/model-robust (SIMULATED_ANNEALING.md §4), cools geometrically, tracks the best
+   board seen (incumbent), then finishes with a greedy quench so the result is at least
+   a local optimum. Leaves m at the best board (m.plaintext set by the quench's decode).
+   All randomness comes from the per-key *rng stream, so it is -T-independent. */
+static double anneal_once(machine & m, uint64_t * rng)
+{
+  /* IC pre-pass: greedy-climb under the index of coincidence to seed a decent board
+     before annealing the target model. The quad surface is nearly flat with only a
+     plug or two set, so annealing it from an empty board wanders; IC is far smoother
+     and places the first plugs well (the same insight as the -S iq staged climb). */
+  int target_model = m.scoring;
+  if (target_model != SCORE_IC)
+    {
+      m.scoring = SCORE_IC;
+      hillclimb(m, pairs_uncapped);
+      m.scoring = target_model;
+    }
+
+  double cur = score_iter(m, 0);
+  double best = cur;
+  unsigned char best_board[asize];
+  unsigned char saved[asize];
+  memcpy(best_board, m.steckerbrett, asize);
+
+  /* Warm-up: sample K random moves from the start board, average the magnitude of the
+     worsening ones, and set T0/Tend so a worsening move is accepted with probability
+     ~chi0 initially and ~chi_end at the end. */
+  double sum_neg = 0.0;
+  int n_neg = 0;
+  for (int i = 0; i < anneal_warmup; i++)
+    {
+      int a, b;
+      random_pair(rng, a, b);
+      memcpy(saved, m.steckerbrett, asize);
+      apply_toggle(m, a, b);
+      double d = score_iter(m, 0) - cur;
+      memcpy(m.steckerbrett, saved, asize);   /* sampling only -- always restore */
+      if (d < 0.0)
+        {
+          sum_neg += -d;
+          n_neg++;
+        }
+    }
+  double meanabs = (n_neg > 0) ? sum_neg / n_neg : 1e-9;
+  double T0 = meanabs / log(1.0 / anneal_chi0);
+  double Tend = meanabs / log(1.0 / anneal_chi_end);
+  if (T0 < 1e-12)
+    T0 = 1e-12;
+  if (Tend < 1e-12 || Tend > T0)
+    Tend = T0 * 1e-6;
+
+  int total = (opt_anneal > 0) ? opt_anneal : 1;
+  double alpha = pow(Tend / T0, static_cast<double>(anneal_chain) / total);
+
+  double T = T0;
+  int moves = 0;
+  while (moves < total)
+    {
+      for (int i = 0; (i < anneal_chain) && (moves < total); i++)
+        {
+          int a, b;
+          random_pair(rng, a, b);
+          memcpy(saved, m.steckerbrett, asize);
+          apply_toggle(m, a, b);
+          double d = score_iter(m, 0) - cur;
+          if ((d >= 0.0) || (uniform01(rng) < exp(d / T)))
+            {
+              cur += d;
+              if (cur > best)
+                {
+                  best = cur;
+                  memcpy(best_board, m.steckerbrett, asize);
+                }
+            }
+          else
+            memcpy(m.steckerbrett, saved, asize);   /* reject -> undo */
+          moves++;
+        }
+      T *= alpha;
+    }
+
+  memcpy(m.steckerbrett, best_board, asize);
+  hillclimb(m, pairs_uncapped);   /* greedy quench under the target model */
+  return score_iter(m, 0);
+}
+
+/* Optimise the plugboard for the current key from the current board: simulated
+   annealing (-A) or the staged greedy climb (default). */
+static double optimize_once(machine & m, uint64_t * rng)
+{
+  if (opt_anneal > 0)
+    return anneal_once(m, rng);
+  return hillclimb_schedule(m);
+}
+
 double hillclimb_restarts(machine & m, uint64_t key_index)
 {
-  double best = hillclimb_schedule(m);
+  uint64_t rng = opt_seed + key_index + 0x0123456789abcdefULL;
+  double best = optimize_once(m, & rng);
   if (opt_restarts <= 1)
     return best;
 
@@ -1236,12 +1386,11 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
   memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
   memcpy(best_steck, m.steckerbrett, asize);
 
-  uint64_t rng = opt_seed + key_index + 0x0123456789abcdefULL;
   for (int r = 1; r < opt_restarts; r++)
     {
       init_steckerbrett(m, opt_steckerbrett);   /* reset to the fixed seed */
       perturb_steckerbrett(m, & rng, opt_perturb);
-      double s = hillclimb_schedule(m);
+      double s = optimize_once(m, & rng);
       if (s > best)
         {
           best = s;
@@ -2043,6 +2192,8 @@ void help(FILE * out)
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
   fprintf(out, "               rN = per-restart random plugs (N pairs, default 8).\n");
   fprintf(out, "               E.g. -S r2i6q\n");
+  fprintf(out, "  -A integer   Recover the plugboard by simulated annealing instead of the\n");
+  fprintf(out, "               greedy climb; integer = move budget (needs -c) [off]\n");
   fprintf(out, "  -e integer   Random seed for the restart perturbation (also $ENIGMA_SEED);\n");
   fprintf(out, "               default is a fresh random seed each run, echoed for repeating\n");
   fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
@@ -2099,10 +2250,13 @@ void show_settings()
             opt_language, opt_datadir);
 
   fprintf(stderr, "Hillclimb:  %s", opt_hillclimb ? "yes" : "no");
+  if (opt_hillclimb && (opt_anneal > 0))
+    fprintf(stderr, " (simulated annealing, %d moves, seed %llu)",
+            opt_anneal, static_cast<unsigned long long>(opt_seed));
   if (opt_hillclimb && (opt_restarts > 1))
     fprintf(stderr, " (%d restarts, %d-pair kick, seed %llu)",
             opt_restarts, opt_perturb, static_cast<unsigned long long>(opt_seed));
-  if (opt_hillclimb && opt_staged)
+  if (opt_hillclimb && opt_staged && (opt_anneal == 0))
     fprintf(stderr, " (staged: %s)", opt_staged);
   fprintf(stderr, "\n");
 
@@ -2185,11 +2339,12 @@ int main(int argc, char * * argv)
   opt_prefilter_frac = 0.0;
   opt_seed = 0;
   opt_seed_set = false;
+  opt_anneal = 0;
 
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:imbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2249,6 +2404,9 @@ int main(int argc, char * * argv)
         case 'e':
           opt_seed = strtoull(optarg, nullptr, 10);
           opt_seed_set = true;
+          break;
+        case 'A':
+          opt_anneal = atoi(optarg);
           break;
         case 'F':
           {
@@ -2443,6 +2601,13 @@ int main(int argc, char * * argv)
     fatal("Illegal pre-filter percentage (-F N% must be 0 < N <= 100)");
   if (((opt_prefilter > 0) || (opt_prefilter_frac > 0.0)) && (! opt_hillclimb))
     fatal("The key pre-filter (-F) needs the plugboard hill-climb (-c)");
+
+  /* Simulated annealing is an alternative plugboard optimiser, so it needs -c; the
+     move budget must be non-negative. */
+  if (opt_anneal < 0)
+    fatal("Illegal anneal move budget (-A must be >= 1)");
+  if ((opt_anneal > 0) && (! opt_hillclimb))
+    fatal("Simulated annealing (-A) needs the plugboard hill-climb (-c)");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully

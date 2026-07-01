@@ -488,6 +488,29 @@ check "pre-filter: -F over 100% rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 8% >/dev/null 2>&1
 check "pre-filter: -F N% without -c rejected (exit code)" "$?" "1"
 
+# Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
+# from the per-key RNG stream (seeded from the flat key index), so an SA search must
+# stay independent of -T just like the restart climb. Recover the plugboard on the
+# same wildcard-start key space.
+check "anneal: -A result is -T-independent" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -T 4)"
+# It must recover the true plugboard on a comfortable (long, fully-specified) message.
+sa_rec=$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -A 60000)
+check "anneal: recovers plaintext on a long message" "$sa_rec" "$r_pt"
+# Like the restart climb, after annealing the displayed board must be the one that
+# actually produced the recovered plaintext (showconfig prints m.steckerbrett).
+sa_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 60000 2>&1 >/dev/null)
+sa_pb=$(printf '%s\n' "$sa_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | grep -oE '[A-Z][A-Z]' | tr '\n' ' ')
+check "anneal: displayed plugboard matches the recovered plaintext" \
+  "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$sa_pb")" \
+  "$sa_rec"
+# -A is validated: it needs -c, and a non-positive budget is rejected.
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -A 20000 >/dev/null 2>&1
+check "anneal: -A without -c rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A -5 >/dev/null 2>&1
+check "anneal: negative -A budget rejected (exit code)" "$?" "1"
+
 # The final diagnostic reports how many rotor combinations were analysed and how many
 # plugboards were scored. A pure scan (no -c) scores exactly one plugboard per key...
 d_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")

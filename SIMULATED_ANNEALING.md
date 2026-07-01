@@ -313,19 +313,22 @@ anneal(machine m, uint64 seed):
 `hillclimb_restarts()` becomes: for each restart, call `anneal()` (or the greedy
 climb, depending on `-A`), keep the best — the merge logic is unchanged.
 
-## 10. Parameters and starting defaults (to be swept)
+## 10. Parameters and shipped defaults (measured, §15)
 
-| Parameter | Symbol | Starting value | Notes |
-|-----------|--------|----------------|-------|
-| Total move budget | `M_total` | 20 000 | main cost/quality knob (SA's `-R`) |
+| Parameter | Symbol | Shipped value | Notes |
+|-----------|--------|---------------|-------|
+| Total move budget | `M_total` | `-A N` (user) | main cost/quality knob (SA's `-R`) |
 | Chain length | `L_chain` | `8·26 = 208` | moves per temperature level |
-| Initial acceptance | `χ0` | 0.8 | high → free early exploration |
+| Initial acceptance | `χ0` | **0.12** | tuned; a *cool* start wins here (§15) |
 | Final acceptance | `χend` | 0.001 | low → greedy finish |
 | Warm-up samples | `K` | 200 | for T calibration |
 | Anneal model | — | `IC → quad` | staged, mirrors `-S iq` |
 | Restarts | `-R` | as configured | independent SA trajectories |
 
-All are guesses to be replaced by measured sweeps (like the `-R`/`k` sweep in §9).
+The starting guesses were `χ0 = 0.8` and `M_total = 20 000`; the sweep in §15 replaced
+`χ0` with **0.12** (the original 0.8 lost ~2× — see §15). Chain length, `χend`, warm-up
+samples and the IC pre-pass were left at their guesses (sweeping chain and reheating did
+not help).
 
 ## 11. Evaluation plan
 
@@ -376,9 +379,11 @@ All are guesses to be replaced by measured sweeps (like the `-R`/`k` sweep in §
 - **Phase 3 — tuning & composition.** Sweep `M_total`, `L_chain`, `χ0/χend`, staged
   vs flat model, reheating/adaptive cooling; wire SA into `-F` tier 2 and `-R`. Settle
   defaults.
-- **Phase 4 — ship or shelve.** If it clears the gate: tests, docs (README, CLAUDE.md,
-  CODE_REVIEW §9 item 5 → IMPLEMENTED), CI green. If not: record the measured negative
-  result here and leave `-A` out.
+- **Phase 4 — ship or shelve. → SHIPPED (`-A`).** SA cleared the gate once `χ0` was
+  tuned (§15): at equal climb time it matches or beats greedy `-R -S iq`. Phase 1's full
+  rescore was fast enough (L ≤ ~150) that Phase 2's delta-scorer was not needed to ship.
+  Tests, CI (ASan/UBSan + TSan cover the `-A` path), and docs (README, CLAUDE.md,
+  CODE_REVIEW §9 item 5) are updated.
 
 ## 14. Research extensions (out of scope for the first build)
 
@@ -392,3 +397,41 @@ All are guesses to be replaced by measured sweeps (like the `-R`/`k` sweep in §
 - **Adaptive neighbourhoods** — bias the `(a,b)` proposal toward letters currently in
   low-scoring quadgrams, rather than uniform. Could speed convergence; adds state and
   determinism surface.
+
+## 15. Measured results (the tuning sweep that decided the ship)
+
+Setup: plugboard-recovery tier (true rotor key fixed, only the plugboard recovered),
+english/quad, 10-pair boards, random excerpts of an English corpus, per-trial distinct
+seeds (fair RNG diversity for both methods), 60 trials per point. "climb ms" is
+**startup-subtracted** wall-clock per trial (the ~76 ms process spawn + quad-table load
+is measured once and removed), so it is the marginal compute — the fair per-time axis.
+The incumbent to beat is the greedy staged restart climb `-R N -S iq`.
+
+**The initial guess `χ0 = 0.8` lost ~2×** to greedy at equal compute (e.g. L80:
+SA `-A 50000` 35.5% vs greedy `-R20` 75.8%). The failure mode was exactly risk §12
+"T mis-scaled → random walk": a hot start wanders. Sweeping `χ0` **down** improved SA
+monotonically until ~0.12, then it turned over (χ0 0.05/0.12/0.20/0.30 →
+68.5/79.6/64.5/68.4% at L80, `-A 100000`). The surface here is greedy-friendly, so the
+best SA is a *mostly-downhill* walk with just enough uphill escapes.
+
+At the tuned `χ0 = 0.12`, matched climb time (L = 50 and 80):
+
+| config | climb ms | L50 exact/60 | L50 mean% | L80 exact/60 | L80 mean% |
+|---|---|---|---|---|---|
+| greedy `-R10 -S iq` | ~13 | 7  | 21.7 | 31 | 57.9 |
+| SA `-A 50000`       | ~14 | 6  | 19.7 | 32 | 58.4 |
+| greedy `-R20 -S iq` | ~23 | 12 | 30.0 | 41 | 72.1 |
+| SA `-A 100000`      | ~22 | 10 | 25.5 | 46 | **79.6** |
+| greedy `-R40 -S iq` | ~45 | 15 | 34.1 | 48 | 82.5 |
+| SA `-A 200000`      | ~44 | 20 | **41.2** | 47 | 81.0 |
+
+Read-out: tuned SA is **at parity-to-better** with greedy at equal compute — a clear win
+at the L80 mid budget (SA `-A 100000` 79.6% vs greedy `-R20` 72.1%, *and* slightly
+faster) and the L50 high budget (41.2% vs 34.1%), a wash elsewhere. That clears the ship
+gate (§11.5: "beats `-R 10 -S iq` at ≤ its compute"). **Reheating hurt** (8/20 cycles
+roughly halved quality) and **chain length** (52/208/520) was flat, so both were dropped;
+the shipped SA is a single geometric cool-down with the IC pre-pass and greedy quench.
+
+Caveat: this is one corpus/language/board-size at two lengths. SA does not *dominate*
+greedy — it is an alternative of comparable strength, worth having as a second
+metaheuristic (and a base for the §14 extensions), not a replacement for `-R -S`.
