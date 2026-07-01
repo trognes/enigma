@@ -2093,21 +2093,25 @@ void show_settings()
 
   fprintf(stderr, "Scoring:    %s", scoring_name[opt_scoring]);
   if (opt_scoring == 0)
-    fprintf(stderr, " (language-independent)");
+    fprintf(stderr, " (language-independent)\n");
   else
-    fprintf(stderr, " (language: %s; n-gram files in %s)",
+    fprintf(stderr, " (language: %s; n-gram files in %s)\n",
             opt_language, opt_datadir);
-  fprintf(stderr, "; plugboard hill-climb: %s", opt_hillclimb ? "yes" : "no");
+
+  fprintf(stderr, "Hillclimb:  %s", opt_hillclimb ? "yes" : "no");
   if (opt_hillclimb && (opt_restarts > 1))
     fprintf(stderr, " (%d restarts, %d-pair kick, seed %llu)",
             opt_restarts, opt_perturb, static_cast<unsigned long long>(opt_seed));
   if (opt_hillclimb && opt_staged)
     fprintf(stderr, " (staged: %s)", opt_staged);
+  fprintf(stderr, "\n");
+
   if (opt_prefilter_frac > 0.0)
-    fprintf(stderr, "; pre-filter: top %g%% of keys", opt_prefilter_frac * 100.0);
+    fprintf(stderr, "Pre-filter: top %g%% of keys\n", opt_prefilter_frac * 100.0);
   else if (opt_prefilter > 0)
-    fprintf(stderr, "; pre-filter: top %d keys", opt_prefilter);
-  fprintf(stderr, "; threads: %d\n", opt_threads);
+    fprintf(stderr, "Pre-filter: top %d keys\n", opt_prefilter);
+
+  fprintf(stderr, "Threads:    %d\n", opt_threads);
 
   if (opt_m4)
     {
