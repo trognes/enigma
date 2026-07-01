@@ -1,10 +1,11 @@
 # Simulated annealing for plugboard recovery — design
 
-Status: **design only, not built.** This is the detailed plan referenced from
-`CODE_REVIEW.md` §9 item 5. It proposes simulated annealing (SA) as an alternative
-plugboard optimiser, why it should help, exactly how it would work in *this*
-codebase, and a phased roadmap gated on a compute-normalised A/B against the current
-best recipe (`-R 10 -S iq`).
+Status: **shipped as `-A`.** This is the design referenced from `CODE_REVIEW.md` §9
+item 5. It proposes simulated annealing (SA) as an alternative plugboard optimiser, why
+it should help, exactly how it works in *this* codebase, and a phased roadmap gated on a
+compute-normalised A/B against the current best recipe (`-R 10 -S iq`). §§1–14 are the
+original plan; **§15 records the tuning sweep that cleared the ship gate, and §16 the
+known-plug-count cap (`-A … -S qK`)** — read those for what actually shipped.
 
 Read `CODE_REVIEW.md` §9 first — it establishes the measurement harness
 (`make crackquality`, its `SPLIT=1` failure-mode split) and the diagnosis this plan
@@ -435,3 +436,39 @@ the shipped SA is a single geometric cool-down with the IC pre-pass and greedy q
 Caveat: this is one corpus/language/board-size at two lengths. SA does not *dominate*
 greedy — it is an alternative of comparable strength, worth having as a second
 metaheuristic (and a base for the §14 extensions), not a replacement for `-R -S`.
+
+## 16. Known-plug-count cap (`-A … -S qK`)
+
+The Wehrmacht did not always use 10 plugs — earlier/other periods used fewer. When the
+count is *known* to be below the maximum, that is a genuine prior worth exploiting, and
+SA now honours it: `-A` reads the **`-S` target-stage plug cap** (`opt_stages[last].cap`,
+uncapped = 13 by default) and applies it across the whole trajectory — the IC pre-pass,
+a **cap-aware `apply_toggle`** (a *connect* that would raise the pair count past the cap
+is a no-op; removes and re-pairings are always allowed, so the ≤-cap board stays
+reachable), and the greedy quench. So `-A 50000 -S q8` anneals toward at most 8 pairs.
+Plain `-A` (no `-S`) keeps the uncapped default, unchanged.
+
+The mechanism is the same overfit story as the `-F` cap (§9 item 2), but here it needs a
+*correct* count: on a short, noisy message the quad score sometimes rewards a spurious
+9th/10th plug that pulls the board off the truth; capping to the real count removes
+exactly those moves.
+
+Measured (true plug count **8**, english/quad, per-trial seeds, 60 trials/point; exact
+recoveries out of 60), plain `-A` vs `-A -S q8`:
+
+| budget | length | `-A` (uncapped) | `-A -S q8` |
+|---|---|---|---|
+| A50k  | 50 | 30 | **37** |
+| A50k  | 80 | 53 | 50 |
+| A100k | 50 | 42 | 41 |
+| A100k | 80 | 54 | **58** |
+| A200k | 50 | 49 | 45 |
+| A200k | 80 | 59 | 59 |
+
+The win concentrates in the **hard corner** — short message, modest budget (a second
+independent trial set confirmed it, e.g. A100k/L50 37 vs 27) — and fades to a wash once
+the message is long enough or the budget high enough that SA finds the true board
+unaided. Setting the cap *below* the true count clips the reachable boards and hurts, so
+it is strictly a user-supplied prior, not a default. The IC-cap-alone experiment (capping
+only the pre-pass, no count knowledge) was by contrast neutral — the value here is the
+*correct count*, not smoothing.

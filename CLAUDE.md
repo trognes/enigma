@@ -139,7 +139,14 @@ any working directory.
   per-key RNG stream (same `opt_seed + key_index` mix as `-R`), so `-A` is
   `-T`-independent. It composes with `-R` (each restart is an independent SA trajectory)
   and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb, not a strict
-  win — see `CODE_REVIEW.md` §9 item 5 and `SIMULATED_ANNEALING.md` §15.
+  win — see `CODE_REVIEW.md` §9 item 5 and `SIMULATED_ANNEALING.md` §15. **SA honours
+  the `-S` target-stage plug cap** (`opt_stages[last].cap`): `-A N -S qK` caps the whole
+  trajectory (IC pre-pass, the cap-aware `apply_toggle`, and the quench) at `K` pairs.
+  When the true plug count is known and below 13, that prior is a *measured win on short
+  messages at modest budgets* (it stops SA adding spurious plugs a noisy short-message
+  quad score would reward), neutral once the message/budget is large enough to recover
+  the board unaided, and a loss if set below the true count — `SIMULATED_ANNEALING.md`
+  §16. With no `-S` the cap defaults to uncapped (13), so plain `-A` is unchanged.
 - `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
   the rest start from a perturbed board, best kept). Per-key RNG seeded from
   `opt_seed + flat key index`, so the result stays independent of `-T`. ~`N`× the

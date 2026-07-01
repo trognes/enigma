@@ -953,6 +953,11 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
    greedy `-R -S iq` at equal climb time (`SIMULATED_ANNEALING.md` §15). It is a peer of
    comparable strength, not a strict improvement — worth having as a second
    metaheuristic. Reheating and chain-length sweeps did not help and were dropped.
+   **SA honours the `-S` target-stage plug cap** (`-A N -S qK`), a known-plug-count
+   prior: a cap-aware `apply_toggle` keeps SA from adding spurious plugs a noisy
+   short-message score would reward. Measured win on short messages at modest budgets
+   when the cap matches the true count, neutral otherwise, a loss if set too low — so
+   it is opt-in via `-S`, uncapped by default (`SIMULATED_ANNEALING.md` §16).
 6. **Tabu search** — short list of recently reversed moves to avoid cycling and
    cross plateaus; modest deterministic robustness gain.
 7. **Richer move set — ✅ "remove a plug" IMPLEMENTED.** The single "force `a`–`b`"

@@ -511,6 +511,21 @@ check "anneal: -A without -c rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A -5 >/dev/null 2>&1
 check "anneal: negative -A budget rejected (exit code)" "$?" "1"
 
+# SA honours the -S target-stage plug cap (a known-plug-count prior): -A -S qN caps the
+# whole trajectory (pre-pass, anneal moves, quench) at N pairs. Still -T-independent.
+check "anneal: -A -S q8 result is -T-independent" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -S q8 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -S q8 -T 4)"
+# The cap is actually enforced: with -S q3 the recovered board must hold <= 3 plug pairs.
+cap_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 40000 -S q3 2>&1 >/dev/null)
+cap_pairs=$(printf '%s\n' "$cap_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | grep -oE '[A-Z][A-Z]' | grep -c .)
+check "anneal: -S q3 caps the board at <= 3 plug pairs" "$([ "${cap_pairs:-0}" -le 3 ] && echo ok)" "ok"
+# With the cap matched to the true count, SA still recovers on a comfortable message.
+sa8_ct=$(run "$r_pt" -i -u B -w 241 -r AAA -g QEW -s "AB CD EF GH IJ KL MN OP")
+check "anneal: -A -S q8 recovers an 8-plug board (long message)" \
+  "$(run "$sa8_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -A 60000 -S q8)" \
+  "$r_pt"
+
 # The final diagnostic reports how many rotor combinations were analysed and how many
 # plugboards were scored. A pure scan (no -c) scores exactly one plugboard per key...
 d_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
