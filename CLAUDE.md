@@ -197,7 +197,10 @@ A single pass through `main()`:
 1. Parse and validate options (`getopt`).
 2. `readciphertext()` reads stdin, uppercases, and keeps only A–Z.
 3. Load the n-gram table matching the chosen scoring model and language; each
-   count is stored as `log10(count + 1)` for additive scoring.
+   count is stored as the log10 probability `log10(count / total)` (unseen grams
+   floored at `log10(0.01 / total)`), so the additive scorers sum a log-likelihood
+   and `score_iter`'s per-symbol average is a cross-entropy (dits/char). IC is a
+   separate normalised ratio and is left untouched.
 4. `init()` precomputes numeric forward/reverse rotor permutations, notch
    tables, and reflector permutations from the hard-coded wiring strings.
 5. `bruteforce()` is the main search, run across `opt_threads` worker threads

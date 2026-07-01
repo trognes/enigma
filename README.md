@@ -273,6 +273,14 @@ where `<ngram>` is `monograms`/`bigrams`/`trigrams`/`quadgrams`. Each line is
 `-d <dir>` → `$ENIGMA_DATA` → `.` (the current directory), so the tool can run
 from any working directory.
 
+At load time each count is converted to a log10 probability `log10(count/total)`,
+with n-grams never seen in the corpus floored at `log10(0.01/total)` so that
+gibberish (which contains impossible n-grams) is penalised rather than ignored. The
+model score is the per-symbol average of these — a cross-entropy in dits/char, so
+scores are negative and roughly length-independent (a more language-like decrypt
+scores closer to zero). The index of coincidence (`-i`) is a separate normalised
+statistic and is unaffected.
+
 Tables for `english`, `german`, `danish` and `french` ship in this repository.
 They were obtained from the
 [Practical Cryptography](http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/)
