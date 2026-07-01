@@ -1,11 +1,16 @@
 # Code Review — `enigma.cc`
 
 A deep review of the Enigma cipher / code-breaking tool. The program is a
-single ~1400-line C++ translation unit. It is functional and reasonably fast,
-but it carries several real correctness bugs, a couple of memory-safety
-hazards, a large amount of dead/experimental code, and structural issues that
-make it hard to test and extend. This document is **analysis only** — no code
-changes are proposed as patches here, only findings and recommendations.
+single ~2400-line C++ translation unit (kept as one TU deliberately — the hot
+path depends on cross-function inlining and struct layout, guarded by
+`make bench BASE=<ref>`, so it is organised with top-level `/* --- section --- */`
+banners rather than split into separately-compiled files; a header-unity split or
+multi-TU + `-flto` are the fallbacks if it roughly doubles).
+When first reviewed it was ~1400 lines and carried several real correctness
+bugs, memory-safety hazards, a large amount of dead/experimental code, and
+structural issues that made it hard to test and extend; most of those are now
+fixed (see the ✅ markers throughout). This document began as **analysis only**
+and has grown into the running design log for the search/scoring work.
 
 Severity legend: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low / nit.
 
@@ -936,9 +941,15 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 4. **Greedy plug-by-plug seed** — pick the best single plug, fix it, pick the best
    next given that, up to a budget, then refine with the swap climb. Better start
    than identity.
-5. **Simulated annealing** — accept worsening moves with a decaying probability to
-   escape local optima (Weierud used it for hard/short messages). More robust but
-   needs a cooling schedule and more evaluations; best as a fallback, not default.
+5. **Simulated annealing — detailed design drafted (`SIMULATED_ANNEALING.md`).**
+   Accept worsening moves with probability `exp(Δscore/T)`, cooling `T` over a single
+   trajectory, to escape the local optima that the SPLIT metric shows are *the* miss
+   mode. More robust but needs a cooling schedule, per-problem temperature
+   calibration, and more evaluations; best as a fallback, not the default. A full
+   plan — state space, involution move set, acceptance-ratio temperature
+   auto-calibration, incremental delta-scoring, determinism, CLI, and a phased
+   roadmap gated on a compute-normalised A/B vs `-R 10 -S iq` — lives in
+   `SIMULATED_ANNEALING.md`. Not yet built.
 6. **Tabu search** — short list of recently reversed moves to avoid cycling and
    cross plateaus; modest deterministic robustness gain.
 7. **Richer move set — ✅ "remove a plug" IMPLEMENTED.** The single "force `a`–`b`"
@@ -1019,10 +1030,12 @@ key per the bench notes); per-key cost ≈ passes × 325 × one full-message sco
 **Bottom line:** **(3)** random restarts, **(1)** the staged schedule, and **(2)**
 the key pre-filter are all **shipped** and **stack**: the best quality combination
 is **`-R 10 -S iq`** (restarts + an IC pre-pass), which lifts L140 from 16 %
-(plain) → 90 %, and **`-F N`** then buys back most of the cost (~8–20×) so more
-restarts are affordable per surviving key. Still open: the heavier metaheuristics
-(SA/tabu/GA, items 5–8) as fallbacks for the hardest cases. The default (`-R 1`,
-no `-S`, no `-F`) is the unchanged single-start climb on every key.
+(plain) → 90 %, and **`-F N`** (now with a capped tier-1 climb and an `N%` form)
+then buys back most of the cost (~8–20×) so more restarts are affordable per
+surviving key. Still open: the heavier metaheuristics (SA/tabu/GA, items 5–8) as
+fallbacks for the hardest cases — **simulated annealing has a detailed design in
+`SIMULATED_ANNEALING.md`** and is the next candidate to build and A/B. The default
+(`-R 1`, no `-S`, no `-F`) is the unchanged single-start climb on every key.
 
 ### Scoring data and smoothing (the other lever — and what it can/can't help)
 
