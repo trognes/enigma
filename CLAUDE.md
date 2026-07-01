@@ -176,6 +176,10 @@ any working directory.
     absolute count); absolute `N` bounds tier-2 cost. Both forms are supported.
   - **Chi-squared was benched as the tier-1 model and lost to IC** (χ² is gameable by
     the plugboard permutation) — IC stays. See `CODE_REVIEW.md` §9 item 2.
+  - **Tier 1 shows a live `\r` progress line** (`ranking NN% (done / total keys)`)
+    while it ranks, but only when stderr is a terminal (`isatty`) so redirected logs and
+    the tests stay clean. A shared atomic counter drives it, and because each atomic add
+    owns a disjoint slice, exactly one thread prints each 1% step — no races, `-T`-safe.
 - `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`)
 - `-T N` worker threads for the search (default 1, max 256)
 
