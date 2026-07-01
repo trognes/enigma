@@ -1171,3 +1171,67 @@ the floor model and an interpolated model for the **full-crack tier** (judgeable
 only once that evaluation tier is built), and **crib scoring** as the orthogonal
 high-value feature. All slot in behind the existing `-i/-m/-b/-t/-q` switch and are
 measurable with `make crackquality`.
+
+### Score normalization (length-independence / cross-model comparability)
+
+The scorers live on wildly different scales: `ic_score_decode` returns a *normalised*
+coincidence ratio `Σ freqⱼ(freqⱼ−1) / (L(L−1))` (~0.038 random, ~0.06–0.07 English,
+length-independent, O(0.01)), while `-m/-b/-t/-q` are **unnormalised sums** of
+`log10(count+1)` over the L (or L−n+1) positions — each term ~5–8, so the total scales
+~linearly with L and sits in the hundreds (the Sinkov statistic). Hence IC is many
+orders of magnitude smaller than the n-gram scores, and the n-gram scores grow with
+message length.
+
+**The crucial caveat: normalization does *not* change what the cracker finds.** In a
+single run every candidate shares the same length `L` and is scored by a *single*
+model, so any monotonic per-model rescaling (÷`L`, subtract a constant, …) leaves the
+`argmax` unchanged — the winning key is identical before and after. Length-dependence
+and the magnitude gap are invisible to within-run ranking. So this is **not** a
+recovery-quality lever and must not be sold as one; expect zero movement in
+`make crackquality`.
+
+**Where it *does* pay** is anywhere scores are compared across models, across lengths,
+or against an absolute bar — none of which the current single-model/single-length
+search does, but several *planned* items do:
+
+- **Model blending / the interpolated back-off model** (item 2 above) — mixing
+  mono+bi+tri+quad *requires* a common scale first; normalization is a prerequisite.
+- **Simulated annealing** (`SIMULATED_ANNEALING.md`) — the plan leans on *per-problem*
+  temperature calibration precisely *because* scores are unnormalised; a normalised
+  score would give transferable default temperatures and a meaningful acceptance scale
+  (calibration still works without it — normalization just improves the defaults).
+- **Absolute confidence / early-stop / "found nothing" signal** — a length- and
+  model-independent score can answer "is this actually language, or just the best of a
+  bad lot?", enabling a stopping criterion the raw sums cannot support.
+- **Cross-length harness reporting** and **interpretability** of the printed score.
+
+**Schemes, cheap → principled:**
+
+1. **Per-symbol average** (÷ number of terms). Trivial; removes length dependence,
+   giving mean `log10(count)` per position. But IC (~0.05) and mean-log-count (~6) are
+   still different *quantities* on different scales — this fixes length, not
+   comparability. Mostly a readability win and a building block.
+2. **Per-symbol cross-entropy / mean log-probability** — switch to probability tables
+   (`log10(count/total)`, the floor model) and average → a per-character log-likelihood
+   (dits/char). The information-theoretic "right" scale, comparable across n-gram
+   orders and the natural basis for **blending** and a **full-crack LM**. Cost: needs
+   the floor model (A/B'd neutral for the plugboard tier, but the correct substrate
+   here). IC does not fit this frame (not a per-symbol log-prob), so it stays separate.
+3. **Z-score / "σ over random"** — `z = (score − μ_rand) / σ_rand`. The most powerful
+   for *comparability*: makes IC and quadgrams both read as "how many σ above random,"
+   dimensionless and length/model-independent, and directly interpretable as signal
+   strength (the classic cryptanalytic normalization; IC-as-sigma). Needs
+   `μ_rand, σ_rand` per (model, length) — analytic for IC (random IC ≈ 1/26), but the
+   n-gram terms are correlated (overlapping windows), so estimate σ empirically by
+   sampling random decrypts once per run (cheap, O(a few·L)).
+
+**Recommendation.** Do **not** implement normalization as a standalone "improvement" —
+it will not move recovery. Implement it only as the enabling step for whichever
+downstream feature needs it: **z-score (σ)** when the goal is comparability / absolute
+thresholds / a unified SA-or-stop criterion (handles IC *and* the n-grams uniformly);
+**cross-entropy** (floor model) when the goal is blending or a full-crack LM. That
+keeps it measurable — the payoff shows up in the *feature*, not in the normalization.
+Two invariants worth banking if it is ever built: (a) a test asserting the normalised
+ranking equals the raw ranking per model (proving search behaviour is unchanged), and
+(b) a downstream test that the normalised scale actually separates real-vs-gibberish
+across lengths.
