@@ -1214,9 +1214,24 @@ search does, but several *planned* items do:
 2. **Per-symbol cross-entropy / mean log-probability** — switch to probability tables
    (`log10(count/total)`, the floor model) and average → a per-character log-likelihood
    (dits/char). The information-theoretic "right" scale, comparable across n-gram
-   orders and the natural basis for **blending** and a **full-crack LM**. Cost: needs
-   the floor model (A/B'd neutral for the plugboard tier, but the correct substrate
-   here). IC does not fit this frame (not a per-symbol log-prob), so it stays separate.
+   orders and the natural basis for **blending** and a **full-crack LM**. IC does not
+   fit this frame (not a per-symbol log-prob), so it stays separate.
+
+   **Cheapest and lowest-risk of the three to implement.** It is two changes, and the
+   hot path is untouched by either: (a) **probability tables** — change only the final
+   transform loop in `ngrams_read` to compute `total = Σ count` and store
+   `log10(count/total)` (floor `log10(floor/total)` for unseen), ~5 lines; the fused
+   scorers (`quadgram_score_decode` etc.) just *sum table entries*, so they need **no**
+   change. (b) **per-symbol division** by the term count `N` (`L` or `L−n+1`) — one
+   division at the report/compare site. No hot-path edit, no determinism obligation, no
+   `make bench` risk (unlike z-score's sampled null). Half of it — the floor tables —
+   is already prototyped and **A/B'd neutral** for the plugboard tier. Caveats: it is
+   ranking-invariant within a run (so no standalone payoff — build it only for a
+   downstream consumer), and it changes global scoring semantics, so add it as a
+   **mode/flag** (or compute the normalised value only for reporting/blending) rather
+   than silently replacing the tuned `log10(count+1)` default. Note (b) alone on the
+   *current* tables gives "mean log-count per symbol" — length-normalised but not a true
+   cross-entropy; the true quantity needs the (a) probability tables too.
 3. **Z-score / "σ over random"** — `z = (score − μ_rand) / σ_rand`. The most powerful
    for *comparability*: makes IC and quadgrams both read as "how many σ above random,"
    dimensionless and length/model-independent, and directly interpretable as signal
@@ -1262,8 +1277,11 @@ downstream feature needs it: **z-score (σ)** when the goal is cross-model /
 cross-length *comparability and interpretability* (a unified "signal strength" axis;
 handles IC *and* the n-grams uniformly — but see its disadvantages: shaky as an
 absolute p-value at short L, and redundant for SA);
-**cross-entropy** (floor model) when the goal is blending or a full-crack LM. That
-keeps it measurable — the payoff shows up in the *feature*, not in the normalization.
+**cross-entropy** (floor model) when the goal is blending or a full-crack LM — and
+note it is the **cheapest and lowest-risk** of the three (hot path untouched, no
+sampled null, floor half already prototyped), so if in doubt it is the one to reach
+for first. That keeps it measurable — the payoff shows up in the *feature*, not in
+the normalization.
 Two invariants worth banking if it is ever built: (a) a test asserting the normalised
 ranking equals the raw ranking per model (proving search behaviour is unchanged), and
 (b) a downstream test that the normalised scale actually separates real-vs-gibberish
