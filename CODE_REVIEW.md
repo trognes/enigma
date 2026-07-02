@@ -29,7 +29,13 @@ out-scores what the climb reaches). The shipped search levers — random restart
 (`-R`), the staged schedule (`-S`), the key pre-filter (`-F`), and simulated
 annealing (`-A`) — stack, with `-R 10 -S iq` the best measured recipe. Remaining
 ideas, in rough order of expected payoff (all with **diminishing returns** — SA
-landed only as a *peer* of `-R -S iq`, and 3-opt was measured and rejected):
+landed only as a *peer* of `-R -S iq`; 3-opt and **cross-restart consensus /
+plug fixation** were built and measured and rejected — consensus loses to a higher
+`-R` at equal compute and saturates as `-R` grows, `performance.md` §3.1). The
+first-order lever remains **raising `-R`** (it never plateaus through 256), so the
+best remaining bets *buy more restarts* — a per-climb throughput win or the
+`max(greedy, SA)` portfolio (two independent trajectories, not a re-climbed shared
+seed) — rather than post-processing a fixed restart budget:
 
 - 🟢 **Full-crack tier for `make crackquality`** (measurement gap, and a
   prerequisite). The harness only exercises the plugboard-recovery tier (true
@@ -109,10 +115,15 @@ these mostly pay off in the (unbuilt) full-crack tier of §1.
   `make bench BASE=<ref>` under **both** g++ and clang. Details in history §6.
 - **Measure; don't ship losers.** The following were built/prototyped, measured,
   and **rejected** — don't re-attempt without a materially different regime:
-  incremental delta-scoring (~2× slower; `SIMULATED_ANNEALING.md` §6.2), χ² as the
-  scoring/`-F` model (gameable by the plugboard), 3-opt / 3-plug re-pair (cost >
-  gain), rotor-stepping reuse across starts (history §6 "optimisation B"),
-  `-march=native` / SIMD gathers and GPU (the scorer is gather-latency-bound, not
-  throughput-bound), and 5-grams / 4-bit scores (too sparse / too coarse).
+  cross-restart consensus / plug fixation (freeze the plugs that a majority of the
+  restart boards agree on, then climb the residual — compute-neutral-to-negative vs
+  simply raising `-R`, and a no-op at high `-R` because best-of-`R` saturates; swept
+  over vote threshold × elite-set size × `-R` × plug count × length × seed;
+  `performance.md` §3.1), incremental delta-scoring (~2× slower;
+  `SIMULATED_ANNEALING.md` §6.2), χ² as the scoring/`-F` model (gameable by the
+  plugboard), 3-opt / 3-plug re-pair (cost > gain), rotor-stepping reuse across
+  starts (history §6 "optimisation B"), `-march=native` / SIMD gathers and GPU (the
+  scorer is gather-latency-bound, not throughput-bound), and 5-grams / 4-bit scores
+  (too sparse / too coarse).
 - **Determinism is a contract.** Results must be independent of `-T`; the per-key
   RNG is seeded from the flat key index. Keep new randomness on that stream.

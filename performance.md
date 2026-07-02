@@ -119,46 +119,60 @@ short-text search failures / reduce variance at equal budget," not a step change
 Rank within this section is by evidence and payoff-per-effort. **The baseline each
 one must beat is a higher `-R` at equal compute**, not a single climb.
 
-### 3.1 Cross-restart consensus / plug fixation (HIGH priority)
+### 3.1 Cross-restart consensus / plug fixation — ❌ BUILT, MEASURED, REJECTED
 
-*Merged from four researchers (restart voting, elite consensus, portfolio
-consensus, fixation).*
+*This was the flagship "if you do three things" pick. It was implemented in full and
+measured against its own stated bar (beat a higher `-R` at equal compute). It does
+not. Kept here as a documented rejection so it is not re-attempted; the top-of-shortlist
+slot is reassigned in §9.*
 
-**Form in this codebase.** `hillclimb_restarts()` (`:1478`) already runs `-R`
-independent climbs and keeps only the single best board, discarding the rest.
-Instead, accumulate a 26×26 symmetric counter over the top-E converged boards,
-weighted by their final score. Pairs present in a strong majority (e.g. ≥70% of
-the elite set) are frozen via the existing `plug_fixed[]` mechanism (the same one
-`-s` uses), and one final climb runs on the smaller residual (free letters only).
-Optionally iterate fix → re-search → fix. This recycles data the search already
-produces and throws away, and it is a pure function of the per-key RNG stream, so
-`-T` determinism holds.
+**The idea.** `hillclimb_restarts()` (`:1478`) runs `-R` independent climbs and keeps
+only the single best board, discarding the rest. Consensus instead mines the discarded
+boards: keep the top-E by score (an elite set), vote each plug across them, freeze the
+plugs that appear in ≥ N% of the elite via a per-key freeze mask (the generalization of
+`-s`'s `plug_fixed[]`), and run one more climb over only the residual (free) letters.
+The premise (per §2): a truly-set plug survives across the *good* basins, so voting is a
+variance-reduction estimator that pulls the identifiable plugs out of the noise and
+shrinks the problem the final climb must solve. Fully deterministic (a pure function of
+the deterministic restart boards), so `-T`-independent.
 
-**Why it helps at 50 chars.** Different restarts get stuck in *different* local
-optima, but a truly-set plug (whose two letters actually occur) tends to be
-present across the good basins even when the rest of the board disagrees. Voting
-is a variance-reduction estimator: it extracts the low-variance signal (the
-identifiable plugs, per §2) and removes them from the combinatorial space, so the
-next climb solves a smaller, easier board.
+**What was built.** A per-machine `plug_frozen[26]` mask (routed through the four climb
+freeze-checks — switch/remove/re-pair/SA-toggle — so consensus can freeze plugs per key
+without racing on the shared global); elite top-E voting; the residual climb via
+`optimize_once` (so it composes with `-A`); best-of-{restarts, residual} kept so it can
+only ever help. Correct, `-Werror`-clean on g++/clang, all tests pass, `-T`-deterministic
+(identical output at T=1/3/8 on a real multi-key search).
 
-**Honest payoff.** Medium-high — the single most promising *new* search lever
-because it recycles most of the existing compute and exploits the involution's
-discreteness (a plug is present-or-absent, so votes are meaningful). Risk: if
-restarts share a *correlated* wrong basin, consensus reinforces the error and the
-fixation locks it in. The `k≈8` kick should give enough diversity to avoid this,
-but it must be checked.
+**Why it was rejected — the measurement.** The residual climb costs only ~+8%
+`score_iter` (about half a restart), so the honest baseline for `-C` at `-R N` is roughly
+`-R N.5`. Measured on `make crackquality` (exact-recovery %, identical problems):
 
-**Cost/risk.** Low: a 26×26 counter in `hillclimb_restarts()`, a threshold, and
-re-entry into the climb with extra `plug_fixed[]` bits. Mitigate false fixation
-with a high vote threshold and a final *unfrozen* polish pass. Note the
-fix → re-climb pass is **not free**: it is extra `score_iter` calls and must be
-counted in the compute budget below (it is post-search, so it does not touch
-`make bench`, but it does compete with spending those cycles on more restarts).
+| regime | plain `-R N` | `-R N` + consensus | equal-compute `-R N+1` |
+|---|---|---|---|
+| R8, PAIRS 10, L90, seed 0 | 52.2 | 52.5 | **54.8** |
+| R8, PAIRS 10, L90, seed 1 | 53.0 | 53.8 | **56.0** |
+| R8, PAIRS 6, L70, seed 0 | 67.3 | 68.0 | **70.0** |
+| R20, PAIRS 10, L90 | 73.0 | 73.0 | **73.3** |
 
-**Experiment.** `make crackquality SPLIT=1` at L40–80, comparing consensus (plus
-its re-climb) vs plain best-of-`R` at **equal total `score_iter`** — consensus
-must beat simply spending those cycles on additional restarts. Track
-exact-recovery, mean %-correct, and whether the search-failure share drops.
+Consensus consistently edges out *plain* `-R N` by a fraction but **loses to (or at best
+ties) the same compute spent on one more restart** — across thresholds {50,60,70}, elite
+sizes {top-2, top-5, R/2, all-boards}, `R` {8,16,20}, PAIRS {6,10}, lengths {50,70,90},
+and two seeds.
+
+**And — counter-intuitively — raising `R` makes it *worse*, not better.** At `R20` it is
+a near-total no-op: identical to plain `R20` at *every* threshold and elite size (even
+top-2 agreement). Mechanism: best-of-`R` saturates. By `R=20` the best of 20 independent
+climbs is already excellent (73% exact at L90), so the consensus residual climb almost
+never finds a board better than one already in the top-20. The marginal climb is always
+better spent on a *fresh* restart (a new basin) than on re-climbing a consensus-frozen
+seed. The stated risk — restarts sharing a *correlated* wrong basin, so consensus
+reinforces the error — is exactly what dominates, and it does not diminish with more
+votes because the votes agree on the same wrong (or already-found) answer.
+
+**Verdict.** Compute-neutral-to-negative; strictly weaker than `-A` (a genuine *peer*).
+Not shipped. Do not re-attempt without a materially different mechanism (the untested
+levers — threshold, elite size, `R` — were all swept and none crosses the equal-compute
+`-R` line).
 
 ### 3.2 Portfolio: per-key `max(greedy, SA)` (HIGH priority)
 
@@ -969,35 +983,39 @@ Build this first; several ideas below only become measurable once it exists.
 
 ### If you do three things (on the existing plugboard tier)
 
-1. **Cross-restart consensus / plug fixation (§3.1).** Highest payoff-per-effort:
-   near-zero extra compute (it recycles data `-R` already discards; the re-climb is a
-   small extra `score_iter` cost, counted in the budget), directly exploits the
-   involution's discreteness and the identifiability structure of §2, deterministic,
-   and it *separates the recoverable plugs from short-text noise* — the exact 50-char
-   failure mode. Measure at equal total `score_iter` so it must beat spending those
-   cycles on more restarts.
+> The original #1 here — cross-restart consensus / plug fixation (§3.1) — was built
+> and **measured as compute-neutral-to-negative** (it loses to a higher `-R` at equal
+> compute, and becomes a no-op as `R` grows because best-of-`R` saturates). It is
+> rejected; see §3.1. The list below is the reassigned top three.
 
-2. **Portfolio `max(greedy, SA)` (§3.2).** Near-free upside that directly monetizes
+1. **Portfolio `max(greedy, SA)` (§3.2).** Near-free upside that directly monetizes
    the shipped "SA is a peer, not a win" finding: run both existing solvers at half
    budget each per key and keep the better board. Zero new algorithm, trivial
    determinism. The one thing to check is that the two solvers' solved-sets actually
    *differ* (not nested); the finding that SA is a *peer* is exactly the evidence they
-   do.
+   do. **Unlike consensus, this does not re-climb a shared seed** — it keeps two
+   genuinely independent trajectories, so it is not subject to the best-of-`R`
+   saturation that sank §3.1.
 
-3. **A per-climb throughput lever — surrogate-ranked ascent (§7.1a) or
+2. **A per-climb throughput lever — surrogate-ranked ascent (§7.1a) or
    first-improvement + don't-look bits (§7.2).** The compute budget *is* the number of
    `score_iter` calls; a several-fold per-climb speedup converts directly into more
-   restarts, which never plateau through R=256. §7.1a is the higher-ceiling,
+   restarts, which never plateau through R=256 — and, per the §3.1 result, *more
+   restarts is the lever that actually pays*. §7.1a is the higher-ceiling,
    higher-complexity option (and is explicitly *not* the rejected quad delta — the
    surrogate delta is a tiny 26-entry update); §7.2 is the simpler first cut. Validate
    at **matched wall-clock**.
 
-Then, as budget allows: True ILS with incumbent-walk acceptance (§3.3, the cheapest
-structural upgrade over the fixed-seed restart — with `δ=0, k=8` as an exact control);
-quick trigram-target tuning (§6.1) and back-off smoothing (§6.2) to de-risk the scoring
-axis; the `-F` IC-pre-pass amortization (§7.3, clean win under `-F`); and partial
-first-pair exhaustion (§3.6) or parallel tempering (§3.4) once the throughput headroom
-from item 3 makes their extra cost affordable.
+3. **True ILS with incumbent-walk acceptance (§3.3).** The cheapest *structural*
+   change to how restarts are spent: instead of always relaunching from the fixed seed,
+   carry a walk incumbent and accept within `δ`, so small perturbations chain across
+   plateaus. It changes the restart *trajectory* rather than post-processing its output
+   (where §3.1 failed), and `δ=0, k=8` reproduces today's `-R` exactly as a control.
+
+Then, as budget allows: quick trigram-target tuning (§6.1) and back-off smoothing (§6.2)
+to de-risk the scoring axis; the `-F` IC-pre-pass amortization (§7.3, clean win under
+`-F`); and partial first-pair exhaustion (§3.6) or parallel tempering (§3.4) once the
+throughput headroom from item 2 makes their extra cost affordable.
 
 ### For real operational traffic (a different goal than the current benchmark)
 
@@ -1027,9 +1045,12 @@ move the current numbers; do not judge them by it.
 
 Shipped: steepest-ascent moves, `-R` restarts, `-S iq` staging + caps, `-F` pre-filter,
 `-A` simulated annealing, `-s` fixed plugs, uint8 tables + hapax floor. Rejected (with
-reason): incremental **quad** delta-scoring (~2× slower — but note §7.1a is a *surrogate*
-delta on a 26-entry table, and §7.1c is an *amortized-per-pass* delta, both distinct);
-chi-squared scoring/tier-1 (gameable, far worse recall); 3-opt / 3-plug re-pair (cost >
+reason): **cross-restart consensus / plug fixation (§3.1** — built and measured
+compute-neutral-to-negative; loses to a higher `-R` at equal compute and no-ops as `R`
+grows because best-of-`R` saturates; swept over threshold × elite size × `R` × PAIRS ×
+length × seed**)**; incremental **quad** delta-scoring (~2× slower — but note §7.1a is a
+*surrogate* delta on a 26-entry table, and §7.1c is an *amortized-per-pass* delta, both
+distinct); chi-squared scoring/tier-1 (gameable, far worse recall); 3-opt / 3-plug re-pair (cost >
 gain); SIMD / `-march=native` (latency-bound — but note §7.1b is scalar MLP, orthogonal);
 GPU (gather-bound, breaks the portable design); rotor-stepping reuse (slower); SA reheating
 / chain-length sweeps (no help); `χ0=0.8` (lost 2×); plugboard-free IC scan pre-filter
