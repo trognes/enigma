@@ -752,8 +752,9 @@ double ic_score_decode(machine & m)
 
   double score = 0.0;
   for(int j=0; j<asize; j++)
-    score += (double) freq[j] * (freq[j] - 1);
-  return (textlength > 1) ? score / ((double) textlength * (textlength - 1)) : 0.0;
+    score += static_cast<double>(freq[j]) * (freq[j] - 1);
+  return (textlength > 1)
+    ? score / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
 }
 
 void showsteckerbrett(machine & m)
@@ -868,8 +869,8 @@ int order[asize];
 
 int compare(const void * x, const void * y)
 {
-  int a = count[*(const int*)(x)];
-  int b = count[*(const int*)(y)];
+  int a = count[*static_cast<const int*>(x)];
+  int b = count[*static_cast<const int*>(y)];
 
   if (a<b)
     return +1;
@@ -1869,12 +1870,24 @@ void finish_worker(machine & m,
    wheel-order tasks, precompute their rotor tables in parallel, then sweep the
    flat (wheel-order x ring x start) key space in parallel. The best decryption
    is written to 'result'. */
-void bruteforce(char * result)
+/* All the derived search dimensions for one run, built from the opt_* CLI state: the
+   task list (reflector x Greek wheel x Greek offset x wheel order) and the ring/start
+   ranges and counts. Bundled so bruteforce() reads as phases rather than one long
+   setup block. */
+struct key_space
 {
-  int u_min, u_max;
-  int w_min[wheels], w_max[wheels];
+  std::vector<wheel_task> tasks;
   search_range range;
+  int rc[wheels], gc[wheels];   /* per-position ring / start counts */
+  size_t rsize, gsize;          /* ring-combo and start-combo counts */
+  size_t total_keys;            /* tasks.size() * rsize * gsize */
+};
 
+static key_space build_key_space()
+{
+  key_space ks;
+
+  int u_min, u_max;
   if (opt_norenigma)
     {
       u_min = 0;
@@ -1902,6 +1915,7 @@ void bruteforce(char * result)
         u_min = u_max = char2num(opt_ukw[0]);
     }
 
+  int w_min[wheels], w_max[wheels];
   for(int i=0; i<wheels; i++)
     {
       if (opt_walzen[i] == '.')
@@ -1916,34 +1930,32 @@ void bruteforce(char * result)
 
       if (opt_ringstellung[i] == '.')
         {
-          range.r_min[i] = 0;
-          range.r_max[i] = 25;
+          ks.range.r_min[i] = 0;
+          ks.range.r_max[i] = 25;
         }
       else
         {
-          range.r_min[i] = range.r_max[i] = char2num(opt_ringstellung[i]);
+          ks.range.r_min[i] = ks.range.r_max[i] = char2num(opt_ringstellung[i]);
         }
 
       if (opt_grundstellung[i] == '.')
         {
-          range.g_min[i] = 0;
-          range.g_max[i] = 25;
+          ks.range.g_min[i] = 0;
+          ks.range.g_max[i] = 25;
         }
       else
         {
-          range.g_min[i] = range.g_max[i] = char2num(opt_grundstellung[i]);
+          ks.range.g_min[i] = ks.range.g_max[i] = char2num(opt_grundstellung[i]);
         }
     }
 
-  /* per-position ring/start counts and their products */
-  int rc[wheels], gc[wheels];
   for (int i = 0; i < wheels; i++)
     {
-      rc[i] = range.r_max[i] - range.r_min[i] + 1;
-      gc[i] = range.g_max[i] - range.g_min[i] + 1;
+      ks.rc[i] = ks.range.r_max[i] - ks.range.r_min[i] + 1;
+      ks.gc[i] = ks.range.g_max[i] - ks.range.g_min[i] + 1;
     }
-  size_t rsize = static_cast<size_t>(rc[0]) * rc[1] * rc[2];
-  size_t gsize = static_cast<size_t>(gc[0]) * gc[1] * gc[2];
+  ks.rsize = static_cast<size_t>(ks.rc[0]) * ks.rc[1] * ks.rc[2];
+  ks.gsize = static_cast<size_t>(ks.gc[0]) * ks.gc[1] * ks.gc[2];
 
   /* M4 adds two outer dimensions: the Greek wheel (Beta/Gamma) and its fixed
      offset. Only the (start - ring) offset of the static Greek wheel is
@@ -1983,7 +1995,6 @@ void bruteforce(char * result)
       offset_list.push_back(0);
     }
 
-  std::vector<wheel_task> tasks;
   for (int u1 = u_min; u1 <= u_max; u1++)
     for (int gi : greek_list)
       for (int off : offset_list)
@@ -1991,23 +2002,74 @@ void bruteforce(char * result)
           for (int w2 = w_min[1]; w2 <= w_max[1]; w2++)
             for (int w3 = w_min[2]; w3 <= w_max[2]; w3++)
               if ((w1 != w2) && (w1 != w3) && (w2 != w3))
-                tasks.push_back(wheel_task{u1, {w1, w2, w3}, gi, off});
+                ks.tasks.push_back(wheel_task{u1, {w1, w2, w3}, gi, off});
 
   /* The option validation should make this unreachable, but never run an empty
      search and emit uninitialised output. */
-  if (tasks.empty())
+  if (ks.tasks.empty())
     fatal("No machine configuration was searched "
           "(check the -u / -w / -x settings)");
 
-  size_t nwo = tasks.size();
-  size_t total_keys = nwo * rsize * gsize;
+  ks.total_keys = ks.tasks.size() * ks.rsize * ks.gsize;
+  return ks;
+}
 
-  /* memory accounting: one [asize]^4 (457 KB) table per task (reflector x wheel
-     order, plus the Greek wheel x offset in M4), all resident. The biggest
-     possible search is a full M4 wildcard (2 thin x 2 Greek x 26 offsets x 336
-     wheel orders = 34 944 tasks ~= 14.9 GiB); every other mode is far smaller. No
-     fixed ceiling is enforced -- the allocation below just fails gracefully if the
-     machine cannot provide the memory. */
+/* Allocate the shared read-only rotor-table block: one [asize]^4 (457 KB) table per
+   task, all resident. A clean fatal() beats a std::terminate if the allocator refuses
+   the block. (Under Linux overcommit a too-large request may instead succeed here and
+   be OOM-killed later while precompute touches the pages.) */
+static subst_table allocate_subst_tables(size_t nwo)
+{
+  try
+    {
+      return new unsigned char[nwo * asize][asize][asize][asize];
+    }
+  catch (const std::bad_alloc &)
+    {
+      char msg[160];
+      double gb = nwo * static_cast<double>(asize) * asize * asize * asize / 1e9;
+      snprintf(msg, sizeof msg,
+               "Could not allocate %.1f GB for the rotor tables "
+               "(narrow -u / -w / -x, or fix the M4 Greek wheel/position)", gb);
+      fatal(msg);
+    }
+  return nullptr;   /* unreachable: fatal() exits */
+}
+
+/* Run per_thread(t) for t in [0, nthreads): inline when single-threaded, otherwise on
+   a thread pool joined before returning. Every search phase uses this, so the
+   spawn/join boilerplate lives in one place. Objects the per_thread lambda captures by
+   reference outlive the join, so no std::ref wrapping is needed. */
+template <typename F>
+static void run_parallel(int nthreads, F per_thread)
+{
+  if (nthreads <= 1)
+    {
+      per_thread(0);
+      return;
+    }
+  std::vector<std::thread> pool;
+  pool.reserve(static_cast<size_t>(nthreads));
+  for (int t = 0; t < nthreads; t++)
+    pool.emplace_back(per_thread, t);
+  for (std::thread & th : pool)
+    th.join();
+}
+
+void bruteforce(char * result)
+{
+  key_space ks = build_key_space();
+  const std::vector<wheel_task> & tasks = ks.tasks;
+  const search_range & range = ks.range;
+  const int * rc = ks.rc;
+  const int * gc = ks.gc;
+  size_t rsize = ks.rsize;
+  size_t gsize = ks.gsize;
+  size_t nwo = tasks.size();
+  size_t total_keys = ks.total_keys;
+
+  /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
+     task; a full M4 wildcard is ~14.9 GiB, every other mode far smaller) */
   g_table_count = nwo;
   g_table_bytes = nwo * static_cast<size_t>(asize) * asize * asize * asize;
 
@@ -2018,48 +2080,19 @@ void bruteforce(char * result)
   if (nthreads < 1)
     nthreads = 1;
 
-  /* the shared, read-only rotor-stack tables (one [asize]^4 block per wheel
-     order) and the per-thread machines (small: mapping/plaintext/settings). A
-     clean message beats a std::terminate if the allocator refuses the block
-     (note: under Linux memory overcommit a too-large request may instead succeed
-     here and be OOM-killed later while precompute touches the pages). */
-  subst_table all;
-  try
-    {
-      all = new unsigned char[nwo * asize][asize][asize][asize];
-    }
-  catch (const std::bad_alloc &)
-    {
-      char msg[160];
-      snprintf(msg, sizeof msg,
-               "Could not allocate %.1f GB for the rotor tables "
-               "(narrow -u / -w / -x, or fix the M4 Greek wheel/position)",
-               g_table_bytes / 1e9);
-      fatal(msg);
-    }
+  subst_table all = allocate_subst_tables(nwo);
 
   std::vector<machine *> machines(static_cast<size_t>(nthreads));
   for (int t = 0; t < nthreads; t++)
     machines[t] = new machine();   /* subst_array is pointed at 'all' per task */
 
-  /* phase 1: precompute every wheel order's table in parallel */
+  /* phase 1: precompute every wheel order's table once, in parallel */
   std::atomic<size_t> next_task{0};
-  if (nthreads == 1)
-    precompute_worker(*machines[0], tasks, next_task, all);
-  else
-    {
-      std::vector<std::thread> pool;
-      pool.reserve(static_cast<size_t>(nthreads));
-      for (int t = 0; t < nthreads; t++)
-        pool.emplace_back(precompute_worker, std::ref(*machines[t]),
-                          std::cref(tasks), std::ref(next_task), all);
-      for (std::thread & th : pool)
-        th.join();
-    }
+  run_parallel(nthreads, [&](int t)
+    { precompute_worker(*machines[t], tasks, next_task, all); });
 
-  /* phase 2: sweep the flat key space in parallel, adaptive chunks (each thread
-     gets ~16 chunks: enough to balance the tail, few enough to amortise the
-     atomic) */
+  /* phase 2: sweep the flat key space in adaptive chunks (~16 per thread: enough to
+     balance the tail, few enough to amortise the atomic) */
   best_result best;
   size_t chunk = total_keys / (static_cast<size_t>(nthreads) * 16);
   if (chunk < 1)
@@ -2083,22 +2116,10 @@ void bruteforce(char * result)
       std::atomic<size_t> fnext{0};
       std::atomic<size_t> fprogress{0};
       bool show_progress = isatty(fileno(stderr)) != 0;   /* live line only on a TTY */
-      if (nthreads == 1)
-        filter_worker(*machines[0], tasks, range, rc, gc, all, rsize, gsize,
-                      fnext, chunk, topn, cand_mutex, cand, fprogress, show_progress);
-      else
-        {
-          std::vector<std::thread> pool;
-          pool.reserve(static_cast<size_t>(nthreads));
-          for (int t = 0; t < nthreads; t++)
-            pool.emplace_back(filter_worker, std::ref(*machines[t]),
-                              std::cref(tasks), std::cref(range), rc, gc, all,
-                              rsize, gsize, std::ref(fnext), chunk, topn,
-                              std::ref(cand_mutex), std::ref(cand),
-                              std::ref(fprogress), show_progress);
-          for (std::thread & th : pool)
-            th.join();
-        }
+      run_parallel(nthreads, [&](int t)
+        { filter_worker(*machines[t], tasks, range, rc, gc, all, rsize, gsize,
+                        fnext, chunk, topn, cand_mutex, cand, fprogress,
+                        show_progress); });
       if (show_progress)
         fprintf(stderr, "\n");   /* finish the live \r progress line */
 
@@ -2123,40 +2144,16 @@ void bruteforce(char * result)
 
       /* Tier 2: full -R / -S climb on the shortlist only. */
       std::atomic<size_t> snext{0};
-      if (nthreads == 1)
-        finish_worker(*machines[0], tasks, range, rc, gc, all, rsize, gsize,
-                      shortlist, snext, best);
-      else
-        {
-          std::vector<std::thread> pool;
-          pool.reserve(static_cast<size_t>(nthreads));
-          for (int t = 0; t < nthreads; t++)
-            pool.emplace_back(finish_worker, std::ref(*machines[t]),
-                              std::cref(tasks), std::cref(range), rc, gc, all,
-                              rsize, gsize, std::cref(shortlist),
-                              std::ref(snext), std::ref(best));
-          for (std::thread & th : pool)
-            th.join();
-        }
+      run_parallel(nthreads, [&](int t)
+        { finish_worker(*machines[t], tasks, range, rc, gc, all, rsize, gsize,
+                        shortlist, snext, best); });
     }
   else
     {
       std::atomic<size_t> next_key{0};
-      if (nthreads == 1)
-        search_worker(*machines[0], tasks, range, rc, gc, all,
-                      rsize, gsize, next_key, chunk, best);
-      else
-        {
-          std::vector<std::thread> pool;
-          pool.reserve(static_cast<size_t>(nthreads));
-          for (int t = 0; t < nthreads; t++)
-            pool.emplace_back(search_worker, std::ref(*machines[t]),
-                              std::cref(tasks), std::cref(range), rc, gc, all,
-                              rsize, gsize, std::ref(next_key), chunk,
-                              std::ref(best));
-          for (std::thread & th : pool)
-            th.join();
-        }
+      run_parallel(nthreads, [&](int t)
+        { search_worker(*machines[t], tasks, range, rc, gc, all,
+                        rsize, gsize, next_key, chunk, best); });
     }
 
   /* diagnostics: every rotor combination is analysed (brute force has no early

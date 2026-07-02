@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 -pthread
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast -O3 -pthread
 
 # Appended after CXXFLAGS; used by CI to add e.g. -Werror or sanitizers
 # without dropping the base flags:  make EXTRA_CXXFLAGS=-Werror
