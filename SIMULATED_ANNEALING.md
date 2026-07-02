@@ -209,6 +209,38 @@ Caveat: the win is largest at **long** L; at the **short** L where SA matters mo
 full rescore is already cheap (`O(L)` with L≤~150), so Phase 1 can use full rescore
 and defer the delta-scorer to Phase 2 once SA is proven to help.
 
+**Measured — rejected (built as a prototype, ~2× *slower*).** The delta-scorer above was
+implemented for the greedy hill-climb candidate loop (its ideal case: 325 candidates per
+pass, each one toggle off a fixed base board), assert-gated against full rescore (zero
+mismatches, byte-identical output). Startup-subtracted per-restart climb time, quad,
+`-S iq`:
+
+| L | full rescore | delta | speedup |
+|---|---|---|---|
+| 50  | 0.72 ms | 1.67 ms | 0.43× |
+| 88  | 1.45 ms | 2.66 ms | 0.55× |
+| 150 | 1.54 ms | 3.36 ms | 0.46× |
+
+Three effects the `O(affected)` model above under-weighted, all of which bite hardest for
+**quad on short text**:
+
+1. **Each affected quadgram costs two table lookups, not one** — subtract the old
+   contribution, add the new — whereas full rescore does one lookup per gram.
+2. **`switch` moves change `|C| = 4` letters, not 2** (both endpoints' partners are
+   ejected). Once a few plugs are set, most candidates are `|C| = 4`, so `|startset|`
+   reaches ~65–80% of a short message's grams. At that fraction, delta already does
+   ~1.5× the lookups of a full pass *before* bookkeeping.
+3. **The fused baseline is a very tight target** — branch-free, sequential,
+   `__restrict`-hoisted, no scratch array. The delta path is scattered random-access
+   positions + per-candidate CSR scans + stamp dedup + a per-pass base rebuild:
+   cache-unfriendly and unvectorizable.
+
+Textbook delta-scoring wins for **long** texts with **small, localized** changes (e.g. a
+simple-substitution swap that moves exactly two letters' positions). This workload is the
+opposite corner. So the delta-scorer is **documented-but-unbuilt**, like χ² tier-1 and
+3-opt — do not re-attempt it for the plugboard climb without changing the regime (much
+longer L, or a model whose window does not spread each change ×4).
+
 ### 6.3 Cheaper-model exploration (a second lever)
 
 Reuse the `-S` insight: run the high-`T` exploratory phase under a **cheaper model**
@@ -374,15 +406,17 @@ not help).
   acceptance-ratio T-calibration, incumbent + final quench, per-key deterministic RNG,
   behind `-A`. Full-message rescore per move (simple, correct). A/B vs `-R 10 -S iq`.
   **Decision point: does it help at all?**
-- **Phase 2 — incremental delta-scoring.** Only if Phase 1 shows promise. Add the
-  `O(affected)` delta-scorer with the debug assert; re-run the compute-normalised A/B
-  (SA should now win on wall-clock too). Bench under g++ and clang.
+- **Phase 2 — incremental delta-scoring. Tried and REJECTED (§6.2):** the assert-gated
+  prototype was ~2× *slower* than full rescore for quad on short L (the new+old double
+  lookup, `|C|=4` switch moves, and the cache-unfriendly bookkeeping outweigh the fewer
+  grams touched). Not built. Do not re-attempt without a different regime (much longer L).
 - **Phase 3 — tuning & composition.** Sweep `M_total`, `L_chain`, `χ0/χend`, staged
   vs flat model, reheating/adaptive cooling; wire SA into `-F` tier 2 and `-R`. Settle
   defaults.
 - **Phase 4 — ship or shelve. → SHIPPED (`-A`).** SA cleared the gate once `χ0` was
   tuned (§15): at equal climb time it matches or beats greedy `-R -S iq`. Phase 1's full
-  rescore was fast enough (L ≤ ~150) that Phase 2's delta-scorer was not needed to ship.
+  rescore was not just fast enough but *the right choice*: the Phase 2 delta-scorer was
+  later prototyped and measured ~2× slower for quad on short L (§6.2), so it was rejected.
   Tests, CI (ASan/UBSan + TSan cover the `-A` path), and docs (README, CLAUDE.md,
   CODE_REVIEW §9 item 5) are updated.
 
