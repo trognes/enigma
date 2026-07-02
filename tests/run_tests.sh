@@ -404,8 +404,8 @@ check "seed: -e 777 is reproducible and -T-independent" \
 # tracks -e; and -e overrides the pinned $ENIGMA_SEED=0.
 seed_echo=$(printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -e 424242 2>&1 >/dev/null)
 case "$seed_echo" in
-  *"seed 424242"*) check "seed: -e is echoed (overrides ENIGMA_SEED)" "ok" "ok" ;;
-  *)               check "seed: -e is echoed (overrides ENIGMA_SEED)" "$seed_echo" "*seed 424242*" ;;
+  *"seed: 424242"*) check "seed: -e is echoed (overrides ENIGMA_SEED)" "ok" "ok" ;;
+  *)                check "seed: -e is echoed (overrides ENIGMA_SEED)" "$seed_echo" "*seed: 424242*" ;;
 esac
 # A run with the harness's pinned ENIGMA_SEED=0 equals an explicit -e 0 (same seed).
 check "seed: pinned ENIGMA_SEED=0 equals -e 0" \

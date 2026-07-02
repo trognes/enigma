@@ -2356,16 +2356,20 @@ void show_settings()
     fprintf(stderr, " (language: %s; n-gram files in %s)\n",
             opt_language, opt_datadir);
 
-  fprintf(stderr, "Hillclimb:  %s", opt_hillclimb ? "yes" : "no");
+  /* One clause per continuation line so the line stays within 79 columns even when
+     several are active (the default random seed is a full 20-digit uint64). The seed
+     is shown once -- it drives both the SA trajectory and the restart perturbation. */
+  fprintf(stderr, "Hillclimb:  %s\n", opt_hillclimb ? "yes" : "no");
   if (opt_hillclimb && (opt_anneal > 0))
-    fprintf(stderr, " (simulated annealing, %d moves, seed %llu)",
-            opt_anneal, static_cast<unsigned long long>(opt_seed));
+    fprintf(stderr, "            simulated annealing, %d moves\n", opt_anneal);
   if (opt_hillclimb && (opt_restarts > 1))
-    fprintf(stderr, " (%d restarts, %d-pair kick, seed %llu)",
-            opt_restarts, opt_perturb, static_cast<unsigned long long>(opt_seed));
+    fprintf(stderr, "            %d restarts, %d-pair kick\n",
+            opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged && (opt_anneal == 0))
-    fprintf(stderr, " (staged: %s)", opt_staged);
-  fprintf(stderr, "\n");
+    fprintf(stderr, "            staged: %s\n", opt_staged);
+  if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts > 1)))
+    fprintf(stderr, "            seed: %llu\n",
+            static_cast<unsigned long long>(opt_seed));
 
   if (opt_prefilter_frac > 0.0)
     fprintf(stderr, "Pre-filter: top %g%% of keys\n", opt_prefilter_frac * 100.0);
@@ -2374,18 +2378,22 @@ void show_settings()
 
   fprintf(stderr, "Threads:    %d\n", opt_threads);
 
+  /* Split over two lines so it stays within 79 columns (M4 in particular is wide, and
+     the "(max wheel N)" clause pushes even the standard line over). */
   if (opt_m4)
     {
-      /* opt_ukw is upper-cased (B/C); echo the thin reflector in lower case */
+      /* opt_ukw is upper-cased (B/C); echo the thin reflector in lower case. Line 1:
+         the M4-specific parts (thin reflector + the static Greek wheel and its offset);
+         line 2: the three stepping rotors. */
       fprintf(stderr,
-              "Machine:    M4 Enigma; thin reflector %c, Greek wheel %c, wheels %s",
+              "Machine:    M4 Enigma; thin reflector %c, Greek wheel %c, ring %c, "
+              "start %c\n",
               (opt_ukw[0] == '.') ? '.' : (opt_ukw[0] == 'B' ? 'b' : 'c'),
-              opt_greek_walzen, opt_walzen);
+              opt_greek_walzen, opt_greek_ringstellung, opt_greek_grundstellung);
+      fprintf(stderr, "            wheels %s", opt_walzen);
       if (strchr(opt_walzen, '.'))
         fprintf(stderr, " (max wheel %d)", opt_maxwheel);
-      fprintf(stderr, ", Greek ring %c start %c, ring %s, start %s\n",
-              opt_greek_ringstellung, opt_greek_grundstellung,
-              opt_ringstellung, opt_grundstellung);
+      fprintf(stderr, ", ring %s, start %s\n", opt_ringstellung, opt_grundstellung);
     }
   else
     {
@@ -2393,7 +2401,7 @@ void show_settings()
               opt_norenigma ? "Norway" : "standard", opt_ukw, opt_walzen);
       if (strchr(opt_walzen, '.'))
         fprintf(stderr, " (max wheel %d)", opt_maxwheel);
-      fprintf(stderr, ", ring %s, start %s\n",
+      fprintf(stderr, "\n            ring %s, start %s\n",
               opt_ringstellung, opt_grundstellung);
     }
 
@@ -2832,10 +2840,9 @@ int main(int argc, char * * argv)
           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
           static_cast<unsigned long long>(g_plugboards_scored),
           (g_plugboards_scored == 1) ? "" : "s");
-  fprintf(stderr,
-          "Finished in %.2f s using %d thread%s; "
-          "precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",
-          secs, opt_threads, (opt_threads == 1) ? "" : "s",
+  fprintf(stderr, "Finished in %.2f s using %d thread%s\n",
+          secs, opt_threads, (opt_threads == 1) ? "" : "s");
+  fprintf(stderr, "Precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",
           g_table_count, (g_table_count == 1) ? "" : "s",
           g_table_bytes / (1024.0 * 1024.0), peak_mb);
 }
