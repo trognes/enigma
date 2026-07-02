@@ -491,6 +491,22 @@ Remaining opportunities:
   unchanged (the full `make test` cracking matrices still pass). The n-gram
   tables stay global; `subst_array`/`mapping` are per-`machine` (`subst_array`
   heap-allocated, `mapping` in the struct).
+- 🟢 **The quad table is now int16 fixed-point in the hot path** ✅. `float`→
+  `int16` (`quad16[]`, `quad_scale = 2048`) halves it again to **0.9 MB**, and the
+  scorer sums int16 into a `long` (exact and order-independent — a small
+  determinism gain over the float sum). This is a **cache-residency** win, measured
+  ~**1.10–1.13× on the scan** — where each key decodes a fresh message and hits
+  cold table cells — and **neutral on hill-climb** (~1.05×, noise), which keeps one
+  message's few quad cells warm regardless of table size. It is machine-dependent
+  (the win is the L2-vs-L3 latency gap). Quantisation at scale 2048 keeps the
+  ~-12 log10 floor inside int16 and preserves recovery **exactly** (identical
+  exact-recovery and best keys across all four languages). Only quad is int16 —
+  mono/bi/tri are already L1/L2-resident. Two alternatives were **measured and
+  rejected**: `-march=native`/SIMD (the gather-bound loop is latency-bound, not
+  throughput-bound, and does not auto-vectorise — no win) and the incremental
+  delta-scorer (~2× slower; `SIMULATED_ANNEALING.md` §6.2). GPU was assessed as
+  scan-only, still gather-bound, and not worth the loss of the portable single-TU
+  CPU design.
 - 🟢 **Decode/score is now a single fused pass** ✅. The n-gram scorers decode
   each character once (`decode_at`) into a sliding window that indexes the n-gram
   table, instead of the old `decode_num` → `num_plaintext[]` scratch array →
