@@ -285,14 +285,14 @@ inline char num2char(int x)
 /* Read an n-gram statistics table from "<language>_<suffix>.txt" into 'itable', the
    flat backing store of the corresponding int16 array (mono16 / bi16 / tri16 / quad16),
    contiguous and row-major so the n letters of a record map to the single index
-   ((a*26 + b)*26 + ...) of size 26^n. Raw counts are accumulated in a transient float
+   ((a*26 + b)*26 + ...) of size 26^n. Raw counts are accumulated in a transient uint32
    scratch buffer; each entry is then stored as the log10 probability log10(count /
    total) -- a per-gram log-likelihood -- quantised to int16 fixed-point (see the
    ngram_scale note), so the additive scorers sum a log-probability and the per-symbol
    average (score_iter) is a cross-entropy (dits/char). Unseen n-grams are floored at
-   log10(floor_count / total) with floor_count < 1 (the community-standard 0.01), so
-   gibberish carrying impossible grams is *penalised* rather than ignored. Parsing stops
-   at end of file or the first malformed record. */
+   log10(1 / total) -- scored as a single occurrence -- so an unattested gram is
+   penalised like the rarest attested one rather than ruled out. Parsing stops at end of
+   file or the first malformed record. */
 void ngrams_read(int n, int16_t * itable, const char * suffix)
 {
   int size = 1;
@@ -345,11 +345,15 @@ void ngrams_read(int n, int16_t * itable, const char * suffix)
   fclose(f);
 
   /* Store log10(count / total) as int16 fixed-point (scaled by ngram_scale), flooring
-     unseen grams at log10(floor_count/total) so gibberish is *penalised* rather than
-     ignored. The log10 is computed in double and quantised straight into itable[];
-     table[] held only the raw counts (scratch) and is not read after this. The clamp
-     keeps the ~-12 log10 floor inside int16 range (see the ngram_scale note above). */
-  const double floor_count = 0.01;   /* community-standard unseen-gram floor */
+     unseen grams at log10(floor_count/total) so they carry a penalty. floor_count = 1
+     scores an unseen gram exactly like a count-1 gram (the rarest that *is* attested):
+     an unseen gram is not truly impossible (corpora have gaps, texts have typos), so a
+     hapax-level penalty is more defensible than a deep one -- and a deep floor was
+     measured not to help recovery. It also bounds the score range to log10(max_count),
+     which matters for the fixed-point representation. The log10 is computed in double
+     and quantised straight into itable[]; table[] held only the raw counts (scratch)
+     and is not read after this. */
+  const double floor_count = 1.0;   /* unseen gram == a single occurrence (a hapax) */
   if (total == 0)
     total = 1;                        /* empty/degenerate table: avoid div-by-zero */
   const double log_total = log10(static_cast<double>(total));
