@@ -64,15 +64,19 @@ these mostly pay off in the (unbuilt) full-crack tier of §1.
 
 ## 3. Maintainability
 
-- 🟡 **`bruteforce()` is large and deeply nested.** The range setup, the two-phase
-  parallel search, and the result reporting are worth separating; the nesting plus
-  the wheel-permutation guard make it harder to follow than the rest of the file.
-  Refactor for readability only — guard throughput with `make bench BASE=<ref>`
-  (both compilers) since it is on the hot path.
-- 🟢 **Optional warning ratchets.** `-Wconversion` (~38 implicit narrowings) and
-  `-Wold-style-cast` (~12 C-style casts) are deliberately off — they reflect the
-  C-style design, not bugs. Turn each on as a ratchet once the corresponding
-  cleanup is done.
+- ✅ **`bruteforce()` decomposed.** The 306-line function was split into
+  `build_key_space()` (the reflector/wheel/ring/start ranges and the task list),
+  `allocate_subst_tables()` (the guarded table allocation), and a `run_parallel()`
+  template that replaced the four copy-pasted spawn/join blocks — `bruteforce()`
+  itself is now ~116 lines that read as phases. Behaviour-preserving (byte-identical
+  output vs the prior version, TSan-clean, no bench regression).
+- ✅ **`-Wold-style-cast` cleaned and enabled.** The four remaining C-style casts
+  were converted to `static_cast` and the flag is now in the base `CXXFLAGS`.
+- 🟢 **`-Wconversion` (~52) deliberately deferred.** 43 of the warnings are
+  `int → unsigned char` narrowings in the hottest loops (steckerbrett writes,
+  decode). Adding that many `static_cast`s clutters the hot path for a low-value
+  nit on deliberately C-style code, so it stays off — a documented future ratchet,
+  not a bug.
 
 ## 4. Tooling & packaging
 
