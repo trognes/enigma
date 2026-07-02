@@ -101,6 +101,11 @@ static const char * opt_walzen;
 static const char * opt_ringstellung;
 static const char * opt_grundstellung;
 static const char * opt_steckerbrett;
+/* Letters that are part of a fixed (-s) plug pair: the hill-climb, re-pair and SA
+   toggle never touch these, so -s pairs are *known* plugs that survive the climb rather
+   than a mere seed. Set once from opt_steckerbrett before the (threaded) search, then
+   read-only. */
+static bool plug_fixed[asize];
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french ...; no default */
 static const char * opt_datadir;  /* directory holding the n-gram files (default ".") */
@@ -423,6 +428,20 @@ void init_steckerbrett(machine & m, const char * steckerbrett_string)
       int b = char2num(steckerbrett_string[2*i+1]);
       m.steckerbrett[a] = b;
       m.steckerbrett[b] = a;
+    }
+}
+
+/* Mark the letters of the fixed (-s) plug pairs, so the climb/SA leave them alone.
+   Called once from main before the threaded search; plug_fixed is read-only after. */
+void init_plug_fixed(const char * steckerbrett_string)
+{
+  for (int j = 0; j < asize; j++)
+    plug_fixed[j] = false;
+  int plug_count = static_cast<int>(strlen(steckerbrett_string) / 2);
+  for (int i = 0; i < plug_count; i++)
+    {
+      plug_fixed[char2num(steckerbrett_string[2*i+0])] = true;
+      plug_fixed[char2num(steckerbrett_string[2*i+1])] = true;
     }
 }
 
@@ -896,7 +915,7 @@ static bool try_repair(machine & m, int iter, double cur_score)
   int phi[asize / 2];
   int np = 0;
   for (int a = 0; a < asize; a++)
-    if (m.steckerbrett[a] > a)
+    if ((m.steckerbrett[a] > a) && ! plug_fixed[a])   /* never rewire a fixed -s plug */
       {
         plo[np] = a;
         phi[np] = m.steckerbrett[a];
@@ -1001,6 +1020,10 @@ double hillclimb(machine & m, int max_pairs)
 #endif
             for(int b=a+1; b<asize; b++)
               {
+                /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
+                if (plug_fixed[a] || plug_fixed[b])
+                  continue;
+
                 /* at the cap, do not add a brand-new pair (both ends unplugged) */
                 if ((pairs >= max_pairs) &&
                     (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b))
@@ -1046,7 +1069,7 @@ double hillclimb(machine & m, int max_pairs)
              staged climb that moved to a sharper model cannot shed a plug the previous
              model set without this. At most 13 pairs are plugged, so it is cheap. */
           for(int a=0; a<asize; a++)
-            if (m.steckerbrett[a] > a)
+            if ((m.steckerbrett[a] > a) && ! plug_fixed[a])   /* never remove a fixed plug */
               {
                 int b = m.steckerbrett[a];
                 m.steckerbrett[a] = a;
@@ -1320,9 +1343,12 @@ static inline int plug_count(const machine & m)
    When cap < 13 (a known plug count, from the -S target-stage cap), a *connect* that
    would raise the pair count above cap is a no-op -- a connect grows the count only
    when both endpoints are currently self-steckered; removes and re-pairings never do,
-   so every board with <= cap pairs stays reachable. */
+   so every board with <= cap pairs stays reachable. A move touching a fixed -s letter
+   is also a no-op, so preset plugs survive annealing. */
 static inline void apply_toggle(machine & m, int a, int b, int cap)
 {
+  if (plug_fixed[a] || plug_fixed[b])         /* never disturb a fixed -s plug */
+    return;
   if (m.steckerbrett[a] == b)                 /* already paired -> remove */
     {
       m.steckerbrett[a] = static_cast<unsigned char>(a);
@@ -2264,7 +2290,8 @@ void help(FILE * out)
   fprintf(out, "               -w/-r/-g take 4 chars, Greek wheel (B/G) / ring / start first\n");
   fprintf(out, "  -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]\n");
   fprintf(out, "  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
-  fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]\n");
+  fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];\n");
+  fprintf(out, "               held fixed -- the -c/-A climb keeps them and finds the rest\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
@@ -2768,6 +2795,8 @@ int main(int argc, char * * argv)
   ciphertext_letterdist();
 
   init();
+
+  init_plug_fixed(opt_steckerbrett);   /* freeze -s plugs against the climb/SA */
 
   /* try all combinations (bruteforce allocates one machine per worker thread) */
 

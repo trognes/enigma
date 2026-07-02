@@ -118,7 +118,7 @@ wheels, ring and start positions — any position left as `.` is brute-forced.
 | `-4` | M4 mode; `-u` is the thin reflector `b`/`c`, and `-w`/`-r`/`-g` take **four** characters, Greek wheel (`B`/`G`) / ring / start first |
 | `-r XYZ` | Ring positions (*ringstellung*), letters `A`–`Z` or `.` `[AA.]` |
 | `-g XYZ` | Start positions (*grundstellung*), letters `A`–`Z` or `.` `[...]` |
-| `-s AB…` | Fixed plugboard pairs, e.g. `-s "AB CD EF"` `[none]` |
+| `-s AB…` | Known plugboard pairs, e.g. `-s "AB CD EF"`; held fixed during `-c`/`-A` (the climb keeps them and recovers the rest) `[none]` |
 
 `-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's
 `start − ring` offset is recoverable, so a full M4 wildcard search enumerates the
@@ -192,7 +192,8 @@ Usage: enigma [OPTIONS]
                -w/-r/-g take 4 chars, Greek wheel (B/G) / ring / start first
   -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]
   -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]
-  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none]
+  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];
+               held fixed -- the -c/-A climb keeps them and finds the rest
   -c           Perform hill climbing to determine plugboard settings
   -R integer   Plugboard hill-climb random restarts (1 = none) [1]
   -S schedule  Staged plugboard climb: <letter><opt.number> tokens.

@@ -526,6 +526,21 @@ check "anneal: -A -S q8 recovers an 8-plug board (long message)" \
   "$(run "$sa8_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -A 60000 -S q8)" \
   "$r_pt"
 
+# Fixed -s plugs are frozen: the climb and SA must never remove or rewire them, not even
+# a spurious one. Encrypt with a single real plug (AB), then force an unrelated plug (YZ)
+# and confirm YZ survives in the recovered board (a plain seed would drop it).
+frz_ct=$(run "$r_pt" -i -u B -w 241 -r AAA -g QEW -s "AB")
+frz_climb=$(printf '%s' "$frz_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq -s "YZ" 2>&1 >/dev/null | grep "W:" | tail -1 | sed -n 's/.*S://p')
+case "$frz_climb" in
+  *YZ*) check "fixed -s plug survives the greedy climb" "ok" "ok" ;;
+  *)    check "fixed -s plug survives the greedy climb" "$frz_climb" "*YZ*" ;;
+esac
+frz_sa=$(printf '%s' "$frz_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 30000 -s "YZ" 2>&1 >/dev/null | grep "W:" | tail -1 | sed -n 's/.*S://p')
+case "$frz_sa" in
+  *YZ*) check "fixed -s plug survives simulated annealing" "ok" "ok" ;;
+  *)    check "fixed -s plug survives simulated annealing" "$frz_sa" "*YZ*" ;;
+esac
+
 # The final diagnostic reports how many rotor combinations were analysed and how many
 # plugboards were scored. A pure scan (no -c) scores exactly one plugboard per key...
 d_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
