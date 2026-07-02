@@ -244,49 +244,25 @@ struct machine
   uint64_t plugboards_scored;
 };
 
-/* n-gram log-scores stored as float (half the memory of double, so the 457 KB
-   quadgram table is ~1.8 MB instead of 3.6 MB and stays warmer in cache); the
-   scorers accumulate the looked-up values into a double, so precision of the sum
-   is unaffected. */
-static float monograms[asize];
-static float bigrams[asize][asize];
-static float trigrams[asize][asize][asize];
-static float quadgrams[asize][asize][asize][asize];
-
-/* The n-gram scorers read int16 fixed-point copies of the log10-probability tables
-   rather than the float tables above. This is a cache-residency optimisation aimed at
-   the quad table -- by far the largest (26^4 entries): int16 halves it from 1.8 MB to
-   0.9 MB, so it stays in a faster cache level during the brute-force scan (where every
-   key decodes a fresh message and hits cold table cells), a measured ~1.15-1.2x scan
-   throughput (make bench: search -17.5%, hill-climb -16.2%; hill-climb re-scores one
-   message so it was near-flat in isolation). mono/bi/tri are tiny and already
-   cache-resident, so int16 gives them no measurable speed-up; they use the same
-   representation only for consistency (and the int sum below is exact/order-independent,
-   a small determinism nicety). All four scale log10 by ngram_scale, round, and clamp
-   into int16 range; the scorers sum int16 into a long and divide by ngram_scale.
-   ngram_scale = 2048 keeps the unseen-gram floor (~-12 log10, most negative for quad)
-   well inside int16 range and preserves recovery quality exactly (measured identical
-   across all four languages and models). The float tables above are used only as the
-   load source; the *16[] copies are what the hot paths read. */
+/* The n-gram scorers read int16 fixed-point log10-probability tables. This is a
+   cache-residency optimisation aimed at the quad table -- by far the largest (26^4
+   entries): int16 halves it from 1.8 MB to 0.9 MB, so it stays in a faster cache level
+   during the brute-force scan (where every key decodes a fresh message and hits cold
+   table cells), a measured ~1.15-1.2x scan throughput (make bench: search -17.5%,
+   hill-climb -16.2%; hill-climb re-scores one message so it was near-flat in isolation).
+   mono/bi/tri are tiny and already cache-resident, so int16 gives them no measurable
+   speed-up; they use the same representation only for consistency (and the int sum is
+   exact/order-independent, a small determinism nicety). ngrams_read() scales log10 by
+   ngram_scale, rounds, and clamps into int16 range; the scorers sum int16 into a long
+   and divide by ngram_scale. ngram_scale = 2048 keeps the unseen-gram floor (~-12 log10,
+   most negative for quad) well inside int16 range and preserves recovery quality exactly
+   (measured identical across all four languages and models). The raw float counts live
+   only in a transient scratch buffer inside ngrams_read(). */
 static const int ngram_scale = 2048;
 static int16_t mono16[asize];
 static int16_t bi16[asize][asize];
 static int16_t tri16[asize][asize][asize];
 static int16_t quad16[asize][asize][asize][asize];
-
-/* Fill an int16 table from its loaded float table (called once, after ngrams_read). */
-static void ngram16_fill(const float * src, int16_t * dst, int size)
-{
-  for (int i = 0; i < size; i++)
-    {
-      double v = static_cast<double>(src[i]) * ngram_scale;
-      if (v < -32768.0)
-        v = -32768.0;
-      else if (v > 32767.0)
-        v = 32767.0;
-      dst[i] = static_cast<int16_t>(v < 0.0 ? v - 0.5 : v + 0.5);
-    }
-}
 
 /* --- diagnostics and n-gram table loading ------------------------------- */
 
@@ -306,26 +282,27 @@ inline char num2char(int x)
   return static_cast<char>('A' + x);
 }
 
-/* Read an n-gram statistics table from "<language>_<suffix>.txt".
-
-   'table' is the flat backing store of the corresponding global array
-   (monograms / bigrams / trigrams / quadgrams). Those arrays are contiguous and
-   row-major, so the n letters of a record map to the single index
-   ((a*26 + b)*26 + ...) into 'table' of size 26^n. Each entry is stored as the
-   log10 probability log10(count / total), i.e. a per-gram log-likelihood, so that
-   the additive scorers sum a log-probability and the per-symbol average
-   (score_iter) is a cross-entropy (dits/char). Unseen n-grams are floored at
-   log10(floor_count / total) with floor_count < 1 (the community-standard 0.01),
-   so gibberish carrying impossible grams is *penalised* rather than ignored.
-   Parsing stops at end of file or the first malformed record. */
-void ngrams_read(int n, float * table, const char * suffix)
+/* Read an n-gram statistics table from "<language>_<suffix>.txt" into 'itable', the
+   flat backing store of the corresponding int16 array (mono16 / bi16 / tri16 / quad16),
+   contiguous and row-major so the n letters of a record map to the single index
+   ((a*26 + b)*26 + ...) of size 26^n. Raw counts are accumulated in a transient float
+   scratch buffer; each entry is then stored as the log10 probability log10(count /
+   total) -- a per-gram log-likelihood -- quantised to int16 fixed-point (see the
+   ngram_scale note), so the additive scorers sum a log-probability and the per-symbol
+   average (score_iter) is a cross-entropy (dits/char). Unseen n-grams are floored at
+   log10(floor_count / total) with floor_count < 1 (the community-standard 0.01), so
+   gibberish carrying impossible grams is *penalised* rather than ignored. Parsing stops
+   at end of file or the first malformed record. */
+void ngrams_read(int n, int16_t * itable, const char * suffix)
 {
   int size = 1;
   for (int i = 0; i < n; i++)
     size *= asize;
 
-  for (int i = 0; i < size; i++)
-    table[i] = 0.0f;   /* unseen: count 0 until floored below */
+  /* Raw counts are accumulated here (transient -- only itable outlives this call).
+     uint32 holds every count exactly (the largest in the data is ~5.3e8, well inside
+     the range); float would lose precision above 2^24 ~ 16.7M. */
+  std::vector<uint32_t> table(size, 0);   /* unseen: count 0 until floored below */
 
   char filename[1024];
   int len = snprintf(filename, sizeof(filename), "%s/%s_%s.txt",
@@ -341,7 +318,7 @@ void ngrams_read(int n, float * table, const char * suffix)
       exit(1);
     }
 
-  double total = 0.0;   /* sum of all counts, in double (can exceed int range) */
+  uint64_t total = 0;   /* sum of all counts, in uint64 (can exceed uint32) */
   while (1)
     {
       int index = 0;
@@ -357,27 +334,34 @@ void ngrams_read(int n, float * table, const char * suffix)
           index = index * asize + char2num(a);
         }
 
-      int count;
-      if (! ok || (fscanf(f, " %d", & count) != 1))
+      unsigned count;
+      if (! ok || (fscanf(f, " %u", & count) != 1))
         break;
 
-      table[index] = static_cast<float>(count);
+      table[index] = count;
       total += count;
     }
 
   fclose(f);
 
-  /* Store log10(count / total), flooring unseen grams at log10(floor_count/total)
-     so they carry a penalty rather than a neutral 0. log in double, one rounding
-     into float (~7 sig. digits); the scorers still accumulate in double. */
+  /* Store log10(count / total) as int16 fixed-point (scaled by ngram_scale), flooring
+     unseen grams at log10(floor_count/total) so gibberish is *penalised* rather than
+     ignored. The log10 is computed in double and quantised straight into itable[];
+     table[] held only the raw counts (scratch) and is not read after this. The clamp
+     keeps the ~-12 log10 floor inside int16 range (see the ngram_scale note above). */
   const double floor_count = 0.01;   /* community-standard unseen-gram floor */
-  if (total <= 0.0)
-    total = 1.0;                      /* empty/degenerate table: avoid div-by-zero */
-  const double log_total = log10(total);
+  if (total == 0)
+    total = 1;                        /* empty/degenerate table: avoid div-by-zero */
+  const double log_total = log10(static_cast<double>(total));
   for (int i = 0; i < size; i++)
     {
       double c = table[i];
-      table[i] = static_cast<float>((c > 0.0 ? log10(c) : log10(floor_count)) - log_total);
+      double v = ((c > 0.0 ? log10(c) : log10(floor_count)) - log_total) * ngram_scale;
+      if (v < -32768.0)
+        v = -32768.0;
+      else if (v > 32767.0)
+        v = 32767.0;
+      itable[i] = static_cast<int16_t>(v < 0.0 ? v - 0.5 : v + 0.5);
     }
 }
 
@@ -1159,18 +1143,10 @@ void load_table(int model)
 {
   switch (model)
     {
-    case SCORE_MONO: ngrams_read(1, monograms, "monograms");
-      ngram16_fill(monograms, mono16, asize);
-      break;
-    case SCORE_BI:   ngrams_read(2, & bigrams[0][0], "bigrams");
-      ngram16_fill(& bigrams[0][0], & bi16[0][0], asize * asize);
-      break;
-    case SCORE_TRI:  ngrams_read(3, & trigrams[0][0][0], "trigrams");
-      ngram16_fill(& trigrams[0][0][0], & tri16[0][0][0], asize * asize * asize);
-      break;
-    case SCORE_QUAD: ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams");
-      ngram16_fill(& quadgrams[0][0][0][0], & quad16[0][0][0][0], asize * asize * asize * asize);
-      break;
+    case SCORE_MONO: ngrams_read(1, mono16, "monograms"); break;
+    case SCORE_BI:   ngrams_read(2, & bi16[0][0], "bigrams"); break;
+    case SCORE_TRI:  ngrams_read(3, & tri16[0][0][0], "trigrams"); break;
+    case SCORE_QUAD: ngrams_read(4, & quad16[0][0][0][0], "quadgrams"); break;
     default: break;   /* IC: no table */
     }
 }
