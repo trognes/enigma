@@ -161,7 +161,7 @@ static double opt_prefilter_frac; /* -F N% form: fraction of the resolved keyspa
    up (fewer passes per key) and improves rotor-key discrimination: an uncapped climb
    lets wrong keys overfit IC with surplus plugs and bury the true key, so a cap near
    the true plug count ranks it better. ~5 is the measured optimum (both-axes win vs
-   uncapped; harmless on easy keyspaces) -- see CODE_REVIEW.md §9 item 2. */
+   uncapped; harmless on easy keyspaces) -- see CODE_REVIEW_HISTORY.md §9 item 2. */
 static const int filter_climb_cap = 5;
 /* Simulated-annealing plugboard optimiser (-A N): N = total move budget (0 = off,
    use the greedy climb). An alternative to the greedy hill-climb that accepts

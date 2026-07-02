@@ -1,13 +1,13 @@
 # Simulated annealing for plugboard recovery — design
 
-Status: **shipped as `-A`.** This is the design referenced from `CODE_REVIEW.md` §9
+Status: **shipped as `-A`.** This is the design referenced from `CODE_REVIEW_HISTORY.md` §9
 item 5. It proposes simulated annealing (SA) as an alternative plugboard optimiser, why
 it should help, exactly how it works in *this* codebase, and a phased roadmap gated on a
 compute-normalised A/B against the current best recipe (`-R 10 -S iq`). §§1–14 are the
 original plan; **§15 records the tuning sweep that cleared the ship gate, and §16 the
 known-plug-count cap (`-A … -S qK`)** — read those for what actually shipped.
 
-Read `CODE_REVIEW.md` §9 first — it establishes the measurement harness
+Read `CODE_REVIEW_HISTORY.md` §9 first — it establishes the measurement harness
 (`make crackquality`, its `SPLIT=1` failure-mode split) and the diagnosis this plan
 builds on.
 
