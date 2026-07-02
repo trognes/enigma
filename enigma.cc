@@ -266,27 +266,14 @@ static float quadgrams[asize][asize][asize][asize];
    into int16 range; the scorers sum int16 into a long and divide by ngram_scale.
    ngram_scale = 2048 keeps the unseen-gram floor (~-12 log10, most negative for quad)
    well inside int16 range and preserves recovery quality exactly (measured identical
-   across all four languages and models). The float tables above are used only as the
-   load source; the *16[] copies are what the hot paths read. */
+   across all four languages and models). The float tables above are used only as
+   count scratch inside ngrams_read(), which quantises straight into these *16[]
+   copies; the *16[] copies are what the hot paths read. */
 static const int ngram_scale = 2048;
 static int16_t mono16[asize];
 static int16_t bi16[asize][asize];
 static int16_t tri16[asize][asize][asize];
 static int16_t quad16[asize][asize][asize][asize];
-
-/* Fill an int16 table from its loaded float table (called once, after ngrams_read). */
-static void ngram16_fill(const float * src, int16_t * dst, int size)
-{
-  for (int i = 0; i < size; i++)
-    {
-      double v = static_cast<double>(src[i]) * ngram_scale;
-      if (v < -32768.0)
-        v = -32768.0;
-      else if (v > 32767.0)
-        v = 32767.0;
-      dst[i] = static_cast<int16_t>(v < 0.0 ? v - 0.5 : v + 0.5);
-    }
-}
 
 /* --- diagnostics and n-gram table loading ------------------------------- */
 
@@ -318,7 +305,7 @@ inline char num2char(int x)
    log10(floor_count / total) with floor_count < 1 (the community-standard 0.01),
    so gibberish carrying impossible grams is *penalised* rather than ignored.
    Parsing stops at end of file or the first malformed record. */
-void ngrams_read(int n, float * table, const char * suffix)
+void ngrams_read(int n, float * table, int16_t * itable, const char * suffix)
 {
   int size = 1;
   for (int i = 0; i < n; i++)
@@ -367,9 +354,11 @@ void ngrams_read(int n, float * table, const char * suffix)
 
   fclose(f);
 
-  /* Store log10(count / total), flooring unseen grams at log10(floor_count/total)
-     so they carry a penalty rather than a neutral 0. log in double, one rounding
-     into float (~7 sig. digits); the scorers still accumulate in double. */
+  /* Store log10(count / total) as int16 fixed-point (scaled by ngram_scale), flooring
+     unseen grams at log10(floor_count/total) so gibberish is *penalised* rather than
+     ignored. The log10 is computed in double and quantised straight into itable[];
+     table[] held only the raw counts (scratch) and is not read after this. The clamp
+     keeps the ~-12 log10 floor inside int16 range (see the ngram_scale note above). */
   const double floor_count = 0.01;   /* community-standard unseen-gram floor */
   if (total <= 0.0)
     total = 1.0;                      /* empty/degenerate table: avoid div-by-zero */
@@ -377,7 +366,12 @@ void ngrams_read(int n, float * table, const char * suffix)
   for (int i = 0; i < size; i++)
     {
       double c = table[i];
-      table[i] = static_cast<float>((c > 0.0 ? log10(c) : log10(floor_count)) - log_total);
+      double v = ((c > 0.0 ? log10(c) : log10(floor_count)) - log_total) * ngram_scale;
+      if (v < -32768.0)
+        v = -32768.0;
+      else if (v > 32767.0)
+        v = 32767.0;
+      itable[i] = static_cast<int16_t>(v < 0.0 ? v - 0.5 : v + 0.5);
     }
 }
 
@@ -1159,18 +1153,10 @@ void load_table(int model)
 {
   switch (model)
     {
-    case SCORE_MONO: ngrams_read(1, monograms, "monograms");
-      ngram16_fill(monograms, mono16, asize);
-      break;
-    case SCORE_BI:   ngrams_read(2, & bigrams[0][0], "bigrams");
-      ngram16_fill(& bigrams[0][0], & bi16[0][0], asize * asize);
-      break;
-    case SCORE_TRI:  ngrams_read(3, & trigrams[0][0][0], "trigrams");
-      ngram16_fill(& trigrams[0][0][0], & tri16[0][0][0], asize * asize * asize);
-      break;
-    case SCORE_QUAD: ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams");
-      ngram16_fill(& quadgrams[0][0][0][0], & quad16[0][0][0][0], asize * asize * asize * asize);
-      break;
+    case SCORE_MONO: ngrams_read(1, monograms, mono16, "monograms"); break;
+    case SCORE_BI:   ngrams_read(2, & bigrams[0][0], & bi16[0][0], "bigrams"); break;
+    case SCORE_TRI:  ngrams_read(3, & trigrams[0][0][0], & tri16[0][0][0], "trigrams"); break;
+    case SCORE_QUAD: ngrams_read(4, & quadgrams[0][0][0][0], & quad16[0][0][0][0], "quadgrams"); break;
     default: break;   /* IC: no table */
     }
 }
