@@ -236,13 +236,16 @@ A single pass through `main()`:
    count is stored as the log10 probability `log10(count / total)` (unseen grams
    floored at `log10(0.01 / total)`), so the additive scorers sum a log-likelihood
    and `score_iter`'s per-symbol average is a cross-entropy (dits/char). IC is a
-   separate normalised ratio and is left untouched. The **quad** table is the hot
-   one (26⁴ entries), so after loading it is converted to an **int16 fixed-point**
-   copy `quad16[]` (`quad_scale = 2048`) that the scorer actually reads: 0.9 MB
-   instead of 1.8 MB float, so it stays cache-resident during the scan (~10% scan
-   throughput; see Performance notes). The float `quadgrams[]` is kept only as the
-   load source. `quad16_fill()` clamps into int16 range, so the ~-12 log10 floor is
-   safe; recovery quality is identical to float (measured across all four languages).
+   separate normalised ratio and is left untouched. After loading, each n-gram table
+   is converted to an **int16 fixed-point** copy (`mono16`/`bi16`/`tri16`/`quad16`,
+   `ngram_scale = 2048`) that the scorer actually reads; `ngram16_fill()` clamps into
+   int16 range so the ~-12 log10 floor is safe, and the float tables are kept only as
+   the load source. This matters for **quad** — the hot, largest table (26⁴ entries):
+   int16 halves it (0.9 MB vs 1.8 MB) so it stays cache-resident during the scan
+   (measured faster; see Performance notes). mono/bi/tri are tiny and already
+   cache-resident, so int16 gives them no measurable speed-up — they use the same
+   representation only for consistency (and the int sum is order-independent). Recovery
+   quality is identical to float for every model, measured across all four languages.
 4. `init()` precomputes numeric forward/reverse rotor permutations, notch
    tables, and reflector permutations from the hard-coded wiring strings.
 5. `bruteforce()` is the main search, run across `opt_threads` worker threads
@@ -343,21 +346,23 @@ two-pass on both compilers, markedly so on clang/ARM). An even earlier
 16-byte-blocked decode was never shown to win and was removed too; the scalar
 fused loop is the current form.
 
-The quad table the scorer reads is **int16 fixed-point** (`quad16[]`, `quad_scale
-= 2048`), not float. Halving it (0.9 MB vs 1.8 MB) keeps it cache-resident during
-the **scan**, where every key decodes a fresh message and hits cold table cells —
-a measured **~1.10–1.13× scan throughput** (machine-dependent: the win is the
-L2-vs-L3 latency difference, so it shrinks on CPUs whose L2 already holds 1.8 MB
-or is too small for 0.9 MB). The **hill-climb is unchanged** (~1.05×, noise): it
-re-scores one message and keeps its few quad cells warm regardless of table size.
-The int16 sum accumulates in a `long` — exact and order-independent, a small
-determinism bonus over float. Quantisation at scale 2048 preserves recovery
-exactly (measured: identical exact-recovery and best keys across all four
-languages). Two rejected precision/SIMD alternatives are on record: `-march=native`
-(no win — the gather-bound loop does not auto-vectorise) and hardware SIMD gathers
-(the loop is latency-bound, not throughput-bound); the delta-scorer is rejected in
-`SIMULATED_ANNEALING.md` §6.2. Only **quad** is int16 — mono/bi/tri tables are tiny
-and already L1/L2-resident, so they stay float.
+The tables the scorers read are **int16 fixed-point** (`mono16`/`bi16`/`tri16`/
+`quad16`, `ngram_scale = 2048`), not float, and each scorer sums int16 into a `long`
+(exact and order-independent, a small determinism bonus) then divides by `ngram_scale`.
+This is a cache win for **quad** — the hot, largest table: halving it (0.9 MB vs
+1.8 MB) keeps it cache-resident during the **scan**, where every key decodes a fresh
+message and hits cold cells — a measured **search −16/−17% on `make bench`**
+(machine-dependent: the win is the L2-vs-L3 latency difference, so it shrinks on CPUs
+whose L2 already holds 1.8 MB or is too small for 0.9 MB). The **hill-climb re-scores
+one message** and keeps its few cells warm, so it was near-flat in isolation. mono/bi/tri
+are tiny and already L1/L2-resident: int16 gives them **no measurable speed-up**, and
+they carry it only for representational consistency. Quantisation at scale 2048 preserves
+recovery **exactly** (identical exact-recovery and best keys across all four languages,
+all models). Rejected precision/SIMD alternatives on record: `-march=native` (no win —
+the gather-bound loop does not auto-vectorise), hardware SIMD gathers (latency-bound,
+not throughput-bound), and the delta-scorer (`SIMULATED_ANNEALING.md` §6.2). (8-bit
+fixed-point is a further step under consideration but not yet measured — expected to
+risk quality on the hardest short messages for marginal further speed.)
 
 > **Struct layout matters for the hot loop.** When the per-search state moved
 > into `struct machine`, collapsing the formerly separate global arrays into one

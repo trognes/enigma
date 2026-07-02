@@ -253,30 +253,33 @@ static float bigrams[asize][asize];
 static float trigrams[asize][asize][asize];
 static float quadgrams[asize][asize][asize][asize];
 
-/* The quadgram scorer is ~99% of the search cost, and the quad table is by far the
-   largest (26^4 entries). Storing it as int16 fixed-point (0.9 MB) instead of float
-   (1.8 MB) roughly halves it, so it stays cache-resident during the brute-force scan
-   -- where every key decodes a fresh message and hits cold table cells -- giving a
-   measured ~1.5-1.75x scan throughput (the hill-climb, which re-scores one message and
-   keeps its few quad cells warm, is unchanged). The log10-probabilities are scaled by
-   quad_scale and rounded; the scorer sums int16 into a long (exact and associativity-
-   free, so bit-identical regardless of order) and divides by quad_scale at the end.
-   quad_scale = 2048 keeps the unseen-gram floor (~-12 log10) well inside int16 range
-   and preserves recovery quality exactly (measured: identical exact-recovery and best
-   keys vs the float table). The float quadgrams[] above is used only to load the table;
-   quad16[] is what the hot path reads. See CODE_REVIEW.md and the header note. */
-static const int quad_scale = 2048;
+/* The n-gram scorers read int16 fixed-point copies of the log10-probability tables
+   rather than the float tables above. This is a cache-residency optimisation aimed at
+   the quad table -- by far the largest (26^4 entries): int16 halves it from 1.8 MB to
+   0.9 MB, so it stays in a faster cache level during the brute-force scan (where every
+   key decodes a fresh message and hits cold table cells), a measured ~1.15-1.2x scan
+   throughput (make bench: search -17.5%, hill-climb -16.2%; hill-climb re-scores one
+   message so it was near-flat in isolation). mono/bi/tri are tiny and already
+   cache-resident, so int16 gives them no measurable speed-up; they use the same
+   representation only for consistency (and the int sum below is exact/order-independent,
+   a small determinism nicety). All four scale log10 by ngram_scale, round, and clamp
+   into int16 range; the scorers sum int16 into a long and divide by ngram_scale.
+   ngram_scale = 2048 keeps the unseen-gram floor (~-12 log10, most negative for quad)
+   well inside int16 range and preserves recovery quality exactly (measured identical
+   across all four languages and models). The float tables above are used only as the
+   load source; the *16[] copies are what the hot paths read. */
+static const int ngram_scale = 2048;
+static int16_t mono16[asize];
+static int16_t bi16[asize][asize];
+static int16_t tri16[asize][asize][asize];
 static int16_t quad16[asize][asize][asize][asize];
 
-/* Fill quad16[] from the loaded float quadgrams[] (called once, after ngrams_read). */
-static void quad16_fill(void)
+/* Fill an int16 table from its loaded float table (called once, after ngrams_read). */
+static void ngram16_fill(const float * src, int16_t * dst, int size)
 {
-  const float * src = & quadgrams[0][0][0][0];
-  int16_t * dst = & quad16[0][0][0][0];
-  int size = asize * asize * asize * asize;
   for (int i = 0; i < size; i++)
     {
-      double v = static_cast<double>(src[i]) * quad_scale;
+      double v = static_cast<double>(src[i]) * ngram_scale;
       if (v < -32768.0)
         v = -32768.0;
       else if (v > 32767.0)
@@ -642,7 +645,7 @@ double quadgram_score_decode(machine & m)
       b = c;
       c = d;
     }
-  score = static_cast<double>(isum) / quad_scale;
+  score = static_cast<double>(isum) / ngram_scale;
   return score;
 }
 
@@ -658,13 +661,15 @@ double trigram_score_decode(machine & m)
 
   int a = decode_at(steck, rows, ct, 0);
   int b = decode_at(steck, rows, ct, 1);
+  long isum = 0;
   for (int i = 2; i < textlength; i++)
     {
       int c = decode_at(steck, rows, ct, i);
-      score += trigrams[a][b][c];
+      isum += tri16[a][b][c];
       a = b;
       b = c;
     }
+  score = static_cast<double>(isum) / ngram_scale;
   return score;
 }
 
@@ -679,12 +684,14 @@ double bigram_score_decode(machine & m)
     return score;
 
   int a = decode_at(steck, rows, ct, 0);
+  long isum = 0;
   for (int i = 1; i < textlength; i++)
     {
       int b = decode_at(steck, rows, ct, i);
-      score += bigrams[a][b];
+      isum += bi16[a][b];
       a = b;
     }
+  score = static_cast<double>(isum) / ngram_scale;
   return score;
 }
 
@@ -694,10 +701,10 @@ double monogram_score_decode(machine & m)
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
 
-  double score = 0.0;
+  long isum = 0;
   for (int i = 0; i < textlength; i++)
-    score += monograms[decode_at(steck, rows, ct, i)];
-  return score;
+    isum += mono16[decode_at(steck, rows, ct, i)];
+  return static_cast<double>(isum) / ngram_scale;
 }
 
 double ic_score_decode(machine & m)
@@ -1152,11 +1159,17 @@ void load_table(int model)
 {
   switch (model)
     {
-    case SCORE_MONO: ngrams_read(1, monograms, "monograms"); break;
-    case SCORE_BI:   ngrams_read(2, & bigrams[0][0], "bigrams"); break;
-    case SCORE_TRI:  ngrams_read(3, & trigrams[0][0][0], "trigrams"); break;
+    case SCORE_MONO: ngrams_read(1, monograms, "monograms");
+      ngram16_fill(monograms, mono16, asize);
+      break;
+    case SCORE_BI:   ngrams_read(2, & bigrams[0][0], "bigrams");
+      ngram16_fill(& bigrams[0][0], & bi16[0][0], asize * asize);
+      break;
+    case SCORE_TRI:  ngrams_read(3, & trigrams[0][0][0], "trigrams");
+      ngram16_fill(& trigrams[0][0][0], & tri16[0][0][0], asize * asize * asize);
+      break;
     case SCORE_QUAD: ngrams_read(4, & quadgrams[0][0][0][0], "quadgrams");
-      quad16_fill();   /* build the int16 hot-path table from the loaded floats */
+      ngram16_fill(& quadgrams[0][0][0][0], & quad16[0][0][0][0], asize * asize * asize * asize);
       break;
     default: break;   /* IC: no table */
     }
