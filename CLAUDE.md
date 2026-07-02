@@ -124,7 +124,11 @@ any working directory.
 - `-4` M4 (4-rotor) mode: `-u` selects thin reflector `b`/`c`; `-w`/`-r`/`-g` take
   **four** characters with the Greek wheel (`B`=Beta/`G`=Gamma) / ring / start first
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
-- `-s AB...` fixed plugboard pairs
+- `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the climb/SA
+  never remove or rewire them (their letters are marked in `plug_fixed[]`, set once from
+  `opt_steckerbrett` before the threaded search, and skipped by every switch/remove/
+  re-pair/toggle move), so `-s` supplies *known* plugs and the search recovers only the
+  rest. They still seed a plain (no-climb) decrypt as before.
 - `-c` hill-climb the plugboard
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
