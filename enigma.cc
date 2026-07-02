@@ -299,8 +299,10 @@ void ngrams_read(int n, int16_t * itable, const char * suffix)
   for (int i = 0; i < n; i++)
     size *= asize;
 
-  /* Raw counts are accumulated here (transient -- only itable outlives this call). */
-  std::vector<float> table(size, 0.0f);   /* unseen: count 0 until floored below */
+  /* Raw counts are accumulated here (transient -- only itable outlives this call).
+     uint32 holds every count exactly (the largest in the data is ~5.3e8, well inside
+     the range); float would lose precision above 2^24 ~ 16.7M. */
+  std::vector<uint32_t> table(size, 0);   /* unseen: count 0 until floored below */
 
   char filename[1024];
   int len = snprintf(filename, sizeof(filename), "%s/%s_%s.txt",
@@ -316,7 +318,7 @@ void ngrams_read(int n, int16_t * itable, const char * suffix)
       exit(1);
     }
 
-  double total = 0.0;   /* sum of all counts, in double (can exceed int range) */
+  uint64_t total = 0;   /* sum of all counts, in uint64 (can exceed uint32) */
   while (1)
     {
       int index = 0;
@@ -332,11 +334,11 @@ void ngrams_read(int n, int16_t * itable, const char * suffix)
           index = index * asize + char2num(a);
         }
 
-      int count;
-      if (! ok || (fscanf(f, " %d", & count) != 1))
+      unsigned count;
+      if (! ok || (fscanf(f, " %u", & count) != 1))
         break;
 
-      table[index] = static_cast<float>(count);
+      table[index] = count;
       total += count;
     }
 
@@ -348,9 +350,9 @@ void ngrams_read(int n, int16_t * itable, const char * suffix)
      table[] held only the raw counts (scratch) and is not read after this. The clamp
      keeps the ~-12 log10 floor inside int16 range (see the ngram_scale note above). */
   const double floor_count = 0.01;   /* community-standard unseen-gram floor */
-  if (total <= 0.0)
-    total = 1.0;                      /* empty/degenerate table: avoid div-by-zero */
-  const double log_total = log10(total);
+  if (total == 0)
+    total = 1;                        /* empty/degenerate table: avoid div-by-zero */
+  const double log_total = log10(static_cast<double>(total));
   for (int i = 0; i < size; i++)
     {
       double c = table[i];
