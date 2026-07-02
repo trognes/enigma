@@ -491,23 +491,26 @@ Remaining opportunities:
   unchanged (the full `make test` cracking matrices still pass). The n-gram
   tables stay global; `subst_array`/`mapping` are per-`machine` (`subst_array`
   heap-allocated, `mapping` in the struct).
-- 🟢 **The n-gram tables are now int16 fixed-point in the hot path** ✅. Each scorer
-  reads an `int16` copy (`mono16`/`bi16`/`tri16`/`quad16`, `ngram_scale = 2048`, filled
-  by `ngram16_fill`) and sums into a `long` (exact and order-independent — a small
-  determinism gain over the float sum). The **cache-residency** win is all in **quad**
-  (`float`→`int16` halves it to **0.9 MB**): measured **search −16/−17% on `make bench`**
-  (the scan decodes a fresh message per key and hits cold table cells), near-flat on
-  hill-climb (it keeps one message's few cells warm regardless of table size), and
-  machine-dependent (the L2-vs-L3 latency gap). mono/bi/tri are already L1/L2-resident,
-  so int16 gives them **no measurable speed-up** — they carry it only for
-  representational consistency. Quantisation at scale 2048 keeps the ~-12 log10 floor
-  inside int16 and preserves recovery **exactly** for every model (identical
-  exact-recovery and best keys across all four languages). Alternatives **measured and
-  rejected**: `-march=native`/SIMD (the gather-bound loop is latency-bound, not
-  throughput-bound, and does not auto-vectorise — no win) and the incremental
-  delta-scorer (~2× slower; `SIMULATED_ANNEALING.md` §6.2). GPU was assessed as
-  scan-only, still gather-bound, and not worth the loss of the portable single-TU
-  CPU design. 8-bit fixed-point is a further candidate, not yet measured.
+- 🟢 **The n-gram tables are now uint8 fixed-point in the hot path** ✅. Each scorer
+  reads a `uint8` copy (`mono8`/`bi8`/`tri8`/`quad8`, `ngram_scale = 32`, per-table
+  `bias` in `ngram_bias[]`) and sums into a `long` (exact and order-independent — a
+  small determinism gain over the float sum), recovering the log-prob sum as
+  `isum/32 + n·bias`. The **cache-residency** win is all in **quad**, narrowed in two
+  shipped steps: `float` (1.8 MB) → `int16` (0.9 MB) gave **search −16/−17% on
+  `make bench`**, then `int16` → `uint8` (**0.45 MB**) a further **~−4/−6%** (~−20% vs
+  float). It is near-flat on hill-climb (one message keeps its few cells warm regardless
+  of table size) and machine-dependent (the cache-level latency gap). mono/bi/tri are
+  already L1/L2-resident, so 8-bit gives them **no measurable speed-up** — they carry it
+  only for representational consistency. 8 bits fit because the unseen-gram floor is a
+  hapax (`log10(1/total)`), capping each range at `log10(max_count)` (widest = english
+  trigrams ~7.9 units < the `255/32 ≈ 8`-unit window); a per-table bias spends all 256
+  levels on the actual range. Recovery is **neutral vs int16** (`make crackquality`,
+  160 trials/length, all four languages). Alternatives **measured and rejected**:
+  `-march=native`/SIMD (the gather-bound loop is latency-bound, not throughput-bound,
+  and does not auto-vectorise — no win) and the incremental delta-scorer (~2× slower;
+  `SIMULATED_ANNEALING.md` §6.2). GPU was assessed as scan-only, still gather-bound, and
+  not worth the loss of the portable single-TU CPU design. 4-bit is not viable (<16
+  levels over an ~8-unit range).
 - 🟢 **Decode/score is now a single fused pass** ✅. The n-gram scorers decode
   each character once (`decode_at`) into a sliding window that indexes the n-gram
   table, instead of the old `decode_num` → `num_plaintext[]` scratch array →

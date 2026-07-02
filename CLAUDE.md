@@ -234,18 +234,22 @@ A single pass through `main()`:
 2. `readciphertext()` reads stdin, uppercases, and keeps only A–Z.
 3. Load the n-gram table matching the chosen scoring model and language; each
    count is stored as the log10 probability `log10(count / total)` (unseen grams
-   floored at `log10(0.01 / total)`), so the additive scorers sum a log-likelihood
-   and `score_iter`'s per-symbol average is a cross-entropy (dits/char). IC is a
-   separate normalised ratio and is left untouched. After loading, each n-gram table
-   is converted to an **int16 fixed-point** copy (`mono16`/`bi16`/`tri16`/`quad16`,
-   `ngram_scale = 2048`) that the scorer actually reads; `ngram16_fill()` clamps into
-   int16 range so the ~-12 log10 floor is safe, and the float tables are kept only as
-   the load source. This matters for **quad** — the hot, largest table (26⁴ entries):
-   int16 halves it (0.9 MB vs 1.8 MB) so it stays cache-resident during the scan
-   (measured faster; see Performance notes). mono/bi/tri are tiny and already
-   cache-resident, so int16 gives them no measurable speed-up — they use the same
-   representation only for consistency (and the int sum is order-independent). Recovery
-   quality is identical to float for every model, measured across all four languages.
+   floored at `log10(1 / total)` — scored as a single occurrence, a hapax), so the
+   additive scorers sum a log-likelihood and `score_iter`'s per-symbol average is a
+   cross-entropy (dits/char). IC is a separate normalised ratio and is left untouched.
+   `ngrams_read()` quantises each table directly into a **uint8 fixed-point** copy
+   (`mono8`/`bi8`/`tri8`/`quad8`, `ngram_scale = 32`) that the scorer reads: `q =
+   round((v − bias)·32)`, with a **per-table `bias` = the table's minimum log10 value**
+   so all 256 levels land on the actual `[vmin, vmax]` range (biases in
+   `ngram_bias[SCORE_*]`). The hapax floor caps each range at `log10(max_count)`, and
+   the widest table (english trigrams, ~7.9 log10 units) fits the `255/32 ≈ 8`-unit
+   uint8 window without clipping. This matters for **quad** — the hot, largest table
+   (26⁴ entries): uint8 shrinks it to 0.45 MB (vs 1.8 MB float / 0.9 MB int16) so it
+   stays cache-resident during the scan (measured faster; see Performance notes).
+   mono/bi/tri are tiny and already cache-resident — same representation only for
+   consistency. Scorers sum uint8 into a `long` and recover the log-prob sum as
+   `isum/32 + n·bias`. Recovery quality is identical to the wider types for every model,
+   measured across all four languages.
 4. `init()` precomputes numeric forward/reverse rotor permutations, notch
    tables, and reflector permutations from the hard-coded wiring strings.
 5. `bruteforce()` is the main search, run across `opt_threads` worker threads
@@ -346,23 +350,27 @@ two-pass on both compilers, markedly so on clang/ARM). An even earlier
 16-byte-blocked decode was never shown to win and was removed too; the scalar
 fused loop is the current form.
 
-The tables the scorers read are **int16 fixed-point** (`mono16`/`bi16`/`tri16`/
-`quad16`, `ngram_scale = 2048`), not float, and each scorer sums int16 into a `long`
-(exact and order-independent, a small determinism bonus) then divides by `ngram_scale`.
-This is a cache win for **quad** — the hot, largest table: halving it (0.9 MB vs
-1.8 MB) keeps it cache-resident during the **scan**, where every key decodes a fresh
-message and hits cold cells — a measured **search −16/−17% on `make bench`**
-(machine-dependent: the win is the L2-vs-L3 latency difference, so it shrinks on CPUs
-whose L2 already holds 1.8 MB or is too small for 0.9 MB). The **hill-climb re-scores
-one message** and keeps its few cells warm, so it was near-flat in isolation. mono/bi/tri
-are tiny and already L1/L2-resident: int16 gives them **no measurable speed-up**, and
-they carry it only for representational consistency. Quantisation at scale 2048 preserves
-recovery **exactly** (identical exact-recovery and best keys across all four languages,
-all models). Rejected precision/SIMD alternatives on record: `-march=native` (no win —
-the gather-bound loop does not auto-vectorise), hardware SIMD gathers (latency-bound,
-not throughput-bound), and the delta-scorer (`SIMULATED_ANNEALING.md` §6.2). (8-bit
-fixed-point is a further step under consideration but not yet measured — expected to
-risk quality on the hardest short messages for marginal further speed.)
+The tables the scorers read are **uint8 fixed-point** (`mono8`/`bi8`/`tri8`/`quad8`,
+`ngram_scale = 32`, per-table `bias`), not float, and each scorer sums uint8 into a
+`long` (exact and order-independent, a small determinism bonus) then recovers the
+log-prob sum as `isum/32 + n·bias`. This is a cache win for **quad** — the hot, largest
+table: shrinking it to 0.45 MB (from 1.8 MB float / 0.9 MB int16) keeps it cache-resident
+during the **scan**, where every key decodes a fresh message and hits cold cells. The
+narrowing happened in three shipped steps, each measured on `make bench`: float→int16
+(0.9 MB) gave **search −16/−17%**, then int16→uint8 (0.45 MB) a further **~−4/−6%**
+(~−20% total vs float). It is machine-dependent (the win is the cache-level latency gap,
+so it shrinks or vanishes on CPUs where the boundary sits elsewhere). The **hill-climb
+re-scores one message** and keeps its few cells warm, so it gains less. mono/bi/tri are
+tiny and already L1/L2-resident: 8-bit gives them **no measurable speed-up**; they carry
+it only for representational consistency. The uint8 range fits because unseen grams are
+floored at a hapax (`log10(1/total)`), capping each table at `log10(max_count)` — the
+widest (english trigrams ~7.9 units) fits the `255/32 ≈ 8`-unit window; recovery is
+**neutral** vs int16 (`make crackquality`, 160 trials/length, all four languages).
+Rejected precision/SIMD alternatives on record: 16-bit and lower resolutions were the
+step *before* 8-bit (8-bit won); `-march=native` (no win — the gather-bound loop does not
+auto-vectorise), hardware SIMD gathers (latency-bound, not throughput-bound), and the
+delta-scorer (`SIMULATED_ANNEALING.md` §6.2). 4-bit would need <16 levels over a ~8-unit
+range and is not viable.
 
 > **Struct layout matters for the hot loop.** When the per-search state moved
 > into `struct machine`, collapsing the formerly separate global arrays into one
