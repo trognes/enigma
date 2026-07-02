@@ -1647,7 +1647,7 @@ void search_worker(machine & m,
                   /* setup_mapping stepped grundstellung; restore the start
                      positions before echoing the config */
                   init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-                  fprintf(stderr, "%10.4f ", score);
+                  fprintf(stderr, "%7.4f ", score);
                   showconfig(m);
 #endif
                 }
@@ -1832,7 +1832,7 @@ void finish_worker(machine & m,
               best.found = true;
               memcpy(best.plaintext, m.plaintext, textlength + 1);
               init_ring_grund(m, rg6[0], rg6[1], rg6[2], rg6[3], rg6[4], rg6[5]);
-              fprintf(stderr, "%10.4f ", score);
+              fprintf(stderr, "%7.4f ", score);
               showconfig(m);
             }
         }
