@@ -371,7 +371,11 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
       else if ((min_seen == 0) || (table[i] < min_seen))
         min_seen = table[i];
     }
-  double min_eff = any_unseen ? floor_count : static_cast<double>(min_seen);
+  /* min_seen == 0 only if no gram was seen at all, which also sets any_unseen; the
+     explicit check keeps min_eff provably positive (log10 argument) and covers the
+     degenerate empty-table case. */
+  double min_eff = (any_unseen || (min_seen == 0)) ? floor_count
+                                                   : static_cast<double>(min_seen);
   double bias = log10(min_eff) - log_total;
   *bias_out = bias;
 
