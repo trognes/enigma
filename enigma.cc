@@ -127,6 +127,12 @@ static int opt_hillclimb;
    to the full scan, fewer full decodes). Accelerates the -S iq IC pre-pass, the -F tier-1
    IC climb, and -m/-i climbs; a no-op for quad/bi/tri (delta-quad was measured slower). */
 static int opt_delta;
+/* -I: circular first-improvement climb instead of steepest ascent. Applies the FIRST
+   improving move (cursor sweeps a fixed move list and continues from where it accepted),
+   so it does far fewer score_iter calls per climb -- ~2.8x cheaper. It recovers WORSE per
+   restart (a different, noisier trajectory), so it is a *throughput multiplier*: pair it
+   with more restarts (-R) and it wins at equal compute. Off by default; needs -c. */
+static int opt_firstimprove;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
@@ -1173,7 +1179,7 @@ static void delta_switch_scan(machine & m, int iter, int max_pairs, int pairs,
 struct pairtab { unsigned char a[asize * (asize - 1) / 2], b[asize * (asize - 1) / 2]; };
 static pairtab make_pairtab()
 {
-  pairtab t;
+  pairtab t = {};   /* zero-init: the loop fills every entry, but this lets cppcheck prove it */
   int k = 0;
   for (int i = 0; i < asize; i++)
     for (int j = i + 1; j < asize; j++)
@@ -1181,7 +1187,7 @@ static pairtab make_pairtab()
   return t;
 }
 
-/* --- Circular first-improvement climb (EXPERIMENT, env ENIGMA_FIRSTIMP) -------
+/* --- Circular first-improvement climb (-I) ------------------------------------
 
    Steepest ascent full-scans all ~338 moves per accepted move and applies the single
    best. First-improvement instead applies the FIRST move that improves and keeps going.
@@ -1283,12 +1289,9 @@ double hillclimb(machine & m, int max_pairs)
 {
   int iter = 1;
 
-  /* EXPERIMENT: circular first-improvement instead of steepest ascent (off by default,
-     so the baseline is byte-identical). */
-  static const bool firstimp = []() {
-    const char * e = getenv("ENIGMA_FIRSTIMP");
-    return e && (atoi(e) != 0);
-  }();
+  /* -I: circular first-improvement instead of steepest ascent (off by default, so the
+     baseline is byte-identical). */
+  const bool firstimp = (opt_firstimprove != 0);
 
   bool progress;
   do
@@ -2625,6 +2628,8 @@ void help(FILE * out)
   fprintf(out, "               held fixed -- the -c/-A climb keeps them and finds the rest\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
   fprintf(out, "  -D           Delta-score mono/IC climb passes (exact, faster; needs -c)\n");
+  fprintf(out, "  -I           First-improvement climb: ~2.8x cheaper per climb, so pair\n");
+  fprintf(out, "               with more -R for a net recovery win (needs -c) [off]\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
@@ -2701,6 +2706,8 @@ void show_settings()
     fprintf(stderr, "            staged: %s\n", opt_staged);
   if (opt_hillclimb && opt_delta)
     fprintf(stderr, "            delta-scoring mono/IC passes\n");
+  if (opt_hillclimb && opt_firstimprove)
+    fprintf(stderr, "            first-improvement climb\n");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts > 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));
@@ -2779,6 +2786,7 @@ int main(int argc, char * * argv)
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_delta = 0;
+  opt_firstimprove = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
@@ -2794,7 +2802,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:Dimbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:DIimbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2838,6 +2846,9 @@ int main(int argc, char * * argv)
           break;
         case 'c':
           opt_hillclimb = 1;
+          break;
+        case 'I':
+          opt_firstimprove = 1;
           break;
         case 'D':
           opt_delta = 1;
@@ -3065,6 +3076,10 @@ int main(int argc, char * * argv)
   /* -D accelerates mono/IC hill-climb passes, so it needs -c. */
   if (opt_delta && (! opt_hillclimb))
     fatal("Delta-scoring (-D) needs the plugboard hill-climb (-c)");
+
+  /* -I is a hill-climb strategy, so it needs -c. */
+  if (opt_firstimprove && (! opt_hillclimb))
+    fatal("First-improvement (-I) needs the plugboard hill-climb (-c)");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully
