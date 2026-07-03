@@ -1150,136 +1150,134 @@ double hillclimb(machine & m, int max_pairs)
         }
       else
         {
-      double best_score;
-      double last_best;
+          double best_score;
+          double last_best;
 
-      /* Cheap moves to convergence: each pass takes the single best of all "switch
-         a-b" moves (force a-b, ejecting conflicts -- adds / moves an endpoint /
-         merges two plugs into one) and all "remove" moves (free an existing pair). */
-      do
-        {
-          best_score = score_iter(m);
-          last_best = best_score;
-
-          /* current plug-pair count: at the cap, moves that would add a brand-new
-             pair (both endpoints currently unplugged) are skipped below */
-          int pairs = 0;
-          for (int j = 0; j < asize; j++)
-            if (m.steckerbrett[j] > j)
-              pairs++;
-
-          double move_score = best_score;
-          int move_kind = 0;        /* 0 = switch, 1 = remove */
-          int move_a = 0;
-          int move_b = 0;
-
-          /* One "toggle a-b" operator over all 325 letter pairs expresses every plug move
-             by the current state of a and b: both ends free -> ADD a-b (+1 pair); exactly
-             one end plugged -> MOVE that plug's endpoint (0); both ends plugged to different
-             partners -> MERGE two plugs into one (-1); a-b already a pair -> REMOVE it (-1).
-             Steepest ascent takes the single best improving toggle per pass. The plug cap
-             gates by count-effect: at/over the cap an ADD is always blocked, and with -M
-             (opt_capmerge) a count-preserving MOVE too, so only the count-reducing MERGE and
-             REMOVE survive -- the cap becomes a strict descent target. (Folding removal in as
-             the already-paired toggle case is what lets a single scan replace the old
-             separate switch-scan + removal-loop pair.) */
-          {
-          for(int a=0; a<asize; a++)
-            for(int b=a+1; b<asize; b++)
-              {
-                /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
-                if (plug_fixed[a] || plug_fixed[b])
-                  continue;
-
-                int sa = m.steckerbrett[a];
-                int sb = m.steckerbrett[b];
-                bool a_free = (sa == a);
-                bool b_free = (sb == b);
-                bool paired = (sa == b);   /* a-b already a plug -> this toggle REMOVES it */
-
-                /* cap gate by count-effect (a REMOVE is -1, so always allowed) */
-                if ((pairs >= max_pairs) && ! paired)
-                  {
-                    if (a_free && b_free)
-                      continue;                    /* block ADD (+1) */
-                    if (opt_capmerge && (a_free || b_free))
-                      continue;                    /* -M: block count-preserving MOVE (0) */
-                  }
-
-                int new_kind, x = 0, y = 0, xx = 0, yy = 0;
-                if (paired)
-                  {
-                    m.steckerbrett[a] = a;         /* REMOVE a-b */
-                    m.steckerbrett[b] = b;
-                    new_kind = 1;
-                  }
-                else
-                  {
-                    x = sa; y = sb;
-                    xx = m.steckerbrett[x];
-                    yy = m.steckerbrett[y];
-                    m.steckerbrett[x] = x;         /* force a-b: ADD / MOVE / MERGE */
-                    m.steckerbrett[y] = y;
-                    m.steckerbrett[a] = b;
-                    m.steckerbrett[b] = a;
-                    new_kind = 0;
-                  }
-
-                double score = score_iter(m);
-
-                /* steepest ascent; on an equal score a switch (add/move/merge) wins the tie
-                   over a removal, so a converged board keeps the plugs the score justifies. */
-                if ((score > move_score) ||
-                    ((score == move_score) && (score > best_score) &&
-                     (new_kind == 0) && (move_kind == 1)))
-                  {
-                    move_score = score;
-                    move_kind = new_kind;
-                    move_a = a;
-                    move_b = b;
-                  }
-
-                if (paired)
-                  {
-                    m.steckerbrett[a] = b;         /* restore REMOVE */
-                    m.steckerbrett[b] = a;
-                  }
-                else
-                  {
-                    m.steckerbrett[a] = sa;        /* restore force */
-                    m.steckerbrett[b] = sb;
-                    m.steckerbrett[x] = xx;
-                    m.steckerbrett[y] = yy;
-                  }
-              }
-          }
-
-          if (move_score - best_score > 0)
+          /* Cheap moves to convergence: each pass takes the single best of all "switch
+             a-b" moves (force a-b, ejecting conflicts -- adds / moves an endpoint /
+             merges two plugs into one) and all "remove" moves (free an existing pair). */
+          do
             {
-              int a = move_a;
-              int b = move_b;
+              best_score = score_iter(m);
+              last_best = best_score;
 
-              if (move_kind == 1)
-                {
-                  /* remove the a-b plug, freeing both ends */
-                  m.steckerbrett[a] = a;
-                  m.steckerbrett[b] = b;
-                }
-              else
-                {
-                  /* switch plugs */
-                  int x = m.steckerbrett[a];
-                  int y = m.steckerbrett[b];
-                  m.steckerbrett[x] = x;
-                  m.steckerbrett[y] = y;
-                  m.steckerbrett[a] = b;
-                  m.steckerbrett[b] = a;
-                }
+              /* current plug-pair count: at the cap, moves that would add a brand-new
+                 pair (both endpoints currently unplugged) are skipped below */
+              int pairs = 0;
+              for (int j = 0; j < asize; j++)
+                if (m.steckerbrett[j] > j)
+                  pairs++;
 
-              best_score = move_score;
+              double move_score = best_score;
+              int move_kind = 0;        /* 0 = switch, 1 = remove */
+              int move_a = 0;
+              int move_b = 0;
+
+              /* One "toggle a-b" operator over all 325 letter pairs expresses every plug move
+                 by the current state of a and b: both ends free -> ADD a-b (+1 pair); exactly
+                 one end plugged -> MOVE that plug's endpoint (0); both ends plugged to different
+                 partners -> MERGE two plugs into one (-1); a-b already a pair -> REMOVE it (-1).
+                 Steepest ascent takes the single best improving toggle per pass. The plug cap
+                 gates by count-effect: at/over the cap an ADD is always blocked, and with -M
+                 (opt_capmerge) a count-preserving MOVE too, so only the count-reducing MERGE and
+                 REMOVE survive -- the cap becomes a strict descent target. (Folding removal in as
+                 the already-paired toggle case is what lets a single scan replace the old
+                 separate switch-scan + removal-loop pair.) */
+              for(int a=0; a<asize; a++)
+                for(int b=a+1; b<asize; b++)
+                  {
+                    /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
+                    if (plug_fixed[a] || plug_fixed[b])
+                      continue;
+
+                    int sa = m.steckerbrett[a];
+                    int sb = m.steckerbrett[b];
+                    bool a_free = (sa == a);
+                    bool b_free = (sb == b);
+                    bool paired = (sa == b);   /* a-b already a plug -> this toggle REMOVES it */
+
+                    /* cap gate by count-effect (a REMOVE is -1, so always allowed) */
+                    if ((pairs >= max_pairs) && ! paired)
+                      {
+                        if (a_free && b_free)
+                          continue;                    /* block ADD (+1) */
+                        if (opt_capmerge && (a_free || b_free))
+                          continue;                    /* -M: block count-preserving MOVE (0) */
+                      }
+
+                    int new_kind, x = 0, y = 0, xx = 0, yy = 0;
+                    if (paired)
+                      {
+                        m.steckerbrett[a] = a;         /* REMOVE a-b */
+                        m.steckerbrett[b] = b;
+                        new_kind = 1;
+                      }
+                    else
+                      {
+                        x = sa; y = sb;
+                        xx = m.steckerbrett[x];
+                        yy = m.steckerbrett[y];
+                        m.steckerbrett[x] = x;         /* force a-b: ADD / MOVE / MERGE */
+                        m.steckerbrett[y] = y;
+                        m.steckerbrett[a] = b;
+                        m.steckerbrett[b] = a;
+                        new_kind = 0;
+                      }
+
+                    double score = score_iter(m);
+
+                    /* steepest ascent; on an equal score a switch (add/move/merge) wins the tie
+                       over a removal, so a converged board keeps the plugs the score justifies. */
+                    if ((score > move_score) ||
+                        ((score == move_score) && (score > best_score) &&
+                         (new_kind == 0) && (move_kind == 1)))
+                      {
+                        move_score = score;
+                        move_kind = new_kind;
+                        move_a = a;
+                        move_b = b;
+                      }
+
+                    if (paired)
+                      {
+                        m.steckerbrett[a] = b;         /* restore REMOVE */
+                        m.steckerbrett[b] = a;
+                      }
+                    else
+                      {
+                        m.steckerbrett[a] = sa;        /* restore force */
+                        m.steckerbrett[b] = sb;
+                        m.steckerbrett[x] = xx;
+                        m.steckerbrett[y] = yy;
+                      }
+                  }
+
+              if (move_score - best_score > 0)
+                {
+                  int a = move_a;
+                  int b = move_b;
+
+                  if (move_kind == 1)
+                    {
+                      /* remove the a-b plug, freeing both ends */
+                      m.steckerbrett[a] = a;
+                      m.steckerbrett[b] = b;
+                    }
+                  else
+                    {
+                      /* switch plugs */
+                      int x = m.steckerbrett[a];
+                      int y = m.steckerbrett[b];
+                      m.steckerbrett[x] = x;
+                      m.steckerbrett[y] = y;
+                      m.steckerbrett[a] = b;
+                      m.steckerbrett[b] = a;
+                    }
+
+                  best_score = move_score;
+                }
             }
-        }
-      while (best_score > last_best);
+          while (best_score > last_best);
           cur = best_score;
         }
 
