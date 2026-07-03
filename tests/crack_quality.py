@@ -98,11 +98,21 @@ BASE = env("BASE", "")
 CRACKOPTS = shlex.split(env("CRACKOPTS", ""))
 
 
+# Per-binary n-gram data directory: each binary reads its tables from its own
+# tree (the working-tree binary from ./ngrams, a BASE binary from its worktree),
+# so an A/B spanning the data-dir move finds the tables for both refs.
+DATADIRS = {}
+
+
 def run(binary, args, text):
     """Feed `text` on stdin, return (stdout, stderr) as strings."""
+    env = os.environ.copy()
+    datadir = DATADIRS.get(binary)
+    if datadir:
+        env["ENIGMA_DATA"] = datadir
     p = subprocess.run([binary] + args, input=text,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                       universal_newlines=True)
+                       universal_newlines=True, env=env)
     return p.stdout, p.stderr
 
 
@@ -194,6 +204,7 @@ def main():
     head = "./enigma"
     if not os.access(head, os.X_OK):
         sys.exit("error: %s not built; run 'make' first" % head)
+    DATADIRS[head] = os.path.abspath("ngrams")
 
     corpus = CORPORA.get(CLANG)
     if corpus is None:
@@ -206,6 +217,8 @@ def main():
             print("note: SPLIT ignored because BASE (A/B) was requested", file=sys.stderr)
             split = False
         base, base_wt = build_base(BASE)
+        wt_ngrams = os.path.join(base_wt, "ngrams")
+        DATADIRS[base] = wt_ngrams if os.path.isdir(wt_ngrams) else base_wt
 
     try:
         if base:

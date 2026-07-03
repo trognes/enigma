@@ -135,8 +135,9 @@ these mostly pay off in the (unbuilt) full-crack tier of §1.
   `performance.md` §3.1), §7.1a surrogate-ranked ascent (rank switch moves by a cheap
   monogram surrogate, full-quad only a top-K — ~1.5× *slower* at the ~50-char target
   because warm short-message quad decodes are too cheap to skip; only wins ≥150 chars;
-  the exact mono/IC delta remnant ships opt-in as `-D`, a long-message-only speedup;
-  `performance.md` §7.1), incremental **quad** delta-scoring (~2× slower;
+  the exact mono/IC delta remnant was briefly shipped as `-D` then removed — a
+  long-message-only speedup, net-negative for this short-message tool and a maintenance
+  tax on the hottest loop; `performance.md` §7.1), incremental **quad** delta-scoring (~2× slower;
   `SIMULATED_ANNEALING.md` §6.2), χ² as the scoring/`-F` model (gameable by the
   plugboard), 3-opt / 3-plug re-pair (cost > gain), rotor-stepping reuse across
   starts (history §6 "optimisation B"), `-march=native` / SIMD gathers and GPU (the

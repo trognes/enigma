@@ -148,7 +148,6 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | `-c` | Hill-climb the plugboard for each candidate key |
 | `-I` | First-improvement climb: ~2.8× cheaper per climb, so **pair with more `-R`** for a net matched-compute recovery win (needs `-c`; off by default) |
 | `-J` | Like `-I` but with **dynamic** best-first move ordering (implies `-I`); a further matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
-| `-D` | Exact delta-scoring for mono/IC climb passes (byte-identical, faster on **long** messages only; needs `-c`; off by default) |
 | `-M` | Make the plug cap a strict **descent target**: at/over the cap only merge/remove moves (no adds or reshuffles). A matched-compute win with a tight `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs `-c`; off by default) |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
@@ -177,7 +176,7 @@ seed.
 
 | Option | Meaning |
 | --- | --- |
-| `-d dir` | Directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`) `[.]` |
+| `-d dir` | Directory holding the n-gram files (else `$ENIGMA_DATA`, else `ngrams`) `[ngrams]` |
 | `-T N` | Worker threads for the search, 1–256 `[1]` |
 | `-p file` | Compare the recovered plaintext against a known plaintext file |
 | `-v` / `-h` | Version / help |
@@ -203,7 +202,6 @@ Usage: enigma [OPTIONS]
                with more -R for a net recovery win (needs -c) [off]
   -J           Like -I but with dynamic best-first move ordering; wins on
                ~10-plug messages, may lose with few plugs (implies -I) [off]
-  -D           Delta-score mono/IC climb passes (exact, faster; needs -c)
   -R integer   Plugboard hill-climb random restarts (1 = none) [1]
   -S schedule  Staged plugboard climb: <letter><opt.number> tokens.
                Models i/m/b/t/q (number caps plug pairs; last = target),
@@ -225,7 +223,7 @@ Usage: enigma [OPTIONS]
   -F N[%]      Key pre-filter: rank keys by a cheap IC climb, then run
                the full -c climb on only the top N keys, or top N% of
                the keyspace (needs -c) [off]
-  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]
+  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [ngrams]
   -T integer   Number of worker threads for the search (1-256) [1]
 ```
 
@@ -344,9 +342,10 @@ Increase `-R` for harder messages.
 
 Scoring uses letter-frequency tables read from `<datadir>/<language>_<ngram>.txt`,
 where `<ngram>` is `monograms`/`bigrams`/`trigrams`/`quadgrams`. Each line is
-`<LETTERS> <count>`, e.g. `TION 13168375`. The data directory is resolved as
-`-d <dir>` → `$ENIGMA_DATA` → `.` (the current directory), so the tool can run
-from any working directory.
+`<LETTERS> <count>`, e.g. `TION 13168375`. The tables ship in the `ngrams/`
+subdirectory, and the data directory is resolved as `-d <dir>` → `$ENIGMA_DATA` →
+`ngrams` (the bundled default, found when run from the repo root) — pass `-d` or set
+`$ENIGMA_DATA` to run from another working directory.
 
 At load time each count is converted to a log10 probability `log10(count/total)`,
 with n-grams never seen in the corpus floored at `log10(0.01/total)` so that
@@ -363,12 +362,14 @@ website, where additional languages are available in the same format.
 
 ## Performance
 
-The search is parallelised over the whole key space — reflectors, wheel orders,
-ring settings and start positions — so `-T N` uses N worker threads even when the
-wheels are fixed and only the rings/starts are being searched. The default is a
-single thread; on a 4-core machine a search runs about 3× faster with `-T 4`, and
-scaling can be measured with `make bench SCALE=1`. Results are independent of the
-thread count (`-T` does not change which plaintext is found).
+The search is parallelised over the whole `keys × restarts` work space — reflectors,
+wheel orders, ring settings, start positions, **and the `-R` plugboard restarts** — so
+`-T N` uses N worker threads even when the wheels are fixed and only the rings/starts are
+being searched, **and even when the rotor key is fully specified and you are only
+recovering the plugboard** (there the restarts are what get spread across threads). The
+default is a single thread; on a 4-core machine a search runs about 3× faster with
+`-T 4`, and scaling can be measured with `make bench SCALE=1`. Results are independent of
+the thread count (`-T` does not change which plaintext is found).
 
 ## References
 

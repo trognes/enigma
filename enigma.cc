@@ -108,7 +108,7 @@ static const char * opt_steckerbrett;
 static bool plug_fixed[asize];
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french ...; no default */
-static const char * opt_datadir;  /* directory holding the n-gram files (default ".") */
+static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_m4;        /* use M4 (4-rotor naval) mode */
 /* M4 mode: 4th "Greek" wheel (Beta/Gamma, rotor indices 13-14) is static (never
@@ -123,10 +123,6 @@ static char opt_greek_grundstellung = '.';  /* Greek start letter or . */
 static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
-/* -D: use exact incremental delta-scoring for mono/IC hillclimb passes (byte-identical
-   to the full scan, fewer full decodes). Accelerates the -S iq IC pre-pass, the -F tier-1
-   IC climb, and -m/-i climbs; a no-op for quad/bi/tri (delta-quad was measured slower). */
-static int opt_delta;
 /* -I: circular first-improvement climb instead of steepest ascent. Applies the FIRST
    improving move (cursor sweeps a fixed move list and continues from where it accepted),
    so it does far fewer score_iter calls per climb -- ~2.8x cheaper. It recovers WORSE per
@@ -788,15 +784,10 @@ double ic_score_decode(machine & m)
 
 void showsteckerbrett(machine & m)
 {
-#if 0
-  for (int j=0; j<asize; j++)
-    putchar(num2char(m.steckerbrett[j]));
-#else
   fprintf(stderr, "S:");
   for (int j=0; j<asize; j++)
     if (m.steckerbrett[j] > j)
       fprintf(stderr, " %c%c", num2char(j), num2char(m.steckerbrett[j]));
-#endif
 }
 
 void showconfig(machine & m)
@@ -846,9 +837,8 @@ void showconfig(machine & m)
   fprintf(stderr, "\n");
 }
 
-double score_iter(machine & m, int iter)
+double score_iter(machine & m)
 {
-  (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
@@ -893,43 +883,6 @@ double score_iter(machine & m, int iter)
   return score;
 }
 
-int count[asize];
-int order[asize];
-
-int compare(const void * x, const void * y)
-{
-  int a = count[*static_cast<const int*>(x)];
-  int b = count[*static_cast<const int*>(y)];
-
-  if (a<b)
-    return +1;
-  else if (a>b)
-    return -1;
-  else
-    return 0;
-}
-
-void ciphertext_letterdist()
-{
-  for(int j=0; j<asize; j++)
-    {
-      count[j]=0;
-      order[j] = j;
-    }
-
-  for (int i=0; i<textlength; i++)
-    count[char2num(ciphertext[i])]++;
-
-  qsort(order, asize, sizeof(int), compare);
-
-#if 0
-  fprintf(stderr, "Ciphertext letter order: ");
-  for(int j=0; j<asize; j++)
-    fprintf(stderr, "%c", num2char(order[j]));
-  fprintf(stderr, "\n");
-#endif
-}
-
 /* --- plugboard hill-climb (steckerbrett) -------------------------------- */
 
 /* Last-resort "re-pair" move: take two existing plugs {a-x},{b-y} to the OTHER
@@ -939,7 +892,7 @@ void ciphertext_letterdist()
    moves cannot. It is run only once the cheap swap/remove moves have converged -- a
    handful of times per climb, not every pass -- so its O(plugs^2) cost is small.
    Applies and returns true iff the single best re-pair strictly beats cur_score. */
-static bool try_repair(machine & m, int iter, double cur_score)
+static bool try_repair(machine & m, double cur_score)
 {
   int plo[asize / 2];
   int phi[asize / 2];
@@ -965,7 +918,7 @@ static bool try_repair(machine & m, int iter, double cur_score)
         /* M1: {a-b, x-y} */
         m.steckerbrett[a] = b; m.steckerbrett[b] = a;
         m.steckerbrett[x] = y; m.steckerbrett[y] = x;
-        double s1 = score_iter(m, iter);
+        double s1 = score_iter(m);
         if (s1 > best)
           {
             best = s1; found = true;
@@ -976,7 +929,7 @@ static bool try_repair(machine & m, int iter, double cur_score)
         /* M2: {a-y, x-b} */
         m.steckerbrett[a] = y; m.steckerbrett[y] = a;
         m.steckerbrett[x] = b; m.steckerbrett[b] = x;
-        double s2 = score_iter(m, iter);
+        double s2 = score_iter(m);
         if (s2 > best)
           {
             best = s2; found = true;
@@ -993,205 +946,6 @@ static bool try_repair(machine & m, int iter, double cur_score)
     for (int k = 0; k < 4; k++)
       m.steckerbrett[rp_pos[k]] = static_cast<unsigned char>(rp_val[k]);
   return found;
-}
-
-/* Climb the steckerbrett for the current scoring model until no move improves it,
-   but never letting the board exceed max_pairs plug pairs (the staged climb caps the
-   low-order pre-pass to its first few plugs; pass pairs_uncapped for an unconstrained
-   climb -- a board can hold at most 13 pairs anyway). The cheap "switch" and "remove"
-   moves are run to convergence; then a single best "re-pair" is tried as a barrier
-   cross, and if it improves the cheap climb resumes from the new board. */
-/* --- Exact delta-accelerated switch scan for mono / IC climbs (option -D) ----
-
-   §7.1a surrogate-RANKING (rank switch moves by a cheap monogram surrogate, then
-   full-quad-score only a top-K) was rejected: at the ~50-char target it is ~1.5x
-   SLOWER than the plain quad scan -- once the quad table is warm from climbing one
-   key, the decodes it skips are too cheap to offset the per-pass index/delta overhead
-   (it only wins at >=150 chars).  See performance.md.
-
-   What survives, as an option, is the incremental delta itself, used EXACTLY (not as a
-   surrogate) for the mono/IC models.  Within a pass the base board is fixed, so a switch
-   on (a,b) changes the plugboard only at the letters {a,b,steck[a],steck[b]} and thus the
-   decode only at positions whose ciphertext letter, or whose (fixed) rotor-stack output
-   letter, is one of those four.  A per-pass inverted index (positions by input letter and
-   by base output letter) sums each candidate's score delta over just those O(few)
-   positions.  The single best-delta switch -- the max-delta switch IS the max-score switch,
-   since the delta is strictly monotone in the score -- is then scored EXACTLY with one
-   score_iter and folded in exactly as the baseline full scan would: BYTE-IDENTICAL
-   selection, fewer full decodes.  mono/IC only (delta-quad was measured ~2x slower); this
-   accelerates the -S iq IC pre-pass, the -F tier-1 IC climb, and -m/-i climbs. */
-static void delta_switch_scan(machine & m, int iter, int max_pairs, int pairs,
-                              double & move_score, int & move_kind,
-                              int & move_a, int & move_b)
-{
-  const int n = textlength;
-  const unsigned char * __restrict ct = num_ciphertext;
-  const unsigned char * const * __restrict rows = m.rows;
-  unsigned char * __restrict steck = m.steckerbrett;   /* base board (unchanged below) */
-  const bool is_ic = (m.scoring == SCORE_IC);
-
-  /* per-pass base decode / rotor-stack output letter, the two CSR inverted indices, and
-     (for IC) the base decoded-letter histogram. */
-  unsigned char base_mid[maxlen], base_dec[maxlen];
-  int ctstart[asize + 1], midstart[asize + 1];
-  int ctpos[maxlen], midpos[maxlen];
-  int ctcnt[asize] = { 0 }, midcnt[asize] = { 0 };
-  int freq[asize] = { 0 };
-  int dfl[2 * maxlen];   /* IC scratch: touched (old,new) letters, to undo per candidate */
-
-  for (int i = 0; i < n; i++)
-    {
-      int mid = rows[i][steck[ct[i]]];
-      int dec = steck[mid];
-      base_mid[i] = static_cast<unsigned char>(mid);
-      base_dec[i] = static_cast<unsigned char>(dec);
-      ctcnt[ct[i]]++;
-      midcnt[mid]++;
-      freq[dec]++;
-    }
-  ctstart[0] = 0;
-  midstart[0] = 0;
-  for (int c = 0; c < asize; c++)
-    {
-      ctstart[c + 1] = ctstart[c] + ctcnt[c];
-      midstart[c + 1] = midstart[c] + midcnt[c];
-    }
-  int ccur[asize], mcur[asize];
-  for (int c = 0; c < asize; c++) { ccur[c] = ctstart[c]; mcur[c] = midstart[c]; }
-  for (int i = 0; i < n; i++)
-    {
-      ctpos[ccur[ct[i]]++] = i;
-      midpos[mcur[base_mid[i]]++] = i;
-    }
-
-  long best_delta = 0;
-  int best_a = 0, best_b = 0;
-  bool have = false;
-
-  for (int a = 0; a < asize; a++)
-    for (int b = a + 1; b < asize; b++)
-      {
-        if (plug_fixed[a] || plug_fixed[b])
-          continue;
-        if ((pairs >= max_pairs) && (steck[a] == a) && (steck[b] == b))
-          continue;
-
-        int x = steck[a];
-        int y = steck[b];
-        auto sn = [&](int c) -> int
-        {
-          if (c == a) return b;
-          if (c == b) return a;
-          if (c == x) return x;
-          if (c == y) return y;
-          return steck[c];
-        };
-        int L[4]; int nl = 0;
-        L[nl++] = a;
-        L[nl++] = b;
-        if ((x != a) && (x != b)) L[nl++] = x;
-        if ((y != a) && (y != b) && (y != x)) L[nl++] = y;
-
-        long delta;
-        if (! is_ic)
-          {
-            long d = 0;
-            /* Type A: ciphertext letter changed plug -> recompute decode at those positions */
-            for (int k = 0; k < nl; k++)
-              {
-                int Lc = L[k];
-                int in = sn(Lc);
-                for (int p = ctstart[Lc]; p < ctstart[Lc + 1]; p++)
-                  { int i = ctpos[p]; d += mono8[sn(rows[i][in])] - mono8[base_dec[i]]; }
-              }
-            /* Type B: base output letter changed plug, input unchanged (skip Type A dups) */
-            for (int k = 0; k < nl; k++)
-              {
-                int Lc = L[k];
-                int nv = mono8[sn(Lc)];
-                for (int p = midstart[Lc]; p < midstart[Lc + 1]; p++)
-                  {
-                    int i = midpos[p];
-                    int cti = ct[i];
-                    if ((cti == a) || (cti == b) || (cti == x) || (cti == y)) continue;
-                    d += nv - mono8[base_dec[i]];
-                  }
-              }
-            delta = d;
-          }
-        else
-          {
-            /* IC: change in the coincidence numerator sum_j f_j (f_j - 1), accumulated
-               incrementally over the affected positions (touched letters recorded, then
-               the histogram restored for the next candidate). */
-            long dnum = 0;
-            int ndf = 0;
-            for (int k = 0; k < nl; k++)
-              {
-                int Lc = L[k];
-                int in = sn(Lc);
-                for (int p = ctstart[Lc]; p < ctstart[Lc + 1]; p++)
-                  {
-                    int i = ctpos[p];
-                    int oldd = base_dec[i];
-                    int newd = sn(rows[i][in]);
-                    if (oldd == newd) continue;
-                    dfl[ndf++] = oldd; dfl[ndf++] = newd;
-                    dnum -= static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
-                    freq[oldd]--;
-                    dnum += static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
-                    dnum -= static_cast<long>(freq[newd]) * (freq[newd] - 1);
-                    freq[newd]++;
-                    dnum += static_cast<long>(freq[newd]) * (freq[newd] - 1);
-                  }
-              }
-            for (int k = 0; k < nl; k++)
-              {
-                int Lc = L[k];
-                int newd = sn(Lc);
-                for (int p = midstart[Lc]; p < midstart[Lc + 1]; p++)
-                  {
-                    int i = midpos[p];
-                    int cti = ct[i];
-                    if ((cti == a) || (cti == b) || (cti == x) || (cti == y)) continue;
-                    int oldd = base_dec[i];
-                    if (oldd == newd) continue;
-                    dfl[ndf++] = oldd; dfl[ndf++] = newd;
-                    dnum -= static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
-                    freq[oldd]--;
-                    dnum += static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
-                    dnum -= static_cast<long>(freq[newd]) * (freq[newd] - 1);
-                    freq[newd]++;
-                    dnum += static_cast<long>(freq[newd]) * (freq[newd] - 1);
-                  }
-              }
-            for (int t = 0; t < ndf; t += 2)   /* restore the histogram */
-              { freq[dfl[t + 1]]--; freq[dfl[t]]++; }
-            delta = dnum;
-          }
-
-        if (! have || (delta > best_delta))   /* max delta; ascending (a,b) keeps lowest on ties */
-          { best_delta = delta; best_a = a; best_b = b; have = true; }
-      }
-
-  /* score the single best switch exactly and fold it in as the baseline scan would */
-  if (have)
-    {
-      int a = best_a, b = best_b;
-      int x = steck[a], y = steck[b];
-      int xx = steck[x], yy = steck[y];
-      steck[x] = static_cast<unsigned char>(x);
-      steck[y] = static_cast<unsigned char>(y);
-      steck[a] = static_cast<unsigned char>(b);
-      steck[b] = static_cast<unsigned char>(a);
-      double score = score_iter(m, iter);
-      if (score > move_score)
-        { move_score = score; move_kind = 0; move_a = a; move_b = b; }
-      steck[a] = static_cast<unsigned char>(x);
-      steck[b] = static_cast<unsigned char>(y);
-      steck[x] = static_cast<unsigned char>(xx);
-      steck[y] = static_cast<unsigned char>(yy);
-    }
 }
 
 /* Lexicographic table of the C(26,2)=325 unordered letter pairs, built once. */
@@ -1224,13 +978,13 @@ static pairtab make_pairtab()
    (no RNG, fixed order and acceptance rule) so the result is -T-independent; the trajectory
    differs from steepest ascent, so this is NOT byte-identical and must be judged on
    recovery, not equality. */
-static void firstimprove_sweep(machine & m, int iter, int max_pairs)
+static void firstimprove_sweep(machine & m, int max_pairs)
 {
   static const int nmoves = asize * (asize - 1) / 2;   /* 325 pair-toggles */
   static const pairtab P = make_pairtab();
 
   unsigned char * __restrict steck = m.steckerbrett;
-  double cur = score_iter(m, iter);
+  double cur = score_iter(m);
 
   int pairs = 0;
   for (int j = 0; j < asize; j++)
@@ -1259,7 +1013,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
       {
         steck[a] = static_cast<unsigned char>(a);
         steck[b] = static_cast<unsigned char>(b);
-        s = score_iter(m, iter);
+        s = score_iter(m);
         steck[a] = static_cast<unsigned char>(b);
         steck[b] = static_cast<unsigned char>(a);
       }
@@ -1271,7 +1025,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
         steck[y] = static_cast<unsigned char>(y);
         steck[a] = static_cast<unsigned char>(b);
         steck[b] = static_cast<unsigned char>(a);
-        s = score_iter(m, iter);
+        s = score_iter(m);
         steck[a] = static_cast<unsigned char>(x);
         steck[b] = static_cast<unsigned char>(y);
         steck[x] = static_cast<unsigned char>(xx);
@@ -1328,7 +1082,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
         {
           steck[a] = static_cast<unsigned char>(a);
           steck[b] = static_cast<unsigned char>(b);
-          double s = score_iter(m, iter);
+          double s = score_iter(m);
           if (s > cur)
             { cur = s; improved = true; }
           else
@@ -1345,7 +1099,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
           steck[y] = static_cast<unsigned char>(y);
           steck[a] = static_cast<unsigned char>(b);
           steck[b] = static_cast<unsigned char>(a);
-          double s = score_iter(m, iter);
+          double s = score_iter(m);
           if (s > cur)
             { cur = s; improved = true; }
           else
@@ -1370,10 +1124,14 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
     }
 }
 
+/* Climb the steckerbrett for the current scoring model until no move improves it,
+   but never letting the board exceed max_pairs plug pairs (the staged climb caps the
+   low-order pre-pass to its first few plugs; pass pairs_uncapped for an unconstrained
+   climb -- a board can hold at most 13 pairs anyway). The cheap "switch" and "remove"
+   moves are run to convergence; then a single best "re-pair" is tried as a barrier
+   cross, and if it improves the cheap climb resumes from the new board. */
 double hillclimb(machine & m, int max_pairs)
 {
-  int iter = 1;
-
   /* -I: circular first-improvement instead of steepest ascent (off by default, so the
      baseline is byte-identical). */
   const bool firstimp = (opt_firstimprove != 0);
@@ -1387,204 +1145,152 @@ double hillclimb(machine & m, int max_pairs)
 
       if (firstimp)
         {
-          firstimprove_sweep(m, iter, max_pairs);
-          cur = score_iter(m, 0);
+          firstimprove_sweep(m, max_pairs);
+          cur = score_iter(m);
         }
       else
         {
-      double best_score;
-      double last_best;
+          double best_score;
+          double last_best;
 
-      /* Cheap moves to convergence: each pass takes the single best of all "switch
-         a-b" moves (force a-b, ejecting conflicts -- adds / moves an endpoint /
-         merges two plugs into one) and all "remove" moves (free an existing pair). */
-      do
-        {
-          best_score = score_iter(m, iter);
-          last_best = best_score;
-
-          /* current plug-pair count: at the cap, moves that would add a brand-new
-             pair (both endpoints currently unplugged) are skipped below */
-          int pairs = 0;
-          for (int j = 0; j < asize; j++)
-            if (m.steckerbrett[j] > j)
-              pairs++;
-
-          double move_score = best_score;
-          int move_kind = 0;        /* 0 = switch, 1 = remove */
-          int move_a = 0;
-          int move_b = 0;
-
-          //#define SHOWHILLCLIMB
-
-          /* One "toggle a-b" operator over all 325 letter pairs expresses every plug move
-             by the current state of a and b: both ends free -> ADD a-b (+1 pair); exactly
-             one end plugged -> MOVE that plug's endpoint (0); both ends plugged to different
-             partners -> MERGE two plugs into one (-1); a-b already a pair -> REMOVE it (-1).
-             Steepest ascent takes the single best improving toggle per pass. The plug cap
-             gates by count-effect: at/over the cap an ADD is always blocked, and with -M
-             (opt_capmerge) a count-preserving MOVE too, so only the count-reducing MERGE and
-             REMOVE survive -- the cap becomes a strict descent target. (Folding removal in as
-             the already-paired toggle case is what lets a single scan replace the old
-             separate switch-scan + removal-loop pair.)
-
-             -D: for mono/IC, delta_switch_scan replaces the ADD/MOVE/MERGE (switch) scan with
-             an exact incremental one (fewer full decodes); removals stay a cheap exact tail.
-             -M routes to the folded scan for all models so its cap rule always holds. */
-          if (opt_delta && ! opt_capmerge
-              && ((m.scoring == SCORE_IC) || (m.scoring == SCORE_MONO)))
+          /* Cheap moves to convergence: each pass takes the single best of all "switch
+             a-b" moves (force a-b, ejecting conflicts -- adds / moves an endpoint /
+             merges two plugs into one) and all "remove" moves (free an existing pair). */
+          do
             {
-              delta_switch_scan(m, iter, max_pairs, pairs,
-                                move_score, move_kind, move_a, move_b);
+              best_score = score_iter(m);
+              last_best = best_score;
 
-              /* removals (the already-paired toggle case): a removal only wins on a strict
-                 improvement, so switches keep ties -- matching the folded scan's tie-break. */
-              for (int a = 0; a < asize; a++)
-                if ((m.steckerbrett[a] > a) && ! plug_fixed[a])
+              /* current plug-pair count: at the cap, moves that would add a brand-new
+                 pair (both endpoints currently unplugged) are skipped below */
+              int pairs = 0;
+              for (int j = 0; j < asize; j++)
+                if (m.steckerbrett[j] > j)
+                  pairs++;
+
+              double move_score = best_score;
+              int move_kind = 0;        /* 0 = switch, 1 = remove */
+              int move_a = 0;
+              int move_b = 0;
+
+              /* One "toggle a-b" operator over all 325 letter pairs expresses every plug move
+                 by the current state of a and b: both ends free -> ADD a-b (+1 pair); exactly
+                 one end plugged -> MOVE that plug's endpoint (0); both ends plugged to different
+                 partners -> MERGE two plugs into one (-1); a-b already a pair -> REMOVE it (-1).
+                 Steepest ascent takes the single best improving toggle per pass. The plug cap
+                 gates by count-effect: at/over the cap an ADD is always blocked, and with -M
+                 (opt_capmerge) a count-preserving MOVE too, so only the count-reducing MERGE and
+                 REMOVE survive -- the cap becomes a strict descent target. (Folding removal in as
+                 the already-paired toggle case is what lets a single scan replace the old
+                 separate switch-scan + removal-loop pair.) */
+              for(int a=0; a<asize; a++)
+                for(int b=a+1; b<asize; b++)
                   {
-                    int b = m.steckerbrett[a];
-                    m.steckerbrett[a] = a;
-                    m.steckerbrett[b] = b;
-                    double score = score_iter(m, iter);
-                    if (score > move_score)
-                      { move_score = score; move_kind = 1; move_a = a; move_b = b; }
-                    m.steckerbrett[a] = b;
-                    m.steckerbrett[b] = a;
-                  }
-            }
-          else
-          {
-          for(int a=0; a<asize; a++)
-            for(int b=a+1; b<asize; b++)
-              {
-                /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
-                if (plug_fixed[a] || plug_fixed[b])
-                  continue;
+                    /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
+                    if (plug_fixed[a] || plug_fixed[b])
+                      continue;
 
-                int sa = m.steckerbrett[a];
-                int sb = m.steckerbrett[b];
-                bool a_free = (sa == a);
-                bool b_free = (sb == b);
-                bool paired = (sa == b);   /* a-b already a plug -> this toggle REMOVES it */
+                    int sa = m.steckerbrett[a];
+                    int sb = m.steckerbrett[b];
+                    bool a_free = (sa == a);
+                    bool b_free = (sb == b);
+                    bool paired = (sa == b);   /* a-b already a plug -> this toggle REMOVES it */
 
-                /* cap gate by count-effect (a REMOVE is -1, so always allowed) */
-                if ((pairs >= max_pairs) && ! paired)
-                  {
-                    if (a_free && b_free)
-                      continue;                    /* block ADD (+1) */
-                    if (opt_capmerge && (a_free || b_free))
-                      continue;                    /* -M: block count-preserving MOVE (0) */
-                  }
+                    /* cap gate by count-effect (a REMOVE is -1, so always allowed) */
+                    if ((pairs >= max_pairs) && ! paired)
+                      {
+                        if (a_free && b_free)
+                          continue;                    /* block ADD (+1) */
+                        if (opt_capmerge && (a_free || b_free))
+                          continue;                    /* -M: block count-preserving MOVE (0) */
+                      }
 
-                int new_kind, x = 0, y = 0, xx = 0, yy = 0;
-                if (paired)
-                  {
-                    m.steckerbrett[a] = a;         /* REMOVE a-b */
-                    m.steckerbrett[b] = b;
-                    new_kind = 1;
-                  }
-                else
-                  {
-                    x = sa; y = sb;
-                    xx = m.steckerbrett[x];
-                    yy = m.steckerbrett[y];
-                    m.steckerbrett[x] = x;         /* force a-b: ADD / MOVE / MERGE */
-                    m.steckerbrett[y] = y;
-                    m.steckerbrett[a] = b;
-                    m.steckerbrett[b] = a;
-                    new_kind = 0;
-                  }
+                    int new_kind, x = 0, y = 0, xx = 0, yy = 0;
+                    if (paired)
+                      {
+                        m.steckerbrett[a] = a;         /* REMOVE a-b */
+                        m.steckerbrett[b] = b;
+                        new_kind = 1;
+                      }
+                    else
+                      {
+                        x = sa; y = sb;
+                        xx = m.steckerbrett[x];
+                        yy = m.steckerbrett[y];
+                        m.steckerbrett[x] = x;         /* force a-b: ADD / MOVE / MERGE */
+                        m.steckerbrett[y] = y;
+                        m.steckerbrett[a] = b;
+                        m.steckerbrett[b] = a;
+                        new_kind = 0;
+                      }
 
-                double score = score_iter(m, iter);
+                    double score = score_iter(m);
 
-#ifdef SHOWHILLCLIMB
-                fprintf(stderr, "%c%c%s%4.0f  ", num2char(a), num2char(b),
-                        paired ? "-" : "+", (score - best_score)/10.0);
-#endif
+                    /* steepest ascent; on an equal score a switch (add/move/merge) wins the tie
+                       over a removal, so a converged board keeps the plugs the score justifies. */
+                    if ((score > move_score) ||
+                        ((score == move_score) && (score > best_score) &&
+                         (new_kind == 0) && (move_kind == 1)))
+                      {
+                        move_score = score;
+                        move_kind = new_kind;
+                        move_a = a;
+                        move_b = b;
+                      }
 
-                /* steepest ascent; a switch wins ties over a removal (as in the delta path,
-                   where a removal only replaces a strictly-better switch). */
-                if ((score > move_score) ||
-                    ((score == move_score) && (score > best_score) &&
-                     (new_kind == 0) && (move_kind == 1)))
-                  {
-                    move_score = score;
-                    move_kind = new_kind;
-                    move_a = a;
-                    move_b = b;
+                    if (paired)
+                      {
+                        m.steckerbrett[a] = b;         /* restore REMOVE */
+                        m.steckerbrett[b] = a;
+                      }
+                    else
+                      {
+                        m.steckerbrett[a] = sa;        /* restore force */
+                        m.steckerbrett[b] = sb;
+                        m.steckerbrett[x] = xx;
+                        m.steckerbrett[y] = yy;
+                      }
                   }
 
-                if (paired)
-                  {
-                    m.steckerbrett[a] = b;         /* restore REMOVE */
-                    m.steckerbrett[b] = a;
-                  }
-                else
-                  {
-                    m.steckerbrett[a] = sa;        /* restore force */
-                    m.steckerbrett[b] = sb;
-                    m.steckerbrett[x] = xx;
-                    m.steckerbrett[y] = yy;
-                  }
-              }
-          }
-
-          if (move_score - best_score > 0)
-            {
-              int a = move_a;
-              int b = move_b;
-
-              if (move_kind == 1)
+              if (move_score - best_score > 0)
                 {
-                  /* remove the a-b plug, freeing both ends */
-                  m.steckerbrett[a] = a;
-                  m.steckerbrett[b] = b;
-                }
-              else
-                {
-                  /* switch plugs */
-                  int x = m.steckerbrett[a];
-                  int y = m.steckerbrett[b];
-                  m.steckerbrett[x] = x;
-                  m.steckerbrett[y] = y;
-                  m.steckerbrett[a] = b;
-                  m.steckerbrett[b] = a;
-                }
+                  int a = move_a;
+                  int b = move_b;
 
-#ifdef SHOWHILLCLIMB
-              fprintf(stderr,
-                      "%2d %s Imp: %10.4f Score: %10.4f ",
-                      iter,
-                      move_kind == 1 ? "del" : "set",
-                      move_score - best_score,
-                      move_score);
-              showsteckerbrett(m);
-              fprintf(stderr, "\n");
-#endif
+                  if (move_kind == 1)
+                    {
+                      /* remove the a-b plug, freeing both ends */
+                      m.steckerbrett[a] = a;
+                      m.steckerbrett[b] = b;
+                    }
+                  else
+                    {
+                      /* switch plugs */
+                      int x = m.steckerbrett[a];
+                      int y = m.steckerbrett[b];
+                      m.steckerbrett[x] = x;
+                      m.steckerbrett[y] = y;
+                      m.steckerbrett[a] = b;
+                      m.steckerbrett[b] = a;
+                    }
 
-              best_score = move_score;
+                  best_score = move_score;
+                }
             }
-
-          iter++;
-        }
-      while (best_score > last_best);
+          while (best_score > last_best);
           cur = best_score;
         }
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
          improves, loop back and let the cheap climb resume from the new board. */
-      if (try_repair(m, iter, cur))
+      if (try_repair(m, cur))
         progress = true;
-      iter++;
     }
   while (progress);
 
   decode(m);
 
-#ifdef SHOWHILLCLIMB
-  printf("Plaintext: %s\n", m.plaintext);
-#endif
-  return score_iter(m, 0);
+  return score_iter(m);
 }
 
 /* splitmix64: a tiny, well-distributed deterministic PRNG. Seeded per key (not
@@ -1839,7 +1545,7 @@ static double anneal_once(machine & m, uint64_t * rng)
       m.scoring = target_model;
     }
 
-  double cur = score_iter(m, 0);
+  double cur = score_iter(m);
   double best = cur;
   unsigned char best_board[asize];
   unsigned char saved[asize];
@@ -1856,7 +1562,7 @@ static double anneal_once(machine & m, uint64_t * rng)
       random_pair(rng, a, b);
       memcpy(saved, m.steckerbrett, asize);
       apply_toggle(m, a, b, cap);
-      double d = score_iter(m, 0) - cur;
+      double d = score_iter(m) - cur;
       memcpy(m.steckerbrett, saved, asize);   /* sampling only -- always restore */
       if (d < 0.0)
         {
@@ -1885,7 +1591,7 @@ static double anneal_once(machine & m, uint64_t * rng)
           random_pair(rng, a, b);
           memcpy(saved, m.steckerbrett, asize);
           apply_toggle(m, a, b, cap);
-          double d = score_iter(m, 0) - cur;
+          double d = score_iter(m) - cur;
           if ((d >= 0.0) || (uniform01(rng) < exp(d / T)))
             {
               cur += d;
@@ -1904,7 +1610,7 @@ static double anneal_once(machine & m, uint64_t * rng)
 
   memcpy(m.steckerbrett, best_board, asize);
   hillclimb(m, cap);   /* greedy quench under the target model, same cap */
-  return score_iter(m, 0);
+  return score_iter(m);
 }
 
 /* Optimise the plugboard for the current key from the current board: simulated
@@ -1916,10 +1622,42 @@ static double optimize_once(machine & m, uint64_t * rng)
   return hillclimb_schedule(m);
 }
 
-double hillclimb_restarts(machine & m, uint64_t key_index)
+/* Independent RNG seed for one restart, mixed from opt_seed, the flat key index and the
+   restart index with a splitmix64 finaliser. Each restart draws from its OWN stream --
+   not a single stream advanced sequentially through the restarts -- so restarts are
+   order-independent and can run in any order / on any thread and still be reproducible
+   (the precondition for parallelising them; see hillclimb_one). opt_seed==0 keeps the
+   historical seedless-but-deterministic behaviour. */
+static inline uint64_t restart_seed(size_t key_index, int restart)
 {
-  uint64_t rng = opt_seed + key_index + 0x0123456789abcdefULL;
-  double best = optimize_once(m, & rng);
+  uint64_t z = opt_seed + 0x0123456789abcdefULL
+             + static_cast<uint64_t>(key_index) * 0x9E3779B97F4A7C15ULL
+             + static_cast<uint64_t>(restart)   * 0xC2B2AE3D27D4EB4FULL;
+  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+  z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+  return z ^ (z >> 31);
+}
+
+/* One plugboard-recovery restart from the fixed seed board. Restart 0 is the seed (no
+   perturbation); restart r>0 injects the random kick first. Draws only from this
+   restart's independent stream, so it is a self-contained unit of work. Leaves m at this
+   restart's converged board + plaintext; returns its score. */
+static double hillclimb_one(machine & m, size_t key_index, int restart)
+{
+  init_steckerbrett(m, opt_steckerbrett);
+  uint64_t rng = restart_seed(key_index, restart);
+  if (restart > 0)
+    perturb_steckerbrett(m, & rng, opt_perturb);
+  return optimize_once(m, & rng);
+}
+
+/* Run all opt_restarts restarts sequentially, keeping the best (used where the search
+   parallelises over keys rather than restarts -- the -F tier-2 climb). search_worker's
+   main path instead spreads the individual restarts across threads via hillclimb_one, so
+   both share the same per-restart seeding and reach the same best. */
+double hillclimb_restarts(machine & m, size_t key_index)
+{
+  double best = hillclimb_one(m, key_index, 0);
   if (opt_restarts <= 1)
     return best;
 
@@ -1935,9 +1673,7 @@ double hillclimb_restarts(machine & m, uint64_t key_index)
 
   for (int r = 1; r < opt_restarts; r++)
     {
-      init_steckerbrett(m, opt_steckerbrett);   /* reset to the fixed seed */
-      perturb_steckerbrett(m, & rng, opt_perturb);
-      double s = optimize_once(m, & rng);
+      double s = hillclimb_one(m, key_index, r);
       if (s > best)
         {
           best = s;
@@ -1977,9 +1713,19 @@ struct best_result
 {
   std::mutex mutex;
   double score = score_min;
+  size_t idx = static_cast<size_t>(-1);   /* work index of the best (for the tie-break) */
   bool found = false;
   char plaintext[maxlen+1];
 };
+
+/* Deterministic ordering of candidates: higher score wins, ties broken by lower work
+   index. Parallel restarts of one key often converge to the same score, so an explicit
+   tie-break is what keeps the global best independent of thread count and merge order
+   (the -T-independence contract) rather than "first thread to merge wins". */
+static inline bool better_cand(double s1, size_t i1, double s2, size_t i2)
+{
+  return (s1 > s2) || ((s1 == s2) && (i1 < i2));
+}
 
 /* --- parallel search -------------------------------------------------------
 
@@ -2042,17 +1788,26 @@ void search_worker(machine & m,
                    size_t rsize, size_t gsize,
                    std::atomic<size_t> & next_key,
                    size_t chunk,
+                   size_t restarts,
                    best_result & best)
 {
   const size_t rg = rsize * gsize;
-  const size_t total = tasks.size() * rg;
+  const size_t nkeys = tasks.size() * rg;
+  /* Work items = keys x restarts. With -c the R restarts of a key are independent, so
+     each is its own item (restart innermost, so consecutive items share a key and reuse
+     setup_mapping); this is what lets a fully-specified rotor key still fill every thread.
+     For the plain scan restarts==1, so the space is just the keys, exactly as before. */
+  const size_t total = nkeys * restarts;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
 
   m.scoring = opt_scoring;   /* per-machine; the staged climb varies it transiently */
 
   double local_best = score_min;
+  size_t local_best_idx = static_cast<size_t>(-1);
   size_t cur_wo = static_cast<size_t>(-1);
+  size_t cur_key = static_cast<size_t>(-1);
+  int r1 = 0, r2 = 0, r3 = 0, g1 = 0, g2 = 0, g3 = 0;   /* current key's ring/start */
 
   size_t start;
   while ((start = next_key.fetch_add(chunk)) < total)
@@ -2063,62 +1818,75 @@ void search_worker(machine & m,
 
       for (size_t idx = start; idx < end; idx++)
         {
-          size_t wo = idx / rg;
-          size_t rem = idx % rg;
-          size_t rflat = rem / gsize;
-          size_t gflat = rem % gsize;
+          size_t keyidx = idx / restarts;
+          int restart = static_cast<int>(idx % restarts);
 
-          if (wo != cur_wo)
+          if (keyidx != cur_key)   /* new key: (re)build the rotor stack, reused by its restarts */
             {
-              cur_wo = wo;
-              const wheel_task & t = tasks[wo];
-              m.subst_array = all + wo * asize;
-              init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
-              m.greek = t.greek;            /* for showconfig of a new best (M4) */
-              m.greek_offset = t.greek_off;
+              cur_key = keyidx;
+              size_t wo = keyidx / rg;
+              size_t rem = keyidx % rg;
+              size_t rflat = rem / gsize;
+              size_t gflat = rem % gsize;
+
+              if (wo != cur_wo)
+                {
+                  cur_wo = wo;
+                  const wheel_task & t = tasks[wo];
+                  m.subst_array = all + wo * asize;
+                  init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
+                  m.greek = t.greek;            /* for showconfig of a new best (M4) */
+                  m.greek_offset = t.greek_off;
+                }
+
+              r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
+              int rr = static_cast<int>(rflat % rc12);
+              r2 = range.r_min[1] + rr / rc[2];
+              r3 = range.r_min[2] + rr % rc[2];
+              g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
+              int gg = static_cast<int>(gflat % gc12);
+              g2 = range.g_min[1] + gg / gc[2];
+              g3 = range.g_min[2] + gg % gc[2];
+
+              init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+              /* hill-climb re-reads each row many times -> copy into contiguous
+                 mapping[]; the scan reads straight from the shared subst_array */
+              setup_mapping(m, opt_hillclimb != 0);
             }
 
-          int r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
-          int rr = static_cast<int>(rflat % rc12);
-          int r2 = range.r_min[1] + rr / rc[2];
-          int r3 = range.r_min[2] + rr % rc[2];
-          int g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
-          int gg = static_cast<int>(gflat % gc12);
-          int g2 = range.g_min[1] + gg / gc[2];
-          int g3 = range.g_min[2] + gg % gc[2];
-
-          init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-          init_steckerbrett(m, opt_steckerbrett);
-          /* hill-climb re-reads each row many times -> copy into contiguous
-             mapping[]; the scan reads straight from the shared subst_array */
-          setup_mapping(m, opt_hillclimb != 0);
-
-          /* Score directly. The scan does not decode the plaintext per key
-             (the fused scorer reads each row once, straight from subst_array);
-             it is materialised only when a new best is recorded, below.
-             hillclimb() leaves m.plaintext set to its best plugboard's decode. */
-          double score = opt_hillclimb ? hillclimb_restarts(m, idx)
-                                       : score_iter(m, 0);
-
-          if (score > local_best)
+          /* Run one restart (climb) or score the key once (scan). hillclimb_one draws
+             from its own (keyidx,restart) stream, so the result is independent of which
+             thread runs it. The scan does not decode per key (the fused scorer reads each
+             row once, straight from subst_array); the plaintext is materialised only for a
+             new best, below. */
+          double score;
+          if (opt_hillclimb)
+            score = hillclimb_one(m, keyidx, restart);
+          else
             {
-              local_best = score;
+              init_steckerbrett(m, opt_steckerbrett);
+              score = score_iter(m);
+            }
+
+          if (better_cand(score, idx, local_best, local_best_idx))
+            {
               std::lock_guard<std::mutex> lock(best.mutex);
-              if (score > best.score)
+              if (better_cand(score, idx, best.score, best.idx))
                 {
                   if (! opt_hillclimb)
                     decode(m);   /* fill m.plaintext for this winning key */
                   best.score = score;
+                  best.idx = idx;
                   best.found = true;
                   memcpy(best.plaintext, m.plaintext, textlength + 1);
-#if 1
                   /* setup_mapping stepped grundstellung; restore the start
                      positions before echoing the config */
                   init_ring_grund(m, r1, r2, r3, g1, g2, g3);
                   fprintf(stderr, "%7.4f ", score);
                   showconfig(m);
-#endif
                 }
+              local_best = best.score;         /* track the global best for the filter */
+              local_best_idx = best.idx;
             }
         }
     }
@@ -2278,6 +2046,7 @@ void finish_worker(machine & m,
   m.scoring = opt_scoring;
 
   double local_best = score_min;
+  size_t local_best_idx = static_cast<size_t>(-1);
   size_t cur_wo = static_cast<size_t>(-1);
   int rg6[6];
 
@@ -2290,19 +2059,21 @@ void finish_worker(machine & m,
 
       double score = hillclimb_restarts(m, idx);
 
-      if (score > local_best)
+      if (better_cand(score, idx, local_best, local_best_idx))
         {
-          local_best = score;
           std::lock_guard<std::mutex> lock(best.mutex);
-          if (score > best.score)
+          if (better_cand(score, idx, best.score, best.idx))
             {
               best.score = score;
+              best.idx = idx;
               best.found = true;
               memcpy(best.plaintext, m.plaintext, textlength + 1);
               init_ring_grund(m, rg6[0], rg6[1], rg6[2], rg6[3], rg6[4], rg6[5]);
               fprintf(stderr, "%7.4f ", score);
               showconfig(m);
             }
+          local_best = best.score;
+          local_best_idx = best.idx;
         }
     }
 }
@@ -2514,10 +2285,19 @@ void bruteforce(char * result)
   g_table_count = nwo;
   g_table_bytes = nwo * static_cast<size_t>(asize) * asize * asize * asize;
 
+  /* With -c and no -F, the R plugboard restarts of each key are independent work items,
+     so the parallel space is total_keys x R -- this is what lets a fully-specified rotor
+     key (total_keys==1) still use every thread. The plain scan and the -F tiers keep one
+     item per key (restarts_par==1). */
+  size_t restarts_par =
+    (opt_hillclimb && (opt_prefilter <= 0) && (opt_prefilter_frac <= 0.0))
+      ? static_cast<size_t>(opt_restarts) : 1;
+  size_t work_items = total_keys * restarts_par;
+
   /* never start more threads than there is work to hand out */
   int nthreads = opt_threads;
-  if (total_keys < static_cast<size_t>(nthreads))
-    nthreads = static_cast<int>(total_keys);
+  if (work_items < static_cast<size_t>(nthreads))
+    nthreads = static_cast<int>(work_items);
   if (nthreads < 1)
     nthreads = 1;
 
@@ -2533,7 +2313,9 @@ void bruteforce(char * result)
     { precompute_worker(*machines[t], tasks, next_task, all); });
 
   /* phase 2: sweep the flat key space in adaptive chunks (~16 per thread: enough to
-     balance the tail, few enough to amortise the atomic) */
+     balance the tail, few enough to amortise the atomic). The -F tiers are keyed over
+     total_keys; the non-F sweep is over work_items (keys x restarts), so it gets its own
+     chunk below. */
   best_result best;
   size_t chunk = total_keys / (static_cast<size_t>(nthreads) * 16);
   if (chunk < 1)
@@ -2591,10 +2373,13 @@ void bruteforce(char * result)
     }
   else
     {
+      size_t schunk = work_items / (static_cast<size_t>(nthreads) * 16);
+      if (schunk < 1)
+        schunk = 1;
       std::atomic<size_t> next_key{0};
       run_parallel(nthreads, [&](int t)
         { search_worker(*machines[t], tasks, range, rc, gc, all,
-                        rsize, gsize, next_key, chunk, best); });
+                        rsize, gsize, next_key, schunk, restarts_par, best); });
     }
 
   /* diagnostics: every rotor combination is analysed (brute force has no early
@@ -2731,7 +2516,6 @@ void help(FILE * out)
   fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];\n");
   fprintf(out, "               held fixed -- the -c/-A climb keeps them and finds the rest\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
-  fprintf(out, "  -D           Delta-score mono/IC climb passes (exact, faster; needs -c)\n");
   fprintf(out, "  -I           First-improvement climb: ~2.8x cheaper per climb, so pair\n");
   fprintf(out, "               with more -R for a net recovery win (needs -c) [off]\n");
   fprintf(out, "  -J           Like -I but with dynamic best-first move ordering; wins on\n");
@@ -2759,7 +2543,7 @@ void help(FILE * out)
   fprintf(out, "  -F N[%%]      Key pre-filter: rank keys by a cheap IC climb, then run\n");
   fprintf(out, "               the full -c climb on only the top N keys, or top N%% of\n");
   fprintf(out, "               the keyspace (needs -c) [off]\n");
-  fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]\n");
+  fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [ngrams]\n");
   fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
@@ -2812,8 +2596,6 @@ void show_settings()
             opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged && (opt_anneal == 0))
     fprintf(stderr, "            staged: %s\n", opt_staged);
-  if (opt_hillclimb && opt_delta)
-    fprintf(stderr, "            delta-scoring mono/IC passes\n");
   if (opt_hillclimb && opt_capmerge)
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_firstimprove)
@@ -2892,11 +2674,10 @@ int main(int argc, char * * argv)
   opt_grundstellung = 0;
   opt_steckerbrett = "";
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q) */
-  opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "." */
+  opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "ngrams" */
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
-  opt_delta = 0;
   opt_firstimprove = 0;
   opt_dynorder = 0;
   opt_capmerge = 0;
@@ -2915,7 +2696,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:DIJMimbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2966,9 +2747,6 @@ int main(int argc, char * * argv)
         case 'J':
           opt_firstimprove = 1;   /* -J implies first-improvement */
           opt_dynorder = 1;
-          break;
-        case 'D':
-          opt_delta = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -3054,11 +2832,11 @@ int main(int argc, char * * argv)
     }
 
   /* resolve the n-gram data directory: -d wins, else $ENIGMA_DATA, else the
-     current directory (the historical behaviour) */
+     bundled "ngrams" subdirectory (found when run from the repo root) */
   if (! opt_datadir)
     opt_datadir = getenv("ENIGMA_DATA");
   if ((! opt_datadir) || (! opt_datadir[0]))
-    opt_datadir = ".";
+    opt_datadir = "ngrams";
 
   /* validate arguments */
 
@@ -3194,10 +2972,6 @@ int main(int argc, char * * argv)
   if ((opt_anneal > 0) && (! opt_hillclimb))
     fatal("Simulated annealing (-A) needs the plugboard hill-climb (-c)");
 
-  /* -D accelerates mono/IC hill-climb passes, so it needs -c. */
-  if (opt_delta && (! opt_hillclimb))
-    fatal("Delta-scoring (-D) needs the plugboard hill-climb (-c)");
-
   /* -I is a hill-climb strategy, so it needs -c. */
   if (opt_firstimprove && (! opt_hillclimb))
     fatal("First-improvement (-I) needs the plugboard hill-climb (-c)");
@@ -3281,8 +3055,6 @@ int main(int argc, char * * argv)
 
   for(int i=0; i< textlength; i++)
     num_ciphertext[i] = char2num(ciphertext[i]);
-
-  ciphertext_letterdist();
 
   init();
 

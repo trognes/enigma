@@ -32,10 +32,10 @@ Makefile                  Builds the `enigma` binary with g++ -O3.
 README.md                 User-facing description and usage.
 LICENSE                   GNU GPL v3.
 .gitignore                Ignores editor backups and cipher*.txt.
-<lang>_monograms.txt       Single-letter frequencies.
-<lang>_bigrams.txt         Two-letter frequencies.
-<lang>_trigrams.txt        Three-letter frequencies.
-<lang>_quadgrams.txt       Four-letter frequencies.
+ngrams/<lang>_monograms.txt   Single-letter frequencies.
+ngrams/<lang>_bigrams.txt     Two-letter frequencies.
+ngrams/<lang>_trigrams.txt    Three-letter frequencies.
+ngrams/<lang>_quadgrams.txt   Four-letter frequencies.
 ```
 
 Languages provided: `english`, `german`, `danish`, `french` (no default — the
@@ -95,8 +95,8 @@ The program reads **ciphertext from stdin** and writes the best-scoring
 are kept; everything else (spaces, punctuation, case) is stripped. The n-gram
 files are read from a **data directory** (filenames built as
 `<datadir>/<language>_<ngram>.txt`) resolved as `-d <dir>` → `$ENIGMA_DATA` →
-`.` (the current directory, the historical default) — so the tool can run from
-any working directory.
+`ngrams` (the bundled `ngrams/` subdirectory, found when run from the repo root) —
+pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 ### Common invocations
 
@@ -161,19 +161,6 @@ any working directory.
   known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
   compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J -S iKqK`).
   Static frequency-ordering was measured and **rejected** (`performance.md` §7.2).
-- `-D` **exact delta-scoring** for mono/IC hill-climb passes (needs `-c`; off by
-  default). Finds the best switch move by an incremental O(affected-positions) score
-  delta over a per-pass inverted index (positions by ciphertext input letter and by
-  base rotor-stack output letter), then scores that one winner exactly — so it is
-  **byte-identical** to the full scan, just fewer full decodes. Applies to `-m`/`-i`
-  climbs, the `-S iq` IC pre-pass, and the `-F` tier-1 IC climb; quad/bi/tri always use
-  the baseline scan (delta-quad was measured ~2× slower). It is a **long-message
-  accelerator only** and therefore opt-in: at the ~50-char target the baseline mono/IC
-  decode is trivially cheap, so the per-pass index build costs more than it saves
-  (~1.5× slower); it crosses over to a win at ≥~250–300 chars (mono up to ~27% at 500,
-  IC ~5–7%). The §7.1a *surrogate-ranking* form (rank by a cheap surrogate, full-quad
-  only a top-K) was **rejected** — ~1.5× slower at 50 chars and the IC ranker collapses
-  recovery (`performance.md` §7.1). `-T`-deterministic; TSan-clean.
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
   cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
   cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an
@@ -280,8 +267,11 @@ any working directory.
     while it ranks, but only when stderr is a terminal (`isatty`) so redirected logs and
     the tests stay clean. A shared atomic counter drives it, and because each atomic add
     owns a disjoint slice, exactly one thread prints each 1% step — no races, `-T`-safe.
-- `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`)
-- `-T N` worker threads for the search (default 1, max 256)
+- `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `ngrams`)
+- `-T N` worker threads for the search (default 1, max 256). Parallelises over the
+  `keys × restarts` work space, so it scales even a **fully-specified rotor key** with
+  `-c -R N` (the restarts are spread across threads) — not just wildcarded keyspaces.
+  `-T`-independent (deterministic regardless of thread count).
 
 Every run echoes the resolved configuration (scoring model, language, n-gram data
 directory, machine settings, plugboard, ciphertext length) to stderr.
@@ -329,9 +319,19 @@ A single pass through `main()`:
      read-only block (`#wheel-orders × 457 KB`). A table serves every ring/start
      of its wheel order via the start−ring offset.
    - **Phase 2 (`search_worker`)**: an atomic counter hands out adaptive chunks
-     of the flat key space; each worker decodes a flat index → (wheel-order,
+     of the flat work space; each worker decodes a flat index → (wheel-order,
      ring, start) by mixed radix, points its private `machine` at that wheel
      order's shared table (swapped, never recomputed, on a boundary), and:
+     - **The work space is `keys × restarts`, not just keys** (`restarts` = `-R` under
+       `-c`, else 1). The `-R` plugboard restarts of a key are independent — each draws
+       from its own `(key,restart)` RNG seed (`restart_seed`) rather than one stream
+       advanced sequentially — so they are spread across threads too. Restart is the
+       innermost dimension, so consecutive items share a key and reuse its `setup_mapping`.
+       **This is what lets a *fully-specified rotor key* (one key) still use every
+       thread** — the old key-only scheme left that case single-threaded (`-T` a no-op).
+       The `-F` tiers and the plain scan keep one item per key. Determinism is preserved
+       by a lowest-work-index tie-break in the best-merge (`better_cand`), since parallel
+       restarts of one key often converge to the same score.
    - `setup_mapping()` steps the rotors over the message length and records, per
      position, a pointer `rows[pos]` to that position's rotor-stack substitution
      row (folding in the stepping). The scan points `rows[pos]` straight into the
@@ -489,10 +489,13 @@ range and is not viable.
   and the `ciphertext` / `num_ciphertext` / `textlength` input. (`-Wshadow` is on;
   the redundant `textlength`/`ciphertext`/`plaintext` parameters that used to
   shadow the globals were removed earlier.)
-- Debug instrumentation is intentionally retained: `showit`, `showconfig`,
-  `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
-  compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
-  `opt_logfilename` code has been removed; see `CODE_REVIEW_HISTORY.md` §3.)
+- The live diagnostics are `showconfig` / `showsteckerbrett` (echo the winning key +
+  plugboard on a new best) and `show_settings` (echo the resolved config at startup).
+  The unused debug scaffolding has been removed: the `SHOWHILLCLIMB` compile-time
+  climb-trace path (and its vestigial per-climb `iter` counter), the `#if 0` blocks and
+  the dead `ciphertext_letterdist`/`compare`/`count`/`order` cluster that only fed one,
+  and the earlier `all_subst_score`/`map`/`opt_threads`/`opt_logfilename` dead code
+  (see `CODE_REVIEW_HISTORY.md` §3).
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).

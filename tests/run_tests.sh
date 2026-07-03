@@ -488,28 +488,6 @@ check "pre-filter: -F over 100% rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 8% >/dev/null 2>&1
 check "pre-filter: -F N% without -c rejected (exit code)" "$?" "1"
 
-# Delta-scoring (-D): an exact accelerator for mono/IC climb passes -- it must produce
-# BYTE-IDENTICAL results to the full scan (its whole correctness contract), across an
-# IC climb, a mono climb, the -S iq IC pre-pass, and the -F tier-1 IC climb; and stay
-# -T-independent. It needs -c.
-check "delta -D: IC climb byte-identical to no -D" \
-  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4 -D)" \
-  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4)"
-check "delta -D: mono climb byte-identical to no -D" \
-  "$(run "$f_ct" -m -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -D)" \
-  "$(run "$f_ct" -m -l english -u B -w 123 -r AAA -g "$rg" -c -R 4)"
-check "delta -D: -S iq (IC pre-pass) byte-identical to no -D" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -D)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq)"
-check "delta -D: -F tier-1 IC climb byte-identical to no -D" \
-  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4 -F 50 -D)" \
-  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4 -F 50)"
-check "delta -D: result is -T-independent" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -D -T 1)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -D -T 4)"
-printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -D >/dev/null 2>&1
-check "delta -D: without -c rejected (exit code)" "$?" "1"
-
 # First-improvement climb (-I): a different (non-byte-identical) climb trajectory, so it
 # is checked by recovery + determinism, not equality. All order/acceptance is fixed (no
 # RNG), so the result must be -T-independent; it needs -c; and paired with restarts it
@@ -546,6 +524,18 @@ check "cap-target -M: result is -T-independent" \
   "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -M -R 8 -S i4q10 -T 4)"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -M >/dev/null 2>&1
 check "cap-target -M: without -c rejected (exit code)" "$?" "1"
+
+# Restart-level parallelism: with a fully-specified rotor key the search has exactly ONE
+# key, so -T can only speed things up by spreading the -R plugboard restarts across
+# threads. Each restart draws from its own (key,restart) seed, so the result must be
+# identical to -T 1 (a deterministic global best with a lowest-index tie-break) and must
+# still recover the plaintext.
+check "restart-parallel: fixed key, -R climb is -T-independent (T1==T8)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 8)"
+check "restart-parallel: fixed key + restarts recovers plaintext" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 8)" \
+  "$f_pt"
 
 # Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
 # from the per-key RNG stream (seeded from the flat key index), so an SA search must
@@ -646,22 +636,22 @@ esac
 # hanging or erroring (guards the fscanf field-count / leading-space fix).
 printf '\n  E 529117365\n\nT 390965105\nA 374061888\n   \n' > zztest_monograms.txt
 check "n-gram parser tolerates messy file" \
-  "$(run 'BDZGOWCXLT' -m -l zztest -u B -w 123 -r AAA -g AAA)" \
+  "$(run 'BDZGOWCXLT' -m -l zztest -d . -u B -w 123 -r AAA -g AAA)" \
   "AAAAAAAAAA"
 rm -f zztest_monograms.txt
 
-# Data directory: the n-gram files can live somewhere other than the current
-# directory, selected by -d or $ENIGMA_DATA (default "."). Run from a different
+# Data directory: the n-gram files can live somewhere other than the default
+# "ngrams" subdirectory, selected by -d or $ENIGMA_DATA. Run from a different
 # CWD (/) with an absolute binary so only the resolved data dir can find them.
 # A small wildcard search (-g ..A) forces the n-gram table to be loaded from the
 # resolved data dir -- a fully fixed machine would not score, so it would not load
 # anything. A successful exit means the files were found there.
 root=$(pwd)
-( cd / && printf 'BDZGOWCXLT' | "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+( cd / && printf 'BDZGOWCXLT' | "$root/enigma" -m -l english -d "$root/ngrams" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
 check "-d finds n-gram files from another CWD (exit code)" "$?" "0"
-( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA="$root" "$root/enigma" -m -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA="$root/ngrams" "$root/enigma" -m -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
 check "ENIGMA_DATA finds n-gram files from another CWD (exit code)" "$?" "0"
-( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA=/nonexistent "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA=/nonexistent "$root/enigma" -m -l english -d "$root/ngrams" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
 check "-d overrides ENIGMA_DATA (exit code)" "$?" "0"
 
 # A missing data directory fails with the full path it tried (and before stdin).

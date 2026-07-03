@@ -785,9 +785,10 @@ g++ and clang** per the standing struct-layout cautions.
 ### 7.1 Restructure the per-pass move-evaluation loop (HIGH priority — one item, three candidate implementations)
 
 > **Measured outcome (7.1a built and tested).** Item **(a)** — surrogate-ranked
-> steepest ascent — was implemented and measured. **The surrogate *ranking* is
-> rejected; only the incremental *delta* survives, as the opt-in `-D` flag for the
-> mono/IC models.** Findings, in order:
+> steepest ascent — was implemented and measured. **The surrogate *ranking* was
+> rejected; the incremental *delta* shipped as the opt-in `-D` flag for the mono/IC
+> models, then was *removed* — a long-message-only accelerator is net-negative for a
+> short-message tool (see the removal note below).** Findings, in order:
 > - **The IC surrogate is a poor *ranker*** of quad moves — recovery collapses (L90
 >   exact 38% at K=32 vs 52% baseline). The **monogram** surrogate preserves recovery
 >   at K≈16–32 (L90 53% vs 52%). So the doc's "monogram *or* IC" was half right:
@@ -798,15 +799,16 @@ g++ and clang** per the standing struct-layout cautions.
 >   cheap that eliminating 7–13× of them does not offset the per-pass index build +
 >   branchy per-candidate delta. The "gather-latency-bound" premise holds for *cold*
 >   long-message decodes, not warm short-message ones. **Rejected.**
-> - **The delta arithmetic itself is sound and reusable.** Used *exactly* (not as a
->   surrogate) for the mono/IC models — find the best switch by an
->   O(affected-positions) delta over a per-pass inverted index, then score that one
->   winner exactly — it is **byte-identical** to the full scan and shipped as `-D`
->   (off by default). Same crossover: slower at short messages (baseline mono/IC
->   decode is trivially cheap there), faster on long ones (mono up to ~27% at 500
->   chars, IC ~5–7% at ≥300), so it is opt-in. Quad/bi/tri keep the baseline scan
->   (delta-quad was already measured ~2× slower). `-T`-deterministic; TSan-clean;
->   no baseline hot-path regression (`make bench BASE`: search −0.5%, hillclimb −0.1%).
+> - **The delta arithmetic itself was sound** — used *exactly* (not as a surrogate) for
+>   the mono/IC models it was byte-identical to the full scan, faster on long ones (mono
+>   up to ~27% at 500 chars, IC ~5–7% at ≥300) but ~1.5× *slower* at the ~50-char target.
+> - **Removed (shipped, then reverted).** `-D` was net-negative for this tool: it only
+>   accelerated mono/IC (never quad, the recommended model — delta-quad was ~2× slower),
+>   only won at ≥250–300 chars (slower at the short target this tool exists for), and its
+>   `delta_switch_scan` was a second, intricate implementation of the hottest loop that
+>   every climb change had to keep consistent (it fought the toggle-fold and forced `-M`
+>   to disable it). The capability was speculative and the maintenance cost recurring, so
+>   the flag and function were removed; this write-up preserves the finding.
 >
 > The takeaway that generalizes: **at the ~50-char target, per-candidate scoring is
 > not the bottleneck to cut** — the decodes are already cheap; the first-order lever
@@ -824,8 +826,8 @@ remove, unified) against a constant base board. That is the cost to cut. Candida
   banner above). Rank all candidates with a **cheap surrogate** and full-quad-score
   only the top-K. Monogram ranks well (K≈16–32), IC does not; but the whole scheme is
   ~1.5× slower at 50 chars (only wins ≥150), because warm short-message quad decodes
-  are too cheap to be worth skipping. The reusable remnant is the exact `-D` mono/IC
-  delta climb (byte-identical, long-message-only win).
+  are too cheap to be worth skipping. The exact mono/IC delta form was briefly shipped
+  as `-D`, then removed (long-message-only win, net-negative for the short-message target).
 
 - **(b) Memory-level-parallel batch scoring (alternative to (a), or stackable if
   (a)'s top-K is still >1).** The score loop is a *dependent* gather chain, but
@@ -871,7 +873,7 @@ merge / remove by the current state of a and b), applies the **first** improving
 **continues from where it accepted** (never restarts at the top). Continuing (vs restarting) is what makes it both efficient (each move examined
 ~once per sweep, no redundant re-scan of unchanged moves) and unbiased (attention rotates
 evenly instead of always favouring low letters). Converged = a full cycle accepts nothing.
-No data structure — which is *why it wins where §7.1a/`-D` lost*: those cut decode count
+No data structure — which is *why it wins where the §7.1a surrogate/delta forms lost*: those cut decode count
 but added bookkeeping that a warm short-message decode is too cheap to justify;
 first-improvement cuts the *number* of evaluations with zero overhead. Deterministic
 (fixed order + acceptance, no RNG) → `-T`-independent; not byte-identical (different
@@ -1179,8 +1181,7 @@ move the current numbers; do not judge them by it.
 ### Do not re-propose (already shipped or measured-and-rejected)
 
 Shipped: steepest-ascent moves, `-R` restarts, `-S iq` staging + caps, `-F` pre-filter,
-`-A` simulated annealing, `-s` fixed plugs, uint8 tables + hapax floor, **`-D` exact
-mono/IC delta-scoring** (opt-in; byte-identical; a long-message-only speedup — §7.1),
+`-A` simulated annealing, `-s` fixed plugs, uint8 tables + hapax floor,
 **`-I` circular first-improvement** (opt-in; ~2.8× cheaper/climb; a matched-compute
 recovery win when paired with more `-R` — §7.2), **`-J` first-improvement + dynamic
 per-restart best-first ordering** (opt-in; +2–6pp mean on the realistic ~10-plug regime
