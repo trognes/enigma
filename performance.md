@@ -908,9 +908,18 @@ move ordering helps or hurts depending entirely on whether it varies *per restar
   regime-dependent; the win lands on the hardest/most-realistic case (10 plugs is the
   crackquality default and standard Wehrmacht). **The prediction that "greedier ⇒ worse"
   was wrong** — it holds only when the order is *fixed across restarts*; a per-restart
-  order gets the front-loading benefit while keeping the diversity. Open follow-up: the
-  6-plug loss looks like over-plugging, so `-J` + a plug cap (`-S qK`) may win in both
-  regimes — untested.
+  order gets the front-loading benefit while keeping the diversity.
+
+  **The 6-plug loss is over-plugging, and the existing plug cap fixes it — decisively.**
+  Capping the climb at the true count (`-S i6q6`, the same known-plug-count prior already
+  shipped for `-A`) turns `-J`'s −5pp 6-plug loss into a **+~30pp win vs the uncapped
+  baseline at matched compute** (measured both seeds: `-J -R29 -S i6q6` vs `-I -R22 -S iq`,
+  ~52k `score_iter`, PAIRS=6 — L40/50/60 +31/+28/+15pp and +32/+28/+17pp). The cap is the
+  first-order lever here (both lex and dyn gain ~+20-30pp from it; `-J`+cap beats lex+cap by
+  a further ~+3-7pp) — capping shrinks the search space to the identifiable plugs and stops
+  the noisy short-message quad score rewarding spurious ones. So the recipe is
+  count-dependent: **~10 plugs → `-J` uncapped; known-few plugs → `-J -S iKqK`.** No new
+  code — `-S qK` already exists; this is a usage finding.
 
 - **Don't-look bits** (Bentley) — the remaining open refinement. A per-letter active
   flag; skip moves incident only to letters that a full sweep already found inert,

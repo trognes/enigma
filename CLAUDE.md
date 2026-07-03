@@ -152,7 +152,10 @@ any working directory.
   (+2–6pp mean %-correct at L40–60, two seeds) and a **loss at 6 plugs** (best-first
   over-commits when few plugs are truly needed), hence opt-in. 10 plugs is the
   `crackquality` default and standard Wehrmacht, so the win lands on the hard/realistic
-  case. Static frequency-ordering was measured and **rejected** (`performance.md` §7.2).
+  case. The 6-plug loss is over-plugging: capping at the true count (`-J -S iKqK`, the same
+  known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
+  compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J -S iKqK`).
+  Static frequency-ordering was measured and **rejected** (`performance.md` §7.2).
 - `-D` **exact delta-scoring** for mono/IC hill-climb passes (needs `-c`; off by
   default). Finds the best switch move by an incremental O(affected-positions) score
   delta over a per-pass inverted index (positions by ciphertext input letter and by
