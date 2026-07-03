@@ -140,6 +140,15 @@ static int opt_firstimprove;
    order). Measured win on the realistic ~10-plug regime (+2-6pp mean at matched compute);
    a loss when few plugs are truly set. Implies -I; off by default; needs -c. */
 static int opt_dynorder;
+/* PROTOTYPE (env ENIGMA_CAPMERGE=1): change the plug-cap rule in the steepest-ascent
+   climb. Default (0): at/over the cap only a brand-new add (both ends free) is blocked,
+   so an over-cap board (a big -S rN kick handed to a small stage cap) can converge still
+   over the cap, merely reshuffled. With this on: at/over the cap allow only count-REDUCING
+   switch moves (merges: both ends already plugged to different partners) plus removals,
+   blocking adds AND count-preserving endpoint-moves -- so the cap becomes a real target the
+   climb must descend to, while keeping the strongest descent move (the merge). Env-gated so
+   it is byte-identical to shipped behaviour when unset; a measurement prototype only. */
+static int opt_capmerge;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
@@ -1429,6 +1438,19 @@ double hillclimb(machine & m, int max_pairs)
                 if ((pairs >= max_pairs) &&
                     (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b))
                   continue;
+
+                /* PROTOTYPE (ENIGMA_CAPMERGE): at/over the cap also block count-preserving
+                   endpoint-moves (exactly one end plugged), leaving only merges (both ends
+                   plugged to different partners -> -1) and the removal loop -- so the climb
+                   can only shed pairs while at/over the cap. */
+                if (opt_capmerge && (pairs >= max_pairs))
+                  {
+                    bool pa = (m.steckerbrett[a] != a);
+                    bool pb = (m.steckerbrett[b] != b);
+                    bool merge = pa && pb && (m.steckerbrett[a] != b);
+                    if (! merge)
+                      continue;
+                  }
 
                 /* switch plugs */
                 int x = m.steckerbrett[a];
@@ -3128,6 +3150,12 @@ int main(int argc, char * * argv)
           opt_seed = (static_cast<uint64_t>(rd()) << 32) ^ rd();
         }
     }
+
+  /* PROTOTYPE: env-gated cap-merge rule (see opt_capmerge). Off unless set. */
+  {
+    const char * cm = getenv("ENIGMA_CAPMERGE");
+    opt_capmerge = (cm && *cm && *cm != '0') ? 1 : 0;
+  }
 
   /* The key pre-filter ranks every key by a cheap plugboard climb and runs the full
      climb only on the top -F keys, so it is only meaningful with -c. -F takes either
