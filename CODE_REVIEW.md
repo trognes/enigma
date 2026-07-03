@@ -42,7 +42,13 @@ best-first move ordering** on top of `-I` — a further matched-compute win (+2�
 on the realistic ~10-plug regime, regime-dependent so also opt-in (`performance.md` §7.2).
 Still open on that axis: don't-look bits and the `max(greedy, SA)` portfolio. *Static*
 (fixed-across-restarts) informed ordering was **rejected** (greedy + diversity-collapsing;
-the per-restart `-J` avoids the collapse — `performance.md` §7.2):
+the per-restart `-J` avoids the collapse — `performance.md` §7.2). A separate shipped
+lever is **`-M` cap-as-target** (`performance.md` §7.8): at/over the `-S` plug cap the
+climb may only *merge* or *remove* plugs (never add or reshuffle), so a big restart kick
+is pruned cleanly back to the cap instead of leaving spurious plugs. It is neutral-to-+2.6pp
+on realistic 10-plug boards and a large win (+3–20pp, biggest at the short/hard end) on
+**known-few-plug** boards with a tight cap (`-S i4q6 -M`) — and cheaper per climb, so it
+buys more restarts too:
 
 - 🟢 **Full-crack tier for `make crackquality`** (measurement gap, and a
   prerequisite). The harness only exercises the plugboard-recovery tier (true
