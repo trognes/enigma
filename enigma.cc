@@ -1169,15 +1169,141 @@ static void delta_switch_scan(machine & m, int iter, int max_pairs, int pairs,
     }
 }
 
+/* Lexicographic table of the C(26,2)=325 unordered letter pairs, built once. */
+struct pairtab { unsigned char a[asize * (asize - 1) / 2], b[asize * (asize - 1) / 2]; };
+static pairtab make_pairtab()
+{
+  pairtab t;
+  int k = 0;
+  for (int i = 0; i < asize; i++)
+    for (int j = i + 1; j < asize; j++)
+      { t.a[k] = static_cast<unsigned char>(i); t.b[k] = static_cast<unsigned char>(j); k++; }
+  return t;
+}
+
+/* --- Circular first-improvement climb (EXPERIMENT, env ENIGMA_FIRSTIMP) -------
+
+   Steepest ascent full-scans all ~338 moves per accepted move and applies the single
+   best. First-improvement instead applies the FIRST move that improves and keeps going.
+   The ordering is *circular*: a cursor sweeps a fixed move list and CONTINUES from where
+   it accepted (never restarts at the top), so each move is examined ~once per sweep --
+   this both avoids re-scanning the moves that didn't change and spreads attention evenly
+   around the 26 letters instead of always favouring low letters (the two problems of
+   naive restart-from-top first-improvement). Convergence: a full cycle of all `nmoves`
+   with no accepted move = a local optimum.
+
+   Move list (fixed indices, so the cursor is well-defined): 0..324 = the switch move on
+   pair k (force a-b, ejecting conflicts); 325..350 = remove the plug on letter (index-325),
+   a no-op unless that letter is the low end of a plug. Deterministic (no RNG, fixed order
+   and acceptance rule) so the result is -T-independent; the trajectory differs from
+   steepest ascent, so this is NOT byte-identical and must be judged on recovery, not
+   equality. */
+static void firstimprove_sweep(machine & m, int iter, int max_pairs)
+{
+  static const int npairs = asize * (asize - 1) / 2;   /* 325 */
+  static const int nmoves = npairs + asize;            /* 351: switches + remove-by-letter */
+  static const pairtab P = make_pairtab();
+
+  unsigned char * __restrict steck = m.steckerbrett;
+  double cur = score_iter(m, iter);
+
+  int pairs = 0;
+  for (int j = 0; j < asize; j++)
+    if (steck[j] > j)
+      pairs++;
+
+  int cursor = 0;
+  int stale = 0;
+  while (stale < nmoves)
+    {
+      int mv = cursor;
+      cursor++;
+      if (cursor == nmoves)
+        cursor = 0;
+
+      bool improved = false;
+
+      if (mv < npairs)
+        {
+          int a = P.a[mv], b = P.b[mv];
+          if (plug_fixed[a] || plug_fixed[b])
+            { stale++; continue; }
+          if ((pairs >= max_pairs) && (steck[a] == a) && (steck[b] == b))
+            { stale++; continue; }
+
+          int x = steck[a], y = steck[b];
+          int xx = steck[x], yy = steck[y];
+          steck[x] = static_cast<unsigned char>(x);
+          steck[y] = static_cast<unsigned char>(y);
+          steck[a] = static_cast<unsigned char>(b);
+          steck[b] = static_cast<unsigned char>(a);
+          double s = score_iter(m, iter);
+          if (s > cur)
+            { cur = s; improved = true; }
+          else
+            {
+              steck[a] = static_cast<unsigned char>(x);
+              steck[b] = static_cast<unsigned char>(y);
+              steck[x] = static_cast<unsigned char>(xx);
+              steck[y] = static_cast<unsigned char>(yy);
+            }
+        }
+      else
+        {
+          int a = mv - npairs;
+          if ((steck[a] <= a) || plug_fixed[a])   /* not the low end of a removable plug */
+            { stale++; continue; }
+          int b = steck[a];
+          steck[a] = static_cast<unsigned char>(a);
+          steck[b] = static_cast<unsigned char>(b);
+          double s = score_iter(m, iter);
+          if (s > cur)
+            { cur = s; improved = true; }
+          else
+            {
+              steck[a] = static_cast<unsigned char>(b);
+              steck[b] = static_cast<unsigned char>(a);
+            }
+        }
+
+      if (improved)
+        {
+          stale = 0;
+          pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
+          for (int j = 0; j < asize; j++)
+            if (steck[j] > j)
+              pairs++;
+        }
+      else
+        stale++;
+    }
+}
+
 double hillclimb(machine & m, int max_pairs)
 {
   int iter = 1;
+
+  /* EXPERIMENT: circular first-improvement instead of steepest ascent (off by default,
+     so the baseline is byte-identical). */
+  static const bool firstimp = []() {
+    const char * e = getenv("ENIGMA_FIRSTIMP");
+    return e && (atoi(e) != 0);
+  }();
 
   bool progress;
   do
     {
       progress = false;
 
+      double cur;   /* converged score, handed to the re-pair barrier */
+
+      if (firstimp)
+        {
+          firstimprove_sweep(m, iter, max_pairs);
+          cur = score_iter(m, 0);
+        }
+      else
+        {
       double best_score;
       double last_best;
 
@@ -1335,10 +1461,12 @@ double hillclimb(machine & m, int max_pairs)
           iter++;
         }
       while (best_score > last_best);
+          cur = best_score;
+        }
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
          improves, loop back and let the cheap climb resume from the new board. */
-      if (try_repair(m, iter, best_score))
+      if (try_repair(m, iter, cur))
         progress = true;
       iter++;
     }
