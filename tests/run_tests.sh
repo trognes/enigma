@@ -547,6 +547,18 @@ check "cap-target -M: result is -T-independent" \
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -M >/dev/null 2>&1
 check "cap-target -M: without -c rejected (exit code)" "$?" "1"
 
+# Restart-level parallelism: with a fully-specified rotor key the search has exactly ONE
+# key, so -T can only speed things up by spreading the -R plugboard restarts across
+# threads. Each restart draws from its own (key,restart) seed, so the result must be
+# identical to -T 1 (a deterministic global best with a lowest-index tie-break) and must
+# still recover the plaintext.
+check "restart-parallel: fixed key, -R climb is -T-independent (T1==T8)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 8)"
+check "restart-parallel: fixed key + restarts recovers plaintext" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 8)" \
+  "$f_pt"
+
 # Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
 # from the per-key RNG stream (seeded from the flat key index), so an SA search must
 # stay independent of -T just like the restart climb. Recover the plugboard on the

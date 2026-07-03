@@ -281,7 +281,10 @@ any working directory.
     the tests stay clean. A shared atomic counter drives it, and because each atomic add
     owns a disjoint slice, exactly one thread prints each 1% step — no races, `-T`-safe.
 - `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`)
-- `-T N` worker threads for the search (default 1, max 256)
+- `-T N` worker threads for the search (default 1, max 256). Parallelises over the
+  `keys × restarts` work space, so it scales even a **fully-specified rotor key** with
+  `-c -R N` (the restarts are spread across threads) — not just wildcarded keyspaces.
+  `-T`-independent (deterministic regardless of thread count).
 
 Every run echoes the resolved configuration (scoring model, language, n-gram data
 directory, machine settings, plugboard, ciphertext length) to stderr.
@@ -329,9 +332,19 @@ A single pass through `main()`:
      read-only block (`#wheel-orders × 457 KB`). A table serves every ring/start
      of its wheel order via the start−ring offset.
    - **Phase 2 (`search_worker`)**: an atomic counter hands out adaptive chunks
-     of the flat key space; each worker decodes a flat index → (wheel-order,
+     of the flat work space; each worker decodes a flat index → (wheel-order,
      ring, start) by mixed radix, points its private `machine` at that wheel
      order's shared table (swapped, never recomputed, on a boundary), and:
+     - **The work space is `keys × restarts`, not just keys** (`restarts` = `-R` under
+       `-c`, else 1). The `-R` plugboard restarts of a key are independent — each draws
+       from its own `(key,restart)` RNG seed (`restart_seed`) rather than one stream
+       advanced sequentially — so they are spread across threads too. Restart is the
+       innermost dimension, so consecutive items share a key and reuse its `setup_mapping`.
+       **This is what lets a *fully-specified rotor key* (one key) still use every
+       thread** — the old key-only scheme left that case single-threaded (`-T` a no-op).
+       The `-F` tiers and the plain scan keep one item per key. Determinism is preserved
+       by a lowest-work-index tie-break in the best-merge (`better_cand`), since parallel
+       restarts of one key often converge to the same score.
    - `setup_mapping()` steps the rotors over the message length and records, per
      position, a pointer `rows[pos]` to that position's rotor-stack substitution
      row (folding in the stepping). The scan points `rows[pos]` straight into the

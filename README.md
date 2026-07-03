@@ -363,12 +363,14 @@ website, where additional languages are available in the same format.
 
 ## Performance
 
-The search is parallelised over the whole key space — reflectors, wheel orders,
-ring settings and start positions — so `-T N` uses N worker threads even when the
-wheels are fixed and only the rings/starts are being searched. The default is a
-single thread; on a 4-core machine a search runs about 3× faster with `-T 4`, and
-scaling can be measured with `make bench SCALE=1`. Results are independent of the
-thread count (`-T` does not change which plaintext is found).
+The search is parallelised over the whole `keys × restarts` work space — reflectors,
+wheel orders, ring settings, start positions, **and the `-R` plugboard restarts** — so
+`-T N` uses N worker threads even when the wheels are fixed and only the rings/starts are
+being searched, **and even when the rotor key is fully specified and you are only
+recovering the plugboard** (there the restarts are what get spread across threads). The
+default is a single thread; on a 4-core machine a search runs about 3× faster with
+`-T 4`, and scaling can be measured with `make bench SCALE=1`. Results are independent of
+the thread count (`-T` does not change which plaintext is found).
 
 ## References
 
