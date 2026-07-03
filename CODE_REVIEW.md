@@ -27,15 +27,19 @@ quality on short messages, `SPLIT=1` for the scoring-vs-search failure split) an
 is a **search** failure, not a scoring failure (the true plugboard always
 out-scores what the climb reaches). The shipped search levers — random restarts
 (`-R`), the staged schedule (`-S`), the key pre-filter (`-F`), and simulated
-annealing (`-A`) — stack, with `-R 10 -S iq` the best measured recipe. Remaining
+annealing (`-A`), and **first-improvement `-I`** — stack, with `-R 10 -S iq` a strong
+baseline recipe and `-I -R <higher>` a measured throughput win on top of it. Remaining
 ideas, in rough order of expected payoff (all with **diminishing returns** — SA
 landed only as a *peer* of `-R -S iq`; 3-opt and **cross-restart consensus /
 plug fixation** were built and measured and rejected — consensus loses to a higher
 `-R` at equal compute and saturates as `-R` grows, `performance.md` §3.1). The
 first-order lever remains **raising `-R`** (it never plateaus through 256), so the
-best remaining bets *buy more restarts* — a per-climb throughput win or the
-`max(greedy, SA)` portfolio (two independent trajectories, not a re-climbed shared
-seed) — rather than post-processing a fixed restart budget:
+best bets *buy more restarts*. The biggest such win shipped is **`-I` circular
+first-improvement** (`performance.md` §7.2): ~2.8× cheaper per climb, so at matched
+compute (paired with more `-R`) it recovers +8pp exact / +1–23pp mean at L40–60 — the
+first idea to beat the baseline at the ~50-char target. Still open on that axis:
+don't-look bits and a static frequency-informed move order (the other half of §7.2),
+and the `max(greedy, SA)` portfolio (two independent trajectories):
 
 - 🟢 **Full-crack tier for `make crackquality`** (measurement gap, and a
   prerequisite). The harness only exercises the plugboard-recovery tier (true

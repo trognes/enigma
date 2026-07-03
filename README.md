@@ -146,6 +146,7 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | Option | Meaning |
 | --- | --- |
 | `-c` | Hill-climb the plugboard for each candidate key |
+| `-I` | First-improvement climb: ~2.8× cheaper per climb, so **pair with more `-R`** for a net matched-compute recovery win (needs `-c`; off by default) |
 | `-D` | Exact delta-scoring for mono/IC climb passes (byte-identical, faster on **long** messages only; needs `-c`; off by default) |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
@@ -196,6 +197,8 @@ Usage: enigma [OPTIONS]
   -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];
                held fixed -- the -c/-A climb keeps them and finds the rest
   -c           Perform hill climbing to determine plugboard settings
+  -I           First-improvement climb: ~2.8x cheaper per climb, so pair
+               with more -R for a net recovery win (needs -c) [off]
   -D           Delta-score mono/IC climb passes (exact, faster; needs -c)
   -R integer   Plugboard hill-climb random restarts (1 = none) [1]
   -S schedule  Staged plugboard climb: <letter><opt.number> tokens.
@@ -261,10 +264,21 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   with a full plugboard even a good `N` recovers only around half of the hardest
   keys.
 
+- **`-I` — first-improvement climb.** Each plugboard climb is ~2.8× cheaper (it applies
+  the first improving move and sweeps circularly, instead of full-scanning for the single
+  best). A single `-I` climb recovers a bit *worse* than the default, so `-I` only pays
+  off when you **spend the saved time on more restarts**: pair it with a larger `-R` and,
+  at equal compute, it recovers noticeably more of a short message (measured +8 percentage
+  points of exact recovery, and up to +20 on messages with fewer plugs). Leave it off at
+  `-R 1`.
+
 A good general recipe for a hard (short) message with a known rotor key:
 
 ```sh
 ./enigma -c -R 20 -S iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+
+# faster climbs → more restarts for the same time: add -I and raise -R
+./enigma -c -I -R 55 -S iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 When you also brute-force the rotor key, add `-F` to shortlist keys and `-T` for

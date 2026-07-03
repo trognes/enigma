@@ -510,6 +510,19 @@ check "delta -D: result is -T-independent" \
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -D >/dev/null 2>&1
 check "delta -D: without -c rejected (exit code)" "$?" "1"
 
+# First-improvement climb (-I): a different (non-byte-identical) climb trajectory, so it
+# is checked by recovery + determinism, not equality. All order/acceptance is fixed (no
+# RNG), so the result must be -T-independent; it needs -c; and paired with restarts it
+# still recovers the plaintext on an easy long message.
+check "first-improve -I: recovers plaintext (long msg + restarts)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -I -R 8 -S iq)" \
+  "$f_pt"
+check "first-improve -I: result is -T-independent" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -I -R 8 -S iq -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -I -R 8 -S iq -T 4)"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -I >/dev/null 2>&1
+check "first-improve -I: without -c rejected (exit code)" "$?" "1"
+
 # Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
 # from the per-key RNG stream (seeded from the flat key index), so an SA search must
 # stay independent of -T just like the restart climb. Recover the plugboard on the
