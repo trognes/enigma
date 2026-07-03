@@ -1218,11 +1218,73 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
     if (steck[j] > j)
       pairs++;
 
+  /* Move-visit order. Default: lexicographic (visit[i]=i). Dynamic (ENIGMA_FI_DYN):
+     score every move once from the starting board and visit them best-score-first, then
+     circularly -- the user's "first round: score all, sort, then process in order"
+     idea. The order is derived per climb from the (perturbed) starting board, so it
+     differs per restart; deterministic (fixed board + tie-break) -> -T-independent. Costs
+     one extra full scan per climb. */
+  static const bool dyn_order = []() {
+    const char * e = getenv("ENIGMA_FI_DYN");
+    return e && (atoi(e) != 0);
+  }();
+  int visit[nmoves];
+  if (dyn_order)
+    {
+      double sc[nmoves];
+      for (int mv = 0; mv < nmoves; mv++)
+        {
+          double s = -1e300;   /* invalid moves sort last */
+          if (mv < npairs)
+            {
+              int a = P.a[mv], b = P.b[mv];
+              if (! (plug_fixed[a] || plug_fixed[b]) &&
+                  ! ((pairs >= max_pairs) && (steck[a] == a) && (steck[b] == b)))
+                {
+                  int x = steck[a], y = steck[b];
+                  int xx = steck[x], yy = steck[y];
+                  steck[x] = static_cast<unsigned char>(x);
+                  steck[y] = static_cast<unsigned char>(y);
+                  steck[a] = static_cast<unsigned char>(b);
+                  steck[b] = static_cast<unsigned char>(a);
+                  s = score_iter(m, iter);
+                  steck[a] = static_cast<unsigned char>(x);
+                  steck[b] = static_cast<unsigned char>(y);
+                  steck[x] = static_cast<unsigned char>(xx);
+                  steck[y] = static_cast<unsigned char>(yy);
+                }
+            }
+          else
+            {
+              int a = mv - npairs;
+              if ((steck[a] > a) && ! plug_fixed[a])
+                {
+                  int b = steck[a];
+                  steck[a] = static_cast<unsigned char>(a);
+                  steck[b] = static_cast<unsigned char>(b);
+                  s = score_iter(m, iter);
+                  steck[a] = static_cast<unsigned char>(b);
+                  steck[b] = static_cast<unsigned char>(a);
+                }
+            }
+          sc[mv] = s;
+          visit[mv] = mv;
+        }
+      std::sort(visit, visit + nmoves, [&](int i, int j)
+      {
+        if (sc[i] != sc[j]) return sc[i] > sc[j];   /* best score first */
+        return i < j;                               /* deterministic tie-break */
+      });
+    }
+  else
+    for (int i = 0; i < nmoves; i++)
+      visit[i] = i;
+
   int cursor = 0;
   int stale = 0;
   while (stale < nmoves)
     {
-      int mv = cursor;
+      int mv = visit[cursor];
       cursor++;
       if (cursor == nmoves)
         cursor = 0;
