@@ -884,16 +884,28 @@ restarts (restarts never plateau through 256) more than repay the per-restart lo
 **Because it recovers worse per restart, `-I` is opt-in** — a user at the default `-R 1`
 who enables it gets *worse* results. Documented as "pair with more `-R`."
 
-**Still open (the other half of §7.2, and its refinements):**
-- **Don't-look bits** (Bentley): a per-letter active flag; skip moves incident only to
-  letters that a full sweep already found inert, re-activating the ~4 letters an accepted
-  move touches. Composes with the `-I` cursor (skip cursor positions whose letters are
-  inactive) and should cut the confirming final cycle further. Not yet built.
-- **Informed move order.** `-I` uses lexicographic order; a *static* order by ciphertext
-  letter frequency (identifiable letters first, §2) is free and might reduce the
-  per-restart quality loss — recovering even more of the win. A *dynamic* scored/ranked
-  queue was analysed and set aside: it reintroduces exactly the per-pass overhead that
-  sank §7.1a at short messages.
+**Refinements — one measured (rejected), one open:**
+- **Static informed move order — ❌ built, measured, rejected.** Ordering the switch
+  moves by ciphertext letter frequency (well-attested/identifiable letters first, §2)
+  instead of lexicographically was expected to reduce the per-restart quality loss. It
+  does the **opposite**: measured across L40–60 × {6,10} plugs × 2 seeds, frequency order
+  is **neutral-to-worse** — a tie at the 10-plug/L40–50 corner, **−4-5pp mean %-correct**
+  at L60 and across 6-plug, and it still loses at *matched* compute (freq `-R 25` vs lex
+  `-R 22`: 45.0 vs 48.7 at L40/6-plug). Mechanism, and the useful lesson: informed order
+  makes first-improvement **commit greedily to high-frequency plugs early** — it converges
+  ~12% *faster* (fewer `score_iter`) but to *worse* optima, destroying the exploration
+  diversity that the restart regime feeds on. **For first-improvement under restarts, an
+  arbitrary (lexicographic) order beats an informed one.** This also predicts the
+  **dynamic scored/ranked order** (even greedier — always take the current best-ranked
+  move) will fare *worse*, on top of reintroducing the per-pass overhead that sank §7.1a;
+  it is not worth building.
+- **Don't-look bits** (Bentley) — the remaining promising refinement. A per-letter active
+  flag; skip moves incident only to letters that a full sweep already found inert,
+  re-activating the ~4 letters an accepted move touches. Crucially it is a **pure
+  speedup** — it changes *which moves are examined*, not the accepted-move trajectory or
+  its order — so it does **not** add the greediness that sank static ordering. Composes
+  with the `-I` cursor (skip cursor positions whose letters are inactive) and should cut
+  the confirming final cycle further. Not yet built.
 
 ### 7.3 Amortize the `-F` IC pre-pass into tier 2 (MEDIUM priority; clean win)
 
@@ -1053,7 +1065,8 @@ Build this first; several ideas below only become measurable once it exists.
    plus-bookkeeping lost. `-I` is ~2.8× cheaper per climb; paired with more `-R` it wins
    at matched compute (+8pp exact / +1–23pp mean, scaling with available signal — §7.2).
    Opt-in, because it recovers worse per restart. **Remaining upside on this axis:**
-   don't-look bits and a static frequency-informed move order (both §7.2, unbuilt).
+   don't-look bits (§7.2, unbuilt). Static frequency-informed move ordering was built and
+   **rejected** — it makes first-improvement greedier and lands in worse optima (§7.2).
 
 3. **True ILS with incumbent-walk acceptance (§3.3).** The cheapest *structural*
    change to how restarts are spent: instead of always relaunching from the fixed seed,

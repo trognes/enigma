@@ -38,8 +38,9 @@ best bets *buy more restarts*. The biggest such win shipped is **`-I` circular
 first-improvement** (`performance.md` §7.2): ~2.8× cheaper per climb, so at matched
 compute (paired with more `-R`) it recovers +8pp exact / +1–23pp mean at L40–60 — the
 first idea to beat the baseline at the ~50-char target. Still open on that axis:
-don't-look bits and a static frequency-informed move order (the other half of §7.2),
-and the `max(greedy, SA)` portfolio (two independent trajectories):
+don't-look bits (the other half of §7.2) and the `max(greedy, SA)` portfolio (two
+independent trajectories). Static frequency-informed move ordering was built and
+**rejected** (it makes first-improvement greedier → worse optima, `performance.md` §7.2):
 
 - 🟢 **Full-crack tier for `make crackquality`** (measurement gap, and a
   prerequisite). The harness only exercises the plugboard-recovery tier (true
