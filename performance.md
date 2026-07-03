@@ -33,8 +33,15 @@ scoring failures.
 
 **Already shipped** (do not re-propose; tune only): steepest-ascent hill-climb
 (switch / remove / gated re-pair moves); random restarts `-R` with a fixed
-`k≈8`-pair kick; staged schedule `-S` with the best recipe `-S iq` (IC pre-pass
-then quadgrams) and per-stage plug caps; key pre-filter `-F` (cheap capped-IC
+`k≈8`-pair kick; staged schedule `-S` with the general recipe `-S iq` (IC pre-pass
+then quadgrams) and per-stage plug caps — on realistic ~10-plug short texts the
+**tuned recipe is `-S i4q10`** (IC pre-pass capped at 4, quad capped at 10, default
+kick): measured **+3–10pp mean %-correct at L40–80 over `-S iq` at matched compute**,
+both seeds, because capping stops the noisy short-message score adding spurious plugs
+*and* makes each climb cheaper so the same budget buys ~30% more restarts. The win is
+the **quad cap of 10**; the IC pre-pass cap is a **flat plateau** — `i3`/`i4`/`i5`/`i6`
+tie within noise (~0.7pp, both seeds, matched `-R 26`), so `i4` is just a central
+representative, not a sharp optimum. A *small* kick (`r3/r4`) hurts, so the kick stays the default; key pre-filter `-F` (cheap capped-IC
 climb shortlists keys, ~8–20× throughput); simulated annealing `-A`
 (toggle-connect, acceptance-ratio-calibrated temperature, tuned `χ0=0.12`, IC
 pre-pass + greedy quench, honoring a known-plug-count cap) — a **peer** of the
@@ -810,8 +817,8 @@ g++ and clang** per the standing struct-layout cautions.
 of the **same** per-pass loop over the **same** inverted index; largely mutually
 exclusive, so competing implementations of one item, not stackable wins.*
 
-Each `hillclimb()` pass full-quad-scores ~325 switch + ~13 remove moves against a
-constant base board. That is the cost to cut. Candidates:
+Each `hillclimb()` pass full-quad-scores the 325 `toggle a-b` moves (add / move / merge /
+remove, unified) against a constant base board. That is the cost to cut. Candidates:
 
 - **(a) Surrogate-ranked steepest ascent — ❌ built, measured, rejected** (see the
   banner above). Rank all candidates with a **cheap surrogate** and full-quad-score
@@ -850,22 +857,84 @@ constant base board. That is the cost to cut. Candidates:
 **matched wall-clock** (scale `-R` so both configs use equal compute) — the honest
 test is recovery at equal compute. Sweep K (for (a)) / N (for (b)).
 
-### 7.2 First-improvement climb with don't-look bits (HIGH priority)
+### 7.2 First-improvement climb — ✅ SHIPPED as `-I` (the matched-compute win)
 
-**Form in this codebase.** `hillclimb()` (`:975`) is steepest-ascent and rescans
-all ~325 switch moves every pass, even late passes where nothing improves. Switch to
-first-improvement + Bentley-style don't-look bits: a per-letter active flag; skip
-flagged letters; re-activate only the ~4 letters touched by an accepted move (plus
-partners). A pass then re-examines only moves incident to recently-changed letters.
-`CODE_REVIEW.md`/history already flags first-improvement as likely reaching the same
-optimum with less work; not yet tried.
+> **The first idea in this document that beats the baseline at the ~50-char target.**
+> Two mechanisms were separable — first-improvement move selection, and don't-look
+> bits. First-improvement was built and shipped as opt-in `-I`; don't-look bits and
+> informed move ordering remain open (below).
 
-**Honest payoff.** High throughput for the many-restart regime; quality
-neutral-to-slightly-worse per restart (a different trajectory), expected net win
-once freed time buys more restarts. Deterministic if scan order is fixed.
+**What shipped.** `hillclimb()` was steepest-ascent — a full 325-move scan per
+accepted move, taking the single best. `-I` switches to **circular first-improvement**:
+a cursor sweeps the same fixed 325-pair `toggle a-b` list (each pair covers add / move /
+merge / remove by the current state of a and b), applies the **first** improving move, and
+**continues from where it accepted** (never restarts at the top). Continuing (vs restarting) is what makes it both efficient (each move examined
+~once per sweep, no redundant re-scan of unchanged moves) and unbiased (attention rotates
+evenly instead of always favouring low letters). Converged = a full cycle accepts nothing.
+No data structure — which is *why it wins where §7.1a/`-D` lost*: those cut decode count
+but added bookkeeping that a warm short-message decode is too cheap to justify;
+first-improvement cuts the *number* of evaluations with zero overhead. Deterministic
+(fixed order + acceptance, no RNG) → `-T`-independent; not byte-identical (different
+trajectory), so judged on recovery, not equality.
 
-**Experiment.** `make bench hillclimb` (moves-per-climb, time) and `make
-crackquality` at **matched wall-clock** (recovery at equal compute, not equal `-R`).
+**Measured (the key result).** ~2.8× fewer `score_iter` and ~1.8–2.6× faster wall at 50
+chars. It recovers *worse per restart* (a noisier trajectory lands in worse optima), so
+it is a **throughput multiplier, not a free win**: pair it with more `-R` and the extra
+restarts (restarts never plateau through 256) more than repay the per-restart loss. At
+**matched compute** (steepest `-R 8` ≈ first-improve `-R 22` ≈ 55k `score_iter`; `-S iq`;
+500 trials; two seeds):
+- **Exact recovery:** +8pp at L90 (60.2 vs 52.2) for 10 plugs; +16–24pp for 6 plugs.
+- **Mean %-correct:** never worse; +1pp at the hardest 10-plug/L40–50 corner (near the
+  §2 information floor, where little is recoverable by *any* method), growing to +6–7pp
+  by L60; **+19–23pp across L40–60 for 6 plugs** (wherever real signal exists).
+
+**Because it recovers worse per restart, `-I` is opt-in** — a user at the default `-R 1`
+who enables it gets *worse* results. Documented as "pair with more `-R`."
+
+**Refinements — one rejected, one shipped, one open. The pair is the interesting part:
+move ordering helps or hurts depending entirely on whether it varies *per restart*.**
+
+- **Static informed move order — ❌ built, measured, rejected.** Ordering the switch
+  moves by ciphertext letter frequency (well-attested/identifiable letters first, §2) —
+  the **same order for every restart**. Measured across L40–60 × {6,10} plugs × 2 seeds it
+  is **neutral-to-worse**: a tie at the 10-plug/L40–50 corner, **−4-5pp mean %-correct**
+  elsewhere, still losing at matched compute (freq `-R 25` vs lex `-R 22`: 45.0 vs 48.7).
+  A fixed informed order makes first-improvement commit greedily to high-frequency plugs
+  *and does so identically every restart*, converging ~12% faster but to worse optima and
+  **collapsing the restart diversity** the regime feeds on.
+
+- **Dynamic (per-restart) best-first order — ✅ SHIPPED as `-J`.** The user's idea: each
+  climb first scores *all* moves once against its (perturbed) starting board, sorts, and
+  runs the circular first-improvement in that order. The critical difference from static:
+  the order is **rebuilt per restart**, so it front-loads good moves *without* collapsing
+  diversity — different restarts get different orders. It costs +24% `score_iter`/climb
+  (the extra scan), so it is compared at matched compute (`-J -R 18` ≈ `-I -R 22`).
+  Measured (500 trials, 2 seeds): a **robust win in the realistic ~10-plug regime**,
+  **+2 to +6pp mean %-correct at L40–60**, and a **loss at 6 plugs** (−2 to −7pp, where
+  best-first over-commits when few plugs are truly needed). Opt-in, because it is
+  regime-dependent; the win lands on the hardest/most-realistic case (10 plugs is the
+  crackquality default and standard Wehrmacht). **The prediction that "greedier ⇒ worse"
+  was wrong** — it holds only when the order is *fixed across restarts*; a per-restart
+  order gets the front-loading benefit while keeping the diversity.
+
+  **The 6-plug loss is over-plugging, and the existing plug cap fixes it — decisively.**
+  Capping the climb at the true count (`-S i6q6`, the same known-plug-count prior already
+  shipped for `-A`) turns `-J`'s −5pp 6-plug loss into a **+~30pp win vs the uncapped
+  baseline at matched compute** (measured both seeds: `-J -R29 -S i6q6` vs `-I -R22 -S iq`,
+  ~52k `score_iter`, PAIRS=6 — L40/50/60 +31/+28/+15pp and +32/+28/+17pp). The cap is the
+  first-order lever here (both lex and dyn gain ~+20-30pp from it; `-J`+cap beats lex+cap by
+  a further ~+3-7pp) — capping shrinks the search space to the identifiable plugs and stops
+  the noisy short-message quad score rewarding spurious ones. So the recipe is
+  count-dependent: **~10 plugs → `-J` uncapped; known-few plugs → `-J -S iKqK`.** No new
+  code — `-S qK` already exists; this is a usage finding.
+
+- **Don't-look bits** (Bentley) — the remaining open refinement. A per-letter active
+  flag; skip moves incident only to letters that a full sweep already found inert,
+  re-activating the ~4 letters an accepted move touches. Crucially it is a **pure
+  speedup** — it changes *which moves are examined*, not the accepted-move trajectory or
+  its order — so it does **not** add the greediness that sank static ordering. Composes
+  with the `-I` cursor (skip cursor positions whose letters are inactive) and should cut
+  the confirming final cycle further. Not yet built.
 
 ### 7.3 Amortize the `-F` IC pre-pass into tier 2 (MEDIUM priority; clean win)
 
@@ -935,6 +1004,48 @@ critical gather (likely net-negative) and risks discarding quadgrams that matter
 for discrimination (a quality regression). The layout-tiling sub-variant is safer
 but likely small payoff. Only pursue as a both-axes win under `make crackquality` +
 `make bench`; low priority.
+
+---
+
+### 7.8 Cap-as-target climb rule — ✅ SHIPPED as `-M`
+
+**Idea.** The per-stage `-S` plug cap is enforced only as a *growth ceiling*: at/over
+the cap the switch scan blocks a brand-new **add** (both ends free) but still allows
+count-preserving **reshuffles** (endpoint-moves, `Δ=0`). So when a big per-restart kick
+(`-S rN`, default `N=8`) lands on a small stage cap (`i4`, `q6/q10`), the board *arrives
+over the cap* and the climb can converge still holding more plugs than the cap — the cap
+never pulls it down. `-M` makes the cap a strict **descent target**: at/over the cap, only
+**count-reducing** moves are allowed — a **merge** (both ends already plugged to different
+partners, `Δ=−1`) or a **remove** (`Δ=−1`) — blocking adds *and* reshuffles, so the climb
+must shed plugs to the cap. The **merge** is deliberately kept (not "removal-only"): it is
+the strongest descent move (−1 *and* score-improving in one step); dropping it (a strict
+removal-only rule, "variant 2") was reasoned to be worse and not built.
+
+**Result (matched compute, mean %-correct — the graded metric; `-S rNi4qK`).** Because
+`-M` is *cheaper* per climb (up to ~2.7× fewer `score_iter` in the `q6` regime — quad
+converges from a tidy ≤cap basin), it is compared at matched compute (baseline `-R 26` vs
+`-M` at the higher `-R` its lower per-climb cost buys). The win **grows as the true plug
+count falls below the cap**:
+
+| regime | N4 | N6 | N8 | N10 |
+|---|---|---|---|---|
+| `PAIRS=10`, `q10` cap, 4 seeds | +4.5 | −0.4 | −0.1 | **+2.6** |
+| `PAIRS=6`,  `q6`  cap, 4 seeds | +2.7 | +3.9 | +5.8 | **+7.1** |
+
+On realistic 10-plug boards it is neutral at the sweet-spot kicks (`N≈6–8`, within noise)
+and a solid **+2.6pp at `N=10`** (the true-count kick, the best operating point; robust
+across all lengths). On **known-few-plug** boards (`q6`) it is a large win that grows with
+kick size and **concentrates at the short/hard end** — `N=10` gives **+20.6pp at L40**,
++8.9 at L50, tapering as length eases. Every miss the baseline makes here is it wasting the
+climb reshuffling an over-cap board; `-M` spends that budget descending to the true count.
+
+**Why the IC-cap plateau (§ "already shipped") is real without `-M`.** The reason
+`-S i3q…`…`i6q…` tie by default is exactly this: on the dominant perturbed restarts the
+board is already over the IC cap, so the cap can't build *or* prune it — it only gates a
+re-add. `-M` is what makes a tight cap actually bite. So the recipe is regime-dependent:
+`~10 plugs → -S rNi4q10` (kick near 10, `-M` optional, small gain); `known-few → -S i4qK -M`
+(cap at the true count `K`, `-M` on — the large win). Off by default (needs `-c`),
+`-T`-deterministic, full suite green.
 
 ---
 
@@ -1019,16 +1130,16 @@ Build this first; several ideas below only become measurable once it exists.
    genuinely independent trajectories, so it is not subject to the best-of-`R`
    saturation that sank §3.1.
 
-2. **A per-climb throughput lever — first-improvement + don't-look bits (§7.2).** The
-   compute budget *is* the number of `score_iter` calls; a per-climb speedup converts
-   directly into more restarts, which never plateau through R=256 — and, per the §3.1
-   result, *more restarts is the lever that actually pays*. (The higher-ceiling option
-   here, §7.1a surrogate-ranked ascent, was **built and rejected**: ~1.5× slower at 50
-   chars because warm short-message quad decodes are too cheap to skip — see §7.1. Its
-   reusable remnant, the exact `-D` mono/IC delta climb, wins only on long messages.)
-   §7.2 cuts the *number* of candidates evaluated rather than the cost of each, so it
-   may fare better at short messages — but it changes the trajectory and needs its own
-   quality gate. Validate at **matched wall-clock**.
+2. **A per-climb throughput lever — first-improvement (§7.2). ✅ DONE, shipped as `-I`.**
+   The prediction held: cutting the *number* of evaluations (not the cost of each) with
+   zero overhead is what beats the baseline at 50 chars, where §7.1a's decode-cheapening-
+   plus-bookkeeping lost. `-I` is ~2.8× cheaper per climb; paired with more `-R` it wins
+   at matched compute (+8pp exact / +1–23pp mean, scaling with available signal — §7.2).
+   Opt-in, because it recovers worse per restart. **Dynamic per-restart best-first move
+   ordering shipped as `-J`** (a matched-compute win on the realistic ~10-plug regime,
+   +2–6pp mean; §7.2). **Remaining upside:** don't-look bits (§7.2, unbuilt). *Static*
+   (fixed-across-restarts) informed ordering was **rejected** — greedier *and* diversity-
+   collapsing; the per-restart `-J` keeps the front-loading without the collapse (§7.2).
 
 3. **True ILS with incumbent-walk acceptance (§3.3).** The cheapest *structural*
    change to how restarts are spent: instead of always relaunching from the fixed seed,
@@ -1069,8 +1180,15 @@ move the current numbers; do not judge them by it.
 
 Shipped: steepest-ascent moves, `-R` restarts, `-S iq` staging + caps, `-F` pre-filter,
 `-A` simulated annealing, `-s` fixed plugs, uint8 tables + hapax floor, **`-D` exact
-mono/IC delta-scoring** (opt-in; byte-identical; a long-message-only speedup — §7.1).
-Rejected (with reason): **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
+mono/IC delta-scoring** (opt-in; byte-identical; a long-message-only speedup — §7.1),
+**`-I` circular first-improvement** (opt-in; ~2.8× cheaper/climb; a matched-compute
+recovery win when paired with more `-R` — §7.2), **`-J` first-improvement + dynamic
+per-restart best-first ordering** (opt-in; +2–6pp mean on the realistic ~10-plug regime
+at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in; at/over the
+`-S` cap only merge/remove moves; matched-compute win growing as true plugs fall below the
+cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
+Rejected (with reason): **static (fixed-across-restarts) informed move order** (greedy
+*and* diversity-collapsing — §7.2); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
 chars — warm short-message quad decodes too cheap to skip; only wins ≥150 chars; the IC
 *ranker* also collapses recovery — §7.1); **cross-restart consensus / plug fixation
 (§3.1** — built and measured compute-neutral-to-negative; loses to a higher `-R` at

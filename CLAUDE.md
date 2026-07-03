@@ -72,7 +72,12 @@ plugboard), recovers each with the true rotor key fixed and only the plugboard
 hill-climbed (the cheap "plugboard-recovery" tier), and reports per length the
 mean %-of-letters-correct (a graded signal) and the exact-recovery rate, plus
 headline `L50`/`L90` (the shortest length reaching that recovery rate — lower is
-better). A fixed `SEED` makes the trial set deterministic (Python's
+better). **When comparing search/scoring changes, judge on the mean %-correct,
+not the exact-recovery rate.** The mean is the graded, lower-variance signal:
+it moves smoothly with small quality changes and separates configs at short
+lengths where the exact rate is near-zero and dominated by trial noise. The
+exact rate (and `L50`/`L90`) is a coarse headline — use it as a secondary check,
+not the metric a tuning decision turns on. A fixed `SEED` makes the trial set deterministic (Python's
 `random.Random(seed)`, reproducible across machines), so `make crackquality
 BASE=<git-ref>` is a same-machine A/B that solves identical problems with both
 binaries. (It was rewritten from shell+awk to Python: awk's seeded `rand()` is not
@@ -130,6 +135,32 @@ any working directory.
   re-pair/toggle move), so `-s` supplies *known* plugs and the search recovers only the
   rest. They still seed a plain (no-climb) decrypt as before.
 - `-c` hill-climb the plugboard
+- `-I` **circular first-improvement** climb instead of steepest ascent (needs `-c`; off by
+  default). `hillclimb()` normally full-scans all 325 toggle moves per accepted move and takes
+  the single best; `-I` sweeps the same fixed 325-pair toggle list (each pair a `toggle a-b`:
+  already-paired → remove, else add/move/merge) with a cursor, applies the **first** improving
+  move, and **continues from where it accepted** (circular — so each move is examined ~once per
+  sweep and attention rotates evenly instead of favouring low letters). ~2.8× fewer `score_iter` per climb, no data structure (which is why
+  it wins at 50 chars where the surrogate/delta ideas lost). Deterministic (fixed order +
+  acceptance, no RNG) → `-T`-independent; **not** byte-identical (different trajectory). It
+  recovers **worse per restart**, so it is a *throughput multiplier*, not a free win: pair it
+  with more `-R` and it wins at **matched compute** (+8pp exact / +1–23pp mean %-correct at
+  L40–60, scaling with how much signal the message has — `performance.md` §7.2). Because a
+  user at the default `-R 1` would get worse results, it is opt-in.
+- `-J` **first-improvement with dynamic best-first move ordering** (implies `-I`; needs
+  `-c`; off by default). Each climb first scores *every* move once against its starting
+  (perturbed) board, sorts, and runs the circular first-improvement in that order — the
+  order is rebuilt **per restart**, so it front-loads good moves *without* collapsing the
+  restart diversity that a *static* (fixed-across-restarts) informed order destroys. Costs
+  +24% `score_iter`/climb (the extra scan), so it is compared at matched compute
+  (`-J -R 18` ≈ `-I -R 22`). Measured a **robust win on the realistic ~10-plug regime**
+  (+2–6pp mean %-correct at L40–60, two seeds) and a **loss at 6 plugs** (best-first
+  over-commits when few plugs are truly needed), hence opt-in. 10 plugs is the
+  `crackquality` default and standard Wehrmacht, so the win lands on the hard/realistic
+  case. The 6-plug loss is over-plugging: capping at the true count (`-J -S iKqK`, the same
+  known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
+  compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J -S iKqK`).
+  Static frequency-ordering was measured and **rejected** (`performance.md` §7.2).
 - `-D` **exact delta-scoring** for mono/IC hill-climb passes (needs `-c`; off by
   default). Finds the best switch move by an incremental O(affected-positions) score
   delta over a per-pass inverted index (positions by ciphertext input letter and by
@@ -143,6 +174,26 @@ any working directory.
   IC ~5–7%). The §7.1a *surrogate-ranking* form (rank by a cheap surrogate, full-quad
   only a top-K) was **rejected** — ~1.5× slower at 50 chars and the IC ranker collapses
   recovery (`performance.md` §7.1). `-T`-deterministic; TSan-clean.
+- `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
+  cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
+  cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an
+  over-cap board — the common case when a big `-S rN` kick lands on a small stage cap —
+  can converge still holding more plugs than the cap, merely reshuffled. `-M` makes the
+  cap a strict **descent target**: at/over the cap only **count-reducing** moves are
+  allowed (**merge** — both ends already plugged to different partners → −1 — and
+  **remove**), blocking adds *and* count-preserving endpoint-moves, so the climb must shed
+  plugs down to the cap while keeping the strongest descent move (the merge). Measured a
+  **matched-compute win that grows as the true plug count falls below the cap**: neutral-to
+  -**+2.6pp** mean %-correct on realistic 10-plug boards (`-S rNi4q10`, best at the
+  true-count kick `N≈10`), and **+3…+20pp** on **known-few-plug** boards (`-S rNi4q6`,
+  largest at the short/hard end — +20pp at L40) — because forcing a clean descent stops the
+  baseline wasting its climb reshuffling an over-cap board. It is also **cheaper per climb**
+  (up to ~2.7× fewer `score_iter` in the `q6` regime: quad converges from a tidy ≤cap
+  basin), so at matched compute it earns many more restarts. Most useful with a **tight
+  `-S` target cap**; near-inert (harmless) with no cap set. `-T`-deterministic. (The reason
+  the IC-pre-pass cap in `-S i4q…` is a *flat plateau* by default is that without `-M` the
+  cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
+  `performance.md` §7.3.)
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
@@ -290,12 +341,20 @@ A single pass through `main()`:
      scorers fuse the decode into their loop). The best is merged under a mutex
      (which also serialises the live progress line). Parallelising the flat key
      space means rings/starts scale even when the wheels are fixed.
-   - With `-c`, `hillclimb()` greedily improves the plugboard: each pass takes the
-     single best "switch a–b" or "remove an existing pair" move, run to convergence;
-     then one "re-pair" move (`try_repair()`, re-match two plugs into the other
-     pairing) is tried as a barrier-cross, and if it improves the cheap climb resumes.
-     Removal lets a staged climb shed plugs an earlier model set; re-pair is a general
-     local-optima escape gated to fire only at convergence (~zero cost). See
+   - With `-c`, `hillclimb()` greedily improves the plugboard: each pass scans a single
+     **"toggle a–b"** operator over all 325 letter pairs — one operator that, by the
+     current state of a and b, *adds* a new plug (both ends free), *moves* an endpoint
+     (one end plugged), *merges* two plugs into one (both plugged, different partners), or
+     *removes* the a–b plug (a and b already paired) — and takes the single best improving
+     toggle, run to convergence. (Folding removal in as the already-paired case is what
+     lets one scan replace the former separate switch-scan + removal-loop; a switch still
+     wins ties over a removal, so it stays byte-identical.) Then one "re-pair" move
+     (`try_repair()`, re-match two plugs into the other pairing — the one count-neutral
+     two-plug move a single toggle can't express) is tried as a barrier-cross, and if it
+     improves the cheap climb resumes; re-pair is a general local-optima escape gated to
+     fire only at convergence (~zero cost). The plug cap gates the toggle by count-effect:
+     an *add* is blocked at/over the cap, and with `-M` a count-preserving *move* too, so
+     only the count-reducing *merge*/*remove* remain (cap as a strict descent target). See
      `CODE_REVIEW_HISTORY.md` §9 item 7.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
    final stderr diagnostic reports the number of rotor combinations analysed

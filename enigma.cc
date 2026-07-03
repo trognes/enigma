@@ -127,6 +127,31 @@ static int opt_hillclimb;
    to the full scan, fewer full decodes). Accelerates the -S iq IC pre-pass, the -F tier-1
    IC climb, and -m/-i climbs; a no-op for quad/bi/tri (delta-quad was measured slower). */
 static int opt_delta;
+/* -I: circular first-improvement climb instead of steepest ascent. Applies the FIRST
+   improving move (cursor sweeps a fixed move list and continues from where it accepted),
+   so it does far fewer score_iter calls per climb -- ~2.8x cheaper. It recovers WORSE per
+   restart (a different, noisier trajectory), so it is a *throughput multiplier*: pair it
+   with more restarts (-R) and it wins at equal compute. Off by default; needs -c. */
+static int opt_firstimprove;
+/* -J: first-improvement (-I) with DYNAMIC best-first move ordering. Each climb first
+   scores every move once against the starting (perturbed) board, sorts, and then runs the
+   circular first-improvement in that order. The order is rebuilt per restart, so it
+   front-loads good moves without collapsing restart diversity (unlike the rejected static
+   order). Measured win on the realistic ~10-plug regime (+2-6pp mean at matched compute);
+   a loss when few plugs are truly set. Implies -I; off by default; needs -c. */
+static int opt_dynorder;
+/* -M: make the plug cap a strict descent TARGET, not just a growth ceiling. Default (0):
+   at/over the cap only a brand-new add (both ends free) is blocked, so an over-cap board
+   (a big -S rN kick handed to a small stage cap) can converge still over the cap, merely
+   reshuffled. With -M: at/over the cap allow only count-REDUCING moves (merges -- both ends
+   already plugged to different partners -- plus removals), blocking adds AND count-preserving
+   endpoint-moves, so the climb must shed plugs down to the cap while keeping the strongest
+   descent move (the merge). Measured a matched-compute win that grows as the true plug count
+   falls below the cap: neutral-to-+2.6pp on realistic 10-plug boards (best at the true-count
+   kick), and +3..+20pp on known-few-plug boards (-S ...q6), largest at the short/hard end;
+   it is also cheaper per climb (quad converges from a tidy basin). Off by default; needs -c.
+   Most useful with a tight -S target cap; near-inert (harmless) with no cap. */
+static int opt_capmerge;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
@@ -1169,15 +1194,204 @@ static void delta_switch_scan(machine & m, int iter, int max_pairs, int pairs,
     }
 }
 
+/* Lexicographic table of the C(26,2)=325 unordered letter pairs, built once. */
+struct pairtab { unsigned char a[asize * (asize - 1) / 2], b[asize * (asize - 1) / 2]; };
+static pairtab make_pairtab()
+{
+  pairtab t = {};   /* zero-init: the loop fills every entry, but this lets cppcheck prove it */
+  int k = 0;
+  for (int i = 0; i < asize; i++)
+    for (int j = i + 1; j < asize; j++)
+      { t.a[k] = static_cast<unsigned char>(i); t.b[k] = static_cast<unsigned char>(j); k++; }
+  return t;
+}
+
+/* --- Circular first-improvement climb (-I) ------------------------------------
+
+   Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
+   best. First-improvement instead applies the FIRST move that improves and keeps going.
+   The ordering is *circular*: a cursor sweeps a fixed move list and CONTINUES from where
+   it accepted (never restarts at the top), so each move is examined ~once per sweep --
+   this both avoids re-scanning the moves that didn't change and spreads attention evenly
+   around the 26 letters instead of always favouring low letters (the two problems of
+   naive restart-from-top first-improvement). Convergence: a full cycle of all `nmoves`
+   with no accepted move = a local optimum.
+
+   Move list (fixed indices, so the cursor is well-defined): the 325 unordered letter
+   pairs, each a "toggle a-b" (already paired -> REMOVE it; else force a-b, i.e. ADD /
+   MOVE an endpoint / MERGE) -- the same unified operator the steepest-ascent scan uses,
+   so removal is the already-paired toggle rather than a separate move list. Deterministic
+   (no RNG, fixed order and acceptance rule) so the result is -T-independent; the trajectory
+   differs from steepest ascent, so this is NOT byte-identical and must be judged on
+   recovery, not equality. */
+static void firstimprove_sweep(machine & m, int iter, int max_pairs)
+{
+  static const int nmoves = asize * (asize - 1) / 2;   /* 325 pair-toggles */
+  static const pairtab P = make_pairtab();
+
+  unsigned char * __restrict steck = m.steckerbrett;
+  double cur = score_iter(m, iter);
+
+  int pairs = 0;
+  for (int j = 0; j < asize; j++)
+    if (steck[j] > j)
+      pairs++;
+
+  /* Is the toggle on (a,b) blocked by the plug cap? A REMOVE (already paired) is always
+     allowed (-1). At/over the cap an ADD (both ends free) is blocked, and with -M a
+     count-preserving MOVE (one end free) too, so only the count-reducing merge/remove
+     survive -- matching the steepest-ascent scan's cap rule. */
+  auto cap_blocks = [&](int a, int b) -> bool
+  {
+    if (pairs < max_pairs) return false;
+    if (steck[a] == b) return false;                        /* REMOVE: allowed */
+    bool a_free = (steck[a] == a), b_free = (steck[b] == b);
+    if (a_free && b_free) return true;                      /* block ADD */
+    if (opt_capmerge && (a_free || b_free)) return true;    /* -M: block MOVE */
+    return false;
+  };
+
+  /* Score the toggle on (a,b) against the current board, leaving the board unchanged. */
+  auto probe_toggle = [&](int a, int b) -> double
+  {
+    double s;
+    if (steck[a] == b)                             /* REMOVE a-b */
+      {
+        steck[a] = static_cast<unsigned char>(a);
+        steck[b] = static_cast<unsigned char>(b);
+        s = score_iter(m, iter);
+        steck[a] = static_cast<unsigned char>(b);
+        steck[b] = static_cast<unsigned char>(a);
+      }
+    else                                           /* force a-b: ADD / MOVE / MERGE */
+      {
+        int x = steck[a], y = steck[b];
+        int xx = steck[x], yy = steck[y];
+        steck[x] = static_cast<unsigned char>(x);
+        steck[y] = static_cast<unsigned char>(y);
+        steck[a] = static_cast<unsigned char>(b);
+        steck[b] = static_cast<unsigned char>(a);
+        s = score_iter(m, iter);
+        steck[a] = static_cast<unsigned char>(x);
+        steck[b] = static_cast<unsigned char>(y);
+        steck[x] = static_cast<unsigned char>(xx);
+        steck[y] = static_cast<unsigned char>(yy);
+      }
+    return s;
+  };
+
+  /* Move-visit order. Default: lexicographic (visit[i]=i). Dynamic (-J): score every move
+     once from the starting board and visit them best-score-first, then circularly -- the
+     "first round: score all, sort, then process in order" idea. The order is derived per
+     climb from the (perturbed) starting board, so it differs per restart; deterministic
+     (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
+  const bool dyn_order = (opt_dynorder != 0);
+  int visit[nmoves];
+  if (dyn_order)
+    {
+      double sc[nmoves];
+      for (int mv = 0; mv < nmoves; mv++)
+        {
+          int a = P.a[mv], b = P.b[mv];
+          double s = -1e300;   /* invalid moves sort last */
+          if (! (plug_fixed[a] || plug_fixed[b]) && ! cap_blocks(a, b))
+            s = probe_toggle(a, b);
+          sc[mv] = s;
+          visit[mv] = mv;
+        }
+      std::sort(visit, visit + nmoves, [&](int i, int j)
+      {
+        if (sc[i] != sc[j]) return sc[i] > sc[j];   /* best score first */
+        return i < j;                               /* deterministic tie-break */
+      });
+    }
+  else
+    for (int i = 0; i < nmoves; i++)
+      visit[i] = i;
+
+  int cursor = 0;
+  int stale = 0;
+  while (stale < nmoves)
+    {
+      int mv = visit[cursor];
+      cursor++;
+      if (cursor == nmoves)
+        cursor = 0;
+
+      int a = P.a[mv], b = P.b[mv];
+      if ((plug_fixed[a] || plug_fixed[b]) || cap_blocks(a, b))
+        { stale++; continue; }
+
+      bool improved = false;
+
+      if (steck[a] == b)                             /* REMOVE a-b */
+        {
+          steck[a] = static_cast<unsigned char>(a);
+          steck[b] = static_cast<unsigned char>(b);
+          double s = score_iter(m, iter);
+          if (s > cur)
+            { cur = s; improved = true; }
+          else
+            {
+              steck[a] = static_cast<unsigned char>(b);
+              steck[b] = static_cast<unsigned char>(a);
+            }
+        }
+      else                                           /* force a-b: ADD / MOVE / MERGE */
+        {
+          int x = steck[a], y = steck[b];
+          int xx = steck[x], yy = steck[y];
+          steck[x] = static_cast<unsigned char>(x);
+          steck[y] = static_cast<unsigned char>(y);
+          steck[a] = static_cast<unsigned char>(b);
+          steck[b] = static_cast<unsigned char>(a);
+          double s = score_iter(m, iter);
+          if (s > cur)
+            { cur = s; improved = true; }
+          else
+            {
+              steck[a] = static_cast<unsigned char>(x);
+              steck[b] = static_cast<unsigned char>(y);
+              steck[x] = static_cast<unsigned char>(xx);
+              steck[y] = static_cast<unsigned char>(yy);
+            }
+        }
+
+      if (improved)
+        {
+          stale = 0;
+          pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
+          for (int j = 0; j < asize; j++)
+            if (steck[j] > j)
+              pairs++;
+        }
+      else
+        stale++;
+    }
+}
+
 double hillclimb(machine & m, int max_pairs)
 {
   int iter = 1;
+
+  /* -I: circular first-improvement instead of steepest ascent (off by default, so the
+     baseline is byte-identical). */
+  const bool firstimp = (opt_firstimprove != 0);
 
   bool progress;
   do
     {
       progress = false;
 
+      double cur;   /* converged score, handed to the re-pair barrier */
+
+      if (firstimp)
+        {
+          firstimprove_sweep(m, iter, max_pairs);
+          cur = score_iter(m, 0);
+        }
+      else
+        {
       double best_score;
       double last_best;
 
@@ -1203,98 +1417,117 @@ double hillclimb(machine & m, int max_pairs)
 
           //#define SHOWHILLCLIMB
 
-          /* -D: exact delta-accelerated switch scan for the mono/IC models (byte-identical
-             to the baseline full scan, fewer full decodes). Quad/bigram/trigram always run
-             the baseline scan (delta-quad was measured ~2x slower). */
-          if (opt_delta && ((m.scoring == SCORE_IC) || (m.scoring == SCORE_MONO)))
-            delta_switch_scan(m, iter, max_pairs, pairs,
-                              move_score, move_kind, move_a, move_b);
+          /* One "toggle a-b" operator over all 325 letter pairs expresses every plug move
+             by the current state of a and b: both ends free -> ADD a-b (+1 pair); exactly
+             one end plugged -> MOVE that plug's endpoint (0); both ends plugged to different
+             partners -> MERGE two plugs into one (-1); a-b already a pair -> REMOVE it (-1).
+             Steepest ascent takes the single best improving toggle per pass. The plug cap
+             gates by count-effect: at/over the cap an ADD is always blocked, and with -M
+             (opt_capmerge) a count-preserving MOVE too, so only the count-reducing MERGE and
+             REMOVE survive -- the cap becomes a strict descent target. (Folding removal in as
+             the already-paired toggle case is what lets a single scan replace the old
+             separate switch-scan + removal-loop pair.)
+
+             -D: for mono/IC, delta_switch_scan replaces the ADD/MOVE/MERGE (switch) scan with
+             an exact incremental one (fewer full decodes); removals stay a cheap exact tail.
+             -M routes to the folded scan for all models so its cap rule always holds. */
+          if (opt_delta && ! opt_capmerge
+              && ((m.scoring == SCORE_IC) || (m.scoring == SCORE_MONO)))
+            {
+              delta_switch_scan(m, iter, max_pairs, pairs,
+                                move_score, move_kind, move_a, move_b);
+
+              /* removals (the already-paired toggle case): a removal only wins on a strict
+                 improvement, so switches keep ties -- matching the folded scan's tie-break. */
+              for (int a = 0; a < asize; a++)
+                if ((m.steckerbrett[a] > a) && ! plug_fixed[a])
+                  {
+                    int b = m.steckerbrett[a];
+                    m.steckerbrett[a] = a;
+                    m.steckerbrett[b] = b;
+                    double score = score_iter(m, iter);
+                    if (score > move_score)
+                      { move_score = score; move_kind = 1; move_a = a; move_b = b; }
+                    m.steckerbrett[a] = b;
+                    m.steckerbrett[b] = a;
+                  }
+            }
           else
           {
-#ifdef SHOWHILLCLIMB
-          fprintf(stderr, "  ");
-          for(int b=1; b<asize; b++)
-            fprintf(stderr, "   %c", num2char(b));
-          fprintf(stderr, "\n");
-#endif
           for(int a=0; a<asize; a++)
-          {
-#ifdef SHOWHILLCLIMB
-            fprintf(stderr, "%c:", num2char(a));
-            for(int b=1; b<a+1; b++)
-              fprintf(stderr, "    ");
-#endif
             for(int b=a+1; b<asize; b++)
               {
                 /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
                 if (plug_fixed[a] || plug_fixed[b])
                   continue;
 
-                /* at the cap, do not add a brand-new pair (both ends unplugged) */
-                if ((pairs >= max_pairs) &&
-                    (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b))
-                  continue;
+                int sa = m.steckerbrett[a];
+                int sb = m.steckerbrett[b];
+                bool a_free = (sa == a);
+                bool b_free = (sb == b);
+                bool paired = (sa == b);   /* a-b already a plug -> this toggle REMOVES it */
 
-                /* switch plugs */
-                int x = m.steckerbrett[a];
-                int y = m.steckerbrett[b];
-                int xx = m.steckerbrett[x];
-                int yy = m.steckerbrett[y];
-                m.steckerbrett[x] = x;
-                m.steckerbrett[y] = y;
-                m.steckerbrett[a] = b;
-                m.steckerbrett[b] = a;
+                /* cap gate by count-effect (a REMOVE is -1, so always allowed) */
+                if ((pairs >= max_pairs) && ! paired)
+                  {
+                    if (a_free && b_free)
+                      continue;                    /* block ADD (+1) */
+                    if (opt_capmerge && (a_free || b_free))
+                      continue;                    /* -M: block count-preserving MOVE (0) */
+                  }
+
+                int new_kind, x = 0, y = 0, xx = 0, yy = 0;
+                if (paired)
+                  {
+                    m.steckerbrett[a] = a;         /* REMOVE a-b */
+                    m.steckerbrett[b] = b;
+                    new_kind = 1;
+                  }
+                else
+                  {
+                    x = sa; y = sb;
+                    xx = m.steckerbrett[x];
+                    yy = m.steckerbrett[y];
+                    m.steckerbrett[x] = x;         /* force a-b: ADD / MOVE / MERGE */
+                    m.steckerbrett[y] = y;
+                    m.steckerbrett[a] = b;
+                    m.steckerbrett[b] = a;
+                    new_kind = 0;
+                  }
 
                 double score = score_iter(m, iter);
 
 #ifdef SHOWHILLCLIMB
-                fprintf(stderr, "%4.0f", (score - best_score)/10.0);
+                fprintf(stderr, "%c%c%s%4.0f  ", num2char(a), num2char(b),
+                        paired ? "-" : "+", (score - best_score)/10.0);
 #endif
 
-                if (score > move_score)
+                /* steepest ascent; a switch wins ties over a removal (as in the delta path,
+                   where a removal only replaces a strictly-better switch). */
+                if ((score > move_score) ||
+                    ((score == move_score) && (score > best_score) &&
+                     (new_kind == 0) && (move_kind == 1)))
                   {
                     move_score = score;
-                    move_kind = 0;
+                    move_kind = new_kind;
                     move_a = a;
                     move_b = b;
                   }
 
-                /* restore plugs */
-                m.steckerbrett[a] = x;
-                m.steckerbrett[b] = y;
-                m.steckerbrett[x] = xx;
-                m.steckerbrett[y] = yy;
+                if (paired)
+                  {
+                    m.steckerbrett[a] = b;         /* restore REMOVE */
+                    m.steckerbrett[b] = a;
+                  }
+                else
+                  {
+                    m.steckerbrett[a] = sa;        /* restore force */
+                    m.steckerbrett[b] = sb;
+                    m.steckerbrett[x] = xx;
+                    m.steckerbrett[y] = yy;
+                  }
               }
-#ifdef SHOWHILLCLIMB
-            printf("\n");
-#endif
-            }
           }
-
-          /* Removal moves: drop an existing plug pair, freeing both ends. The switch
-             moves can add, re-pair or merge plugs but never simply delete one, so a
-             staged climb that moved to a sharper model cannot shed a plug the previous
-             model set without this. At most 13 pairs are plugged, so it is cheap. */
-          for(int a=0; a<asize; a++)
-            if ((m.steckerbrett[a] > a) && ! plug_fixed[a])   /* never remove a fixed plug */
-              {
-                int b = m.steckerbrett[a];
-                m.steckerbrett[a] = a;
-                m.steckerbrett[b] = b;
-
-                double score = score_iter(m, iter);
-
-                if (score > move_score)
-                  {
-                    move_score = score;
-                    move_kind = 1;
-                    move_a = a;
-                    move_b = b;
-                  }
-
-                m.steckerbrett[a] = b;
-                m.steckerbrett[b] = a;
-              }
 
           if (move_score - best_score > 0)
             {
@@ -1335,10 +1568,12 @@ double hillclimb(machine & m, int max_pairs)
           iter++;
         }
       while (best_score > last_best);
+          cur = best_score;
+        }
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
          improves, loop back and let the cheap climb resume from the new board. */
-      if (try_repair(m, iter, best_score))
+      if (try_repair(m, iter, cur))
         progress = true;
       iter++;
     }
@@ -2497,6 +2732,12 @@ void help(FILE * out)
   fprintf(out, "               held fixed -- the -c/-A climb keeps them and finds the rest\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
   fprintf(out, "  -D           Delta-score mono/IC climb passes (exact, faster; needs -c)\n");
+  fprintf(out, "  -I           First-improvement climb: ~2.8x cheaper per climb, so pair\n");
+  fprintf(out, "               with more -R for a net recovery win (needs -c) [off]\n");
+  fprintf(out, "  -J           Like -I but with dynamic best-first move ordering; wins on\n");
+  fprintf(out, "               ~10-plug messages, may lose with few plugs (implies -I) [off]\n");
+  fprintf(out, "  -M           Make the plug cap a strict descent target: at/over the cap\n");
+  fprintf(out, "               only merge/remove moves; best with a tight -S cap (needs -c) [off]\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
@@ -2573,6 +2814,11 @@ void show_settings()
     fprintf(stderr, "            staged: %s\n", opt_staged);
   if (opt_hillclimb && opt_delta)
     fprintf(stderr, "            delta-scoring mono/IC passes\n");
+  if (opt_hillclimb && opt_capmerge)
+    fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
+  if (opt_hillclimb && opt_firstimprove)
+    fprintf(stderr, "            first-improvement climb%s\n",
+            opt_dynorder ? " (dynamic move order)" : "");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts > 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));
@@ -2651,6 +2897,9 @@ int main(int argc, char * * argv)
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_delta = 0;
+  opt_firstimprove = 0;
+  opt_dynorder = 0;
+  opt_capmerge = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
@@ -2666,7 +2915,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:Dimbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:DIJMimbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2711,8 +2960,18 @@ int main(int argc, char * * argv)
         case 'c':
           opt_hillclimb = 1;
           break;
+        case 'I':
+          opt_firstimprove = 1;
+          break;
+        case 'J':
+          opt_firstimprove = 1;   /* -J implies first-improvement */
+          opt_dynorder = 1;
+          break;
         case 'D':
           opt_delta = 1;
+          break;
+        case 'M':
+          opt_capmerge = 1;
           break;
         case 'S':
           opt_staged = optarg;
@@ -2916,6 +3175,7 @@ int main(int argc, char * * argv)
         }
     }
 
+
   /* The key pre-filter ranks every key by a cheap plugboard climb and runs the full
      climb only on the top -F keys, so it is only meaningful with -c. -F takes either
      an absolute count (opt_prefilter) or a percentage of the resolved keyspace
@@ -2937,6 +3197,14 @@ int main(int argc, char * * argv)
   /* -D accelerates mono/IC hill-climb passes, so it needs -c. */
   if (opt_delta && (! opt_hillclimb))
     fatal("Delta-scoring (-D) needs the plugboard hill-climb (-c)");
+
+  /* -I is a hill-climb strategy, so it needs -c. */
+  if (opt_firstimprove && (! opt_hillclimb))
+    fatal("First-improvement (-I) needs the plugboard hill-climb (-c)");
+
+  /* -M changes the plug-cap rule in the climb, so it needs -c. */
+  if (opt_capmerge && (! opt_hillclimb))
+    fatal("Cap-as-target (-M) needs the plugboard hill-climb (-c)");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully

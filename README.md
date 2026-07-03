@@ -146,7 +146,10 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | Option | Meaning |
 | --- | --- |
 | `-c` | Hill-climb the plugboard for each candidate key |
+| `-I` | First-improvement climb: ~2.8× cheaper per climb, so **pair with more `-R`** for a net matched-compute recovery win (needs `-c`; off by default) |
+| `-J` | Like `-I` but with **dynamic** best-first move ordering (implies `-I`); a further matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
 | `-D` | Exact delta-scoring for mono/IC climb passes (byte-identical, faster on **long** messages only; needs `-c`; off by default) |
+| `-M` | Make the plug cap a strict **descent target**: at/over the cap only merge/remove moves (no adds or reshuffles). A matched-compute win with a tight `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs `-c`; off by default) |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
 | `-A N` | Recover the plugboard by simulated annealing (move budget `N`) instead of the greedy climb (needs `-c`; `0` = off) `[0]` |
@@ -196,6 +199,10 @@ Usage: enigma [OPTIONS]
   -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];
                held fixed -- the -c/-A climb keeps them and finds the rest
   -c           Perform hill climbing to determine plugboard settings
+  -I           First-improvement climb: ~2.8x cheaper per climb, so pair
+               with more -R for a net recovery win (needs -c) [off]
+  -J           Like -I but with dynamic best-first move ordering; wins on
+               ~10-plug messages, may lose with few plugs (implies -I) [off]
   -D           Delta-score mono/IC climb passes (exact, faster; needs -c)
   -R integer   Plugboard hill-climb random restarts (1 = none) [1]
   -S schedule  Staged plugboard climb: <letter><opt.number> tokens.
@@ -261,17 +268,53 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   with a full plugboard even a good `N` recovers only around half of the hardest
   keys.
 
+- **`-I` — first-improvement climb.** Each plugboard climb is ~2.8× cheaper (it applies
+  the first improving move and sweeps circularly, instead of full-scanning for the single
+  best). A single `-I` climb recovers a bit *worse* than the default, so `-I` only pays
+  off when you **spend the saved time on more restarts**: pair it with a larger `-R` and,
+  at equal compute, it recovers noticeably more of a short message (measured +8 percentage
+  points of exact recovery, and up to +20 on messages with fewer plugs). Leave it off at
+  `-R 1`.
+
 A good general recipe for a hard (short) message with a known rotor key:
 
 ```sh
 ./enigma -c -R 20 -S iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+
+# faster climbs → more restarts for the same time: add -I and raise -R
+./enigma -c -I -R 55 -S iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+```
+
+**Cap the plug count in the schedule.** A real Wehrmacht board has ~10 plugs, so
+capping the final (quad) stage at 10 and the IC pre-pass lower — `-S i4q10` — keeps
+the climb from adding spurious plugs on the noisy short-message score, and (being
+cheaper) buys more restarts for the same budget. On ~50–80-letter 10-plug messages
+this recovers several percentage points more than `-S iq` at equal compute. The
+final quad cap of 10 is what matters; the IC pre-pass cap is a **flat plateau**
+(≈3–6 all tie, so the exact value barely matters — `i4` is a fine representative).
+The kick stays the default — a *small* kick like `r3` hurts:
+
+```sh
+./enigma -c -R 26 -S i4q10 -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+```
+
+If you know the board uses **few** plugs (say 6), cap at that count instead
+(`-S i4q6` or so) — there the cap is a large win, and adding **`-M`** makes it
+larger still: `-M` turns the cap into a strict descent target (at/over the cap the
+climb may only merge or remove plugs, never add or reshuffle), so a restart's random
+kick is cleanly pruned back down to the true count instead of leaving spurious plugs.
+On known-few-plug short messages this adds several more points (up to ~+20pp at the
+hardest lengths) at equal compute, and it climbs faster too:
+
+```sh
+./enigma -c -R 26 -S i4q6 -M -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 When you also brute-force the rotor key, add `-F` to shortlist keys and `-T` for
 threads:
 
 ```sh
-./enigma -c -R 20 -S iq -F 10% -T 4 -l english -u . -w ... -r AAA -g ... < cipher.txt
+./enigma -c -R 20 -S i4q10 -F 10% -T 4 -l english -u . -w ... -r AAA -g ... < cipher.txt
 ```
 
 Increase `-R` for harder messages.
