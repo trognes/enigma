@@ -1007,6 +1007,48 @@ but likely small payoff. Only pursue as a both-axes win under `make crackquality
 
 ---
 
+### 7.8 Cap-as-target climb rule — ✅ SHIPPED as `-M`
+
+**Idea.** The per-stage `-S` plug cap is enforced only as a *growth ceiling*: at/over
+the cap the switch scan blocks a brand-new **add** (both ends free) but still allows
+count-preserving **reshuffles** (endpoint-moves, `Δ=0`). So when a big per-restart kick
+(`-S rN`, default `N=8`) lands on a small stage cap (`i4`, `q6/q10`), the board *arrives
+over the cap* and the climb can converge still holding more plugs than the cap — the cap
+never pulls it down. `-M` makes the cap a strict **descent target**: at/over the cap, only
+**count-reducing** moves are allowed — a **merge** (both ends already plugged to different
+partners, `Δ=−1`) or a **remove** (`Δ=−1`) — blocking adds *and* reshuffles, so the climb
+must shed plugs to the cap. The **merge** is deliberately kept (not "removal-only"): it is
+the strongest descent move (−1 *and* score-improving in one step); dropping it (a strict
+removal-only rule, "variant 2") was reasoned to be worse and not built.
+
+**Result (matched compute, mean %-correct — the graded metric; `-S rNi4qK`).** Because
+`-M` is *cheaper* per climb (up to ~2.7× fewer `score_iter` in the `q6` regime — quad
+converges from a tidy ≤cap basin), it is compared at matched compute (baseline `-R 26` vs
+`-M` at the higher `-R` its lower per-climb cost buys). The win **grows as the true plug
+count falls below the cap**:
+
+| regime | N4 | N6 | N8 | N10 |
+|---|---|---|---|---|
+| `PAIRS=10`, `q10` cap, 4 seeds | +4.5 | −0.4 | −0.1 | **+2.6** |
+| `PAIRS=6`,  `q6`  cap, 4 seeds | +2.7 | +3.9 | +5.8 | **+7.1** |
+
+On realistic 10-plug boards it is neutral at the sweet-spot kicks (`N≈6–8`, within noise)
+and a solid **+2.6pp at `N=10`** (the true-count kick, the best operating point; robust
+across all lengths). On **known-few-plug** boards (`q6`) it is a large win that grows with
+kick size and **concentrates at the short/hard end** — `N=10` gives **+20.6pp at L40**,
++8.9 at L50, tapering as length eases. Every miss the baseline makes here is it wasting the
+climb reshuffling an over-cap board; `-M` spends that budget descending to the true count.
+
+**Why the IC-cap plateau (§ "already shipped") is real without `-M`.** The reason
+`-S i3q…`…`i6q…` tie by default is exactly this: on the dominant perturbed restarts the
+board is already over the IC cap, so the cap can't build *or* prune it — it only gates a
+re-add. `-M` is what makes a tight cap actually bite. So the recipe is regime-dependent:
+`~10 plugs → -S rNi4q10` (kick near 10, `-M` optional, small gain); `known-few → -S i4qK -M`
+(cap at the true count `K`, `-M` on — the large win). Off by default (needs `-c`),
+`-T`-deterministic, full suite green.
+
+---
+
 ## 8. Novel / higher-risk
 
 - **Distributional-assignment plug seed (§6.1's cousin, via Hungarian/matching).**
@@ -1142,7 +1184,9 @@ mono/IC delta-scoring** (opt-in; byte-identical; a long-message-only speedup —
 **`-I` circular first-improvement** (opt-in; ~2.8× cheaper/climb; a matched-compute
 recovery win when paired with more `-R` — §7.2), **`-J` first-improvement + dynamic
 per-restart best-first ordering** (opt-in; +2–6pp mean on the realistic ~10-plug regime
-at matched compute; regime-dependent — §7.2).
+at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in; at/over the
+`-S` cap only merge/remove moves; matched-compute win growing as true plugs fall below the
+cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
 Rejected (with reason): **static (fixed-across-restarts) informed move order** (greedy
 *and* diversity-collapsing — §7.2); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
 chars — warm short-message quad decodes too cheap to skip; only wins ≥150 chars; the IC

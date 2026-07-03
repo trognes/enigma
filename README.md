@@ -149,6 +149,7 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | `-I` | First-improvement climb: ~2.8× cheaper per climb, so **pair with more `-R`** for a net matched-compute recovery win (needs `-c`; off by default) |
 | `-J` | Like `-I` but with **dynamic** best-first move ordering (implies `-I`); a further matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
 | `-D` | Exact delta-scoring for mono/IC climb passes (byte-identical, faster on **long** messages only; needs `-c`; off by default) |
+| `-M` | Make the plug cap a strict **descent target**: at/over the cap only merge/remove moves (no adds or reshuffles). A matched-compute win with a tight `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs `-c`; off by default) |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
 | `-A N` | Recover the plugboard by simulated annealing (move budget `N`) instead of the greedy climb (needs `-c`; `0` = off) `[0]` |
@@ -298,7 +299,16 @@ The kick stays the default — a *small* kick like `r3` hurts:
 ```
 
 If you know the board uses **few** plugs (say 6), cap at that count instead
-(`-S i4q6` or so) — there the cap is a large win.
+(`-S i4q6` or so) — there the cap is a large win, and adding **`-M`** makes it
+larger still: `-M` turns the cap into a strict descent target (at/over the cap the
+climb may only merge or remove plugs, never add or reshuffle), so a restart's random
+kick is cleanly pruned back down to the true count instead of leaving spurious plugs.
+On known-few-plug short messages this adds several more points (up to ~+20pp at the
+hardest lengths) at equal compute, and it climbs faster too:
+
+```sh
+./enigma -c -R 26 -S i4q6 -M -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+```
 
 When you also brute-force the rotor key, add `-F` to shortlist keys and `-T` for
 threads:

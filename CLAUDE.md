@@ -174,6 +174,26 @@ any working directory.
   IC ~5–7%). The §7.1a *surrogate-ranking* form (rank by a cheap surrogate, full-quad
   only a top-K) was **rejected** — ~1.5× slower at 50 chars and the IC ranker collapses
   recovery (`performance.md` §7.1). `-T`-deterministic; TSan-clean.
+- `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
+  cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
+  cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an
+  over-cap board — the common case when a big `-S rN` kick lands on a small stage cap —
+  can converge still holding more plugs than the cap, merely reshuffled. `-M` makes the
+  cap a strict **descent target**: at/over the cap only **count-reducing** moves are
+  allowed (**merge** — both ends already plugged to different partners → −1 — and
+  **remove**), blocking adds *and* count-preserving endpoint-moves, so the climb must shed
+  plugs down to the cap while keeping the strongest descent move (the merge). Measured a
+  **matched-compute win that grows as the true plug count falls below the cap**: neutral-to
+  -**+2.6pp** mean %-correct on realistic 10-plug boards (`-S rNi4q10`, best at the
+  true-count kick `N≈10`), and **+3…+20pp** on **known-few-plug** boards (`-S rNi4q6`,
+  largest at the short/hard end — +20pp at L40) — because forcing a clean descent stops the
+  baseline wasting its climb reshuffling an over-cap board. It is also **cheaper per climb**
+  (up to ~2.7× fewer `score_iter` in the `q6` regime: quad converges from a tidy ≤cap
+  basin), so at matched compute it earns many more restarts. Most useful with a **tight
+  `-S` target cap**; near-inert (harmless) with no cap set. `-T`-deterministic. (The reason
+  the IC-pre-pass cap in `-S i4q…` is a *flat plateau* by default is that without `-M` the
+  cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
+  `performance.md` §7.3.)
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC

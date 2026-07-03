@@ -140,14 +140,17 @@ static int opt_firstimprove;
    order). Measured win on the realistic ~10-plug regime (+2-6pp mean at matched compute);
    a loss when few plugs are truly set. Implies -I; off by default; needs -c. */
 static int opt_dynorder;
-/* PROTOTYPE (env ENIGMA_CAPMERGE=1): change the plug-cap rule in the steepest-ascent
-   climb. Default (0): at/over the cap only a brand-new add (both ends free) is blocked,
-   so an over-cap board (a big -S rN kick handed to a small stage cap) can converge still
-   over the cap, merely reshuffled. With this on: at/over the cap allow only count-REDUCING
-   switch moves (merges: both ends already plugged to different partners) plus removals,
-   blocking adds AND count-preserving endpoint-moves -- so the cap becomes a real target the
-   climb must descend to, while keeping the strongest descent move (the merge). Env-gated so
-   it is byte-identical to shipped behaviour when unset; a measurement prototype only. */
+/* -M: make the plug cap a strict descent TARGET, not just a growth ceiling. Default (0):
+   at/over the cap only a brand-new add (both ends free) is blocked, so an over-cap board
+   (a big -S rN kick handed to a small stage cap) can converge still over the cap, merely
+   reshuffled. With -M: at/over the cap allow only count-REDUCING moves (merges -- both ends
+   already plugged to different partners -- plus removals), blocking adds AND count-preserving
+   endpoint-moves, so the climb must shed plugs down to the cap while keeping the strongest
+   descent move (the merge). Measured a matched-compute win that grows as the true plug count
+   falls below the cap: neutral-to-+2.6pp on realistic 10-plug boards (best at the true-count
+   kick), and +3..+20pp on known-few-plug boards (-S ...q6), largest at the short/hard end;
+   it is also cheaper per climb (quad converges from a tidy basin). Off by default; needs -c.
+   Most useful with a tight -S target cap; near-inert (harmless) with no cap. */
 static int opt_capmerge;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
@@ -2720,6 +2723,8 @@ void help(FILE * out)
   fprintf(out, "               with more -R for a net recovery win (needs -c) [off]\n");
   fprintf(out, "  -J           Like -I but with dynamic best-first move ordering; wins on\n");
   fprintf(out, "               ~10-plug messages, may lose with few plugs (implies -I) [off]\n");
+  fprintf(out, "  -M           Make the plug cap a strict descent target: at/over the cap\n");
+  fprintf(out, "               only merge/remove moves; best with a tight -S cap (needs -c) [off]\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
@@ -2796,6 +2801,8 @@ void show_settings()
     fprintf(stderr, "            staged: %s\n", opt_staged);
   if (opt_hillclimb && opt_delta)
     fprintf(stderr, "            delta-scoring mono/IC passes\n");
+  if (opt_hillclimb && opt_capmerge)
+    fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" : "");
@@ -2879,6 +2886,7 @@ int main(int argc, char * * argv)
   opt_delta = 0;
   opt_firstimprove = 0;
   opt_dynorder = 0;
+  opt_capmerge = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
@@ -2894,7 +2902,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:DIJimbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:DIJMimbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2948,6 +2956,9 @@ int main(int argc, char * * argv)
           break;
         case 'D':
           opt_delta = 1;
+          break;
+        case 'M':
+          opt_capmerge = 1;
           break;
         case 'S':
           opt_staged = optarg;
@@ -3151,11 +3162,6 @@ int main(int argc, char * * argv)
         }
     }
 
-  /* PROTOTYPE: env-gated cap-merge rule (see opt_capmerge). Off unless set. */
-  {
-    const char * cm = getenv("ENIGMA_CAPMERGE");
-    opt_capmerge = (cm && *cm && *cm != '0') ? 1 : 0;
-  }
 
   /* The key pre-filter ranks every key by a cheap plugboard climb and runs the full
      climb only on the top -F keys, so it is only meaningful with -c. -F takes either
@@ -3182,6 +3188,10 @@ int main(int argc, char * * argv)
   /* -I is a hill-climb strategy, so it needs -c. */
   if (opt_firstimprove && (! opt_hillclimb))
     fatal("First-improvement (-I) needs the plugboard hill-climb (-c)");
+
+  /* -M changes the plug-cap rule in the climb, so it needs -c. */
+  if (opt_capmerge && (! opt_hillclimb))
+    fatal("Cap-as-target (-M) needs the plugboard hill-climb (-c)");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully

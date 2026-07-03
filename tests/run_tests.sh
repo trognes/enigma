@@ -535,6 +535,18 @@ check "dynamic-order -J: result is -T-independent" \
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -J >/dev/null 2>&1
 check "dynamic-order -J: without -c rejected (exit code)" "$?" "1"
 
+# -M: make the plug cap a strict descent target (merge/remove only at/over the cap). A
+# different (non-byte-identical) trajectory, so checked by recovery + determinism, not
+# equality; deterministic so -T-independent; needs -c; still recovers on an easy message.
+check "cap-target -M: recovers plaintext (long msg + capped schedule)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -M -R 8 -S i4q10)" \
+  "$f_pt"
+check "cap-target -M: result is -T-independent" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -M -R 8 -S i4q10 -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -M -R 8 -S i4q10 -T 4)"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -M >/dev/null 2>&1
+check "cap-target -M: without -c rejected (exit code)" "$?" "1"
+
 # Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
 # from the per-key RNG stream (seeded from the flat key index), so an SA search must
 # stay independent of -T just like the restart climb. Recover the plugboard on the
