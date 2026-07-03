@@ -489,11 +489,13 @@ range and is not viable.
   and the `ciphertext` / `num_ciphertext` / `textlength` input. (`-Wshadow` is on;
   the redundant `textlength`/`ciphertext`/`plaintext` parameters that used to
   shadow the globals were removed earlier.)
-- Debug instrumentation is intentionally retained: `showit`, `showconfig`,
-  `showsteckerbrett`, and the `#if 0` trace blocks. (The `SHOWHILLCLIMB` compile-time
-  climb-trace path was removed, taking the vestigial per-climb `iter` counter with it;
-  the earlier `all_subst_score`/`map`/`opt_threads`/`opt_logfilename` dead code is gone
-  too — see `CODE_REVIEW_HISTORY.md` §3.)
+- The live diagnostics are `showconfig` / `showsteckerbrett` (echo the winning key +
+  plugboard on a new best) and `show_settings` (echo the resolved config at startup).
+  The unused debug scaffolding has been removed: the `SHOWHILLCLIMB` compile-time
+  climb-trace path (and its vestigial per-climb `iter` counter), the `#if 0` blocks and
+  the dead `ciphertext_letterdist`/`compare`/`count`/`order` cluster that only fed one,
+  and the earlier `all_subst_score`/`map`/`opt_threads`/`opt_logfilename` dead code
+  (see `CODE_REVIEW_HISTORY.md` §3).
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).

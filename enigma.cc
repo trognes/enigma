@@ -784,15 +784,10 @@ double ic_score_decode(machine & m)
 
 void showsteckerbrett(machine & m)
 {
-#if 0
-  for (int j=0; j<asize; j++)
-    putchar(num2char(m.steckerbrett[j]));
-#else
   fprintf(stderr, "S:");
   for (int j=0; j<asize; j++)
     if (m.steckerbrett[j] > j)
       fprintf(stderr, " %c%c", num2char(j), num2char(m.steckerbrett[j]));
-#endif
 }
 
 void showconfig(machine & m)
@@ -886,43 +881,6 @@ double score_iter(machine & m)
     score /= nterms;
 
   return score;
-}
-
-int count[asize];
-int order[asize];
-
-int compare(const void * x, const void * y)
-{
-  int a = count[*static_cast<const int*>(x)];
-  int b = count[*static_cast<const int*>(y)];
-
-  if (a<b)
-    return +1;
-  else if (a>b)
-    return -1;
-  else
-    return 0;
-}
-
-void ciphertext_letterdist()
-{
-  for(int j=0; j<asize; j++)
-    {
-      count[j]=0;
-      order[j] = j;
-    }
-
-  for (int i=0; i<textlength; i++)
-    count[char2num(ciphertext[i])]++;
-
-  qsort(order, asize, sizeof(int), compare);
-
-#if 0
-  fprintf(stderr, "Ciphertext letter order: ");
-  for(int j=0; j<asize; j++)
-    fprintf(stderr, "%c", num2char(order[j]));
-  fprintf(stderr, "\n");
-#endif
 }
 
 /* --- plugboard hill-climb (steckerbrett) -------------------------------- */
@@ -3099,8 +3057,6 @@ int main(int argc, char * * argv)
 
   for(int i=0; i< textlength; i++)
     num_ciphertext[i] = char2num(ciphertext[i]);
-
-  ciphertext_letterdist();
 
   init();
 
