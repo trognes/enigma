@@ -341,12 +341,20 @@ A single pass through `main()`:
      scorers fuse the decode into their loop). The best is merged under a mutex
      (which also serialises the live progress line). Parallelising the flat key
      space means rings/starts scale even when the wheels are fixed.
-   - With `-c`, `hillclimb()` greedily improves the plugboard: each pass takes the
-     single best "switch a–b" or "remove an existing pair" move, run to convergence;
-     then one "re-pair" move (`try_repair()`, re-match two plugs into the other
-     pairing) is tried as a barrier-cross, and if it improves the cheap climb resumes.
-     Removal lets a staged climb shed plugs an earlier model set; re-pair is a general
-     local-optima escape gated to fire only at convergence (~zero cost). See
+   - With `-c`, `hillclimb()` greedily improves the plugboard: each pass scans a single
+     **"toggle a–b"** operator over all 325 letter pairs — one operator that, by the
+     current state of a and b, *adds* a new plug (both ends free), *moves* an endpoint
+     (one end plugged), *merges* two plugs into one (both plugged, different partners), or
+     *removes* the a–b plug (a and b already paired) — and takes the single best improving
+     toggle, run to convergence. (Folding removal in as the already-paired case is what
+     lets one scan replace the former separate switch-scan + removal-loop; a switch still
+     wins ties over a removal, so it stays byte-identical.) Then one "re-pair" move
+     (`try_repair()`, re-match two plugs into the other pairing — the one count-neutral
+     two-plug move a single toggle can't express) is tried as a barrier-cross, and if it
+     improves the cheap climb resumes; re-pair is a general local-optima escape gated to
+     fire only at convergence (~zero cost). The plug cap gates the toggle by count-effect:
+     an *add* is blocked at/over the cap, and with `-M` a count-preserving *move* too, so
+     only the count-reducing *merge*/*remove* remain (cap as a strict descent target). See
      `CODE_REVIEW_HISTORY.md` §9 item 7.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
    final stderr diagnostic reports the number of rotor combinations analysed

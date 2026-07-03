@@ -1410,111 +1410,117 @@ double hillclimb(machine & m, int max_pairs)
 
           //#define SHOWHILLCLIMB
 
-          /* -D: exact delta-accelerated switch scan for the mono/IC models (byte-identical
-             to the baseline full scan, fewer full decodes). Quad/bigram/trigram always run
-             the baseline scan (delta-quad was measured ~2x slower). */
-          if (opt_delta && ((m.scoring == SCORE_IC) || (m.scoring == SCORE_MONO)))
-            delta_switch_scan(m, iter, max_pairs, pairs,
-                              move_score, move_kind, move_a, move_b);
+          /* One "toggle a-b" operator over all 325 letter pairs expresses every plug move
+             by the current state of a and b: both ends free -> ADD a-b (+1 pair); exactly
+             one end plugged -> MOVE that plug's endpoint (0); both ends plugged to different
+             partners -> MERGE two plugs into one (-1); a-b already a pair -> REMOVE it (-1).
+             Steepest ascent takes the single best improving toggle per pass. The plug cap
+             gates by count-effect: at/over the cap an ADD is always blocked, and with -M
+             (opt_capmerge) a count-preserving MOVE too, so only the count-reducing MERGE and
+             REMOVE survive -- the cap becomes a strict descent target. (Folding removal in as
+             the already-paired toggle case is what lets a single scan replace the old
+             separate switch-scan + removal-loop pair.)
+
+             -D: for mono/IC, delta_switch_scan replaces the ADD/MOVE/MERGE (switch) scan with
+             an exact incremental one (fewer full decodes); removals stay a cheap exact tail.
+             -M routes to the folded scan for all models so its cap rule always holds. */
+          if (opt_delta && ! opt_capmerge
+              && ((m.scoring == SCORE_IC) || (m.scoring == SCORE_MONO)))
+            {
+              delta_switch_scan(m, iter, max_pairs, pairs,
+                                move_score, move_kind, move_a, move_b);
+
+              /* removals (the already-paired toggle case): a removal only wins on a strict
+                 improvement, so switches keep ties -- matching the folded scan's tie-break. */
+              for (int a = 0; a < asize; a++)
+                if ((m.steckerbrett[a] > a) && ! plug_fixed[a])
+                  {
+                    int b = m.steckerbrett[a];
+                    m.steckerbrett[a] = a;
+                    m.steckerbrett[b] = b;
+                    double score = score_iter(m, iter);
+                    if (score > move_score)
+                      { move_score = score; move_kind = 1; move_a = a; move_b = b; }
+                    m.steckerbrett[a] = b;
+                    m.steckerbrett[b] = a;
+                  }
+            }
           else
           {
-#ifdef SHOWHILLCLIMB
-          fprintf(stderr, "  ");
-          for(int b=1; b<asize; b++)
-            fprintf(stderr, "   %c", num2char(b));
-          fprintf(stderr, "\n");
-#endif
           for(int a=0; a<asize; a++)
-          {
-#ifdef SHOWHILLCLIMB
-            fprintf(stderr, "%c:", num2char(a));
-            for(int b=1; b<a+1; b++)
-              fprintf(stderr, "    ");
-#endif
             for(int b=a+1; b<asize; b++)
               {
                 /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
                 if (plug_fixed[a] || plug_fixed[b])
                   continue;
 
-                /* at the cap, do not add a brand-new pair (both ends unplugged) */
-                if ((pairs >= max_pairs) &&
-                    (m.steckerbrett[a] == a) && (m.steckerbrett[b] == b))
-                  continue;
+                int sa = m.steckerbrett[a];
+                int sb = m.steckerbrett[b];
+                bool a_free = (sa == a);
+                bool b_free = (sb == b);
+                bool paired = (sa == b);   /* a-b already a plug -> this toggle REMOVES it */
 
-                /* PROTOTYPE (ENIGMA_CAPMERGE): at/over the cap also block count-preserving
-                   endpoint-moves (exactly one end plugged), leaving only merges (both ends
-                   plugged to different partners -> -1) and the removal loop -- so the climb
-                   can only shed pairs while at/over the cap. */
-                if (opt_capmerge && (pairs >= max_pairs))
+                /* cap gate by count-effect (a REMOVE is -1, so always allowed) */
+                if ((pairs >= max_pairs) && ! paired)
                   {
-                    bool pa = (m.steckerbrett[a] != a);
-                    bool pb = (m.steckerbrett[b] != b);
-                    bool merge = pa && pb && (m.steckerbrett[a] != b);
-                    if (! merge)
-                      continue;
+                    if (a_free && b_free)
+                      continue;                    /* block ADD (+1) */
+                    if (opt_capmerge && (a_free || b_free))
+                      continue;                    /* -M: block count-preserving MOVE (0) */
                   }
 
-                /* switch plugs */
-                int x = m.steckerbrett[a];
-                int y = m.steckerbrett[b];
-                int xx = m.steckerbrett[x];
-                int yy = m.steckerbrett[y];
-                m.steckerbrett[x] = x;
-                m.steckerbrett[y] = y;
-                m.steckerbrett[a] = b;
-                m.steckerbrett[b] = a;
+                int new_kind, x = 0, y = 0, xx = 0, yy = 0;
+                if (paired)
+                  {
+                    m.steckerbrett[a] = a;         /* REMOVE a-b */
+                    m.steckerbrett[b] = b;
+                    new_kind = 1;
+                  }
+                else
+                  {
+                    x = sa; y = sb;
+                    xx = m.steckerbrett[x];
+                    yy = m.steckerbrett[y];
+                    m.steckerbrett[x] = x;         /* force a-b: ADD / MOVE / MERGE */
+                    m.steckerbrett[y] = y;
+                    m.steckerbrett[a] = b;
+                    m.steckerbrett[b] = a;
+                    new_kind = 0;
+                  }
 
                 double score = score_iter(m, iter);
 
 #ifdef SHOWHILLCLIMB
-                fprintf(stderr, "%4.0f", (score - best_score)/10.0);
+                fprintf(stderr, "%c%c%s%4.0f  ", num2char(a), num2char(b),
+                        paired ? "-" : "+", (score - best_score)/10.0);
 #endif
 
-                if (score > move_score)
+                /* steepest ascent; a switch wins ties over a removal (as in the delta path,
+                   where a removal only replaces a strictly-better switch). */
+                if ((score > move_score) ||
+                    ((score == move_score) && (score > best_score) &&
+                     (new_kind == 0) && (move_kind == 1)))
                   {
                     move_score = score;
-                    move_kind = 0;
+                    move_kind = new_kind;
                     move_a = a;
                     move_b = b;
                   }
 
-                /* restore plugs */
-                m.steckerbrett[a] = x;
-                m.steckerbrett[b] = y;
-                m.steckerbrett[x] = xx;
-                m.steckerbrett[y] = yy;
+                if (paired)
+                  {
+                    m.steckerbrett[a] = b;         /* restore REMOVE */
+                    m.steckerbrett[b] = a;
+                  }
+                else
+                  {
+                    m.steckerbrett[a] = sa;        /* restore force */
+                    m.steckerbrett[b] = sb;
+                    m.steckerbrett[x] = xx;
+                    m.steckerbrett[y] = yy;
+                  }
               }
-#ifdef SHOWHILLCLIMB
-            printf("\n");
-#endif
-            }
           }
-
-          /* Removal moves: drop an existing plug pair, freeing both ends. The switch
-             moves can add, re-pair or merge plugs but never simply delete one, so a
-             staged climb that moved to a sharper model cannot shed a plug the previous
-             model set without this. At most 13 pairs are plugged, so it is cheap. */
-          for(int a=0; a<asize; a++)
-            if ((m.steckerbrett[a] > a) && ! plug_fixed[a])   /* never remove a fixed plug */
-              {
-                int b = m.steckerbrett[a];
-                m.steckerbrett[a] = a;
-                m.steckerbrett[b] = b;
-
-                double score = score_iter(m, iter);
-
-                if (score > move_score)
-                  {
-                    move_score = score;
-                    move_kind = 1;
-                    move_a = a;
-                    move_b = b;
-                  }
-
-                m.steckerbrett[a] = b;
-                m.steckerbrett[b] = a;
-              }
 
           if (move_score - best_score > 0)
             {
