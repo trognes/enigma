@@ -181,37 +181,41 @@ Not shipped. Do not re-attempt without a materially different mechanism (the unt
 levers — threshold, elite size, `R` — were all swept and none crosses the equal-compute
 `-R` line).
 
-### 3.2 Portfolio: per-key `max(greedy, SA)` (HIGH priority)
+### 3.2 Portfolio: per-key `max(greedy, SA)` — ❌ MEASURED, REJECTED
 
-**Form in this codebase.** The repo's own finding is that SA (`-A`) is a *peer* of
-greedy `-R -S iq`, not a strict win — which is the textbook precondition for a
-**portfolio**: two solvers that fail on *different* keys. For each rotor key, run
-the greedy restart climb at half the budget and one SA trajectory at half the
-budget, and keep the better board. No new algorithm, no new landscape, no new
-tuning — just call both existing solvers per key and take the max. Deterministic
-(both already ride the per-key RNG stream).
+**Form.** For each rotor key run greedy at half budget and one SA trajectory at half
+budget, keep the better board. The pitch was near-free upside: SA is a *peer* of greedy,
+so (it was argued) they fail on *different* keys and `max` captures the union.
 
-**Why it helps at 50 chars.** If greedy solves set A of keys and SA solves set B,
-and A ≠ B, then `max(greedy, SA)` solves `A ∪ B` — strictly at least as many as
-either alone, for the same total compute (each at half budget). The "SA is a peer,
-not a win" result is precisely the evidence that A and B differ; a strict winner
-would make the portfolio pointless, but a peer makes it near-free upside.
+**Measured (crackquality, PAIRS=10, L70/80/90, 100 trials × 2 seeds, matched `score_iter`:
+greedy `-R20 -S iq` ≈ SA `-A6000 -R12 -S iq` ≈ 132k).** The portfolio at matched compute is
+**neutral-to-negative** — Δ vs the best single solver: −2/+0/−1 (seed 1) and −5/−7/+2 (seed 2),
+averaging ~−3pp, never a clean win. Rejected. Two-part reason, and the second half is the
+non-obvious one:
 
-**Honest payoff.** Potentially the **highest ROI in the document**: zero new
-mechanism, trivial determinism, and it directly monetizes the shipped SA work that
-otherwise sits as a mere alternative. The risk is the opposite — if the two
-solvers' solved-sets turn out to be nearly *nested* (SA solves a strict subset of
-greedy's keys), the union adds nothing and half-budget-each simply weakens the
-better solver. That is the one thing to measure first.
+- **The complementarity is real** — so the doc's *falsifier* (nested solved-sets) did **not**
+  hold. At *double* budget (each solver at full B, "either solves") the union beats the best
+  single by **+10–17pp**: greedy and SA genuinely fail on different keys (SA's stochastic
+  acceptance escapes different local optima than greedy's restarts). The overlap check
+  confirmed large `greedy-only` **and** `SA-only` sets.
+- **But the budget split cancels it.** Halving each solver to fund both costs ~11–14pp per
+  solver (recovery has not saturated at these budgets), and that loss almost exactly cancels
+  the union gain, so `max(halves) ≈ best single @B`. **And when one solver dominates at a
+  given compute (SA out-recovered greedy in both seeds), the portfolio is strictly worse** —
+  it spends half the budget on the weaker solver. A portfolio only helps when neither solver
+  dominates *and* the split is cheap; here one usually dominates and the split is expensive.
 
-**Cost/risk.** Very low (an orchestration change; both solvers exist). The only
-subtlety is the budget split — half each is the neutral default; sweep it.
+**Where the original reasoning failed.** "SA is a peer ⇒ the solved-sets differ" is an
+invalid inference (equal *average* recovery is consistent with identical *or* disjoint
+solved-sets); the sets happened to differ anyway, but the argument never priced in the cost
+of running each solver at half budget, which is what actually sinks it.
 
-**Experiment.** `make crackquality SPLIT=1` at L40–120 at **equal total
-`score_iter`**: portfolio (greedy@½ + SA@½) vs greedy-only@full vs SA-only@full.
-The claim is "fewer misses because the union of solved keys is larger"; the
-falsifier is "the solved-sets are nested, so the union is no bigger than the
-better solver." Also log per-trial *which* solver won, to confirm the sets differ.
+**Takeaway.** Don't split — identify and run the single best solver at full budget. The real
+complementarity (~+15pp at 2B) is worth capturing, but *only* without the halving penalty,
+which a post-hoc `max` of two independent runs cannot do — a single trajectory that blends
+exploration and exploitation can (→ ILS, §3.3). Side finding worth its own check: at matched
+`score_iter`, SA-with-restarts consistently out-recovered greedy here, so SA may be underused
+as the *primary* solver rather than a mere peer.
 
 ### 3.3 Iterated Local Search with incumbent-walk acceptance (HIGH priority)
 
@@ -1145,14 +1149,14 @@ Build this first; several ideas below only become measurable once it exists.
 > compute, and becomes a no-op as `R` grows because best-of-`R` saturates). It is
 > rejected; see §3.1. The list below is the reassigned top three.
 
-1. **Portfolio `max(greedy, SA)` (§3.2).** Near-free upside that directly monetizes
-   the shipped "SA is a peer, not a win" finding: run both existing solvers at half
-   budget each per key and keep the better board. Zero new algorithm, trivial
-   determinism. The one thing to check is that the two solvers' solved-sets actually
-   *differ* (not nested); the finding that SA is a *peer* is exactly the evidence they
-   do. **Unlike consensus, this does not re-climb a shared seed** — it keeps two
-   genuinely independent trajectories, so it is not subject to the best-of-`R`
-   saturation that sank §3.1.
+1. **~~Portfolio `max(greedy, SA)` (§3.2)~~ — built, measured, REJECTED.** The reassigned
+   #1 met the same fate as the original. It was *not* the expected failure (nested
+   solved-sets): greedy and SA are genuinely complementary (+10–17pp union at double budget).
+   But at matched compute the budget split cancels that gain — `max(greedy@½, SA@½)` is
+   neutral-to-negative vs the best single solver @full (~−3pp avg, worst −7pp over 2 seeds),
+   and strictly worse whenever one solver dominates (SA usually did). The lesson: run the best
+   *single* solver at full budget; capturing the real complementarity needs a single blended
+   trajectory, not a post-hoc max (→ item 3, ILS). See §3.2.
 
 2. **A per-climb throughput lever — first-improvement (§7.2). ✅ DONE, shipped as `-I`.**
    The prediction held: cutting the *number* of evaluations (not the cost of each) with
