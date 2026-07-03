@@ -133,6 +133,13 @@ static int opt_delta;
    restart (a different, noisier trajectory), so it is a *throughput multiplier*: pair it
    with more restarts (-R) and it wins at equal compute. Off by default; needs -c. */
 static int opt_firstimprove;
+/* -J: first-improvement (-I) with DYNAMIC best-first move ordering. Each climb first
+   scores every move once against the starting (perturbed) board, sorts, and then runs the
+   circular first-improvement in that order. The order is rebuilt per restart, so it
+   front-loads good moves without collapsing restart diversity (unlike the rejected static
+   order). Measured win on the realistic ~10-plug regime (+2-6pp mean at matched compute);
+   a loss when few plugs are truly set. Implies -I; off by default; needs -c. */
+static int opt_dynorder;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
@@ -1224,10 +1231,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
      idea. The order is derived per climb from the (perturbed) starting board, so it
      differs per restart; deterministic (fixed board + tie-break) -> -T-independent. Costs
      one extra full scan per climb. */
-  static const bool dyn_order = []() {
-    const char * e = getenv("ENIGMA_FI_DYN");
-    return e && (atoi(e) != 0);
-  }();
+  const bool dyn_order = (opt_dynorder != 0);
   int visit[nmoves];
   if (dyn_order)
     {
@@ -2692,6 +2696,8 @@ void help(FILE * out)
   fprintf(out, "  -D           Delta-score mono/IC climb passes (exact, faster; needs -c)\n");
   fprintf(out, "  -I           First-improvement climb: ~2.8x cheaper per climb, so pair\n");
   fprintf(out, "               with more -R for a net recovery win (needs -c) [off]\n");
+  fprintf(out, "  -J           Like -I but with dynamic best-first move ordering; wins on\n");
+  fprintf(out, "               ~10-plug messages, may lose with few plugs (implies -I) [off]\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
@@ -2769,7 +2775,8 @@ void show_settings()
   if (opt_hillclimb && opt_delta)
     fprintf(stderr, "            delta-scoring mono/IC passes\n");
   if (opt_hillclimb && opt_firstimprove)
-    fprintf(stderr, "            first-improvement climb\n");
+    fprintf(stderr, "            first-improvement climb%s\n",
+            opt_dynorder ? " (dynamic move order)" : "");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts > 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));
@@ -2849,6 +2856,7 @@ int main(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_delta = 0;
   opt_firstimprove = 0;
+  opt_dynorder = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
@@ -2864,7 +2872,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:DIimbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:DIJimbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2911,6 +2919,10 @@ int main(int argc, char * * argv)
           break;
         case 'I':
           opt_firstimprove = 1;
+          break;
+        case 'J':
+          opt_firstimprove = 1;   /* -J implies first-improvement */
+          opt_dynorder = 1;
           break;
         case 'D':
           opt_delta = 1;

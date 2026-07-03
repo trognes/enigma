@@ -142,6 +142,17 @@ any working directory.
   with more `-R` and it wins at **matched compute** (+8pp exact / +1–23pp mean %-correct at
   L40–60, scaling with how much signal the message has — `performance.md` §7.2). Because a
   user at the default `-R 1` would get worse results, it is opt-in.
+- `-J` **first-improvement with dynamic best-first move ordering** (implies `-I`; needs
+  `-c`; off by default). Each climb first scores *every* move once against its starting
+  (perturbed) board, sorts, and runs the circular first-improvement in that order — the
+  order is rebuilt **per restart**, so it front-loads good moves *without* collapsing the
+  restart diversity that a *static* (fixed-across-restarts) informed order destroys. Costs
+  +24% `score_iter`/climb (the extra scan), so it is compared at matched compute
+  (`-J -R 18` ≈ `-I -R 22`). Measured a **robust win on the realistic ~10-plug regime**
+  (+2–6pp mean %-correct at L40–60, two seeds) and a **loss at 6 plugs** (best-first
+  over-commits when few plugs are truly needed), hence opt-in. 10 plugs is the
+  `crackquality` default and standard Wehrmacht, so the win lands on the hard/realistic
+  case. Static frequency-ordering was measured and **rejected** (`performance.md` §7.2).
 - `-D` **exact delta-scoring** for mono/IC hill-climb passes (needs `-c`; off by
   default). Finds the best switch move by an incremental O(affected-positions) score
   delta over a per-pass inverted index (positions by ciphertext input letter and by

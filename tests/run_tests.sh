@@ -523,6 +523,18 @@ check "first-improve -I: result is -T-independent" \
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -I >/dev/null 2>&1
 check "first-improve -I: without -c rejected (exit code)" "$?" "1"
 
+# -J: first-improvement with dynamic best-first move ordering (implies -I). A different
+# trajectory again, so checked by recovery + determinism, not equality; deterministic
+# (order derived from the fixed board, fixed tie-break) so -T-independent; needs -c.
+check "dynamic-order -J: recovers plaintext (long msg + restarts)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -J -R 8 -S iq)" \
+  "$f_pt"
+check "dynamic-order -J: result is -T-independent" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -J -R 8 -S iq -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -J -R 8 -S iq -T 4)"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -J >/dev/null 2>&1
+check "dynamic-order -J: without -c rejected (exit code)" "$?" "1"
+
 # Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
 # from the per-key RNG stream (seeded from the flat key index), so an SA search must
 # stay independent of -T just like the restart climb. Recover the plugboard on the

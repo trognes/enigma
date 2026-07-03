@@ -147,6 +147,7 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | --- | --- |
 | `-c` | Hill-climb the plugboard for each candidate key |
 | `-I` | First-improvement climb: ~2.8× cheaper per climb, so **pair with more `-R`** for a net matched-compute recovery win (needs `-c`; off by default) |
+| `-J` | Like `-I` but with **dynamic** best-first move ordering (implies `-I`); a further matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
 | `-D` | Exact delta-scoring for mono/IC climb passes (byte-identical, faster on **long** messages only; needs `-c`; off by default) |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
@@ -199,6 +200,8 @@ Usage: enigma [OPTIONS]
   -c           Perform hill climbing to determine plugboard settings
   -I           First-improvement climb: ~2.8x cheaper per climb, so pair
                with more -R for a net recovery win (needs -c) [off]
+  -J           Like -I but with dynamic best-first move ordering; wins on
+               ~10-plug messages, may lose with few plugs (implies -I) [off]
   -D           Delta-score mono/IC climb passes (exact, faster; needs -c)
   -R integer   Plugboard hill-climb random restarts (1 = none) [1]
   -S schedule  Staged plugboard climb: <letter><opt.number> tokens.

@@ -884,22 +884,35 @@ restarts (restarts never plateau through 256) more than repay the per-restart lo
 **Because it recovers worse per restart, `-I` is opt-in** — a user at the default `-R 1`
 who enables it gets *worse* results. Documented as "pair with more `-R`."
 
-**Refinements — one measured (rejected), one open:**
+**Refinements — one rejected, one shipped, one open. The pair is the interesting part:
+move ordering helps or hurts depending entirely on whether it varies *per restart*.**
+
 - **Static informed move order — ❌ built, measured, rejected.** Ordering the switch
-  moves by ciphertext letter frequency (well-attested/identifiable letters first, §2)
-  instead of lexicographically was expected to reduce the per-restart quality loss. It
-  does the **opposite**: measured across L40–60 × {6,10} plugs × 2 seeds, frequency order
-  is **neutral-to-worse** — a tie at the 10-plug/L40–50 corner, **−4-5pp mean %-correct**
-  at L60 and across 6-plug, and it still loses at *matched* compute (freq `-R 25` vs lex
-  `-R 22`: 45.0 vs 48.7 at L40/6-plug). Mechanism, and the useful lesson: informed order
-  makes first-improvement **commit greedily to high-frequency plugs early** — it converges
-  ~12% *faster* (fewer `score_iter`) but to *worse* optima, destroying the exploration
-  diversity that the restart regime feeds on. **For first-improvement under restarts, an
-  arbitrary (lexicographic) order beats an informed one.** This also predicts the
-  **dynamic scored/ranked order** (even greedier — always take the current best-ranked
-  move) will fare *worse*, on top of reintroducing the per-pass overhead that sank §7.1a;
-  it is not worth building.
-- **Don't-look bits** (Bentley) — the remaining promising refinement. A per-letter active
+  moves by ciphertext letter frequency (well-attested/identifiable letters first, §2) —
+  the **same order for every restart**. Measured across L40–60 × {6,10} plugs × 2 seeds it
+  is **neutral-to-worse**: a tie at the 10-plug/L40–50 corner, **−4-5pp mean %-correct**
+  elsewhere, still losing at matched compute (freq `-R 25` vs lex `-R 22`: 45.0 vs 48.7).
+  A fixed informed order makes first-improvement commit greedily to high-frequency plugs
+  *and does so identically every restart*, converging ~12% faster but to worse optima and
+  **collapsing the restart diversity** the regime feeds on.
+
+- **Dynamic (per-restart) best-first order — ✅ SHIPPED as `-J`.** The user's idea: each
+  climb first scores *all* moves once against its (perturbed) starting board, sorts, and
+  runs the circular first-improvement in that order. The critical difference from static:
+  the order is **rebuilt per restart**, so it front-loads good moves *without* collapsing
+  diversity — different restarts get different orders. It costs +24% `score_iter`/climb
+  (the extra scan), so it is compared at matched compute (`-J -R 18` ≈ `-I -R 22`).
+  Measured (500 trials, 2 seeds): a **robust win in the realistic ~10-plug regime**,
+  **+2 to +6pp mean %-correct at L40–60**, and a **loss at 6 plugs** (−2 to −7pp, where
+  best-first over-commits when few plugs are truly needed). Opt-in, because it is
+  regime-dependent; the win lands on the hardest/most-realistic case (10 plugs is the
+  crackquality default and standard Wehrmacht). **The prediction that "greedier ⇒ worse"
+  was wrong** — it holds only when the order is *fixed across restarts*; a per-restart
+  order gets the front-loading benefit while keeping the diversity. Open follow-up: the
+  6-plug loss looks like over-plugging, so `-J` + a plug cap (`-S qK`) may win in both
+  regimes — untested.
+
+- **Don't-look bits** (Bentley) — the remaining open refinement. A per-letter active
   flag; skip moves incident only to letters that a full sweep already found inert,
   re-activating the ~4 letters an accepted move touches. Crucially it is a **pure
   speedup** — it changes *which moves are examined*, not the accepted-move trajectory or
@@ -1064,9 +1077,11 @@ Build this first; several ideas below only become measurable once it exists.
    zero overhead is what beats the baseline at 50 chars, where §7.1a's decode-cheapening-
    plus-bookkeeping lost. `-I` is ~2.8× cheaper per climb; paired with more `-R` it wins
    at matched compute (+8pp exact / +1–23pp mean, scaling with available signal — §7.2).
-   Opt-in, because it recovers worse per restart. **Remaining upside on this axis:**
-   don't-look bits (§7.2, unbuilt). Static frequency-informed move ordering was built and
-   **rejected** — it makes first-improvement greedier and lands in worse optima (§7.2).
+   Opt-in, because it recovers worse per restart. **Dynamic per-restart best-first move
+   ordering shipped as `-J`** (a matched-compute win on the realistic ~10-plug regime,
+   +2–6pp mean; §7.2). **Remaining upside:** don't-look bits (§7.2, unbuilt). *Static*
+   (fixed-across-restarts) informed ordering was **rejected** — greedier *and* diversity-
+   collapsing; the per-restart `-J` keeps the front-loading without the collapse (§7.2).
 
 3. **True ILS with incumbent-walk acceptance (§3.3).** The cheapest *structural*
    change to how restarts are spent: instead of always relaunching from the fixed seed,
@@ -1109,8 +1124,11 @@ Shipped: steepest-ascent moves, `-R` restarts, `-S iq` staging + caps, `-F` pre-
 `-A` simulated annealing, `-s` fixed plugs, uint8 tables + hapax floor, **`-D` exact
 mono/IC delta-scoring** (opt-in; byte-identical; a long-message-only speedup — §7.1),
 **`-I` circular first-improvement** (opt-in; ~2.8× cheaper/climb; a matched-compute
-recovery win when paired with more `-R` — §7.2).
-Rejected (with reason): **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
+recovery win when paired with more `-R` — §7.2), **`-J` first-improvement + dynamic
+per-restart best-first ordering** (opt-in; +2–6pp mean on the realistic ~10-plug regime
+at matched compute; regime-dependent — §7.2).
+Rejected (with reason): **static (fixed-across-restarts) informed move order** (greedy
+*and* diversity-collapsing — §7.2); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
 chars — warm short-message quad decodes too cheap to skip; only wins ≥150 chars; the IC
 *ranker* also collapses recovery — §7.1); **cross-restart consensus / plug fixation
 (§3.1** — built and measured compute-neutral-to-negative; loses to a higher `-R` at
