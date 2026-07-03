@@ -972,6 +972,189 @@ static bool try_repair(machine & m, int iter, double cur_score)
    climb -- a board can hold at most 13 pairs anyway). The cheap "switch" and "remove"
    moves are run to convergence; then a single best "re-pair" is tried as a barrier
    cross, and if it improves the cheap climb resumes from the new board. */
+/* --- Surrogate-ranked steepest ascent (performance.md §7.1a) ---------------
+
+   Each hillclimb pass full-quad-scores ~325 switch moves -- the dominant cost. This
+   instead ranks all switch moves by a cheap MONOGRAM surrogate and full-quad-scores
+   only the top-K (K a quality/speed knob). The surrogate is scored INCREMENTALLY:
+   within a pass the base board is fixed, so a switch on (a,b) -- which changes the
+   plugboard only at the letters {a,b,steck[a],steck[b]} -- alters the decode only at
+   the positions whose ciphertext letter, or whose (fixed) rotor-stack output letter,
+   is one of those four. A per-pass inverted index (positions by input letter and by
+   base output letter) sums each candidate's monogram delta over just those O(few)
+   positions instead of a full decode -- the win that turns ~7-13x fewer quad decodes
+   into wall-clock. IC was measured a poor surrogate (misranks quad moves); monogram at
+   K~=16-32 preserves recovery (performance.md).
+
+   Determinism: the ranking is a pure function of the board (ties break by (a,b)); the
+   top-K is quad-scored in (a,b) order, matching the baseline's lowest-(a,b)-wins tie-
+   break, so the chosen move is -T-independent. ENIGMA_SURR_SLOW forces a full-decode
+   surrogate (same ranking) for a byte-identical cross-check of the delta arithmetic. */
+static void surrogate_switch_scan(machine & m, int iter, int max_pairs, int pairs,
+                                  int surr_k, bool surr_slow,
+                                  double & move_score, int & move_kind,
+                                  int & move_a, int & move_b)
+{
+  const int n = textlength;
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * const * __restrict rows = m.rows;
+  unsigned char * __restrict steck = m.steckerbrett;   /* base board (unchanged below) */
+
+  /* per-pass base output letter + base-decode monogram at each position, and the two
+     CSR inverted indices (positions by ciphertext letter / by base output letter). */
+  unsigned char base_mid[maxlen];
+  int monobase[maxlen];
+  int ctstart[asize + 1], midstart[asize + 1];
+  int ctpos[maxlen], midpos[maxlen];
+  int ctcnt[asize] = { 0 }, midcnt[asize] = { 0 };
+
+  for (int i = 0; i < n; i++)
+    {
+      int mid = rows[i][steck[ct[i]]];
+      base_mid[i] = static_cast<unsigned char>(mid);
+      monobase[i] = mono8[steck[mid]];
+      ctcnt[ct[i]]++;
+      midcnt[mid]++;
+    }
+  ctstart[0] = 0;
+  midstart[0] = 0;
+  for (int c = 0; c < asize; c++)
+    {
+      ctstart[c + 1] = ctstart[c] + ctcnt[c];
+      midstart[c + 1] = midstart[c] + midcnt[c];
+    }
+  int ccur[asize], mcur[asize];
+  for (int c = 0; c < asize; c++) { ccur[c] = ctstart[c]; mcur[c] = midstart[c]; }
+  for (int i = 0; i < n; i++)
+    {
+      ctpos[ccur[ct[i]]++] = i;
+      midpos[mcur[base_mid[i]]++] = i;
+    }
+
+  /* top-K by surrogate key (higher better; ties -> lower (a,b)) */
+  long tkey[64];
+  int ta[64], tb[64];
+  int nt = 0;
+
+  for (int a = 0; a < asize; a++)
+    for (int b = a + 1; b < asize; b++)
+      {
+        if (plug_fixed[a] || plug_fixed[b])
+          continue;
+        if ((pairs >= max_pairs) && (steck[a] == a) && (steck[b] == b))
+          continue;
+
+        int x = steck[a];
+        int y = steck[b];
+        /* the plugboard after the switch, without mutating steck (a,b win overlaps) */
+        auto sn = [&](int c) -> int
+        {
+          if (c == a) return b;
+          if (c == b) return a;
+          if (c == x) return x;
+          if (c == y) return y;
+          return steck[c];
+        };
+        /* distinct changed letters {a,b,x,y} */
+        int L[4]; int nl = 0;
+        L[nl++] = a;
+        L[nl++] = b;
+        if ((x != a) && (x != b)) L[nl++] = x;
+        if ((y != a) && (y != b) && (y != x)) L[nl++] = y;
+
+        long key;
+        if (surr_slow)
+          {
+            long s = 0;   /* full virtual decode monogram sum (same order as the delta) */
+            for (int i = 0; i < n; i++)
+              s += mono8[sn(rows[i][sn(ct[i])])];
+            key = s;
+          }
+        else
+          {
+            long delta = 0;
+            /* Type A: ciphertext letter changed plug -> recompute decode at those positions */
+            for (int k = 0; k < nl; k++)
+              {
+                int Lc = L[k];
+                int in = sn(Lc);   /* ct[i] == Lc here */
+                for (int p = ctstart[Lc]; p < ctstart[Lc + 1]; p++)
+                  {
+                    int i = ctpos[p];
+                    delta += mono8[sn(rows[i][in])] - monobase[i];
+                  }
+              }
+            /* Type B: base output letter changed plug, input unchanged (skip Type A dups) */
+            for (int k = 0; k < nl; k++)
+              {
+                int Lc = L[k];
+                int nd = mono8[sn(Lc)];   /* base_mid[i] == Lc */
+                for (int p = midstart[Lc]; p < midstart[Lc + 1]; p++)
+                  {
+                    int i = midpos[p];
+                    int cti = ct[i];
+                    if ((cti == a) || (cti == b) || (cti == x) || (cti == y))
+                      continue;
+                    delta += nd - monobase[i];
+                  }
+              }
+            key = delta;
+          }
+
+        if (nt < surr_k)
+          { tkey[nt] = key; ta[nt] = a; tb[nt] = b; nt++; }
+        else
+          {
+            int w = 0;   /* worst kept: lowest key, ties -> largest (a,b) */
+            for (int i = 1; i < nt; i++)
+              if ((tkey[i] < tkey[w]) ||
+                  ((tkey[i] == tkey[w]) &&
+                   ((ta[i] > ta[w]) || ((ta[i] == ta[w]) && (tb[i] > tb[w])))))
+                w = i;
+            if (key > tkey[w])   /* ascending (a,b) => equal key never displaces */
+              { tkey[w] = key; ta[w] = a; tb[w] = b; }
+          }
+      }
+
+  /* quad-score the K survivors in (a,b) order (baseline lowest-(a,b)-wins tie-break) */
+  for (int i = 1; i < nt; i++)   /* insertion sort ta/tb by (a,b) */
+    {
+      int ka = ta[i], kb = tb[i];
+      int j = i - 1;
+      while ((j >= 0) && ((ta[j] > ka) || ((ta[j] == ka) && (tb[j] > kb))))
+        { ta[j + 1] = ta[j]; tb[j + 1] = tb[j]; j--; }
+      ta[j + 1] = ka; tb[j + 1] = kb;
+    }
+
+  for (int k = 0; k < nt; k++)
+    {
+      int a = ta[k];
+      int b = tb[k];
+      int x = steck[a];
+      int y = steck[b];
+      int xx = steck[x];
+      int yy = steck[y];
+      steck[x] = static_cast<unsigned char>(x);
+      steck[y] = static_cast<unsigned char>(y);
+      steck[a] = static_cast<unsigned char>(b);
+      steck[b] = static_cast<unsigned char>(a);
+
+      double score = score_iter(m, iter);
+      if (score > move_score)
+        {
+          move_score = score;
+          move_kind = 0;
+          move_a = a;
+          move_b = b;
+        }
+
+      steck[a] = static_cast<unsigned char>(x);
+      steck[b] = static_cast<unsigned char>(y);
+      steck[x] = static_cast<unsigned char>(xx);
+      steck[y] = static_cast<unsigned char>(yy);
+    }
+}
+
 double hillclimb(machine & m, int max_pairs)
 {
   int iter = 1;
@@ -1006,6 +1189,26 @@ double hillclimb(machine & m, int max_pairs)
 
           //#define SHOWHILLCLIMB
 
+          /* §7.1a surrogate-ranked ascent (EXPERIMENT, env-gated): rank switch moves by
+             a cheap monogram surrogate, full-quad only the top-K. Only for the expensive
+             quad target; cheaper models run the baseline full scan. */
+          static const int surr_k = []() {
+            const char * e = getenv("ENIGMA_SURR_K");
+            int k = e ? atoi(e) : 0;
+            if (k < 0) k = 0;
+            if (k > 64) k = 64;
+            return k;
+          }();
+          static const bool surr_slow = []() {
+            const char * e = getenv("ENIGMA_SURR_SLOW");
+            return e && (atoi(e) != 0);
+          }();
+
+          if ((surr_k > 0) && (m.scoring == SCORE_QUAD))
+            surrogate_switch_scan(m, iter, max_pairs, pairs, surr_k, surr_slow,
+                                  move_score, move_kind, move_a, move_b);
+          else
+          {
 #ifdef SHOWHILLCLIMB
           fprintf(stderr, "  ");
           for(int b=1; b<asize; b++)
@@ -1064,6 +1267,7 @@ double hillclimb(machine & m, int max_pairs)
             printf("\n");
 #endif
             }
+          }
 
           /* Removal moves: drop an existing plug pair, freeing both ends. The switch
              moves can add, re-pair or merge plugs but never simply delete one, so a
@@ -2783,6 +2987,10 @@ int main(int argc, char * * argv)
               table_loaded[model] = true;
             }
         }
+      /* §7.1a surrogate ranking needs mono8 even when monograms are not a scoring stage */
+      { const char * e = getenv("ENIGMA_SURR_K");
+        if (e && (atoi(e) > 0) && ! table_loaded[SCORE_MONO])
+          { load_table(SCORE_MONO); table_loaded[SCORE_MONO] = true; } }
     }
 
   /* read ciphertext */
