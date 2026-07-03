@@ -782,7 +782,7 @@ directly into more restarts — but **any trajectory-changing idea must be valid
 at matched wall-clock, not matched `-R`**, and any hot-path edit A/B'd under **both
 g++ and clang** per the standing struct-layout cautions.
 
-### 7.1 Restructure the per-pass move-evaluation loop (HIGH priority — one item, three candidate implementations)
+### 7.1 Restructure the per-pass move-evaluation loop (❌ CLOSED — all three candidates measured/expected negative)
 
 > **Measured outcome (7.1a built and tested).** Item **(a)** — surrogate-ranked
 > steepest ascent — was implemented and measured. **The surrogate *ranking* was
@@ -812,8 +812,11 @@ g++ and clang** per the standing struct-layout cautions.
 >
 > The takeaway that generalizes: **at the ~50-char target, per-candidate scoring is
 > not the bottleneck to cut** — the decodes are already cheap; the first-order lever
-> stays *more restarts* (raise `-R`). Items (b)/(c) below share the same premise the
-> measurement undercut; expect the same short-message crossover.
+> stays *more restarts* (raise `-R`). **Item (b) has since been micro-benchmarked and
+> rejected too** (a single board already saturates the memory-level parallelism batching
+> would add — below), and (c) is expected to re-lose for the same reason (a). With all
+> three candidates negative, §7.1 as a whole is closed: the per-pass scan is not where the
+> short-message win lives.
 
 *The nominal plan (unchanged for context): three researchers proposed three rewrites
 of the **same** per-pass loop over the **same** inverted index; largely mutually
@@ -829,20 +832,22 @@ remove, unified) against a constant base board. That is the cost to cut. Candida
   are too cheap to be worth skipping. The exact mono/IC delta form was briefly shipped
   as `-D`, then removed (long-message-only win, net-negative for the short-message target).
 
-- **(b) Memory-level-parallel batch scoring (alternative to (a), or stackable if
-  (a)'s top-K is still >1).** The score loop is a *dependent* gather chain, but
-  scoring N *different* candidate boards is N *independent* chains. Restructure to
-  be position-major over a batch of N boards: at each position issue all N boards'
-  gathers before consuming any result, keeping N running quad accumulators. All
-  boards share `ct[]`/`rows[]` and differ only in 4 `steck` entries, so the loads
-  overlap in the load-store queue and hide each other's latency. This is scalar
-  latency-hiding, **not** the rejected SIMD (which targeted arithmetic throughput
-  and failed because the loop is latency-bound — that distinction is real and is
-  why this is worth trying). *Payoff:* medium-high, ~1.5–3× on the score-bound
-  section *if* enough MLP is exposed; erodes past some N from register/LLC pressure
-  (sweep N). High code complexity (a batched scorer distinct from the fused
-  single-board one; must stay portable). Numerically identical → `crackquality`
-  unchanged.
+- **(b) Memory-level-parallel batch scoring — ❌ micro-benchmarked, measured, rejected.**
+  The proposal: score N *different* candidate boards position-major so their N `quad8`
+  gathers are in flight together, hiding each other's latency (scalar latency-hiding, not
+  the rejected SIMD). **The premise was wrong.** It rests on the score loop being "a
+  *dependent* gather chain," but it is not: within one board the `quad8[a][b][c][d]` loads
+  are **independent across iterations** — the address chain is the decode window, and the
+  only cross-iteration dependency is the `isum` accumulator (a reduction, which does not
+  block issuing the next load). So a single board *already* keeps several `quad8` gathers
+  in flight; there is little latency left for batching to hide. An isolated micro-benchmark
+  of the exact hot loop (base + 325 toggles; warm `quad8`; L = 50/100/250; N = 1..16; g++
+  and clang) confirmed it: batching is **slower at every point** — 0.43× at N=1 (pure
+  per-board bookkeeping), recovering only to ~**0.85–0.90×** at N=16, never reaching parity.
+  This is a strict *upper bound* on (b): the micro-benchmark has zero integration cost,
+  whereas the real scan would add board materialisation, cap/fixed filtering and
+  best-tracking — so it can only do worse. Not built in-tree. (The bench lives outside the
+  repo; this write-up preserves the finding.)
 
 - **(c) Amortized per-pass delta (LOW — expected to re-lose; last resort).** Within
   one pass the base board is constant; precompute the base decode + each window's
