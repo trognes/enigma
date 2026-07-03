@@ -84,6 +84,20 @@ if [ -n "${BASE:-}" ]; then
   BASE_BIN="$base_dir/enigma"
 fi
 
+# Each binary loads its n-gram tables from its own tree: the working-tree binary
+# from ./ngrams, and a BASE binary from its worktree (ngrams/ if that ref carries
+# the folder, else the worktree root -- so an A/B spanning the data-dir move still
+# finds the tables for both refs).
+HEAD_DATA="$PWD/ngrams"
+BASE_DATA=""
+if [ -n "${BASE:-}" ]; then
+  if [ -d "$base_dir/ngrams" ]; then BASE_DATA="$base_dir/ngrams"; else BASE_DATA="$base_dir"; fi
+fi
+data_for() {
+  if [ -n "${BASE_BIN:-}" ] && [ "$1" = "$BASE_BIN" ]; then printf '%s' "$BASE_DATA"
+  else printf '%s' "$HEAD_DATA"; fi
+}
+
 # trunc LEN -> first LEN characters of the English benchmark plaintext (shares
 # the passage used by the cracking tests in run_tests.sh).
 PT="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSEWEFINDTHATCERTAINCOMMONWORDSANDLETTERPATTERNSREPEATSOOFTEN"
@@ -96,16 +110,17 @@ encrypt() { printf '%s' "$1" | "$HEAD_BIN" -i -u B -w 123 -r AAA -g AAA -s "$2" 
 # runs (after WARMUP discarded runs), feeding CT on stdin.
 min_time() {
   _bin=$1; _reps=$2; _warm=$3; _ct=$4; shift 4
+  _data=$(data_for "$_bin")
   _w=0
   while [ "$_w" -lt "$_warm" ]; do
-    printf '%s' "$_ct" | "$_bin" "$@" >/dev/null 2>&1
+    printf '%s' "$_ct" | ENIGMA_DATA="$_data" "$_bin" "$@" >/dev/null 2>&1
     _w=$((_w + 1))
   done
   _min=""
   _i=0
   while [ "$_i" -lt "$_reps" ]; do
     _t0=$(date +%s.%N)
-    printf '%s' "$_ct" | "$_bin" "$@" >/dev/null 2>&1
+    printf '%s' "$_ct" | ENIGMA_DATA="$_data" "$_bin" "$@" >/dev/null 2>&1
     _t1=$(date +%s.%N)
     _dt=$(awk -v a="$_t0" -v b="$_t1" 'BEGIN { printf "%.4f", b - a }')
     if [ -z "$_min" ] || awk -v d="$_dt" -v m="$_min" 'BEGIN { exit !(d < m) }'; then
@@ -119,7 +134,7 @@ min_time() {
 # solved BIN CT EXPECT ARGS... -> "ok" if the recovered plaintext matches.
 solved() {
   _bin=$1; _ct=$2; _exp=$3; shift 3
-  _out=$(printf '%s' "$_ct" | "$_bin" "$@" 2>/dev/null)
+  _out=$(printf '%s' "$_ct" | ENIGMA_DATA="$(data_for "$_bin")" "$_bin" "$@" 2>/dev/null)
   [ "$_out" = "$_exp" ] && echo ok || echo MISS
 }
 

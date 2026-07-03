@@ -108,7 +108,7 @@ static const char * opt_steckerbrett;
 static bool plug_fixed[asize];
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french ...; no default */
-static const char * opt_datadir;  /* directory holding the n-gram files (default ".") */
+static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_m4;        /* use M4 (4-rotor naval) mode */
 /* M4 mode: 4th "Greek" wheel (Beta/Gamma, rotor indices 13-14) is static (never
@@ -2543,7 +2543,7 @@ void help(FILE * out)
   fprintf(out, "  -F N[%%]      Key pre-filter: rank keys by a cheap IC climb, then run\n");
   fprintf(out, "               the full -c climb on only the top N keys, or top N%% of\n");
   fprintf(out, "               the keyspace (needs -c) [off]\n");
-  fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]\n");
+  fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [ngrams]\n");
   fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
@@ -2674,7 +2674,7 @@ int main(int argc, char * * argv)
   opt_grundstellung = 0;
   opt_steckerbrett = "";
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q) */
-  opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "." */
+  opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "ngrams" */
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
@@ -2832,11 +2832,11 @@ int main(int argc, char * * argv)
     }
 
   /* resolve the n-gram data directory: -d wins, else $ENIGMA_DATA, else the
-     current directory (the historical behaviour) */
+     bundled "ngrams" subdirectory (found when run from the repo root) */
   if (! opt_datadir)
     opt_datadir = getenv("ENIGMA_DATA");
   if ((! opt_datadir) || (! opt_datadir[0]))
-    opt_datadir = ".";
+    opt_datadir = "ngrams";
 
   /* validate arguments */
 

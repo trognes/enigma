@@ -636,22 +636,22 @@ esac
 # hanging or erroring (guards the fscanf field-count / leading-space fix).
 printf '\n  E 529117365\n\nT 390965105\nA 374061888\n   \n' > zztest_monograms.txt
 check "n-gram parser tolerates messy file" \
-  "$(run 'BDZGOWCXLT' -m -l zztest -u B -w 123 -r AAA -g AAA)" \
+  "$(run 'BDZGOWCXLT' -m -l zztest -d . -u B -w 123 -r AAA -g AAA)" \
   "AAAAAAAAAA"
 rm -f zztest_monograms.txt
 
-# Data directory: the n-gram files can live somewhere other than the current
-# directory, selected by -d or $ENIGMA_DATA (default "."). Run from a different
+# Data directory: the n-gram files can live somewhere other than the default
+# "ngrams" subdirectory, selected by -d or $ENIGMA_DATA. Run from a different
 # CWD (/) with an absolute binary so only the resolved data dir can find them.
 # A small wildcard search (-g ..A) forces the n-gram table to be loaded from the
 # resolved data dir -- a fully fixed machine would not score, so it would not load
 # anything. A successful exit means the files were found there.
 root=$(pwd)
-( cd / && printf 'BDZGOWCXLT' | "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+( cd / && printf 'BDZGOWCXLT' | "$root/enigma" -m -l english -d "$root/ngrams" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
 check "-d finds n-gram files from another CWD (exit code)" "$?" "0"
-( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA="$root" "$root/enigma" -m -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA="$root/ngrams" "$root/enigma" -m -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
 check "ENIGMA_DATA finds n-gram files from another CWD (exit code)" "$?" "0"
-( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA=/nonexistent "$root/enigma" -m -l english -d "$root" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
+( cd / && printf 'BDZGOWCXLT' | ENIGMA_DATA=/nonexistent "$root/enigma" -m -l english -d "$root/ngrams" -u B -w 123 -r AAA -g ..A >/dev/null 2>&1 )
 check "-d overrides ENIGMA_DATA (exit code)" "$?" "0"
 
 # A missing data directory fails with the full path it tried (and before stdin).

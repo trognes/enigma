@@ -32,10 +32,10 @@ Makefile                  Builds the `enigma` binary with g++ -O3.
 README.md                 User-facing description and usage.
 LICENSE                   GNU GPL v3.
 .gitignore                Ignores editor backups and cipher*.txt.
-<lang>_monograms.txt       Single-letter frequencies.
-<lang>_bigrams.txt         Two-letter frequencies.
-<lang>_trigrams.txt        Three-letter frequencies.
-<lang>_quadgrams.txt       Four-letter frequencies.
+ngrams/<lang>_monograms.txt   Single-letter frequencies.
+ngrams/<lang>_bigrams.txt     Two-letter frequencies.
+ngrams/<lang>_trigrams.txt    Three-letter frequencies.
+ngrams/<lang>_quadgrams.txt   Four-letter frequencies.
 ```
 
 Languages provided: `english`, `german`, `danish`, `french` (no default — the
@@ -95,8 +95,8 @@ The program reads **ciphertext from stdin** and writes the best-scoring
 are kept; everything else (spaces, punctuation, case) is stripped. The n-gram
 files are read from a **data directory** (filenames built as
 `<datadir>/<language>_<ngram>.txt`) resolved as `-d <dir>` → `$ENIGMA_DATA` →
-`.` (the current directory, the historical default) — so the tool can run from
-any working directory.
+`ngrams` (the bundled `ngrams/` subdirectory, found when run from the repo root) —
+pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 ### Common invocations
 
@@ -267,7 +267,7 @@ any working directory.
     while it ranks, but only when stderr is a terminal (`isatty`) so redirected logs and
     the tests stay clean. A shared atomic counter drives it, and because each atomic add
     owns a disjoint slice, exactly one thread prints each 1% step — no races, `-T`-safe.
-- `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`)
+- `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else `ngrams`)
 - `-T N` worker threads for the search (default 1, max 256). Parallelises over the
   `keys × restarts` work space, so it scales even a **fully-specified rotor key** with
   `-c -R N` (the restarts are spread across threads) — not just wildcarded keyspaces.

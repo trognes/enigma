@@ -176,7 +176,7 @@ seed.
 
 | Option | Meaning |
 | --- | --- |
-| `-d dir` | Directory holding the n-gram files (else `$ENIGMA_DATA`, else `.`) `[.]` |
+| `-d dir` | Directory holding the n-gram files (else `$ENIGMA_DATA`, else `ngrams`) `[ngrams]` |
 | `-T N` | Worker threads for the search, 1–256 `[1]` |
 | `-p file` | Compare the recovered plaintext against a known plaintext file |
 | `-v` / `-h` | Version / help |
@@ -223,7 +223,7 @@ Usage: enigma [OPTIONS]
   -F N[%]      Key pre-filter: rank keys by a cheap IC climb, then run
                the full -c climb on only the top N keys, or top N% of
                the keyspace (needs -c) [off]
-  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [.]
+  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [ngrams]
   -T integer   Number of worker threads for the search (1-256) [1]
 ```
 
@@ -342,9 +342,10 @@ Increase `-R` for harder messages.
 
 Scoring uses letter-frequency tables read from `<datadir>/<language>_<ngram>.txt`,
 where `<ngram>` is `monograms`/`bigrams`/`trigrams`/`quadgrams`. Each line is
-`<LETTERS> <count>`, e.g. `TION 13168375`. The data directory is resolved as
-`-d <dir>` → `$ENIGMA_DATA` → `.` (the current directory), so the tool can run
-from any working directory.
+`<LETTERS> <count>`, e.g. `TION 13168375`. The tables ship in the `ngrams/`
+subdirectory, and the data directory is resolved as `-d <dir>` → `$ENIGMA_DATA` →
+`ngrams` (the bundled default, found when run from the repo root) — pass `-d` or set
+`$ENIGMA_DATA` to run from another working directory.
 
 At load time each count is converted to a log10 probability `log10(count/total)`,
 with n-grams never seen in the corpus floored at `log10(0.01/total)` so that
