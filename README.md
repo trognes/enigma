@@ -146,6 +146,7 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | Option | Meaning |
 | --- | --- |
 | `-c` | Hill-climb the plugboard for each candidate key |
+| `-D` | Exact delta-scoring for mono/IC climb passes (byte-identical, faster on **long** messages only; needs `-c`; off by default) |
 | `-R N` | Random restarts of the plugboard climb (`1` = none) `[1]` |
 | `-S sched` | Staged climb schedule (see below) |
 | `-A N` | Recover the plugboard by simulated annealing (move budget `N`) instead of the greedy climb (needs `-c`; `0` = off) `[0]` |
@@ -195,6 +196,7 @@ Usage: enigma [OPTIONS]
   -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];
                held fixed -- the -c/-A climb keeps them and finds the rest
   -c           Perform hill climbing to determine plugboard settings
+  -D           Delta-score mono/IC climb passes (exact, faster; needs -c)
   -R integer   Plugboard hill-climb random restarts (1 = none) [1]
   -S schedule  Staged plugboard climb: <letter><opt.number> tokens.
                Models i/m/b/t/q (number caps plug pairs; last = target),

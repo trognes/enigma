@@ -130,6 +130,19 @@ any working directory.
   re-pair/toggle move), so `-s` supplies *known* plugs and the search recovers only the
   rest. They still seed a plain (no-climb) decrypt as before.
 - `-c` hill-climb the plugboard
+- `-D` **exact delta-scoring** for mono/IC hill-climb passes (needs `-c`; off by
+  default). Finds the best switch move by an incremental O(affected-positions) score
+  delta over a per-pass inverted index (positions by ciphertext input letter and by
+  base rotor-stack output letter), then scores that one winner exactly — so it is
+  **byte-identical** to the full scan, just fewer full decodes. Applies to `-m`/`-i`
+  climbs, the `-S iq` IC pre-pass, and the `-F` tier-1 IC climb; quad/bi/tri always use
+  the baseline scan (delta-quad was measured ~2× slower). It is a **long-message
+  accelerator only** and therefore opt-in: at the ~50-char target the baseline mono/IC
+  decode is trivially cheap, so the per-pass index build costs more than it saves
+  (~1.5× slower); it crosses over to a win at ≥~250–300 chars (mono up to ~27% at 500,
+  IC ~5–7%). The §7.1a *surrogate-ranking* form (rank by a cheap surrogate, full-quad
+  only a top-K) was **rejected** — ~1.5× slower at 50 chars and the IC ranker collapses
+  recovery (`performance.md` §7.1). `-T`-deterministic; TSan-clean.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
