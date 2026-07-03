@@ -72,7 +72,12 @@ plugboard), recovers each with the true rotor key fixed and only the plugboard
 hill-climbed (the cheap "plugboard-recovery" tier), and reports per length the
 mean %-of-letters-correct (a graded signal) and the exact-recovery rate, plus
 headline `L50`/`L90` (the shortest length reaching that recovery rate — lower is
-better). A fixed `SEED` makes the trial set deterministic (Python's
+better). **When comparing search/scoring changes, judge on the mean %-correct,
+not the exact-recovery rate.** The mean is the graded, lower-variance signal:
+it moves smoothly with small quality changes and separates configs at short
+lengths where the exact rate is near-zero and dominated by trial noise. The
+exact rate (and `L50`/`L90`) is a coarse headline — use it as a secondary check,
+not the metric a tuning decision turns on. A fixed `SEED` makes the trial set deterministic (Python's
 `random.Random(seed)`, reproducible across machines), so `make crackquality
 BASE=<git-ref>` is a same-machine A/B that solves identical problems with both
 binaries. (It was rewritten from shell+awk to Python: awk's seeded `rand()` is not
