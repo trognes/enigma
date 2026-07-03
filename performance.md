@@ -817,8 +817,8 @@ g++ and clang** per the standing struct-layout cautions.
 of the **same** per-pass loop over the **same** inverted index; largely mutually
 exclusive, so competing implementations of one item, not stackable wins.*
 
-Each `hillclimb()` pass full-quad-scores ~325 switch + ~13 remove moves against a
-constant base board. That is the cost to cut. Candidates:
+Each `hillclimb()` pass full-quad-scores the 325 `toggle a-b` moves (add / move / merge /
+remove, unified) against a constant base board. That is the cost to cut. Candidates:
 
 - **(a) Surrogate-ranked steepest ascent — ❌ built, measured, rejected** (see the
   banner above). Rank all candidates with a **cheap surrogate** and full-quad-score
@@ -864,11 +864,11 @@ test is recovery at equal compute. Sweep K (for (a)) / N (for (b)).
 > bits. First-improvement was built and shipped as opt-in `-I`; don't-look bits and
 > informed move ordering remain open (below).
 
-**What shipped.** `hillclimb()` was steepest-ascent — a full ~338-move scan per
+**What shipped.** `hillclimb()` was steepest-ascent — a full 325-move scan per
 accepted move, taking the single best. `-I` switches to **circular first-improvement**:
-a cursor sweeps a fixed 351-move list (325 switch pairs + 26 remove-by-letter), applies
-the **first** improving move, and **continues from where it accepted** (never restarts at
-the top). Continuing (vs restarting) is what makes it both efficient (each move examined
+a cursor sweeps the same fixed 325-pair `toggle a-b` list (each pair covers add / move /
+merge / remove by the current state of a and b), applies the **first** improving move, and
+**continues from where it accepted** (never restarts at the top). Continuing (vs restarting) is what makes it both efficient (each move examined
 ~once per sweep, no redundant re-scan of unchanged moves) and unbiased (attention rotates
 evenly instead of always favouring low letters). Converged = a full cycle accepts nothing.
 No data structure — which is *why it wins where §7.1a/`-D` lost*: those cut decode count

@@ -1208,7 +1208,7 @@ static pairtab make_pairtab()
 
 /* --- Circular first-improvement climb (-I) ------------------------------------
 
-   Steepest ascent full-scans all ~338 moves per accepted move and applies the single
+   Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
    best. First-improvement instead applies the FIRST move that improves and keeps going.
    The ordering is *circular*: a cursor sweeps a fixed move list and CONTINUES from where
    it accepted (never restarts at the top), so each move is examined ~once per sweep --
@@ -1217,16 +1217,16 @@ static pairtab make_pairtab()
    naive restart-from-top first-improvement). Convergence: a full cycle of all `nmoves`
    with no accepted move = a local optimum.
 
-   Move list (fixed indices, so the cursor is well-defined): 0..324 = the switch move on
-   pair k (force a-b, ejecting conflicts); 325..350 = remove the plug on letter (index-325),
-   a no-op unless that letter is the low end of a plug. Deterministic (no RNG, fixed order
-   and acceptance rule) so the result is -T-independent; the trajectory differs from
-   steepest ascent, so this is NOT byte-identical and must be judged on recovery, not
-   equality. */
+   Move list (fixed indices, so the cursor is well-defined): the 325 unordered letter
+   pairs, each a "toggle a-b" (already paired -> REMOVE it; else force a-b, i.e. ADD /
+   MOVE an endpoint / MERGE) -- the same unified operator the steepest-ascent scan uses,
+   so removal is the already-paired toggle rather than a separate move list. Deterministic
+   (no RNG, fixed order and acceptance rule) so the result is -T-independent; the trajectory
+   differs from steepest ascent, so this is NOT byte-identical and must be judged on
+   recovery, not equality. */
 static void firstimprove_sweep(machine & m, int iter, int max_pairs)
 {
-  static const int npairs = asize * (asize - 1) / 2;   /* 325 */
-  static const int nmoves = npairs + asize;            /* 351: switches + remove-by-letter */
+  static const int nmoves = asize * (asize - 1) / 2;   /* 325 pair-toggles */
   static const pairtab P = make_pairtab();
 
   unsigned char * __restrict steck = m.steckerbrett;
@@ -1237,12 +1237,54 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
     if (steck[j] > j)
       pairs++;
 
-  /* Move-visit order. Default: lexicographic (visit[i]=i). Dynamic (ENIGMA_FI_DYN):
-     score every move once from the starting board and visit them best-score-first, then
-     circularly -- the user's "first round: score all, sort, then process in order"
-     idea. The order is derived per climb from the (perturbed) starting board, so it
-     differs per restart; deterministic (fixed board + tie-break) -> -T-independent. Costs
-     one extra full scan per climb. */
+  /* Is the toggle on (a,b) blocked by the plug cap? A REMOVE (already paired) is always
+     allowed (-1). At/over the cap an ADD (both ends free) is blocked, and with -M a
+     count-preserving MOVE (one end free) too, so only the count-reducing merge/remove
+     survive -- matching the steepest-ascent scan's cap rule. */
+  auto cap_blocks = [&](int a, int b) -> bool
+  {
+    if (pairs < max_pairs) return false;
+    if (steck[a] == b) return false;                        /* REMOVE: allowed */
+    bool a_free = (steck[a] == a), b_free = (steck[b] == b);
+    if (a_free && b_free) return true;                      /* block ADD */
+    if (opt_capmerge && (a_free || b_free)) return true;    /* -M: block MOVE */
+    return false;
+  };
+
+  /* Score the toggle on (a,b) against the current board, leaving the board unchanged. */
+  auto probe_toggle = [&](int a, int b) -> double
+  {
+    double s;
+    if (steck[a] == b)                             /* REMOVE a-b */
+      {
+        steck[a] = static_cast<unsigned char>(a);
+        steck[b] = static_cast<unsigned char>(b);
+        s = score_iter(m, iter);
+        steck[a] = static_cast<unsigned char>(b);
+        steck[b] = static_cast<unsigned char>(a);
+      }
+    else                                           /* force a-b: ADD / MOVE / MERGE */
+      {
+        int x = steck[a], y = steck[b];
+        int xx = steck[x], yy = steck[y];
+        steck[x] = static_cast<unsigned char>(x);
+        steck[y] = static_cast<unsigned char>(y);
+        steck[a] = static_cast<unsigned char>(b);
+        steck[b] = static_cast<unsigned char>(a);
+        s = score_iter(m, iter);
+        steck[a] = static_cast<unsigned char>(x);
+        steck[b] = static_cast<unsigned char>(y);
+        steck[x] = static_cast<unsigned char>(xx);
+        steck[y] = static_cast<unsigned char>(yy);
+      }
+    return s;
+  };
+
+  /* Move-visit order. Default: lexicographic (visit[i]=i). Dynamic (-J): score every move
+     once from the starting board and visit them best-score-first, then circularly -- the
+     "first round: score all, sort, then process in order" idea. The order is derived per
+     climb from the (perturbed) starting board, so it differs per restart; deterministic
+     (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
   const bool dyn_order = (opt_dynorder != 0);
   int visit[nmoves];
   if (dyn_order)
@@ -1250,39 +1292,10 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
       double sc[nmoves];
       for (int mv = 0; mv < nmoves; mv++)
         {
+          int a = P.a[mv], b = P.b[mv];
           double s = -1e300;   /* invalid moves sort last */
-          if (mv < npairs)
-            {
-              int a = P.a[mv], b = P.b[mv];
-              if (! (plug_fixed[a] || plug_fixed[b]) &&
-                  ! ((pairs >= max_pairs) && (steck[a] == a) && (steck[b] == b)))
-                {
-                  int x = steck[a], y = steck[b];
-                  int xx = steck[x], yy = steck[y];
-                  steck[x] = static_cast<unsigned char>(x);
-                  steck[y] = static_cast<unsigned char>(y);
-                  steck[a] = static_cast<unsigned char>(b);
-                  steck[b] = static_cast<unsigned char>(a);
-                  s = score_iter(m, iter);
-                  steck[a] = static_cast<unsigned char>(x);
-                  steck[b] = static_cast<unsigned char>(y);
-                  steck[x] = static_cast<unsigned char>(xx);
-                  steck[y] = static_cast<unsigned char>(yy);
-                }
-            }
-          else
-            {
-              int a = mv - npairs;
-              if ((steck[a] > a) && ! plug_fixed[a])
-                {
-                  int b = steck[a];
-                  steck[a] = static_cast<unsigned char>(a);
-                  steck[b] = static_cast<unsigned char>(b);
-                  s = score_iter(m, iter);
-                  steck[a] = static_cast<unsigned char>(b);
-                  steck[b] = static_cast<unsigned char>(a);
-                }
-            }
+          if (! (plug_fixed[a] || plug_fixed[b]) && ! cap_blocks(a, b))
+            s = probe_toggle(a, b);
           sc[mv] = s;
           visit[mv] = mv;
         }
@@ -1305,16 +1318,27 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
       if (cursor == nmoves)
         cursor = 0;
 
+      int a = P.a[mv], b = P.b[mv];
+      if ((plug_fixed[a] || plug_fixed[b]) || cap_blocks(a, b))
+        { stale++; continue; }
+
       bool improved = false;
 
-      if (mv < npairs)
+      if (steck[a] == b)                             /* REMOVE a-b */
         {
-          int a = P.a[mv], b = P.b[mv];
-          if (plug_fixed[a] || plug_fixed[b])
-            { stale++; continue; }
-          if ((pairs >= max_pairs) && (steck[a] == a) && (steck[b] == b))
-            { stale++; continue; }
-
+          steck[a] = static_cast<unsigned char>(a);
+          steck[b] = static_cast<unsigned char>(b);
+          double s = score_iter(m, iter);
+          if (s > cur)
+            { cur = s; improved = true; }
+          else
+            {
+              steck[a] = static_cast<unsigned char>(b);
+              steck[b] = static_cast<unsigned char>(a);
+            }
+        }
+      else                                           /* force a-b: ADD / MOVE / MERGE */
+        {
           int x = steck[a], y = steck[b];
           int xx = steck[x], yy = steck[y];
           steck[x] = static_cast<unsigned char>(x);
@@ -1330,23 +1354,6 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
               steck[b] = static_cast<unsigned char>(y);
               steck[x] = static_cast<unsigned char>(xx);
               steck[y] = static_cast<unsigned char>(yy);
-            }
-        }
-      else
-        {
-          int a = mv - npairs;
-          if ((steck[a] <= a) || plug_fixed[a])   /* not the low end of a removable plug */
-            { stale++; continue; }
-          int b = steck[a];
-          steck[a] = static_cast<unsigned char>(a);
-          steck[b] = static_cast<unsigned char>(b);
-          double s = score_iter(m, iter);
-          if (s > cur)
-            { cur = s; improved = true; }
-          else
-            {
-              steck[a] = static_cast<unsigned char>(b);
-              steck[b] = static_cast<unsigned char>(a);
             }
         }
 

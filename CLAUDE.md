@@ -136,11 +136,11 @@ any working directory.
   rest. They still seed a plain (no-climb) decrypt as before.
 - `-c` hill-climb the plugboard
 - `-I` **circular first-improvement** climb instead of steepest ascent (needs `-c`; off by
-  default). `hillclimb()` normally full-scans all ~338 moves per accepted move and takes
-  the single best; `-I` sweeps a fixed 351-move list (325 switch pairs + 26 remove-by-letter)
-  with a cursor, applies the **first** improving move, and **continues from where it accepted**
-  (circular — so each move is examined ~once per sweep and attention rotates evenly instead of
-  favouring low letters). ~2.8× fewer `score_iter` per climb, no data structure (which is why
+  default). `hillclimb()` normally full-scans all 325 toggle moves per accepted move and takes
+  the single best; `-I` sweeps the same fixed 325-pair toggle list (each pair a `toggle a-b`:
+  already-paired → remove, else add/move/merge) with a cursor, applies the **first** improving
+  move, and **continues from where it accepted** (circular — so each move is examined ~once per
+  sweep and attention rotates evenly instead of favouring low letters). ~2.8× fewer `score_iter` per climb, no data structure (which is why
   it wins at 50 chars where the surrogate/delta ideas lost). Deterministic (fixed order +
   acceptance, no RNG) → `-T`-independent; **not** byte-identical (different trajectory). It
   recovers **worse per restart**, so it is a *throughput multiplier*, not a free win: pair it
