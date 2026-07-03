@@ -213,9 +213,27 @@ of running each solver at half budget, which is what actually sinks it.
 **Takeaway.** Don't split — identify and run the single best solver at full budget. The real
 complementarity (~+15pp at 2B) is worth capturing, but *only* without the halving penalty,
 which a post-hoc `max` of two independent runs cannot do — a single trajectory that blends
-exploration and exploitation can (→ ILS, §3.3). Side finding worth its own check: at matched
-`score_iter`, SA-with-restarts consistently out-recovered greedy here, so SA may be underused
-as the *primary* solver rather than a mere peer.
+exploration and exploitation can (→ ILS, §3.3).
+
+**Follow-up: greedy vs SA at matched compute, both properly tuned.** An earlier note here
+claimed "SA consistently out-recovers greedy" — that was an artifact of comparing SA against a
+*weak* greedy (`-R -S iq`). Re-run with each solver at its best (greedy `-J -S r10i4q10`; SA
+`-A12000 -S q10` — SA needs *deep* anneals, `-A6000` starves it), matched `score_iter`, 10-plug
+messages, 100 trials × 2 seeds, they are **genuine peers with a length-dependent crossover**
+(mean%/exact%, at ~2× the `-R20` budget):
+
+| L | greedy `-J -S r10i4q10 -R80` | SA `-A12000 -S q10 -R12` |
+|---|---|---|
+| 40 | 24 / 8  | **27 / 12** |
+| 50 | **45 / 33** | 40 / 32 |
+| 60 | 60 / 50 | **63 / 57** |
+| 70 | **78 / 73** | 70 / 64 |
+
+SA owns the mid-short / hardest end (L40, L60: +4–7pp exact); greedy owns the longer short
+end (L70: +9pp), with L50 ~tied. The result held at half budget too. So the repo's original
+"SA is a *peer*, not a win" framing is correct — and *both* under-tuning greedy and
+under-tuning SA flip the apparent winner, which is why a matched-compute comparison must have
+**both** at their best. (Practical recipes for each are in the README / `-h`.)
 
 ### 3.3 Iterated Local Search with incumbent-walk acceptance (HIGH priority)
 

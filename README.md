@@ -317,6 +317,31 @@ threads:
 
 Increase `-R` for harder messages.
 
+### Two recommended recipes (standard ~10-plug board)
+
+There are two strong plugboard solvers, and at **matched compute** they are **peers with a
+length-dependent crossover** — pick either, or run both:
+
+- **Greedy** — the tuned restart climb: dynamic move ordering (`-J`) over a capped staged
+  schedule (`r10` kick → IC pre-pass → quad capped at 10 plugs). Very cheap per restart, so it
+  affords many of them.
+
+  ```sh
+  ./enigma -c -J -S r10i4q10 -R 40 -q -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+  ```
+
+- **Simulated annealing** (`-A`) — a *deep* anneal per restart (small `-A` starves it) with the
+  same 10-plug cap:
+
+  ```sh
+  ./enigma -c -A 12000 -S q10 -R 12 -q -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+  ```
+
+Measured on 50–70-letter 10-plug messages at equal `score_iter`, **SA tends to win the very
+shortest / hardest lengths and greedy the slightly longer ones**, within a few points either
+way — so neither dominates. Scale `-R` up together for harder messages (and `-A` is the SA
+depth knob; keep it deep). Both compose with `-F`/`-T` when the rotor key is also unknown.
+
 ## Input, output and diagnostics
 
 - **Input** comes from stdin; only A–Z are kept (case, spaces and punctuation are

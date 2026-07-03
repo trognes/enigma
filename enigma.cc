@@ -2557,6 +2557,12 @@ void help(FILE * out)
   fprintf(out, "resulting in the highest plaintext score. If asked for, a hill climbing\n");
   fprintf(out, "algorithm will be used to try to determine the plugboard settings.\n");
   fprintf(out, "\n");
+  fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
+  fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
+  fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
+  fprintf(out, "  greedy: -c -J -S r10i4q10 -R 40 -q -l english\n");
+  fprintf(out, "  SA:     -c -A 12000 -S q10 -R 12 -q -l english\n");
+  fprintf(out, "\n");
 }
 
 void removespaces(char * p)
