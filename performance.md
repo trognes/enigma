@@ -777,26 +777,48 @@ g++ and clang** per the standing struct-layout cautions.
 
 ### 7.1 Restructure the per-pass move-evaluation loop (HIGH priority — one item, three candidate implementations)
 
-*The single highest-value speed item. Three researchers proposed three rewrites of
-the **same** per-pass loop over the **same** inverted index; they are largely
-**mutually exclusive**, so treat them as competing implementations of one item, not
-three stackable wins. Lead with (a); fall back to (b)/(c) only if (a) disappoints.*
+> **Measured outcome (7.1a built and tested).** Item **(a)** — surrogate-ranked
+> steepest ascent — was implemented and measured. **The surrogate *ranking* is
+> rejected; only the incremental *delta* survives, as the opt-in `-D` flag for the
+> mono/IC models.** Findings, in order:
+> - **The IC surrogate is a poor *ranker*** of quad moves — recovery collapses (L90
+>   exact 38% at K=32 vs 52% baseline). The **monogram** surrogate preserves recovery
+>   at K≈16–32 (L90 53% vs 52%). So the doc's "monogram *or* IC" was half right:
+>   monogram ranks, IC does not.
+> - **But surrogate ranking is a net *loss* at the ~50-char target** — ~1.5× *slower*
+>   than the plain quad scan, and it only crosses over to a win at ≥150 chars. Reason:
+>   once the quad table is warm from climbing one key, a 47-lookup quad decode is so
+>   cheap that eliminating 7–13× of them does not offset the per-pass index build +
+>   branchy per-candidate delta. The "gather-latency-bound" premise holds for *cold*
+>   long-message decodes, not warm short-message ones. **Rejected.**
+> - **The delta arithmetic itself is sound and reusable.** Used *exactly* (not as a
+>   surrogate) for the mono/IC models — find the best switch by an
+>   O(affected-positions) delta over a per-pass inverted index, then score that one
+>   winner exactly — it is **byte-identical** to the full scan and shipped as `-D`
+>   (off by default). Same crossover: slower at short messages (baseline mono/IC
+>   decode is trivially cheap there), faster on long ones (mono up to ~27% at 500
+>   chars, IC ~5–7% at ≥300), so it is opt-in. Quad/bi/tri keep the baseline scan
+>   (delta-quad was already measured ~2× slower). `-T`-deterministic; TSan-clean;
+>   no baseline hot-path regression (`make bench BASE`: search −0.5%, hillclimb −0.1%).
+>
+> The takeaway that generalizes: **at the ~50-char target, per-candidate scoring is
+> not the bottleneck to cut** — the decodes are already cheap; the first-order lever
+> stays *more restarts* (raise `-R`). Items (b)/(c) below share the same premise the
+> measurement undercut; expect the same short-message crossover.
+
+*The nominal plan (unchanged for context): three researchers proposed three rewrites
+of the **same** per-pass loop over the **same** inverted index; largely mutually
+exclusive, so competing implementations of one item, not stackable wins.*
 
 Each `hillclimb()` pass full-quad-scores ~325 switch + ~13 remove moves against a
 constant base board. That is the cost to cut. Candidates:
 
-- **(a) Surrogate-ranked steepest ascent (lead).** Rank all candidates with a
-  **cheap surrogate** (monogram via `mono8`, or the IC frequency vector) and
-  full-quad-score only the top-K (~8–16), then apply the true best. Crucially, the
-  surrogate itself *can* be delta-scored cheaply: a switch touches only 4 `steck`
-  entries, so the output-letter histogram mono/IC need changes only at the affected
-  positions — the tiny 26-entry `mono8`/histogram update that made the *rejected*
-  quad delta lose (4 old+new 457 KB `quad8` lookups per affected quadgram) **does
-  not apply** to a mono/IC surrogate. Maintain an inverted index (positions per
-  input letter) across accepted moves; deterministic tie-break on the shortlist for
-  `-T`. *Payoff:* high on throughput (cuts ~335 quad evals/pass to ~16); gated by
-  surrogate fidelity — if mono ranks the true best quad move outside top-K, the
-  trajectory degrades and recovery could drop. K is a direct quality/speed knob.
+- **(a) Surrogate-ranked steepest ascent — ❌ built, measured, rejected** (see the
+  banner above). Rank all candidates with a **cheap surrogate** and full-quad-score
+  only the top-K. Monogram ranks well (K≈16–32), IC does not; but the whole scheme is
+  ~1.5× slower at 50 chars (only wins ≥150), because warm short-message quad decodes
+  are too cheap to be worth skipping. The reusable remnant is the exact `-D` mono/IC
+  delta climb (byte-identical, long-message-only win).
 
 - **(b) Memory-level-parallel batch scoring (alternative to (a), or stackable if
   (a)'s top-K is still >1).** The score loop is a *dependent* gather chain, but
@@ -997,14 +1019,16 @@ Build this first; several ideas below only become measurable once it exists.
    genuinely independent trajectories, so it is not subject to the best-of-`R`
    saturation that sank §3.1.
 
-2. **A per-climb throughput lever — surrogate-ranked ascent (§7.1a) or
-   first-improvement + don't-look bits (§7.2).** The compute budget *is* the number of
-   `score_iter` calls; a several-fold per-climb speedup converts directly into more
-   restarts, which never plateau through R=256 — and, per the §3.1 result, *more
-   restarts is the lever that actually pays*. §7.1a is the higher-ceiling,
-   higher-complexity option (and is explicitly *not* the rejected quad delta — the
-   surrogate delta is a tiny 26-entry update); §7.2 is the simpler first cut. Validate
-   at **matched wall-clock**.
+2. **A per-climb throughput lever — first-improvement + don't-look bits (§7.2).** The
+   compute budget *is* the number of `score_iter` calls; a per-climb speedup converts
+   directly into more restarts, which never plateau through R=256 — and, per the §3.1
+   result, *more restarts is the lever that actually pays*. (The higher-ceiling option
+   here, §7.1a surrogate-ranked ascent, was **built and rejected**: ~1.5× slower at 50
+   chars because warm short-message quad decodes are too cheap to skip — see §7.1. Its
+   reusable remnant, the exact `-D` mono/IC delta climb, wins only on long messages.)
+   §7.2 cuts the *number* of candidates evaluated rather than the cost of each, so it
+   may fare better at short messages — but it changes the trajectory and needs its own
+   quality gate. Validate at **matched wall-clock**.
 
 3. **True ILS with incumbent-walk acceptance (§3.3).** The cheapest *structural*
    change to how restarts are spent: instead of always relaunching from the fixed seed,
@@ -1044,13 +1068,15 @@ move the current numbers; do not judge them by it.
 ### Do not re-propose (already shipped or measured-and-rejected)
 
 Shipped: steepest-ascent moves, `-R` restarts, `-S iq` staging + caps, `-F` pre-filter,
-`-A` simulated annealing, `-s` fixed plugs, uint8 tables + hapax floor. Rejected (with
-reason): **cross-restart consensus / plug fixation (§3.1** — built and measured
-compute-neutral-to-negative; loses to a higher `-R` at equal compute and no-ops as `R`
-grows because best-of-`R` saturates; swept over threshold × elite size × `R` × PAIRS ×
-length × seed**)**; incremental **quad** delta-scoring (~2× slower — but note §7.1a is a
-*surrogate* delta on a 26-entry table, and §7.1c is an *amortized-per-pass* delta, both
-distinct); chi-squared scoring/tier-1 (gameable, far worse recall); 3-opt / 3-plug re-pair (cost >
+`-A` simulated annealing, `-s` fixed plugs, uint8 tables + hapax floor, **`-D` exact
+mono/IC delta-scoring** (opt-in; byte-identical; a long-message-only speedup — §7.1).
+Rejected (with reason): **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
+chars — warm short-message quad decodes too cheap to skip; only wins ≥150 chars; the IC
+*ranker* also collapses recovery — §7.1); **cross-restart consensus / plug fixation
+(§3.1** — built and measured compute-neutral-to-negative; loses to a higher `-R` at
+equal compute and no-ops as `R` grows because best-of-`R` saturates; swept over threshold
+× elite size × `R` × PAIRS × length × seed**)**; incremental **quad** delta-scoring
+(~2× slower); chi-squared scoring/tier-1 (gameable, far worse recall); 3-opt / 3-plug re-pair (cost >
 gain); SIMD / `-march=native` (latency-bound — but note §7.1b is scalar MLP, orthogonal);
 GPU (gather-bound, breaks the portable design); rotor-stepping reuse (slower); SA reheating
 / chain-length sweeps (no help); `χ0=0.8` (lost 2×); plugboard-free IC scan pre-filter

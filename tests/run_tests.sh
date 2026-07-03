@@ -488,6 +488,28 @@ check "pre-filter: -F over 100% rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 8% >/dev/null 2>&1
 check "pre-filter: -F N% without -c rejected (exit code)" "$?" "1"
 
+# Delta-scoring (-D): an exact accelerator for mono/IC climb passes -- it must produce
+# BYTE-IDENTICAL results to the full scan (its whole correctness contract), across an
+# IC climb, a mono climb, the -S iq IC pre-pass, and the -F tier-1 IC climb; and stay
+# -T-independent. It needs -c.
+check "delta -D: IC climb byte-identical to no -D" \
+  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4 -D)" \
+  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4)"
+check "delta -D: mono climb byte-identical to no -D" \
+  "$(run "$f_ct" -m -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -D)" \
+  "$(run "$f_ct" -m -l english -u B -w 123 -r AAA -g "$rg" -c -R 4)"
+check "delta -D: -S iq (IC pre-pass) byte-identical to no -D" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -D)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq)"
+check "delta -D: -F tier-1 IC climb byte-identical to no -D" \
+  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4 -F 50 -D)" \
+  "$(run "$f_ct" -i -u B -w 123 -r AAA -g "$rg" -c -R 4 -F 50)"
+check "delta -D: result is -T-independent" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -D -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -D -T 4)"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -D >/dev/null 2>&1
+check "delta -D: without -c rejected (exit code)" "$?" "1"
+
 # Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
 # from the per-key RNG stream (seeded from the flat key index), so an SA search must
 # stay independent of -T just like the restart climb. Recover the plugboard on the

@@ -123,6 +123,10 @@ static char opt_greek_grundstellung = '.';  /* Greek start letter or . */
 static int opt_maxwheel;
 static int opt_scoring;
 static int opt_hillclimb;
+/* -D: use exact incremental delta-scoring for mono/IC hillclimb passes (byte-identical
+   to the full scan, fewer full decodes). Accelerates the -S iq IC pre-pass, the -F tier-1
+   IC climb, and -m/-i climbs; a no-op for quad/bi/tri (delta-quad was measured slower). */
+static int opt_delta;
 static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
 static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
@@ -972,6 +976,199 @@ static bool try_repair(machine & m, int iter, double cur_score)
    climb -- a board can hold at most 13 pairs anyway). The cheap "switch" and "remove"
    moves are run to convergence; then a single best "re-pair" is tried as a barrier
    cross, and if it improves the cheap climb resumes from the new board. */
+/* --- Exact delta-accelerated switch scan for mono / IC climbs (option -D) ----
+
+   §7.1a surrogate-RANKING (rank switch moves by a cheap monogram surrogate, then
+   full-quad-score only a top-K) was rejected: at the ~50-char target it is ~1.5x
+   SLOWER than the plain quad scan -- once the quad table is warm from climbing one
+   key, the decodes it skips are too cheap to offset the per-pass index/delta overhead
+   (it only wins at >=150 chars).  See performance.md.
+
+   What survives, as an option, is the incremental delta itself, used EXACTLY (not as a
+   surrogate) for the mono/IC models.  Within a pass the base board is fixed, so a switch
+   on (a,b) changes the plugboard only at the letters {a,b,steck[a],steck[b]} and thus the
+   decode only at positions whose ciphertext letter, or whose (fixed) rotor-stack output
+   letter, is one of those four.  A per-pass inverted index (positions by input letter and
+   by base output letter) sums each candidate's score delta over just those O(few)
+   positions.  The single best-delta switch -- the max-delta switch IS the max-score switch,
+   since the delta is strictly monotone in the score -- is then scored EXACTLY with one
+   score_iter and folded in exactly as the baseline full scan would: BYTE-IDENTICAL
+   selection, fewer full decodes.  mono/IC only (delta-quad was measured ~2x slower); this
+   accelerates the -S iq IC pre-pass, the -F tier-1 IC climb, and -m/-i climbs. */
+static void delta_switch_scan(machine & m, int iter, int max_pairs, int pairs,
+                              double & move_score, int & move_kind,
+                              int & move_a, int & move_b)
+{
+  const int n = textlength;
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * const * __restrict rows = m.rows;
+  unsigned char * __restrict steck = m.steckerbrett;   /* base board (unchanged below) */
+  const bool is_ic = (m.scoring == SCORE_IC);
+
+  /* per-pass base decode / rotor-stack output letter, the two CSR inverted indices, and
+     (for IC) the base decoded-letter histogram. */
+  unsigned char base_mid[maxlen], base_dec[maxlen];
+  int ctstart[asize + 1], midstart[asize + 1];
+  int ctpos[maxlen], midpos[maxlen];
+  int ctcnt[asize] = { 0 }, midcnt[asize] = { 0 };
+  int freq[asize] = { 0 };
+  int dfl[2 * maxlen];   /* IC scratch: touched (old,new) letters, to undo per candidate */
+
+  for (int i = 0; i < n; i++)
+    {
+      int mid = rows[i][steck[ct[i]]];
+      int dec = steck[mid];
+      base_mid[i] = static_cast<unsigned char>(mid);
+      base_dec[i] = static_cast<unsigned char>(dec);
+      ctcnt[ct[i]]++;
+      midcnt[mid]++;
+      freq[dec]++;
+    }
+  ctstart[0] = 0;
+  midstart[0] = 0;
+  for (int c = 0; c < asize; c++)
+    {
+      ctstart[c + 1] = ctstart[c] + ctcnt[c];
+      midstart[c + 1] = midstart[c] + midcnt[c];
+    }
+  int ccur[asize], mcur[asize];
+  for (int c = 0; c < asize; c++) { ccur[c] = ctstart[c]; mcur[c] = midstart[c]; }
+  for (int i = 0; i < n; i++)
+    {
+      ctpos[ccur[ct[i]]++] = i;
+      midpos[mcur[base_mid[i]]++] = i;
+    }
+
+  long best_delta = 0;
+  int best_a = 0, best_b = 0;
+  bool have = false;
+
+  for (int a = 0; a < asize; a++)
+    for (int b = a + 1; b < asize; b++)
+      {
+        if (plug_fixed[a] || plug_fixed[b])
+          continue;
+        if ((pairs >= max_pairs) && (steck[a] == a) && (steck[b] == b))
+          continue;
+
+        int x = steck[a];
+        int y = steck[b];
+        auto sn = [&](int c) -> int
+        {
+          if (c == a) return b;
+          if (c == b) return a;
+          if (c == x) return x;
+          if (c == y) return y;
+          return steck[c];
+        };
+        int L[4]; int nl = 0;
+        L[nl++] = a;
+        L[nl++] = b;
+        if ((x != a) && (x != b)) L[nl++] = x;
+        if ((y != a) && (y != b) && (y != x)) L[nl++] = y;
+
+        long delta;
+        if (! is_ic)
+          {
+            long d = 0;
+            /* Type A: ciphertext letter changed plug -> recompute decode at those positions */
+            for (int k = 0; k < nl; k++)
+              {
+                int Lc = L[k];
+                int in = sn(Lc);
+                for (int p = ctstart[Lc]; p < ctstart[Lc + 1]; p++)
+                  { int i = ctpos[p]; d += mono8[sn(rows[i][in])] - mono8[base_dec[i]]; }
+              }
+            /* Type B: base output letter changed plug, input unchanged (skip Type A dups) */
+            for (int k = 0; k < nl; k++)
+              {
+                int Lc = L[k];
+                int nv = mono8[sn(Lc)];
+                for (int p = midstart[Lc]; p < midstart[Lc + 1]; p++)
+                  {
+                    int i = midpos[p];
+                    int cti = ct[i];
+                    if ((cti == a) || (cti == b) || (cti == x) || (cti == y)) continue;
+                    d += nv - mono8[base_dec[i]];
+                  }
+              }
+            delta = d;
+          }
+        else
+          {
+            /* IC: change in the coincidence numerator sum_j f_j (f_j - 1), accumulated
+               incrementally over the affected positions (touched letters recorded, then
+               the histogram restored for the next candidate). */
+            long dnum = 0;
+            int ndf = 0;
+            for (int k = 0; k < nl; k++)
+              {
+                int Lc = L[k];
+                int in = sn(Lc);
+                for (int p = ctstart[Lc]; p < ctstart[Lc + 1]; p++)
+                  {
+                    int i = ctpos[p];
+                    int oldd = base_dec[i];
+                    int newd = sn(rows[i][in]);
+                    if (oldd == newd) continue;
+                    dfl[ndf++] = oldd; dfl[ndf++] = newd;
+                    dnum -= static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
+                    freq[oldd]--;
+                    dnum += static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
+                    dnum -= static_cast<long>(freq[newd]) * (freq[newd] - 1);
+                    freq[newd]++;
+                    dnum += static_cast<long>(freq[newd]) * (freq[newd] - 1);
+                  }
+              }
+            for (int k = 0; k < nl; k++)
+              {
+                int Lc = L[k];
+                int newd = sn(Lc);
+                for (int p = midstart[Lc]; p < midstart[Lc + 1]; p++)
+                  {
+                    int i = midpos[p];
+                    int cti = ct[i];
+                    if ((cti == a) || (cti == b) || (cti == x) || (cti == y)) continue;
+                    int oldd = base_dec[i];
+                    if (oldd == newd) continue;
+                    dfl[ndf++] = oldd; dfl[ndf++] = newd;
+                    dnum -= static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
+                    freq[oldd]--;
+                    dnum += static_cast<long>(freq[oldd]) * (freq[oldd] - 1);
+                    dnum -= static_cast<long>(freq[newd]) * (freq[newd] - 1);
+                    freq[newd]++;
+                    dnum += static_cast<long>(freq[newd]) * (freq[newd] - 1);
+                  }
+              }
+            for (int t = 0; t < ndf; t += 2)   /* restore the histogram */
+              { freq[dfl[t + 1]]--; freq[dfl[t]]++; }
+            delta = dnum;
+          }
+
+        if (! have || (delta > best_delta))   /* max delta; ascending (a,b) keeps lowest on ties */
+          { best_delta = delta; best_a = a; best_b = b; have = true; }
+      }
+
+  /* score the single best switch exactly and fold it in as the baseline scan would */
+  if (have)
+    {
+      int a = best_a, b = best_b;
+      int x = steck[a], y = steck[b];
+      int xx = steck[x], yy = steck[y];
+      steck[x] = static_cast<unsigned char>(x);
+      steck[y] = static_cast<unsigned char>(y);
+      steck[a] = static_cast<unsigned char>(b);
+      steck[b] = static_cast<unsigned char>(a);
+      double score = score_iter(m, iter);
+      if (score > move_score)
+        { move_score = score; move_kind = 0; move_a = a; move_b = b; }
+      steck[a] = static_cast<unsigned char>(x);
+      steck[b] = static_cast<unsigned char>(y);
+      steck[x] = static_cast<unsigned char>(xx);
+      steck[y] = static_cast<unsigned char>(yy);
+    }
+}
+
 double hillclimb(machine & m, int max_pairs)
 {
   int iter = 1;
@@ -1006,6 +1203,14 @@ double hillclimb(machine & m, int max_pairs)
 
           //#define SHOWHILLCLIMB
 
+          /* -D: exact delta-accelerated switch scan for the mono/IC models (byte-identical
+             to the baseline full scan, fewer full decodes). Quad/bigram/trigram always run
+             the baseline scan (delta-quad was measured ~2x slower). */
+          if (opt_delta && ((m.scoring == SCORE_IC) || (m.scoring == SCORE_MONO)))
+            delta_switch_scan(m, iter, max_pairs, pairs,
+                              move_score, move_kind, move_a, move_b);
+          else
+          {
 #ifdef SHOWHILLCLIMB
           fprintf(stderr, "  ");
           for(int b=1; b<asize; b++)
@@ -1064,6 +1269,7 @@ double hillclimb(machine & m, int max_pairs)
             printf("\n");
 #endif
             }
+          }
 
           /* Removal moves: drop an existing plug pair, freeing both ends. The switch
              moves can add, re-pair or merge plugs but never simply delete one, so a
@@ -2290,6 +2496,7 @@ void help(FILE * out)
   fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];\n");
   fprintf(out, "               held fixed -- the -c/-A climb keeps them and finds the rest\n");
   fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
+  fprintf(out, "  -D           Delta-score mono/IC climb passes (exact, faster; needs -c)\n");
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
@@ -2364,6 +2571,8 @@ void show_settings()
             opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged && (opt_anneal == 0))
     fprintf(stderr, "            staged: %s\n", opt_staged);
+  if (opt_hillclimb && opt_delta)
+    fprintf(stderr, "            delta-scoring mono/IC passes\n");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts > 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));
@@ -2441,6 +2650,7 @@ int main(int argc, char * * argv)
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
+  opt_delta = 0;
   opt_restarts = 1;
   opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
@@ -2456,7 +2666,7 @@ int main(int argc, char * * argv)
   /* get arguments */
 
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:imbtqcvhn4")) != -1)
+  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:Dimbtqcvhn4")) != -1)
     {
       switch (c)
         {
@@ -2500,6 +2710,9 @@ int main(int argc, char * * argv)
           break;
         case 'c':
           opt_hillclimb = 1;
+          break;
+        case 'D':
+          opt_delta = 1;
           break;
         case 'S':
           opt_staged = optarg;
@@ -2720,6 +2933,10 @@ int main(int argc, char * * argv)
     fatal("Illegal anneal move budget (-A must be >= 1)");
   if ((opt_anneal > 0) && (! opt_hillclimb))
     fatal("Simulated annealing (-A) needs the plugboard hill-climb (-c)");
+
+  /* -D accelerates mono/IC hill-climb passes, so it needs -c. */
+  if (opt_delta && (! opt_hillclimb))
+    fatal("Delta-scoring (-D) needs the plugboard hill-climb (-c)");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully
