@@ -490,9 +490,10 @@ range and is not viable.
   the redundant `textlength`/`ciphertext`/`plaintext` parameters that used to
   shadow the globals were removed earlier.)
 - Debug instrumentation is intentionally retained: `showit`, `showconfig`,
-  `showsteckerbrett`, the `#if 0` trace blocks, and the `SHOWHILLCLIMB`
-  compile-time path. (The vestigial `all_subst_score`/`map`/`opt_threads`/
-  `opt_logfilename` code has been removed; see `CODE_REVIEW_HISTORY.md` §3.)
+  `showsteckerbrett`, and the `#if 0` trace blocks. (The `SHOWHILLCLIMB` compile-time
+  climb-trace path was removed, taking the vestigial per-climb `iter` counter with it;
+  the earlier `all_subst_score`/`map`/`opt_threads`/`opt_logfilename` dead code is gone
+  too — see `CODE_REVIEW_HISTORY.md` §3.)
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).

@@ -842,9 +842,8 @@ void showconfig(machine & m)
   fprintf(stderr, "\n");
 }
 
-double score_iter(machine & m, int iter)
+double score_iter(machine & m)
 {
-  (void) iter;   /* the iteration counter is only used by SHOWHILLCLIMB */
   m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
@@ -935,7 +934,7 @@ void ciphertext_letterdist()
    moves cannot. It is run only once the cheap swap/remove moves have converged -- a
    handful of times per climb, not every pass -- so its O(plugs^2) cost is small.
    Applies and returns true iff the single best re-pair strictly beats cur_score. */
-static bool try_repair(machine & m, int iter, double cur_score)
+static bool try_repair(machine & m, double cur_score)
 {
   int plo[asize / 2];
   int phi[asize / 2];
@@ -961,7 +960,7 @@ static bool try_repair(machine & m, int iter, double cur_score)
         /* M1: {a-b, x-y} */
         m.steckerbrett[a] = b; m.steckerbrett[b] = a;
         m.steckerbrett[x] = y; m.steckerbrett[y] = x;
-        double s1 = score_iter(m, iter);
+        double s1 = score_iter(m);
         if (s1 > best)
           {
             best = s1; found = true;
@@ -972,7 +971,7 @@ static bool try_repair(machine & m, int iter, double cur_score)
         /* M2: {a-y, x-b} */
         m.steckerbrett[a] = y; m.steckerbrett[y] = a;
         m.steckerbrett[x] = b; m.steckerbrett[b] = x;
-        double s2 = score_iter(m, iter);
+        double s2 = score_iter(m);
         if (s2 > best)
           {
             best = s2; found = true;
@@ -1021,13 +1020,13 @@ static pairtab make_pairtab()
    (no RNG, fixed order and acceptance rule) so the result is -T-independent; the trajectory
    differs from steepest ascent, so this is NOT byte-identical and must be judged on
    recovery, not equality. */
-static void firstimprove_sweep(machine & m, int iter, int max_pairs)
+static void firstimprove_sweep(machine & m, int max_pairs)
 {
   static const int nmoves = asize * (asize - 1) / 2;   /* 325 pair-toggles */
   static const pairtab P = make_pairtab();
 
   unsigned char * __restrict steck = m.steckerbrett;
-  double cur = score_iter(m, iter);
+  double cur = score_iter(m);
 
   int pairs = 0;
   for (int j = 0; j < asize; j++)
@@ -1056,7 +1055,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
       {
         steck[a] = static_cast<unsigned char>(a);
         steck[b] = static_cast<unsigned char>(b);
-        s = score_iter(m, iter);
+        s = score_iter(m);
         steck[a] = static_cast<unsigned char>(b);
         steck[b] = static_cast<unsigned char>(a);
       }
@@ -1068,7 +1067,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
         steck[y] = static_cast<unsigned char>(y);
         steck[a] = static_cast<unsigned char>(b);
         steck[b] = static_cast<unsigned char>(a);
-        s = score_iter(m, iter);
+        s = score_iter(m);
         steck[a] = static_cast<unsigned char>(x);
         steck[b] = static_cast<unsigned char>(y);
         steck[x] = static_cast<unsigned char>(xx);
@@ -1125,7 +1124,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
         {
           steck[a] = static_cast<unsigned char>(a);
           steck[b] = static_cast<unsigned char>(b);
-          double s = score_iter(m, iter);
+          double s = score_iter(m);
           if (s > cur)
             { cur = s; improved = true; }
           else
@@ -1142,7 +1141,7 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
           steck[y] = static_cast<unsigned char>(y);
           steck[a] = static_cast<unsigned char>(b);
           steck[b] = static_cast<unsigned char>(a);
-          double s = score_iter(m, iter);
+          double s = score_iter(m);
           if (s > cur)
             { cur = s; improved = true; }
           else
@@ -1175,8 +1174,6 @@ static void firstimprove_sweep(machine & m, int iter, int max_pairs)
    cross, and if it improves the cheap climb resumes from the new board. */
 double hillclimb(machine & m, int max_pairs)
 {
-  int iter = 1;
-
   /* -I: circular first-improvement instead of steepest ascent (off by default, so the
      baseline is byte-identical). */
   const bool firstimp = (opt_firstimprove != 0);
@@ -1190,8 +1187,8 @@ double hillclimb(machine & m, int max_pairs)
 
       if (firstimp)
         {
-          firstimprove_sweep(m, iter, max_pairs);
-          cur = score_iter(m, 0);
+          firstimprove_sweep(m, max_pairs);
+          cur = score_iter(m);
         }
       else
         {
@@ -1203,7 +1200,7 @@ double hillclimb(machine & m, int max_pairs)
          merges two plugs into one) and all "remove" moves (free an existing pair). */
       do
         {
-          best_score = score_iter(m, iter);
+          best_score = score_iter(m);
           last_best = best_score;
 
           /* current plug-pair count: at the cap, moves that would add a brand-new
@@ -1217,8 +1214,6 @@ double hillclimb(machine & m, int max_pairs)
           int move_kind = 0;        /* 0 = switch, 1 = remove */
           int move_a = 0;
           int move_b = 0;
-
-          //#define SHOWHILLCLIMB
 
           /* One "toggle a-b" operator over all 325 letter pairs expresses every plug move
              by the current state of a and b: both ends free -> ADD a-b (+1 pair); exactly
@@ -1272,12 +1267,7 @@ double hillclimb(machine & m, int max_pairs)
                     new_kind = 0;
                   }
 
-                double score = score_iter(m, iter);
-
-#ifdef SHOWHILLCLIMB
-                fprintf(stderr, "%c%c%s%4.0f  ", num2char(a), num2char(b),
-                        paired ? "-" : "+", (score - best_score)/10.0);
-#endif
+                double score = score_iter(m);
 
                 /* steepest ascent; on an equal score a switch (add/move/merge) wins the tie
                    over a removal, so a converged board keeps the plugs the score justifies. */
@@ -1328,21 +1318,8 @@ double hillclimb(machine & m, int max_pairs)
                   m.steckerbrett[b] = a;
                 }
 
-#ifdef SHOWHILLCLIMB
-              fprintf(stderr,
-                      "%2d %s Imp: %10.4f Score: %10.4f ",
-                      iter,
-                      move_kind == 1 ? "del" : "set",
-                      move_score - best_score,
-                      move_score);
-              showsteckerbrett(m);
-              fprintf(stderr, "\n");
-#endif
-
               best_score = move_score;
             }
-
-          iter++;
         }
       while (best_score > last_best);
           cur = best_score;
@@ -1350,18 +1327,14 @@ double hillclimb(machine & m, int max_pairs)
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
          improves, loop back and let the cheap climb resume from the new board. */
-      if (try_repair(m, iter, cur))
+      if (try_repair(m, cur))
         progress = true;
-      iter++;
     }
   while (progress);
 
   decode(m);
 
-#ifdef SHOWHILLCLIMB
-  printf("Plaintext: %s\n", m.plaintext);
-#endif
-  return score_iter(m, 0);
+  return score_iter(m);
 }
 
 /* splitmix64: a tiny, well-distributed deterministic PRNG. Seeded per key (not
@@ -1616,7 +1589,7 @@ static double anneal_once(machine & m, uint64_t * rng)
       m.scoring = target_model;
     }
 
-  double cur = score_iter(m, 0);
+  double cur = score_iter(m);
   double best = cur;
   unsigned char best_board[asize];
   unsigned char saved[asize];
@@ -1633,7 +1606,7 @@ static double anneal_once(machine & m, uint64_t * rng)
       random_pair(rng, a, b);
       memcpy(saved, m.steckerbrett, asize);
       apply_toggle(m, a, b, cap);
-      double d = score_iter(m, 0) - cur;
+      double d = score_iter(m) - cur;
       memcpy(m.steckerbrett, saved, asize);   /* sampling only -- always restore */
       if (d < 0.0)
         {
@@ -1662,7 +1635,7 @@ static double anneal_once(machine & m, uint64_t * rng)
           random_pair(rng, a, b);
           memcpy(saved, m.steckerbrett, asize);
           apply_toggle(m, a, b, cap);
-          double d = score_iter(m, 0) - cur;
+          double d = score_iter(m) - cur;
           if ((d >= 0.0) || (uniform01(rng) < exp(d / T)))
             {
               cur += d;
@@ -1681,7 +1654,7 @@ static double anneal_once(machine & m, uint64_t * rng)
 
   memcpy(m.steckerbrett, best_board, asize);
   hillclimb(m, cap);   /* greedy quench under the target model, same cap */
-  return score_iter(m, 0);
+  return score_iter(m);
 }
 
 /* Optimise the plugboard for the current key from the current board: simulated
@@ -1936,7 +1909,7 @@ void search_worker(machine & m,
           else
             {
               init_steckerbrett(m, opt_steckerbrett);
-              score = score_iter(m, 0);
+              score = score_iter(m);
             }
 
           if (better_cand(score, idx, local_best, local_best_idx))
