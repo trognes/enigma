@@ -33,8 +33,13 @@ scoring failures.
 
 **Already shipped** (do not re-propose; tune only): steepest-ascent hill-climb
 (switch / remove / gated re-pair moves); random restarts `-R` with a fixed
-`k≈8`-pair kick; staged schedule `-S` with the best recipe `-S iq` (IC pre-pass
-then quadgrams) and per-stage plug caps; key pre-filter `-F` (cheap capped-IC
+`k≈8`-pair kick; staged schedule `-S` with the general recipe `-S iq` (IC pre-pass
+then quadgrams) and per-stage plug caps — on realistic ~10-plug short texts the
+**tuned recipe is `-S i5q10`** (IC pre-pass capped at 5, quad capped at 10, default
+kick): measured **+3–10pp mean %-correct at L40–80 over `-S iq` at matched compute**,
+both seeds, because capping stops the noisy short-message score adding spurious plugs
+*and* makes each climb cheaper so the same budget buys ~30% more restarts; a *small*
+kick (`r3/r4`) hurts, so the kick stays the default; key pre-filter `-F` (cheap capped-IC
 climb shortlists keys, ~8–20× throughput); simulated annealing `-A`
 (toggle-connect, acceptance-ratio-calibrated temperature, tuned `χ0=0.12`, IC
 pre-pass + greedy quench, honoring a known-plug-count cap) — a **peer** of the

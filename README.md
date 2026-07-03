@@ -284,11 +284,26 @@ A good general recipe for a hard (short) message with a known rotor key:
 ./enigma -c -I -R 55 -S iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
+**Cap the plug count in the schedule.** A real Wehrmacht board has ~10 plugs, so
+capping the final (quad) stage at 10 and the IC pre-pass lower — `-S i5q10` — keeps
+the climb from adding spurious plugs on the noisy short-message score, and (being
+cheaper) buys more restarts for the same budget. On ~50–80-letter 10-plug messages
+this recovers several percentage points more than `-S iq` at equal compute (best
+measured: `-S i5q10`, i.e. IC capped at 5, quad at 10; the kick stays the default —
+a *small* kick like `r3` hurts):
+
+```sh
+./enigma -c -R 26 -S i5q10 -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+```
+
+If you know the board uses **few** plugs (say 6), cap at that count instead
+(`-S i5q6` or so) — there the cap is a large win.
+
 When you also brute-force the rotor key, add `-F` to shortlist keys and `-T` for
 threads:
 
 ```sh
-./enigma -c -R 20 -S iq -F 10% -T 4 -l english -u . -w ... -r AAA -g ... < cipher.txt
+./enigma -c -R 20 -S i5q10 -F 10% -T 4 -l english -u . -w ... -r AAA -g ... < cipher.txt
 ```
 
 Increase `-R` for harder messages.
