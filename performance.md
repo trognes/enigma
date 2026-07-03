@@ -863,8 +863,9 @@ test is recovery at equal compute. Sweep K (for (a)) / N (for (b)).
 
 > **The first idea in this document that beats the baseline at the ~50-char target.**
 > Two mechanisms were separable — first-improvement move selection, and don't-look
-> bits. First-improvement was built and shipped as opt-in `-I`; don't-look bits and
-> informed move ordering remain open (below).
+> bits. First-improvement was built and shipped as opt-in `-I` (and informed move ordering
+> as `-J`); don't-look bits were later built and **rejected** (not exact on this global
+> objective; neutral-to-negative at matched compute — below).
 
 **What shipped.** `hillclimb()` was steepest-ascent — a full 325-move scan per
 accepted move, taking the single best. `-I` switches to **circular first-improvement**:
@@ -930,13 +931,29 @@ move ordering helps or hurts depending entirely on whether it varies *per restar
   count-dependent: **~10 plugs → `-J` uncapped; known-few plugs → `-J -S iKqK`.** No new
   code — `-S qK` already exists; this is a usage finding.
 
-- **Don't-look bits** (Bentley) — the remaining open refinement. A per-letter active
-  flag; skip moves incident only to letters that a full sweep already found inert,
-  re-activating the ~4 letters an accepted move touches. Crucially it is a **pure
-  speedup** — it changes *which moves are examined*, not the accepted-move trajectory or
-  its order — so it does **not** add the greediness that sank static ordering. Composes
-  with the `-I` cursor (skip cursor positions whose letters are inactive) and should cut
-  the confirming final cycle further. Not yet built.
+- **Don't-look bits** (Bentley) — ❌ **built, measured, rejected.** The idea: a move is
+  skipped once evaluated-and-inert, revived only when an accepted move touches one of its
+  letters. Prototyped as move-level bits on the `-I`/`-J` cursor (revive every move incident
+  to the ~4 letters a move changes), behind an opt-in `-K`.
+
+  **The premise was wrong.** Don't-look bits are exact only for a **separable** objective
+  (TSP tour length — a move's delta is *local* to its two cities). The plugboard score is a
+  **global, overlapping n-gram** objective: toggling `(a,b)` shifts quadgram windows that
+  overlap *other* letters, so a move's improvement can depend on a change to a letter it is
+  **not** incident to. Skipping an "inert" move can therefore miss a real improvement — the
+  filter is a **heuristic, not the pure/trajectory-preserving speedup claimed above**. Direct
+  evidence: on *easy* keys `-I` and `-I -K` converge to the identical plaintext (so the
+  implementation is correct), but on *hard* keys they land in **different local optima**.
+
+  **As a heuristic it does not pay at matched compute.** It does cut `score_iter` — `-I` to
+  ~0.64×, `-J` to ~0.82× (the smaller `-J` saving is because DLB cannot touch `-J`'s up-front
+  ordering scan) — buying ~1.2–1.6× more restarts. But at matched `score_iter` (crackquality,
+  PAIRS=10, L60/70/80, 60 trials × 2 seeds): **`-I` is noise-level neutral** (−4pp exact at
+  L70, +5pp at L80, tie at L60) and **`-J` is a consistent small loss** (−2 to −5pp exact at
+  every length). Recovering *worse per restart* (a noisier trajectory) is not repaid by the
+  extra restarts — the same failure mode as the static-ordering idea above. Reverted; not
+  shipped. A restricted variant (bits active only during the terminal confirming cycles,
+  where nothing improves so the heuristic risk is lowest) is conceivable but untested.
 
 ### 7.3 Amortize the `-F` IC pre-pass into tier 2 (MEDIUM priority; clean win)
 
@@ -1139,9 +1156,10 @@ Build this first; several ideas below only become measurable once it exists.
    at matched compute (+8pp exact / +1–23pp mean, scaling with available signal — §7.2).
    Opt-in, because it recovers worse per restart. **Dynamic per-restart best-first move
    ordering shipped as `-J`** (a matched-compute win on the realistic ~10-plug regime,
-   +2–6pp mean; §7.2). **Remaining upside:** don't-look bits (§7.2, unbuilt). *Static*
-   (fixed-across-restarts) informed ordering was **rejected** — greedier *and* diversity-
-   collapsing; the per-restart `-J` keeps the front-loading without the collapse (§7.2).
+   +2–6pp mean; §7.2). **Don't-look bits were built and rejected** — not exact on a global
+   n-gram objective (unlike TSP), so a heuristic; neutral for `-I`, a small loss for `-J` at
+   matched compute (§7.2). *Static* (fixed-across-restarts) informed ordering was **rejected**
+   too — greedier *and* diversity-collapsing; per-restart `-J` keeps the front-loading (§7.2).
 
 3. **True ILS with incumbent-walk acceptance (§3.3).** The cheapest *structural*
    change to how restarts are spent: instead of always relaunching from the fixed seed,
