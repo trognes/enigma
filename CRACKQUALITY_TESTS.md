@@ -14,9 +14,10 @@
 > binary hook + the `DIVERSITY` basin-collapse mode. All three binary hooks are
 > **off by default** (default paths byte-identical and bench-neutral, verified),
 > and `WILDCARD=""` / no-mode runs are byte-identical to the original harness. The
-> commands below are runnable now. **First numbers collected:** §2 Test A (`-F`
-> recall) on the 6-order proxy — see the measured table in §2. The scoring gate
-> (§1), the full 60-order recall, Test B, and §3 diversity sweeps are not yet run.
+> commands below are runnable now. **Numbers collected:** the §1 scoring-failure
+> gate (H0 — fires only at L40, ~7.5%; search-bound at L ≥ 50; see §1) and §2 Test A
+> (`-F` recall on the 6-order proxy; see §2). The full 60-order recall, Test B, the
+> `FULLCRACK` wheel-order gate, and §3 diversity sweeps are not yet run.
 >
 > **This supersedes the earlier "full-crack tier" design.** Its cross-key plug
 > marginalization goal (PERFORMANCE.md §5.3) is **dropped** — see the note at the
@@ -121,6 +122,43 @@ rare-letter plugs in 50 chars are near-unidentifiable regardless of effort
 parsed `last_score`/`last_key` *values* byte-identical across `T=1/3/8` — **not**
 full-stderr, since which progress *lines appear* is thread-timing dependent by
 design (`best_result.shown`).
+
+### Measured — the gate (H0), first run
+
+Config: `START` scope unfiltered (`WILDCARD=g`, reflector+wheels fixed true, ring
+`AAA`, start wildcarded ⇒ 17,576 keys), English quad, **6 plugs**, `-R 8`,
+`SEED=1`, 12 trials/length (L40 extended to **80** — two seeds × 40 — to test the
+short-end signal). `search-fail%` / `scoring-fail%` are over *all* trials (exact
+recoveries fill the remainder).
+
+| L | mean% | exact% | search-fail% | **scoring-fail%** | trials |
+|--:|--:|--:|--:|--:|--:|
+| 40 | ~16 | ~9 | ~84 | **7.5** (6/80) | 80 |
+| 50 | 20.2 | 8.3 | 91.7 | **0.0** | 12 |
+| 60 | 53.6 | 50.0 | 50.0 | **0.0** | 12 |
+| 90 | 45.4 | 41.7 | 58.3 | **0.0** | 12 |
+| 120 | 100 | 100 | 0.0 | **0.0** | 12 |
+
+**H0 fires, but narrowly.** From **L50 up the tier is cleanly search-bound** —
+`scoring-fail% = 0`, every miss is the plugboard climb stuck in a local optimum,
+exactly as on the fixed-key tier. **At L40 only**, ~7.5% of messages have a wrong
+(key, board) out-score the truth under quad — **robust across two independent
+seeds** (5% and 10%, so not the 1/12 trial-noise the first 12-trial run
+suggested). These are the **first scoring failures this project has observed**:
+right at the identifiability floor, a noisy quad score over ~37 quadgrams
+occasionally mis-ranks a decoy start with an overfit plugboard above the truth.
+
+**What it means.** §6 (scoring) **stays parked for the regime that matters** —
+there is no scoring problem at L ≥ 50. The narrow L40 re-opening is a concrete but
+small target for the two length-sensitive scoring ideas (§6.1 trigram-at-short-end,
+§6.2 back-off smoothing): they could only help at L ≲ 40, where recovery is already
+near the information floor (`exact% ≈ 9`), so the practical payoff is limited.
+
+**Caveats.** `START` scope tests **start-discrimination only** (wheels/reflector
+fixed true); a wheel-order scoring failure would need the heavier `FULLCRACK`
+unfiltered gate, not run. One machine; L50–120 are 12 trials each (percentages
+coarse — e.g. L60 > L90 mean is trial noise, not a real dip). The load-bearing
+result is the `scoring-fail%` column, and it is 0 everywhere except the L40 floor.
 
 ---
 
