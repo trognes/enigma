@@ -4,6 +4,7 @@
 #include <math.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -2608,51 +2609,81 @@ void help(FILE * out)
 {
   version(out);
   fprintf(out, "Usage: enigma [OPTIONS]\n");
-  fprintf(out, "  -h           Show help information\n");
-  fprintf(out, "  -v           Show version information\n");
-  fprintf(out, "  -u X         Reflector (umkehrwalze) X (A-C, N, M4 b/c, or .) [.]\n");
-  fprintf(out, "  -w XYZ       Wheels (walzen) XYZ (1-8 or .) [...]\n");
-  fprintf(out, "  -x integer   Highest wheel number to use (3-8) [5]\n");
-  fprintf(out, "  -n           Use the Norway Enigma reflector (N) and wheels (1-5)\n");
-  fprintf(out, "  -4           M4 (4-rotor naval) mode: -u selects thin reflector b/c;\n");
-  fprintf(out, "               -w/-r/-g take 4 chars, Greek wheel (B/G) / ring / start first\n");
-  fprintf(out, "  -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]\n");
-  fprintf(out, "  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
-  fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];\n");
-  fprintf(out, "               held fixed -- the -c/-A climb keeps them and finds the rest\n");
-  fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
-  fprintf(out, "  -I           First-improvement climb: ~2.8x cheaper per climb, so pair\n");
-  fprintf(out, "               with more -R for a net recovery win (needs -c) [off]\n");
-  fprintf(out, "  -J           Like -I but with dynamic best-first move ordering; wins on\n");
-  fprintf(out, "               ~10-plug messages, may lose with few plugs (implies -I) [off]\n");
-  fprintf(out, "  -M           Make the plug cap a strict descent target: at/over the cap\n");
-  fprintf(out, "               only merge/remove moves; best with a tight -S cap (needs -c) [off]\n");
-  fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
-  fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
-  fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
-  fprintf(out, "               rN = per-restart random plugs (N pairs, default 8),\n");
-  fprintf(out, "               aN = pin N plugs total (the -s pairs plus the rest forced) and\n");
-  fprintf(out, "               try every combination (a1 = 325 climbs; N>1 explodes -- an\n");
-  fprintf(out, "               exploration tool, -T 1; dominated by a high -R at equal compute).\n");
-  fprintf(out, "               E.g. -S a1i4q10  or  -s ABCD -S a3q10  (2 fixed + 1 forced)\n");
-  fprintf(out, "  -A integer   Recover the plugboard by simulated annealing instead of the\n");
-  fprintf(out, "               greedy climb; integer = move budget (needs -c) [off].\n");
-  fprintf(out, "               Honours the -S target cap: -A N -S qK caps it at K plugs\n");
-  fprintf(out, "  -e integer   Random seed for the restart perturbation (also $ENIGMA_SEED);\n");
-  fprintf(out, "               default is a fresh random seed each run, echoed for repeating\n");
-  fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
-  fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
-  fprintf(out, "  -i           Use index of coincidence (IC) to score; needs no -l [default]\n");
-  fprintf(out, "  -m           Use monogram statistics to determine plaintext score\n");
-  fprintf(out, "  -b           Use bigram statistics to determine plaintext score\n");
-  fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
-  fprintf(out, "  -q           Use quadgram statistics to determine plaintext score\n");
-  fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
-  fprintf(out, "  -F N[%%]      Key pre-filter: rank keys by a cheap IC climb, then run\n");
-  fprintf(out, "               the full -c climb on only the top N keys, or top N%% of\n");
-  fprintf(out, "               the keyspace (needs -c) [off]\n");
-  fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [ngrams]\n");
-  fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
+  fprintf(out, "\n");
+
+  /* Options are grouped basic/advanced; every option shows its short flag and
+     its long alias. Unambiguous long-name prefixes (e.g. --lang, --restart) also
+     work. Descriptions are aligned in a 24-column spec field (continuation lines
+     pass an empty spec) and kept within 79 columns. */
+  fprintf(out, "Basic options:\n");
+  fprintf(out, "  %-24s %s\n", "-h, --help", "Show help information");
+  fprintf(out, "  %-24s %s\n", "-v, --version", "Show version information");
+  fprintf(out, "  %-24s %s\n", "-u, --reflector X",
+          "Reflector (umkehrwalze); A-C, N, M4 b/c, or . [.]");
+  fprintf(out, "  %-24s %s\n", "-w, --wheels XYZ", "Wheels (walzen); 1-8 or . [...]");
+  fprintf(out, "  %-24s %s\n", "-r, --rings XYZ",
+          "Ring positions (ringstellung); A-Z or . [AA.]");
+  fprintf(out, "  %-24s %s\n", "-g, --start-position XYZ",
+          "Start positions (grundstellung); A-Z or . [...]");
+  fprintf(out, "  %-24s %s\n", "-s, --plugboard AB...",
+          "Plugboard (steckerbrett) A-Z letter pairs [none];");
+  fprintf(out, "  %-24s %s\n", "", "held fixed; the -c/-A climb finds the rest");
+  fprintf(out, "  %-24s %s\n", "-n, --norway",
+          "Norway Enigma: reflector N and wheels (1-5)");
+  fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
+  fprintf(out, "  %-24s %s\n", "", "reflector b/c; -w/-r/-g take 4 chars (Greek");
+  fprintf(out, "  %-24s %s\n", "", "wheel/ring/start first)");
+  fprintf(out, "  %-24s %s\n", "-c, --climb",
+          "Perform hill climbing to find plugboard settings");
+  fprintf(out, "  %-24s %s\n", "-R, --restarts N",
+          "Plugboard hill-climb random restarts (1=none) [1]");
+  fprintf(out, "  %-24s %s\n", "-S, --score schedule",
+          "Staged plugboard climb: <letter><number> tokens.");
+  fprintf(out, "  %-24s %s\n", "", "Models i/m/b/t/q (number caps pairs; last=target),");
+  fprintf(out, "  %-24s %s\n", "", "rN = per-restart random plugs (N pairs, default 8),");
+  fprintf(out, "  %-24s %s\n", "", "aN = pin N plugs total (-s pairs + the rest forced)");
+  fprintf(out, "  %-24s %s\n", "", "and try every combo (a1 = 325 climbs; N>1 explodes");
+  fprintf(out, "  %-24s %s\n", "", "-- an exploration tool, -T 1; a high -R dominates).");
+  fprintf(out, "  %-24s %s\n", "", "E.g. -S a1i4q10  or  -s ABCD -S a3q10 (2 fixed+1)");
+  fprintf(out, "  %-24s %s\n", "-l, --language language",
+          "Scoring language (english/german/danish/french);");
+  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q (no default); not for -i");
+  fprintf(out, "  %-24s %s\n", "-i, --ic",
+          "Index of coincidence (IC); needs no -l [default]");
+  fprintf(out, "  %-24s %s\n", "-m, --mono", "Monogram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-b, --bi", "Bigram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-t, --tri", "Trigram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-q, --quad", "Quadgram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
+          "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
+  fprintf(out, "  %-24s %s\n", "-T, --threads N",
+          "Worker threads for the search (1-256) [1]");
+  fprintf(out, "\n");
+  fprintf(out, "Advanced options:\n");
+  fprintf(out, "  %-24s %s\n", "-x, --max-wheel N", "Highest wheel number to use (3-8) [5]");
+  fprintf(out, "  %-24s %s\n", "-A, --anneal N",
+          "Recover the plugboard by simulated annealing");
+  fprintf(out, "  %-24s %s\n", "", "instead of the greedy climb; N = move budget");
+  fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
+  fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
+  fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
+          "Key pre-filter: rank by a cheap IC climb, then");
+  fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
+  fprintf(out, "  %-24s %s\n", "", "top N% of the keyspace (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "-I, --first-improve",
+          "First-improvement climb: ~2.8x cheaper per climb,");
+  fprintf(out, "  %-24s %s\n", "", "so pair with more -R for a net win (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "-J, --dynamic-order",
+          "Like -I with dynamic best-first move ordering;");
+  fprintf(out, "  %-24s %s\n", "", "wins ~10-plug, may lose few-plug (implies -I) [off]");
+  fprintf(out, "  %-24s %s\n", "-M, --cap-target",
+          "Make the plug cap a strict descent target: only");
+  fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
+  fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
+  fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
+  fprintf(out, "  %-24s %s\n", "-p, --compare filename",
+          "Plaintext file to compare the result against");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
@@ -2821,8 +2852,48 @@ int main(int argc, char * * argv)
 
   /* get arguments */
 
+  /* Long-option aliases for every short flag (Part A of REDESIGN.md). Each long
+     name maps onto the existing short value, so the switch below is unchanged and
+     behaviour is identical. Unambiguous prefixes (e.g. --lang, --restart) are
+     accepted natively by getopt_long. New long-only options (--random, --exhaust)
+     are deliberately NOT added here; they arrive with the seed pipeline in Part B. */
+  static const struct option long_options[] =
+    {
+      { "reflector",      required_argument, nullptr, 'u' },
+      { "wheels",         required_argument, nullptr, 'w' },
+      { "rings",          required_argument, nullptr, 'r' },
+      { "start-position", required_argument, nullptr, 'g' },
+      { "plugboard",      required_argument, nullptr, 's' },
+      { "compare",        required_argument, nullptr, 'p' },
+      { "language",       required_argument, nullptr, 'l' },
+      { "max-wheel",      required_argument, nullptr, 'x' },
+      { "threads",        required_argument, nullptr, 'T' },
+      { "restarts",       required_argument, nullptr, 'R' },
+      { "score",          required_argument, nullptr, 'S' },
+      { "prefilter",      required_argument, nullptr, 'F' },
+      { "seed",           required_argument, nullptr, 'e' },
+      { "anneal",         required_argument, nullptr, 'A' },
+      { "ngrams",         required_argument, nullptr, 'd' },
+      { "first-improve",  no_argument,       nullptr, 'I' },
+      { "dynamic-order",  no_argument,       nullptr, 'J' },
+      { "cap-target",     no_argument,       nullptr, 'M' },
+      { "ic",             no_argument,       nullptr, 'i' },
+      { "mono",           no_argument,       nullptr, 'm' },
+      { "bi",             no_argument,       nullptr, 'b' },
+      { "tri",            no_argument,       nullptr, 't' },
+      { "quad",           no_argument,       nullptr, 'q' },
+      { "climb",          no_argument,       nullptr, 'c' },
+      { "norway",         no_argument,       nullptr, 'n' },
+      { "m4",             no_argument,       nullptr, '4' },
+      { "version",        no_argument,       nullptr, 'v' },
+      { "help",           no_argument,       nullptr, 'h' },
+      { nullptr,          0,                 nullptr, 0   }
+    };
+
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqcvhn4")) != -1)
+  while ((c = getopt_long(argc, argv,
+                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqcvhn4",
+                          long_options, nullptr)) != -1)
     {
       switch (c)
         {
