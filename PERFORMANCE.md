@@ -60,7 +60,9 @@ single-TU design); rotor-stepping reuse across start positions (byte-identical
 but slower); SA reheating and chain-length sweeps (no help); `χ0=0.8` (lost ~2×);
 plugboard-free IC scan as pre-filter (~0% recall); 5-grams / 4-bit scores (too
 sparse / too coarse); uncapped tier-1 IC climb (overfits, worse recall *and*
-slower).
+slower); back-off / interpolated quadgram smoothing (`--backoff`, §6.2 — conditional
+form −20pp, joint-floor form neutral; the harsh flat floor is a discrimination
+*feature*).
 
 **Constraints every proposal must respect:** `-T` thread determinism (all
 randomness rides the per-key splitmix64 stream seeded from the flat key index —
@@ -700,33 +702,41 @@ across all four languages, not just the harness's one passage.
 short end. Ship the length switch only if trigram wins at 40–70 and quad wins
 longer.
 
-### 6.2 Back-off / interpolated smoothing to replace the flat hapax floor (MEDIUM priority)
+### 6.2 Back-off / interpolated smoothing to replace the flat hapax floor (❌ BUILT, MEASURED, REJECTED)
 
-**Form in this codebase.** `ngrams_read()` (`:307`) floors every unseen quadgram
-at one fixed value `log10(1/total)`. On 50 letters a large fraction of the ~47
-quadgrams are unseen and all contribute the *same* constant — the score is driven
-by only the handful of attested quadgrams and is blind to *which* unseen quadgram
-appeared. Replace the flat floor with an interpolated/back-off estimate
-(`P4 ≈ λ4·P4 + λ3·P3(·|abc) + λ2·P2 + λ1·P1`, or modified Kneser-Ney), **precomputed
-into the same `quad8` table at load time**, so the hot loop is byte-identical
-(still one `quad8[a][b][c][d]` gather, no throughput risk).
+**The idea.** `ngrams_read()` floors every unseen quadgram at one fixed value
+`log10(1/total)`. On ~50 letters most of the ~47 quadgrams are unseen and all
+contribute the *same* constant — so the score is blind to *which* unseen quadgram
+appeared. The hypothesis: replace the flat floor with an interpolated/back-off
+estimate that keeps the lower-order signal, **precomputed into the same `quad8`
+table at load time** (hot loop and bench byte-identical, only the build differs),
+would reshape the short-text surface and pull the climb into the true basin.
 
-**Why it helps at 50 chars.** Short text is exactly the regime dominated by
-unseen/rare quadgrams; back-off keeps the lower-order signal that *is* attested for
-those positions, so it reshapes the surface (not a monotone rescale) and can pull
-the climb into the true basin.
+**Built behind an opt-in `--backoff` flag and measured (`crackquality`, plugboard
+tier, 6 plugs, `-R 8`, 40 trials/length). Two formulations, both fail:**
 
-**Honest payoff.** Medium. Per the search-failure diagnosis, this helps only
-insofar as a denser surface lets the same climb reach the basin; the larger win is
-the future full-crack tier (rotor-key discrimination). KN-over-flat is usually a
-few-percent likelihood gain, not transformative. New tunable (interpolation
-weights), refit per language; keep the flat-floor table for A/B.
+- **Interpolated *conditional* LM** — `P(d|abc)=Σ λ_k P_k`, backing off through the
+  tri/bi/mono tables. **Decisively worse: −11pp L50, −24pp L70, −20pp L90, and
+  unmoved by the weights** (even `λ4=0.97`). Cause: the conditional `count4/count3`
+  *rewards "locally predictable" gibberish* — a rare trigram context whose one
+  frequent continuation appears scores high conditionally, though the quadgram is
+  vanishingly rare jointly. Conditional normalisation systematically inflates decoy
+  scores and shrinks the gap to the truth.
+- **Joint-floor, downward** — keep the exact joint surface for *seen* quads; push
+  only *unseen* quads below the floor by their suffix-trigram implausibility
+  (`λ=0` reproduces the flat floor byte-identically; verified). **Neutral: ±1–3pp,
+  mixed sign, pure trial noise** across `λ∈{0.5,1,2}`, `cap∈{1,2}`.
 
-**Cost/risk.** Low: offline table build, hot path unchanged.
-
-**Experiment.** `make crackquality SPLIT=1` at L40–100: exact-recovery, mean
-%-correct, and whether the scoring-failure count stays ~0 (confirming surface, not
-discrimination, moved). `make bench` must be flat.
+**Verdict — the flat hapax floor's harshness is a *feature*, not a bug.** Punishing
+every unseen quadgram equally hard is exactly what makes only genuinely
+language-like (attested-quad-rich) decrypts win; any smoothing that *lifts* unseen
+values rewards plausible-looking gibberish (the conditional form), and even the
+mechanistically-sound *downward* variant doesn't help because — per the §1
+scoring-gate result — the tier is **search-bound, not scoring-bound**, so a
+better-conditioned unseen-quad surface has no search failures to convert. Not
+shipped; `--backoff` removed (the `load_counts()` refactor it introduced is kept).
+The related "denser surface" idea for the *final* model at the short end survives
+only as §6.1 (trigram target), and even that inherits this negative prior.
 
 ### 6.3 Soft MDL / plug-count prior (LOW–MEDIUM priority; weakest fit to the diagnosis)
 
@@ -1291,7 +1301,8 @@ gain); SIMD / `-march=native` (latency-bound — but note §7.1b is scalar MLP, 
 GPU (gather-bound, breaks the portable design); rotor-stepping reuse (slower); SA reheating
 / chain-length sweeps (no help); `χ0=0.8` (lost 2×); plugboard-free IC scan pre-filter
 (~0% recall); primary 5-grams / 4-bit scores (too sparse / coarse); uncapped tier-1 IC
-climb (overfits).
+climb (overfits); **back-off / interpolated quadgram smoothing** (`--backoff`, §6.2 —
+conditional form −20pp, joint-floor form neutral; harsh flat floor is a feature).
 
 ---
 
