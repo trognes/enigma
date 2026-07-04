@@ -373,17 +373,11 @@ inline char num2char(int x)
    log10(1 / total) -- scored as a single occurrence -- so an unattested gram is
    penalised like the rarest attested one rather than ruled out. Parsing stops at end of
    file or the first malformed record. */
-void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix)
+/* Read the raw n-gram counts for one order into `table` (pre-sized to asize^n by the
+   caller); returns the total count. Extracted from ngrams_read so the file-read is a
+   single-purpose helper, separate from the quantisation. */
+static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * suffix)
 {
-  int size = 1;
-  for (int i = 0; i < n; i++)
-    size *= asize;
-
-  /* Raw counts are accumulated here (transient -- only itable outlives this call).
-     uint32 holds every count exactly (the largest in the data is ~5.3e8, well inside
-     the range); float would lose precision above 2^24 ~ 16.7M. */
-  std::vector<uint32_t> table(size, 0);   /* unseen: count 0 until floored below */
-
   char filename[1024];
   int len = snprintf(filename, sizeof(filename), "%s/%s_%s.txt",
                      opt_datadir, opt_language, suffix);
@@ -423,6 +417,20 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
     }
 
   fclose(f);
+  return total;
+}
+
+void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix)
+{
+  int size = 1;
+  for (int i = 0; i < n; i++)
+    size *= asize;
+
+  /* Raw counts are accumulated here (transient -- only itable outlives this call).
+     uint32 holds every count exactly (the largest in the data is ~5.3e8, well inside
+     the range); float would lose precision above 2^24 ~ 16.7M. */
+  std::vector<uint32_t> table(size, 0);   /* unseen: count 0 until floored below */
+  uint64_t total = load_counts(n, table, suffix);
 
   /* Quantise log10(count / total) into itable as uint8 fixed-point. Unseen grams are
      floored at count = floor_count = 1 (a hapax): not truly impossible (corpora have
