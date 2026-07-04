@@ -611,7 +611,20 @@ per-move predicate stays off the hot path's critical cost. Same harness caveat a
 **Experiment.** Same crib tier: seed+constrain vs full-bombe vs no-crib across crib
 lengths; bench the per-move predicate cost.
 
-### 5.3 Cross-key plug marginalization (HIGH value — but needs the full-crack tier)
+### 5.3 Cross-key plug marginalization (❌ DE-PRIORITIZED — correlated-noise argument, maintainer decision)
+
+> **De-prioritized, not pursued.** The premise — "a plug that helps *many*
+> candidate keys is likely true" — assumes the candidate keys carry a shared
+> plugboard signal. They do not: under a *wrong* rotor key the decrypt is garbage,
+> so its best-fitting plugboard is **noise** uncorrelated with the truth, and
+> marginalizing over the top-N (mostly-wrong) keys aggregates mostly noise. This is
+> the **correlated-wrong-basin** failure that already sank §3.1 cross-restart
+> consensus (built, measured, rejected); §5.3 is the cross-*key* twin of that
+> cross-*restart* idea and inherits the result. The expensive cross-key experiments
+> are therefore not worth running. The one cheap survivor of the full-crack tier —
+> a one-time check of whether the *objective* misranks under an unknown key — is
+> kept as the scoring-failure gate in `CRACKQUALITY_TESTS.md` §1. The original
+> write-up is retained below for the record.
 
 **Form in this codebase.** Exploit that the plugboard is **identical for every
 rotor key** (it is the message's stecker, key-independent) — the single
@@ -1163,22 +1176,35 @@ re-add. `-M` is what makes a tight cap actually bite. So the recipe is regime-de
 
 ## 9. Prioritized shortlist and measurement plan
 
-### The one infrastructure item that gates everything: build the full-crack `crackquality` tier
+### Planned test additions: `CRACKQUALITY_TESTS.md`
 
-Before *and above* the algorithmic shortlist below stands a **measurement**, not an
-algorithm: a `make crackquality` tier that **wildcards the rotor key too** (not just
-the plugboard). It is the highest-value infrastructure item because:
+The earlier top item here — *"build the full-crack tier that gates everything"* —
+has been **de-scoped**. Its headline justification was cross-key plug
+marginalization (§5.3), now **de-prioritized** (the correlated-noise argument that
+sank §3.1 — see §5.3). What survives is three focused, cheap test additions,
+specified concretely in the dedicated root-level doc **`CRACKQUALITY_TESTS.md`**:
 
-- Every "scoring is fine, the tier is search-bound" conclusion in this document is
-  scoped to the plugboard-recovery tier. Rotor-key discrimination may expose genuine
-  *scoring* failures that would re-justify all of §6.
-- It is the prerequisite for **cross-key plug marginalization (§5.3)** — the one
-  non-crib lever that *adds information* at 50 chars — and it is where the Bayesian
-  calibration (§6.7) and MDL prior (§6.3) actually pay off.
-- It is cheap: it reuses the existing harness plumbing and simply removes the
-  fixed-key assumption.
+- **A one-time scoring-failure gate (unknown key).** The cheap survivor of the
+  full-crack tier: run *once* at the `START` scope (wheels/reflector fixed, ring
+  pinned `AAA`, start wildcarded, **unfiltered** so `-F` filter-recall cannot
+  confound the split), ~15 min, to answer whether the *objective* ever misranks a
+  wrong (key, board) above the true one. If it never does, §6 stays parked; if it
+  does, §6 (and its MDL prior §6.3 / calibration §6.7) re-opens. This is the only
+  reason left to wildcard the rotor key, and it is a diagnostic, not a suite.
+- **`-F` prefilter validation.** Throughput is documented; **recall is not** — how
+  often tier-1's capped-IC climb drops the *true* key before tier-2. A `--true-key`
+  hook + a `recall@N` sweep (tier-1 only, cheap) and a matched-`score_iter`
+  filtered-vs-unfiltered recovery A/B. The thorough `-F` test the docs lack.
+- **Restart-diversity diagnostics.** Measure directly how often restarts collapse
+  into the same local optimum (distinct-optima / global-best-hit per key) and rank
+  the *shipped* knobs (`--random` kick size, steepest/`-I`/`-J`) by basin coverage
+  at matched compute. Instrumentation + comparison only — no new anti-convergence
+  algorithm yet (deferred), just the measurement that would size one.
 
-Build this first; several ideas below only become measurable once it exists.
+The identifiability facts these rest on are verified (turnover reads the absolute
+start with no ring term, `enigma.cc:668–680`, so with ring pinned `AAA` the start
+is identifiable and the left ring/start are a pure ×26 degeneracy). Read
+`CRACKQUALITY_TESTS.md` before building any of the three.
 
 ### If you do three things (on the existing plugboard tier)
 
