@@ -2,11 +2,17 @@
 
 > **Scope and status.** Three focused, cheap additions to the `make crackquality`
 > harness, grounded in **measured** 4-core timings and **verified** `enigma.cc`
-> identifiability facts. Like PERFORMANCE.md, this is a **plan — no code changes
-> accompany it**; where an idea needs a small binary hook it is described, not
-> built. It inherits PERFORMANCE.md's measurement discipline (compute-normalize on
-> `score_iter`, the baseline is a higher `-R` at equal compute, `-T`
-> byte-determinism, both compilers for hot-path touches, `ENIGMA_SEED=0`).
+> identifiability facts. It inherits PERFORMANCE.md's measurement discipline
+> (compute-normalize on `score_iter`, the baseline is a higher `-R` at equal
+> compute, `-T` byte-determinism, both compilers for hot-path touches,
+> `ENIGMA_SEED=0`).
+>
+> **Build status:** §1's harness plumbing (the opt-in `WILDCARD`/`FILTER`/
+> `RESTARTS`/`FULLCRACK` knobs, `last_key`/`key_ok`, the `key%` column and the
+> generalized SPLIT) is **implemented** — `WILDCARD=""` keeps the fixed-key tier
+> byte-identical, verified — so the scoring gate can be run now. §2 and §3 are
+> still **plans**; each needs a small off-by-default binary hook, described below,
+> not yet built.
 >
 > **This supersedes the earlier "full-crack tier" design.** Its cross-key plug
 > marginalization goal (PERFORMANCE.md §5.3) is **dropped** — see the note at the

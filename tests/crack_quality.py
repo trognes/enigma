@@ -58,6 +58,24 @@
 # Tunables (environment): MODEL (i/m/b/t/q, default q), CLANG (crack language,
 # default english), TRIALS, LENGTHS, PAIRS, SEED, BASE, SPLIT, CRACKOPTS (extra
 # options appended to the climb invocation, e.g. "-R 10").
+#
+# --- Full-crack / scoring-gate tier (WILDCARD, see CRACKQUALITY_TESTS.md §1) --
+#
+# By default the climb is handed the TRUE rotor key and only the plugboard is
+# recovered. WILDCARD wildcards named rotor-key dimensions instead, so the search
+# must find the key AND the plugboard -- the setup for the one-time scoring-failure
+# gate (does a wrong (key, board) ever out-score the true one?).
+#   WILDCARD  subset of "uwrg" to wildcard (reflector/wheels/ring/start); ""
+#             (default) keeps the fixed-key tier byte-identical.
+#   XMAX      -x value + wheel-sampling cap when wheels are wildcarded (default 3).
+#   FILTER    -F key pre-filter budget; "" or "0" => no filter (the gate runs
+#             UNFILTERED so -F filter-recall cannot confound the search/scoring split).
+#   RESTARTS  -R restart budget.
+#   FULLCRACK "1" is sugar: WILDCARD->"wg", and FILTER/RESTARTS default to 200/8
+#             only when left unset.
+# When WILDCARD is set, trials are generated with true ring AAA (so fixed-ring
+# recovery is identifiable), and a key% column reports rotor-key recovery on the
+# identifiable columns (reflector+wheels and start). See CRACKQUALITY_TESTS.md §1.
 
 import os
 import random
@@ -97,6 +115,20 @@ SPLIT = env("SPLIT", "0") == "1"
 BASE = env("BASE", "")
 CRACKOPTS = shlex.split(env("CRACKOPTS", ""))
 
+# Full-crack / scoring-gate knobs (see the header note and CRACKQUALITY_TESTS.md §1).
+WILDCARD = env("WILDCARD", "")
+XMAX = env("XMAX", "3")
+FILTER = env("FILTER", "")
+RESTARTS = env("RESTARTS", "")
+if env("FULLCRACK", "0") == "1":
+    if not WILDCARD:
+        WILDCARD = "wg"
+    if not FILTER:
+        FILTER = "200"
+    if not RESTARTS:
+        RESTARTS = "8"
+WILD = bool(WILDCARD)
+
 
 # Per-binary n-gram data directory: each binary reads its tables from its own
 # tree (the working-tree binary from ./ngrams, a BASE binary from its worktree),
@@ -133,6 +165,34 @@ def last_score(stderr):
     return score
 
 
+def last_key(stderr):
+    """(W, R, G) = the reflector+wheels / ring / start columns of the last progress
+    line (the recovered rotor key). None on the old '-4.36 W: B241 R: ...' format
+    (fields[1] == 'W:'), so key% is head-only in an A/B against such a ref."""
+    key = None
+    for line in stderr.splitlines():
+        fields = line.split()
+        if len(fields) >= 4 and "." in fields[0] and fields[1] != "W:":
+            try:
+                float(fields[0])
+            except ValueError:
+                continue
+            key = (fields[1], fields[2], fields[3])
+    return key
+
+
+def key_ok(recovered, true_key):
+    """True if the recovered rotor key matches the true key on the IDENTIFIABLE
+    columns. With ring pinned AAA (how WILDCARD trials are generated) the start is
+    identifiable, so compare the W column (reflector letter + wheel digits, e.g.
+    'B241') and the G column (start); ring is not compared."""
+    if recovered is None:
+        return False
+    u, w, _r, g, _pb = true_key
+    rw, _rr, rg = recovered
+    return rw == (u + w) and rg == g
+
+
 def encrypt(binary, key, plain):
     u, w, r, g, pb = key
     out, _ = run(binary, ["-i", "-u", u, "-w", w, "-r", r, "-g", g, "-s", pb], plain)
@@ -140,12 +200,30 @@ def encrypt(binary, key, plain):
 
 
 def climb(binary, key, ct):
-    """Run the plugboard hill-climb; return (recovered_plaintext, best_score)."""
+    """Run the search + plugboard hill-climb; return
+    (recovered_plaintext, best_score, recovered_key). WILDCARD replaces the named
+    rotor-key dimensions with '.' wildcards so the key is searched, not fixed;
+    FILTER/RESTARTS wire -F/-R. With WILDCARD unset this is byte-identical to the
+    fixed-key climb (no extra args)."""
     u, w, r, g, _ = key
+    if "u" in WILDCARD:
+        u = "."
+    if "w" in WILDCARD:
+        w = "..."
+    if "r" in WILDCARD:
+        r = "..."
+    if "g" in WILDCARD:
+        g = "..."
     args = ["-" + MODEL, "-l", CLANG, "-u", u, "-w", w, "-r", r, "-g", g, "-c"]
+    if "w" in WILDCARD:
+        args += ["-x", XMAX]
+    if FILTER and FILTER != "0":
+        args += ["-F", FILTER]
+    if RESTARTS:
+        args += ["-R", RESTARTS]
     args += CRACKOPTS
     out, err = run(binary, args, ct)
-    return out.strip(), last_score(err)
+    return out.strip(), last_score(err), last_key(err)
 
 
 def oracle_score(binary, key, ct):
@@ -171,9 +249,17 @@ def gen_trials(length, corpus):
         off = rng.randrange(len(corpus) - length + 1)
         excerpt = corpus[off:off + length]
         u = rng.choice("ABC")
-        w = "".join(str(d) for d in rng.sample(range(1, 9), 3))
+        # cap the wheel range to XMAX when wheels are wildcarded, so the true
+        # order lies inside the searched space (-x XMAX); else the usual 1..8.
+        wheel_hi = int(XMAX) + 1 if "w" in WILDCARD else 9
+        w = "".join(str(d) for d in rng.sample(range(1, wheel_hi), 3))
         r = "".join(rng.choice(string.ascii_uppercase) for _ in range(3))
         g = "".join(rng.choice(string.ascii_uppercase) for _ in range(3))
+        # With a wildcarded key but ring not itself wildcarded, pin the true ring
+        # to AAA so fixed-ring recovery is identifiable (CRACKQUALITY_TESTS.md §1);
+        # r was still drawn above, so the RNG stream is unchanged.
+        if WILD and "r" not in WILDCARD:
+            r = "AAA"
         letters = rng.sample(string.ascii_uppercase, 2 * PAIRS)
         pb = " ".join(letters[2 * i] + letters[2 * i + 1] for i in range(PAIRS))
         trials.append((excerpt, (u, w, r, g, pb)))
@@ -230,30 +316,40 @@ def main():
         else:
             print("crack quality (working-tree binary)")
         extra = ("  crackopts=%s" % " ".join(CRACKOPTS)) if CRACKOPTS else ""
+        if WILD:
+            extra += "  wildcard=%s" % WILDCARD
+            if "w" in WILDCARD:
+                extra += " xmax=%s" % XMAX
+            extra += " -F%s" % (FILTER if (FILTER and FILTER != "0") else "off")
+            if RESTARTS:
+                extra += " -R%s" % RESTARTS
         print("model=-%s  lang=%s  trials=%d  pairs=%d  seed=%d  corpus=%d chars%s\n"
               % (MODEL, CLANG, TRIALS, PAIRS, SEED, len(corpus), extra))
 
+        keyhdr = "  %6s" % "key%" if WILD else ""
         if base:
-            print("%4s  %18s  %18s" % ("len", "head mean% exact%", "base mean% exact%"))
+            print("%4s  %18s%s  %18s" % ("len", "head mean% exact%", keyhdr, "base mean% exact%"))
         elif split:
-            print("%4s  %8s  %8s  %12s  %12s"
-                  % ("len", "mean%", "exact%", "search-fail%", "scoring-fail%"))
+            print("%4s  %8s  %8s%s  %12s  %12s"
+                  % ("len", "mean%", "exact%", keyhdr, "search-fail%", "scoring-fail%"))
         else:
-            print("%4s  %8s  %8s" % ("len", "mean%", "exact%"))
+            print("%4s  %8s  %8s%s" % ("len", "mean%", "exact%", keyhdr))
 
         head_curve = []
         for L in LENGTHS:
             if L > len(corpus):
                 print("  skip len=%d (longer than corpus %d)" % (L, len(corpus)), file=sys.stderr)
                 continue
-            hp, bp, classes = [], [], []
+            hp, bp, kp, classes = [], [], [], []
             for excerpt, key in gen_trials(L, corpus):
                 ct = encrypt(head, key, excerpt)
-                rec, hscore = climb(head, key, ct)
+                rec, hscore, hkey = climb(head, key, ct)
                 p = pct_correct(rec, excerpt)
                 hp.append(p)
+                if WILD:
+                    kp.append(key_ok(hkey, key))
                 if base:
-                    brec, _ = climb(base, key, ct)
+                    brec, _, _ = climb(base, key, ct)
                     bp.append(pct_correct(brec, excerpt))
                 elif split:
                     if p >= 99.95:
@@ -266,16 +362,17 @@ def main():
 
             hmean, hexact = stats(hp)
             head_curve.append((L, hexact))
+            keycol = ("  %6.1f" % (100.0 * sum(kp) / len(kp))) if WILD else ""
             if base:
                 bmean, bexact = stats(bp)
-                print("%4d  %8.1f %8.1f   %8.1f %8.1f" % (L, hmean, hexact, bmean, bexact))
+                print("%4d  %8.1f %8.1f%s   %8.1f %8.1f" % (L, hmean, hexact, keycol, bmean, bexact))
             elif split:
                 n = len(classes)
                 sf = 100.0 * classes.count("search") / n
                 cf = 100.0 * classes.count("scoring") / n
-                print("%4d  %8.1f  %8.1f  %12.1f  %12.1f" % (L, hmean, hexact, sf, cf))
+                print("%4d  %8.1f  %8.1f%s  %12.1f  %12.1f" % (L, hmean, hexact, keycol, sf, cf))
             else:
-                print("%4d  %8.1f  %8.1f" % (L, hmean, hexact))
+                print("%4d  %8.1f  %8.1f%s" % (L, hmean, hexact, keycol))
 
         def lcross(thr):
             for L, exact in head_curve:   # lengths ascending -> shortest reaching thr
