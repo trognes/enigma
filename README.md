@@ -100,11 +100,19 @@ settings are left unspecified (a dot `.` wildcard), it searches:
 The search is exhaustive over the rotor settings and heuristic over the
 plugboard (whose ~150-trillion 10-pair configurations are far too many to
 enumerate). The best plaintext found is printed to stdout; progress and a final
-diagnostic (timing, threads, memory) go to stderr. A progress line (score plus
-the full machine settings) is echoed for every improvement — each rotor setting
-that beats the best so far, and, with `-c`, each intermediate plugboard
-improvement inside a climb, so you can watch the board being built up plug by
-plug.
+diagnostic (timing, threads, memory) go to stderr. A progress line is echoed
+for every improvement — each rotor setting that beats the best so far, and,
+with `-c`, each intermediate plugboard improvement inside a climb, so you can
+watch the board being built up plug by plug. The lines are fixed-width columns
+under a `Score W R G S Text` header — score, reflector+wheels, ring, start,
+plugboard and the first 15 characters of the decoded text:
+
+```
+  Score W     R    G    S                                      Text
+-5.5715 B241  AAA  QEW  AB EF GH IJ                            PHEQUODLASYKYII
+-4.9559 B241  AAA  QEW  AB EF GH IJ KL                         PHEQUIDKASALYSI
+-4.3598 B241  AAA  QEW  AB CD EF GH IJ KL                      THEQUICKANALYSI
+```
 
 ## Options
 

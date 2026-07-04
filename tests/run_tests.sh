@@ -68,6 +68,18 @@ check() {
   fi
 }
 
+# Progress lines are "score W R G S... text": the score first (the only stderr
+# lines starting with a decimal number), then fixed columns under a header
+# (Score W R G S Text). progress_lines filters them from a stderr capture;
+# last_plugboard extracts the plugboard column of the LAST one -- fields 5
+# through NF-1 are the plug pairs (1-4 = score/wheels/ring/start, NF = the
+# decoded-text preview), printed with a leading space per pair (" AB CD").
+progress_re='^ *-{0,1}[0-9][0-9]*\.[0-9]'
+progress_lines() { grep -E "$progress_re"; }
+last_plugboard() {
+  progress_lines | tail -1 | awk '{ for (i = 5; i < NF; i++) printf " %s", $i }'
+}
+
 # roundtrip NAME PLAINTEXT OPTS... -> encrypt then decrypt with same settings,
 # expect to get PLAINTEXT back (reciprocity).
 roundtrip() {
@@ -370,23 +382,38 @@ check "restarts: -R 8 result is -T-independent" \
 pbv_ct=$(run "$r_pt" -i -u B -w 241 -r AAA -g QEW -s "AB CD EF GH IJ KL")
 pbv_rec=$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq)
 pbv_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq 2>&1 >/dev/null)
-pbv_pb=$(printf '%s\n' "$pbv_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | grep -oE '[A-Z][A-Z]' | tr '\n' ' ')
+pbv_pb=$(printf '%s\n' "$pbv_err" | last_plugboard | grep -oE '[A-Z][A-Z]' | tr '\n' ' ')
 check "restart climb: displayed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pbv_pb")" \
   "$pbv_rec"
 # Progress lines: the climb echoes EVERY plugboard improvement (score + machine
 # settings) as it happens, not just each finished climb -- a single-key -c run used
-# to print exactly one W: line (the converged board); now the board builds up live.
+# to print exactly one progress line (the converged board); now the board builds up
+# live.
 pg_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c 2>&1 >/dev/null)
-pg_n=$(printf '%s\n' "$pg_err" | grep -c "W:")
+pg_n=$(printf '%s\n' "$pg_err" | progress_lines | grep -c .)
 check "progress: climb echoes intermediate plugboard improvements (>1 line)" \
   "$([ "$pg_n" -gt 1 ] && echo ok)" "ok"
 # ...and the LAST echoed line is still the winning board: its plugboard reproduces
 # the recovered plaintext (display/result consistency at the finer granularity).
-pg_pb=$(printf '%s\n' "$pg_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | tr -d ' ')
+pg_pb=$(printf '%s\n' "$pg_err" | last_plugboard | tr -d ' ')
 check "progress: last echoed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pg_pb")" \
   "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c)"
+# Progress line FORMAT: a column header (Score W R G S Text) printed exactly once,
+# each line ending in the first 15 characters of the decoded text, and the whole
+# line within 79 columns even with a full 13-pair plugboard.
+fmt_pb="AB CD EF GH IJ KL MN OP QR ST UV WX YZ"
+fmt_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "$fmt_pb")
+fmt_err=$(printf '%s' "$fmt_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -s "$fmt_pb" 2>&1 >/dev/null)
+check "progress: column header printed exactly once" \
+  "$(printf '%s\n' "$fmt_err" | grep -c '^ *Score ')" "1"
+check "progress: line ends with the first 15 decoded characters" \
+  "$(printf '%s\n' "$fmt_err" | progress_lines | tail -1 | awk '{ print $NF }')" \
+  "$(printf '%s' "$r_pt" | cut -c1-15)"
+check "progress: lines stay within 79 columns (13-pair board)" \
+  "$(printf '%s\n' "$fmt_err" | awk 'length > m { m = length } END { print (m <= 79) ? "ok" : m }')" \
+  "ok"
 # The --random default kick is a fixed 10 pairs: a plain kicked -R run must equal an
 # explicit --random 10 run (REDESIGN Part B: default kick 8 -> 10).
 check "restarts: default kick == --random 10" \
@@ -643,7 +670,7 @@ check "anneal: recovers plaintext on a long message" "$sa_rec" "$r_pt"
 # Like the restart climb, after annealing the displayed board must be the one that
 # actually produced the recovered plaintext (showconfig prints m.steckerbrett).
 sa_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 60000 2>&1 >/dev/null)
-sa_pb=$(printf '%s\n' "$sa_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | grep -oE '[A-Z][A-Z]' | tr '\n' ' ')
+sa_pb=$(printf '%s\n' "$sa_err" | last_plugboard | grep -oE '[A-Z][A-Z]' | tr '\n' ' ')
 check "anneal: displayed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$sa_pb")" \
   "$sa_rec"
@@ -660,7 +687,7 @@ check "anneal: -A -S q8 result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -S q8 -T 4)"
 # The cap is actually enforced: with -S q3 the recovered board must hold <= 3 plug pairs.
 cap_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 40000 -S q3 2>&1 >/dev/null)
-cap_pairs=$(printf '%s\n' "$cap_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | grep -oE '[A-Z][A-Z]' | grep -c .)
+cap_pairs=$(printf '%s\n' "$cap_err" | last_plugboard | grep -oE '[A-Z][A-Z]' | grep -c .)
 check "anneal: -S q3 caps the board at <= 3 plug pairs" "$([ "${cap_pairs:-0}" -le 3 ] && echo ok)" "ok"
 # With the cap matched to the true count, SA still recovers on a comfortable message.
 sa8_ct=$(run "$r_pt" -i -u B -w 241 -r AAA -g QEW -s "AB CD EF GH IJ KL MN OP")
@@ -672,12 +699,12 @@ check "anneal: -A -S q8 recovers an 8-plug board (long message)" \
 # a spurious one. Encrypt with a single real plug (AB), then force an unrelated plug (YZ)
 # and confirm YZ survives in the recovered board (a plain seed would drop it).
 frz_ct=$(run "$r_pt" -i -u B -w 241 -r AAA -g QEW -s "AB")
-frz_climb=$(printf '%s' "$frz_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq -s "YZ" 2>&1 >/dev/null | grep "W:" | tail -1 | sed -n 's/.*S://p')
+frz_climb=$(printf '%s' "$frz_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 20 -S iq -s "YZ" 2>&1 >/dev/null | last_plugboard)
 case "$frz_climb" in
   *YZ*) check "fixed -s plug survives the greedy climb" "ok" "ok" ;;
   *)    check "fixed -s plug survives the greedy climb" "$frz_climb" "*YZ*" ;;
 esac
-frz_sa=$(printf '%s' "$frz_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 30000 -s "YZ" 2>&1 >/dev/null | grep "W:" | tail -1 | sed -n 's/.*S://p')
+frz_sa=$(printf '%s' "$frz_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 30000 -s "YZ" 2>&1 >/dev/null | last_plugboard)
 case "$frz_sa" in
   *YZ*) check "fixed -s plug survives simulated annealing" "ok" "ok" ;;
   *)    check "fixed -s plug survives simulated annealing" "$frz_sa" "*YZ*" ;;

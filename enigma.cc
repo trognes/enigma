@@ -832,59 +832,92 @@ double ic_score_decode(machine & m)
     ? score / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
 }
 
-void showsteckerbrett(machine & m)
+/* Progress-line columns (shared by the header and the lines): score %7.4f,
+   reflector+wheels up to 5 chars (M4 "bB123"), ring and start up to 4 (M4),
+   plugboard up to 13 pairs = 38 chars, then the first preview_len characters
+   of the decoded text. Worst case 7+1+5+1+4+1+4+1+38+1+15 = 78 chars, inside
+   a 79-column terminal. */
+static const int preview_len = 15;
+static const char progress_fmt[] = "%7s %-5s %-4s %-4s %-38s %s\n";
+
+/* Column header, printed once before the first progress line of a search. */
+void showconfig_header(void)
 {
-  fprintf(stderr, "S:");
-  for (int j=0; j<asize; j++)
-    if (m.steckerbrett[j] > j)
-      fprintf(stderr, " %c%c", num2char(j), num2char(m.steckerbrett[j]));
+  fprintf(stderr, progress_fmt, "Score", "W", "R", "G", "S", "Text");
 }
 
-void showconfig(machine & m)
+void showconfig(machine & m, double score)
 {
-  /* display wheel numbers 1..N: standard rotors are index+1, Norway wheels are
-     index - norway_rotor_base + 1; the reflector prints as its letter (N for
-     Norway, else A/B/C). */
-  int wheel_offset = opt_norenigma ? 1 - norway_rotor_base : 1;
+  char w[8], r[8], g[8], s[3 * 13], text[preview_len + 1];
 
   if (opt_m4)
     {
       /* M4: thin reflector (b/c) + static Greek wheel (B/G). Only the Greek
          (start - ring) offset is identifiable, so it is shown as start=offset,
-         ring=A. The reflector/Greek/ring/start fields list the Greek first. */
-      fprintf(stderr,
-              "W: %c%c%d%d%d R: A%c%c%c G: %c%c%c%c ",
-              (m.ukw == m4_thin_base) ? 'b' : 'c',
-              (m.greek == greek_base) ? 'B' : 'G',
-              m.walzenlage[0] + 1,
-              m.walzenlage[1] + 1,
-              m.walzenlage[2] + 1,
-              num2char(m.ringstellung[0]),
-              num2char(m.ringstellung[1]),
-              num2char(m.ringstellung[2]),
-              num2char(m.greek_offset),
-              num2char(m.grundstellung[0]),
-              num2char(m.grundstellung[1]),
-              num2char(m.grundstellung[2]));
-      showsteckerbrett(m);
-      fprintf(stderr, "\n");
-      return;
+         ring=A. The reflector/Greek/ring/start columns list the Greek first. */
+      /* wheel numbers are single digits (1-8), printed as chars so the
+         compiler can see the buffer cannot truncate */
+      snprintf(w, sizeof(w), "%c%c%c%c%c",
+               (m.ukw == m4_thin_base) ? 'b' : 'c',
+               (m.greek == greek_base) ? 'B' : 'G',
+               '1' + m.walzenlage[0],
+               '1' + m.walzenlage[1],
+               '1' + m.walzenlage[2]);
+      snprintf(r, sizeof(r), "A%c%c%c",
+               num2char(m.ringstellung[0]),
+               num2char(m.ringstellung[1]),
+               num2char(m.ringstellung[2]));
+      snprintf(g, sizeof(g), "%c%c%c%c",
+               num2char(m.greek_offset),
+               num2char(m.grundstellung[0]),
+               num2char(m.grundstellung[1]),
+               num2char(m.grundstellung[2]));
+    }
+  else
+    {
+      /* display wheel numbers 1..N: standard rotors are index+1, Norway wheels
+         are index - norway_rotor_base + 1; the reflector prints as its letter
+         (N for Norway, else A/B/C). */
+      int wheel_offset = opt_norenigma ? 1 - norway_rotor_base : 1;
+      snprintf(w, sizeof(w), "%c%c%c%c",
+               opt_norenigma ? 'N' : num2char(m.ukw),
+               static_cast<char>('0' + m.walzenlage[0] + wheel_offset),
+               static_cast<char>('0' + m.walzenlage[1] + wheel_offset),
+               static_cast<char>('0' + m.walzenlage[2] + wheel_offset));
+      snprintf(r, sizeof(r), "%c%c%c",
+               num2char(m.ringstellung[0]),
+               num2char(m.ringstellung[1]),
+               num2char(m.ringstellung[2]));
+      snprintf(g, sizeof(g), "%c%c%c",
+               num2char(m.grundstellung[0]),
+               num2char(m.grundstellung[1]),
+               num2char(m.grundstellung[2]));
     }
 
-  fprintf(stderr,
-          "W: %c%d%d%d R: %c%c%c G: %c%c%c ",
-          opt_norenigma ? 'N' : num2char(m.ukw),
-          m.walzenlage[0] + wheel_offset,
-          m.walzenlage[1] + wheel_offset,
-          m.walzenlage[2] + wheel_offset,
-          num2char(m.ringstellung[0]),
-          num2char(m.ringstellung[1]),
-          num2char(m.ringstellung[2]),
-          num2char(m.grundstellung[0]),
-          num2char(m.grundstellung[1]),
-          num2char(m.grundstellung[2]));
-  showsteckerbrett(m);
-  fprintf(stderr, "\n");
+  char * p = s;
+  for (int j = 0; j < asize; j++)
+    if (m.steckerbrett[j] > j)
+      {
+        if (p > s)
+          *p++ = ' ';
+        *p++ = num2char(j);
+        *p++ = num2char(m.steckerbrett[j]);
+      }
+  *p = 0;
+
+  /* Decode the text preview on the fly from the machine's CURRENT board --
+     m.plaintext can be stale here (inside a running climb it still holds an
+     earlier candidate). */
+  const unsigned char * steck = m.steckerbrett;
+  const unsigned char * const * rows = m.rows;
+  int n = (textlength < preview_len) ? textlength : preview_len;
+  for (int i = 0; i < n; i++)
+    text[i] = num2char(decode_at(steck, rows, num_ciphertext, i));
+  text[n] = 0;
+
+  char scorebuf[16];
+  snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
+  fprintf(stderr, progress_fmt, scorebuf, w, r, g, s, text);
 }
 
 double score_iter(machine & m)
@@ -2016,6 +2049,9 @@ struct best_result
      while `score` only advances when a finished work item merges. Atomic so climbing
      workers can pre-check it cheaply (and race-free) before taking the mutex. */
   std::atomic<double> shown{score_min};
+  /* Column header emitted before the first progress line (display state, only
+     touched under the mutex). */
+  bool header_shown = false;
 };
 
 /* The live search's shared best, exported for report_climb_progress (the climbs sit
@@ -2023,16 +2059,28 @@ struct best_result
    Set by bruteforce() before the workers start; null outside a search. */
 static best_result * g_progress = nullptr;
 
+/* Print one progress line under the best-result mutex, emitting the column
+   header before the first line of the run. */
+static void progress_line(best_result & b, machine & m, double score)
+{
+  if (! b.header_shown)
+    {
+      b.header_shown = true;
+      showconfig_header();
+    }
+  showconfig(m, score);
+}
+
 /* Echo an intermediate plugboard improvement from inside a climb: the same
-   "score W: R: G: S:" line the key-level merge prints, but at the granularity the
-   user actually watches -- every accepted climb move that beats everything echoed so
+   progress line the key-level merge prints, but at the granularity the user
+   actually watches -- every accepted climb move that beats everything echoed so
    far, not just every finished climb. Gated to the TARGET scoring model (a staged
    pre-pass and the -F tier-1 filter climb score in a different model, so their values
    are not comparable with the ranking scores) and to workers that opted in
    (m.report). Costs one relaxed atomic load per ACCEPTED move -- nothing on the
    325-move scoring scans -- so the hot path is untouched. The worker restored the
    machine's grundstellung right after setup_mapping (climb paths only), so
-   showconfig(m) prints the true start positions here. */
+   showconfig() prints the true start positions here. */
 static void report_climb_progress(machine & m, double score)
 {
   best_result * bp = g_progress;
@@ -2044,8 +2092,7 @@ static void report_climb_progress(machine & m, double score)
   if (score <= bp->shown.load(std::memory_order_relaxed))
     return;   /* another thread echoed something at least as good meanwhile */
   bp->shown.store(score, std::memory_order_relaxed);
-  fprintf(stderr, "%7.4f ", score);
-  showconfig(m);
+  progress_line(* bp, m, score);
 }
 
 /* Deterministic ordering of candidates: higher score wins, ties broken by lower work
@@ -2231,8 +2278,7 @@ void search_worker(machine & m,
                       /* setup_mapping stepped grundstellung (scan path only; the
                          climb path restored it right after setup_mapping) */
                       init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-                      fprintf(stderr, "%7.4f ", score);
-                      showconfig(m);
+                      progress_line(best, m, score);
                     }
                 }
               local_best = best.score;         /* track the global best for the filter */
@@ -2429,8 +2475,7 @@ void finish_worker(machine & m,
               if (score > best.shown.load(std::memory_order_relaxed))
                 {
                   best.shown.store(score, std::memory_order_relaxed);
-                  fprintf(stderr, "%7.4f ", score);
-                  showconfig(m);
+                  progress_line(best, m, score);
                 }
             }
           local_best = best.score;

@@ -117,14 +117,18 @@ def run(binary, args, text):
 
 
 def last_score(stderr):
-    """The final best score the search printed (first field of the last 'W:' line,
-    e.g. '  392.9191 W: B137 R: ...')."""
+    """The final best score the search printed: the first field of the last
+    progress line, e.g. '-4.3598 B241 AAA QEW AB CD ... THEQUICKAN' (older
+    binaries, still met as A/B BASE refs, print '-4.3598 W: B241 R: ...').
+    Both start with the score, and no other stderr line's first token carries
+    a decimal point (the settings echo's bare counts have no '.')."""
     score = None
     for line in stderr.splitlines():
-        if "W:" in line:
+        fields = line.split()
+        if fields and "." in fields[0]:
             try:
-                score = float(line.split()[0])
-            except (ValueError, IndexError):
+                score = float(fields[0])
+            except ValueError:
                 pass
     return score
 
