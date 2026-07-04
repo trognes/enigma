@@ -26,7 +26,9 @@ bench : enigma
 # short-message regime). Separate from `bench` (speed) and `test` (pass/fail).
 #   make crackquality                  working-tree binary
 #   make crackquality BASE=<git-ref>   same-machine A/B vs <git-ref>
-# Tunables (env): MODEL, CLANG, TRIALS, LENGTHS, PAIRS, SEED.
+# Tunables (env): MODEL, CLANG, TRIALS, LENGTHS, PAIRS, SEED, SPLIT, CRACKOPTS.
+# Full-crack / scoring-gate knobs (CRACKQUALITY_TESTS.md §1): WILDCARD, XMAX,
+# FILTER, RESTARTS, FULLCRACK.
 crackquality : enigma
 	python3 tests/crack_quality.py
 

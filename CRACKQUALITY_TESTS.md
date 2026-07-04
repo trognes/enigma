@@ -2,11 +2,20 @@
 
 > **Scope and status.** Three focused, cheap additions to the `make crackquality`
 > harness, grounded in **measured** 4-core timings and **verified** `enigma.cc`
-> identifiability facts. Like PERFORMANCE.md, this is a **plan — no code changes
-> accompany it**; where an idea needs a small binary hook it is described, not
-> built. It inherits PERFORMANCE.md's measurement discipline (compute-normalize on
-> `score_iter`, the baseline is a higher `-R` at equal compute, `-T`
-> byte-determinism, both compilers for hot-path touches, `ENIGMA_SEED=0`).
+> identifiability facts. It inherits PERFORMANCE.md's measurement discipline
+> (compute-normalize on `score_iter`, the baseline is a higher `-R` at equal
+> compute, `-T` byte-determinism, both compilers for hot-path touches,
+> `ENIGMA_SEED=0`).
+>
+> **Build status: all three are implemented.** §1's harness plumbing (the opt-in
+> `WILDCARD`/`FILTER`/`RESTARTS`/`FULLCRACK` knobs, `last_key`/`key_ok`, the `key%`
+> column and the generalized SPLIT). §2's `--true-key` binary hook + the
+> `FILTERRECALL` recall@N mode and `SCOREITER` column. §3's `--dump-restarts`
+> binary hook + the `DIVERSITY` basin-collapse mode. All three binary hooks are
+> **off by default** (default paths byte-identical and bench-neutral, verified),
+> and `WILDCARD=""` / no-mode runs are byte-identical to the original harness. The
+> commands below are runnable now; the numbers they will produce are still to be
+> collected (that is compute, not code).
 >
 > **This supersedes the earlier "full-crack tier" design.** Its cross-key plug
 > marginalization goal (PERFORMANCE.md §5.3) is **dropped** — see the note at the

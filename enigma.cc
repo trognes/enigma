@@ -224,6 +224,24 @@ static const int max_threads = 256;
 static uint64_t opt_seed;
 static bool opt_seed_set;
 
+/* --true-key <reflector><3 wheels><3 ring><3 start> (standard Enigma, 10 chars,
+   e.g. B241AAAQEW): a diagnostic for -F recall testing (CRACKQUALITY_TESTS.md §2).
+   With -F set, after tier-1 ranks every key the search prints "true-key tier1 rank
+   R of N" to stderr -- R = 1 + the number of keys whose tier-1 IC score is strictly
+   higher, N = total keys -- so a harness can measure how often the pre-filter keeps
+   the true key. Off by default; parsed into g_tk_* below. */
+static const char * opt_true_key;
+static int g_tk_u, g_tk_w[3], g_tk_r[3], g_tk_g[3];   /* parsed --true-key (numeric) */
+static std::vector<float> g_tk_scores;                /* tier-1 IC score per flat key idx */
+static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of the true key */
+
+/* --dump-restarts: a diagnostic for restart-diversity testing (CRACKQUALITY_TESTS.md
+   §3). With -c, every converged restart climb prints "restart <score> <board>" to
+   stderr (under a mutex), so a harness can count how many distinct optima the restarts
+   reach. Display-only -- it does not affect which candidate wins, so -T-deterministic
+   results are preserved. Verbose; off by default. */
+static bool opt_dump_restarts;
+
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
 static int textlength;
@@ -1961,6 +1979,28 @@ static inline uint64_t restart_seed(size_t key_index, int restart)
   return z ^ (z >> 31);
 }
 
+/* --dump-restarts: emit one converged restart's (score, plugboard) to stderr for the
+   restart-diversity diagnostic. The board is written canonically (each pair low-high,
+   pairs ordered by low letter) so a harness can dedupe boards by string equality. Under
+   a mutex; display-only, so results stay -T-deterministic. */
+static std::mutex g_dump_mutex;
+static void dump_restart(machine & m, double score)
+{
+  char board[3 * 13];
+  char * p = board;
+  for (int j = 0; j < asize; j++)
+    if (m.steckerbrett[j] > j)
+      {
+        if (p > board)
+          *p++ = ' ';
+        *p++ = num2char(j);
+        *p++ = num2char(m.steckerbrett[j]);
+      }
+  *p = 0;
+  std::lock_guard<std::mutex> lock(g_dump_mutex);
+  fprintf(stderr, "restart %.4f %s\n", score, board);
+}
+
 /* One plugboard-recovery climb from the seed board. In kicked mode (--restarts N>=1) every
    climb -- including index 0 -- injects a fresh --random kick first, so the un-kicked seed
    climb is not run (REDESIGN Option A). With --restarts 0 there is a single un-kicked climb.
@@ -1972,7 +2012,10 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   uint64_t rng = restart_seed(key_index, restart);
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
-  return optimize_once(m, & rng);
+  double score = optimize_once(m, & rng);
+  if (opt_dump_restarts)
+    dump_restart(m, score);
+  return score;
 }
 
 /* Run all the climbs for one key sequentially, keeping the best (used where the search
@@ -2394,6 +2437,18 @@ void filter_worker(machine & m,
                          rc12, gc12, cur_wo, rg6);
           double s = hillclimb<false>(m, cap);   /* single capped IC climb */
 
+          if (opt_true_key)   /* --true-key: record every key's tier-1 score, and this
+                                 flat idx if it is the true key (for the rank print) */
+            {
+              g_tk_scores[idx] = static_cast<float>(s);
+              const wheel_task & t = tasks[cur_wo];
+              if ((t.u == g_tk_u)
+                  && (t.w[0] == g_tk_w[0]) && (t.w[1] == g_tk_w[1]) && (t.w[2] == g_tk_w[2])
+                  && (rg6[0] == g_tk_r[0]) && (rg6[1] == g_tk_r[1]) && (rg6[2] == g_tk_r[2])
+                  && (rg6[3] == g_tk_g[0]) && (rg6[4] == g_tk_g[1]) && (rg6[5] == g_tk_g[2]))
+                g_tk_idx.store(idx, std::memory_order_relaxed);
+            }
+
           if (heap.size() < topn)
             heap.push(scored_key{s, idx});
           else
@@ -2753,12 +2808,36 @@ void bruteforce(char * result)
       std::atomic<size_t> fnext{0};
       std::atomic<size_t> fprogress{0};
       bool show_progress = isatty(fileno(stderr)) != 0;   /* live line only on a TTY */
+      if (opt_true_key)   /* --true-key: size the per-key tier-1 score store */
+        {
+          g_tk_scores.assign(total_keys, 0.0f);
+          g_tk_idx.store(static_cast<size_t>(-1), std::memory_order_relaxed);
+        }
       run_parallel(nthreads, [&](int t)
         { filter_worker(*machines[t], tasks, range, rc, gc, all, rsize, gsize,
                         fnext, chunk, topn, cand_mutex, cand, fprogress,
                         show_progress); });
       if (show_progress)
         fprintf(stderr, "\n");   /* finish the live \r progress line */
+
+      if (opt_true_key)   /* report the true key's tier-1 rank among all keys */
+        {
+          size_t tki = g_tk_idx.load(std::memory_order_relaxed);
+          if (tki == static_cast<size_t>(-1))
+            fprintf(stderr, "true-key tier1 rank: not in the searched keyspace (of %zu keys)\n",
+                    total_keys);
+          else
+            {
+              float ts = g_tk_scores[tki];
+              size_t better = 0;
+              for (size_t i = 0; i < total_keys; i++)
+                if (g_tk_scores[i] > ts)
+                  better++;
+              fprintf(stderr, "true-key tier1 rank %zu of %zu\n", better + 1, total_keys);
+            }
+          g_tk_scores.clear();
+          g_tk_scores.shrink_to_fit();
+        }
 
       /* deterministic global top-N: highest score first, ties by lowest idx */
       std::sort(cand.begin(), cand.end(),
@@ -2999,6 +3078,13 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
   fprintf(out, "  %-24s %s\n", "", "exploration tool (E=1 = 325 climbs; E>1 explodes;");
   fprintf(out, "  %-24s %s\n", "", "needs -c; a high -R dominates it) [off]");
+  fprintf(out, "  %-24s %s\n", "--true-key KEY",
+          "Diagnostic: with -F, print the tier-1 rank of the");
+  fprintf(out, "  %-24s %s\n", "", "given standard key (e.g. B241AAAQEW = reflector,");
+  fprintf(out, "  %-24s %s\n", "", "3 wheels, 3 ring, 3 start) among all keys [off]");
+  fprintf(out, "  %-24s %s\n", "--dump-restarts",
+          "Diagnostic: with -c, print each converged restart's");
+  fprintf(out, "  %-24s %s\n", "", "score and board to stderr (verbose) [off]");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
@@ -3170,7 +3256,7 @@ int main(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST };
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3208,6 +3294,8 @@ int main(int argc, char * * argv)
       { "help",           no_argument,       nullptr, 'h' },
       { "random",         required_argument, nullptr, OPT_RANDOM  },
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
+      { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
+      { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3287,6 +3375,13 @@ int main(int argc, char * * argv)
           break;
         case OPT_EXHAUST:
           opt_exhaust = atoi(optarg);
+          break;
+        case OPT_TRUEKEY:
+          alltoupper(optarg);
+          opt_true_key = optarg;
+          break;
+        case OPT_DUMP:
+          opt_dump_restarts = true;
           break;
         case 'e':
           opt_seed = strtoull(optarg, nullptr, 10);
@@ -3533,6 +3628,33 @@ int main(int argc, char * * argv)
     fatal("The random kick (--random) needs the plugboard hill-climb (-c)");
   if (opt_exhaust && (! opt_hillclimb))
     fatal("Partial exhaustion (--exhaust) needs the plugboard hill-climb (-c)");
+
+  /* --dump-restarts is a per-restart climb diagnostic, so it needs -c. */
+  if (opt_dump_restarts && (! opt_hillclimb))
+    fatal("--dump-restarts needs the plugboard hill-climb (-c)");
+
+  /* --true-key reports the true key's tier-1 rank, so it needs the pre-filter (-F);
+     it is a standard-Enigma diagnostic and parses into g_tk_* here. */
+  if (opt_true_key)
+    {
+      if (opt_norenigma || opt_m4)
+        fatal("--true-key is only supported for the standard Enigma (not -n / -4)");
+      if ((opt_prefilter <= 0) && (opt_prefilter_frac <= 0.0))
+        fatal("--true-key reports the tier-1 rank, so it needs the pre-filter (-F)");
+      if (strlen(opt_true_key) != 10)
+        fatal("--true-key needs 10 chars: <reflector><3 wheels><3 ring><3 start>, e.g. B241AAAQEW");
+      g_tk_u = char2num(opt_true_key[0]);
+      if ((g_tk_u < 0) || (g_tk_u > 2))
+        fatal("--true-key reflector must be A/B/C");
+      for (int i = 0; i < 3; i++)
+        {
+          if ((opt_true_key[1 + i] < '1') || (opt_true_key[1 + i] > '8'))
+            fatal("--true-key wheels must be digits 1-8");
+          g_tk_w[i] = opt_true_key[1 + i] - '1';
+          g_tk_r[i] = char2num(opt_true_key[4 + i]);
+          g_tk_g[i] = char2num(opt_true_key[7 + i]);
+        }
+    }
 
   /* --exhaust E forces E extra plug pairs among the free letters (on top of any -s pairs); it
      runs the greedy staged climb (not SA). E is bounded by the free plug pairs (13 minus the
