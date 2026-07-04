@@ -523,11 +523,17 @@ range and is not viable.
   and the `ciphertext` / `num_ciphertext` / `textlength` input. (`-Wshadow` is on;
   the redundant `textlength`/`ciphertext`/`plaintext` parameters that used to
   shadow the globals were removed earlier.)
-- The live diagnostics are `showconfig` / `showsteckerbrett` (echo the winning key +
-  plugboard on a new best) and `show_settings` (echo the resolved config at startup).
-  With `-c` the echo is per plugboard IMPROVEMENT, not per finished climb: every
-  accepted climb/SA move whose (target-model) score beats everything echoed so far
-  prints the same `score W: R: G: S:` line (`report_climb_progress`, called on accepted
+- The live diagnostics are `showconfig` (echo the winning key + plugboard on a new
+  best) and `show_settings` (echo the resolved config at startup). Progress lines are
+  fixed-width columns under a one-time header (`Score W R G S Text`, printed by
+  `showconfig_header` before the first line — `best_result.header_shown`): score,
+  reflector+wheels, ring, start, plugboard (room for all 13 pairs) and the first 10
+  characters of the decoded text — the preview is decoded on the fly from the
+  machine's *current* board (`m.plaintext` can be stale mid-climb); worst case 73
+  chars, inside a 79-column terminal. With `-c` the echo is per plugboard
+  IMPROVEMENT, not per finished climb: every accepted climb/SA move whose
+  (target-model) score beats everything echoed so far prints a progress line
+  (`report_climb_progress`, called on accepted
   moves only — nothing on the 325-move scoring scans, so the hot path is untouched).
   Display state lives in `best_result.shown` (atomic), never read by the merge logic,
   so which candidate WINS stays `-T`-deterministic; which lines appear is thread-timing
