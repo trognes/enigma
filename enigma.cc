@@ -177,9 +177,10 @@ static int opt_nstages;    /* number of model stages in opt_stages[] */
 static int opt_perturb;    /* random plug pairs injected per restart: 0..13 (an rN
                               token; default_perturb when no r token; r0 = no-op) */
 static const int default_perturb = 8;   /* no-r-token kick: best in the §9 sweep */
-static int opt_exhaust;    /* -S a1: partial plugboard exhaustion -- force each of the
-                              C(26,2)=325 first plug pairs in turn and keep the best climb
-                              (0 = off). Prototype: single-threaded (see exhaust_first_pair). */
+static int opt_exhaust;    /* -S aN: partial plugboard exhaustion -- pin N plug pairs total
+                              (the -s pairs count toward N), trying every set of the N-fixed
+                              forced pairs and keeping the best climb (0 = off). Single-threaded
+                              exploration tool; see exhaust_first_pairs(). */
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
@@ -1419,11 +1420,14 @@ void parse_schedule()
         {
           if (opt_exhaust)
             fatal("Illegal -S schedule: at most one a (exhaustion) token");
-          /* aN forces N first plug pairs exhaustively; the prototype supports N=1
-             (all 325 first pairs). Omitted number = 1. */
+          /* aN pins N plug pairs TOTAL (like a model-token cap; the -s pairs count toward N),
+             forcing N - fixed of them exhaustively (omitted N = 1). The combination count is
+             free!/(2^k k! (free-2k)!) for k = N - fixed forced -- 325 (k=1), ~45k (k=2),
+             ~3.5M (k=3) -- so large k is single-threaded exploration only. N must be >= the -s
+             pairs (validated once -s is known). */
           int k = (n < 0) ? 1 : n;
-          if (k != 1)
-            fatal("Illegal -S a token: only a1 (a single forced first pair) is supported");
+          if ((k < 1) || (k > pairs_uncapped))
+            fatal("Illegal -S a token (a1 to a13: number of forced plug pairs)");
           opt_exhaust = k;
         }
       else if (strchr("imbtq", letter))
@@ -1467,51 +1471,89 @@ static double run_stages(machine & m)
   return s;   /* opt_nstages >= 1, so s is the target-model score */
 }
 
-/* -S a1 partial plugboard exhaustion (PROTOTYPE): instead of one climb from the seed,
-   force each of the C(26,2)=325 first plug pairs in turn -- pin it (as -s pins plugs) and
-   run the staged climb from that seed -- and keep the best board. One of the 325 pins holds
-   a true plug, so a climb is guaranteed to launch from inside the right basin, rather than
-   sampling basin space with a blind random kick. Pairs touching a fixed -s letter are
-   skipped. This mutates the global plug_fixed[] around each climb, so it is single-threaded
-   (gated to -T 1 in validation); a threaded version needs a per-machine plug_fixed. */
-static double exhaust_first_pair(machine & m)
+/* -S aN partial plugboard exhaustion (PROTOTYPE, exploration tool only -- dominated by a
+   high -R greedy climb at equal compute; see performance.md §3.6). `N` is the TOTAL pinned
+   pairs (like a model-token cap, counting the -s pairs); it forces k = N - (fixed -s pairs)
+   of them. Instead of one climb from the seed, try every set of k disjoint pairs among the
+   free letters -- pin them (as -s pins plugs) and run the staged climb from that seed -- and
+   keep the best board. k=1 tries each of the 325 first pairs; larger k is exponentially more
+   work (free!/(2^k k! (free-2k)!) sets: ~45k for k=2, ~3.5M for k=3 with no -s). It mutates the
+   global plug_fixed[] as it recurses, so it is single-threaded (gated to -T 1); a threaded
+   version needs a per-machine plug_fixed. */
+struct exhaust_ctx
 {
-  double best = 0.0;
-  bool have = false;
+  int a[pairs_uncapped];   /* the currently-pinned forced pairs (depth of them) */
+  int b[pairs_uncapped];
+  int target;              /* N */
+  double best;
+  bool have;
   char best_pt[maxlen + 1];
   unsigned char best_steck[asize];
-  for (int a = 0; a < asize; a++)
+};
+
+/* Enumerate every set of `target` disjoint pairs among the free (non -s) letters, exactly
+   once: each pair's low letter is chosen in increasing order (`first`), and pinning it in
+   plug_fixed[] as we descend both excludes it from deeper pairs and makes run_stages hold it
+   fixed. At full depth, seed the board with -s + the N forced pairs and climb. */
+static void exhaust_recurse(machine & m, exhaust_ctx & c, int depth, int first)
+{
+  if (depth == c.target)
     {
-      if (plug_fixed[a])
-        continue;
-      for (int b = a + 1; b < asize; b++)
+      init_steckerbrett(m, opt_steckerbrett);              /* identity + -s pairs */
+      for (int i = 0; i < c.target; i++)
         {
-          if (plug_fixed[b])
+          m.steckerbrett[c.a[i]] = static_cast<unsigned char>(c.b[i]);
+          m.steckerbrett[c.b[i]] = static_cast<unsigned char>(c.a[i]);
+        }
+      double s = run_stages(m);   /* plug_fixed pins -s + all N forced pairs */
+      if (! c.have || (s > c.best))
+        {
+          c.best = s;
+          c.have = true;
+          memcpy(c.best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+          memcpy(c.best_steck, m.steckerbrett, asize);
+        }
+      return;
+    }
+  for (int x = first; x < asize; x++)
+    {
+      if (plug_fixed[x])
+        continue;
+      for (int y = x + 1; y < asize; y++)
+        {
+          if (plug_fixed[y])
             continue;
-          init_steckerbrett(m, opt_steckerbrett);              /* identity + -s pairs */
-          m.steckerbrett[a] = static_cast<unsigned char>(b);   /* force a-b */
-          m.steckerbrett[b] = static_cast<unsigned char>(a);
-          plug_fixed[a] = plug_fixed[b] = true;                /* pin it for this climb */
-          double s = run_stages(m);
-          plug_fixed[a] = plug_fixed[b] = false;               /* a,b are not -s letters */
-          if (! have || (s > best))
-            {
-              best = s;
-              have = true;
-              memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
-              memcpy(best_steck, m.steckerbrett, asize);
-            }
+          c.a[depth] = x;
+          c.b[depth] = y;
+          plug_fixed[x] = plug_fixed[y] = true;
+          exhaust_recurse(m, c, depth + 1, x + 1);
+          plug_fixed[x] = plug_fixed[y] = false;   /* x,y are not -s letters */
         }
     }
-  memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
-  memcpy(m.steckerbrett, best_steck, asize);   /* restore the best board to match */
-  return best;
+}
+
+static double exhaust_first_pairs(machine & m)
+{
+  /* aN pins N plug pairs *total*, like the cap on a model token: the -s pairs count toward
+     N, so only N - (fixed -s pairs) are exhaustively forced among the free letters. */
+  int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
+  exhaust_ctx c;
+  c.target = opt_exhaust - fixed_pairs;
+  c.best = 0.0;
+  c.have = false;
+  exhaust_recurse(m, c, 0, 0);
+  if (c.have)   /* validation guarantees >= 1 combination, so this always holds */
+    {
+      memcpy(m.plaintext, c.best_pt, static_cast<size_t>(textlength) + 1);
+      memcpy(m.steckerbrett, c.best_steck, asize);   /* restore the best board to match */
+    }
+  return c.best;
 }
 
 double hillclimb_schedule(machine & m)
 {
   if (opt_exhaust)
-    return exhaust_first_pair(m);
+    return exhaust_first_pairs(m);
   return run_stages(m);
 }
 
@@ -2589,9 +2631,10 @@ void help(FILE * out)
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
   fprintf(out, "               rN = per-restart random plugs (N pairs, default 8),\n");
-  fprintf(out, "               a1 = force each of the 325 first plug pairs (experimental,\n");
-  fprintf(out, "               single-threaded; dominated by a high -R at equal compute).\n");
-  fprintf(out, "               E.g. -S r2i6q  or  -S a1i4q10\n");
+  fprintf(out, "               aN = pin N plugs total (the -s pairs plus the rest forced) and\n");
+  fprintf(out, "               try every combination (a1 = 325 climbs; N>1 explodes -- an\n");
+  fprintf(out, "               exploration tool, -T 1; dominated by a high -R at equal compute).\n");
+  fprintf(out, "               E.g. -S a1i4q10  or  -s ABCD -S a3q10  (2 fixed + 1 forced)\n");
   fprintf(out, "  -A integer   Recover the plugboard by simulated annealing instead of the\n");
   fprintf(out, "               greedy climb; integer = move budget (needs -c) [off].\n");
   fprintf(out, "               Honours the -S target cap: -A N -S qK caps it at K plugs\n");
@@ -2668,7 +2711,17 @@ void show_settings()
   if (opt_hillclimb && opt_staged && (opt_anneal == 0))
     fprintf(stderr, "            staged: %s\n", opt_staged);
   if (opt_hillclimb && opt_exhaust)
-    fprintf(stderr, "            partial exhaustion: forcing each of 325 first plug pairs\n");
+    {
+      int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
+      int to_force = opt_exhaust - fixed_pairs;
+      int free_letters = asize - 2 * fixed_pairs;
+      double combos = 1.0;   /* free!/(2^k k! (free-2k)!) sets of k = to_force disjoint pairs */
+      for (int i = 0; i < to_force; i++)
+        combos *= static_cast<double>((free_letters - 2*i) * (free_letters - 2*i - 1))
+                  / (2.0 * (i + 1));
+      fprintf(stderr, "            partial exhaustion: N=%d plug pairs pinned, %d forced "
+              "(%.0f combinations)\n", opt_exhaust, to_force, combos);
+    }
   if (opt_hillclimb && opt_capmerge)
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_firstimprove)
@@ -3053,15 +3106,24 @@ int main(int argc, char * * argv)
   if (opt_capmerge && (! opt_hillclimb))
     fatal("Cap-as-target (-M) needs the plugboard hill-climb (-c)");
 
-  /* -S a1 partial exhaustion is a plugboard-climb strategy (needs -c), runs the greedy
+  /* -S aN partial exhaustion is a plugboard-climb strategy (needs -c), runs the greedy
      staged climb (not SA), and mutates the global plug_fixed[] per pair, so the prototype
-     is single-threaded. */
+     is single-threaded. N is bounded by the free plug pairs (26 letters minus the -s pins). */
   if (opt_exhaust && (! opt_hillclimb))
-    fatal("Partial exhaustion (-S a1) needs the plugboard hill-climb (-c)");
+    fatal("Partial exhaustion (-S aN) needs the plugboard hill-climb (-c)");
   if (opt_exhaust && (opt_anneal > 0))
-    fatal("Partial exhaustion (-S a1) is not supported with simulated annealing (-A)");
+    fatal("Partial exhaustion (-S aN) is not supported with simulated annealing (-A)");
   if (opt_exhaust && (opt_threads > 1))
-    fatal("Partial exhaustion (-S a1) is a single-threaded prototype; use -T 1");
+    fatal("Partial exhaustion (-S aN) is a single-threaded prototype; use -T 1");
+  if (opt_exhaust)
+    {
+      /* aN is the TOTAL pinned pairs (like a model-token cap): N - fixed are forced, so N
+         must be at least the -s pairs. The parse cap N <= 13 already bounds N - fixed to the
+         free plug pairs (13 - fixed). */
+      int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
+      if (opt_exhaust < fixed_pairs)
+        fatal("Partial exhaustion (-S aN): N (total plug pairs) is below the -s fixed pairs");
+    }
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully

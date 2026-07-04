@@ -333,8 +333,12 @@ seeds)** recovery, where tabu's determinism should show best.
 **Form.** The core diversification device in Ostwald & Weierud (2017): instead of a
 random kick, systematically **force each candidate first pair** (`C(26,2)=325`), pin it
 (as `-s` pins plugs), run the staged IC→quad climb, keep the best. Deterministic. Built
-as the `-S a1` schedule token (`-S a1i4q10`); single-threaded prototype (it mutates the
-global `plug_fixed[]` per pair — a threaded version needs per-machine state).
+as the `-S aN` schedule token (`-S a1i4q10`), where `N` is the **total** pinned pairs (the
+`-s` pairs count toward it, so `-s ABCD -S a3q10` forces one more pair on top of the two
+fixed). `N−fixed > 1` explodes combinatorially (`free!/(2^k k! (free−2k)!)`: ~45k for 2,
+~3.5M for 3) so it is a single-threaded **exploration knob only**; the measured result below
+is for `a1`. Single-threaded prototype (it mutates the global `plug_fixed[]` as it recurses —
+a threaded version needs per-machine state).
 
 **It works, and it is dominated.** The basin guarantee is real — on a message where a
 single plain climb (`-R 1`) sticks, `-S a1i4q10` recovers exactly. But the honest test is

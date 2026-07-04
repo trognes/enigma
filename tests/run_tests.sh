@@ -394,16 +394,23 @@ check "restart count past old 100000 cap accepted (exit code)" "$?" "0"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 1000000001 >/dev/null 2>&1
 check "restart count over 1000000000 rejected (exit code)" "$?" "1"
 
-# Partial plugboard exhaustion (-S a1): force each of the 325 first plug pairs and keep
-# the best climb. On an easy long message it recovers exactly (a KAT of the a-token path).
-# It is a single-threaded, greedy-only prototype -- the two guards below enforce that.
+# Partial plugboard exhaustion (-S aN): pin N plug pairs total (the -s pairs count toward
+# N, so N-fixed are forced), try every combination, keep the best climb. On an easy long
+# message it recovers exactly (a KAT of the a-token path). a1 (no -s) forces the 325 first
+# pairs; -s AB -S a2 pins the true AB and forces one more. Single-threaded, greedy-only
+# prototype; the guards below enforce -T 1 / no -A / N >= fixed.
 check "exhaustion -S a1 recovers an easy message" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -S a1i4q10 -T 1)" \
   "$r_pt"
+check "exhaustion -s AB -S a2 (fixed pair counts toward N) recovers" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB" -c -S a2i4q10 -T 1)" \
+  "$r_pt"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S a1q -T 4 >/dev/null 2>&1
-check "exhaustion -S a1 rejects -T > 1 (exit code)" "$?" "1"
+check "exhaustion -S aN rejects -T > 1 (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A 6000 -S a1q -T 1 >/dev/null 2>&1
-check "exhaustion -S a1 rejects -A simulated annealing (exit code)" "$?" "1"
+check "exhaustion -S aN rejects -A simulated annealing (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -s "ABCD" -c -S a1q -T 1 >/dev/null 2>&1
+check "exhaustion -S aN rejects N below the -s fixed pairs (exit code)" "$?" "1"
 
 # Random seed (-e / $ENIGMA_SEED): the restart perturbation is seeded from it mixed
 # with the key index, so a fixed seed is reproducible and stays -T-independent, an
