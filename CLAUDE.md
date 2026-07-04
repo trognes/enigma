@@ -222,12 +222,14 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   kick and restarts (fixing the earlier silent no-op): for each forced combo, `-R N` runs N
   kicked climbs (the kick perturbs only the still-free letters). `--exhaust 1` (no `-s`) = the
   325 first pairs; larger `E` explodes as `free!/(2^E E! (free−2E)!)` (~45k for 2, ~3.5M for
-  3), so it is **single-threaded exploration only** — `exhaust_recurse()` mutates the global
-  `plug_fixed[]` as it descends, so validation forces `-T 1`, forbids `-A`, requires `-c`,
-  and bounds `E` by the free plug pairs (13 − `-s` pairs). Deterministic. **Measured,
-  dominated** — at matched `score_iter` a high-`-R` greedy climb beats it by 10–40pp exact
-  (§3.6); an exploration tool, not recommended. Replaces the old `-S aN` token (note the
-  semantics change: `aN` counted *total* pinned pairs, `--exhaust E` counts *forced* pairs).
+  3). **Parallel** (REDESIGN Part D): the *first forced pair* is the work unit — ≤325 units
+  per key, spread across threads like restarts, each running its own sub-exhaustion ×
+  restarts against a per-worker pin set — so `--exhaust` scales with `-T` and stays
+  `-T`-independent. Validation forbids `-A`, requires `-c`, and bounds `E` by the free plug
+  pairs (13 − `-s` pairs). Deterministic. **Measured, dominated** — at matched `score_iter`
+  a high-`-R` greedy climb beats it by 10–40pp exact (§3.6); an exploration tool, not
+  recommended. Replaces the old `-S aN` token (note the semantics change: `aN` counted
+  *total* pinned pairs, `--exhaust E` counts *forced* pairs).
 - `-e N` random seed for the restart perturbation. Resolved as `-e` > `$ENIGMA_SEED`
   > a fresh `std::random_device` draw, so **by default every run explores different
   restarts**; the chosen seed is echoed by `show_settings()` (when restarts are
@@ -487,6 +489,17 @@ range and is not viable.
 > g++ and clang. Always re-check `make bench BASE=<ref>` under **both** g++ and
 > clang (`make bench CXX=clang++ BASE=<ref>`) after touching the hot path or the
 > struct.
+>
+> The **climb move loop** is aliasing-sensitive the same way (Part D finding): its
+> `plug_fixed` reads must stay a **plain-global** access — routing them through a struct
+> member, a `thread_local`, or an opaque pointer parameter cost ~18% on one compiler or
+> the other. Hence the `template<bool EX>` climb chain (the common `EX=false` instantiation
+> folds to the plain global; only `--exhaust` uses `EX=true`) and the compiler-conditional
+> storage for the exhaust scratch (`PLUG_FIXED_EX`: `thread_local` under clang, a `machine`
+> member under g++ — each compiler's measured-neutral form; verified byte-identical to the
+> clean build under clang). Also beware: the climb/scan benches on a shared box can be
+> **bimodal** — before trusting a regression, re-run and check base-vs-base; disassembly
+> comparison (`objdump -d`) settles whether codegen actually changed.
 
 ## Conventions & gotchas for contributors
 

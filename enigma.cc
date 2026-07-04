@@ -102,11 +102,10 @@ static const char * opt_walzen;
 static const char * opt_ringstellung;
 static const char * opt_grundstellung;
 static const char * opt_steckerbrett;
-/* Letters that are part of a fixed (-s) plug pair: the hill-climb, re-pair and SA
-   toggle never touch these, so -s pairs are *known* plugs that survive the climb rather
-   than a mere seed. Set once from opt_steckerbrett before the (threaded) search, then
-   read-only. */
-static bool plug_fixed[asize];
+/* Letters that are part of a fixed (-s) plug pair are never rewired by the hill-climb,
+   re-pair or SA toggle, so -s pairs are *known* plugs that survive the climb rather than
+   a mere seed (see plug_fixed / PLUG_FIXED_EX below for the storage and the parallel
+   --exhaust arrangement, REDESIGN Part D). */
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french ...; no default */
 static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
@@ -187,7 +186,8 @@ static bool opt_random_set;             /* was --random passed explicitly? (erro
 static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force E extra plug
                               pairs among the free letters (on top of any -s pairs), trying
                               every set of E disjoint pairs and keeping the best climb (0 = off).
-                              Single-threaded exploration tool; see exhaust_first_pairs(). */
+                              Parallel over the first forced pair (exhaust_unit); exploration
+                              tool, dominated by a high --restarts climb (see PERFORMANCE.md §3.6). */
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
@@ -283,6 +283,15 @@ struct machine
      out of the hot per-character loop, and placed last so it never pushes the hot
      tables above to large struct offsets. Summed across workers for the final line. */
   uint64_t plugboards_scored;
+
+  /* Per-worker scratch for --exhaust (see the PLUG_FIXED_EX note below): a copy of the global
+     plug_fixed (-s seed) plus this leaf's forced-pair letters, read ONLY by the EX=true climb
+     instantiations. Under g++ this lives here, in the machine (a thread_local shifts g++'s
+     whole-TU codegen); under clang it lives in a thread_local instead (a struct member shifts
+     clang's climb codegen), so it is compiled out of the struct there. */
+#if !defined(__clang__)
+  bool plug_fixed_ex[asize];
+#endif
 };
 
 /* The n-gram scorers read uint8 fixed-point log10-probability tables. This is a
@@ -451,10 +460,12 @@ void init()
       reflector[i][j] = char2num(reflector_string[i][j]);
 }
 
+/* Reset the plugboard to identity + the fixed -s pairs. Board-only (the fixed-letter set is
+   the separate plug_fixed, below), so the init-dominated scan path pays no extra cost. */
 void init_steckerbrett(machine & m, const char * steckerbrett_string)
 {
   for (int j=0; j < asize; j++)
-    m.steckerbrett[j] = j;
+    m.steckerbrett[j] = static_cast<unsigned char>(j);
 
   int plug_count = static_cast<int>(strlen(steckerbrett_string) / 2);
 
@@ -462,13 +473,35 @@ void init_steckerbrett(machine & m, const char * steckerbrett_string)
     {
       int a = char2num(steckerbrett_string[2*i+0]);
       int b = char2num(steckerbrett_string[2*i+1]);
-      m.steckerbrett[a] = b;
-      m.steckerbrett[b] = a;
+      m.steckerbrett[a] = static_cast<unsigned char>(b);
+      m.steckerbrett[b] = static_cast<unsigned char>(a);
     }
 }
 
-/* Mark the letters of the fixed (-s) plug pairs, so the climb/SA leave them alone.
-   Called once from main before the threaded search; plug_fixed is read-only after. */
+/* Letters the climb/SA must not rewire. plug_fixed is the fixed -s set: a plain read-only
+   global, set once by init_plug_fixed before the search and shared by every worker (they only
+   read it). The common (non-exhaust) climb reads this global directly, via a local
+   `const bool * __restrict pf = plug_fixed` inside each climb function; that plain-global read
+   is what clang and g++ both compile without reloading it after the steckerbrett stores in the
+   move loop -- reading a struct member or thread_local there instead shifts a compiler's
+   codegen ~18% (see CLAUDE.md and the PLUG_FIXED_EX note).
+
+   --exhaust needs PER-WORKER forced pins (each parallel first-pair unit forces different pairs),
+   so the EX=true climb instantiations read PLUG_FIXED_EX -- a per-worker copy of plug_fixed plus
+   this leaf's forced pairs -- selected at compile time (EX ? PLUG_FIXED_EX : plug_fixed), so the
+   common EX=false path folds to the plain global. WHERE that per-worker copy lives is compiler-
+   dependent, and the two compilers disagree: clang wants it thread_local (a struct member costs
+   its climb ~18%), g++ wants it a machine member (a thread_local costs g++'s whole-TU codegen
+   ~19%). We give each what it wants; the exhaust path is a dominated exploration tool, so its
+   own codegen does not matter -- only that the common path stays a plain global. */
+static bool plug_fixed[asize];
+#if defined(__clang__)
+static thread_local bool plug_fixed_ex[asize];   /* clang: thread_local scratch */
+#define PLUG_FIXED_EX plug_fixed_ex
+#else
+#define PLUG_FIXED_EX m.plug_fixed_ex           /* g++: the machine member declared above */
+#endif
+
 void init_plug_fixed(const char * steckerbrett_string)
 {
   for (int j = 0; j < asize; j++)
@@ -903,13 +936,15 @@ double score_iter(machine & m)
    moves cannot. It is run only once the cheap swap/remove moves have converged -- a
    handful of times per climb, not every pass -- so its O(plugs^2) cost is small.
    Applies and returns true iff the single best re-pair strictly beats cur_score. */
+template<bool EX>
 static bool try_repair(machine & m, double cur_score)
 {
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
   int plo[asize / 2];
   int phi[asize / 2];
   int np = 0;
   for (int a = 0; a < asize; a++)
-    if ((m.steckerbrett[a] > a) && ! plug_fixed[a])   /* never rewire a fixed -s plug */
+    if ((m.steckerbrett[a] > a) && ! pf[a])   /* never rewire a fixed -s plug */
       {
         plo[np] = a;
         phi[np] = m.steckerbrett[a];
@@ -989,8 +1024,10 @@ static pairtab make_pairtab()
    (no RNG, fixed order and acceptance rule) so the result is -T-independent; the trajectory
    differs from steepest ascent, so this is NOT byte-identical and must be judged on
    recovery, not equality. */
+template<bool EX>
 static void firstimprove_sweep(machine & m, int max_pairs)
 {
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
   static const int nmoves = asize * (asize - 1) / 2;   /* 325 pair-toggles */
   static const pairtab P = make_pairtab();
 
@@ -1059,7 +1096,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
         {
           int a = P.a[mv], b = P.b[mv];
           double s = -1e300;   /* invalid moves sort last */
-          if (! (plug_fixed[a] || plug_fixed[b]) && ! cap_blocks(a, b))
+          if (! (pf[a] || pf[b]) && ! cap_blocks(a, b))
             s = probe_toggle(a, b);
           sc[mv] = s;
           visit[mv] = mv;
@@ -1084,7 +1121,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
         cursor = 0;
 
       int a = P.a[mv], b = P.b[mv];
-      if ((plug_fixed[a] || plug_fixed[b]) || cap_blocks(a, b))
+      if ((pf[a] || pf[b]) || cap_blocks(a, b))
         { stale++; continue; }
 
       bool improved = false;
@@ -1141,8 +1178,10 @@ static void firstimprove_sweep(machine & m, int max_pairs)
    climb -- a board can hold at most 13 pairs anyway). The cheap "switch" and "remove"
    moves are run to convergence; then a single best "re-pair" is tried as a barrier
    cross, and if it improves the cheap climb resumes from the new board. */
-double hillclimb(machine & m, int max_pairs)
+template<bool EX>
+static double hillclimb(machine & m, int max_pairs)
 {
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
   /* -I: circular first-improvement instead of steepest ascent (off by default, so the
      baseline is byte-identical). */
   const bool firstimp = (opt_firstimprove != 0);
@@ -1156,7 +1195,7 @@ double hillclimb(machine & m, int max_pairs)
 
       if (firstimp)
         {
-          firstimprove_sweep(m, max_pairs);
+          firstimprove_sweep<EX>(m, max_pairs);
           cur = score_iter(m);
         }
       else
@@ -1198,7 +1237,7 @@ double hillclimb(machine & m, int max_pairs)
                 for(int b=a+1; b<asize; b++)
                   {
                     /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
-                    if (plug_fixed[a] || plug_fixed[b])
+                    if (pf[a] || pf[b])
                       continue;
 
                     int sa = m.steckerbrett[a];
@@ -1294,7 +1333,7 @@ double hillclimb(machine & m, int max_pairs)
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
          improves, loop back and let the cheap climb resume from the new board. */
-      if (try_repair(m, cur))
+      if (try_repair<EX>(m, cur))
         progress = true;
     }
   while (progress);
@@ -1478,21 +1517,18 @@ static double disjoint_pair_combinations(int free_letters, int pairs)
    (complementary to random restarts). The returned score and m.plaintext are in the
    target (last) model, so cross-key comparison is unaffected. With no -S this is a
    single uncapped climb in the -i/-m/.../-q model. */
+template<bool EX>
 static double run_stages(machine & m)
 {
   double s = 0.0;
   for (int i = 0; i < opt_nstages; i++)
     {
       m.scoring = opt_stages[i].model;
-      s = hillclimb(m, opt_stages[i].cap);
+      s = hillclimb<EX>(m, opt_stages[i].cap);
     }
   return s;   /* opt_nstages >= 1, so s is the target-model score */
 }
 
-double hillclimb_schedule(machine & m)
-{
-  return run_stages(m);
-}
 
 /* --exhaust E partial plugboard exhaustion (PROTOTYPE, exploration tool only -- dominated by
    a high --restarts greedy climb at equal compute; see PERFORMANCE.md §3.6). E is the number
@@ -1502,50 +1538,60 @@ double hillclimb_schedule(machine & m)
    tries each of the 325 first pairs; larger E is exponentially more work (combos(free,E) =
    free!/(2^E E! (free-2E)!) sets: ~45k for E=2, ~3.5M for E=3 with no -s). It composes with
    the kick and restarts: for each forced combo, --restarts N runs N kicked climbs (the kick
-   perturbs only the still-free letters, leaving -s and the forced pairs intact), and the
-   global best over all combos x restarts is kept. It mutates the global plug_fixed[] as it
-   recurses, so it is single-threaded (gated to -T 1); a threaded version needs a per-machine
-   plug_fixed (REDESIGN Part D). */
+   perturbs only the still-free letters, leaving -s and the forced pairs intact), keeping the
+   best.
+
+   Parallel (REDESIGN Part D): the FIRST forced pair (the combo's minimum-low-letter pair)
+   is the unit of work -- there are at most C(free,2) <= 325 of them, listed in
+   g_exhaust_firsts, and every combo belongs to exactly one (its remaining pairs all use
+   letters above the first pair's low letter). Each unit runs on any thread against its own
+   PLUG_FIXED_EX pin set (per-thread under clang, per-machine under g++ -- no shared mutable
+   state), and its best merges into the global best exactly like a restart. So exhaustion now
+   scales with -T and stays -T-independent (each (unit, restart) climb is seeded only by
+   key + restart). */
 static inline uint64_t restart_seed(size_t key_index, int restart);   /* defined below */
+
+/* Flat list of the free first-pair choices (x,y), two bytes each; built once before the
+   search by build_exhaust_firsts(), read-only during it. */
+static std::vector<unsigned char> g_exhaust_firsts;
 
 struct exhaust_ctx
 {
-  int a[pairs_uncapped];   /* the currently-pinned forced pairs (depth of them) */
+  int a[pairs_uncapped];   /* the currently-chosen forced pairs (depth of them) */
   int b[pairs_uncapped];
   int target;              /* E forced pairs */
   size_t key_index;        /* for the per-restart RNG seed */
-  int restart;             /* current restart index (RNG stream selector) */
-  int kick_pairs;          /* random plug pairs to inject this restart (0 = no kick) */
+  bool used[asize];        /* letters consumed by -s + forced-so-far (enumeration only) */
   double best;
   bool have;
   char best_pt[maxlen + 1];
   unsigned char best_steck[asize];
 };
 
-/* Enumerate every set of `target` disjoint pairs among the free (non -s) letters, exactly
-   once: each pair's low letter is chosen in increasing order (`first`), and pinning it in
-   plug_fixed[] as we descend both excludes it from deeper pairs and makes run_stages hold it
-   fixed. At full depth, seed the board with -s + the E forced pairs, add this restart's kick
-   (over the still-free letters), and climb. */
-static void exhaust_recurse(machine & m, exhaust_ctx & c, int depth, int first)
+/* At a full combo (the E forced pairs in c.a/c.b): run every restart's climb from the seed
+   board -- identity + -s + the forced pairs -- plus this restart's --random kick over the
+   still-free letters, and keep the best in c. The forced pairs are pinned in plug_fixed so
+   the climb (and the kick, which draws only from self-steckered letters) leave them intact. */
+static void exhaust_leaf(machine & m, exhaust_ctx & c)
 {
-  if (depth == c.target)
+  const bool kicked = (opt_restarts >= 1);
+  const int climbs = kicked ? opt_restarts : 1;
+  for (int r = 0; r < climbs; r++)
     {
-      init_steckerbrett(m, opt_steckerbrett);              /* identity + -s pairs */
+      init_steckerbrett(m, opt_steckerbrett);   /* board = identity + -s */
+      memcpy(PLUG_FIXED_EX, plug_fixed, asize);   /* per-worker pins = -s seed ... */
       for (int i = 0; i < c.target; i++)
         {
           m.steckerbrett[c.a[i]] = static_cast<unsigned char>(c.b[i]);
           m.steckerbrett[c.b[i]] = static_cast<unsigned char>(c.a[i]);
+          PLUG_FIXED_EX[c.a[i]] = PLUG_FIXED_EX[c.b[i]] = true;   /* ... plus the forced pair */
         }
-      if (c.kick_pairs > 0)
+      if (kicked)
         {
-          /* the forced and -s pairs are already set on the board, so perturb (which draws
-             only from self-steckered letters) touches only the still-free letters, and they
-             are pinned in plug_fixed[] so the climb never rewires them */
-          uint64_t rng = restart_seed(c.key_index, c.restart);
-          perturb_steckerbrett(m, & rng, c.kick_pairs);
+          uint64_t rng = restart_seed(c.key_index, r);
+          perturb_steckerbrett(m, & rng, opt_perturb);
         }
-      double s = run_stages(m);   /* plug_fixed pins -s + all E forced pairs */
+      double s = run_stages<true>(m);
       if (! c.have || (s > c.best))
         {
           c.best = s;
@@ -1553,51 +1599,131 @@ static void exhaust_recurse(machine & m, exhaust_ctx & c, int depth, int first)
           memcpy(c.best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
           memcpy(c.best_steck, m.steckerbrett, asize);
         }
+    }
+}
+
+/* Choose the remaining forced pairs (from depth up to c.target), each pair's low letter in
+   increasing order (`first`) so every combo is enumerated exactly once. c.used excludes the
+   -s letters and the pairs chosen so far. At full depth, climb (exhaust_leaf). */
+static void exhaust_recurse(machine & m, exhaust_ctx & c, int depth, int first)
+{
+  if (depth == c.target)
+    {
+      exhaust_leaf(m, c);
       return;
     }
   for (int x = first; x < asize; x++)
     {
-      if (plug_fixed[x])
+      if (c.used[x])
         continue;
       for (int y = x + 1; y < asize; y++)
         {
-          if (plug_fixed[y])
+          if (c.used[y])
             continue;
           c.a[depth] = x;
           c.b[depth] = y;
-          plug_fixed[x] = plug_fixed[y] = true;
+          c.used[x] = c.used[y] = true;
           exhaust_recurse(m, c, depth + 1, x + 1);
-          plug_fixed[x] = plug_fixed[y] = false;   /* x,y are not -s letters */
+          c.used[x] = c.used[y] = false;
         }
     }
 }
 
-/* Run the partial exhaustion for one rotor key: E forced pairs among the free letters,
-   composed with the --random kick and --restarts loop. --restarts 0 is pure exhaustion (one
-   un-kicked climb per combo); --restarts N runs N kicked climbs per combo. Keeps the global
-   best board + plaintext. Single-threaded (gated to -T 1). */
-static double exhaust_first_pairs(machine & m, size_t key_index)
+/* Initialise c for one rotor key: E forced pairs, -s letters marked used. */
+static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
 {
-  exhaust_ctx c;
-  c.target = opt_exhaust;                 /* E extra forced pairs among the free letters */
+  c.target = opt_exhaust;
   c.key_index = key_index;
   c.best = 0.0;
   c.have = false;
-
-  const bool kicked = (opt_restarts >= 1);
-  const int climbs = kicked ? opt_restarts : 1;
-  for (int r = 0; r < climbs; r++)
+  for (int j = 0; j < asize; j++)
+    c.used[j] = false;
+  int fixed = static_cast<int>(strlen(opt_steckerbrett) / 2);
+  for (int i = 0; i < fixed; i++)
     {
-      c.restart = r;
-      c.kick_pairs = kicked ? opt_perturb : 0;
-      exhaust_recurse(m, c, 0, 0);
+      c.used[char2num(opt_steckerbrett[2*i+0])] = true;
+      c.used[char2num(opt_steckerbrett[2*i+1])] = true;
     }
-  if (c.have)   /* validation guarantees >= 1 combination, so this always holds */
+}
+
+/* One parallel exhaustion unit: all combos whose first forced pair is g_exhaust_firsts[fi],
+   over all restarts. Leaves m at the unit's best board/plaintext and returns its score, or
+   a sentinel below any real score if the first pair leaves no room for E-1 more pairs. */
+static double exhaust_unit(machine & m, size_t key_index, size_t fi)
+{
+  exhaust_ctx c;
+  exhaust_ctx_init(c, key_index);
+  int x = g_exhaust_firsts[2*fi];
+  int y = g_exhaust_firsts[2*fi + 1];
+  c.a[0] = x;
+  c.b[0] = y;
+  c.used[x] = c.used[y] = true;
+  exhaust_recurse(m, c, 1, x + 1);   /* remaining E-1 pairs use letters above x */
+  if (c.have)
     {
       memcpy(m.plaintext, c.best_pt, static_cast<size_t>(textlength) + 1);
-      memcpy(m.steckerbrett, c.best_steck, asize);   /* restore the best board to match */
+      memcpy(m.steckerbrett, c.best_steck, asize);
+      return c.best;
     }
-  return c.best;
+  return -1e300;   /* no valid combo under this first pair: never wins the merge */
+}
+
+/* Whole-key exhaustion (used by the -F tier-2 climb, which parallelises over keys): every
+   first-pair unit, keeping the best board/plaintext. Validation guarantees >= 1 combo. */
+static double exhaust_all_combos(machine & m, size_t key_index)
+{
+  double best = 0.0;
+  bool have = false;
+  char best_pt[maxlen + 1];
+  unsigned char best_steck[asize];
+  size_t nfirsts = g_exhaust_firsts.size() / 2;
+  for (size_t fi = 0; fi < nfirsts; fi++)
+    {
+      double s = exhaust_unit(m, key_index, fi);
+      if ((! have || (s > best)) && (s > -1e300))
+        {
+          best = s;
+          have = true;
+          memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+          memcpy(best_steck, m.steckerbrett, asize);
+        }
+    }
+  if (have)
+    {
+      memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+      memcpy(m.steckerbrett, best_steck, asize);
+    }
+  return best;
+}
+
+/* Enumerate the free first-pair choices (x,y) into g_exhaust_firsts: every pair of letters
+   not pinned by -s, low letter first. Built once before the search (read-only after). Bounded
+   by C(free,2) <= 325 regardless of E, so it never explodes in memory (unlike a full combo
+   list); each unit does its own bounded sub-exhaustion. */
+static void build_exhaust_firsts()
+{
+  bool sfixed[asize];
+  for (int j = 0; j < asize; j++)
+    sfixed[j] = false;
+  int fixed = static_cast<int>(strlen(opt_steckerbrett) / 2);
+  for (int i = 0; i < fixed; i++)
+    {
+      sfixed[char2num(opt_steckerbrett[2*i+0])] = true;
+      sfixed[char2num(opt_steckerbrett[2*i+1])] = true;
+    }
+  g_exhaust_firsts.clear();
+  for (int x = 0; x < asize; x++)
+    {
+      if (sfixed[x])
+        continue;
+      for (int y = x + 1; y < asize; y++)
+        {
+          if (sfixed[y])
+            continue;
+          g_exhaust_firsts.push_back(static_cast<unsigned char>(x));
+          g_exhaust_firsts.push_back(static_cast<unsigned char>(y));
+        }
+    }
 }
 
 /* Hill-climb the plugboard with optional random restarts. --restarts 0 runs a single climb
@@ -1689,7 +1815,7 @@ static double anneal_once(machine & m, uint64_t * rng)
   if (target_model != SCORE_IC)
     {
       m.scoring = SCORE_IC;
-      hillclimb(m, cap);
+      hillclimb<false>(m, cap);
       m.scoring = target_model;
     }
 
@@ -1757,7 +1883,7 @@ static double anneal_once(machine & m, uint64_t * rng)
     }
 
   memcpy(m.steckerbrett, best_board, asize);
-  hillclimb(m, cap);   /* greedy quench under the target model, same cap */
+  hillclimb<false>(m, cap);   /* greedy quench under the target model, same cap */
   return score_iter(m);
 }
 
@@ -1767,7 +1893,7 @@ static double optimize_once(machine & m, uint64_t * rng)
 {
   if (opt_anneal > 0)
     return anneal_once(m, rng);
-  return hillclimb_schedule(m);
+  return run_stages<false>(m);
 }
 
 /* Independent RNG seed for one restart, mixed from opt_seed, the flat key index and the
@@ -2005,15 +2131,16 @@ void search_worker(machine & m,
               setup_mapping(m, opt_hillclimb != 0);
             }
 
-          /* Run one restart (climb) or score the key once (scan). hillclimb_one draws
-             from its own (keyidx,restart) stream, so the result is independent of which
-             thread runs it. --exhaust owns its own combo x restart loop per key, so it is
-             one work item per key (restarts_par==1, restart==0). The scan does not decode
-             per key (the fused scorer reads each row once, straight from subst_array); the
-             plaintext is materialised only for a new best, below. */
+          /* Run one work unit: a restart climb, an --exhaust first-pair unit, or one scan
+             score. Both hillclimb_one and exhaust_unit draw only from their own
+             (keyidx, restart)/(keyidx) streams, so the result is independent of which thread
+             runs the unit. For --exhaust the per-key units are the first-pair choices, so
+             `restart` here indexes g_exhaust_firsts. The scan does not decode per key (the
+             fused scorer reads each row once, straight from subst_array); the plaintext is
+             materialised only for a new best, below. */
           double score;
           if (opt_hillclimb)
-            score = opt_exhaust ? exhaust_first_pairs(m, keyidx)
+            score = opt_exhaust ? exhaust_unit(m, keyidx, static_cast<size_t>(restart))
                                 : hillclimb_one(m, keyidx, restart);
           else
             {
@@ -2145,7 +2272,7 @@ void filter_worker(machine & m,
         {
           key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                          rc12, gc12, cur_wo, rg6);
-          double s = hillclimb(m, cap);   /* single capped IC climb */
+          double s = hillclimb<false>(m, cap);   /* single capped IC climb */
 
           if (heap.size() < topn)
             heap.push(scored_key{s, idx});
@@ -2210,7 +2337,7 @@ void finish_worker(machine & m,
       key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                      rc12, gc12, cur_wo, rg6);
 
-      double score = opt_exhaust ? exhaust_first_pairs(m, idx)
+      double score = opt_exhaust ? exhaust_all_combos(m, idx)
                                   : hillclimb_restarts(m, idx);
 
       if (better_cand(score, idx, local_best, local_best_idx))
@@ -2439,18 +2566,20 @@ void bruteforce(char * result)
   g_table_count = nwo;
   g_table_bytes = nwo * static_cast<size_t>(asize) * asize * asize * asize;
 
-  /* With -c and no -F, the climbs of each key are independent work items, so the parallel
-     space is total_keys x climbs -- this is what lets a fully-specified rotor key
-     (total_keys==1) still use every thread. --restarts 0 is one (un-kicked) climb per key;
-     --restarts N is N (kicked) climbs. --exhaust runs its own combo x restart loop per key
-     (single-threaded), and the plain scan and the -F tiers keep one item per key, so all
-     three use restarts_par==1. */
+  /* With -c and no -F, the per-key work units are independent, so the parallel space is
+     total_keys x units -- this is what lets a fully-specified rotor key (total_keys==1) still
+     use every thread. For a plain climb the units are the restarts: --restarts 0 is one
+     (un-kicked) climb per key, --restarts N is N (kicked) climbs. For --exhaust the units are
+     the first-pair choices (each runs its own sub-exhaustion x restarts; REDESIGN Part D), so
+     exhaustion now scales with -T too. The plain scan and the -F tiers keep one item per key
+     (restarts_par==1). */
   const size_t climbs_per_key =
     (opt_restarts >= 1) ? static_cast<size_t>(opt_restarts) : 1;
+  const size_t units_per_key =
+    opt_exhaust ? (g_exhaust_firsts.size() / 2) : climbs_per_key;
   size_t restarts_par =
-    (opt_hillclimb && ! opt_exhaust &&
-     (opt_prefilter <= 0) && (opt_prefilter_frac <= 0.0))
-      ? climbs_per_key : 1;
+    (opt_hillclimb && (opt_prefilter <= 0) && (opt_prefilter_frac <= 0.0))
+      ? units_per_key : 1;
   size_t work_items = total_keys * restarts_par;
 
   /* never start more threads than there is work to hand out */
@@ -2743,7 +2872,7 @@ void help(FILE * out)
           "Force E extra plug pairs among the free letters,");
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
   fprintf(out, "  %-24s %s\n", "", "exploration tool (E=1 = 325 climbs; E>1 explodes;");
-  fprintf(out, "  %-24s %s\n", "", "needs -c, -T 1; a high -R dominates it) [off]");
+  fprintf(out, "  %-24s %s\n", "", "needs -c; a high -R dominates it) [off]");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
@@ -3280,12 +3409,11 @@ int main(int argc, char * * argv)
     fatal("Partial exhaustion (--exhaust) needs the plugboard hill-climb (-c)");
 
   /* --exhaust E forces E extra plug pairs among the free letters (on top of any -s pairs); it
-     runs the greedy staged climb (not SA) and mutates the global plug_fixed[] per pair, so the
-     prototype is single-threaded. E is bounded by the free plug pairs (13 minus the -s pins). */
+     runs the greedy staged climb (not SA). E is bounded by the free plug pairs (13 minus the
+     -s pins). It now parallelises over the first forced pair (REDESIGN Part D), so -T > 1 is
+     fine; each worker climbs against its own PLUG_FIXED_EX pin set. */
   if (opt_exhaust && (opt_anneal > 0))
     fatal("Partial exhaustion (--exhaust) is not supported with simulated annealing (-A)");
-  if (opt_exhaust && (opt_threads > 1))
-    fatal("Partial exhaustion (--exhaust) is a single-threaded prototype; use -T 1");
   if (opt_exhaust)
     {
       int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
@@ -3294,6 +3422,7 @@ int main(int argc, char * * argv)
         fatal("Illegal partial exhaustion (--exhaust must be >= 1 forced plug pairs)");
       if (opt_exhaust > free_pairs)
         fatal("Partial exhaustion (--exhaust E): E exceeds the free plug pairs (13 minus -s pairs)");
+      build_exhaust_firsts();   /* the parallel first-pair work list (read-only after) */
     }
 
   /* Non-fatal warning: if --restarts N asks for more kicked restarts than there are distinct
@@ -3405,7 +3534,7 @@ int main(int argc, char * * argv)
 
   init();
 
-  init_plug_fixed(opt_steckerbrett);   /* freeze -s plugs against the climb/SA */
+  init_plug_fixed(opt_steckerbrett);   /* -s seed each worker thread copies into plug_fixed */
 
   /* try all combinations (bruteforce allocates one machine per worker thread) */
 

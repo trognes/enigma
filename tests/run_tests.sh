@@ -408,8 +408,7 @@ check "kick --random without -c rejected (exit code)" "$?" "1"
 # letters (on top of any -s pairs), try every combination, keep the best climb. On an easy
 # long message it recovers exactly (a KAT of the exhaustion path). --exhaust 1 (no -s)
 # forces each of the 325 first pairs; -s AB --exhaust 1 pins the true AB and forces one
-# more. Single-threaded, greedy-only prototype; the guards below enforce -T 1 / no -A /
-# E within the free plug pairs.
+# more. Greedy-only; the guards below enforce no -A and E within the free plug pairs.
 check "exhaustion --exhaust 1 recovers an easy message" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --score i4q10 -T 1)" \
   "$r_pt"
@@ -417,13 +416,22 @@ check "exhaustion -s AB --exhaust 1 (1 fixed + 1 forced) recovers" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB" -c --exhaust 1 --score i4q10 -T 1)" \
   "$r_pt"
 # Exhaustion composes with the kick and restarts (the old silent no-op is fixed): a kicked
-# exhaustion run still recovers the easy message and stays -T-independent by construction
-# (single-threaded), i.e. two identical-seed runs agree.
-check "exhaustion --exhaust 1 --random 2 --restarts 3 is reproducible" \
+# exhaustion run still recovers the easy message.
+check "exhaustion --exhaust 1 --random 2 --restarts 3 recovers" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 1 -e 5)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 1 -e 5)"
-printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 -T 4 >/dev/null 2>&1
-check "exhaustion --exhaust rejects -T > 1 (exit code)" "$?" "1"
+  "$r_pt"
+# Part D: exhaustion is now parallel (first forced pair = the work unit), so it runs on
+# -T > 1 and stays -T-independent -- pure exhaustion and the kicked+restart form both agree
+# byte-for-byte across thread counts, and E=2 too.
+check "exhaustion --exhaust 1 is -T-independent (T1==T8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --score i4q10 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --score i4q10 -T 8)"
+check "exhaustion --exhaust 1 --random 2 --restarts 3 is -T-independent (T1==T8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 1 -e 5)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 8 -e 5)"
+check "exhaustion --exhaust 2 is -T-independent (T1==T4)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 4)"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A 6000 --exhaust 1 -T 1 >/dev/null 2>&1
 check "exhaustion --exhaust rejects -A simulated annealing (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA --exhaust 1 -T 1 >/dev/null 2>&1

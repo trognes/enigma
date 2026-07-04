@@ -1,9 +1,9 @@
 # REDESIGN — CLI consistency refactor
 
-**Status: Parts A, B and C implemented** (long options; the seed pipeline —
+**Status: ALL FOUR PARTS IMPLEMENTED** (long options; the seed pipeline —
 `--score` climb-only, `--random`/`--exhaust`, kicked-only `--restarts`; model selectors as
-`--score` aliases with conflict detection). **Part D remains.** Execute one Part at a time,
-in order, and only on an explicit "go" for that Part.
+`--score` aliases with conflict detection; parallel exhaustion). The plan below is kept as
+the record of what was agreed and shipped.
 Each Part must land (merged, suite green, determinism preserved) before the next begins.
 This is a **consistency / correctness** refactor, not a recovery or performance change —
 the bar for every Part is:
@@ -185,7 +185,7 @@ scan-model rule holds (see "`--score` without `-c`" above): `--score`/selectors 
 - **Done:** selector ≡ `--score <m>`; **conflicting scoring models rejected** with a clear
   message; scan ranking works via `--score` alone; the no-`-c` staged-`--score` warning fires.
 
-### Part D — parallel exhaustion (A2)
+### Part D — parallel exhaustion (A2)  ✅ DONE
 
 Move `plug_fixed[]` into `struct machine` (per-worker). Make `--exhaust` combos a
 parallel work dimension (like restarts); drop the `-T 1` guard. Re-verify determinism and

@@ -337,11 +337,11 @@ random kick, systematically **force each candidate first pair** (`C(26,2)=325`),
 as the `--exhaust E` option (`--exhaust 1 --score i4q10`), where `E` is the number of
 **extra forced** pairs among the free letters, on top of any `-s` pairs (so `-s ABCD
 --exhaust 1` forces one more pair beyond the two fixed). `E > 1` explodes combinatorially
-(`free!/(2^E E! (free−2E)!)`: ~45k for 2, ~3.5M for 3) so it is a single-threaded
-**exploration knob only**; the measured result below is for `E=1`. It composes with the
-`--random` kick and `-R` restarts (each forced combo runs the restart loop). Single-threaded
-prototype (it mutates the global `plug_fixed[]` as it recurses — a threaded version needs
-per-machine state; REDESIGN Part D). (Historically this was the `-S aN` schedule token, where
+(`free!/(2^E E! (free−2E)!)`: ~45k for 2, ~3.5M for 3) so it is an **exploration knob
+only**; the measured result below is for `E=1`. It composes with the `--random` kick and
+`-R` restarts (each forced combo runs the restart loop), and is **parallel** over the first
+forced pair (≤325 units per key, spread across threads like restarts — REDESIGN Part D;
+`-T`-independent, TSan-clean, per-worker pin state). (Historically this was the `-S aN` schedule token, where
 `N` was the *total* pinned pairs; Part B renamed it `--exhaust E` and switched to *forced*-pair
 counting, so the old `-S a1` and `-s ABCD -S a3` become `--exhaust 1` and `-s ABCD --exhaust 1`.)
 

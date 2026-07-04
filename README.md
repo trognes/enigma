@@ -156,7 +156,7 @@ for `-q` (scoring an English message with `-l german` typically fails). Note tha
 | `-R N` / `--restarts N` | Random restart attempts: `0` = one deterministic climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best `[0]` |
 | `--random K` | Random-kick size — plug pairs injected per restart (needs `-c`; `0` = no kick, a control) `[10]` |
 | `-S sched` / `--score sched` | Staged climb schedule — model stages only (see below) |
-| `--exhaust E` | Force `E` extra plug pairs among the free letters, try every combination, keep the best climb (exploration tool; needs `-c`, `-T 1`) `[off]` |
+| `--exhaust E` | Force `E` extra plug pairs among the free letters, try every combination, keep the best climb (exploration tool; needs `-c`; parallel over the first forced pair, so `-T` helps) `[off]` |
 | `-A N` / `--anneal N` | Recover the plugboard by simulated annealing (move budget `N`) instead of the greedy climb (needs `-c`; `0` = off) `[0]` |
 | `-F N` / `-F N%` / `--prefilter` | Key pre-filter: full climb only the top `N` keys, or top `N%` of the keyspace (needs `-c`; `0` = off) `[0]` |
 | `-e N` / `--seed N` | Random seed for restarts / annealing (also `$ENIGMA_SEED`); default is a fresh random seed each run |
@@ -251,7 +251,7 @@ Advanced options:
   --exhaust E              Force E extra plug pairs among the free letters,
                            try every combination, keep the best climb. An
                            exploration tool (E=1 = 325 climbs; E>1 explodes;
-                           needs -c, -T 1; a high -R dominates it) [off]
+                           needs -c; a high -R dominates it) [off]
 ```
 
 ## Cracking strategy
