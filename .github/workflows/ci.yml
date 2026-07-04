@@ -82,10 +82,10 @@ jobs:
             | ./enigma -i -u . -w 12. -x 4 -r AAA -g .AA -T 8 >/dev/null
       - name: Threaded hill-climb is race-free (-T 8)
         run: |
-          # hill-climb path: adds restarts (-R), the plugboard perturbation and a
-          # staged IC->quad climb on top of the same parallel key space.
+          # hill-climb path: adds restarts (-R), the plugboard perturbation (--random) and a
+          # staged IC->quad climb (--score) on top of the same parallel key space.
           printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
-            | ./enigma -q -l english -u . -w 12. -x 4 -r AAA -g .AA -c -R 3 -S r2iq -T 8 >/dev/null
+            | ./enigma -q -l english -u . -w 12. -x 4 -r AAA -g .AA -c -R 3 --score iq --random 2 -T 8 >/dev/null
       - name: Threaded simulated-annealing climb is race-free (-T 8)
         run: |
           # -A path: per-key SA RNG stream + toggle moves + greedy quench across the
