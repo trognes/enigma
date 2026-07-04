@@ -480,61 +480,83 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
     }
 }
 
-/* Back-off / interpolated smoothing for the quadgram table (--backoff), an opt-in
-   alternative to the flat hapax floor (PERFORMANCE.md §6.2). Instead of every unseen
-   quadgram sharing one floor value, each quadgram's stored value is the log10 of an
-   interpolated CONDITIONAL probability
-     P(d|abc) = L4*P(d|abc) + L3*P(d|bc) + L2*P(d|c) + L1*P(d),
-   backing off through the trigram/bigram/monogram tables (P(d|abc)=cnt4(abcd)/cnt3(abc),
-   etc.; a higher-order term is 0 when its context is unseen). Unseen/rare quadgrams then
-   reflect the lower-order plausibility of their letters -- a denser, smoother short-text
-   surface -- rather than all collapsing to one value. The log10 values are quantised into
-   the SAME quad8 table the (unchanged) scorer reads, so the hot path and its bench are
-   untouched; only this build differs. Deterministic. Weights default below and are
-   overridable for tuning via $ENIGMA_BACKOFF="L4 L3 L2 L1". */
+/* Back-off smoothing for the quadgram table (--backoff), an opt-in alternative to the
+   flat hapax floor (PERFORMANCE.md §6.2, "joint-floor" variant). SEEN quadgrams keep the
+   exact joint log10(count/total) surface (the discriminative part is untouched). Only the
+   UNSEEN quadgrams -- which currently all share one flat floor -- are differentiated, and
+   deliberately only DOWNWARD: an unseen quad whose suffix trigram (bcd) is common stays at
+   the floor, while one whose suffix trigram is rare drops below it (by up to penalty_cap
+   log10 units). The intent follows the measured "harsh floor is a feature" insight (the
+   conditional interpolation that lifted unseen values was decisively worse): decoy decrypts
+   carry more IMPLAUSIBLE unseen quads, so pushing those down widens the gap to the truth
+   without ever rewarding plausible-looking gibberish above the floor.
+     v(abcd) = log10(count4/total4)                       if count4 > 0
+             = floor + lambda*(log10 P3(bcd) - max log10 P3), clamped to [floor-cap, floor]
+   Built into the SAME quad8 table the (unchanged) scorer reads, so the hot path / bench are
+   untouched. Deterministic. lambda=0 reproduces the flat floor exactly (a control); tune via
+   $ENIGMA_BACKOFF="lambda cap" (defaults below). */
 static void ngrams_read_backoff(uint8_t * quad_itable, double * bias_out)
 {
   const int A = asize;
-  std::vector<uint32_t> c1(A, 0), c2(A * A, 0), c3(A * A * A, 0),
+  std::vector<uint32_t> c3(static_cast<size_t>(A) * A * A, 0),
                         c4(static_cast<size_t>(A) * A * A * A, 0);
-  uint64_t t1 = load_counts(1, c1, "monograms");
-  load_counts(2, c2, "bigrams");
-  load_counts(3, c3, "trigrams");
-  load_counts(4, c4, "quadgrams");
+  uint64_t t3 = load_counts(3, c3, "trigrams");
+  uint64_t t4 = load_counts(4, c4, "quadgrams");
+  if (t3 == 0) t3 = 1;
+  if (t4 == 0) t4 = 1;
 
-  double L[4] = { 0.6, 0.25, 0.10, 0.05 };   /* highest order first; sum normalised to 1 */
+  double lambda = 1.0;        /* penalty strength (0 = flat floor exactly) */
+  double penalty_cap = 1.0;   /* max log10 units an unseen quad may drop below the floor
+                                 (keeps the uint8 window from clipping the seen quads) */
   const char * ovr = getenv("ENIGMA_BACKOFF");
-  if (ovr && (sscanf(ovr, "%lf %lf %lf %lf", & L[0], & L[1], & L[2], & L[3]) == 4))
+  if (ovr)
     {
-      double s = L[0] + L[1] + L[2] + L[3];
-      if (s > 0.0) { L[0] /= s; L[1] /= s; L[2] /= s; L[3] /= s; }
+      double a = lambda, b = penalty_cap;
+      int got = sscanf(ovr, "%lf %lf", & a, & b);
+      if (got >= 1) lambda = a;
+      if (got >= 2) penalty_cap = b;
     }
-  const double dtotal1 = (t1 > 0) ? static_cast<double>(t1) : 1.0;
+
+  const double logt3 = log10(static_cast<double>(t3));
+  const double logt4 = log10(static_cast<double>(t4));
+  const double floor_q = -logt4;   /* the flat hapax floor for an unseen quad = log10(1/total4) */
+
+  /* per-trigram joint log10 prob (unseen trigram floored at a hapax), plus the maximum */
+  const size_t tsize = static_cast<size_t>(A) * A * A;
+  std::vector<double> p3log(tsize);
+  double max_p3 = -1e30;
+  for (size_t i = 0; i < tsize; i++)
+    {
+      double lp = (c3[i] > 0 ? log10(static_cast<double>(c3[i])) : 0.0) - logt3;
+      p3log[i] = lp;
+      if (lp > max_p3)
+        max_p3 = lp;
+    }
 
   std::vector<double> v(static_cast<size_t>(A) * A * A * A);
   double vmin = 1e30;
-  for (int a = 0; a < A; a++)
-    for (int b = 0; b < A; b++)
-      for (int cc = 0; cc < A; cc++)
+  for (size_t abc = 0; abc < tsize; abc++)
+    {
+      int b  = static_cast<int>((abc / A) % A);
+      int cc = static_cast<int>(abc % A);
+      size_t bc = static_cast<size_t>(b) * A + cc;   /* bigram bc: prefix of the suffix trigram bcd */
+      for (int d = 0; d < A; d++)
         {
-          int abc = (a * A + b) * A + cc;   /* trigram context abc */
-          int bc  = b * A + cc;             /* bigram context bc */
-          uint32_t n_abc = c3[abc], n_bc = c2[bc], n_c = c1[cc];
-          for (int d = 0; d < A; d++)
+          size_t abcd = abc * A + d;
+          double val;
+          if (c4[abcd] > 0)
+            val = log10(static_cast<double>(c4[abcd])) - logt4;   /* SEEN: joint, unchanged */
+          else
             {
-              double p4 = (n_abc > 0) ? static_cast<double>(c4[static_cast<size_t>(abc) * A + d]) / n_abc : 0.0;
-              double p3 = (n_bc  > 0) ? static_cast<double>(c3[bc * A + d]) / n_bc : 0.0;
-              double p2 = (n_c   > 0) ? static_cast<double>(c2[cc * A + d]) / n_c : 0.0;
-              double p1 = static_cast<double>(c1[d]) / dtotal1;
-              double p = L[0] * p4 + L[1] * p3 + L[2] * p2 + L[3] * p1;
-              if (p < 1e-12)         /* guard log10 (a letter absent from the monogram table) */
-                p = 1e-12;
-              double val = log10(p);
-              v[static_cast<size_t>(abc) * A + d] = val;
-              if (val < vmin)
-                vmin = val;
+              val = floor_q + lambda * (p3log[bc * A + d] - max_p3);   /* <= floor_q */
+              if (val < floor_q - penalty_cap)
+                val = floor_q - penalty_cap;
             }
+          v[abcd] = val;
+          if (val < vmin)
+            vmin = val;
         }
+    }
 
   /* bias = the minimum value, so the uint8 window spans the actual range; the scorer
      recovers the log-prob sum as isum/scale + n*bias exactly as for the flat table. */
