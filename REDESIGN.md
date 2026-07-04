@@ -202,7 +202,7 @@ aliases, and the model selectors stay as permanent aliases for `--score <model>`
   `exhaust_*`, validation, `struct machine` (Part D).
 - `tests/run_tests.sh`, `tests/bench.sh`, `tests/crack_quality.py` — the `-S r…`/`-S a…`
   strings → `--random`/`--exhaust`, and any `-R` usage affected by the new semantics.
-- `README.md`, `CLAUDE.md`, `performance.md` — option tables, `-S` grammar section, §3.6,
+- `README.md`, `CLAUDE.md`, `PERFORMANCE.md` — option tables, `-S` grammar section, §3.6,
   recommended recipes.
 - CI runs via `make test/bench`, so covered by the harness edits (no direct option strings).
 
