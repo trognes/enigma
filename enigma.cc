@@ -284,6 +284,12 @@ struct machine
      tables above to large struct offsets. Summed across workers for the final line. */
   uint64_t plugboards_scored;
 
+  /* Echo intermediate climb improvements as progress lines? Set by the workers:
+     true in the main search and the -F tier-2 climb, false in the -F tier-1 filter
+     (whose IC scores are not comparable with the ranking model). Cold -- read only
+     on ACCEPTED climb moves (see report_climb_progress), never in the scoring scans. */
+  bool report;
+
   /* Per-worker scratch for --exhaust (see the PLUG_FIXED_EX note below): a copy of the global
      plug_fixed (-s seed) plus this leaf's forced-pair letters, read ONLY by the EX=true climb
      instantiations. Under g++ this lives here, in the machine (a thread_local shifts g++'s
@@ -936,6 +942,10 @@ double score_iter(machine & m)
    moves cannot. It is run only once the cheap swap/remove moves have converged -- a
    handful of times per climb, not every pass -- so its O(plugs^2) cost is small.
    Applies and returns true iff the single best re-pair strictly beats cur_score. */
+/* Defined after best_result (below the search structs); climbs call it on every
+   accepted move to echo intermediate plugboard improvements. */
+static void report_climb_progress(machine & m, double score);
+
 template<bool EX>
 static bool try_repair(machine & m, double cur_score)
 {
@@ -989,8 +999,11 @@ static bool try_repair(machine & m, double cur_score)
       }
 
   if (found)
-    for (int k = 0; k < 4; k++)
-      m.steckerbrett[rp_pos[k]] = static_cast<unsigned char>(rp_val[k]);
+    {
+      for (int k = 0; k < 4; k++)
+        m.steckerbrett[rp_pos[k]] = static_cast<unsigned char>(rp_val[k]);
+      report_climb_progress(m, best);
+    }
   return found;
 }
 
@@ -1162,6 +1175,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
       if (improved)
         {
           stale = 0;
+          report_climb_progress(m, cur);
           pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
           for (int j = 0; j < asize; j++)
             if (steck[j] > j)
@@ -1325,6 +1339,7 @@ static double hillclimb(machine & m, int max_pairs)
                     }
 
                   best_score = move_score;
+                  report_climb_progress(m, best_score);
                 }
             }
           while (best_score > last_best);
@@ -1873,6 +1888,7 @@ static double anneal_once(machine & m, uint64_t * rng)
                 {
                   best = cur;
                   memcpy(best_board, m.steckerbrett, asize);
+                  report_climb_progress(m, best);
                 }
             }
           else
@@ -1993,7 +2009,44 @@ struct best_result
   size_t idx = static_cast<size_t>(-1);   /* work index of the best (for the tie-break) */
   bool found = false;
   char plaintext[maxlen+1];
+  /* Highest score already ECHOED as a progress line -- display state only, never read
+     by the merge logic, so it cannot affect which candidate wins (the -T-determinism
+     contract is untouched). It can run ahead of `score`: an intermediate plugboard
+     inside a still-running climb echoes as soon as it beats every line shown so far,
+     while `score` only advances when a finished work item merges. Atomic so climbing
+     workers can pre-check it cheaply (and race-free) before taking the mutex. */
+  std::atomic<double> shown{score_min};
 };
+
+/* The live search's shared best, exported for report_climb_progress (the climbs sit
+   above bruteforce() in the file and know nothing else about the search phase).
+   Set by bruteforce() before the workers start; null outside a search. */
+static best_result * g_progress = nullptr;
+
+/* Echo an intermediate plugboard improvement from inside a climb: the same
+   "score W: R: G: S:" line the key-level merge prints, but at the granularity the
+   user actually watches -- every accepted climb move that beats everything echoed so
+   far, not just every finished climb. Gated to the TARGET scoring model (a staged
+   pre-pass and the -F tier-1 filter climb score in a different model, so their values
+   are not comparable with the ranking scores) and to workers that opted in
+   (m.report). Costs one relaxed atomic load per ACCEPTED move -- nothing on the
+   325-move scoring scans -- so the hot path is untouched. The worker restored the
+   machine's grundstellung right after setup_mapping (climb paths only), so
+   showconfig(m) prints the true start positions here. */
+static void report_climb_progress(machine & m, double score)
+{
+  best_result * bp = g_progress;
+  if ((bp == nullptr) || (! m.report) || (m.scoring != opt_scoring))
+    return;
+  if (score <= bp->shown.load(std::memory_order_relaxed))
+    return;
+  std::lock_guard<std::mutex> lock(bp->mutex);
+  if (score <= bp->shown.load(std::memory_order_relaxed))
+    return;   /* another thread echoed something at least as good meanwhile */
+  bp->shown.store(score, std::memory_order_relaxed);
+  fprintf(stderr, "%7.4f ", score);
+  showconfig(m);
+}
 
 /* Deterministic ordering of candidates: higher score wins, ties broken by lower work
    index. Parallel restarts of one key often converge to the same score, so an explicit
@@ -2079,6 +2132,7 @@ void search_worker(machine & m,
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
 
   m.scoring = opt_scoring;   /* per-machine; the staged climb varies it transiently */
+  m.report = (opt_hillclimb != 0);   /* echo intermediate climb improvements */
 
   double local_best = score_min;
   size_t local_best_idx = static_cast<size_t>(-1);
@@ -2129,6 +2183,13 @@ void search_worker(machine & m,
               /* hill-climb re-reads each row many times -> copy into contiguous
                  mapping[]; the scan reads straight from the shared subst_array */
               setup_mapping(m, opt_hillclimb != 0);
+              /* setup_mapping stepped grundstellung; on the climb path restore the
+                 start positions now, so an intermediate progress line (echoed from
+                 inside the climb, where r1..g3 are out of reach) shows the true
+                 config. The scan keeps the lazy restore below (no mid-key echoes,
+                 and no extra per-key writes on its init-dominated path). */
+              if (opt_hillclimb)
+                init_ring_grund(m, r1, r2, r3, g1, g2, g3);
             }
 
           /* Run one work unit: a restart climb, an --exhaust first-pair unit, or one scan
@@ -2159,11 +2220,20 @@ void search_worker(machine & m,
                   best.idx = idx;
                   best.found = true;
                   memcpy(best.plaintext, m.plaintext, textlength + 1);
-                  /* setup_mapping stepped grundstellung; restore the start
-                     positions before echoing the config */
-                  init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-                  fprintf(stderr, "%7.4f ", score);
-                  showconfig(m);
+                  /* Echo the new best -- unless a progress line already showed this
+                     score (a climb's last accepted move IS its converged board, so
+                     reprinting it here would just duplicate the line). Ties that
+                     win the merge on the idx tie-break are display-identical, so
+                     they stay silent too. */
+                  if (score > best.shown.load(std::memory_order_relaxed))
+                    {
+                      best.shown.store(score, std::memory_order_relaxed);
+                      /* setup_mapping stepped grundstellung (scan path only; the
+                         climb path restored it right after setup_mapping) */
+                      init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+                      fprintf(stderr, "%7.4f ", score);
+                      showconfig(m);
+                    }
                 }
               local_best = best.score;         /* track the global best for the filter */
               local_best_idx = best.idx;
@@ -2215,7 +2285,10 @@ static void key_to_machine(machine & m, size_t idx,
 
   init_ring_grund(m, r1, r2, r3, g1, g2, g3);
   init_steckerbrett(m, opt_steckerbrett);
-  setup_mapping(m, true);   /* both the filter climb and the finish climb need it */
+  setup_mapping(m, true);
+  /* restore the start positions setup_mapping stepped, so mid-climb progress lines
+     (finish_worker) echo the true config; rg6 carries them to the callers */
+  init_ring_grund(m, r1, r2, r3, g1, g2, g3);
   rg6[0] = r1; rg6[1] = r2; rg6[2] = r3; rg6[3] = g1; rg6[4] = g2; rg6[5] = g3;
 }
 
@@ -2254,6 +2327,7 @@ void filter_worker(machine & m,
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
   const size_t step = (total >= 100) ? total / 100 : 1;   /* progress granularity */
 
+  m.report = false;   /* tier-1 filter scores are not ranking scores; stay quiet */
   m.scoring = SCORE_IC;   /* the cheap, smooth-surface filter model */
   const int cap = filter_climb_cap;
 
@@ -2324,6 +2398,7 @@ void finish_worker(machine & m,
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
 
   m.scoring = opt_scoring;
+  m.report = (opt_hillclimb != 0);   /* echo intermediate climb improvements */
 
   double local_best = score_min;
   size_t local_best_idx = static_cast<size_t>(-1);
@@ -2349,9 +2424,14 @@ void finish_worker(machine & m,
               best.idx = idx;
               best.found = true;
               memcpy(best.plaintext, m.plaintext, textlength + 1);
-              init_ring_grund(m, rg6[0], rg6[1], rg6[2], rg6[3], rg6[4], rg6[5]);
-              fprintf(stderr, "%7.4f ", score);
-              showconfig(m);
+              /* echo only if no progress line already showed this score (see the
+                 matching note in search_worker) */
+              if (score > best.shown.load(std::memory_order_relaxed))
+                {
+                  best.shown.store(score, std::memory_order_relaxed);
+                  fprintf(stderr, "%7.4f ", score);
+                  showconfig(m);
+                }
             }
           local_best = best.score;
           local_best_idx = best.idx;
@@ -2605,6 +2685,7 @@ void bruteforce(char * result)
      total_keys; the non-F sweep is over work_items (keys x restarts), so it gets its own
      chunk below. */
   best_result best;
+  g_progress = & best;   /* climbs echo intermediate improvements against this */
   size_t chunk = total_keys / (static_cast<size_t>(nthreads) * 16);
   if (chunk < 1)
     chunk = 1;

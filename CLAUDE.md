@@ -525,6 +525,14 @@ range and is not viable.
   shadow the globals were removed earlier.)
 - The live diagnostics are `showconfig` / `showsteckerbrett` (echo the winning key +
   plugboard on a new best) and `show_settings` (echo the resolved config at startup).
+  With `-c` the echo is per plugboard IMPROVEMENT, not per finished climb: every
+  accepted climb/SA move whose (target-model) score beats everything echoed so far
+  prints the same `score W: R: G: S:` line (`report_climb_progress`, called on accepted
+  moves only — nothing on the 325-move scoring scans, so the hot path is untouched).
+  Display state lives in `best_result.shown` (atomic), never read by the merge logic,
+  so which candidate WINS stays `-T`-deterministic; which lines appear is thread-timing
+  dependent, as before. Staged pre-pass stages and the `-F` tier-1 filter score in a
+  different model and stay silent (`m.report` + target-model gate).
   The unused debug scaffolding has been removed: the `SHOWHILLCLIMB` compile-time
   climb-trace path (and its vestigial per-climb `iter` counter), the `#if 0` blocks and
   the dead `ciphertext_letterdist`/`compare`/`count`/`order` cluster that only fed one,
