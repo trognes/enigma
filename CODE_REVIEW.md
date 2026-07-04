@@ -55,11 +55,18 @@ on realistic 10-plug boards and a large win (+3–20pp, biggest at the short/har
 **known-few-plug** boards with a tight cap (`-S i4q6 -M`) — and cheaper per climb, so it
 buys more restarts too:
 
-- 🟢 **Full-crack tier for `make crackquality`** (measurement gap, and a
-  prerequisite). The harness only exercises the plugboard-recovery tier (true
-  rotor key fixed). A tier that wildcards the rotor key too would reveal whether
-  genuine *scoring* failures exist there — which is what would justify the scoring
-  work in §2. Build this before betting on scoring changes.
+- 🟢 **Planned `make crackquality` test additions** (`CRACKQUALITY_TESTS.md`).
+  Three cheap, focused additions: (1) a **one-time scoring-failure gate** —
+  wildcard only the start (`START` scope, ring pinned `AAA`, **unfiltered**) and
+  check *once* whether a wrong (key, board) ever out-scores the true one; if not,
+  the scoring work in §2 stays parked, if so it re-opens; (2) **`-F` prefilter
+  validation** — a `recall@N` sweep + matched-`score_iter` filtered-vs-unfiltered
+  A/B, the recall test `-F` lacks; (3) **restart-diversity diagnostics** —
+  measure how often restarts collapse into the same optimum and rank the shipped
+  knobs by basin coverage. The earlier "full-crack tier that gates everything"
+  was **de-scoped**: its cross-key plug marginalization goal (`PERFORMANCE.md`
+  §5.3) is dropped (correlated-noise argument, the §3.1 precedent). Build the
+  gate before betting on scoring changes.
 - 🟢 **Greedy plug-by-plug seed** (history §9 item 4). Pick the best single plug,
   fix it, repeat to a small budget, then refine with the swap climb — a better
   start than the identity board. Cheap; modest expected gain.
