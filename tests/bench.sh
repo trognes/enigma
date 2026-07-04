@@ -64,6 +64,34 @@ LONG_REPS=2
 
 regressed=0
 
+# --- GitHub Actions job summary (markdown) -----------------------------------
+# When running under Actions, GITHUB_STEP_SUMMARY names a file whose markdown is
+# rendered on the workflow run page. We mirror each benchmark row into a table
+# there so the results are an obvious report, not buried in the log. Empty (and a
+# no-op) for local runs, so `make bench` on a workstation is unchanged.
+GH_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
+sumln() {
+  [ -n "$GH_SUMMARY" ] || return 0
+  printf '%s\n' "$1" >> "$GH_SUMMARY"
+}
+sum_header() {
+  [ -n "$GH_SUMMARY" ] || return 0
+  _mach="${CXX:-g++} / $(uname -m)"
+  sumln "## Bench — $_mach"
+  sumln ""
+  if [ -n "$BASE_BIN" ]; then
+    sumln "A/B vs \`$BASE\` · regression threshold ${THRESHOLD}% · LONG=$LONG (min of ${QUICK_REPS}/${LONG_REPS} reps)"
+    sumln ""
+    sumln "| benchmark | tier | base | head | Δ | |"
+    sumln "|:--|:--|--:|--:|--:|:-:|"
+  else
+    sumln "working-tree timings · LONG=$LONG (min of ${QUICK_REPS}/${LONG_REPS} reps)"
+    sumln ""
+    sumln "| benchmark | tier | time | throughput | solved |"
+    sumln "|:--|:--|--:|--:|:-:|"
+  fi
+}
+
 # Build the BASE binary in a throwaway worktree, if an A/B was requested.
 BASE_BIN=""
 if [ -n "${BASE:-}" ]; then
@@ -159,10 +187,19 @@ bench() {
     fi
     printf '%-10s %-5s base %8.2fs  head %8.2fs  %7s%%%s\n' \
       "$_name" "$_tier" "$_bt" "$_ht" "$_delta" "$_flag"
+    if [ -n "$GH_SUMMARY" ]; then
+      _mk="✅"; [ -n "$_flag" ] && _mk="⚠️"
+      sumln "$(awk -v n="$_name" -v ti="$_tier" -v b="$_bt" -v h="$_ht" -v d="$_delta" -v e="$_mk" \
+        'BEGIN { printf "| `%s` | %s | %.2fs | %.2fs | %s%% | %s |", n, ti, b, h, d, e }')"
+    fi
   else
     _rate=$(awk -v w="$_work" -v t="$_ht" 'BEGIN { printf "%.0f", w / t }')
     printf '%-10s %-5s %8.2fs  %10s %-8s %s\n' \
       "$_name" "$_tier" "$_ht" "$_rate" "$_unit/s" "$_sol"
+    if [ -n "$GH_SUMMARY" ]; then
+      sumln "$(awk -v n="$_name" -v ti="$_tier" -v h="$_ht" -v r="$_rate" -v u="$_unit" -v so="$_sol" \
+        'BEGIN { printf "| `%s` | %s | %.2fs | %s %s/s | %s |", n, ti, h, r, u, so }')"
+    fi
   fi
 }
 
@@ -173,6 +210,7 @@ else
 fi
 printf 'LONG=%s  SCALE=%s  quick reps=%s  long reps=%s\n\n' \
   "$LONG" "$SCALE" "$QUICK_REPS" "$LONG_REPS"
+sum_header
 
 # --- search: brute-force scan, no plugboard (wildcard wheels + start) ---------
 ct_s=$(encrypt "$(trunc 80)" "")
@@ -241,9 +279,14 @@ if [ "$SCALE" = 1 ]; then
 fi
 
 echo
+sumln ""
 if [ "$regressed" -eq 1 ]; then
   echo "RESULT: regression detected (> ${THRESHOLD}% slower than BASE)"
+  sumln "**⚠️ regression detected — >${THRESHOLD}% slower than base on at least one benchmark (advisory: re-check on quiet hardware; the shared runners are bimodal on the climb tier).**"
   exit 1
 fi
-[ -n "$BASE_BIN" ] && echo "RESULT: no regression > ${THRESHOLD}%"
+if [ -n "$BASE_BIN" ]; then
+  echo "RESULT: no regression > ${THRESHOLD}%"
+  sumln "**✅ no regression > ${THRESHOLD}% vs base.**"
+fi
 exit 0
