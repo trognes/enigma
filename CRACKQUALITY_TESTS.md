@@ -14,8 +14,10 @@
 > binary hook + the `DIVERSITY` basin-collapse mode. All three binary hooks are
 > **off by default** (default paths byte-identical and bench-neutral, verified),
 > and `WILDCARD=""` / no-mode runs are byte-identical to the original harness. The
-> commands below are runnable now; the numbers they will produce are still to be
-> collected (that is compute, not code).
+> commands below are runnable now. **Numbers collected:** the §1 scoring-failure
+> gate (H0 — fires only at L40, ~7.5%; search-bound at L ≥ 50; see §1) and §2 Test A
+> (`-F` recall on the 6-order proxy; see §2). The full 60-order recall, Test B, the
+> `FULLCRACK` wheel-order gate, and §3 diversity sweeps are not yet run.
 >
 > **This supersedes the earlier "full-crack tier" design.** Its cross-key plug
 > marginalization goal (PERFORMANCE.md §5.3) is **dropped** — see the note at the
@@ -121,6 +123,43 @@ parsed `last_score`/`last_key` *values* byte-identical across `T=1/3/8` — **no
 full-stderr, since which progress *lines appear* is thread-timing dependent by
 design (`best_result.shown`).
 
+### Measured — the gate (H0), first run
+
+Config: `START` scope unfiltered (`WILDCARD=g`, reflector+wheels fixed true, ring
+`AAA`, start wildcarded ⇒ 17,576 keys), English quad, **6 plugs**, `-R 8`,
+`SEED=1`, 12 trials/length (L40 extended to **80** — two seeds × 40 — to test the
+short-end signal). `search-fail%` / `scoring-fail%` are over *all* trials (exact
+recoveries fill the remainder).
+
+| L | mean% | exact% | search-fail% | **scoring-fail%** | trials |
+|--:|--:|--:|--:|--:|--:|
+| 40 | ~16 | ~9 | ~84 | **7.5** (6/80) | 80 |
+| 50 | 20.2 | 8.3 | 91.7 | **0.0** | 12 |
+| 60 | 53.6 | 50.0 | 50.0 | **0.0** | 12 |
+| 90 | 45.4 | 41.7 | 58.3 | **0.0** | 12 |
+| 120 | 100 | 100 | 0.0 | **0.0** | 12 |
+
+**H0 fires, but narrowly.** From **L50 up the tier is cleanly search-bound** —
+`scoring-fail% = 0`, every miss is the plugboard climb stuck in a local optimum,
+exactly as on the fixed-key tier. **At L40 only**, ~7.5% of messages have a wrong
+(key, board) out-score the truth under quad — **robust across two independent
+seeds** (5% and 10%, so not the 1/12 trial-noise the first 12-trial run
+suggested). These are the **first scoring failures this project has observed**:
+right at the identifiability floor, a noisy quad score over ~37 quadgrams
+occasionally mis-ranks a decoy start with an overfit plugboard above the truth.
+
+**What it means.** §6 (scoring) **stays parked for the regime that matters** —
+there is no scoring problem at L ≥ 50. The narrow L40 re-opening is a concrete but
+small target for the two length-sensitive scoring ideas (§6.1 trigram-at-short-end,
+§6.2 back-off smoothing): they could only help at L ≲ 40, where recovery is already
+near the information floor (`exact% ≈ 9`), so the practical payoff is limited.
+
+**Caveats.** `START` scope tests **start-discrimination only** (wheels/reflector
+fixed true); a wheel-order scoring failure would need the heavier `FULLCRACK`
+unfiltered gate, not run. One machine; L50–120 are 12 trials each (percentages
+coarse — e.g. L60 > L90 mean is trial noise, not a real dip). The load-bearing
+result is the `scoring-fail%` column, and it is 0 everywhere except the L40 floor.
+
 ---
 
 ## 2. `-F` prefilter validation
@@ -171,6 +210,50 @@ prefilter is vindicated; if it sags at the short/high-plug corners, that
 quantifies exactly where `-F` costs recoveries — and Test B says whether the
 throughput still wins on net. Either way it is the thorough measurement `-F` has
 lacked.
+
+### Measured — Test A, first proxy run
+
+Config: 6-order **proxy** keyspace (`WILDCARD=wg XMAX=3` — reflector fixed to the
+true value, wheels over I–III = 6 orders, ring `AAA`, start wildcarded ⇒ **105,456
+keys**), English quad, **10 plugs**, `SEED=1`, **16 trials/length**. Command:
+
+```
+WILDCARD=wg XMAX=3 FILTERRECALL=1 CLANG=english PAIRS=10 LENGTHS='120 200 300' TRIALS=16 CRACKOPTS='-T 4'
+```
+
+| L | rec@50 | rec@100 | rec@200 | rec@500 | median rank |
+|--:|--:|--:|--:|--:|--:|
+| 120 | 6.2% | 6.2% | 6.2% | 6.2% | **12416** |
+| 200 | 56.2% | 56.2% | 62.5% | 75.0% | **27** |
+| 300 | 93.8% | 93.8% | 93.8% | 93.8% | **1** |
+
+**The prefilter has a sharp length threshold, right where the literature puts it.**
+
+- **L120 (short/hard) — `-F` is effectively broken.** Median rank ~12,400 of 105k:
+  the true key sits mid-pack, so any practical shortlist drops it. On short 10-plug
+  traffic the capped-5 IC climb cannot discriminate the true rotor key.
+- **L200 (the knee) — usable but lossy, and *bimodal*.** Median rank 27, yet
+  recall@50 is only 56%: outcomes are either "rank ≲ 50" or "rank in the
+  thousands," almost nothing between (note recall@50 = recall@100). So a bigger
+  shortlist barely helps at the knee — message length is the only real lever.
+- **L300 (realistic operational length) — `-F` works cleanly.** Median rank 1, 94%
+  recall at any shortlist ≥ 50.
+
+**Caveats (do not over-read):**
+
+- **This is the *optimistic* proxy** — 6 wheel orders, not the real 60. ~10× fewer
+  decoys, so the full Wehrmacht keyspace would rank the true key **worse** (most
+  where the IC signal is weak, i.e. the L200 knee); the real "works reliably" point
+  is likely **L250–300+**, not L200. The full 60-order confirm was not run.
+- One realization (`SEED=1`, 16 trials); the buckets top out at N=500, which for a
+  105k (let alone 1.05M) keyspace is a tight shortlist — the **median-rank** column,
+  not the recall buckets, is the load-bearing number.
+- **Verdict:** the prefilter is sound for realistic-length traffic (~L300) and
+  genuinely unreliable on the short/hard messages the tool is otherwise aimed at.
+  A concrete, honest map of where `-F` earns its ~8–20× and where it silently costs
+  the crack — directly bearing out the standing `-F` skepticism.
+
+Test B (matched-compute recovery) was not run.
 
 ---
 

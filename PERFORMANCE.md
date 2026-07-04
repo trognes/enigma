@@ -652,6 +652,15 @@ cross-key-seeded finalists vs the independent-per-key baseline at equal compute.
 
 ## 6. Scoring
 
+> **Measured update (unknown-key gate).** The scoring-failure gate is now built
+> and run (`CRACKQUALITY_TESTS.md` §1): with an *unknown* rotor start, `scoring-fail%`
+> is **0 at L ≥ 50** (still purely search-bound) and only **~7.5% at L40** (robust
+> over two seeds) — the first scoring failures the project has seen, right at the
+> identifiability floor. So this whole section stays parked *for the regime that
+> matters*; the sole measured opening is a narrow one at **L ≲ 40** (near-zero
+> recovery regardless), which is exactly what §6.1 (trigram-at-short-end) and §6.2
+> (back-off smoothing) target. Do not promote §6 above §3/§7 on the strength of it.
+
 Per the §1 diagnosis, purely *monotone* rescales (likelihood-ratio null
 normalization, z-scoring, per-length normalization) **provably cannot change
 per-key ranking** and cannot move the plugboard tier. Only ideas that **reshape
