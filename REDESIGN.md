@@ -120,6 +120,25 @@ Work space = `--exhaust combos × restart attempts`. Per item: pin `-s` + one fo
 combo, add this restart's `--random` kick (0 for `--restarts 0`), climb `--score`, keep the
 global best. `-S`/`--score` no longer carries `r`/`a` tokens — only model stages with caps.
 
+### `--score` without `-c` (rotor-only scan)
+
+`--score`'s **target (last) stage's model is always the ranking model** — used by the rotor
+scan to rank candidate decryptions *and* by the climb as its final model. The earlier stages
+and their caps are **climb-only**: inert when there is no `-c`. So a pure rotor scan is
+configured by `--score` alone:
+
+- no `--score` → rank by **IC** (the default; `./enigma < cipher` works with no options);
+- `--score q` (≡ `-q`) → rank by quadgrams;
+- `--score iq` / `--score i4q10` (no `-c`) → rank by the target (`q`); the earlier stages and
+  caps are ignored (there is no climb to apply them to).
+
+**Decision — warn (option b):** when `--score` carries climb-only detail (more than one stage,
+or any cap) but `-c` is absent, emit a **non-fatal** warning ("climb schedule ignored without
+`-c`; ranking by *<model>*") and proceed, ranking by the target. This flags a forgotten `-c`
+or a pasted climb recipe without breaking recipe reuse — same spirit as the pigeonhole and
+`N < fixed` warnings. (By contrast, `--random`/`--exhaust` are plugboard operations and
+**error** without `-c`, since they can do nothing in a scan.)
+
 ---
 
 ## The plan
@@ -138,7 +157,9 @@ forms**. New options (`--random`, `--exhaust`) are **not** added here (Part B). 
 Move `r`/`a` out of `-S`; `-S` becomes `--score` (climb stages only). Add `--random K`
 (kick, default 10) and `--exhaust E` (forced pairs, long-only, single-threaded — A1).
 Implement the seed pipeline so exhaustion and the kick **compose** (fixing the current
-silent no-op). Adopt the new `--restarts`/`--random` semantics + the pigeonhole warning.
+silent no-op). Adopt the new `--restarts`/`--random` semantics + the pigeonhole warning, and
+the **climb-schedule-without-`-c` warning** (see "`--score` without `-c`" above); `--random`/
+`--exhaust` **error** without `-c`.
 - **Behaviour changes (intended):** `-R` renumbered; default kick 8→10; `-S r…`/`-S a…`
   strings no longer parse (moved to `--random`/`--exhaust`); exhaustion now respects the
   kick and restarts.
@@ -152,11 +173,15 @@ silent no-op). Adopt the new `--restarts`/`--random` semantics + the pigeonhole 
 ### Part C — model selectors as aliases (C-lite)
 
 Redefine `-i/-m/-b/-t/-q` precisely as aliases for `--score <model>` (single uncapped
-stage). Make precedence explicit: **error** if a selector and an `--score` model target are
-both given (instead of silently letting `--score` win). Verify `--score`/selectors set the
-**scan** model with no `-c`.
-- **Done:** selector ≡ `--score <m>`; conflicting combo rejected with a clear message; scan
-  ranking works via `--score` alone.
+stage). Make precedence explicit but lenient: **warn** (non-fatal) when the scoring model is
+set to *conflicting* values by different options — a selector vs an `--score` target
+(e.g. `-m --score q`), or two disagreeing selectors (`-m -q`) — then proceed with the
+`--score` target if present, else the last option given (it wins). No warning when they agree
+(`-q --score q`, `-q -q`). Confirm the scan-model rule holds (see "`--score` without `-c`"
+above): `--score`/selectors set the **scan** ranking model with no `-c`, target model wins.
+- **Done:** selector ≡ `--score <m>`; conflicting scoring models **warned** (not rejected),
+  `--score`/last wins; scan ranking works via `--score` alone; the no-`-c` staged-`--score`
+  warning fires.
 
 ### Part D — parallel exhaustion (A2)
 
