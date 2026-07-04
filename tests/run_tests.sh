@@ -374,6 +374,19 @@ pbv_pb=$(printf '%s\n' "$pbv_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | g
 check "restart climb: displayed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pbv_pb")" \
   "$pbv_rec"
+# Progress lines: the climb echoes EVERY plugboard improvement (score + machine
+# settings) as it happens, not just each finished climb -- a single-key -c run used
+# to print exactly one W: line (the converged board); now the board builds up live.
+pg_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c 2>&1 >/dev/null)
+pg_n=$(printf '%s\n' "$pg_err" | grep -c "W:")
+check "progress: climb echoes intermediate plugboard improvements (>1 line)" \
+  "$([ "$pg_n" -gt 1 ] && echo ok)" "ok"
+# ...and the LAST echoed line is still the winning board: its plugboard reproduces
+# the recovered plaintext (display/result consistency at the finer granularity).
+pg_pb=$(printf '%s\n' "$pg_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | tr -d ' ')
+check "progress: last echoed plugboard matches the recovered plaintext" \
+  "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pg_pb")" \
+  "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c)"
 # The --random default kick is a fixed 10 pairs: a plain kicked -R run must equal an
 # explicit --random 10 run (REDESIGN Part B: default kick 8 -> 10).
 check "restarts: default kick == --random 10" \

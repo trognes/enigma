@@ -100,7 +100,11 @@ settings are left unspecified (a dot `.` wildcard), it searches:
 The search is exhaustive over the rotor settings and heuristic over the
 plugboard (whose ~150-trillion 10-pair configurations are far too many to
 enumerate). The best plaintext found is printed to stdout; progress and a final
-diagnostic (timing, threads, memory) go to stderr.
+diagnostic (timing, threads, memory) go to stderr. A progress line (score plus
+the full machine settings) is echoed for every improvement — each rotor setting
+that beats the best so far, and, with `-c`, each intermediate plugboard
+improvement inside a climb, so you can watch the board being built up plug by
+plug.
 
 ## Options
 
