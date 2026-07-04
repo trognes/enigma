@@ -499,7 +499,9 @@ range and is not viable.
 > member under g++ — each compiler's measured-neutral form; verified byte-identical to the
 > clean build under clang). Also beware: the climb/scan benches on a shared box can be
 > **bimodal** — before trusting a regression, re-run and check base-vs-base; disassembly
-> comparison (`objdump -d`) settles whether codegen actually changed.
+> comparison (`objdump -d`) settles whether codegen actually changed. The shipped form was
+> verified neutral **end-to-end on Apple-silicon clang** (M2, the layout-sensitive target):
+> `make bench LONG=1` vs a pre-REDESIGN base, all four benchmarks within ±0.7%.
 
 ## Conventions & gotchas for contributors
 
@@ -540,7 +542,12 @@ range and is not viable.
   (`.github/workflows/ci.yml`) runs on every push
   and PR: the suite `-Werror` under g++ and clang++, ASan+UBSan, valgrind,
   cppcheck, clang-tidy (config in `.clang-tidy`), and shellcheck; a separate
-  CodeQL workflow runs on PRs and weekly. Keep all of these green.
+  CodeQL workflow runs on PRs and weekly. Keep all of these green. A `Bench`
+  workflow (`.github/workflows/bench.yml`) additionally runs `make bench LONG=1`
+  on a {g++, clang++} × {x86_64, arm64-Linux} matrix — on PRs as a same-machine
+  A/B vs the PR base, but **advisory only** (`continue-on-error`): shared runners
+  are noisy/bimodal, so treat a flagged cell as "re-check on quiet hardware and
+  compare disassembly", never as an automatic block (or a pass as proof).
 
 ## Status & remaining work
 
