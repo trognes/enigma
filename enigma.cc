@@ -190,18 +190,18 @@ static double opt_prefilter_frac; /* -F N% form: fraction of the resolved keyspa
    up (fewer passes per key) and improves rotor-key discrimination: an uncapped climb
    lets wrong keys overfit IC with surplus plugs and bury the true key, so a cap near
    the true plug count ranks it better. ~5 is the measured optimum (both-axes win vs
-   uncapped; harmless on easy keyspaces) -- see CODE_REVIEW_HISTORY.md §9 item 2. */
+   uncapped; harmless on easy keyspaces) -- see archived/CODE_REVIEW_HISTORY.md §9 item 2. */
 static const int filter_climb_cap = 5;
 /* Simulated-annealing plugboard optimiser (-A N): N = total move budget (0 = off,
    use the greedy climb). An alternative to the greedy hill-climb that accepts
    worsening moves with a cooling probability to escape local optima. Needs -c; the
    move budget is SA's cost/quality knob (like -R for the greedy climb). See
-   SIMULATED_ANNEALING.md. */
+   archived/SIMULATED_ANNEALING.md. */
 static int opt_anneal;
 static const int anneal_chain = 208;      /* moves per temperature level (8*26) */
 static const int anneal_warmup = 200;     /* warm-up samples for T calibration */
 /* chi0 is the initial worsening-move acceptance target; chi_end the final (near-greedy)
-   one. chi0 = 0.12 was tuned by a quality-per-climb-time sweep (SIMULATED_ANNEALING.md
+   one. chi0 = 0.12 was tuned by a quality-per-climb-time sweep (archived/SIMULATED_ANNEALING.md
    §15): the surface here is greedy-friendly, so a *cool* start (a mostly-downhill walk
    with occasional uphill escapes) matches or beats the greedy restart climb, whereas a
    hot start (chi0 = 0.8) wanders and loses ~2x. Higher chi0 and reheating were both
@@ -1472,7 +1472,7 @@ static double run_stages(machine & m)
 }
 
 /* -S aN partial plugboard exhaustion (PROTOTYPE, exploration tool only -- dominated by a
-   high -R greedy climb at equal compute; see performance.md §3.6). `N` is the TOTAL pinned
+   high -R greedy climb at equal compute; see PERFORMANCE.md §3.6). `N` is the TOTAL pinned
    pairs (like a model-token cap, counting the -s pairs); it forces k = N - (fixed -s pairs)
    of them. Instead of one climb from the seed, try every set of k disjoint pairs among the
    free letters -- pin them (as -s pins plugs) and run the staged climb from that seed -- and
@@ -1623,7 +1623,7 @@ static inline void apply_toggle(machine & m, int a, int b, int cap)
 
 /* One simulated-annealing trajectory on the current board (Phase 1: full rescore per
    move, flat target model). Calibrates the temperature from a warm-up sample so it is
-   length/model-robust (SIMULATED_ANNEALING.md §4), cools geometrically, tracks the best
+   length/model-robust (archived/SIMULATED_ANNEALING.md §4), cools geometrically, tracks the best
    board seen (incumbent), then finishes with a greedy quench so the result is at least
    a local optimum. Leaves m at the best board (m.plaintext set by the quench's decode).
    All randomness comes from the per-key *rng stream, so it is -T-independent. */
@@ -1635,7 +1635,7 @@ static double anneal_once(machine & m, uint64_t * rng)
      quad score would otherwise reward -- a measured win on short messages at modest
      budgets, neutral once the message/budget is large enough to recover the true board
      unaided. Set below the true count it clips and hurts, so it is a user-supplied
-     prior (SIMULATED_ANNEALING.md §16). */
+     prior (archived/SIMULATED_ANNEALING.md §16). */
   int cap = opt_stages[opt_nstages - 1].cap;
 
   /* IC pre-pass: greedy-climb under the index of coincidence to seed a decent board

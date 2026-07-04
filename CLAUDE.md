@@ -87,7 +87,7 @@ actually helps short-message cracking. `make crackquality SPLIT=1` additionally
 classifies each non-recovered trial as a **scoring** failure (the true plugboard
 does not score highest) or a **search** failure (it does, but the climb stuck in
 a local optimum) via an oracle run — telling you which lever to pull. (See
-`CODE_REVIEW_HISTORY.md` §9 for the algorithmic ideas this is meant to measure; on the
+`archived/CODE_REVIEW_HISTORY.md` §9 for the algorithmic ideas this is meant to measure; on the
 v1.1.0 baseline every miss is a *search* failure.)
 
 The program reads **ciphertext from stdin** and writes the best-scoring
@@ -145,7 +145,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   acceptance, no RNG) → `-T`-independent; **not** byte-identical (different trajectory). It
   recovers **worse per restart**, so it is a *throughput multiplier*, not a free win: pair it
   with more `-R` and it wins at **matched compute** (+8pp exact / +1–23pp mean %-correct at
-  L40–60, scaling with how much signal the message has — `performance.md` §7.2). Because a
+  L40–60, scaling with how much signal the message has — `PERFORMANCE.md` §7.2). Because a
   user at the default `-R 1` would get worse results, it is opt-in.
 - `-J` **first-improvement with dynamic best-first move ordering** (implies `-I`; needs
   `-c`; off by default). Each climb first scores *every* move once against its starting
@@ -160,7 +160,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   case. The 6-plug loss is over-plugging: capping at the true count (`-J -S iKqK`, the same
   known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
   compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J -S iKqK`).
-  Static frequency-ordering was measured and **rejected** (`performance.md` §7.2).
+  Static frequency-ordering was measured and **rejected** (`PERFORMANCE.md` §7.2).
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
   cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
   cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an
@@ -180,7 +180,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   `-S` target cap**; near-inert (harmless) with no cap set. `-T`-deterministic. (The reason
   the IC-pre-pass cap in `-S i4q…` is a *flat plateau* by default is that without `-M` the
   cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
-  `performance.md` §7.3.)
+  `PERFORMANCE.md` §7.3.)
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
@@ -194,13 +194,13 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   per-key RNG stream (same `opt_seed + key_index` mix as `-R`), so `-A` is
   `-T`-independent. It composes with `-R` (each restart is an independent SA trajectory)
   and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb, not a strict
-  win — see `CODE_REVIEW_HISTORY.md` §9 item 5 and `SIMULATED_ANNEALING.md` §15. **SA honours
+  win — see `archived/CODE_REVIEW_HISTORY.md` §9 item 5 and `archived/SIMULATED_ANNEALING.md` §15. **SA honours
   the `-S` target-stage plug cap** (`opt_stages[last].cap`): `-A N -S qK` caps the whole
   trajectory (IC pre-pass, the cap-aware `apply_toggle`, and the quench) at `K` pairs.
   When the true plug count is known and below 13, that prior is a *measured win on short
   messages at modest budgets* (it stops SA adding spurious plugs a noisy short-message
   quad score would reward), neutral once the message/budget is large enough to recover
-  the board unaided, and a loss if set below the true count — `SIMULATED_ANNEALING.md`
+  the board unaided, and a loss if set below the true count — `archived/SIMULATED_ANNEALING.md`
   §16. With no `-S` the cap defaults to uncapped (13), so plain `-A` is unchanged.
 - `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
   the rest start from a perturbed board, best kept). Per-key RNG seeded from
@@ -236,7 +236,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
     The first-order lever is the restart count `-R N`, which never plateaus through
     256.
   - **the `aN` token** (at most one) is **partial plugboard exhaustion** (§3.6 in
-    `performance.md`): `N` is the **total** pinned pairs (like a model-token cap — the `-s`
+    `PERFORMANCE.md`): `N` is the **total** pinned pairs (like a model-token cap — the `-s`
     pairs count toward `N`), so `N − fixed` pairs are forced. It tries *every* set of those
     forced pairs (pinned like `-s`), runs the staged climb, and keeps the best. `a1` (no `-s`)
     = the 325 first pairs; larger `N−fixed` explodes as `free!/(2^k k! (free−2k)!)` (~45k for
@@ -247,7 +247,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
     tool, not recommended.
   Per-`machine` `scoring` field (never a global → race-free); deterministic; the
   `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
-  was folded into the per-stage numbers — see `CODE_REVIEW_HISTORY.md` §9.)
+  was folded into the per-stage numbers — see `archived/CODE_REVIEW_HISTORY.md` §9.)
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
   used by `-i`. `-l` alone does nothing: it takes effect only with an n-gram model,
   so it is `-q -l english`, not `-l english`, that scores with English quadgrams.
@@ -272,7 +272,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   - **`N%` scales with the keyspace** (recall tracks the *fraction* kept, not the
     absolute count); absolute `N` bounds tier-2 cost. Both forms are supported.
   - **Chi-squared was benched as the tier-1 model and lost to IC** (χ² is gameable by
-    the plugboard permutation) — IC stays. See `CODE_REVIEW_HISTORY.md` §9 item 2.
+    the plugboard permutation) — IC stays. See `archived/CODE_REVIEW_HISTORY.md` §9 item 2.
   - **Tier 1 shows a live `\r` progress line** (`ranking NN% (done / total keys)`)
     while it ranks, but only when stderr is a terminal (`isatty`) so redirected logs and
     the tests stay clean. A shared atomic counter drives it, and because each atomic add
@@ -365,7 +365,7 @@ A single pass through `main()`:
      fire only at convergence (~zero cost). The plug cap gates the toggle by count-effect:
      an *add* is blocked at/over the cap, and with `-M` a count-preserving *move* too, so
      only the count-reducing *merge*/*remove* remain (cap as a strict descent target). See
-     `CODE_REVIEW_HISTORY.md` §9 item 7.
+     `archived/CODE_REVIEW_HISTORY.md` §9 item 7.
 6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
    final stderr diagnostic reports the number of rotor combinations analysed
    (`= total_keys`, brute force has no early exit) and plugboards scored (total
@@ -455,7 +455,7 @@ widest (english trigrams ~7.9 units) fits the `255/32 ≈ 8`-unit window; recove
 Rejected precision/SIMD alternatives on record: 16-bit and lower resolutions were the
 step *before* 8-bit (8-bit won); `-march=native` (no win — the gather-bound loop does not
 auto-vectorise), hardware SIMD gathers (latency-bound, not throughput-bound), and the
-delta-scorer (`SIMULATED_ANNEALING.md` §6.2). 4-bit would need <16 levels over a ~8-unit
+delta-scorer (`archived/SIMULATED_ANNEALING.md` §6.2). 4-bit would need <16 levels over a ~8-unit
 range and is not viable.
 
 > **Struct layout matters for the hot loop.** When the per-search state moved
@@ -493,7 +493,7 @@ range and is not viable.
   `plaintext`) — is
   bundled into `struct machine`, threaded through the search/scoring functions as
   `machine & m`; `main()` owns one heap instance. This makes the search
-  reentrant (the precondition for multi-threading — see `CODE_REVIEW_HISTORY.md` §5/§6).
+  reentrant (the precondition for multi-threading — see `archived/CODE_REVIEW_HISTORY.md` §5/§6).
   The read-only data stays file-scope global and shared: the wiring tables
   (`rotor_fwd/rev`, `notch`, `reflector`) built by `init()`, the n-gram tables,
   and the `ciphertext` / `num_ciphertext` / `textlength` input. (`-Wshadow` is on;
@@ -505,7 +505,7 @@ range and is not viable.
   climb-trace path (and its vestigial per-climb `iter` counter), the `#if 0` blocks and
   the dead `ciphertext_letterdist`/`compare`/`count`/`order` cluster that only fed one,
   and the earlier `all_subst_score`/`map`/`opt_threads`/`opt_logfilename` dead code
-  (see `CODE_REVIEW_HISTORY.md` §3).
+  (see `archived/CODE_REVIEW_HISTORY.md` §3).
 - Index conventions: reflectors 0–2 = A/B/C, 3 = Norway, 4–5 = M4 thin;
   rotors 0–7 = I–VIII, 8–12 = Norway 1–5, 13–14 = Beta/Gamma. Norway mode
   applies a +3 / +8 offset (see `init_walzen`).
@@ -524,7 +524,7 @@ range and is not viable.
 
 The still-open issues and roadmap live in `CODE_REVIEW.md`; the historical audit
 (original findings, now fixed, plus the design rationale and rejected experiments)
-is archived in `CODE_REVIEW_HISTORY.md`. Most findings have been fixed —
+is archived in `archived/CODE_REVIEW_HISTORY.md`. Most findings have been fixed —
 the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
 overflow, the `fscanf`/read-handling bugs, dead code, the C-style
 modernization, the `textlength` global/parameter shadowing, the encapsulation of
@@ -535,14 +535,14 @@ under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`, and clean unde
 ThreadSanitizer. Scaling is ~3× on 4 cores (`make bench SCALE=1`). **M4 (4-rotor
 naval) mode** is now implemented (`-4`; static Greek wheel folded into an
 effective reflector, so the hot path is untouched — see "M4 mode" above and
-`CODE_REVIEW_HISTORY.md` §5). On **cracking quality for short messages** the
+`archived/CODE_REVIEW_HISTORY.md` §5). On **cracking quality for short messages** the
 `make crackquality` harness shows every miss is a *search* failure (the plugboard
 hill-climb sticking in local optima); the search levers shipped so far are random
 restarts (`-R N`), the staged climb (`-S`), the **key pre-filter** (`-F N`, a
 cheap-IC-climb tier that shortlists keys so the full climb runs only on the top
-`N` — ~8–20× throughput, see `CODE_REVIEW_HISTORY.md` §9 item 2), and **simulated annealing**
+`N` — ~8–20× throughput, see `archived/CODE_REVIEW_HISTORY.md` §9 item 2), and **simulated annealing**
 (`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute —
-`SIMULATED_ANNEALING.md` §15). Remaining open: the other heavier metaheuristics
+`archived/SIMULATED_ANNEALING.md` §15). Remaining open: the other heavier metaheuristics
 (tabu / GA) for the hardest cases. Read `CODE_REVIEW.md` (and, for the detailed
-design rationale and rejected experiments, `CODE_REVIEW_HISTORY.md`) before changing
+design rationale and rejected experiments, `archived/CODE_REVIEW_HISTORY.md`) before changing
 the search or scoring code.
