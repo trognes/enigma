@@ -291,6 +291,12 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
     harmless on easy keyspaces). `cap≈5` (near the true plug count) is the optimum.
   - **`N%` scales with the keyspace** (recall tracks the *fraction* kept, not the
     absolute count); absolute `N` bounds tier-2 cost. Both forms are supported.
+  - **Recall is strongly length-dependent** (measured via `--true-key` /
+    `FILTERRECALL=1`; `CRACKQUALITY_TESTS.md` §2): on a 6-order proxy at 10 plugs the
+    true key's median tier-1 rank is ~12k/105k at L120 (effectively unrecoverable),
+    ~27 at L200 (bimodal), and 1 at L300. So `-F` is sound for realistic-length
+    traffic (~L300) and unreliable on the short/hard end — and the real 60-order
+    keyspace is worse than the proxy.
   - **Chi-squared was benched as the tier-1 model and lost to IC** (χ² is gameable by
     the plugboard permutation) — IC stays. See `archived/CODE_REVIEW_HISTORY.md` §9 item 2.
   - **Tier 1 shows a live `\r` progress line** (`ranking NN% (done / total keys)`)
