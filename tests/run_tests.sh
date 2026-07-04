@@ -501,6 +501,15 @@ tk1=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c
 tk4=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -F 5 --true-key B123AAAAAA -T 4 2>&1 >/dev/null | grep -oE 'rank [0-9]+ of [0-9]+')
 check "--true-key rank is -T-independent" "$tk1" "$tk4"
 
+# --backoff (experimental quad smoothing): needs -q; builds a valid (full-length,
+# non-crashing) decrypt. Recovery QUALITY is evaluated separately (crackquality), not
+# asserted here. The flat-floor default path is unaffected (byte-identical, covered by
+# the KAT/crack matrices above).
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA --backoff >/dev/null 2>&1
+check "--backoff without -q rejected (exit code)" "$?" "1"
+bo_out=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c --backoff 2>/dev/null)
+check "--backoff produces a full-length decrypt" "${#bo_out}" "${#r_pt}"
+
 # Random seed (-e / $ENIGMA_SEED): the restart perturbation is seeded from it mixed
 # with the key index, so a fixed seed is reproducible and stays -T-independent, an
 # explicit -e overrides $ENIGMA_SEED, and the seed is echoed so a run can be repeated.

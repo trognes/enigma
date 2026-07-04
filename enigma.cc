@@ -242,6 +242,12 @@ static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of t
    results are preserved. Verbose; off by default. */
 static bool opt_dump_restarts;
 
+/* --backoff: build the quadgram table by interpolated back-off smoothing instead of the
+   flat hapax floor (PERFORMANCE.md §6.2; requires the quad model). Off by default, so the
+   default table (and every non-quad model) is byte-identical. Table-build only -- the hot
+   scorer is unchanged, so bench is unaffected. */
+static bool opt_backoff;
+
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
 static int textlength;
@@ -373,17 +379,11 @@ inline char num2char(int x)
    log10(1 / total) -- scored as a single occurrence -- so an unattested gram is
    penalised like the rarest attested one rather than ruled out. Parsing stops at end of
    file or the first malformed record. */
-void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix)
+/* Read the raw n-gram counts for one order into `table` (pre-sized to asize^n by the
+   caller); returns the total count. Shared by ngrams_read (flat floor) and the
+   back-off loader (ngrams_read_backoff). */
+static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * suffix)
 {
-  int size = 1;
-  for (int i = 0; i < n; i++)
-    size *= asize;
-
-  /* Raw counts are accumulated here (transient -- only itable outlives this call).
-     uint32 holds every count exactly (the largest in the data is ~5.3e8, well inside
-     the range); float would lose precision above 2^24 ~ 16.7M. */
-  std::vector<uint32_t> table(size, 0);   /* unseen: count 0 until floored below */
-
   char filename[1024];
   int len = snprintf(filename, sizeof(filename), "%s/%s_%s.txt",
                      opt_datadir, opt_language, suffix);
@@ -423,6 +423,20 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
     }
 
   fclose(f);
+  return total;
+}
+
+void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix)
+{
+  int size = 1;
+  for (int i = 0; i < n; i++)
+    size *= asize;
+
+  /* Raw counts are accumulated here (transient -- only itable outlives this call).
+     uint32 holds every count exactly (the largest in the data is ~5.3e8, well inside
+     the range); float would lose precision above 2^24 ~ 16.7M. */
+  std::vector<uint32_t> table(size, 0);   /* unseen: count 0 until floored below */
+  uint64_t total = load_counts(n, table, suffix);
 
   /* Quantise log10(count / total) into itable as uint8 fixed-point. Unseen grams are
      floored at count = floor_count = 1 (a hapax): not truly impossible (corpora have
@@ -463,6 +477,77 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
       else if (q > 255.0)
         q = 255.0;
       itable[i] = static_cast<uint8_t>(q < 0.0 ? q - 0.5 : q + 0.5);
+    }
+}
+
+/* Back-off / interpolated smoothing for the quadgram table (--backoff), an opt-in
+   alternative to the flat hapax floor (PERFORMANCE.md §6.2). Instead of every unseen
+   quadgram sharing one floor value, each quadgram's stored value is the log10 of an
+   interpolated CONDITIONAL probability
+     P(d|abc) = L4*P(d|abc) + L3*P(d|bc) + L2*P(d|c) + L1*P(d),
+   backing off through the trigram/bigram/monogram tables (P(d|abc)=cnt4(abcd)/cnt3(abc),
+   etc.; a higher-order term is 0 when its context is unseen). Unseen/rare quadgrams then
+   reflect the lower-order plausibility of their letters -- a denser, smoother short-text
+   surface -- rather than all collapsing to one value. The log10 values are quantised into
+   the SAME quad8 table the (unchanged) scorer reads, so the hot path and its bench are
+   untouched; only this build differs. Deterministic. Weights default below and are
+   overridable for tuning via $ENIGMA_BACKOFF="L4 L3 L2 L1". */
+static void ngrams_read_backoff(uint8_t * quad_itable, double * bias_out)
+{
+  const int A = asize;
+  std::vector<uint32_t> c1(A, 0), c2(A * A, 0), c3(A * A * A, 0),
+                        c4(static_cast<size_t>(A) * A * A * A, 0);
+  uint64_t t1 = load_counts(1, c1, "monograms");
+  load_counts(2, c2, "bigrams");
+  load_counts(3, c3, "trigrams");
+  load_counts(4, c4, "quadgrams");
+
+  double L[4] = { 0.6, 0.25, 0.10, 0.05 };   /* highest order first; sum normalised to 1 */
+  const char * ovr = getenv("ENIGMA_BACKOFF");
+  if (ovr && (sscanf(ovr, "%lf %lf %lf %lf", & L[0], & L[1], & L[2], & L[3]) == 4))
+    {
+      double s = L[0] + L[1] + L[2] + L[3];
+      if (s > 0.0) { L[0] /= s; L[1] /= s; L[2] /= s; L[3] /= s; }
+    }
+  const double dtotal1 = (t1 > 0) ? static_cast<double>(t1) : 1.0;
+
+  std::vector<double> v(static_cast<size_t>(A) * A * A * A);
+  double vmin = 1e30;
+  for (int a = 0; a < A; a++)
+    for (int b = 0; b < A; b++)
+      for (int cc = 0; cc < A; cc++)
+        {
+          int abc = (a * A + b) * A + cc;   /* trigram context abc */
+          int bc  = b * A + cc;             /* bigram context bc */
+          uint32_t n_abc = c3[abc], n_bc = c2[bc], n_c = c1[cc];
+          for (int d = 0; d < A; d++)
+            {
+              double p4 = (n_abc > 0) ? static_cast<double>(c4[static_cast<size_t>(abc) * A + d]) / n_abc : 0.0;
+              double p3 = (n_bc  > 0) ? static_cast<double>(c3[bc * A + d]) / n_bc : 0.0;
+              double p2 = (n_c   > 0) ? static_cast<double>(c2[cc * A + d]) / n_c : 0.0;
+              double p1 = static_cast<double>(c1[d]) / dtotal1;
+              double p = L[0] * p4 + L[1] * p3 + L[2] * p2 + L[3] * p1;
+              if (p < 1e-12)         /* guard log10 (a letter absent from the monogram table) */
+                p = 1e-12;
+              double val = log10(p);
+              v[static_cast<size_t>(abc) * A + d] = val;
+              if (val < vmin)
+                vmin = val;
+            }
+        }
+
+  /* bias = the minimum value, so the uint8 window spans the actual range; the scorer
+     recovers the log-prob sum as isum/scale + n*bias exactly as for the flat table. */
+  *bias_out = vmin;
+  const size_t qsize = static_cast<size_t>(A) * A * A * A;
+  for (size_t i = 0; i < qsize; i++)
+    {
+      double q = (v[i] - vmin) * ngram_scale;
+      if (q < 0.0)
+        q = 0.0;
+      else if (q > 255.0)
+        q = 255.0;
+      quad_itable[i] = static_cast<uint8_t>(q + 0.5);
     }
 }
 
@@ -1461,7 +1546,12 @@ void load_table(int model)
     case SCORE_MONO: ngrams_read(1, mono8, & ngram_bias[SCORE_MONO], "monograms"); break;
     case SCORE_BI:   ngrams_read(2, & bi8[0][0], & ngram_bias[SCORE_BI], "bigrams"); break;
     case SCORE_TRI:  ngrams_read(3, & tri8[0][0][0], & ngram_bias[SCORE_TRI], "trigrams"); break;
-    case SCORE_QUAD: ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], "quadgrams"); break;
+    case SCORE_QUAD:
+      if (opt_backoff)
+        ngrams_read_backoff(& quad8[0][0][0][0], & ngram_bias[SCORE_QUAD]);
+      else
+        ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], "quadgrams");
+      break;
     default: break;   /* IC: no table */
     }
 }
@@ -3085,6 +3175,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--dump-restarts",
           "Diagnostic: with -c, print each converged restart's");
   fprintf(out, "  %-24s %s\n", "", "score and board to stderr (verbose) [off]");
+  fprintf(out, "  %-24s %s\n", "--backoff",
+          "Build the quadgram table by interpolated back-off");
+  fprintf(out, "  %-24s %s\n", "", "smoothing instead of the flat floor (needs -q;");
+  fprintf(out, "  %-24s %s\n", "", "experimental, table-build only) [off]");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
@@ -3256,7 +3350,7 @@ int main(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP };
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_BACKOFF };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3296,6 +3390,7 @@ int main(int argc, char * * argv)
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
+      { "backoff",        no_argument,       nullptr, OPT_BACKOFF },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3382,6 +3477,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_DUMP:
           opt_dump_restarts = true;
+          break;
+        case OPT_BACKOFF:
+          opt_backoff = true;
           break;
         case 'e':
           opt_seed = strtoull(optarg, nullptr, 10);
@@ -3632,6 +3730,10 @@ int main(int argc, char * * argv)
   /* --dump-restarts is a per-restart climb diagnostic, so it needs -c. */
   if (opt_dump_restarts && (! opt_hillclimb))
     fatal("--dump-restarts needs the plugboard hill-climb (-c)");
+
+  /* --backoff smooths the quadgram table, so it needs the quad model. */
+  if (opt_backoff && (opt_scoring != SCORE_QUAD))
+    fatal("--backoff requires the quadgram scoring model (-q / --score q)");
 
   /* --true-key reports the true key's tier-1 rank, so it needs the pre-filter (-F);
      it is a standard-Enigma diagnostic and parses into g_tk_* here. */
