@@ -4,7 +4,7 @@ This is the **live** issue list: only what is still open. The original audit —
 fixed correctness/memory-safety bugs, the C-style modernization, the `struct
 machine` / threading refactor, M4 mode, the design rationale of every shipped
 feature, and the experiments that were measured and **rejected** (so they are not
-re-attempted) — is archived in **`CODE_REVIEW_HISTORY.md`**. Section references of
+re-attempted) — is archived in **`archived/CODE_REVIEW_HISTORY.md`**. Section references of
 the form "§9 item N" elsewhere in the codebase point into that archive.
 
 Status in one line: the tool is correct, warning-free under
@@ -32,23 +32,23 @@ baseline recipe and `-I -R <higher>` a measured throughput win on top of it. Rem
 ideas, in rough order of expected payoff (all with **diminishing returns** — SA
 landed only as a *peer* of `-R -S iq`; 3-opt and **cross-restart consensus /
 plug fixation** were built and measured and rejected — consensus loses to a higher
-`-R` at equal compute and saturates as `-R` grows, `performance.md` §3.1). The
+`-R` at equal compute and saturates as `-R` grows, `PERFORMANCE.md` §3.1). The
 first-order lever remains **raising `-R`** (it never plateaus through 256), so the
 best bets *buy more restarts*. The biggest such win shipped is **`-I` circular
-first-improvement** (`performance.md` §7.2): ~2.8× cheaper per climb, so at matched
+first-improvement** (`PERFORMANCE.md` §7.2): ~2.8× cheaper per climb, so at matched
 compute (paired with more `-R`) it recovers +8pp exact / +1–23pp mean at L40–60 — the
 first idea to beat the baseline at the ~50-char target. **`-J` adds dynamic per-restart
 best-first move ordering** on top of `-I` — a further matched-compute win (+2–6pp mean)
-on the realistic ~10-plug regime, regime-dependent so also opt-in (`performance.md` §7.2).
-Still open on that axis: ILS with incumbent-walk acceptance (`performance.md` §3.3). The
+on the realistic ~10-plug regime, regime-dependent so also opt-in (`PERFORMANCE.md` §7.2).
+Still open on that axis: ILS with incumbent-walk acceptance (`PERFORMANCE.md` §3.3). The
 **`max(greedy, SA)` portfolio was built and rejected** — greedy and SA are genuinely
 complementary (+10–17pp union at double budget), but at matched compute the budget split
 cancels it (~−3pp vs the best single solver; §3.2). **Don't-look bits were built and
 rejected** too — exact only for a separable objective (TSP), but the plugboard's global n-gram
 score makes them a heuristic that is neutral (`-I`) to a small loss (`-J`) at matched compute
-(`performance.md` §7.2). *Static* (fixed-across-restarts) informed ordering was **rejected**
-too (greedy + diversity-collapsing; the per-restart `-J` avoids the collapse — `performance.md` §7.2). A separate shipped
-lever is **`-M` cap-as-target** (`performance.md` §7.8): at/over the `-S` plug cap the
+(`PERFORMANCE.md` §7.2). *Static* (fixed-across-restarts) informed ordering was **rejected**
+too (greedy + diversity-collapsing; the per-restart `-J` avoids the collapse — `PERFORMANCE.md` §7.2). A separate shipped
+lever is **`-M` cap-as-target** (`PERFORMANCE.md` §7.8): at/over the `-S` plug cap the
 climb may only *merge* or *remove* plugs (never add or reshuffle), so a big restart kick
 is pruned cleanly back to the cap instead of leaving spurious plugs. It is neutral-to-+2.6pp
 on realistic 10-plug boards and a large win (+3–20pp, biggest at the short/hard end) on
@@ -137,13 +137,13 @@ these mostly pay off in the (unbuilt) full-crack tier of §1.
   restart boards agree on, then climb the residual — compute-neutral-to-negative vs
   simply raising `-R`, and a no-op at high `-R` because best-of-`R` saturates; swept
   over vote threshold × elite-set size × `-R` × plug count × length × seed;
-  `performance.md` §3.1), §7.1a surrogate-ranked ascent (rank switch moves by a cheap
+  `PERFORMANCE.md` §3.1), §7.1a surrogate-ranked ascent (rank switch moves by a cheap
   monogram surrogate, full-quad only a top-K — ~1.5× *slower* at the ~50-char target
   because warm short-message quad decodes are too cheap to skip; only wins ≥150 chars;
   the exact mono/IC delta remnant was briefly shipped as `-D` then removed — a
   long-message-only speedup, net-negative for this short-message tool and a maintenance
-  tax on the hottest loop; `performance.md` §7.1), incremental **quad** delta-scoring (~2× slower;
-  `SIMULATED_ANNEALING.md` §6.2), χ² as the scoring/`-F` model (gameable by the
+  tax on the hottest loop; `PERFORMANCE.md` §7.1), incremental **quad** delta-scoring (~2× slower;
+  `archived/SIMULATED_ANNEALING.md` §6.2), χ² as the scoring/`-F` model (gameable by the
   plugboard), 3-opt / 3-plug re-pair (cost > gain), rotor-stepping reuse across
   starts (history §6 "optimisation B"), `-march=native` / SIMD gathers and GPU (the
   scorer is gather-latency-bound, not throughput-bound), and 5-grams / 4-bit scores

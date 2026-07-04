@@ -250,7 +250,7 @@ composes with the staged-schedule machinery already in place.
 
 ### 6.4 Hot-path constraints
 
-Any incremental scorer touches the hot path, so the `CLAUDE.md` performance rules
+Any incremental scorer touches the hot path, so the `../CLAUDE.md` performance rules
 apply: hoist member base pointers into `__restrict` locals, keep the layout that
 keeps `subst_array`/`mapping`/`steckerbrett` off large struct offsets, and re-check
 `make bench BASE=<ref>` under **both g++ and clang** after implementing.
@@ -417,7 +417,7 @@ not help).
   tuned (§15): at equal climb time it matches or beats greedy `-R -S iq`. Phase 1's full
   rescore was not just fast enough but *the right choice*: the Phase 2 delta-scorer was
   later prototyped and measured ~2× slower for quad on short L (§6.2), so it was rejected.
-  Tests, CI (ASan/UBSan + TSan cover the `-A` path), and docs (README, CLAUDE.md,
+  Tests, CI (ASan/UBSan + TSan cover the `-A` path), and docs (README, ../CLAUDE.md,
   CODE_REVIEW §9 item 5) are updated.
 
 ## 14. Research extensions (out of scope for the first build)

@@ -1,4 +1,4 @@
-# performance.md — Improving short-message plugboard recovery
+# PERFORMANCE.md — Improving short-message plugboard recovery
 
 > **Scope and relationship to the other docs.** Despite the file name, ~80% of
 > this document is about **cracking quality** (recovering the plugboard on short
@@ -6,9 +6,9 @@
 > harness and `make crackquality` is the recovery harness, and most ideas below are
 > measured by the latter. Read this as the forward-looking roadmap that **extends
 > `CODE_REVIEW.md` §1–§2** (the live "cracking quality — search / scoring" items)
-> and the archived **`CODE_REVIEW_HISTORY.md` §9** (the shipped-feature rationale and
+> and the archived **`archived/CODE_REVIEW_HISTORY.md` §9** (the shipped-feature rationale and
 > the measured-and-rejected list). The simulated-annealing design and its tuning
-> evidence live in **`SIMULATED_ANNEALING.md`**; where an idea here touches SA it
+> evidence live in **`archived/SIMULATED_ANNEALING.md`**; where an idea here touches SA it
 > cites that file. Nothing here is a decision to build — it is the option space with
 > honest priors, so the maintainer can pick the next experiment. **No code changes
 > accompany this document.**
@@ -1147,7 +1147,7 @@ re-add. `-M` is what makes a tight cap actually bite. So the recipe is regime-de
 - **Score-guided adaptive neighborhood.** Bias `(a,b)` proposals (SA and greedy
   ordering) toward letters sitting in the lowest-scoring quadgram windows of the current
   decode — spend moves where the plaintext looks least language-like
-  (`SIMULATED_ANNEALING.md` §14). *Honest payoff:* low — speeds convergence (more useful
+  (`archived/SIMULATED_ANNEALING.md` §14). *Honest payoff:* low — speeds convergence (more useful
   moves/budget) rather than changing the reachable optimum; helps mainly the tight-budget
   corner and risks self-reinforcing bias. **Hot-path hazard:** per-letter blame
   attribution must come from the fused scorer *without* a second pass / `num_plaintext`
@@ -1311,8 +1311,8 @@ should be confirmed before being quoted as fact.**
 - bytereef.org M4 project (known M4 messages, telegraphic-German validation).
 
 Repo-internal references: `CODE_REVIEW.md` §1, §2 (live search/scoring roadmap);
-`CODE_REVIEW_HISTORY.md` §9 and the archived §6/§7 (shipped-feature rationale, rejected
-experiments); `SIMULATED_ANNEALING.md` §6.2, §12, §14, §15, §16 (SA design and tuning
+`archived/CODE_REVIEW_HISTORY.md` §9 and the archived §6/§7 (shipped-feature rationale, rejected
+experiments); `archived/SIMULATED_ANNEALING.md` §6.2, §12, §14, §15, §16 (SA design and tuning
 evidence). Code anchors cited inline by `enigma.cc` line number (verified against the
 current source: `ngrams_read` :307, `setup_mapping` :572, `quadgram_score_decode` :656,
 `hillclimb` :975, `perturb_steckerbrett` :1166, `anneal_once` :1378, `hillclimb_restarts`

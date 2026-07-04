@@ -5,7 +5,7 @@
 > experiments that were measured and **rejected** (so they are not re-attempted).
 > Section numbers referenced elsewhere in the codebase (e.g. "`CODE_REVIEW_HISTORY.md`
 > §9 item 5") point here. For the **still-open** issues and roadmap, see the current
-> `CODE_REVIEW.md`.
+> `../CODE_REVIEW.md`.
 
 A deep review of the Enigma cipher / code-breaking tool. The program is a
 single ~2400-line C++ translation unit (kept as one TU deliberately — the hot
