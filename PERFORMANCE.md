@@ -1175,10 +1175,22 @@ the plugboard). It is the highest-value infrastructure item because:
 - It is the prerequisite for **cross-key plug marginalization (§5.3)** — the one
   non-crib lever that *adds information* at 50 chars — and it is where the Bayesian
   calibration (§6.7) and MDL prior (§6.3) actually pay off.
-- It is cheap: it reuses the existing harness plumbing and simply removes the
-  fixed-key assumption.
+- It reuses the existing harness plumbing (an opt-in `WILDCARD` knob; the fixed-key
+  tier stays byte-identical). It is *not* free, though: `-F` tier-1 IC-climbs **every**
+  key, so per-trial cost is set by keyspace size (~10k keys/s at L50, measured), which
+  is why the scope is capped — see the design doc.
 
 Build this first; several ideas below only become measurable once it exists.
+
+> **Concrete design: `FULL_CRACK_TIER.md`.** The full plan lives in a dedicated
+> root-level doc: the identifiability/scope decisions (wildcard wheel-order + start,
+> pin ring `AAA`), the measured per-trial budgets and two named scopes
+> (`FULLCRACK` ≈ 105k keys/~10 s; `START` ≈ 17.6k/~2 s), the `crack_quality.py` diff
+> (env knobs, `climb()`/`gen_trials()`/`last_key()`/`key_ok()` changes, new
+> `mean%/exact%/key%` columns), the explicit test matrix, and — importantly — the
+> **generalized search-vs-scoring SPLIT oracle plus its third failure mode**
+> (`-F` *filter-recall*), which is why the gate question ("is scoring-fail% > 0 once
+> the key is unknown?") must be run with the filter **off**. Read it before building.
 
 ### If you do three things (on the existing plugboard tier)
 
