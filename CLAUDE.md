@@ -146,7 +146,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   recovers **worse per restart**, so it is a *throughput multiplier*, not a free win: pair it
   with more `-R` and it wins at **matched compute** (+8pp exact / +1–23pp mean %-correct at
   L40–60, scaling with how much signal the message has — `PERFORMANCE.md` §7.2). Because a
-  user at the default `-R 1` would get worse results, it is opt-in.
+  user at the default `-R 0` (a single deterministic climb) would get worse results, it is opt-in.
 - `-J` **first-improvement with dynamic best-first move ordering** (implies `-I`; needs
   `-c`; off by default). Each climb first scores *every* move once against its starting
   (perturbed) board, sorts, and runs the circular first-improvement in that order — the
@@ -159,26 +159,26 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   `crackquality` default and standard Wehrmacht, so the win lands on the hard/realistic
   case. The 6-plug loss is over-plugging: capping at the true count (`-J -S iKqK`, the same
   known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
-  compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J -S iKqK`).
+  compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected** (`PERFORMANCE.md` §7.2).
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
   cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
   cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an
-  over-cap board — the common case when a big `-S rN` kick lands on a small stage cap —
+  over-cap board — the common case when a big `--random` kick lands on a small stage cap —
   can converge still holding more plugs than the cap, merely reshuffled. `-M` makes the
   cap a strict **descent target**: at/over the cap only **count-reducing** moves are
   allowed (**merge** — both ends already plugged to different partners → −1 — and
   **remove**), blocking adds *and* count-preserving endpoint-moves, so the climb must shed
   plugs down to the cap while keeping the strongest descent move (the merge). Measured a
   **matched-compute win that grows as the true plug count falls below the cap**: neutral-to
-  -**+2.6pp** mean %-correct on realistic 10-plug boards (`-S rNi4q10`, best at the
-  true-count kick `N≈10`), and **+3…+20pp** on **known-few-plug** boards (`-S rNi4q6`,
+  -**+2.6pp** mean %-correct on realistic 10-plug boards (`--score i4q10 --random N`, best at
+  the true-count kick `N≈10`), and **+3…+20pp** on **known-few-plug** boards (`--score i4q6 --random N`,
   largest at the short/hard end — +20pp at L40) — because forcing a clean descent stops the
   baseline wasting its climb reshuffling an over-cap board. It is also **cheaper per climb**
   (up to ~2.7× fewer `score_iter` in the `q6` regime: quad converges from a tidy ≤cap
   basin), so at matched compute it earns many more restarts. Most useful with a **tight
-  `-S` target cap**; near-inert (harmless) with no cap set. `-T`-deterministic. (The reason
-  the IC-pre-pass cap in `-S i4q…` is a *flat plateau* by default is that without `-M` the
+  `--score` target cap**; near-inert (harmless) with no cap set. `-T`-deterministic. (The reason
+  the IC-pre-pass cap in `--score i4q…` is a *flat plateau* by default is that without `-M` the
   cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
   `PERFORMANCE.md` §7.3.)
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
@@ -189,23 +189,45 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   `toggle-connect` moves with probability `exp(Δ/T)`, and a final greedy quench lands
   on a local optimum. `χ0 = 0.12` (a *cool* start) was tuned by a quality-per-climb-time
   sweep — the surface is greedy-friendly, so a mostly-downhill walk with occasional
-  escapes matches or beats greedy `-R -S iq` at equal compute (the guessed `χ0 = 0.8`
+  escapes matches or beats greedy `-R --score iq` at equal compute (the guessed `χ0 = 0.8`
   lost ~2×; reheating and chain-length sweeps didn't help). All randomness is from the
   per-key RNG stream (same `opt_seed + key_index` mix as `-R`), so `-A` is
   `-T`-independent. It composes with `-R` (each restart is an independent SA trajectory)
   and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb, not a strict
   win — see `archived/CODE_REVIEW_HISTORY.md` §9 item 5 and `archived/SIMULATED_ANNEALING.md` §15. **SA honours
-  the `-S` target-stage plug cap** (`opt_stages[last].cap`): `-A N -S qK` caps the whole
+  the `--score` target-stage plug cap** (`opt_stages[last].cap`): `-A N --score qK` caps the whole
   trajectory (IC pre-pass, the cap-aware `apply_toggle`, and the quench) at `K` pairs.
   When the true plug count is known and below 13, that prior is a *measured win on short
   messages at modest budgets* (it stops SA adding spurious plugs a noisy short-message
   quad score would reward), neutral once the message/budget is large enough to recover
   the board unaided, and a loss if set below the true count — `archived/SIMULATED_ANNEALING.md`
-  §16. With no `-S` the cap defaults to uncapped (13), so plain `-A` is unchanged.
-- `-R N` plugboard hill-climb random restarts (1 = none; restart 0 is the seed,
-  the rest start from a perturbed board, best kept). Per-key RNG seeded from
-  `opt_seed + flat key index`, so the result stays independent of `-T`. ~`N`× the
-  `-c` cost. The restart count is separate from the schedule string (`-S`).
+  §16. With no `--score` the cap defaults to uncapped (13), so plain `-A` is unchanged.
+- `-R N` / `--restarts N` plugboard hill-climb random restarts (**REDESIGN Part B,
+  Option A — kicked-only**): `-R 0` (**the default**) is one deterministic climb from
+  the seed, **no kick** (fully reproducible); `-R N` (N≥1) is exactly **N kicked climbs**
+  (each from the seed plus a fresh `--random` kick, best kept) — the un-kicked seed climb
+  is *not* additionally run. Per-restart RNG seeded from `opt_seed + flat key index +
+  restart`, so each climb is an independent unit and the result stays independent of `-T`.
+  ~`N`× the `-c` cost. The restart count is separate from the schedule string (`--score`).
+  A non-fatal **pigeonhole warning** fires when `-R N` exceeds the distinct `K`-pair kicks
+  among the free letters (they must then repeat).
+- `--random K` (long-only) **kick size**: `K` random plug pairs injected per restart
+  (0–13; default **10**, near the typical plug count). `--random 0` is a legal control
+  (no perturbation — N restarts then repeat the seed climb). Needs `-c` (errors otherwise,
+  since a kick does nothing in a bare rotor scan). Replaces the old `-S rN` token.
+- `--exhaust E` (long-only) **partial plugboard exhaustion** (§3.6 in `PERFORMANCE.md`):
+  force `E` **extra** plug pairs among the free letters (on top of any `-s` pairs) — `E`
+  counts *forced* pairs, not total. It tries *every* set of `E` disjoint pairs (pinned like
+  `-s`), runs the staged climb from that seed, and keeps the best. It **composes** with the
+  kick and restarts (fixing the earlier silent no-op): for each forced combo, `-R N` runs N
+  kicked climbs (the kick perturbs only the still-free letters). `--exhaust 1` (no `-s`) = the
+  325 first pairs; larger `E` explodes as `free!/(2^E E! (free−2E)!)` (~45k for 2, ~3.5M for
+  3), so it is **single-threaded exploration only** — `exhaust_recurse()` mutates the global
+  `plug_fixed[]` as it descends, so validation forces `-T 1`, forbids `-A`, requires `-c`,
+  and bounds `E` by the free plug pairs (13 − `-s` pairs). Deterministic. **Measured,
+  dominated** — at matched `score_iter` a high-`-R` greedy climb beats it by 10–40pp exact
+  (§3.6); an exploration tool, not recommended. Replaces the old `-S aN` token (note the
+  semantics change: `aN` counted *total* pinned pairs, `--exhaust E` counts *forced* pairs).
 - `-e N` random seed for the restart perturbation. Resolved as `-e` > `$ENIGMA_SEED`
   > a fresh `std::random_device` draw, so **by default every run explores different
   restarts**; the chosen seed is echoed by `show_settings()` (when restarts are
@@ -213,41 +235,23 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   historical pre-seed behaviour exactly (the RNG mixes `opt_seed + key_index`), which
   is why `tests/` and the `crackquality`/`bench` harnesses pin `ENIGMA_SEED=0` for
   deterministic, cross-ref-comparable runs.
-- `-S <schedule>` staged plugboard climb — a string of `<letter><optional number>`
-  tokens parsed by `parse_schedule()` into `opt_stages[]`:
-  - **model tokens** `i`/`m`/`b`/`t`/`q` are climb stages run in order; the number
-    caps the **plug pairs** that stage may set (1–13; omitted = uncapped, 13). The
-    **last** model token is the target/ranking model (sets `opt_scoring`), so the
-    target lives *in* the string — e.g. `-S i6q` = IC capped at 6 pairs, then quad
-    uncapped. A lower-order early stage steers the first plugs into a better basin
-    (its surface is smoother when few plugs are set); **`-S i…q` (IC pre-pass) is
-    the best measured** — much better than bigram, extra stages after IC add little.
-  - **the `rN` token** (at most one) sets the **per-restart random perturbation**:
-    `rN` injects `N` random plug pairs from the seed each restart (`r0` = no-op, so
-    restarts collapse — a useful control; a bare `r` with no count takes the default
-    kick, just as a bare model token is uncapped).
-    **With no `r` token the perturbation is a fixed `default_perturb` (= 8) pairs** —
-    so `-c -R N` (no `-S`) does an 8-pair-kick restart. The sweep (§9, 500 trials,
-    R 1→256) found the best kick is near the true plug count (`k≈8–10`): a fixed
-    `k=8` significantly beats the old uniform-`1..13` involution at high `-R` on the
-    shortest texts and is never worse, so it is the default (the uniform involution
-    was removed, so a bare `r` now means this default too). Small `k` (1–2) is a
-    footgun at high `-R`; `r0` is a no-op control.
-    The first-order lever is the restart count `-R N`, which never plateaus through
-    256.
-  - **the `aN` token** (at most one) is **partial plugboard exhaustion** (§3.6 in
-    `PERFORMANCE.md`): `N` is the **total** pinned pairs (like a model-token cap — the `-s`
-    pairs count toward `N`), so `N − fixed` pairs are forced. It tries *every* set of those
-    forced pairs (pinned like `-s`), runs the staged climb, and keeps the best. `a1` (no `-s`)
-    = the 325 first pairs; larger `N−fixed` explodes as `free!/(2^k k! (free−2k)!)` (~45k for
-    2, ~3.5M for 3), so it is **single-threaded exploration only** — `exhaust_recurse()`
-    mutates the global `plug_fixed[]` as it descends, so validation forces `-T 1`, forbids
-    `-A`, and requires `N ≥ fixed`. Deterministic. **Measured, dominated** — at matched
-    `score_iter` a high-`-R` greedy climb beats it by 10–40pp exact (§3.6); an exploration
-    tool, not recommended.
-  Per-`machine` `scoring` field (never a global → race-free); deterministic; the
-  `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
-  was folded into the per-stage numbers — see `archived/CODE_REVIEW_HISTORY.md` §9.)
+- `-S <schedule>` / `--score <schedule>` staged plugboard climb — a string of
+  `<letter><optional cap>` **model tokens** `i`/`m`/`b`/`t`/`q` parsed by
+  `parse_schedule()` into `opt_stages[]`. Each is a climb stage run in order; the number
+  caps the **plug pairs** that stage may set (1–13; omitted = uncapped, 13). The **last**
+  model token is the target/ranking model (sets `opt_scoring`), so the target lives *in*
+  the string — e.g. `--score i6q` = IC capped at 6 pairs, then quad uncapped. A lower-order
+  early stage steers the first plugs into a better basin (its surface is smoother when few
+  plugs are set); **`--score i…q` (IC pre-pass) is the best measured** — much better than
+  bigram, extra stages after IC add little. The schedule carries **only** model stages: the
+  per-restart kick and the exhaustion are their own options (`--random` / `--exhaust`), not
+  schedule tokens (REDESIGN Part B moved the old `rN`/`aN` tokens out). Per-`machine`
+  `scoring` field (never a global → race-free); deterministic; the `--score` stages,
+  `--random` kick and `-R` count compose. Without `-c`, a `--score` schedule that carries
+  climb-only detail (more than one stage, or any cap) emits a non-fatal warning and the run
+  ranks by the target model (there is no climb to apply the stages to). (Replaces the
+  earlier separate `-L` cap, which was folded into the per-stage numbers — see
+  `archived/CODE_REVIEW_HISTORY.md` §9.)
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
   used by `-i`. `-l` alone does nothing: it takes effect only with an n-gram model,
   so it is `-q -l english`, not `-l english`, that scores with English quadgrams.

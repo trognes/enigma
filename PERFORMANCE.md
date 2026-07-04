@@ -32,16 +32,17 @@ tier* (rotor key also unknown), where rotor-key discrimination may expose genuin
 scoring failures.
 
 **Already shipped** (do not re-propose; tune only): steepest-ascent hill-climb
-(switch / remove / gated re-pair moves); random restarts `-R` with a fixed
-`k≈8`-pair kick; staged schedule `-S` with the general recipe `-S iq` (IC pre-pass
-then quadgrams) and per-stage plug caps — on realistic ~10-plug short texts the
-**tuned recipe is `-S i4q10`** (IC pre-pass capped at 4, quad capped at 10, default
-kick): measured **+3–10pp mean %-correct at L40–80 over `-S iq` at matched compute**,
-both seeds, because capping stops the noisy short-message score adding spurious plugs
-*and* makes each climb cheaper so the same budget buys ~30% more restarts. The win is
-the **quad cap of 10**; the IC pre-pass cap is a **flat plateau** — `i3`/`i4`/`i5`/`i6`
+(switch / remove / gated re-pair moves); random restarts `-R`/`--restarts` with a
+`--random`-sized kick (default `k=10` pairs); staged schedule `--score` with the general
+recipe `--score iq` (IC pre-pass then quadgrams) and per-stage plug caps — on realistic
+~10-plug short texts the **tuned recipe is `--score i4q10`** (IC pre-pass capped at 4, quad
+capped at 10, default kick): measured **+3–10pp mean %-correct at L40–80 over `--score iq`
+at matched compute**, both seeds, because capping stops the noisy short-message score adding
+spurious plugs *and* makes each climb cheaper so the same budget buys ~30% more restarts. The
+win is the **quad cap of 10**; the IC pre-pass cap is a **flat plateau** — `i3`/`i4`/`i5`/`i6`
 tie within noise (~0.7pp, both seeds, matched `-R 26`), so `i4` is just a central
-representative, not a sharp optimum. A *small* kick (`r3/r4`) hurts, so the kick stays the default; key pre-filter `-F` (cheap capped-IC
+representative, not a sharp optimum. A *small* kick (`--random 3/4`) hurts, so the kick stays
+the default; key pre-filter `-F` (cheap capped-IC
 climb shortlists keys, ~8–20× throughput); simulated annealing `-A`
 (toggle-connect, acceptance-ratio-calibrated temperature, tuned `χ0=0.12`, IC
 pre-pass + greedy quench, honoring a known-plug-count cap) — a **peer** of the
@@ -217,12 +218,12 @@ exploration and exploitation can (→ ILS, §3.3).
 
 **Follow-up: greedy vs SA at matched compute, both properly tuned.** An earlier note here
 claimed "SA consistently out-recovers greedy" — that was an artifact of comparing SA against a
-*weak* greedy (`-R -S iq`). Re-run with each solver at its best (greedy `-J -S r10i4q10`; SA
-`-A12000 -S q10` — SA needs *deep* anneals, `-A6000` starves it), matched `score_iter`, 10-plug
-messages, 100 trials × 2 seeds, they are **genuine peers with a length-dependent crossover**
-(mean%/exact%, at ~2× the `-R20` budget):
+*weak* greedy (`-R --score iq`). Re-run with each solver at its best (greedy
+`-J --score i4q10 --random 10`; SA `-A12000 --score q10` — SA needs *deep* anneals, `-A6000`
+starves it), matched `score_iter`, 10-plug messages, 100 trials × 2 seeds, they are **genuine
+peers with a length-dependent crossover** (mean%/exact%, at ~2× the `-R20` budget):
 
-| L | greedy `-J -S r10i4q10 -R80` | SA `-A12000 -S q10 -R12` |
+| L | greedy `-J --score i4q10 --random 10 -R80` | SA `-A12000 --score q10 -R12` |
 |---|---|---|
 | 40 | 24 / 8  | **27 / 12** |
 | 50 | **45 / 33** | 40 / 32 |
@@ -328,29 +329,33 @@ New knob (tenure).
 equal `score_iter` budget; sweep tenure ∈ {4,8,12}. Report **worst-case (min over
 seeds)** recovery, where tabu's determinism should show best.
 
-### 3.6 Partial plugboard exhaustion — forced first pair (❌ implemented as `-S a1`, measured, DOMINATED)
+### 3.6 Partial plugboard exhaustion — forced first pair (❌ implemented as `--exhaust 1`, measured, DOMINATED)
 
 **Form.** The core diversification device in Ostwald & Weierud (2017): instead of a
 random kick, systematically **force each candidate first pair** (`C(26,2)=325`), pin it
 (as `-s` pins plugs), run the staged IC→quad climb, keep the best. Deterministic. Built
-as the `-S aN` schedule token (`-S a1i4q10`), where `N` is the **total** pinned pairs (the
-`-s` pairs count toward it, so `-s ABCD -S a3q10` forces one more pair on top of the two
-fixed). `N−fixed > 1` explodes combinatorially (`free!/(2^k k! (free−2k)!)`: ~45k for 2,
-~3.5M for 3) so it is a single-threaded **exploration knob only**; the measured result below
-is for `a1`. Single-threaded prototype (it mutates the global `plug_fixed[]` as it recurses —
-a threaded version needs per-machine state).
+as the `--exhaust E` option (`--exhaust 1 --score i4q10`), where `E` is the number of
+**extra forced** pairs among the free letters, on top of any `-s` pairs (so `-s ABCD
+--exhaust 1` forces one more pair beyond the two fixed). `E > 1` explodes combinatorially
+(`free!/(2^E E! (free−2E)!)`: ~45k for 2, ~3.5M for 3) so it is a single-threaded
+**exploration knob only**; the measured result below is for `E=1`. It composes with the
+`--random` kick and `-R` restarts (each forced combo runs the restart loop). Single-threaded
+prototype (it mutates the global `plug_fixed[]` as it recurses — a threaded version needs
+per-machine state; REDESIGN Part D). (Historically this was the `-S aN` schedule token, where
+`N` was the *total* pinned pairs; Part B renamed it `--exhaust E` and switched to *forced*-pair
+counting, so the old `-S a1` and `-s ABCD -S a3` become `--exhaust 1` and `-s ABCD --exhaust 1`.)
 
 **It works, and it is dominated.** The basin guarantee is real — on a message where a
-single plain climb (`-R 1`) sticks, `-S a1i4q10` recovers exactly. But the honest test is
-**matched `score_iter`**, and there it loses badly to spending the same budget on the tuned
-greedy restart climb (10-plug messages, 80 trials/cell). Two matchings, both decisive:
+single plain climb (`-R 0`) sticks, `--exhaust 1 --score i4q10` recovers exactly. But the
+honest test is **matched `score_iter`**, and there it loses badly to spending the same budget
+on the tuned greedy restart climb (10-plug messages, 80 trials/cell). Two matchings, both decisive:
 
 | | L50 | L60 | L70 |
 |---|---|---|---|
-| `-S a1i4q10` (325 climbs, ~1.05M) | 51 / 35 | 58 / 39 | 76 / 65 |
-| greedy `-J -S r10i4q10 -R436` (~1.05M) | **69 / 64** | **82 / 79** | **96 / 94** |
-| `-S a1i4q10 -J` (325 climbs, ~483k) | 48 / 32 | 61 / 46 | 78 / 65 |
-| greedy `-J -S r10i4q10 -R205` (~483k) | **58 / 50** | **77 / 74** | **88 / 84** |
+| `--exhaust 1 --score i4q10` (325 climbs, ~1.05M) | 51 / 35 | 58 / 39 | 76 / 65 |
+| greedy `-J --score i4q10 --random 10 -R436` (~1.05M) | **69 / 64** | **82 / 79** | **96 / 94** |
+| `--exhaust 1 --score i4q10 -J` (325 climbs, ~483k) | 48 / 32 | 61 / 46 | 78 / 65 |
+| greedy `-J --score i4q10 --random 10 -R205` (~483k) | **58 / 50** | **77 / 74** | **88 / 84** |
 *(mean% / exact%)*
 
 **Why it loses.** Only ~10 of the 325 forced pairs are true plugs, so ~315 climbs launch
@@ -361,7 +366,7 @@ plateau through 256." The second matching is apples-to-apples (**both arms `-J`*
 exhaustion even gets *more* climbs — 325 vs 205, because its 1-plug seeds are cheaper than
 greedy's 10-plug kick) and greedy still wins by −10 to −28pp exact, so the loss is not a
 config artifact. Fails its own bar ("must beat spending that same 325× as raw `-R`") by a
-wide margin. Kept as an experimental opt-in (`-S a1`), not recommended.
+wide margin. Kept as an experimental opt-in (`--exhaust 1`), not recommended.
 
 **Untested variant.** A ranked ~150-pair shortlist (ciphertext × plaintext-language letter
 frequency, so the shortlist concentrates on likely-true pairs) would halve the cost, but each
@@ -933,8 +938,8 @@ restarts (restarts never plateau through 256) more than repay the per-restart lo
   §2 information floor, where little is recoverable by *any* method), growing to +6–7pp
   by L60; **+19–23pp across L40–60 for 6 plugs** (wherever real signal exists).
 
-**Because it recovers worse per restart, `-I` is opt-in** — a user at the default `-R 1`
-who enables it gets *worse* results. Documented as "pair with more `-R`."
+**Because it recovers worse per restart, `-I` is opt-in** — a user at the default `-R 0`
+(a single deterministic climb) who enables it gets *worse* results. Documented as "pair with more `-R`."
 
 **Refinements — one rejected, one shipped, one open. The pair is the interesting part:
 move ordering helps or hurts depending entirely on whether it varies *per restart*.**
@@ -1073,7 +1078,7 @@ but likely small payoff. Only pursue as a both-axes win under `make crackquality
 **Idea.** The per-stage `-S` plug cap is enforced only as a *growth ceiling*: at/over
 the cap the switch scan blocks a brand-new **add** (both ends free) but still allows
 count-preserving **reshuffles** (endpoint-moves, `Δ=0`). So when a big per-restart kick
-(`-S rN`, default `N=8`) lands on a small stage cap (`i4`, `q6/q10`), the board *arrives
+(`--random K`, default `K=10`) lands on a small stage cap (`i4`, `q6/q10`), the board *arrives
 over the cap* and the climb can converge still holding more plugs than the cap — the cap
 never pulls it down. `-M` makes the cap a strict **descent target**: at/over the cap, only
 **count-reducing** moves are allowed — a **merge** (both ends already plugged to different
@@ -1082,7 +1087,7 @@ must shed plugs to the cap. The **merge** is deliberately kept (not "removal-onl
 the strongest descent move (−1 *and* score-improving in one step); dropping it (a strict
 removal-only rule, "variant 2") was reasoned to be worse and not built.
 
-**Result (matched compute, mean %-correct — the graded metric; `-S rNi4qK`).** Because
+**Result (matched compute, mean %-correct — the graded metric; `--score i4qK --random N`).** Because
 `-M` is *cheaper* per climb (up to ~2.7× fewer `score_iter` in the `q6` regime — quad
 converges from a tidy ≤cap basin), it is compared at matched compute (baseline `-R 26` vs
 `-M` at the higher `-R` its lower per-climb cost buys). The win **grows as the true plug
@@ -1104,7 +1109,7 @@ climb reshuffling an over-cap board; `-M` spends that budget descending to the t
 `-S i3q…`…`i6q…` tie by default is exactly this: on the dominant perturbed restarts the
 board is already over the IC cap, so the cap can't build *or* prune it — it only gates a
 re-add. `-M` is what makes a tight cap actually bite. So the recipe is regime-dependent:
-`~10 plugs → -S rNi4q10` (kick near 10, `-M` optional, small gain); `known-few → -S i4qK -M`
+`~10 plugs → --score i4q10 --random N` (kick near 10, `-M` optional, small gain); `known-few → --score i4qK -M`
 (cap at the true count `K`, `-M` on — the large win). Off by default (needs `-c`),
 `-T`-deterministic, full suite green.
 

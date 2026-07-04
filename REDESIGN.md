@@ -1,9 +1,11 @@
 # REDESIGN — CLI consistency refactor
 
-**Status: DRAFT PLAN — not yet implemented.** Execute one Part at a time, in order,
-and only on an explicit "go" for that Part. Each Part must land (merged, suite green,
-determinism preserved) before the next begins. This is a **consistency / correctness**
-refactor, not a recovery or performance change — the bar for every Part is:
+**Status: Part A and Part B implemented** (long options; the seed pipeline —
+`--score` climb-only, `--random`/`--exhaust`, kicked-only `--restarts`). **Parts C and D
+remain.** Execute one Part at a time, in order, and only on an explicit "go" for that Part.
+Each Part must land (merged, suite green, determinism preserved) before the next begins.
+This is a **consistency / correctness** refactor, not a recovery or performance change —
+the bar for every Part is:
 
 - full suite green under g++ **and** clang (`-Werror`), TSan-clean;
 - behaviour **unchanged** for any invocation whose surface this Part does not explicitly
@@ -143,7 +145,7 @@ or a pasted climb recipe without breaking recipe reuse — same spirit as the pi
 
 ## The plan
 
-### Part A — long options (`getopt_long`, additive)  [was B1]
+### Part A — long options (`getopt_long`, additive)  [was B1]  ✅ DONE
 
 Switch `getopt`→`getopt_long`. Add every long name in the table; **keep all existing short
 forms**. New options (`--random`, `--exhaust`) are **not** added here (Part B). Rewrite
@@ -152,7 +154,7 @@ forms**. New options (`--random`, `--exhaust`) are **not** added here (Part B). 
 - **Done:** every short flag still works; every long flag and unambiguous prefix works;
   byte-identical outputs; suite green (g++/clang), plus a few long-option smoke tests.
 
-### Part B — seed pipeline (`--score` climb-only; `--random`/`--exhaust`)  [was A / A1]
+### Part B — seed pipeline (`--score` climb-only; `--random`/`--exhaust`)  [was A / A1]  ✅ DONE
 
 Move `r`/`a` out of `-S`; `-S` becomes `--score` (climb stages only). Add `--random K`
 (kick, default 10) and `--exhaust E` (forced pairs, long-only, single-threaded — A1).
