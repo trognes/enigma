@@ -835,9 +835,9 @@ double ic_score_decode(machine & m)
 /* Progress-line columns (shared by the header and the lines): score %7.4f,
    reflector+wheels up to 5 chars (M4 "bB123"), ring and start up to 4 (M4),
    plugboard up to 13 pairs = 38 chars, then the first preview_len characters
-   of the decoded text. Worst case 7+1+5+1+4+1+4+1+38+1+10 = 73 chars, inside
+   of the decoded text. Worst case 7+1+5+1+4+1+4+1+38+1+15 = 78 chars, inside
    a 79-column terminal. */
-static const int preview_len = 10;
+static const int preview_len = 15;
 static const char progress_fmt[] = "%7s %-5s %-4s %-4s %-38s %s\n";
 
 /* Column header, printed once before the first progress line of a search. */

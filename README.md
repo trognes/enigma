@@ -105,13 +105,13 @@ for every improvement — each rotor setting that beats the best so far, and,
 with `-c`, each intermediate plugboard improvement inside a climb, so you can
 watch the board being built up plug by plug. The lines are fixed-width columns
 under a `Score W R G S Text` header — score, reflector+wheels, ring, start,
-plugboard and the first 10 characters of the decoded text:
+plugboard and the first 15 characters of the decoded text:
 
 ```
   Score W     R    G    S                                      Text
--5.5715 B241  AAA  QEW  AB EF GH IJ                            PHEQUODLAS
--4.9559 B241  AAA  QEW  AB EF GH IJ KL                         PHEQUIDKAS
--4.3598 B241  AAA  QEW  AB CD EF GH IJ KL                      THEQUICKAN
+-5.5715 B241  AAA  QEW  AB EF GH IJ                            PHEQUODLASYKYII
+-4.9559 B241  AAA  QEW  AB EF GH IJ KL                         PHEQUIDKASALYSI
+-4.3598 B241  AAA  QEW  AB CD EF GH IJ KL                      THEQUICKANALYSI
 ```
 
 ## Options

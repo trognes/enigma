@@ -401,16 +401,16 @@ check "progress: last echoed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pg_pb")" \
   "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c)"
 # Progress line FORMAT: a column header (Score W R G S Text) printed exactly once,
-# each line ending in the first 10 characters of the decoded text, and the whole
+# each line ending in the first 15 characters of the decoded text, and the whole
 # line within 79 columns even with a full 13-pair plugboard.
 fmt_pb="AB CD EF GH IJ KL MN OP QR ST UV WX YZ"
 fmt_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "$fmt_pb")
 fmt_err=$(printf '%s' "$fmt_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -s "$fmt_pb" 2>&1 >/dev/null)
 check "progress: column header printed exactly once" \
   "$(printf '%s\n' "$fmt_err" | grep -c '^ *Score ')" "1"
-check "progress: line ends with the first 10 decoded characters" \
+check "progress: line ends with the first 15 decoded characters" \
   "$(printf '%s\n' "$fmt_err" | progress_lines | tail -1 | awk '{ print $NF }')" \
-  "$(printf '%s' "$r_pt" | cut -c1-10)"
+  "$(printf '%s' "$r_pt" | cut -c1-15)"
 check "progress: lines stay within 79 columns (13-pair board)" \
   "$(printf '%s\n' "$fmt_err" | awk 'length > m { m = length } END { print (m <= 79) ? "ok" : m }')" \
   "ok"

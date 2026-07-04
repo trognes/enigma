@@ -527,9 +527,9 @@ range and is not viable.
   best) and `show_settings` (echo the resolved config at startup). Progress lines are
   fixed-width columns under a one-time header (`Score W R G S Text`, printed by
   `showconfig_header` before the first line — `best_result.header_shown`): score,
-  reflector+wheels, ring, start, plugboard (room for all 13 pairs) and the first 10
+  reflector+wheels, ring, start, plugboard (room for all 13 pairs) and the first 15
   characters of the decoded text — the preview is decoded on the fly from the
-  machine's *current* board (`m.plaintext` can be stale mid-climb); worst case 73
+  machine's *current* board (`m.plaintext` can be stale mid-climb); worst case 78
   chars, inside a 79-column terminal. With `-c` the echo is per plugboard
   IMPROVEMENT, not per finished climb: every accepted climb/SA move whose
   (target-model) score beats everything echoed so far prints a progress line
