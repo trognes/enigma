@@ -4,6 +4,7 @@
 #include <math.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -101,11 +102,10 @@ static const char * opt_walzen;
 static const char * opt_ringstellung;
 static const char * opt_grundstellung;
 static const char * opt_steckerbrett;
-/* Letters that are part of a fixed (-s) plug pair: the hill-climb, re-pair and SA
-   toggle never touch these, so -s pairs are *known* plugs that survive the climb rather
-   than a mere seed. Set once from opt_steckerbrett before the (threaded) search, then
-   read-only. */
-static bool plug_fixed[asize];
+/* Letters that are part of a fixed (-s) plug pair are never rewired by the hill-climb,
+   re-pair or SA toggle, so -s pairs are *known* plugs that survive the climb rather than
+   a mere seed (see plug_fixed / PLUG_FIXED_EX below for the storage and the parallel
+   --exhaust arrangement, REDESIGN Part D). */
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french ...; no default */
 static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
@@ -121,7 +121,12 @@ static char opt_greek_walzen = '.';      /* Greek wheel: B (Beta), G (Gamma) or 
 static char opt_greek_ringstellung = '.';   /* Greek ring letter or . */
 static char opt_greek_grundstellung = '.';  /* Greek start letter or . */
 static int opt_maxwheel;
-static int opt_scoring;
+static int opt_scoring;   /* the resolved ranking/target model (SCORE_*) */
+/* The model chosen by a bare selector -i/-m/-b/-t/-q, or -1 if none was given. The
+   selectors are thin aliases for a single uncapped --score <model> stage (REDESIGN
+   Part C); this records the choice so conflicting models -- two disagreeing selectors,
+   or a selector vs a different --score target -- can be rejected as a fatal error. */
+static int opt_model_selector;
 static int opt_hillclimb;
 /* -I: circular first-improvement climb instead of steepest ascent. Applies the FIRST
    improving move (cursor sweeps a fixed move list and continues from where it accepted),
@@ -138,7 +143,7 @@ static int opt_firstimprove;
 static int opt_dynorder;
 /* -M: make the plug cap a strict descent TARGET, not just a growth ceiling. Default (0):
    at/over the cap only a brand-new add (both ends free) is blocked, so an over-cap board
-   (a big -S rN kick handed to a small stage cap) can converge still over the cap, merely
+   (a big --random kick handed to a small stage cap) can converge still over the cap, merely
    reshuffled. With -M: at/over the cap allow only count-REDUCING moves (merges -- both ends
    already plugged to different partners -- plus removals), blocking adds AND count-preserving
    endpoint-moves, so the climb must shed plugs down to the cap while keeping the strongest
@@ -148,8 +153,11 @@ static int opt_dynorder;
    it is also cheaper per climb (quad converges from a tidy basin). Off by default; needs -c.
    Most useful with a tight -S target cap; near-inert (harmless) with no cap. */
 static int opt_capmerge;
-static int opt_restarts;  /* plugboard hill-climb random restarts (1 = none) */
-static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
+static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
+                             0 (the default) = one deterministic climb from the seed,
+                             no kick; N>=1 = exactly N kicked climbs, keep the best
+                             (the un-kicked seed climb is not additionally run). */
+static const char * opt_staged;  /* raw --score/-S schedule string (e.g. "i4q10"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
 /* Upper bound on -R, purely a sanity guard against a typo (each restart just
    re-runs the hill-climb from a fresh perturbed board -- no extra memory -- so the
@@ -158,14 +166,11 @@ static const char * opt_staged;  /* raw -S schedule string (e.g. "r2i6q"), or 0;
 static const int max_restarts = 1000000000;
 static const int pairs_uncapped = asize / 2;   /* 13: a board holds at most this */
 
-/* A parsed -S schedule is an ordered list of climb stages -- each a scoring model
-   and a cap on the plug pairs it may set -- plus the per-restart random
-   perturbation strength. Tokens are <letter><optional number>: model letters
-   i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped) and r (the random
-   perturbation, number = plug pairs injected per restart, omitted = default_perturb).
-   The last model stage is the target/ranking model. With no r token (including no -S
-   at all) the perturbation is a fixed default_perturb plug pairs -- the sweep's best
-   kick, near the typical plug count (CODE_REVIEW §9). */
+/* A parsed --score/-S schedule is an ordered list of climb stages -- each a scoring
+   model and a cap on the plug pairs it may set. Tokens are <letter><optional number>:
+   model letters i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped). The
+   last model stage is the target/ranking model. The per-restart random kick and the
+   partial exhaustion are separate options (--random / --exhaust), not schedule tokens. */
 static const int max_stages = 16;
 struct climbstage
 {
@@ -174,13 +179,15 @@ struct climbstage
 };
 static struct climbstage opt_stages[max_stages];
 static int opt_nstages;    /* number of model stages in opt_stages[] */
-static int opt_perturb;    /* random plug pairs injected per restart: 0..13 (an rN
-                              token; default_perturb when no r token; r0 = no-op) */
-static const int default_perturb = 8;   /* no-r-token kick: best in the §9 sweep */
-static int opt_exhaust;    /* -S aN: partial plugboard exhaustion -- pin N plug pairs total
-                              (the -s pairs count toward N), trying every set of the N-fixed
-                              forced pairs and keeping the best climb (0 = off). Single-threaded
-                              exploration tool; see exhaust_first_pairs(). */
+static int opt_perturb;    /* --random K: random plug pairs injected per restart, 0..13
+                              (K=0 is legal -- a no-perturbation control). */
+static const int default_perturb = 10;  /* --random default kick: near the typical plug count */
+static bool opt_random_set;             /* was --random passed explicitly? (errors without -c) */
+static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force E extra plug
+                              pairs among the free letters (on top of any -s pairs), trying
+                              every set of E disjoint pairs and keeping the best climb (0 = off).
+                              Parallel over the first forced pair (exhaust_unit); exploration
+                              tool, dominated by a high --restarts climb (see PERFORMANCE.md §3.6). */
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
@@ -276,6 +283,15 @@ struct machine
      out of the hot per-character loop, and placed last so it never pushes the hot
      tables above to large struct offsets. Summed across workers for the final line. */
   uint64_t plugboards_scored;
+
+  /* Per-worker scratch for --exhaust (see the PLUG_FIXED_EX note below): a copy of the global
+     plug_fixed (-s seed) plus this leaf's forced-pair letters, read ONLY by the EX=true climb
+     instantiations. Under g++ this lives here, in the machine (a thread_local shifts g++'s
+     whole-TU codegen); under clang it lives in a thread_local instead (a struct member shifts
+     clang's climb codegen), so it is compiled out of the struct there. */
+#if !defined(__clang__)
+  bool plug_fixed_ex[asize];
+#endif
 };
 
 /* The n-gram scorers read uint8 fixed-point log10-probability tables. This is a
@@ -444,10 +460,12 @@ void init()
       reflector[i][j] = char2num(reflector_string[i][j]);
 }
 
+/* Reset the plugboard to identity + the fixed -s pairs. Board-only (the fixed-letter set is
+   the separate plug_fixed, below), so the init-dominated scan path pays no extra cost. */
 void init_steckerbrett(machine & m, const char * steckerbrett_string)
 {
   for (int j=0; j < asize; j++)
-    m.steckerbrett[j] = j;
+    m.steckerbrett[j] = static_cast<unsigned char>(j);
 
   int plug_count = static_cast<int>(strlen(steckerbrett_string) / 2);
 
@@ -455,13 +473,35 @@ void init_steckerbrett(machine & m, const char * steckerbrett_string)
     {
       int a = char2num(steckerbrett_string[2*i+0]);
       int b = char2num(steckerbrett_string[2*i+1]);
-      m.steckerbrett[a] = b;
-      m.steckerbrett[b] = a;
+      m.steckerbrett[a] = static_cast<unsigned char>(b);
+      m.steckerbrett[b] = static_cast<unsigned char>(a);
     }
 }
 
-/* Mark the letters of the fixed (-s) plug pairs, so the climb/SA leave them alone.
-   Called once from main before the threaded search; plug_fixed is read-only after. */
+/* Letters the climb/SA must not rewire. plug_fixed is the fixed -s set: a plain read-only
+   global, set once by init_plug_fixed before the search and shared by every worker (they only
+   read it). The common (non-exhaust) climb reads this global directly, via a local
+   `const bool * __restrict pf = plug_fixed` inside each climb function; that plain-global read
+   is what clang and g++ both compile without reloading it after the steckerbrett stores in the
+   move loop -- reading a struct member or thread_local there instead shifts a compiler's
+   codegen ~18% (see CLAUDE.md and the PLUG_FIXED_EX note).
+
+   --exhaust needs PER-WORKER forced pins (each parallel first-pair unit forces different pairs),
+   so the EX=true climb instantiations read PLUG_FIXED_EX -- a per-worker copy of plug_fixed plus
+   this leaf's forced pairs -- selected at compile time (EX ? PLUG_FIXED_EX : plug_fixed), so the
+   common EX=false path folds to the plain global. WHERE that per-worker copy lives is compiler-
+   dependent, and the two compilers disagree: clang wants it thread_local (a struct member costs
+   its climb ~18%), g++ wants it a machine member (a thread_local costs g++'s whole-TU codegen
+   ~19%). We give each what it wants; the exhaust path is a dominated exploration tool, so its
+   own codegen does not matter -- only that the common path stays a plain global. */
+static bool plug_fixed[asize];
+#if defined(__clang__)
+static thread_local bool plug_fixed_ex[asize];   /* clang: thread_local scratch */
+#define PLUG_FIXED_EX plug_fixed_ex
+#else
+#define PLUG_FIXED_EX m.plug_fixed_ex           /* g++: the machine member declared above */
+#endif
+
 void init_plug_fixed(const char * steckerbrett_string)
 {
   for (int j = 0; j < asize; j++)
@@ -896,13 +936,15 @@ double score_iter(machine & m)
    moves cannot. It is run only once the cheap swap/remove moves have converged -- a
    handful of times per climb, not every pass -- so its O(plugs^2) cost is small.
    Applies and returns true iff the single best re-pair strictly beats cur_score. */
+template<bool EX>
 static bool try_repair(machine & m, double cur_score)
 {
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
   int plo[asize / 2];
   int phi[asize / 2];
   int np = 0;
   for (int a = 0; a < asize; a++)
-    if ((m.steckerbrett[a] > a) && ! plug_fixed[a])   /* never rewire a fixed -s plug */
+    if ((m.steckerbrett[a] > a) && ! pf[a])   /* never rewire a fixed -s plug */
       {
         plo[np] = a;
         phi[np] = m.steckerbrett[a];
@@ -982,8 +1024,10 @@ static pairtab make_pairtab()
    (no RNG, fixed order and acceptance rule) so the result is -T-independent; the trajectory
    differs from steepest ascent, so this is NOT byte-identical and must be judged on
    recovery, not equality. */
+template<bool EX>
 static void firstimprove_sweep(machine & m, int max_pairs)
 {
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
   static const int nmoves = asize * (asize - 1) / 2;   /* 325 pair-toggles */
   static const pairtab P = make_pairtab();
 
@@ -1052,7 +1096,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
         {
           int a = P.a[mv], b = P.b[mv];
           double s = -1e300;   /* invalid moves sort last */
-          if (! (plug_fixed[a] || plug_fixed[b]) && ! cap_blocks(a, b))
+          if (! (pf[a] || pf[b]) && ! cap_blocks(a, b))
             s = probe_toggle(a, b);
           sc[mv] = s;
           visit[mv] = mv;
@@ -1077,7 +1121,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
         cursor = 0;
 
       int a = P.a[mv], b = P.b[mv];
-      if ((plug_fixed[a] || plug_fixed[b]) || cap_blocks(a, b))
+      if ((pf[a] || pf[b]) || cap_blocks(a, b))
         { stale++; continue; }
 
       bool improved = false;
@@ -1134,8 +1178,10 @@ static void firstimprove_sweep(machine & m, int max_pairs)
    climb -- a board can hold at most 13 pairs anyway). The cheap "switch" and "remove"
    moves are run to convergence; then a single best "re-pair" is tried as a barrier
    cross, and if it improves the cheap climb resumes from the new board. */
-double hillclimb(machine & m, int max_pairs)
+template<bool EX>
+static double hillclimb(machine & m, int max_pairs)
 {
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
   /* -I: circular first-improvement instead of steepest ascent (off by default, so the
      baseline is byte-identical). */
   const bool firstimp = (opt_firstimprove != 0);
@@ -1149,7 +1195,7 @@ double hillclimb(machine & m, int max_pairs)
 
       if (firstimp)
         {
-          firstimprove_sweep(m, max_pairs);
+          firstimprove_sweep<EX>(m, max_pairs);
           cur = score_iter(m);
         }
       else
@@ -1191,7 +1237,7 @@ double hillclimb(machine & m, int max_pairs)
                 for(int b=a+1; b<asize; b++)
                   {
                     /* never reassign a fixed -s plug (a fixed letter keeps its partner) */
-                    if (plug_fixed[a] || plug_fixed[b])
+                    if (pf[a] || pf[b])
                       continue;
 
                     int sa = m.steckerbrett[a];
@@ -1287,7 +1333,7 @@ double hillclimb(machine & m, int max_pairs)
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
          improves, loop back and let the cheap climb resume from the new board. */
-      if (try_repair(m, cur))
+      if (try_repair<EX>(m, cur))
         progress = true;
     }
   while (progress);
@@ -1368,18 +1414,28 @@ int model_of(char c)
     }
 }
 
-/* Parse the -S schedule string into opt_stages[]/opt_nstages/opt_perturb, and set
+/* Record a bare model selector (-i/-m/-b/-t/-q) as a single uncapped --score <model>
+   stage (REDESIGN Part C). Two selectors that disagree (e.g. -m -q) make the intended
+   model ambiguous, so reject them; repeats that agree (-q -q) are fine. Sets opt_scoring
+   so a run with no --score ranks by the selected model. */
+static void select_model(int model)
+{
+  if ((opt_model_selector != -1) && (opt_model_selector != model))
+    fatal("Conflicting scoring models: the -i/-m/-b/-t/-q selectors disagree; "
+          "pick one");
+  opt_model_selector = model;
+  opt_scoring = model;
+}
+
+/* Parse the --score/-S schedule string into opt_stages[]/opt_nstages, and set
    opt_scoring to the target (last model stage). Tokens are <letter><optional int>:
    model letters i/m/b/t/q (a climb stage; the number caps its plug pairs, omitted =
-   uncapped) and r (the random perturbation; the number is plug pairs injected per
-   restart, omitted = the default_perturb kick). On a syntax error it calls fatal().
-   With no -S the schedule is the single -i/-m/.../-q target, uncapped; with no r
-   token the perturbation stays at the fixed default_perturb kick. */
+   uncapped). On a syntax error it calls fatal(). With no --score the schedule is the
+   single -i/-m/.../-q target, uncapped. The per-restart random kick (--random) and
+   the partial exhaustion (--exhaust) are separate options, not schedule tokens. */
 void parse_schedule()
 {
   opt_nstages = 0;
-  opt_perturb = default_perturb;   /* fixed kick unless an r token overrides it */
-  opt_exhaust = 0;
 
   if (! opt_staged)
     {
@@ -1389,7 +1445,6 @@ void parse_schedule()
       return;
     }
 
-  bool seen_r = false;
   for (const char * p = opt_staged; *p; )
     {
       char letter = *p++;
@@ -1405,52 +1460,54 @@ void parse_schedule()
             }
         }
 
-      if (letter == 'r')
-        {
-          if (seen_r)
-            fatal("Illegal -S schedule: at most one r (random) token");
-          seen_r = true;
-          if (n > pairs_uncapped)
-            fatal("Illegal -S r token (0 to 13 random plug pairs)");
-          /* omitted number = the default kick, just as a bare model token is
-             uncapped; rN sets a fixed N (r0 = a no-op control) */
-          opt_perturb = (n < 0) ? default_perturb : n;
-        }
-      else if (letter == 'a')
-        {
-          if (opt_exhaust)
-            fatal("Illegal -S schedule: at most one a (exhaustion) token");
-          /* aN pins N plug pairs TOTAL (like a model-token cap; the -s pairs count toward N),
-             forcing N - fixed of them exhaustively (omitted N = 1). The combination count is
-             free!/(2^k k! (free-2k)!) for k = N - fixed forced -- 325 (k=1), ~45k (k=2),
-             ~3.5M (k=3) -- so large k is single-threaded exploration only. N must be >= the -s
-             pairs (validated once -s is known). */
-          int k = (n < 0) ? 1 : n;
-          if ((k < 1) || (k > pairs_uncapped))
-            fatal("Illegal -S a token (a1 to a13: number of forced plug pairs)");
-          opt_exhaust = k;
-        }
-      else if (strchr("imbtq", letter))
+      if (strchr("imbtq", letter))
         {
           if (opt_nstages >= max_stages)
-            fatal("Illegal -S schedule: too many stages (max 16)");
+            fatal("Illegal --score schedule: too many stages (max 16)");
           int cap = (n < 0) ? pairs_uncapped : n;
           if ((cap < 1) || (cap > pairs_uncapped))
-            fatal("Illegal -S stage cap (1 to 13 plug pairs; omit for no cap)");
+            fatal("Illegal --score stage cap (1 to 13 plug pairs; omit for no cap)");
           opt_stages[opt_nstages].model = model_of(letter);
           opt_stages[opt_nstages].cap = cap;
           opt_nstages++;
         }
       else
-        fatal("Illegal -S schedule (tokens are a/r/i/m/b/t/q + optional number, "
-              "e.g. -S r2i6q or -S a1i4q10)");
+        fatal("Illegal --score schedule (tokens are i/m/b/t/q + optional cap, "
+              "e.g. --score i4q10; use --random for the kick, --exhaust for forcing)");
     }
 
   if (opt_nstages < 1)
-    fatal("Illegal -S schedule: needs at least one model stage (i/m/b/t/q)");
+    fatal("Illegal --score schedule: needs at least one model stage (i/m/b/t/q)");
 
   /* the last model stage is the target/ranking model */
   opt_scoring = opt_stages[opt_nstages - 1].model;
+}
+
+/* Does the parsed --score schedule carry climb-only detail -- i.e. more than one
+   stage, or any stage capped below the board maximum? Such detail is meaningful only
+   during a plugboard climb (-c); a bare rotor scan just ranks by the target model.
+   Used to warn when a climb schedule is given without -c. */
+static bool schedule_is_climb_only()
+{
+  if (opt_nstages > 1)
+    return true;
+  for (int i = 0; i < opt_nstages; i++)
+    if (opt_stages[i].cap < pairs_uncapped)
+      return true;
+  return false;
+}
+
+/* Number of distinct sets of `pairs` disjoint plug pairs drawable from `free` letters:
+   free! / (2^p p! (free-2p)!). Returned as a double (the count explodes fast). Used for the
+   exhaustion combo count and for the restart pigeonhole warning (a kick of K pairs among the
+   free letters has this many distinct outcomes). */
+static double disjoint_pair_combinations(int free_letters, int pairs)
+{
+  double combos = 1.0;
+  for (int i = 0; i < pairs; i++)
+    combos *= static_cast<double>((free_letters - 2*i) * (free_letters - 2*i - 1))
+              / (2.0 * (i + 1));
+  return combos;
 }
 
 /* Staged plugboard climb: run each schedule stage in order, capping the plug pairs
@@ -1460,52 +1517,81 @@ void parse_schedule()
    (complementary to random restarts). The returned score and m.plaintext are in the
    target (last) model, so cross-key comparison is unaffected. With no -S this is a
    single uncapped climb in the -i/-m/.../-q model. */
+template<bool EX>
 static double run_stages(machine & m)
 {
   double s = 0.0;
   for (int i = 0; i < opt_nstages; i++)
     {
       m.scoring = opt_stages[i].model;
-      s = hillclimb(m, opt_stages[i].cap);
+      s = hillclimb<EX>(m, opt_stages[i].cap);
     }
   return s;   /* opt_nstages >= 1, so s is the target-model score */
 }
 
-/* -S aN partial plugboard exhaustion (PROTOTYPE, exploration tool only -- dominated by a
-   high -R greedy climb at equal compute; see PERFORMANCE.md §3.6). `N` is the TOTAL pinned
-   pairs (like a model-token cap, counting the -s pairs); it forces k = N - (fixed -s pairs)
-   of them. Instead of one climb from the seed, try every set of k disjoint pairs among the
-   free letters -- pin them (as -s pins plugs) and run the staged climb from that seed -- and
-   keep the best board. k=1 tries each of the 325 first pairs; larger k is exponentially more
-   work (free!/(2^k k! (free-2k)!) sets: ~45k for k=2, ~3.5M for k=3 with no -s). It mutates the
-   global plug_fixed[] as it recurses, so it is single-threaded (gated to -T 1); a threaded
-   version needs a per-machine plug_fixed. */
+
+/* --exhaust E partial plugboard exhaustion (PROTOTYPE, exploration tool only -- dominated by
+   a high --restarts greedy climb at equal compute; see PERFORMANCE.md §3.6). E is the number
+   of EXTRA plug pairs forced among the free letters, on top of any -s pairs. Instead of one
+   climb from the seed, try every set of E disjoint pairs among the free letters -- pin them
+   (as -s pins plugs) and run the staged climb from that seed -- and keep the best board. E=1
+   tries each of the 325 first pairs; larger E is exponentially more work (combos(free,E) =
+   free!/(2^E E! (free-2E)!) sets: ~45k for E=2, ~3.5M for E=3 with no -s). It composes with
+   the kick and restarts: for each forced combo, --restarts N runs N kicked climbs (the kick
+   perturbs only the still-free letters, leaving -s and the forced pairs intact), keeping the
+   best.
+
+   Parallel (REDESIGN Part D): the FIRST forced pair (the combo's minimum-low-letter pair)
+   is the unit of work -- there are at most C(free,2) <= 325 of them, listed in
+   g_exhaust_firsts, and every combo belongs to exactly one (its remaining pairs all use
+   letters above the first pair's low letter). Each unit runs on any thread against its own
+   PLUG_FIXED_EX pin set (per-thread under clang, per-machine under g++ -- no shared mutable
+   state), and its best merges into the global best exactly like a restart. So exhaustion now
+   scales with -T and stays -T-independent (each (unit, restart) climb is seeded only by
+   key + restart). */
+static inline uint64_t restart_seed(size_t key_index, int restart);   /* defined below */
+
+/* Flat list of the free first-pair choices (x,y), two bytes each; built once before the
+   search by build_exhaust_firsts(), read-only during it. */
+static std::vector<unsigned char> g_exhaust_firsts;
+
 struct exhaust_ctx
 {
-  int a[pairs_uncapped];   /* the currently-pinned forced pairs (depth of them) */
+  int a[pairs_uncapped];   /* the currently-chosen forced pairs (depth of them) */
   int b[pairs_uncapped];
-  int target;              /* N */
+  int target;              /* E forced pairs */
+  size_t key_index;        /* for the per-restart RNG seed */
+  bool used[asize];        /* letters consumed by -s + forced-so-far (enumeration only) */
   double best;
   bool have;
   char best_pt[maxlen + 1];
   unsigned char best_steck[asize];
 };
 
-/* Enumerate every set of `target` disjoint pairs among the free (non -s) letters, exactly
-   once: each pair's low letter is chosen in increasing order (`first`), and pinning it in
-   plug_fixed[] as we descend both excludes it from deeper pairs and makes run_stages hold it
-   fixed. At full depth, seed the board with -s + the N forced pairs and climb. */
-static void exhaust_recurse(machine & m, exhaust_ctx & c, int depth, int first)
+/* At a full combo (the E forced pairs in c.a/c.b): run every restart's climb from the seed
+   board -- identity + -s + the forced pairs -- plus this restart's --random kick over the
+   still-free letters, and keep the best in c. The forced pairs are pinned in plug_fixed so
+   the climb (and the kick, which draws only from self-steckered letters) leave them intact. */
+static void exhaust_leaf(machine & m, exhaust_ctx & c)
 {
-  if (depth == c.target)
+  const bool kicked = (opt_restarts >= 1);
+  const int climbs = kicked ? opt_restarts : 1;
+  for (int r = 0; r < climbs; r++)
     {
-      init_steckerbrett(m, opt_steckerbrett);              /* identity + -s pairs */
+      init_steckerbrett(m, opt_steckerbrett);   /* board = identity + -s */
+      memcpy(PLUG_FIXED_EX, plug_fixed, asize);   /* per-worker pins = -s seed ... */
       for (int i = 0; i < c.target; i++)
         {
           m.steckerbrett[c.a[i]] = static_cast<unsigned char>(c.b[i]);
           m.steckerbrett[c.b[i]] = static_cast<unsigned char>(c.a[i]);
+          PLUG_FIXED_EX[c.a[i]] = PLUG_FIXED_EX[c.b[i]] = true;   /* ... plus the forced pair */
         }
-      double s = run_stages(m);   /* plug_fixed pins -s + all N forced pairs */
+      if (kicked)
+        {
+          uint64_t rng = restart_seed(c.key_index, r);
+          perturb_steckerbrett(m, & rng, opt_perturb);
+        }
+      double s = run_stages<true>(m);
       if (! c.have || (s > c.best))
         {
           c.best = s;
@@ -1513,58 +1599,141 @@ static void exhaust_recurse(machine & m, exhaust_ctx & c, int depth, int first)
           memcpy(c.best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
           memcpy(c.best_steck, m.steckerbrett, asize);
         }
+    }
+}
+
+/* Choose the remaining forced pairs (from depth up to c.target), each pair's low letter in
+   increasing order (`first`) so every combo is enumerated exactly once. c.used excludes the
+   -s letters and the pairs chosen so far. At full depth, climb (exhaust_leaf). */
+static void exhaust_recurse(machine & m, exhaust_ctx & c, int depth, int first)
+{
+  if (depth == c.target)
+    {
+      exhaust_leaf(m, c);
       return;
     }
   for (int x = first; x < asize; x++)
     {
-      if (plug_fixed[x])
+      if (c.used[x])
         continue;
       for (int y = x + 1; y < asize; y++)
         {
-          if (plug_fixed[y])
+          if (c.used[y])
             continue;
           c.a[depth] = x;
           c.b[depth] = y;
-          plug_fixed[x] = plug_fixed[y] = true;
+          c.used[x] = c.used[y] = true;
           exhaust_recurse(m, c, depth + 1, x + 1);
-          plug_fixed[x] = plug_fixed[y] = false;   /* x,y are not -s letters */
+          c.used[x] = c.used[y] = false;
         }
     }
 }
 
-static double exhaust_first_pairs(machine & m)
+/* Initialise c for one rotor key: E forced pairs, -s letters marked used. */
+static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
 {
-  /* aN pins N plug pairs *total*, like the cap on a model token: the -s pairs count toward
-     N, so only N - (fixed -s pairs) are exhaustively forced among the free letters. */
-  int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
-  exhaust_ctx c;
-  c.target = opt_exhaust - fixed_pairs;
+  c.target = opt_exhaust;
+  c.key_index = key_index;
   c.best = 0.0;
   c.have = false;
-  exhaust_recurse(m, c, 0, 0);
-  if (c.have)   /* validation guarantees >= 1 combination, so this always holds */
+  for (int j = 0; j < asize; j++)
+    c.used[j] = false;
+  int fixed = static_cast<int>(strlen(opt_steckerbrett) / 2);
+  for (int i = 0; i < fixed; i++)
+    {
+      c.used[char2num(opt_steckerbrett[2*i+0])] = true;
+      c.used[char2num(opt_steckerbrett[2*i+1])] = true;
+    }
+}
+
+/* One parallel exhaustion unit: all combos whose first forced pair is g_exhaust_firsts[fi],
+   over all restarts. Leaves m at the unit's best board/plaintext and returns its score, or
+   a sentinel below any real score if the first pair leaves no room for E-1 more pairs. */
+static double exhaust_unit(machine & m, size_t key_index, size_t fi)
+{
+  exhaust_ctx c;
+  exhaust_ctx_init(c, key_index);
+  int x = g_exhaust_firsts[2*fi];
+  int y = g_exhaust_firsts[2*fi + 1];
+  c.a[0] = x;
+  c.b[0] = y;
+  c.used[x] = c.used[y] = true;
+  exhaust_recurse(m, c, 1, x + 1);   /* remaining E-1 pairs use letters above x */
+  if (c.have)
     {
       memcpy(m.plaintext, c.best_pt, static_cast<size_t>(textlength) + 1);
-      memcpy(m.steckerbrett, c.best_steck, asize);   /* restore the best board to match */
+      memcpy(m.steckerbrett, c.best_steck, asize);
+      return c.best;
     }
-  return c.best;
+  return -1e300;   /* no valid combo under this first pair: never wins the merge */
 }
 
-double hillclimb_schedule(machine & m)
+/* Whole-key exhaustion (used by the -F tier-2 climb, which parallelises over keys): every
+   first-pair unit, keeping the best board/plaintext. Validation guarantees >= 1 combo. */
+static double exhaust_all_combos(machine & m, size_t key_index)
 {
-  if (opt_exhaust)
-    return exhaust_first_pairs(m);
-  return run_stages(m);
+  double best = 0.0;
+  bool have = false;
+  char best_pt[maxlen + 1];
+  unsigned char best_steck[asize];
+  size_t nfirsts = g_exhaust_firsts.size() / 2;
+  for (size_t fi = 0; fi < nfirsts; fi++)
+    {
+      double s = exhaust_unit(m, key_index, fi);
+      if ((! have || (s > best)) && (s > -1e300))
+        {
+          best = s;
+          have = true;
+          memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+          memcpy(best_steck, m.steckerbrett, asize);
+        }
+    }
+  if (have)
+    {
+      memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+      memcpy(m.steckerbrett, best_steck, asize);
+    }
+  return best;
 }
 
-/* Hill-climb the plugboard with optional random restarts: restart 0 uses the
-   configured seed (identity or -s pairs) -- exactly the opt_restarts==1 behaviour
-   -- then opt_restarts-1 further climbs start from the seed plus opt_perturb random
-   plugs (a moderate kick, near the typical plug count), keeping the best. The
-   rotor-stack mapping[] depends only on the key (not the plugboard), so it is reused
-   across restarts; only the steckerbrett is reset each time. The RNG is seeded from
-   the flat key index, so the result is independent of -T. Each start runs the staged
-   climb. */
+/* Enumerate the free first-pair choices (x,y) into g_exhaust_firsts: every pair of letters
+   not pinned by -s, low letter first. Built once before the search (read-only after). Bounded
+   by C(free,2) <= 325 regardless of E, so it never explodes in memory (unlike a full combo
+   list); each unit does its own bounded sub-exhaustion. */
+static void build_exhaust_firsts()
+{
+  bool sfixed[asize];
+  for (int j = 0; j < asize; j++)
+    sfixed[j] = false;
+  int fixed = static_cast<int>(strlen(opt_steckerbrett) / 2);
+  for (int i = 0; i < fixed; i++)
+    {
+      sfixed[char2num(opt_steckerbrett[2*i+0])] = true;
+      sfixed[char2num(opt_steckerbrett[2*i+1])] = true;
+    }
+  g_exhaust_firsts.clear();
+  for (int x = 0; x < asize; x++)
+    {
+      if (sfixed[x])
+        continue;
+      for (int y = x + 1; y < asize; y++)
+        {
+          if (sfixed[y])
+            continue;
+          g_exhaust_firsts.push_back(static_cast<unsigned char>(x));
+          g_exhaust_firsts.push_back(static_cast<unsigned char>(y));
+        }
+    }
+}
+
+/* Hill-climb the plugboard with optional random restarts. --restarts 0 runs a single climb
+   from the configured seed (identity or -s pairs), no kick -- fully deterministic. --restarts
+   N runs N climbs, each from the seed plus a fresh --random kick (opt_perturb plug pairs, a
+   moderate kick near the typical plug count), keeping the best; the un-kicked seed climb is not
+   additionally run (REDESIGN Option A). The rotor-stack mapping[] depends only on the key (not
+   the plugboard), so it is reused across restarts; only the steckerbrett is reset each time.
+   The RNG is seeded from the flat key index, so the result is independent of -T. Each start
+   runs the staged climb. */
 /* A uniform double in [0, 1) from the splitmix64 stream (top 53 bits). */
 static inline double uniform01(uint64_t * rng)
 {
@@ -1646,7 +1815,7 @@ static double anneal_once(machine & m, uint64_t * rng)
   if (target_model != SCORE_IC)
     {
       m.scoring = SCORE_IC;
-      hillclimb(m, cap);
+      hillclimb<false>(m, cap);
       m.scoring = target_model;
     }
 
@@ -1714,7 +1883,7 @@ static double anneal_once(machine & m, uint64_t * rng)
     }
 
   memcpy(m.steckerbrett, best_board, asize);
-  hillclimb(m, cap);   /* greedy quench under the target model, same cap */
+  hillclimb<false>(m, cap);   /* greedy quench under the target model, same cap */
   return score_iter(m);
 }
 
@@ -1724,7 +1893,7 @@ static double optimize_once(machine & m, uint64_t * rng)
 {
   if (opt_anneal > 0)
     return anneal_once(m, rng);
-  return hillclimb_schedule(m);
+  return run_stages<false>(m);
 }
 
 /* Independent RNG seed for one restart, mixed from opt_seed, the flat key index and the
@@ -1743,27 +1912,30 @@ static inline uint64_t restart_seed(size_t key_index, int restart)
   return z ^ (z >> 31);
 }
 
-/* One plugboard-recovery restart from the fixed seed board. Restart 0 is the seed (no
-   perturbation); restart r>0 injects the random kick first. Draws only from this
-   restart's independent stream, so it is a self-contained unit of work. Leaves m at this
-   restart's converged board + plaintext; returns its score. */
+/* One plugboard-recovery climb from the seed board. In kicked mode (--restarts N>=1) every
+   climb -- including index 0 -- injects a fresh --random kick first, so the un-kicked seed
+   climb is not run (REDESIGN Option A). With --restarts 0 there is a single un-kicked climb.
+   Each restart draws from its own independent (key,restart) stream, so it is a self-contained
+   unit of work; leaves m at this climb's converged board + plaintext and returns its score. */
 static double hillclimb_one(machine & m, size_t key_index, int restart)
 {
   init_steckerbrett(m, opt_steckerbrett);
   uint64_t rng = restart_seed(key_index, restart);
-  if (restart > 0)
+  if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
   return optimize_once(m, & rng);
 }
 
-/* Run all opt_restarts restarts sequentially, keeping the best (used where the search
-   parallelises over keys rather than restarts -- the -F tier-2 climb). search_worker's
+/* Run all the climbs for one key sequentially, keeping the best (used where the search
+   parallelises over keys rather than restarts -- the -F tier-2 climb). --restarts 0 is a
+   single un-kicked seed climb; --restarts N is N kicked climbs (indices 0..N-1). search_worker's
    main path instead spreads the individual restarts across threads via hillclimb_one, so
    both share the same per-restart seeding and reach the same best. */
 double hillclimb_restarts(machine & m, size_t key_index)
 {
+  const int climbs = (opt_restarts >= 1) ? opt_restarts : 1;
   double best = hillclimb_one(m, key_index, 0);
-  if (opt_restarts <= 1)
+  if (climbs <= 1)
     return best;
 
   /* Keep the best restart's plaintext AND its plugboard together: each restart leaves
@@ -1776,7 +1948,7 @@ double hillclimb_restarts(machine & m, size_t key_index)
   memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
   memcpy(best_steck, m.steckerbrett, asize);
 
-  for (int r = 1; r < opt_restarts; r++)
+  for (int r = 1; r < climbs; r++)
     {
       double s = hillclimb_one(m, key_index, r);
       if (s > best)
@@ -1959,14 +2131,17 @@ void search_worker(machine & m,
               setup_mapping(m, opt_hillclimb != 0);
             }
 
-          /* Run one restart (climb) or score the key once (scan). hillclimb_one draws
-             from its own (keyidx,restart) stream, so the result is independent of which
-             thread runs it. The scan does not decode per key (the fused scorer reads each
-             row once, straight from subst_array); the plaintext is materialised only for a
-             new best, below. */
+          /* Run one work unit: a restart climb, an --exhaust first-pair unit, or one scan
+             score. Both hillclimb_one and exhaust_unit draw only from their own
+             (keyidx, restart)/(keyidx) streams, so the result is independent of which thread
+             runs the unit. For --exhaust the per-key units are the first-pair choices, so
+             `restart` here indexes g_exhaust_firsts. The scan does not decode per key (the
+             fused scorer reads each row once, straight from subst_array); the plaintext is
+             materialised only for a new best, below. */
           double score;
           if (opt_hillclimb)
-            score = hillclimb_one(m, keyidx, restart);
+            score = opt_exhaust ? exhaust_unit(m, keyidx, static_cast<size_t>(restart))
+                                : hillclimb_one(m, keyidx, restart);
           else
             {
               init_steckerbrett(m, opt_steckerbrett);
@@ -2097,7 +2272,7 @@ void filter_worker(machine & m,
         {
           key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                          rc12, gc12, cur_wo, rg6);
-          double s = hillclimb(m, cap);   /* single capped IC climb */
+          double s = hillclimb<false>(m, cap);   /* single capped IC climb */
 
           if (heap.size() < topn)
             heap.push(scored_key{s, idx});
@@ -2162,7 +2337,8 @@ void finish_worker(machine & m,
       key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                      rc12, gc12, cur_wo, rg6);
 
-      double score = hillclimb_restarts(m, idx);
+      double score = opt_exhaust ? exhaust_all_combos(m, idx)
+                                  : hillclimb_restarts(m, idx);
 
       if (better_cand(score, idx, local_best, local_best_idx))
         {
@@ -2390,13 +2566,20 @@ void bruteforce(char * result)
   g_table_count = nwo;
   g_table_bytes = nwo * static_cast<size_t>(asize) * asize * asize * asize;
 
-  /* With -c and no -F, the R plugboard restarts of each key are independent work items,
-     so the parallel space is total_keys x R -- this is what lets a fully-specified rotor
-     key (total_keys==1) still use every thread. The plain scan and the -F tiers keep one
-     item per key (restarts_par==1). */
+  /* With -c and no -F, the per-key work units are independent, so the parallel space is
+     total_keys x units -- this is what lets a fully-specified rotor key (total_keys==1) still
+     use every thread. For a plain climb the units are the restarts: --restarts 0 is one
+     (un-kicked) climb per key, --restarts N is N (kicked) climbs. For --exhaust the units are
+     the first-pair choices (each runs its own sub-exhaustion x restarts; REDESIGN Part D), so
+     exhaustion now scales with -T too. The plain scan and the -F tiers keep one item per key
+     (restarts_par==1). */
+  const size_t climbs_per_key =
+    (opt_restarts >= 1) ? static_cast<size_t>(opt_restarts) : 1;
+  const size_t units_per_key =
+    opt_exhaust ? (g_exhaust_firsts.size() / 2) : climbs_per_key;
   size_t restarts_par =
     (opt_hillclimb && (opt_prefilter <= 0) && (opt_prefilter_frac <= 0.0))
-      ? static_cast<size_t>(opt_restarts) : 1;
+      ? units_per_key : 1;
   size_t work_items = total_keys * restarts_par;
 
   /* never start more threads than there is work to hand out */
@@ -2608,51 +2791,88 @@ void help(FILE * out)
 {
   version(out);
   fprintf(out, "Usage: enigma [OPTIONS]\n");
-  fprintf(out, "  -h           Show help information\n");
-  fprintf(out, "  -v           Show version information\n");
-  fprintf(out, "  -u X         Reflector (umkehrwalze) X (A-C, N, M4 b/c, or .) [.]\n");
-  fprintf(out, "  -w XYZ       Wheels (walzen) XYZ (1-8 or .) [...]\n");
-  fprintf(out, "  -x integer   Highest wheel number to use (3-8) [5]\n");
-  fprintf(out, "  -n           Use the Norway Enigma reflector (N) and wheels (1-5)\n");
-  fprintf(out, "  -4           M4 (4-rotor naval) mode: -u selects thin reflector b/c;\n");
-  fprintf(out, "               -w/-r/-g take 4 chars, Greek wheel (B/G) / ring / start first\n");
-  fprintf(out, "  -r XYZ       Ring positions (ringstellung) XYZ (A-Z or .) [AA.]\n");
-  fprintf(out, "  -g XYZ       Start positions (grundstellung) XYZ (A-Z or .) [...]\n");
-  fprintf(out, "  -s AB...     Plugboard (steckerbrett) letter pairs (A-Z pairs) [none];\n");
-  fprintf(out, "               held fixed -- the -c/-A climb keeps them and finds the rest\n");
-  fprintf(out, "  -c           Perform hill climbing to determine plugboard settings\n");
-  fprintf(out, "  -I           First-improvement climb: ~2.8x cheaper per climb, so pair\n");
-  fprintf(out, "               with more -R for a net recovery win (needs -c) [off]\n");
-  fprintf(out, "  -J           Like -I but with dynamic best-first move ordering; wins on\n");
-  fprintf(out, "               ~10-plug messages, may lose with few plugs (implies -I) [off]\n");
-  fprintf(out, "  -M           Make the plug cap a strict descent target: at/over the cap\n");
-  fprintf(out, "               only merge/remove moves; best with a tight -S cap (needs -c) [off]\n");
-  fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
-  fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
-  fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
-  fprintf(out, "               rN = per-restart random plugs (N pairs, default 8),\n");
-  fprintf(out, "               aN = pin N plugs total (the -s pairs plus the rest forced) and\n");
-  fprintf(out, "               try every combination (a1 = 325 climbs; N>1 explodes -- an\n");
-  fprintf(out, "               exploration tool, -T 1; dominated by a high -R at equal compute).\n");
-  fprintf(out, "               E.g. -S a1i4q10  or  -s ABCD -S a3q10  (2 fixed + 1 forced)\n");
-  fprintf(out, "  -A integer   Recover the plugboard by simulated annealing instead of the\n");
-  fprintf(out, "               greedy climb; integer = move budget (needs -c) [off].\n");
-  fprintf(out, "               Honours the -S target cap: -A N -S qK caps it at K plugs\n");
-  fprintf(out, "  -e integer   Random seed for the restart perturbation (also $ENIGMA_SEED);\n");
-  fprintf(out, "               default is a fresh random seed each run, echoed for repeating\n");
-  fprintf(out, "  -l language  Scoring language (english, german, danish, french); required\n");
-  fprintf(out, "               for -m/-b/-t/-q (no default), not used by -i\n");
-  fprintf(out, "  -i           Use index of coincidence (IC) to score; needs no -l [default]\n");
-  fprintf(out, "  -m           Use monogram statistics to determine plaintext score\n");
-  fprintf(out, "  -b           Use bigram statistics to determine plaintext score\n");
-  fprintf(out, "  -t           Use trigram statistics to determine plaintext score\n");
-  fprintf(out, "  -q           Use quadgram statistics to determine plaintext score\n");
-  fprintf(out, "  -p filename  Name of file containing plaintext to compare result with\n");
-  fprintf(out, "  -F N[%%]      Key pre-filter: rank keys by a cheap IC climb, then run\n");
-  fprintf(out, "               the full -c climb on only the top N keys, or top N%% of\n");
-  fprintf(out, "               the keyspace (needs -c) [off]\n");
-  fprintf(out, "  -d directory Directory holding the n-gram files (or $ENIGMA_DATA) [ngrams]\n");
-  fprintf(out, "  -T integer   Number of worker threads for the search (1-256) [1]\n");
+  fprintf(out, "\n");
+
+  /* Options are grouped basic/advanced; every option shows its short flag and
+     its long alias. Unambiguous long-name prefixes (e.g. --lang, --restart) also
+     work. Descriptions are aligned in a 24-column spec field (continuation lines
+     pass an empty spec) and kept within 79 columns. */
+  fprintf(out, "Basic options:\n");
+  fprintf(out, "  %-24s %s\n", "-h, --help", "Show help information");
+  fprintf(out, "  %-24s %s\n", "-v, --version", "Show version information");
+  fprintf(out, "  %-24s %s\n", "-u, --reflector X",
+          "Reflector (umkehrwalze); A-C, N, M4 b/c, or . [.]");
+  fprintf(out, "  %-24s %s\n", "-w, --wheels XYZ", "Wheels (walzen); 1-8 or . [...]");
+  fprintf(out, "  %-24s %s\n", "-r, --rings XYZ",
+          "Ring positions (ringstellung); A-Z or . [AA.]");
+  fprintf(out, "  %-24s %s\n", "-g, --start-position XYZ",
+          "Start positions (grundstellung); A-Z or . [...]");
+  fprintf(out, "  %-24s %s\n", "-s, --plugboard AB...",
+          "Plugboard (steckerbrett) A-Z letter pairs [none];");
+  fprintf(out, "  %-24s %s\n", "", "held fixed; the -c/-A climb finds the rest");
+  fprintf(out, "  %-24s %s\n", "-n, --norway",
+          "Norway Enigma: reflector N and wheels (1-5)");
+  fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
+  fprintf(out, "  %-24s %s\n", "", "reflector b/c; -w/-r/-g take 4 chars (Greek");
+  fprintf(out, "  %-24s %s\n", "", "wheel/ring/start first)");
+  fprintf(out, "  %-24s %s\n", "-c, --climb",
+          "Perform hill climbing to find plugboard settings");
+  fprintf(out, "  %-24s %s\n", "-R, --restarts N",
+          "Random restart attempts: 0 = one deterministic");
+  fprintf(out, "  %-24s %s\n", "", "climb; N = N kicked climbs, keep best [0]");
+  fprintf(out, "  %-24s %s\n", "-S, --score schedule",
+          "Staged plugboard climb: <letter><cap> tokens,");
+  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q (number caps plug pairs; the last");
+  fprintf(out, "  %-24s %s\n", "", "stage is the target/ranking model). E.g. --score");
+  fprintf(out, "  %-24s %s\n", "", "i4q10 (bigram pre-pass then quad, both capped).");
+  fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
+  fprintf(out, "  %-24s %s\n", "-l, --language language",
+          "Scoring language (english/german/danish/french);");
+  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q (no default); not for -i");
+  fprintf(out, "  %-24s %s\n", "-i, --ic",
+          "Index of coincidence (IC); needs no -l [default]");
+  fprintf(out, "  %-24s %s\n", "-m, --mono", "Monogram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-b, --bi", "Bigram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-t, --tri", "Trigram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-q, --quad", "Quadgram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
+          "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
+  fprintf(out, "  %-24s %s\n", "-T, --threads N",
+          "Worker threads for the search (1-256) [1]");
+  fprintf(out, "\n");
+  fprintf(out, "Advanced options:\n");
+  fprintf(out, "  %-24s %s\n", "-x, --max-wheel N", "Highest wheel number to use (3-8) [5]");
+  fprintf(out, "  %-24s %s\n", "-A, --anneal N",
+          "Recover the plugboard by simulated annealing");
+  fprintf(out, "  %-24s %s\n", "", "instead of the greedy climb; N = move budget");
+  fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
+  fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
+  fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
+          "Key pre-filter: rank by a cheap IC climb, then");
+  fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
+  fprintf(out, "  %-24s %s\n", "", "top N% of the keyspace (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "-I, --first-improve",
+          "First-improvement climb: ~2.8x cheaper per climb,");
+  fprintf(out, "  %-24s %s\n", "", "so pair with more -R for a net win (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "-J, --dynamic-order",
+          "Like -I with dynamic best-first move ordering;");
+  fprintf(out, "  %-24s %s\n", "", "wins ~10-plug, may lose few-plug (implies -I) [off]");
+  fprintf(out, "  %-24s %s\n", "-M, --cap-target",
+          "Make the plug cap a strict descent target: only");
+  fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
+  fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
+  fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
+  fprintf(out, "  %-24s %s\n", "-p, --compare filename",
+          "Plaintext file to compare the result against");
+  fprintf(out, "  %-24s %s\n", "--random K",
+          "Random-kick size: plug pairs injected per restart");
+  fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = no kick, a control) [10]");
+  fprintf(out, "  %-24s %s\n", "--exhaust E",
+          "Force E extra plug pairs among the free letters,");
+  fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
+  fprintf(out, "  %-24s %s\n", "", "exploration tool (E=1 = 325 climbs; E>1 explodes;");
+  fprintf(out, "  %-24s %s\n", "", "needs -c; a high -R dominates it) [off]");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
@@ -2668,8 +2888,8 @@ void help(FILE * out)
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J -S r10i4q10 -R 40 -q -l english\n");
-  fprintf(out, "  SA:     -c -A 12000 -S q10 -R 12 -q -l english\n");
+  fprintf(out, "  greedy: -c -J --score i4q10 --random 10 -R 40 -q -l english\n");
+  fprintf(out, "  SA:     -c -A 12000 --score q10 -R 12 -q -l english\n");
   fprintf(out, "\n");
 }
 
@@ -2705,7 +2925,7 @@ void show_settings()
   fprintf(stderr, "Hillclimb:  %s\n", opt_hillclimb ? "yes" : "no");
   if (opt_hillclimb && (opt_anneal > 0))
     fprintf(stderr, "            simulated annealing, %d moves\n", opt_anneal);
-  if (opt_hillclimb && (opt_restarts > 1))
+  if (opt_hillclimb && (opt_restarts >= 1))
     fprintf(stderr, "            %d restarts, %d-pair kick\n",
             opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged && (opt_anneal == 0))
@@ -2713,21 +2933,17 @@ void show_settings()
   if (opt_hillclimb && opt_exhaust)
     {
       int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
-      int to_force = opt_exhaust - fixed_pairs;
       int free_letters = asize - 2 * fixed_pairs;
-      double combos = 1.0;   /* free!/(2^k k! (free-2k)!) sets of k = to_force disjoint pairs */
-      for (int i = 0; i < to_force; i++)
-        combos *= static_cast<double>((free_letters - 2*i) * (free_letters - 2*i - 1))
-                  / (2.0 * (i + 1));
-      fprintf(stderr, "            partial exhaustion: N=%d plug pairs pinned, %d forced "
-              "(%.0f combinations)\n", opt_exhaust, to_force, combos);
+      double combos = disjoint_pair_combinations(free_letters, opt_exhaust);
+      fprintf(stderr, "            partial exhaustion: %d forced pair(s) on top of %d "
+              "-s pair(s) (%.0f combinations)\n", opt_exhaust, fixed_pairs, combos);
     }
   if (opt_hillclimb && opt_capmerge)
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" : "");
-  if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts > 1)))
+  if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts >= 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));
 
@@ -2807,9 +3023,13 @@ int main(int argc, char * * argv)
   opt_firstimprove = 0;
   opt_dynorder = 0;
   opt_capmerge = 0;
-  opt_restarts = 1;
-  opt_staged = 0;   /* -S schedule string, or 0 for the single-model climb */
+  opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
+  opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
+  opt_random_set = false;
+  opt_exhaust = 0;    /* --exhaust E forced pairs, 0 = off */
+  opt_staged = 0;   /* --score schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
+  opt_model_selector = -1;  /* no -i/-m/-b/-t/-q selector seen yet */
   opt_norenigma = 0;
   opt_m4 = 0;
   opt_threads = 1;
@@ -2821,8 +3041,54 @@ int main(int argc, char * * argv)
 
   /* get arguments */
 
+  /* Long-only option identifiers (no short form): values above the byte range so they
+     never collide with a short flag char. --random and --exhaust are the seed-pipeline
+     options introduced in REDESIGN Part B. */
+  enum { OPT_RANDOM = 256, OPT_EXHAUST };
+
+  /* Long-option aliases for the short flags (Part A of REDESIGN.md), plus the two
+     long-only options above (Part B). Each aliased long name maps onto its short value,
+     so the switch below is shared. Unambiguous prefixes (e.g. --lang, --restart) are
+     accepted natively by getopt_long. */
+  static const struct option long_options[] =
+    {
+      { "reflector",      required_argument, nullptr, 'u' },
+      { "wheels",         required_argument, nullptr, 'w' },
+      { "rings",          required_argument, nullptr, 'r' },
+      { "start-position", required_argument, nullptr, 'g' },
+      { "plugboard",      required_argument, nullptr, 's' },
+      { "compare",        required_argument, nullptr, 'p' },
+      { "language",       required_argument, nullptr, 'l' },
+      { "max-wheel",      required_argument, nullptr, 'x' },
+      { "threads",        required_argument, nullptr, 'T' },
+      { "restarts",       required_argument, nullptr, 'R' },
+      { "score",          required_argument, nullptr, 'S' },
+      { "prefilter",      required_argument, nullptr, 'F' },
+      { "seed",           required_argument, nullptr, 'e' },
+      { "anneal",         required_argument, nullptr, 'A' },
+      { "ngrams",         required_argument, nullptr, 'd' },
+      { "first-improve",  no_argument,       nullptr, 'I' },
+      { "dynamic-order",  no_argument,       nullptr, 'J' },
+      { "cap-target",     no_argument,       nullptr, 'M' },
+      { "ic",             no_argument,       nullptr, 'i' },
+      { "mono",           no_argument,       nullptr, 'm' },
+      { "bi",             no_argument,       nullptr, 'b' },
+      { "tri",            no_argument,       nullptr, 't' },
+      { "quad",           no_argument,       nullptr, 'q' },
+      { "climb",          no_argument,       nullptr, 'c' },
+      { "norway",         no_argument,       nullptr, 'n' },
+      { "m4",             no_argument,       nullptr, '4' },
+      { "version",        no_argument,       nullptr, 'v' },
+      { "help",           no_argument,       nullptr, 'h' },
+      { "random",         required_argument, nullptr, OPT_RANDOM  },
+      { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
+      { nullptr,          0,                 nullptr, 0   }
+    };
+
   int c;
-  while ((c = getopt(argc, argv, "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqcvhn4")) != -1)
+  while ((c = getopt_long(argc, argv,
+                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqcvhn4",
+                          long_options, nullptr)) != -1)
     {
       switch (c)
         {
@@ -2850,19 +3116,19 @@ int main(int argc, char * * argv)
           opt_plaintext = optarg;
           break;
         case 'i':
-          opt_scoring = SCORE_IC;
+          select_model(SCORE_IC);
           break;
         case 'm':
-          opt_scoring = SCORE_MONO;
+          select_model(SCORE_MONO);
           break;
         case 'b':
-          opt_scoring = SCORE_BI;
+          select_model(SCORE_BI);
           break;
         case 't':
-          opt_scoring = SCORE_TRI;
+          select_model(SCORE_TRI);
           break;
         case 'q':
-          opt_scoring = SCORE_QUAD;
+          select_model(SCORE_QUAD);
           break;
         case 'c':
           opt_hillclimb = 1;
@@ -2888,6 +3154,13 @@ int main(int argc, char * * argv)
           break;
         case 'R':
           opt_restarts = atoi(optarg);
+          break;
+        case OPT_RANDOM:
+          opt_perturb = atoi(optarg);
+          opt_random_set = true;
+          break;
+        case OPT_EXHAUST:
+          opt_exhaust = atoi(optarg);
           break;
         case 'e':
           opt_seed = strtoull(optarg, nullptr, 10);
@@ -3052,13 +3325,35 @@ int main(int argc, char * * argv)
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
 
-  if ((opt_restarts < 1) || (opt_restarts > max_restarts))
-    fatal("Illegal restart count (must be 1 to 1000000000)");
+  /* --restarts 0 (the new default) is legal: one deterministic climb from the seed, no
+     kick. --restarts N>=1 runs N kicked climbs. */
+  if ((opt_restarts < 0) || (opt_restarts > max_restarts))
+    fatal("Illegal restart count (--restarts must be 0 to 1000000000)");
 
-  /* Expand the -S schedule into opt_stages[]/opt_perturb and set opt_scoring to the
-     target (last) stage. Validates the schedule syntax; fatal() on error. With no
-     -S this builds the single -i/-m/.../-q stage. */
+  /* --random K is the kick size (plug pairs injected per restart); K=0 is a legal control. */
+  if ((opt_perturb < 0) || (opt_perturb > pairs_uncapped))
+    fatal("Illegal kick size (--random must be 0 to 13 plug pairs)");
+
+  /* Expand the --score schedule into opt_stages[] and set opt_scoring to the target
+     (last) stage. Validates the schedule syntax; fatal() on error. With no --score
+     this builds the single -i/-m/.../-q stage. */
   parse_schedule();
+
+  /* A model selector (-i/-m/-b/-t/-q) is a --score <model> alias, so if BOTH are given
+     they must agree on the target/ranking model: after parse_schedule() opt_scoring is the
+     --score target, so a selector naming a different model is genuinely ambiguous -- reject
+     it (REDESIGN Part C). Agreement (e.g. -q --score i4q10, or -q --score q) is fine. When
+     no --score is given, opt_scoring already equals the selector, so this never fires. */
+  if ((opt_model_selector != -1) && opt_staged && (opt_model_selector != opt_scoring))
+    {
+      static const char * const model_name[] =
+        { "IC", "monograms", "bigrams", "trigrams", "quadgrams" };
+      char msg[128];
+      snprintf(msg, sizeof msg,
+               "Conflicting scoring models: selector picks %s but --score targets %s; "
+               "pick one", model_name[opt_model_selector], model_name[opt_scoring]);
+      fatal(msg);
+    }
 
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
@@ -3106,23 +3401,59 @@ int main(int argc, char * * argv)
   if (opt_capmerge && (! opt_hillclimb))
     fatal("Cap-as-target (-M) needs the plugboard hill-climb (-c)");
 
-  /* -S aN partial exhaustion is a plugboard-climb strategy (needs -c), runs the greedy
-     staged climb (not SA), and mutates the global plug_fixed[] per pair, so the prototype
-     is single-threaded. N is bounded by the free plug pairs (26 letters minus the -s pins). */
+  /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
+     scan, so passing them without -c is an error (fail fast rather than silently ignore). */
+  if (opt_random_set && (! opt_hillclimb))
+    fatal("The random kick (--random) needs the plugboard hill-climb (-c)");
   if (opt_exhaust && (! opt_hillclimb))
-    fatal("Partial exhaustion (-S aN) needs the plugboard hill-climb (-c)");
+    fatal("Partial exhaustion (--exhaust) needs the plugboard hill-climb (-c)");
+
+  /* --exhaust E forces E extra plug pairs among the free letters (on top of any -s pairs); it
+     runs the greedy staged climb (not SA). E is bounded by the free plug pairs (13 minus the
+     -s pins). It now parallelises over the first forced pair (REDESIGN Part D), so -T > 1 is
+     fine; each worker climbs against its own PLUG_FIXED_EX pin set. */
   if (opt_exhaust && (opt_anneal > 0))
-    fatal("Partial exhaustion (-S aN) is not supported with simulated annealing (-A)");
-  if (opt_exhaust && (opt_threads > 1))
-    fatal("Partial exhaustion (-S aN) is a single-threaded prototype; use -T 1");
+    fatal("Partial exhaustion (--exhaust) is not supported with simulated annealing (-A)");
   if (opt_exhaust)
     {
-      /* aN is the TOTAL pinned pairs (like a model-token cap): N - fixed are forced, so N
-         must be at least the -s pairs. The parse cap N <= 13 already bounds N - fixed to the
-         free plug pairs (13 - fixed). */
       int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
-      if (opt_exhaust < fixed_pairs)
-        fatal("Partial exhaustion (-S aN): N (total plug pairs) is below the -s fixed pairs");
+      int free_pairs = pairs_uncapped - fixed_pairs;   /* free letters / 2 */
+      if (opt_exhaust < 1)
+        fatal("Illegal partial exhaustion (--exhaust must be >= 1 forced plug pairs)");
+      if (opt_exhaust > free_pairs)
+        fatal("Partial exhaustion (--exhaust E): E exceeds the free plug pairs (13 minus -s pairs)");
+      build_exhaust_firsts();   /* the parallel first-pair work list (read-only after) */
+    }
+
+  /* Non-fatal warning: if --restarts N asks for more kicked restarts than there are distinct
+     K-pair kicks among the free letters, the restarts must repeat by pigeonhole. free letters =
+     26 - 2*(-s pairs + --exhaust forced pairs); the kick is clamped to at most free/2 pairs.
+     Mainly catches the small-K / high-N footgun (e.g. --random 1 --restarts 1000). */
+  if (opt_hillclimb && (opt_restarts >= 1))
+    {
+      int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
+      int free_letters = asize - 2 * (fixed_pairs + opt_exhaust);
+      if (free_letters < 0)
+        free_letters = 0;
+      int keff = opt_perturb;
+      if (keff > free_letters / 2)
+        keff = free_letters / 2;
+      double distinct = disjoint_pair_combinations(free_letters, keff);
+      if (static_cast<double>(opt_restarts) > distinct)
+        fprintf(stderr, "Warning: --restarts %d exceeds the %.0f distinct %d-pair kick(s) "
+                "among %d free letters; restarts will repeat\n",
+                opt_restarts, distinct, keff, free_letters);
+    }
+
+  /* Non-fatal warning: a --score schedule with climb-only detail (more than one stage, or any
+     cap) does nothing in a bare rotor scan -- there is no climb to apply the stages/caps to.
+     Flag a forgotten -c (or a pasted climb recipe) but proceed, ranking by the target model. */
+  if ((! opt_hillclimb) && opt_staged && schedule_is_climb_only())
+    {
+      static const char * const model_name[] =
+        { "IC", "monograms", "bigrams", "trigrams", "quadgrams" };
+      fprintf(stderr, "Warning: --score climb schedule ignored without -c; "
+              "ranking by %s\n", model_name[opt_scoring]);
     }
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
@@ -3149,9 +3480,9 @@ int main(int argc, char * * argv)
     opt_scoring = SCORE_IC;
 
   /* The n-gram scoring models (mono/bi/tri/quad) need a language, with no default;
-     the index of coincidence (-i) and the r token are language-independent. Every
-     stage that reads an n-gram table -- pre-pass or target -- needs -l. Only enforce
-     this when scoring actually runs. */
+     the index of coincidence (-i) is language-independent. Every stage that reads an
+     n-gram table -- pre-pass or target -- needs -l. Only enforce this when scoring
+     actually runs. */
   if (needs_scoring && ! opt_language)
     for (int i = 0; i < opt_nstages; i++)
       if (opt_stages[i].model != SCORE_IC)
@@ -3203,7 +3534,7 @@ int main(int argc, char * * argv)
 
   init();
 
-  init_plug_fixed(opt_steckerbrett);   /* freeze -s plugs against the climb/SA */
+  init_plug_fixed(opt_steckerbrett);   /* -s seed each worker thread copies into plug_fixed */
 
   /* try all combinations (bruteforce allocates one machine per worker thread) */
 

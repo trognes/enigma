@@ -1,0 +1,58 @@
+name: Bench
+
+# Performance benchmarks (tests/bench.sh) across both compilers and both Linux
+# architectures: x86_64 (ubuntu-24.04) and arm64 (ubuntu-24.04-arm; free for
+# public repositories). The hot path is compiler- AND arch-sensitive (see the
+# struct-layout / aliasing notes in CLAUDE.md), so a change can regress one
+# cell of this matrix while the other three stay clean.
+#
+# On pull requests each cell runs the same-machine A/B (make bench BASE=<PR
+# base> LONG=1) -- the only reliable comparison, since absolute timings differ
+# per runner. The A/B step is ADVISORY (continue-on-error): shared CI runners
+# are noisy and the climb/scan tiers are known to be bimodal on shared boxes
+# (CLAUDE.md), so a flagged regression here means "re-run and investigate on
+# quiet hardware, and compare disassembly", not an automatic block.
+#
+# On pushes to the long-lived branches (and manual dispatch) there is no
+# meaningful base, so each cell just records HEAD timings as a reference.
+
+on:
+  pull_request:
+  push:
+    branches: [master, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: bench-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: bench (${{ matrix.cxx }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     arch: x86_64, cxx: g++ }
+          - { os: ubuntu-24.04,     arch: x86_64, cxx: clang++ }
+          - { os: ubuntu-24.04-arm, arch: arm64,  cxx: g++ }
+          - { os: ubuntu-24.04-arm, arch: arm64,  cxx: clang++ }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # the A/B builds BASE from a git worktree, so it needs history
+      - name: Compiler and machine
+        run: |
+          ${{ matrix.cxx }} --version
+          uname -m
+          nproc
+      - name: Build
+        run: make CXX=${{ matrix.cxx }}
+      - name: Bench A/B vs PR base (advisory)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: make bench CXX=${{ matrix.cxx }} LONG=1 THRESHOLD=15 BASE=${{ github.event.pull_request.base.sha }}
+      - name: Bench HEAD (reference timings)
+        if: github.event_name != 'pull_request'
+        run: make bench CXX=${{ matrix.cxx }} LONG=1

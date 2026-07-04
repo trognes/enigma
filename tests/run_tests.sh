@@ -374,43 +374,72 @@ pbv_pb=$(printf '%s\n' "$pbv_err" | grep "W:" | tail -1 | sed -n 's/.*S://p' | g
 check "restart climb: displayed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pbv_pb")" \
   "$pbv_rec"
-# The no-r-token default kick is a fixed 8 pairs (CODE_REVIEW §9): a plain -R run
-# must equal an explicit -S r8 run.
-check "restarts: default kick == -S r8 (fixed 8 pairs)" \
+# The --random default kick is a fixed 10 pairs: a plain kicked -R run must equal an
+# explicit --random 10 run (REDESIGN Part B: default kick 8 -> 10).
+check "restarts: default kick == --random 10" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -S r8q)"
-# A bare r token (no count) takes the default kick, just as a bare model token is
-# uncapped: with the model stages held equal, -S riq must equal -S r8iq.
-check "restarts: bare r == default kick (-S riq == -S r8iq)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -S riq)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -S r8iq)"
-# -R is validated: 0 is rejected, the count may be large (well past the old 100000
-# guard), but an absurd value over the 1000000000 cap is still rejected. The accept
-# case omits -c so only the validation runs (no actual restart climbs).
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --random 10)"
+# --restarts 0 (the new default) is one deterministic seed climb, no kick: an explicit
+# -R 0 must equal the no-R default, and both must be -T-independent (trivially, one climb).
+check "restarts: -R 0 == default (one deterministic climb)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 0)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c)"
+# -R is validated: 0 is now legal (the default), the count may be large (well past the
+# old 100000 guard), a negative value is rejected, and an absurd value over the
+# 1000000000 cap is still rejected. The accept cases omit -c so only validation runs.
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 0 >/dev/null 2>&1
-check "restart count 0 rejected (exit code)" "$?" "1"
+check "restart count 0 accepted (exit code)" "$?" "0"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R -1 >/dev/null 2>&1
+check "restart count -1 rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -R 200000 >/dev/null 2>&1
 check "restart count past old 100000 cap accepted (exit code)" "$?" "0"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -R 1000000001 >/dev/null 2>&1
 check "restart count over 1000000000 rejected (exit code)" "$?" "1"
+# --random is the kick size (0..13); K=0 is legal (a no-perturbation control), an
+# out-of-range K is rejected, and --random without -c is an error (nothing to kick).
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c --random 0 >/dev/null 2>&1
+check "kick --random 0 accepted (exit code)" "$?" "0"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c --random 14 >/dev/null 2>&1
+check "kick --random 14 (over max) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA --random 5 >/dev/null 2>&1
+check "kick --random without -c rejected (exit code)" "$?" "1"
 
-# Partial plugboard exhaustion (-S aN): pin N plug pairs total (the -s pairs count toward
-# N, so N-fixed are forced), try every combination, keep the best climb. On an easy long
-# message it recovers exactly (a KAT of the a-token path). a1 (no -s) forces the 325 first
-# pairs; -s AB -S a2 pins the true AB and forces one more. Single-threaded, greedy-only
-# prototype; the guards below enforce -T 1 / no -A / N >= fixed.
-check "exhaustion -S a1 recovers an easy message" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -S a1i4q10 -T 1)" \
+# Partial plugboard exhaustion (--exhaust E): force E extra plug pairs among the free
+# letters (on top of any -s pairs), try every combination, keep the best climb. On an easy
+# long message it recovers exactly (a KAT of the exhaustion path). --exhaust 1 (no -s)
+# forces each of the 325 first pairs; -s AB --exhaust 1 pins the true AB and forces one
+# more. Greedy-only; the guards below enforce no -A and E within the free plug pairs.
+check "exhaustion --exhaust 1 recovers an easy message" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --score i4q10 -T 1)" \
   "$r_pt"
-check "exhaustion -s AB -S a2 (fixed pair counts toward N) recovers" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB" -c -S a2i4q10 -T 1)" \
+check "exhaustion -s AB --exhaust 1 (1 fixed + 1 forced) recovers" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB" -c --exhaust 1 --score i4q10 -T 1)" \
   "$r_pt"
-printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -S a1q -T 4 >/dev/null 2>&1
-check "exhaustion -S aN rejects -T > 1 (exit code)" "$?" "1"
-printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A 6000 -S a1q -T 1 >/dev/null 2>&1
-check "exhaustion -S aN rejects -A simulated annealing (exit code)" "$?" "1"
-printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -s "ABCD" -c -S a1q -T 1 >/dev/null 2>&1
-check "exhaustion -S aN rejects N below the -s fixed pairs (exit code)" "$?" "1"
+# Exhaustion composes with the kick and restarts (the old silent no-op is fixed): a kicked
+# exhaustion run still recovers the easy message.
+check "exhaustion --exhaust 1 --random 2 --restarts 3 recovers" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 1 -e 5)" \
+  "$r_pt"
+# Part D: exhaustion is now parallel (first forced pair = the work unit), so it runs on
+# -T > 1 and stays -T-independent -- pure exhaustion and the kicked+restart form both agree
+# byte-for-byte across thread counts, and E=2 too.
+check "exhaustion --exhaust 1 is -T-independent (T1==T8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --score i4q10 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --score i4q10 -T 8)"
+check "exhaustion --exhaust 1 --random 2 --restarts 3 is -T-independent (T1==T8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 1 -e 5)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 8 -e 5)"
+check "exhaustion --exhaust 2 is -T-independent (T1==T4)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 4)"
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A 6000 --exhaust 1 -T 1 >/dev/null 2>&1
+check "exhaustion --exhaust rejects -A simulated annealing (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA --exhaust 1 -T 1 >/dev/null 2>&1
+check "exhaustion --exhaust without -c rejected (exit code)" "$?" "1"
+# E must fit in the free plug pairs: 11 -s pairs leave 4 free letters = 2 free pairs, so
+# --exhaust 3 has no room and is rejected.
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -s "ABCDEFGHIJKLMNOPQRSTUV" -c --exhaust 3 -T 1 >/dev/null 2>&1
+check "exhaustion --exhaust E over the free pairs rejected (exit code)" "$?" "1"
 
 # Random seed (-e / $ENIGMA_SEED): the restart perturbation is seeded from it mixed
 # with the key index, so a fixed seed is reproducible and stays -T-independent, an
@@ -430,39 +459,72 @@ check "seed: pinned ENIGMA_SEED=0 equals -e 0" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -e 0)"
 
-# Staged plugboard climb (-S schedule: a bigram pre-pass, then the quad target as
-# the last token). It must stay -T-independent, and recover a small plugboard on a
+# Staged plugboard climb (--score schedule: a bigram pre-pass, then the quad target as
+# the last stage). It must stay -T-independent, and recover a small plugboard on a
 # long message (where the bigram pre-pass reliably steers the quad climb to the true
-# board). The restart perturbation here is the full-random default (no r token).
+# board). The kick here is the --random default (10 pairs).
 s_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
-check "staged: -S bq -R 4 result is -T-independent" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c -S bq -R 4 -T 1)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c -S bq -R 4 -T 4)"
-check "staged: -S bq recovers plugboard (long message)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g AAA -c -S bq)" \
+check "staged: --score bq -R 4 result is -T-independent" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score bq -R 4 -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score bq -R 4 -T 4)"
+check "staged: --score bq recovers plugboard (long message)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g AAA -c --score bq)" \
   "$r_pt"
-# -S schedule is validated: a non-model/-r letter is rejected.
-printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S z >/dev/null 2>&1
-check "staged: bad -S schedule rejected (exit code)" "$?" "1"
+# --score schedule is validated: a non-model letter is rejected (the r/a tokens are gone,
+# moved to --random / --exhaust).
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score z >/dev/null 2>&1
+check "staged: bad --score schedule rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score r8q >/dev/null 2>&1
+check "staged: --score no longer accepts r token (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score a1q >/dev/null 2>&1
+check "staged: --score no longer accepts a token (exit code)" "$?" "1"
 
-# Per-stage plug-pair caps (the number after a model letter) and the per-restart
-# random token (r). Both must stay -T-independent.
-check "staged: -S r2i3q -R 4 result is -T-independent" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c -S r2i3q -R 4 -T 1)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c -S r2i3q -R 4 -T 4)"
-# r0 injects no plugs, so restarts are a no-op: -S r0iq -R 8 == -S iq -R 1.
-check "staged: -S r0 makes restarts a no-op" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c -S r0iq -R 8)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c -S iq -R 1)"
-# Schedule grammar is validated: out-of-range stage cap and r token are rejected.
-printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S q14 >/dev/null 2>&1
-check "staged: -S stage cap over max (q14) rejected (exit code)" "$?" "1"
-printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S q0 >/dev/null 2>&1
-check "staged: -S stage cap 0 (q0) rejected (exit code)" "$?" "1"
-printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S r99 >/dev/null 2>&1
-check "staged: -S r token over max (r99) rejected (exit code)" "$?" "1"
-printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c -S rir >/dev/null 2>&1
-check "staged: -S two r tokens rejected (exit code)" "$?" "1"
+# Per-stage plug-pair caps (the number after a model letter) composed with the kick
+# (--random) and restarts must stay -T-independent.
+check "staged: --score i3q --random 2 -R 4 is -T-independent" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 4)"
+# --random 0 injects no plugs, so N restarts all repeat the seed climb: --random 0 -R 8
+# equals the deterministic -R 0 (one seed climb).
+check "staged: --random 0 makes restarts a no-op" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score iq --random 0 -R 8)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score iq -R 0)"
+# Schedule grammar is validated: an out-of-range stage cap is rejected.
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score q14 >/dev/null 2>&1
+check "staged: --score stage cap over max (q14) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score q0 >/dev/null 2>&1
+check "staged: --score stage cap 0 (q0) rejected (exit code)" "$?" "1"
+
+# A --score climb schedule (more than one stage, or any cap) without -c is a non-fatal
+# warning (nothing to climb), and the run proceeds ranking by the target model.
+sc_warn=$(printf '%s' "$s_ct" | "$ENIGMA" -l english -u B -w 123 -r AAA -g "..A" --score i4q10 2>&1 >/dev/null)
+case "$sc_warn" in
+  *"climb schedule ignored without -c"*) check "staged: --score without -c warns" "ok" "ok" ;;
+  *)                                      check "staged: --score without -c warns" "$sc_warn" "*climb schedule ignored without -c*" ;;
+esac
+
+# Model selectors (-i/-m/-b/-t/-q) are aliases for a single uncapped --score <model>
+# stage (REDESIGN Part C). Setting the scoring model to *conflicting* values is a fatal
+# error: two disagreeing selectors, or a selector vs a different --score target. Agreement
+# (a repeated selector, or a selector matching the --score target) is accepted silently.
+printf 'ABCDE' | "$ENIGMA" -m -q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: two disagreeing selectors (-m -q) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -m --score q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: selector vs --score target (-m --score q) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -i --score q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: -i vs --score q rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: repeated agreeing selector (-q -q) accepted (exit code)" "$?" "0"
+printf 'ABCDE' | "$ENIGMA" -q --score q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: selector matching --score target (-q --score q) accepted (exit code)" "$?" "0"
+printf 'ABCDE' | "$ENIGMA" -q --score i4q10 -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: selector matching --score target/last stage (-q --score i4q10) accepted (exit code)" "$?" "0"
+# A selector alone sets the scan ranking model identically to the equivalent --score:
+# with a fixed key + wildcard start, -q and --score q must rank the same best decrypt.
+qsel_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA)
+check "model: -q selector == --score q (same ranking, no -c)" \
+  "$(run "$qsel_ct" -l english -u B -w 123 -r AAA -g ..A -q)" \
+  "$(run "$qsel_ct" -l english -u B -w 123 -r AAA -g ..A --score q)"
 
 # Key pre-filter (-F N): tier 1 ranks every key by a cheap IC climb and keeps the
 # top N; tier 2 runs the full -c/-R/-S climb on only those keys. On a long message

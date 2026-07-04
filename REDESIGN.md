@@ -1,9 +1,12 @@
 # REDESIGN — CLI consistency refactor
 
-**Status: DRAFT PLAN — not yet implemented.** Execute one Part at a time, in order,
-and only on an explicit "go" for that Part. Each Part must land (merged, suite green,
-determinism preserved) before the next begins. This is a **consistency / correctness**
-refactor, not a recovery or performance change — the bar for every Part is:
+**Status: ALL FOUR PARTS IMPLEMENTED** (long options; the seed pipeline —
+`--score` climb-only, `--random`/`--exhaust`, kicked-only `--restarts`; model selectors as
+`--score` aliases with conflict detection; parallel exhaustion). The plan below is kept as
+the record of what was agreed and shipped.
+Each Part must land (merged, suite green, determinism preserved) before the next begins.
+This is a **consistency / correctness** refactor, not a recovery or performance change —
+the bar for every Part is:
 
 - full suite green under g++ **and** clang (`-Werror`), TSan-clean;
 - behaviour **unchanged** for any invocation whose surface this Part does not explicitly
@@ -143,7 +146,7 @@ or a pasted climb recipe without breaking recipe reuse — same spirit as the pi
 
 ## The plan
 
-### Part A — long options (`getopt_long`, additive)  [was B1]
+### Part A — long options (`getopt_long`, additive)  [was B1]  ✅ DONE
 
 Switch `getopt`→`getopt_long`. Add every long name in the table; **keep all existing short
 forms**. New options (`--random`, `--exhaust`) are **not** added here (Part B). Rewrite
@@ -152,7 +155,7 @@ forms**. New options (`--random`, `--exhaust`) are **not** added here (Part B). 
 - **Done:** every short flag still works; every long flag and unambiguous prefix works;
   byte-identical outputs; suite green (g++/clang), plus a few long-option smoke tests.
 
-### Part B — seed pipeline (`--score` climb-only; `--random`/`--exhaust`)  [was A / A1]
+### Part B — seed pipeline (`--score` climb-only; `--random`/`--exhaust`)  [was A / A1]  ✅ DONE
 
 Move `r`/`a` out of `-S`; `-S` becomes `--score` (climb stages only). Add `--random K`
 (kick, default 10) and `--exhaust E` (forced pairs, long-only, single-threaded — A1).
@@ -170,7 +173,7 @@ the **climb-schedule-without-`-c` warning** (see "`--score` without `-c`" above)
 - **Done:** exhaustion+kick+restarts compose (test it); determinism preserved (`-T`-indep);
   suite green; recipes updated.
 
-### Part C — model selectors as aliases (C-lite)
+### Part C — model selectors as aliases (C-lite)  ✅ DONE
 
 Redefine `-i/-m/-b/-t/-q` precisely as aliases for `--score <model>` (single uncapped
 stage). Make it a **fatal error** when the scoring model is set to *conflicting* values by
@@ -182,7 +185,7 @@ scan-model rule holds (see "`--score` without `-c`" above): `--score`/selectors 
 - **Done:** selector ≡ `--score <m>`; **conflicting scoring models rejected** with a clear
   message; scan ranking works via `--score` alone; the no-`-c` staged-`--score` warning fires.
 
-### Part D — parallel exhaustion (A2)
+### Part D — parallel exhaustion (A2)  ✅ DONE
 
 Move `plug_fixed[]` into `struct machine` (per-worker). Make `--exhaust` combos a
 parallel work dimension (like restarts); drop the `-T 1` guard. Re-verify determinism and
