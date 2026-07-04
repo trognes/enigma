@@ -173,15 +173,14 @@ the **climb-schedule-without-`-c` warning** (see "`--score` without `-c`" above)
 ### Part C — model selectors as aliases (C-lite)
 
 Redefine `-i/-m/-b/-t/-q` precisely as aliases for `--score <model>` (single uncapped
-stage). Make precedence explicit but lenient: **warn** (non-fatal) when the scoring model is
-set to *conflicting* values by different options — a selector vs an `--score` target
-(e.g. `-m --score q`), or two disagreeing selectors (`-m -q`) — then proceed with the
-`--score` target if present, else the last option given (it wins). No warning when they agree
-(`-q --score q`, `-q -q`). Confirm the scan-model rule holds (see "`--score` without `-c`"
-above): `--score`/selectors set the **scan** ranking model with no `-c`, target model wins.
-- **Done:** selector ≡ `--score <m>`; conflicting scoring models **warned** (not rejected),
-  `--score`/last wins; scan ranking works via `--score` alone; the no-`-c` staged-`--score`
-  warning fires.
+stage). Make it a **fatal error** when the scoring model is set to *conflicting* values by
+different options — a selector vs an `--score` target (e.g. `-m --score q`), or two
+disagreeing selectors (`-m -q`) — since the intended model is genuinely ambiguous; fail fast
+and make the user pick. No error when they agree (`-q --score q`, `-q -q`). Confirm the
+scan-model rule holds (see "`--score` without `-c`" above): `--score`/selectors set the
+**scan** ranking model with no `-c`, target model wins.
+- **Done:** selector ≡ `--score <m>`; **conflicting scoring models rejected** with a clear
+  message; scan ranking works via `--score` alone; the no-`-c` staged-`--score` warning fires.
 
 ### Part D — parallel exhaustion (A2)
 
