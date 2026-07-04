@@ -495,6 +495,29 @@ case "$sc_warn" in
   *)                                      check "staged: --score without -c warns" "$sc_warn" "*climb schedule ignored without -c*" ;;
 esac
 
+# Model selectors (-i/-m/-b/-t/-q) are aliases for a single uncapped --score <model>
+# stage (REDESIGN Part C). Setting the scoring model to *conflicting* values is a fatal
+# error: two disagreeing selectors, or a selector vs a different --score target. Agreement
+# (a repeated selector, or a selector matching the --score target) is accepted silently.
+printf 'ABCDE' | "$ENIGMA" -m -q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: two disagreeing selectors (-m -q) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -m --score q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: selector vs --score target (-m --score q) rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -i --score q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: -i vs --score q rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: repeated agreeing selector (-q -q) accepted (exit code)" "$?" "0"
+printf 'ABCDE' | "$ENIGMA" -q --score q -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: selector matching --score target (-q --score q) accepted (exit code)" "$?" "0"
+printf 'ABCDE' | "$ENIGMA" -q --score i4q10 -l english -u B -w 123 -r AAA -g ..A >/dev/null 2>&1
+check "model: selector matching --score target/last stage (-q --score i4q10) accepted (exit code)" "$?" "0"
+# A selector alone sets the scan ranking model identically to the equivalent --score:
+# with a fixed key + wildcard start, -q and --score q must rank the same best decrypt.
+qsel_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA)
+check "model: -q selector == --score q (same ranking, no -c)" \
+  "$(run "$qsel_ct" -l english -u B -w 123 -r AAA -g ..A -q)" \
+  "$(run "$qsel_ct" -l english -u B -w 123 -r AAA -g ..A --score q)"
+
 # Key pre-filter (-F N): tier 1 ranks every key by a cheap IC climb and keeps the
 # top N; tier 2 runs the full -c/-R/-S climb on only those keys. On a long message
 # the true rotor key sits comfortably inside a generous top-N, so the pre-filter

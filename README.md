@@ -135,7 +135,11 @@ distinct offsets rather than every ring×start pair.
 The **default model is the index of coincidence** (`-i`) — the only one that needs
 no language, so the tool runs out of the box with no scoring options. Quadgrams
 (`-q`) discriminate the correct key most sharply and are the recommended model when
-you know the language; pass `-q -l <lang>` to use them. The n-gram tables are highly
+you know the language; pass `-q -l <lang>` to use them. Each selector is just an
+alias for a single-stage `--score <model>`, so setting the model to **conflicting**
+values — two disagreeing selectors (`-m -q`), or a selector against a different
+`--score` target (`-m --score q`) — is a **fatal error**; agreement (`-q --score q`,
+`-q --score i4q10`) is fine. The n-gram tables are highly
 language-specific — **`-l` must match the language of the plaintext**, especially
 for `-q` (scoring an English message with `-l german` typically fails). Note that
 `-l` on its own does nothing: it only takes effect with an n-gram model, so it is

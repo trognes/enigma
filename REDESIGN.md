@@ -1,8 +1,9 @@
 # REDESIGN — CLI consistency refactor
 
-**Status: Part A and Part B implemented** (long options; the seed pipeline —
-`--score` climb-only, `--random`/`--exhaust`, kicked-only `--restarts`). **Parts C and D
-remain.** Execute one Part at a time, in order, and only on an explicit "go" for that Part.
+**Status: Parts A, B and C implemented** (long options; the seed pipeline —
+`--score` climb-only, `--random`/`--exhaust`, kicked-only `--restarts`; model selectors as
+`--score` aliases with conflict detection). **Part D remains.** Execute one Part at a time,
+in order, and only on an explicit "go" for that Part.
 Each Part must land (merged, suite green, determinism preserved) before the next begins.
 This is a **consistency / correctness** refactor, not a recovery or performance change —
 the bar for every Part is:
@@ -172,7 +173,7 @@ the **climb-schedule-without-`-c` warning** (see "`--score` without `-c`" above)
 - **Done:** exhaustion+kick+restarts compose (test it); determinism preserved (`-T`-indep);
   suite green; recipes updated.
 
-### Part C — model selectors as aliases (C-lite)
+### Part C — model selectors as aliases (C-lite)  ✅ DONE
 
 Redefine `-i/-m/-b/-t/-q` precisely as aliases for `--score <model>` (single uncapped
 stage). Make it a **fatal error** when the scoring model is set to *conflicting* values by

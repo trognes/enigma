@@ -258,7 +258,12 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 - `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad. **IC is the default**
   — the only model needing no `-l`, so the tool runs with no scoring options (an
   n-gram default would be inconsistent: it requires a language, which has no default).
-  Quad is the sharpest and the recommended model when the language is known.
+  Quad is the sharpest and the recommended model when the language is known. Each
+  selector is a **thin alias for a single uncapped `--score <model>` stage** (REDESIGN
+  Part C); it sets the scan **ranking** model and the climb **target** model. Setting the
+  model to *conflicting* values is a **fatal error** — two disagreeing selectors (`-m -q`)
+  or a selector vs a different `--score` target (`-m --score q`) — since the intent is
+  genuinely ambiguous; agreement is silent (`-q -q`, `-q --score q`, `-q --score i4q10`).
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (needs `-c`; `0` = off): a two-tier search — tier 1
   ranks *every* key by a single **cheap IC climb** and keeps the top `N` (or top `N%`

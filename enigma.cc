@@ -122,7 +122,12 @@ static char opt_greek_walzen = '.';      /* Greek wheel: B (Beta), G (Gamma) or 
 static char opt_greek_ringstellung = '.';   /* Greek ring letter or . */
 static char opt_greek_grundstellung = '.';  /* Greek start letter or . */
 static int opt_maxwheel;
-static int opt_scoring;
+static int opt_scoring;   /* the resolved ranking/target model (SCORE_*) */
+/* The model chosen by a bare selector -i/-m/-b/-t/-q, or -1 if none was given. The
+   selectors are thin aliases for a single uncapped --score <model> stage (REDESIGN
+   Part C); this records the choice so conflicting models -- two disagreeing selectors,
+   or a selector vs a different --score target -- can be rejected as a fatal error. */
+static int opt_model_selector;
 static int opt_hillclimb;
 /* -I: circular first-improvement climb instead of steepest ascent. Applies the FIRST
    improving move (cursor sweeps a fixed move list and continues from where it accepted),
@@ -1368,6 +1373,19 @@ int model_of(char c)
     case 'q': return SCORE_QUAD;
     default:  return SCORE_IC;
     }
+}
+
+/* Record a bare model selector (-i/-m/-b/-t/-q) as a single uncapped --score <model>
+   stage (REDESIGN Part C). Two selectors that disagree (e.g. -m -q) make the intended
+   model ambiguous, so reject them; repeats that agree (-q -q) are fine. Sets opt_scoring
+   so a run with no --score ranks by the selected model. */
+static void select_model(int model)
+{
+  if ((opt_model_selector != -1) && (opt_model_selector != model))
+    fatal("Conflicting scoring models: the -i/-m/-b/-t/-q selectors disagree; "
+          "pick one");
+  opt_model_selector = model;
+  opt_scoring = model;
 }
 
 /* Parse the --score/-S schedule string into opt_stages[]/opt_nstages, and set
@@ -2882,6 +2900,7 @@ int main(int argc, char * * argv)
   opt_exhaust = 0;    /* --exhaust E forced pairs, 0 = off */
   opt_staged = 0;   /* --score schedule string, or 0 for the single-model climb */
   opt_scoring = SCORE_IC;   /* default: the only model needing no -l (see help) */
+  opt_model_selector = -1;  /* no -i/-m/-b/-t/-q selector seen yet */
   opt_norenigma = 0;
   opt_m4 = 0;
   opt_threads = 1;
@@ -2968,19 +2987,19 @@ int main(int argc, char * * argv)
           opt_plaintext = optarg;
           break;
         case 'i':
-          opt_scoring = SCORE_IC;
+          select_model(SCORE_IC);
           break;
         case 'm':
-          opt_scoring = SCORE_MONO;
+          select_model(SCORE_MONO);
           break;
         case 'b':
-          opt_scoring = SCORE_BI;
+          select_model(SCORE_BI);
           break;
         case 't':
-          opt_scoring = SCORE_TRI;
+          select_model(SCORE_TRI);
           break;
         case 'q':
-          opt_scoring = SCORE_QUAD;
+          select_model(SCORE_QUAD);
           break;
         case 'c':
           opt_hillclimb = 1;
@@ -3190,6 +3209,22 @@ int main(int argc, char * * argv)
      (last) stage. Validates the schedule syntax; fatal() on error. With no --score
      this builds the single -i/-m/.../-q stage. */
   parse_schedule();
+
+  /* A model selector (-i/-m/-b/-t/-q) is a --score <model> alias, so if BOTH are given
+     they must agree on the target/ranking model: after parse_schedule() opt_scoring is the
+     --score target, so a selector naming a different model is genuinely ambiguous -- reject
+     it (REDESIGN Part C). Agreement (e.g. -q --score i4q10, or -q --score q) is fine. When
+     no --score is given, opt_scoring already equals the selector, so this never fires. */
+  if ((opt_model_selector != -1) && opt_staged && (opt_model_selector != opt_scoring))
+    {
+      static const char * const model_name[] =
+        { "IC", "monograms", "bigrams", "trigrams", "quadgrams" };
+      char msg[128];
+      snprintf(msg, sizeof msg,
+               "Conflicting scoring models: selector picks %s but --score targets %s; "
+               "pick one", model_name[opt_model_selector], model_name[opt_scoring]);
+      fatal(msg);
+    }
 
   if ((opt_threads < 1) || (opt_threads > max_threads))
     fatal("Illegal thread count (must be 1 to 256)");
