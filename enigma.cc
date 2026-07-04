@@ -177,6 +177,9 @@ static int opt_nstages;    /* number of model stages in opt_stages[] */
 static int opt_perturb;    /* random plug pairs injected per restart: 0..13 (an rN
                               token; default_perturb when no r token; r0 = no-op) */
 static const int default_perturb = 8;   /* no-r-token kick: best in the §9 sweep */
+static int opt_exhaust;    /* -S a1: partial plugboard exhaustion -- force each of the
+                              C(26,2)=325 first plug pairs in turn and keep the best climb
+                              (0 = off). Prototype: single-threaded (see exhaust_first_pair). */
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
@@ -1375,6 +1378,7 @@ void parse_schedule()
 {
   opt_nstages = 0;
   opt_perturb = default_perturb;   /* fixed kick unless an r token overrides it */
+  opt_exhaust = 0;
 
   if (! opt_staged)
     {
@@ -1411,6 +1415,17 @@ void parse_schedule()
              uncapped; rN sets a fixed N (r0 = a no-op control) */
           opt_perturb = (n < 0) ? default_perturb : n;
         }
+      else if (letter == 'a')
+        {
+          if (opt_exhaust)
+            fatal("Illegal -S schedule: at most one a (exhaustion) token");
+          /* aN forces N first plug pairs exhaustively; the prototype supports N=1
+             (all 325 first pairs). Omitted number = 1. */
+          int k = (n < 0) ? 1 : n;
+          if (k != 1)
+            fatal("Illegal -S a token: only a1 (a single forced first pair) is supported");
+          opt_exhaust = k;
+        }
       else if (strchr("imbtq", letter))
         {
           if (opt_nstages >= max_stages)
@@ -1423,8 +1438,8 @@ void parse_schedule()
           opt_nstages++;
         }
       else
-        fatal("Illegal -S schedule (tokens are r/i/m/b/t/q + optional number, "
-              "e.g. -S r2i6q)");
+        fatal("Illegal -S schedule (tokens are a/r/i/m/b/t/q + optional number, "
+              "e.g. -S r2i6q or -S a1i4q10)");
     }
 
   if (opt_nstages < 1)
@@ -1441,7 +1456,7 @@ void parse_schedule()
    (complementary to random restarts). The returned score and m.plaintext are in the
    target (last) model, so cross-key comparison is unaffected. With no -S this is a
    single uncapped climb in the -i/-m/.../-q model. */
-double hillclimb_schedule(machine & m)
+static double run_stages(machine & m)
 {
   double s = 0.0;
   for (int i = 0; i < opt_nstages; i++)
@@ -1450,6 +1465,54 @@ double hillclimb_schedule(machine & m)
       s = hillclimb(m, opt_stages[i].cap);
     }
   return s;   /* opt_nstages >= 1, so s is the target-model score */
+}
+
+/* -S a1 partial plugboard exhaustion (PROTOTYPE): instead of one climb from the seed,
+   force each of the C(26,2)=325 first plug pairs in turn -- pin it (as -s pins plugs) and
+   run the staged climb from that seed -- and keep the best board. One of the 325 pins holds
+   a true plug, so a climb is guaranteed to launch from inside the right basin, rather than
+   sampling basin space with a blind random kick. Pairs touching a fixed -s letter are
+   skipped. This mutates the global plug_fixed[] around each climb, so it is single-threaded
+   (gated to -T 1 in validation); a threaded version needs a per-machine plug_fixed. */
+static double exhaust_first_pair(machine & m)
+{
+  double best = 0.0;
+  bool have = false;
+  char best_pt[maxlen + 1];
+  unsigned char best_steck[asize];
+  for (int a = 0; a < asize; a++)
+    {
+      if (plug_fixed[a])
+        continue;
+      for (int b = a + 1; b < asize; b++)
+        {
+          if (plug_fixed[b])
+            continue;
+          init_steckerbrett(m, opt_steckerbrett);              /* identity + -s pairs */
+          m.steckerbrett[a] = static_cast<unsigned char>(b);   /* force a-b */
+          m.steckerbrett[b] = static_cast<unsigned char>(a);
+          plug_fixed[a] = plug_fixed[b] = true;                /* pin it for this climb */
+          double s = run_stages(m);
+          plug_fixed[a] = plug_fixed[b] = false;               /* a,b are not -s letters */
+          if (! have || (s > best))
+            {
+              best = s;
+              have = true;
+              memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+              memcpy(best_steck, m.steckerbrett, asize);
+            }
+        }
+    }
+  memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+  memcpy(m.steckerbrett, best_steck, asize);   /* restore the best board to match */
+  return best;
+}
+
+double hillclimb_schedule(machine & m)
+{
+  if (opt_exhaust)
+    return exhaust_first_pair(m);
+  return run_stages(m);
 }
 
 /* Hill-climb the plugboard with optional random restarts: restart 0 uses the
@@ -2525,8 +2588,10 @@ void help(FILE * out)
   fprintf(out, "  -R integer   Plugboard hill-climb random restarts (1 = none) [1]\n");
   fprintf(out, "  -S schedule  Staged plugboard climb: <letter><opt.number> tokens.\n");
   fprintf(out, "               Models i/m/b/t/q (number caps plug pairs; last = target),\n");
-  fprintf(out, "               rN = per-restart random plugs (N pairs, default 8).\n");
-  fprintf(out, "               E.g. -S r2i6q\n");
+  fprintf(out, "               rN = per-restart random plugs (N pairs, default 8),\n");
+  fprintf(out, "               a1 = force each of the 325 first plug pairs (experimental,\n");
+  fprintf(out, "               single-threaded; dominated by a high -R at equal compute).\n");
+  fprintf(out, "               E.g. -S r2i6q  or  -S a1i4q10\n");
   fprintf(out, "  -A integer   Recover the plugboard by simulated annealing instead of the\n");
   fprintf(out, "               greedy climb; integer = move budget (needs -c) [off].\n");
   fprintf(out, "               Honours the -S target cap: -A N -S qK caps it at K plugs\n");
@@ -2602,6 +2667,8 @@ void show_settings()
             opt_restarts, opt_perturb);
   if (opt_hillclimb && opt_staged && (opt_anneal == 0))
     fprintf(stderr, "            staged: %s\n", opt_staged);
+  if (opt_hillclimb && opt_exhaust)
+    fprintf(stderr, "            partial exhaustion: forcing each of 325 first plug pairs\n");
   if (opt_hillclimb && opt_capmerge)
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_firstimprove)
@@ -2985,6 +3052,16 @@ int main(int argc, char * * argv)
   /* -M changes the plug-cap rule in the climb, so it needs -c. */
   if (opt_capmerge && (! opt_hillclimb))
     fatal("Cap-as-target (-M) needs the plugboard hill-climb (-c)");
+
+  /* -S a1 partial exhaustion is a plugboard-climb strategy (needs -c), runs the greedy
+     staged climb (not SA), and mutates the global plug_fixed[] per pair, so the prototype
+     is single-threaded. */
+  if (opt_exhaust && (! opt_hillclimb))
+    fatal("Partial exhaustion (-S a1) needs the plugboard hill-climb (-c)");
+  if (opt_exhaust && (opt_anneal > 0))
+    fatal("Partial exhaustion (-S a1) is not supported with simulated annealing (-A)");
+  if (opt_exhaust && (opt_threads > 1))
+    fatal("Partial exhaustion (-S a1) is a single-threaded prototype; use -T 1");
 
   /* Scoring only happens when the run ranks candidates -- a '.' wildcard in the
      reflector/wheels/ring/start -- or hill-climbs the plugboard (-c). A fully

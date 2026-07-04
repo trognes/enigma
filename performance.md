@@ -328,30 +328,41 @@ New knob (tenure).
 equal `score_iter` budget; sweep tenure ∈ {4,8,12}. Report **worst-case (min over
 seeds)** recovery, where tabu's determinism should show best.
 
-### 3.6 Partial plugboard exhaustion — forced first pair (MEDIUM priority; literature-backed)
+### 3.6 Partial plugboard exhaustion — forced first pair (❌ implemented as `-S a1`, measured, DOMINATED)
 
-**Form in this codebase.** The core diversification device in Ostwald & Weierud
-(2017) and its predecessors. Instead of starting every climb from a
-perturbed board, systematically **force each candidate first pair** —
-`C(26,2)=325`, or cheaper a shortlist of ~150 pairs on the most frequent cipher
-letters — pin it (as `-s` already pins plugs), run the full IC→quad climb, keep
-the best. Deterministic (no RNG). Compose with `-F` so the 325× cost lands only
-on shortlisted keys.
+**Form.** The core diversification device in Ostwald & Weierud (2017): instead of a
+random kick, systematically **force each candidate first pair** (`C(26,2)=325`), pin it
+(as `-s` pins plugs), run the staged IC→quad climb, keep the best. Deterministic. Built
+as the `-S a1` schedule token (`-S a1i4q10`); single-threaded prototype (it mutates the
+global `plug_fixed[]` per pair — a threaded version needs per-machine state).
 
-**Why it helps at 50 chars.** It *guarantees* the climb is launched from inside
-325 distinct basins, one of which reliably contains the first true plug — whereas
-an 8-pair random kick samples basin space blindly. A structured superset of the
-random-restart idea already shown to keep paying through R=256.
+**It works, and it is dominated.** The basin guarantee is real — on a message where a
+single plain climb (`-R 1`) sticks, `-S a1i4q10` recovers exactly. But the honest test is
+**matched `score_iter`**, and there it loses badly to spending the same budget on the tuned
+greedy restart climb (10-plug messages, 80 trials/cell). Two matchings, both decisive:
 
-**Honest payoff.** High evidence, but calibrate against §2: at 50 chars with 10
-plugs the information may simply not be there for *full* recovery. Expect the
-largest gains in **mean %-correct** and in the **60–120 char band**, not in exact
-recovery at 40–50. Up to ~325× a single climb per surviving key, so it is only
-affordable paired with `-F`, and it must beat spending that same 325× as raw `-R`.
+| | L50 | L60 | L70 |
+|---|---|---|---|
+| `-S a1i4q10` (325 climbs, ~1.05M) | 51 / 35 | 58 / 39 | 76 / 65 |
+| greedy `-J -S r10i4q10 -R436` (~1.05M) | **69 / 64** | **82 / 79** | **96 / 94** |
+| `-S a1i4q10 -J` (325 climbs, ~483k) | 48 / 32 | 61 / 46 | 78 / 65 |
+| greedy `-J -S r10i4q10 -R205` (~483k) | **58 / 50** | **77 / 74** | **88 / 84** |
+*(mean% / exact%)*
 
-**Experiment.** `make crackquality SPLIT=1` at L40/50/60/80/120, comparing
-`-c -S iq -F N` vs the exhaustion arm at **equal wall-clock** (shrink `-R` for
-the exhaustion arm to match compute). Expect the search-failure share to drop.
+**Why it loses.** Only ~10 of the 325 forced pairs are true plugs, so ~315 climbs launch
+from a wrong basin and are wasted; and forcing 1 of 10 plugs barely constrains the climb —
+the other 9 must still be found in a *single* forced-seed climb. Meanwhile the greedy arm
+spends the same budget on hundreds of full random-restart trajectories, and restarts "never
+plateau through 256." The second matching is apples-to-apples (**both arms `-J`**, and
+exhaustion even gets *more* climbs — 325 vs 205, because its 1-plug seeds are cheaper than
+greedy's 10-plug kick) and greedy still wins by −10 to −28pp exact, so the loss is not a
+config artifact. Fails its own bar ("must beat spending that same 325× as raw `-R`") by a
+wide margin. Kept as an experimental opt-in (`-S a1`), not recommended.
+
+**Untested variant.** A ranked ~150-pair shortlist (ciphertext × plaintext-language letter
+frequency, so the shortlist concentrates on likely-true pairs) would halve the cost, but each
+forced pair still gets one weak single climb and only true-plug pairs help — unlikely to
+close a 20–40pp gap. Not pursued.
 
 ### 3.7 Multi-seed IC basin-hopping (LOW–MEDIUM priority)
 

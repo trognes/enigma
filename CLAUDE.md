@@ -235,6 +235,13 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
     footgun at high `-R`; `r0` is a no-op control.
     The first-order lever is the restart count `-R N`, which never plateaus through
     256.
+  - **the `a1` token** (at most one) is **partial plugboard exhaustion** (§3.6 in
+    `performance.md`): instead of one climb, force each of the `C(26,2)=325` first plug
+    pairs in turn (pinned like `-s`) and keep the best staged climb. Deterministic; an
+    experimental **single-threaded** prototype (`exhaust_first_pair()` mutates the global
+    `plug_fixed[]` per pair, so validation forces `-T 1` and forbids `-A`; only `a1` is
+    supported). **Measured, dominated** — at matched `score_iter` a high-`-R` greedy climb
+    beats it by 10–40pp exact (§3.6), so it is kept as an opt-in, not recommended.
   Per-`machine` `scoring` field (never a global → race-free); deterministic; the
   `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
   was folded into the per-stage numbers — see `CODE_REVIEW_HISTORY.md` §9.)
