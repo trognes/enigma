@@ -90,6 +90,15 @@ a local optimum) via an oracle run — telling you which lever to pull. (See
 `archived/CODE_REVIEW_HISTORY.md` §9 for the algorithmic ideas this is meant to measure; on the
 v1.1.0 baseline every miss is a *search* failure.)
 
+`crack_quality.py` also carries three opt-in test modes from `CRACKQUALITY_TESTS.md`
+(all off by default, the normal flow unchanged): `WILDCARD` wildcards the rotor key
+for the **scoring-failure gate** (§1); `FILTERRECALL=1` reports the true key's `-F`
+tier-1 **recall@N** (§2, via the binary's `--true-key` diagnostic flag); and
+`DIVERSITY=1` reports **restart basin-collapse** stats — distinct converged optima and
+best-board hit-count across the `-R` restarts (§3, via `--dump-restarts`). The two
+`--true-key`/`--dump-restarts` flags are off-by-default binary diagnostics (default
+paths byte-identical and bench-neutral, ASan/TSan-clean).
+
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
 are kept; everything else (spaces, punctuation, case) is stripped. The n-gram

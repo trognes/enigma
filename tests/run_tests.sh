@@ -481,6 +481,26 @@ check "exhaustion --exhaust without -c rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -s "ABCDEFGHIJKLMNOPQRSTUV" -c --exhaust 3 -T 1 >/dev/null 2>&1
 check "exhaustion --exhaust E over the free pairs rejected (exit code)" "$?" "1"
 
+# --dump-restarts (§3 diagnostic): needs -c and prints one 'restart' line per restart.
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA --dump-restarts -T 1 >/dev/null 2>&1
+check "--dump-restarts without -c rejected (exit code)" "$?" "1"
+dr_n=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -R 4 --dump-restarts -T 1 2>&1 >/dev/null | grep -c '^restart ')
+check "--dump-restarts prints one line per restart (-R 4)" "$dr_n" "4"
+
+# --true-key (§2 diagnostic): needs -F and reports the true key's tier-1 rank. r_ct was
+# encrypted at reflector B, wheels 123, ring AAA, start AAA => true key B123AAAAAA, which
+# is inside the -g A.. keyspace here (first start letter fixed A).
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c --true-key B123AAAAAA -T 1 >/dev/null 2>&1
+check "--true-key without -F rejected (exit code)" "$?" "1"
+printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -F 5 --true-key TOOSHORT -T 1 >/dev/null 2>&1
+check "--true-key with a malformed key rejected (exit code)" "$?" "1"
+tk_line=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -F 5 --true-key B123AAAAAA -T 2 2>&1 >/dev/null | grep -c 'true-key tier1 rank [0-9][0-9]* of ')
+check "--true-key reports a tier-1 rank line" "$tk_line" "1"
+# The reported rank must be -T-independent (deterministic tier-1).
+tk1=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -F 5 --true-key B123AAAAAA -T 1 2>&1 >/dev/null | grep -oE 'rank [0-9]+ of [0-9]+')
+tk4=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g A.. -c -F 5 --true-key B123AAAAAA -T 4 2>&1 >/dev/null | grep -oE 'rank [0-9]+ of [0-9]+')
+check "--true-key rank is -T-independent" "$tk1" "$tk4"
+
 # Random seed (-e / $ENIGMA_SEED): the restart perturbation is seeded from it mixed
 # with the key index, so a fixed seed is reproducible and stays -T-independent, an
 # explicit -e overrides $ENIGMA_SEED, and the seed is echoed so a run can be repeated.

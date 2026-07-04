@@ -264,7 +264,15 @@ Advanced options:
                            try every combination, keep the best climb. An
                            exploration tool (E=1 = 325 climbs; E>1 explodes;
                            needs -c; a high -R dominates it) [off]
+  --true-key KEY           Diagnostic: with -F, print the tier-1 rank of the
+                           given standard key (e.g. B241AAAQEW = reflector,
+                           3 wheels, 3 ring, 3 start) among all keys [off]
+  --dump-restarts          Diagnostic: with -c, print each converged restart's
+                           score and board to stderr (verbose) [off]
 ```
+
+The last two are test-harness diagnostics used by `tests/crack_quality.py`'s
+`-F`-recall and restart-diversity modes (see `CRACKQUALITY_TESTS.md`).
 
 ## Cracking strategy
 

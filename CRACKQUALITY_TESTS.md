@@ -7,12 +7,15 @@
 > compute, `-T` byte-determinism, both compilers for hot-path touches,
 > `ENIGMA_SEED=0`).
 >
-> **Build status:** §1's harness plumbing (the opt-in `WILDCARD`/`FILTER`/
-> `RESTARTS`/`FULLCRACK` knobs, `last_key`/`key_ok`, the `key%` column and the
-> generalized SPLIT) is **implemented** — `WILDCARD=""` keeps the fixed-key tier
-> byte-identical, verified — so the scoring gate can be run now. §2 and §3 are
-> still **plans**; each needs a small off-by-default binary hook, described below,
-> not yet built.
+> **Build status: all three are implemented.** §1's harness plumbing (the opt-in
+> `WILDCARD`/`FILTER`/`RESTARTS`/`FULLCRACK` knobs, `last_key`/`key_ok`, the `key%`
+> column and the generalized SPLIT). §2's `--true-key` binary hook + the
+> `FILTERRECALL` recall@N mode and `SCOREITER` column. §3's `--dump-restarts`
+> binary hook + the `DIVERSITY` basin-collapse mode. All three binary hooks are
+> **off by default** (default paths byte-identical and bench-neutral, verified),
+> and `WILDCARD=""` / no-mode runs are byte-identical to the original harness. The
+> commands below are runnable now; the numbers they will produce are still to be
+> collected (that is compute, not code).
 >
 > **This supersedes the earlier "full-crack tier" design.** Its cross-key plug
 > marginalization goal (PERFORMANCE.md §5.3) is **dropped** — see the note at the
