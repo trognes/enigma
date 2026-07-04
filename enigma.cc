@@ -3172,7 +3172,7 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST };
 
-  /* Long-option aliases for the short flags (Part A of REDESIGN.md), plus the two
+  /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
      so the switch below is shared. Unambiguous prefixes (e.g. --lang, --restart) are
      accepted natively by getopt_long. */
