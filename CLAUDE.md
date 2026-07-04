@@ -235,6 +235,16 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
     footgun at high `-R`; `r0` is a no-op control.
     The first-order lever is the restart count `-R N`, which never plateaus through
     256.
+  - **the `aN` token** (at most one) is **partial plugboard exhaustion** (§3.6 in
+    `performance.md`): `N` is the **total** pinned pairs (like a model-token cap — the `-s`
+    pairs count toward `N`), so `N − fixed` pairs are forced. It tries *every* set of those
+    forced pairs (pinned like `-s`), runs the staged climb, and keeps the best. `a1` (no `-s`)
+    = the 325 first pairs; larger `N−fixed` explodes as `free!/(2^k k! (free−2k)!)` (~45k for
+    2, ~3.5M for 3), so it is **single-threaded exploration only** — `exhaust_recurse()`
+    mutates the global `plug_fixed[]` as it descends, so validation forces `-T 1`, forbids
+    `-A`, and requires `N ≥ fixed`. Deterministic. **Measured, dominated** — at matched
+    `score_iter` a high-`-R` greedy climb beats it by 10–40pp exact (§3.6); an exploration
+    tool, not recommended.
   Per-`machine` `scoring` field (never a global → race-free); deterministic; the
   `r` token and `-R` count compose. (Replaces the earlier separate `-L` cap, which
   was folded into the per-stage numbers — see `CODE_REVIEW_HISTORY.md` §9.)

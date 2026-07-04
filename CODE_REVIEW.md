@@ -40,9 +40,14 @@ compute (paired with more `-R`) it recovers +8pp exact / +1–23pp mean at L40�
 first idea to beat the baseline at the ~50-char target. **`-J` adds dynamic per-restart
 best-first move ordering** on top of `-I` — a further matched-compute win (+2–6pp mean)
 on the realistic ~10-plug regime, regime-dependent so also opt-in (`performance.md` §7.2).
-Still open on that axis: don't-look bits and the `max(greedy, SA)` portfolio. *Static*
-(fixed-across-restarts) informed ordering was **rejected** (greedy + diversity-collapsing;
-the per-restart `-J` avoids the collapse — `performance.md` §7.2). A separate shipped
+Still open on that axis: ILS with incumbent-walk acceptance (`performance.md` §3.3). The
+**`max(greedy, SA)` portfolio was built and rejected** — greedy and SA are genuinely
+complementary (+10–17pp union at double budget), but at matched compute the budget split
+cancels it (~−3pp vs the best single solver; §3.2). **Don't-look bits were built and
+rejected** too — exact only for a separable objective (TSP), but the plugboard's global n-gram
+score makes them a heuristic that is neutral (`-I`) to a small loss (`-J`) at matched compute
+(`performance.md` §7.2). *Static* (fixed-across-restarts) informed ordering was **rejected**
+too (greedy + diversity-collapsing; the per-restart `-J` avoids the collapse — `performance.md` §7.2). A separate shipped
 lever is **`-M` cap-as-target** (`performance.md` §7.8): at/over the `-S` plug cap the
 climb may only *merge* or *remove* plugs (never add or reshuffle), so a big restart kick
 is pruned cleanly back to the cap instead of leaving spurious plugs. It is neutral-to-+2.6pp

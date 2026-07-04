@@ -181,37 +181,59 @@ Not shipped. Do not re-attempt without a materially different mechanism (the unt
 levers — threshold, elite size, `R` — were all swept and none crosses the equal-compute
 `-R` line).
 
-### 3.2 Portfolio: per-key `max(greedy, SA)` (HIGH priority)
+### 3.2 Portfolio: per-key `max(greedy, SA)` — ❌ MEASURED, REJECTED
 
-**Form in this codebase.** The repo's own finding is that SA (`-A`) is a *peer* of
-greedy `-R -S iq`, not a strict win — which is the textbook precondition for a
-**portfolio**: two solvers that fail on *different* keys. For each rotor key, run
-the greedy restart climb at half the budget and one SA trajectory at half the
-budget, and keep the better board. No new algorithm, no new landscape, no new
-tuning — just call both existing solvers per key and take the max. Deterministic
-(both already ride the per-key RNG stream).
+**Form.** For each rotor key run greedy at half budget and one SA trajectory at half
+budget, keep the better board. The pitch was near-free upside: SA is a *peer* of greedy,
+so (it was argued) they fail on *different* keys and `max` captures the union.
 
-**Why it helps at 50 chars.** If greedy solves set A of keys and SA solves set B,
-and A ≠ B, then `max(greedy, SA)` solves `A ∪ B` — strictly at least as many as
-either alone, for the same total compute (each at half budget). The "SA is a peer,
-not a win" result is precisely the evidence that A and B differ; a strict winner
-would make the portfolio pointless, but a peer makes it near-free upside.
+**Measured (crackquality, PAIRS=10, L70/80/90, 100 trials × 2 seeds, matched `score_iter`:
+greedy `-R20 -S iq` ≈ SA `-A6000 -R12 -S iq` ≈ 132k).** The portfolio at matched compute is
+**neutral-to-negative** — Δ vs the best single solver: −2/+0/−1 (seed 1) and −5/−7/+2 (seed 2),
+averaging ~−3pp, never a clean win. Rejected. Two-part reason, and the second half is the
+non-obvious one:
 
-**Honest payoff.** Potentially the **highest ROI in the document**: zero new
-mechanism, trivial determinism, and it directly monetizes the shipped SA work that
-otherwise sits as a mere alternative. The risk is the opposite — if the two
-solvers' solved-sets turn out to be nearly *nested* (SA solves a strict subset of
-greedy's keys), the union adds nothing and half-budget-each simply weakens the
-better solver. That is the one thing to measure first.
+- **The complementarity is real** — so the doc's *falsifier* (nested solved-sets) did **not**
+  hold. At *double* budget (each solver at full B, "either solves") the union beats the best
+  single by **+10–17pp**: greedy and SA genuinely fail on different keys (SA's stochastic
+  acceptance escapes different local optima than greedy's restarts). The overlap check
+  confirmed large `greedy-only` **and** `SA-only` sets.
+- **But the budget split cancels it.** Halving each solver to fund both costs ~11–14pp per
+  solver (recovery has not saturated at these budgets), and that loss almost exactly cancels
+  the union gain, so `max(halves) ≈ best single @B`. **And when one solver dominates at a
+  given compute (SA out-recovered greedy in both seeds), the portfolio is strictly worse** —
+  it spends half the budget on the weaker solver. A portfolio only helps when neither solver
+  dominates *and* the split is cheap; here one usually dominates and the split is expensive.
 
-**Cost/risk.** Very low (an orchestration change; both solvers exist). The only
-subtlety is the budget split — half each is the neutral default; sweep it.
+**Where the original reasoning failed.** "SA is a peer ⇒ the solved-sets differ" is an
+invalid inference (equal *average* recovery is consistent with identical *or* disjoint
+solved-sets); the sets happened to differ anyway, but the argument never priced in the cost
+of running each solver at half budget, which is what actually sinks it.
 
-**Experiment.** `make crackquality SPLIT=1` at L40–120 at **equal total
-`score_iter`**: portfolio (greedy@½ + SA@½) vs greedy-only@full vs SA-only@full.
-The claim is "fewer misses because the union of solved keys is larger"; the
-falsifier is "the solved-sets are nested, so the union is no bigger than the
-better solver." Also log per-trial *which* solver won, to confirm the sets differ.
+**Takeaway.** Don't split — identify and run the single best solver at full budget. The real
+complementarity (~+15pp at 2B) is worth capturing, but *only* without the halving penalty,
+which a post-hoc `max` of two independent runs cannot do — a single trajectory that blends
+exploration and exploitation can (→ ILS, §3.3).
+
+**Follow-up: greedy vs SA at matched compute, both properly tuned.** An earlier note here
+claimed "SA consistently out-recovers greedy" — that was an artifact of comparing SA against a
+*weak* greedy (`-R -S iq`). Re-run with each solver at its best (greedy `-J -S r10i4q10`; SA
+`-A12000 -S q10` — SA needs *deep* anneals, `-A6000` starves it), matched `score_iter`, 10-plug
+messages, 100 trials × 2 seeds, they are **genuine peers with a length-dependent crossover**
+(mean%/exact%, at ~2× the `-R20` budget):
+
+| L | greedy `-J -S r10i4q10 -R80` | SA `-A12000 -S q10 -R12` |
+|---|---|---|
+| 40 | 24 / 8  | **27 / 12** |
+| 50 | **45 / 33** | 40 / 32 |
+| 60 | 60 / 50 | **63 / 57** |
+| 70 | **78 / 73** | 70 / 64 |
+
+SA owns the mid-short / hardest end (L40, L60: +4–7pp exact); greedy owns the longer short
+end (L70: +9pp), with L50 ~tied. The result held at half budget too. So the repo's original
+"SA is a *peer*, not a win" framing is correct — and *both* under-tuning greedy and
+under-tuning SA flip the apparent winner, which is why a matched-compute comparison must have
+**both** at their best. (Practical recipes for each are in the README / `-h`.)
 
 ### 3.3 Iterated Local Search with incumbent-walk acceptance (HIGH priority)
 
@@ -306,30 +328,45 @@ New knob (tenure).
 equal `score_iter` budget; sweep tenure ∈ {4,8,12}. Report **worst-case (min over
 seeds)** recovery, where tabu's determinism should show best.
 
-### 3.6 Partial plugboard exhaustion — forced first pair (MEDIUM priority; literature-backed)
+### 3.6 Partial plugboard exhaustion — forced first pair (❌ implemented as `-S a1`, measured, DOMINATED)
 
-**Form in this codebase.** The core diversification device in Ostwald & Weierud
-(2017) and its predecessors. Instead of starting every climb from a
-perturbed board, systematically **force each candidate first pair** —
-`C(26,2)=325`, or cheaper a shortlist of ~150 pairs on the most frequent cipher
-letters — pin it (as `-s` already pins plugs), run the full IC→quad climb, keep
-the best. Deterministic (no RNG). Compose with `-F` so the 325× cost lands only
-on shortlisted keys.
+**Form.** The core diversification device in Ostwald & Weierud (2017): instead of a
+random kick, systematically **force each candidate first pair** (`C(26,2)=325`), pin it
+(as `-s` pins plugs), run the staged IC→quad climb, keep the best. Deterministic. Built
+as the `-S aN` schedule token (`-S a1i4q10`), where `N` is the **total** pinned pairs (the
+`-s` pairs count toward it, so `-s ABCD -S a3q10` forces one more pair on top of the two
+fixed). `N−fixed > 1` explodes combinatorially (`free!/(2^k k! (free−2k)!)`: ~45k for 2,
+~3.5M for 3) so it is a single-threaded **exploration knob only**; the measured result below
+is for `a1`. Single-threaded prototype (it mutates the global `plug_fixed[]` as it recurses —
+a threaded version needs per-machine state).
 
-**Why it helps at 50 chars.** It *guarantees* the climb is launched from inside
-325 distinct basins, one of which reliably contains the first true plug — whereas
-an 8-pair random kick samples basin space blindly. A structured superset of the
-random-restart idea already shown to keep paying through R=256.
+**It works, and it is dominated.** The basin guarantee is real — on a message where a
+single plain climb (`-R 1`) sticks, `-S a1i4q10` recovers exactly. But the honest test is
+**matched `score_iter`**, and there it loses badly to spending the same budget on the tuned
+greedy restart climb (10-plug messages, 80 trials/cell). Two matchings, both decisive:
 
-**Honest payoff.** High evidence, but calibrate against §2: at 50 chars with 10
-plugs the information may simply not be there for *full* recovery. Expect the
-largest gains in **mean %-correct** and in the **60–120 char band**, not in exact
-recovery at 40–50. Up to ~325× a single climb per surviving key, so it is only
-affordable paired with `-F`, and it must beat spending that same 325× as raw `-R`.
+| | L50 | L60 | L70 |
+|---|---|---|---|
+| `-S a1i4q10` (325 climbs, ~1.05M) | 51 / 35 | 58 / 39 | 76 / 65 |
+| greedy `-J -S r10i4q10 -R436` (~1.05M) | **69 / 64** | **82 / 79** | **96 / 94** |
+| `-S a1i4q10 -J` (325 climbs, ~483k) | 48 / 32 | 61 / 46 | 78 / 65 |
+| greedy `-J -S r10i4q10 -R205` (~483k) | **58 / 50** | **77 / 74** | **88 / 84** |
+*(mean% / exact%)*
 
-**Experiment.** `make crackquality SPLIT=1` at L40/50/60/80/120, comparing
-`-c -S iq -F N` vs the exhaustion arm at **equal wall-clock** (shrink `-R` for
-the exhaustion arm to match compute). Expect the search-failure share to drop.
+**Why it loses.** Only ~10 of the 325 forced pairs are true plugs, so ~315 climbs launch
+from a wrong basin and are wasted; and forcing 1 of 10 plugs barely constrains the climb —
+the other 9 must still be found in a *single* forced-seed climb. Meanwhile the greedy arm
+spends the same budget on hundreds of full random-restart trajectories, and restarts "never
+plateau through 256." The second matching is apples-to-apples (**both arms `-J`**, and
+exhaustion even gets *more* climbs — 325 vs 205, because its 1-plug seeds are cheaper than
+greedy's 10-plug kick) and greedy still wins by −10 to −28pp exact, so the loss is not a
+config artifact. Fails its own bar ("must beat spending that same 325× as raw `-R`") by a
+wide margin. Kept as an experimental opt-in (`-S a1`), not recommended.
+
+**Untested variant.** A ranked ~150-pair shortlist (ciphertext × plaintext-language letter
+frequency, so the shortlist concentrates on likely-true pairs) would halve the cost, but each
+forced pair still gets one weak single climb and only true-plug pairs help — unlikely to
+close a 20–40pp gap. Not pursued.
 
 ### 3.7 Multi-seed IC basin-hopping (LOW–MEDIUM priority)
 
@@ -782,7 +819,7 @@ directly into more restarts — but **any trajectory-changing idea must be valid
 at matched wall-clock, not matched `-R`**, and any hot-path edit A/B'd under **both
 g++ and clang** per the standing struct-layout cautions.
 
-### 7.1 Restructure the per-pass move-evaluation loop (HIGH priority — one item, three candidate implementations)
+### 7.1 Restructure the per-pass move-evaluation loop (❌ CLOSED — all three candidates measured/expected negative)
 
 > **Measured outcome (7.1a built and tested).** Item **(a)** — surrogate-ranked
 > steepest ascent — was implemented and measured. **The surrogate *ranking* was
@@ -812,8 +849,11 @@ g++ and clang** per the standing struct-layout cautions.
 >
 > The takeaway that generalizes: **at the ~50-char target, per-candidate scoring is
 > not the bottleneck to cut** — the decodes are already cheap; the first-order lever
-> stays *more restarts* (raise `-R`). Items (b)/(c) below share the same premise the
-> measurement undercut; expect the same short-message crossover.
+> stays *more restarts* (raise `-R`). **Item (b) has since been micro-benchmarked and
+> rejected too** (a single board already saturates the memory-level parallelism batching
+> would add — below), and (c) is expected to re-lose for the same reason (a). With all
+> three candidates negative, §7.1 as a whole is closed: the per-pass scan is not where the
+> short-message win lives.
 
 *The nominal plan (unchanged for context): three researchers proposed three rewrites
 of the **same** per-pass loop over the **same** inverted index; largely mutually
@@ -829,20 +869,22 @@ remove, unified) against a constant base board. That is the cost to cut. Candida
   are too cheap to be worth skipping. The exact mono/IC delta form was briefly shipped
   as `-D`, then removed (long-message-only win, net-negative for the short-message target).
 
-- **(b) Memory-level-parallel batch scoring (alternative to (a), or stackable if
-  (a)'s top-K is still >1).** The score loop is a *dependent* gather chain, but
-  scoring N *different* candidate boards is N *independent* chains. Restructure to
-  be position-major over a batch of N boards: at each position issue all N boards'
-  gathers before consuming any result, keeping N running quad accumulators. All
-  boards share `ct[]`/`rows[]` and differ only in 4 `steck` entries, so the loads
-  overlap in the load-store queue and hide each other's latency. This is scalar
-  latency-hiding, **not** the rejected SIMD (which targeted arithmetic throughput
-  and failed because the loop is latency-bound — that distinction is real and is
-  why this is worth trying). *Payoff:* medium-high, ~1.5–3× on the score-bound
-  section *if* enough MLP is exposed; erodes past some N from register/LLC pressure
-  (sweep N). High code complexity (a batched scorer distinct from the fused
-  single-board one; must stay portable). Numerically identical → `crackquality`
-  unchanged.
+- **(b) Memory-level-parallel batch scoring — ❌ micro-benchmarked, measured, rejected.**
+  The proposal: score N *different* candidate boards position-major so their N `quad8`
+  gathers are in flight together, hiding each other's latency (scalar latency-hiding, not
+  the rejected SIMD). **The premise was wrong.** It rests on the score loop being "a
+  *dependent* gather chain," but it is not: within one board the `quad8[a][b][c][d]` loads
+  are **independent across iterations** — the address chain is the decode window, and the
+  only cross-iteration dependency is the `isum` accumulator (a reduction, which does not
+  block issuing the next load). So a single board *already* keeps several `quad8` gathers
+  in flight; there is little latency left for batching to hide. An isolated micro-benchmark
+  of the exact hot loop (base + 325 toggles; warm `quad8`; L = 50/100/250; N = 1..16; g++
+  and clang) confirmed it: batching is **slower at every point** — 0.43× at N=1 (pure
+  per-board bookkeeping), recovering only to ~**0.85–0.90×** at N=16, never reaching parity.
+  This is a strict *upper bound* on (b): the micro-benchmark has zero integration cost,
+  whereas the real scan would add board materialisation, cap/fixed filtering and
+  best-tracking — so it can only do worse. Not built in-tree. (The bench lives outside the
+  repo; this write-up preserves the finding.)
 
 - **(c) Amortized per-pass delta (LOW — expected to re-lose; last resort).** Within
   one pass the base board is constant; precompute the base decode + each window's
@@ -863,8 +905,9 @@ test is recovery at equal compute. Sweep K (for (a)) / N (for (b)).
 
 > **The first idea in this document that beats the baseline at the ~50-char target.**
 > Two mechanisms were separable — first-improvement move selection, and don't-look
-> bits. First-improvement was built and shipped as opt-in `-I`; don't-look bits and
-> informed move ordering remain open (below).
+> bits. First-improvement was built and shipped as opt-in `-I` (and informed move ordering
+> as `-J`); don't-look bits were later built and **rejected** (not exact on this global
+> objective; neutral-to-negative at matched compute — below).
 
 **What shipped.** `hillclimb()` was steepest-ascent — a full 325-move scan per
 accepted move, taking the single best. `-I` switches to **circular first-improvement**:
@@ -930,13 +973,29 @@ move ordering helps or hurts depending entirely on whether it varies *per restar
   count-dependent: **~10 plugs → `-J` uncapped; known-few plugs → `-J -S iKqK`.** No new
   code — `-S qK` already exists; this is a usage finding.
 
-- **Don't-look bits** (Bentley) — the remaining open refinement. A per-letter active
-  flag; skip moves incident only to letters that a full sweep already found inert,
-  re-activating the ~4 letters an accepted move touches. Crucially it is a **pure
-  speedup** — it changes *which moves are examined*, not the accepted-move trajectory or
-  its order — so it does **not** add the greediness that sank static ordering. Composes
-  with the `-I` cursor (skip cursor positions whose letters are inactive) and should cut
-  the confirming final cycle further. Not yet built.
+- **Don't-look bits** (Bentley) — ❌ **built, measured, rejected.** The idea: a move is
+  skipped once evaluated-and-inert, revived only when an accepted move touches one of its
+  letters. Prototyped as move-level bits on the `-I`/`-J` cursor (revive every move incident
+  to the ~4 letters a move changes), behind an opt-in `-K`.
+
+  **The premise was wrong.** Don't-look bits are exact only for a **separable** objective
+  (TSP tour length — a move's delta is *local* to its two cities). The plugboard score is a
+  **global, overlapping n-gram** objective: toggling `(a,b)` shifts quadgram windows that
+  overlap *other* letters, so a move's improvement can depend on a change to a letter it is
+  **not** incident to. Skipping an "inert" move can therefore miss a real improvement — the
+  filter is a **heuristic, not the pure/trajectory-preserving speedup claimed above**. Direct
+  evidence: on *easy* keys `-I` and `-I -K` converge to the identical plaintext (so the
+  implementation is correct), but on *hard* keys they land in **different local optima**.
+
+  **As a heuristic it does not pay at matched compute.** It does cut `score_iter` — `-I` to
+  ~0.64×, `-J` to ~0.82× (the smaller `-J` saving is because DLB cannot touch `-J`'s up-front
+  ordering scan) — buying ~1.2–1.6× more restarts. But at matched `score_iter` (crackquality,
+  PAIRS=10, L60/70/80, 60 trials × 2 seeds): **`-I` is noise-level neutral** (−4pp exact at
+  L70, +5pp at L80, tie at L60) and **`-J` is a consistent small loss** (−2 to −5pp exact at
+  every length). Recovering *worse per restart* (a noisier trajectory) is not repaid by the
+  extra restarts — the same failure mode as the static-ordering idea above. Reverted; not
+  shipped. A restricted variant (bits active only during the terminal confirming cycles,
+  where nothing improves so the heuristic risk is lowest) is conceivable but untested.
 
 ### 7.3 Amortize the `-F` IC pre-pass into tier 2 (MEDIUM priority; clean win)
 
@@ -1123,14 +1182,14 @@ Build this first; several ideas below only become measurable once it exists.
 > compute, and becomes a no-op as `R` grows because best-of-`R` saturates). It is
 > rejected; see §3.1. The list below is the reassigned top three.
 
-1. **Portfolio `max(greedy, SA)` (§3.2).** Near-free upside that directly monetizes
-   the shipped "SA is a peer, not a win" finding: run both existing solvers at half
-   budget each per key and keep the better board. Zero new algorithm, trivial
-   determinism. The one thing to check is that the two solvers' solved-sets actually
-   *differ* (not nested); the finding that SA is a *peer* is exactly the evidence they
-   do. **Unlike consensus, this does not re-climb a shared seed** — it keeps two
-   genuinely independent trajectories, so it is not subject to the best-of-`R`
-   saturation that sank §3.1.
+1. **~~Portfolio `max(greedy, SA)` (§3.2)~~ — built, measured, REJECTED.** The reassigned
+   #1 met the same fate as the original. It was *not* the expected failure (nested
+   solved-sets): greedy and SA are genuinely complementary (+10–17pp union at double budget).
+   But at matched compute the budget split cancels that gain — `max(greedy@½, SA@½)` is
+   neutral-to-negative vs the best single solver @full (~−3pp avg, worst −7pp over 2 seeds),
+   and strictly worse whenever one solver dominates (SA usually did). The lesson: run the best
+   *single* solver at full budget; capturing the real complementarity needs a single blended
+   trajectory, not a post-hoc max (→ item 3, ILS). See §3.2.
 
 2. **A per-climb throughput lever — first-improvement (§7.2). ✅ DONE, shipped as `-I`.**
    The prediction held: cutting the *number* of evaluations (not the cost of each) with
@@ -1139,9 +1198,10 @@ Build this first; several ideas below only become measurable once it exists.
    at matched compute (+8pp exact / +1–23pp mean, scaling with available signal — §7.2).
    Opt-in, because it recovers worse per restart. **Dynamic per-restart best-first move
    ordering shipped as `-J`** (a matched-compute win on the realistic ~10-plug regime,
-   +2–6pp mean; §7.2). **Remaining upside:** don't-look bits (§7.2, unbuilt). *Static*
-   (fixed-across-restarts) informed ordering was **rejected** — greedier *and* diversity-
-   collapsing; the per-restart `-J` keeps the front-loading without the collapse (§7.2).
+   +2–6pp mean; §7.2). **Don't-look bits were built and rejected** — not exact on a global
+   n-gram objective (unlike TSP), so a heuristic; neutral for `-I`, a small loss for `-J` at
+   matched compute (§7.2). *Static* (fixed-across-restarts) informed ordering was **rejected**
+   too — greedier *and* diversity-collapsing; per-restart `-J` keeps the front-loading (§7.2).
 
 3. **True ILS with incumbent-walk acceptance (§3.3).** The cheapest *structural*
    change to how restarts are spent: instead of always relaunching from the fixed seed,
