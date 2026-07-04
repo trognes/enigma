@@ -2287,8 +2287,8 @@ static void key_to_machine(machine & m, size_t idx,
   init_steckerbrett(m, opt_steckerbrett);
   setup_mapping(m, true);
   /* restore the start positions setup_mapping stepped, so mid-climb progress lines
-     (finish_worker) echo the true config; rg6 still carries them for the callers */
-  init_ring_grund(m, rg6[0], rg6[1], rg6[2], rg6[3], rg6[4], rg6[5]);   /* both the filter climb and the finish climb need it */
+     (finish_worker) echo the true config; rg6 carries them to the callers */
+  init_ring_grund(m, r1, r2, r3, g1, g2, g3);
   rg6[0] = r1; rg6[1] = r2; rg6[2] = r3; rg6[3] = g1; rg6[4] = g2; rg6[5] = g3;
 }
 
