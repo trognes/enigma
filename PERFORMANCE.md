@@ -850,6 +850,59 @@ over-fitting one traffic style.
   them — reject unless a full-crack tier justifies it. (5-grams were already
   rejected as a *primary* model: too sparse.)
 
+### 6.8 Lower-order intermediate `--score` stage (mono pre-pass) — ❌ MEASURED, REJECTED
+
+**The idea.** The staged climb already runs `i4q10` (IC cap-4 pre-pass → quad
+uncapped). Insert a *third*, even-lower-order stage between them —
+`-S i4m4q10` (IC cap-4 → **monogram cap-4** → quad) — on the §6.1 "denser cells =
+smoother surface" logic: a monogram surface is maximally dense, so a mono stage
+should steer the first few plugs into a better basin before quad refines. A bigram
+or trigram intermediate (`-S i4m4b6t8q10`) is the natural generalisation.
+
+**Why it looked like a win (the weak-test trap).** On the first pass — **English
+only, few seeds, bare steepest-ascent climb** — `i4m4q10` beat `i4q10` by a large,
+consistent margin (up to +11pp mean %-correct at L50). That is exactly the
+configuration in which a scoring tweak is most likely to *look* good and least
+likely to *be* good, and it is the same trap the trigram-target probe fell into
+(§6.1): a bare climb is a weak, high-variance baseline that the tuned recipe
+easily beats.
+
+**Measured properly and it collapses.** Re-judged the way every scoring change
+must be — **10 plugs** (the `crackquality` default / standard Wehrmacht), **all
+four languages, six seeds, matched `score_iter`, with `-J`** (the shipped recipe,
+not a bare climb). The compute match uses baseline `-J -S i4q10 -R13` vs mono
+`-J -S i4m4q10 -R10` (both ≈ 30k `score_iter`/climb on English):
+
+- **English:** marginal and seed-mixed — roughly +1–3pp at L50/L70, near-zero and
+  sign-flipping across seeds at L90. Not a robust win even in its best language.
+- **German L90: −8.0pp, all six seeds negative** (`------`).
+- **Danish L90: −4.9pp, all six seeds negative** (`------`).
+- **French:** nominally positive but at near-zero signal (both configs recover
+  almost nothing) — uninformative.
+
+**And the loss is worse than it prints.** The `-R10`/`-R13` compute match was
+calibrated on English, where the climb is most expensive per restart. The
+non-English climbs are cheaper, so the German/Danish mono runs actually consumed
+**~15–17% *more* `score_iter`** than their baselines — and still lost at L90. A
+change that reverses sign across languages *while holding a compute advantage* is
+not a win.
+
+**Verdict — reject; the recipe stays `i4q10`.** A mono (or bi/tri) intermediate
+stage does not generalise past English; it is a robust loss at the length that
+matters (L90) in German and Danish. The mechanism is the §6.2 negative prior
+again: the tier is **search-bound, not scoring-bound**, so a smoother
+intermediate surface has few search failures to convert, and the extra stage just
+spends compute steering plugs by a language-generic-then-mismatched signal.
+Two methodology lessons, both now paid for twice (here and §6.1):
+
+1. **Compute must be matched *per language*, not once on English.** Per-climb cost
+   varies enough by language that an English-calibrated `-R` match silently hands
+   the challenger a double-digit-percent compute edge in other languages.
+2. **A bare-climb / few-seed / English-only win must survive `-J` + all four
+   languages + more seeds before it earns a place in the recipe.** Both the
+   trigram-target (§6.1) and the mono-stage passed the weak test and failed the
+   strong one.
+
 ---
 
 ## 7. Speed / throughput
@@ -1320,7 +1373,10 @@ GPU (gather-bound, breaks the portable design); rotor-stepping reuse (slower); S
 climb (overfits); **back-off / interpolated quadgram smoothing** (`--backoff`, §6.2 —
 conditional form −20pp, joint-floor form neutral; harsh flat floor is a feature);
 **trigram-target-at-short-end** (§6.1 — quad wins at 10 plugs with the tuned `-S i4qK`
-recipe; the bare-model "trigram wins" was a weak-baseline artifact).
+recipe; the bare-model "trigram wins" was a weak-baseline artifact);
+**lower-order intermediate `--score` stage** (`-S i4m4q10` mono pre-pass, §6.8 —
+seductive English-only/bare-climb win that reverses to −5…−8pp at L90 in
+German/Danish under matched-per-language compute + `-J`; does not generalise).
 
 ---
 
