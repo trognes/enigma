@@ -32,7 +32,11 @@
 #   EVAL_OPTS     climb-strategy options, the part that varies per experiment
 #                 (default "-J -S i4q10 -R 10"); the rotor key is supplied
 #                 separately from the true settings, so DON'T put -u/-w/-r/-g/-s
-#                 here. -q (quad) is fixed by design and prepended automatically.
+#                 here.
+#   EVAL_MODEL    final/ranking scoring model letter (default "q" quad; "t"=tri,
+#                 "b"=bi, ...). Sets the leading model flag AND the oracle
+#                 true_score model. Match the -S schedule target to it, e.g.
+#                 EVAL_MODEL=t with EVAL_OPTS='-J -S i4t10 -R 10'.
 #   EVAL_LABEL    short config label for grouping (default: EVAL_OPTS collapsed)
 #   EVAL_THREADS  -T threads (default 1, for clean comparable wall-time)
 #   EVAL_SOLVER_SEED  -e restart seed (default 0)
@@ -122,10 +126,11 @@ def score_iter(stderr):
     return n
 
 
-def oracle_score(binary, key, ct, lang):
-    """Quad score of the TRUE (key+plugboard) decrypt -- true_score."""
+def oracle_score(binary, key, ct, lang, model):
+    """Score of the TRUE (key+plugboard) decrypt under the target model -- the
+    true_score, so the recovered-vs-true comparison is in the SAME model."""
     u, w, r, g, pb = key
-    _, err, _ = run(binary, ["-q", "-l", lang, "-u", u, "-w", w,
+    _, err, _ = run(binary, ["-" + model, "-l", lang, "-u", u, "-w", w,
                              "-r", r, "-g", g, "-s", pb], ct)
     s, _ = parse_recovered(err)
     return s
@@ -209,6 +214,7 @@ def main():
     length = int(env("EVAL_LENGTH", "50"))
     pairs = int(env("EVAL_PAIRS", "10"))
     opts = env("EVAL_OPTS", "-J -S i4q10 -R 10")
+    model = env("EVAL_MODEL", "q")   # final/ranking model: q(uad), t(ri), b(i)...
     label = env("EVAL_LABEL", "") or re.sub(r"\s+", "", opts)
     threads = env("EVAL_THREADS", "1")
     solver_seed = env("EVAL_SOLVER_SEED", "0")
@@ -220,7 +226,7 @@ def main():
     rng = random.Random()   # fresh OS entropy -> different problems each invocation
 
     # cli_options records the strategy portion; the rotor key comes from true_*.
-    cli_options = " ".join(["-q", "-l", "<lang>", "-c"] + opt_list +
+    cli_options = " ".join(["-" + model, "-l", "<lang>", "-c"] + opt_list +
                            ["-e", solver_seed, "-T", threads])
 
     if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
@@ -245,7 +251,7 @@ def main():
             u, w, r, g, pb = key
             ct = encrypt(binary, key, excerpt)
 
-            args = ["-q", "-l", lang, "-u", u, "-w", w, "-r", r, "-g", g, "-c"] \
+            args = ["-" + model, "-l", lang, "-u", u, "-w", w, "-r", r, "-g", g, "-c"] \
                 + opt_list + ["-e", solver_seed, "-T", threads]
             rec_out, rec_err, wall_ms = run(binary, args, ct)
             recovered = rec_out.strip()
@@ -255,7 +261,7 @@ def main():
             exact = 1 if matched == length else 0
             si = score_iter(rec_err)
             rec_score, rec_plugs = parse_recovered(rec_err)
-            true_score = oracle_score(binary, key, ct, lang)
+            true_score = oracle_score(binary, key, ct, lang, model)
 
             ts = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
             row = [

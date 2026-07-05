@@ -33,8 +33,10 @@ Env knobs: `EVAL_LANGS` (default `english german`), `EVAL_RUNS` (40),
 `EVAL_LENGTH` (50), `EVAL_PAIRS` (10), `EVAL_OPTS` (climb strategy, default
 `-J -S i4q10 -R 10`), `EVAL_LABEL`, `EVAL_THREADS` (1), `EVAL_SOLVER_SEED` (0),
 `EVAL_CORPORA` (comma-separated corpus names to restrict to, e.g.
-`doenitz1945`; default all), `EVAL_OUT`. Problems are drawn from fresh OS
-entropy, so each invocation adds new random instances.
+`doenitz1945`; default all), `EVAL_MODEL` (final/ranking model letter, default
+`q`; set with a matching `-S` target, e.g. `EVAL_MODEL=t EVAL_OPTS='-J -S i4t10
+-R 10'`), `EVAL_OUT`. Problems are drawn from fresh OS entropy, so each
+invocation adds new random instances.
 
 ## Corpora (`eval/corpora/`)
 
