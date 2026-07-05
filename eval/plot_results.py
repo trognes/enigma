@@ -157,16 +157,26 @@ for clabel, cfg, color, labelpts in [
                             textcoords="offset points", color=color, fontsize=8)
 ax.set_xlabel("compute — mean score_iter per message (thousands)")
 ax.set_ylabel("letters correct (mean %)")
-ax.set_title("Climb variants at matched compute (english, quad, 10 plugs)",
+ax.set_title("Compute per climb, by variant (english, quad, 10 plugs, R=10)",
              fontsize=13, fontweight="bold", pad=12)
 ax.set_ylim(0, 102); ax.set_xlim(0, 62)
 ax.legend(frameon=False, loc="upper left", fontsize=9)
-ax.annotate("first-improvement (-I/-J): same\nrecovery at ~1/3 the compute",
-            (20, 72), (33, 52), textcoords="data", fontsize=9, color="#555555",
-            arrowprops=dict(arrowstyle="->", color="#999999"))
+ax.annotate("-I/-J run each climb at ~1/3-2/5 the compute\nof steepest. At fixed R=10 steepest recovers a\nbit MORE per length (see recovery-vs-length);\nthe -I/-J win needs those cycles spent on more R.",
+            (24, 46), textcoords="data", fontsize=8.5, color="#555555")
 fig.tight_layout()
 fig.savefig(os.path.join(OUT, "greedy_vs_steepest_compute.png"), bbox_inches="tight", facecolor="white")
 plt.close(fig)
 print("wrote greedy_vs_steepest_compute.png")
+
+# 7. climb variants: recovery vs length (english), ignoring compute
+line_chart(
+    [("-I  first-improvement", "#0072B2",
+      *curve(lambda r: r["config_label"] == FI and r["language"] == "english", lambda r: r["pct"])),
+     ("-J  (+ dynamic order)", "#009E73",
+      *curve(lambda r: r["config_label"] == GREEDY and r["language"] == "english", lambda r: r["pct"])),
+     ("steepest ascent", "#D55E00",
+      *curve(lambda r: r["config_label"] == STEEP and r["language"] == "english", lambda r: r["pct"]))],
+    "Climb variants: recovery vs length (english, quad, 10 plugs, R=10)",
+    "letters correct (mean %)", "climb_variants_recovery.png")
 
 print("done ->", OUT)
