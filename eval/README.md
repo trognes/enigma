@@ -97,26 +97,33 @@ test them in isolation.
   a new strategy can be replayed on the *same* problems already in the file for a
   low-variance paired comparison — you never have to pre-commit a seed list.
 
+## Current contents
+
+The log currently holds **English rows only**. All German rows were **removed**:
+they were produced before the n-gram parser was fixed, so they measured a
+crippled scorer (see below), and the entire batch that reached the correct
+folded tables was never rerun. German can be regenerated cleanly under the
+current binary whenever needed; the removal is recorded in `PERFORMANCE.md`
+§6.9 and the commit that dropped them.
+
 ## Key findings so far (10 plugs, `-J -R 10`)
 
+- **English is search-bound** — 0 scoring failures at every length, fully solved
+  by ~L200. English was never affected by the table bug below (26 letters, no
+  accents; its tables always loaded fully).
 - **A table-loading bug crippled non-English scoring (found via this log, now
   fixed).** `load_counts` stopped reading at the first accented gram, so the
-  German quad table loaded only its 29 most frequent entries (4.9%). The initial
-  eval round therefore showed German quad badly scoring-bound and a spurious
-  "bigram > trigram > quad" ordering (a truncation artifact — lower order = less
-  truncated). See `PERFORMANCE.md` §6.9 and commit `41eed72`.
-- **After the fix, German quad works like English.** German L90 mean %-correct
-  jumped **24.7 → 91.1** (before → after), scoring failures fell to ~0, and the
-  natural order returned (quad ≳ tri ≳ bi). **Model order is *not* meaningfully
-  language-dependent** once the tables load — use `-q`. Rows before/after are
-  distinguishable by `git_sha` (`41eed72`+ = fixed).
-- **English was never affected** (26 letters, no accents; loaded fully all along)
-  — search-bound, 0 scoring failures, solved by ~L200.
-- **Genuine telegraphic German remains the real residual.** The Dönitz 1945
-  message and the 1930 manual message (`Q`-for-`CH`, dense `X` separators,
-  `ae/oe/ue/ss` transliteration) score worse than prose even after the fix —
-  operational orthography off-distribution for the prose tables (§6.6), now
-  cleanly separated from the loading bug.
+  German quad table loaded only its 29 most frequent entries (4.9%). During the
+  investigation this produced a spurious "German wants bigram" reading — a
+  truncation artifact (lower order = less truncated), **now retracted**. The
+  parser was fixed to fold accented grams to their A–Z base and accumulate
+  counts (`PERFORMANCE.md` §6.9); model order is *not* meaningfully
+  language-dependent once the tables load — use `-q`. The German rows behind that
+  investigation have been removed as invalid.
+- **Genuine telegraphic German is the real residual** (independent of the bug):
+  operational orthography — `Q`-for-`CH`, dense `X` separators — is
+  off-distribution for the prose tables (§6.6). This will need genuine-text
+  rows regenerated under the fixed binary to quantify.
 
 ## Reproducing a single row
 
