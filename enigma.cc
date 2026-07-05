@@ -393,25 +393,35 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
     }
 
   uint64_t total = 0;   /* sum of all counts, in uint64 (can exceed uint32) */
-  while (1)
+  char line[256];
+  while (fgets(line, sizeof(line), f))
     {
+      /* One record per line: "<GRAM> <count>". SKIP -- do not stop on -- any
+         record whose gram is not exactly n A-Z letters. The tables are frequency
+         sorted and the non-English languages interleave accented grams (German
+         umlauts a-e/o-e/u-e and eszett as single symbols, Danish/French accents)
+         from near the top; the earlier "stop at the first malformed record"
+         truncated the table there -- e.g. the german quadgram table to its first
+         29 of 366k entries (4.9% of the count), silently flooring the other 95%
+         as hapax and crippling non-English scoring. Skipping keeps every A-Z gram
+         the 26-letter machine can actually use. */
+      char gram[16];
+      unsigned count;
+      if (sscanf(line, "%15s %u", gram, & count) != 2)
+        continue;
       int index = 0;
       int ok = 1;
       for (int k = 0; k < n; k++)
         {
-          char a;
-          if ((fscanf(f, " %c", & a) != 1) || (a < 'A') || (a > 'Z'))
+          if ((gram[k] < 'A') || (gram[k] > 'Z'))
             {
               ok = 0;
               break;
             }
-          index = index * asize + char2num(a);
+          index = index * asize + char2num(gram[k]);
         }
-
-      unsigned count;
-      if (! ok || (fscanf(f, " %u", & count) != 1))
-        break;
-
+      if (! ok || (gram[n] != '\0'))   /* non-A-Z char, or gram longer than n */
+        continue;
       table[index] = count;
       total += count;
     }
