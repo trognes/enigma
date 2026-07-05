@@ -99,31 +99,34 @@ test them in isolation.
 
 ## Current contents
 
-The log currently holds **English rows only**. All German rows were **removed**:
-they were produced before the n-gram parser was fixed, so they measured a
-crippled scorer (see below), and the entire batch that reached the correct
-folded tables was never rerun. German can be regenerated cleanly under the
-current binary whenever needed; the removal is recorded in `PERFORMANCE.md`
-§6.9 and the commit that dropped them.
+The log holds **all four languages** (english, german, danish, french), 2800–2840
+rows each, 10 plugs. The buggy pre-fix German rows were removed (see below) and
+the non-English rows were regenerated under the fold-and-accumulate binary
+(`git_sha` `ad4113e`). Configs present: quad greedy (`-J -S i4q10 -R 10`), quad
+steepest (`-S i4q10 -R 10`), and a trigram slice (`-J -S i4t10 -R 10`), across
+L40–L300. English uses 4 prose corpora, german its 4 prose corpora; danish/french
+each use a single built-in passage (less excerpt diversity).
 
 ## Key findings so far (10 plugs, `-J -R 10`)
 
-- **English is search-bound** — 0 scoring failures at every length, fully solved
-  by ~L200. English was never affected by the table bug below (26 letters, no
-  accents; its tables always loaded fully).
 - **A table-loading bug crippled non-English scoring (found via this log, now
   fixed).** `load_counts` stopped reading at the first accented gram, so the
-  German quad table loaded only its 29 most frequent entries (4.9%). During the
-  investigation this produced a spurious "German wants bigram" reading — a
-  truncation artifact (lower order = less truncated), **now retracted**. The
-  parser was fixed to fold accented grams to their A–Z base and accumulate
-  counts (`PERFORMANCE.md` §6.9); model order is *not* meaningfully
-  language-dependent once the tables load — use `-q`. The German rows behind that
-  investigation have been removed as invalid.
-- **Genuine telegraphic German is the real residual** (independent of the bug):
-  operational orthography — `Q`-for-`CH`, dense `X` separators — is
-  off-distribution for the prose tables (§6.6). This will need genuine-text
-  rows regenerated under the fixed binary to quantify.
+  German quad table loaded only its 29 most frequent entries (4.9%). This
+  produced a spurious "German wants bigram" reading — a truncation artifact
+  (lower order = less truncated), **now retracted**. The parser was fixed to fold
+  accented grams to their A–Z base and accumulate counts (`PERFORMANCE.md` §6.9);
+  **model order is not meaningfully language-dependent — use `-q`.**
+- **After the fix every language cracks comparably** (quad greedy), all reaching
+  100% exact by ~L200. At short lengths the non-English languages are actually
+  *easier* than english (L50 mean %-correct: english 15, french 34, german 35,
+  danish 33). English is search-bound (0 scoring failures at every length).
+- **Accent-folding convention.** The tool folds accents to a single base letter
+  (`ä→A`). French matches this (its corpus strips accents to the base); the
+  german/danish corpora *expand* (`ä→ae`, `å→aa`), a small mismatch on accented
+  words (in practice negligible — german scores among the best). Single-letter
+  corpora would make the cross-language comparison fully clean.
+- **Genuine telegraphic German** remains a separate §6.6 residual (operational
+  `Q`-for-`CH` / `X`-separator orthography), to be requantified under the fix.
 
 ## Reproducing a single row
 
