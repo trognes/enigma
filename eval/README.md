@@ -35,20 +35,37 @@ Env knobs: `EVAL_LANGS` (default `english german`), `EVAL_RUNS` (40),
 `EVAL_OUT`. Problems are drawn from fresh OS entropy, so each invocation adds
 new random instances.
 
+## Corpora (`eval/corpora/`)
+
+Each run draws its excerpt from a randomly chosen source passage for the
+language (weighted so every valid excerpt across all passages is equally
+likely), and records which one in the `corpus` column. Passages live as plain
+`<language>_<name>.txt` files in `eval/corpora/`; the loader keeps only A–Z
+(uppercased), so **you can add a corpus by dropping a raw text file there** — no
+code change. `<name>` becomes the `corpus` value.
+
+The seeded passages are **authored** (original prose on varied topics), not
+fetched literature: this session's egress proxy denies general web hosts
+(`www.gutenberg.org` → 403), so external corpora could not be downloaded. Add
+real ones as files when you have them. German umlauts/eszett are transliterated
+`ae/oe/ue/ss` (the project convention). `eval/corpora/build_corpora.py` holds
+the human-readable sources and regenerates the `.txt` files.
+
 ## Columns
 
 | column | meaning |
 |---|---|
 | `git_sha` | binary/code version (`-dirty` if the tree differs from HEAD, ignoring the results file itself) |
 | `timestamp_utc`, `host` | when/where the run happened |
-| `language`, `length`, `num_plugs` | the regime (english/german, 50, 10) |
+| `language`, `length`, `num_plugs` | the regime (english/german, length, 10) |
+| `corpus` | which source passage the excerpt was drawn from (see `eval/corpora/`) |
 | `true_reflector`, `true_rotors`, `true_ring`, `true_grund`, `true_plugs` | the answer key (reflector A/B/C, 3 wheel digits, ring, start, plug pairs) |
 | `plaintext` | the true excerpt (A–Z only) |
 | `cli_options` | the strategy options used, with `<lang>` filled in — **excludes** the rotor key, which lives in the `true_*` columns |
 | `config_label` | short language-independent tag for grouping runs of one strategy |
 | `solver_seed` | `-e` restart seed (pinned 0, recorded) |
 | `threads` | `-T` (affects wall-time only; `score_iter` is thread-independent) |
-| `letters_matched_count`, `letters_matched_pct` | recovered-vs-true letter agreement over the 50 positions |
+| `letters_matched_count`, `letters_matched_pct` | recovered-vs-true letter agreement over the message positions |
 | `exact_match` | 1 iff every letter matches |
 | `score_iter` | plugboards scored (the compute spent — compare configs at matched `score_iter`, never matched `-R`) |
 | `wall_time_ms` | crack wall-time (machine-dependent, unlike `score_iter`) |

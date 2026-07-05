@@ -58,7 +58,7 @@ CORPORA = {
 }
 
 HEADER = [
-    "git_sha", "timestamp_utc", "host", "language", "length", "num_plugs",
+    "git_sha", "timestamp_utc", "host", "language", "corpus", "length", "num_plugs",
     "true_reflector", "true_rotors", "true_ring", "true_grund", "true_plugs",
     "plaintext", "cli_options", "config_label", "solver_seed", "threads",
     "letters_matched_count", "letters_matched_pct", "exact_match", "score_iter",
@@ -131,17 +131,41 @@ def oracle_score(binary, key, ct, lang):
     return s
 
 
-def gen_problem(rng, corpus, length, pairs):
-    """One random problem: (excerpt, (u, w, r, g, pb)) from fresh entropy."""
-    off = rng.randrange(len(corpus) - length + 1)
-    excerpt = corpus[off:off + length]
+def load_corpora(lang):
+    """[(name, text), ...] for a language from eval/corpora/<lang>_*.txt (A-Z
+    only, uppercased); falls back to the built-in passage if the dir has none.
+    Drop more <lang>_<name>.txt files in eval/corpora/ to add corpora -- no code
+    change needed (any non-A-Z is stripped, so raw text files are fine)."""
+    out = []
+    cdir = os.path.join("eval", "corpora")
+    if os.path.isdir(cdir):
+        for fn in sorted(os.listdir(cdir)):
+            if fn.startswith(lang + "_") and fn.endswith(".txt"):
+                with open(os.path.join(cdir, fn)) as fh:
+                    text = re.sub(r"[^A-Z]", "", fh.read().upper())
+                if text:
+                    out.append((fn[len(lang) + 1:-4], text))
+    if not out and lang in CORPORA:
+        out = [("builtin", CORPORA[lang])]
+    return out
+
+
+def gen_problem(rng, corpora, length, pairs):
+    """One random problem from a randomly chosen corpus, weighted so every valid
+    excerpt across all corpora is equally likely. Returns
+    (corpus_name, excerpt, (u, w, r, g, pb))."""
+    usable = [(nm, t) for nm, t in corpora if len(t) >= length]
+    weights = [len(t) - length + 1 for _, t in usable]
+    nm, text = rng.choices(usable, weights=weights, k=1)[0]
+    off = rng.randrange(len(text) - length + 1)
+    excerpt = text[off:off + length]
     u = rng.choice("ABC")
     w = "".join(str(d) for d in rng.sample(range(1, 9), 3))
     r = "".join(rng.choice(string.ascii_uppercase) for _ in range(3))
     g = "".join(rng.choice(string.ascii_uppercase) for _ in range(3))
     letters = rng.sample(string.ascii_uppercase, 2 * pairs)
     pb = " ".join(letters[2 * i] + letters[2 * i + 1] for i in range(pairs))
-    return excerpt, (u, w, r, g, pb)
+    return nm, excerpt, (u, w, r, g, pb)
 
 
 def git_sha(root, ignore=()):
@@ -202,15 +226,15 @@ def main():
           % (runs, len(langs), total, out_path, sha, opts, label), file=sys.stderr)
 
     for lang in langs:
-        corpus = CORPORA.get(lang)
-        if corpus is None:
+        corpora = load_corpora(lang)
+        if not corpora:
             print("skip unknown language %s" % lang, file=sys.stderr)
             continue
         cli = cli_options.replace("<lang>", lang)
         exact_ct = 0
         pct_sum = 0.0
         for _ in range(runs):
-            excerpt, key = gen_problem(rng, corpus, length, pairs)
+            corpus_name, excerpt, key = gen_problem(rng, corpora, length, pairs)
             u, w, r, g, pb = key
             ct = encrypt(binary, key, excerpt)
 
@@ -228,7 +252,7 @@ def main():
 
             ts = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
             row = [
-                sha, ts, host, lang, str(length), str(pairs),
+                sha, ts, host, lang, corpus_name, str(length), str(pairs),
                 u, w, r, g, pb, excerpt, cli, label, solver_seed, threads,
                 str(matched), "%.1f" % pct, str(exact),
                 str(si) if si is not None else "",
