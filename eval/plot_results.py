@@ -190,4 +190,32 @@ line_chart(
     "Recovery vs length at MATCHED compute (~55k score_iter; english, quad, 10 plugs)",
     "letters correct (mean %)", "matched_compute_recovery.png")
 
+# 9. matched-compute recovery per language (2x2 small multiples, pooled 2 seeds)
+MC = [("-I  R=32", "i4q10.R32.I", "#0072B2"),
+      ("-J  R=24", "i4q10.R24.J", "#009E73"),
+      ("steepest  R=10", "i4q10.R10.steepest", "#D55E00")]
+MC_LENS = {50, 70, 90, 120, 160}
+fig, axes = plt.subplots(2, 2, figsize=(10, 7.5), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    for clabel, cfg, color in MC:
+        xs, ys = curve(lambda r, L=lang, C=cfg: r["config_label"] == C
+                       and r["language"] == L and r["length"] in MC_LENS, lambda r: r["pct"])
+        ax.plot(xs, ys, "-o", color=color, lw=2, ms=5, label=clabel,
+                markeredgecolor="white", markeredgewidth=0.6)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8)
+    ax.set_axisbelow(True)
+for ax in axes[1]:
+    ax.set_xlabel("message length (letters)")
+for ax in (axes[0, 0], axes[1, 0]):
+    ax.set_ylabel("letters correct (mean %)")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8.5)
+fig.suptitle("Matched-compute recovery, per language (~55k score_iter, quad, 10 plugs, 2 seeds)",
+             fontsize=13, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "matched_compute_by_language.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote matched_compute_by_language.png")
+
 print("done ->", OUT)
