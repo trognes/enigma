@@ -99,13 +99,21 @@ test them in isolation.
 
 ## Current contents
 
-The log holds **all four languages** (english, german, danish, french), 2800–2840
-rows each, 10 plugs. The buggy pre-fix German rows were removed (see below) and
-the non-English rows were regenerated under the fold-and-accumulate binary
-(`git_sha` `ad4113e`). Configs present: quad greedy (`-J -S i4q10 -R 10`), quad
-steepest (`-S i4q10 -R 10`), and a trigram slice (`-J -S i4t10 -R 10`), across
-L40–L300. English uses 4 prose corpora, german its 4 prose corpora; danish/french
-each use a single built-in passage (less excerpt diversity).
+The log holds **all four languages** (english, german, danish, french), 10 plugs,
+on the fold-and-accumulate binary. **The main grid is orthogonal**: each language
+has **4 prose corpora** (english builtin/city/mountains/ocean, german
+builtin/wald/reise/wissenschaft, danish builtin/hav/by/skov, french
+builtin/mer/ville/montagne) and identical row counts per (config × length) —
+three configs (quad greedy `-J -S i4q10 -R 10`, quad steepest `-S i4q10 -R 10`,
+trigram `-J -S i4t10 -R 10`) across L40–L300, sampled to 140/160/160 at L50/60/70
+and 80 elsewhere.
+
+Separate experiments carry their own `config_label` suffix so they don't pollute
+the main grid: **`.translit`** (german and danish multi- vs single-letter
+transliteration, the `*_sl` / `danmark` corpora) and **`.genuine`** (the German
+genuine messages `doenitz1945` / `manual1930`). These are inherently
+language-specific (no accents in english, none of the accented/genuine text for
+the others) and are the only remaining non-orthogonality.
 
 ## Key findings so far (10 plugs, `-J -R 10`)
 
