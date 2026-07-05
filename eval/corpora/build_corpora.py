@@ -23,6 +23,10 @@ import re
 BUILTIN = {
     "english_builtin": "THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSEWEFINDTHATCERTAINCOMMONWORDSANDLETTERPATTERNSREPEATSOOFTENTHATTHEYBETRAYTHEUNDERLYINGSTRUCTUREOFTHEMESSAGEEVENAFTERITHASBEENENCRYPTEDWITHAROTORMACHINELIKETHEENIGMAUSEDINTHEWARHISTORIANSBELIEVETHATBREAKINGTHISCIPHERSHORTENEDTHECONFLICTBYSEVERALYEARSANDSAVEDCOUNTLESSLIVES",
     "german_builtin": "DIEENIGMAMASCHINEWURDEIMZWEITENWELTKRIEGVONDERDEUTSCHENWEHRMACHTVERWENDETUMGEHEIMENACHRICHTENZUVERSCHLUESSELNABERDIEALLIIERTENKONNTENDENGEHEIMENCODETROTZDEMBRECHENWEILDIEDEUTSCHENOFTDIEGLEICHENFLOSKELNVERWENDETENUNDWEILVIELEBEDIENERIMMERWIEDERDIESELBENFEHLERMACHTENDIEPOLNISCHENUNDBRITISCHENMATHEMATIKERBAUTENMASCHINENUMDIETAEGLICHENSCHLUESSELZUFINDENUNDLASENSODIEGEHEIMENFUNKSPRUECHEDESFEINDESMITUNDVERKUERZTENDADURCHDENKRIEGUMMEHREREJAHREUNDRETTETENVIELETAUSENDMENSCHENLEBEN",
+    # danish/french "builtin" = the passages eval.py used as the fallback corpus,
+    # so the corpus name stays "builtin" and matches the earlier rows' content.
+    "danish_builtin": "DETVARENGANGENLILLEHAVFRUESOMBOEDELANGTUDEPAAHAVETSBUNDSAMMENMEDSINFADEROGSINEFEMSOESTREHUNVARDENYNGSTEOGSMUKKESTEAFDEMALLEMENHUNLAENGTESEFTERATKOMMEOPTILMENNESKENESVERDENOGSEDENSTORESKIBEOGBYERNEOGSKOVENEHVERTAARBLEVHUNAELDREOGFIKLOVTILATSTIGEOPGENNEMDETKLAREVANDFORATSIDDEPAAKLIPPERNEISKINNETFRAMAANENOGSEUDOVERDENSTOREVIDEVERDENOGNAARSOLENGIKNEDDYKKEDEHUNNEDIGENMENHUNGLEMTEALDRIGDENDEJLIGEVERDENOVENOVERVANDETOGENDAGDAHUNREDDEDEENUNGPRINSFRADRUKNINGFORELSKEDEHUNSIGHAABLOEST",
+    "french_builtin": "LESSANGLOTSLONGSDESVIOLONSDELAUTOMNEBLESSENTMONCOEURDUNELANGUEURMONOTONETOUTSUFFOCANTETBLEMEQUANDSONNELHEUREJEMESOUVIENSDESJOURSANCIENSETALORSJEPLEUREETJEMENVAISAUVENTMAUVAISQUIMEMPORTEDECADELABCOMMELAFEUILLEMORTEPENDANTLONGTEMPSJEMESUISCOUCHEDEBONNEHEUREETJAIREVEDESPAYSLOINTAINSOULESHOMMESSONTLIBRESETOULAVIEESTDOUCEETBELLECHAQUEMATINJEMEPROMENAISLELONGDELARIVIEREENECOUTANTLECHANTDESOISEAUXETLEMURMUREDELEAUQUICOULAITDOUCEMENTVERSLAMER",
 }
 
 # Genuine historical Enigma message plaintexts (already A-Z after cleaning;
@@ -125,6 +129,72 @@ fordi landet er fladt og let at komme rundt i. Selv om vintrene kan være kolde
 og mørke, holder folk humøret oppe med hygge, levende lys og varm kaffe sammen
 med gode venner og nær familie.
 """,
+    "danish_hav": """
+Havet dækker størstedelen af vores planet og er stadig et af de mindst
+udforskede steder på jorden. Under bølgerne lever mærkelige og smukke skabninger,
+fra det lille lysende plankton til de store hvaler, der synger til hinanden over
+lange afstande. Koralrev giver ly til utallige fisk i det varme lave vand, mens
+dyrene i det kolde mørke dyb har lært at lave deres eget lys. Stærke havstrømme
+fører varmt vand fra ækvator mod polerne og former vejret på hvert kontinent.
+Søfolk har krydset disse vande i tusinder af år, styret efter stjernerne, og
+meget af det, der ligger under overfladen, er stadig en gåde, som venter på at
+blive opdaget.
+""",
+    "danish_by": """
+En stor by sover aldrig helt, for selv i nattens mørkeste timer er der mennesker
+på arbejde for at holde den i live. Høje huse af glas og stål rejser sig, hvor
+der før lå marker, og under de travle gader kører tog fulde af trætte rejsende.
+På torvene sælges mad fra alle verdens hjørner, og på hjørnerne spiller musikere
+for mønter, mens kunstnere maler den forbipasserende folkemængde. Gennem årene er
+byen vokset udad og opad, slugt de nærliggende landsbyer og tiltrukket nye
+mennesker, der søger arbejde og et bedre liv. Alligevel står der gemt mellem de
+moderne tårne gamle kirker og smalle stræder, som husker en mere stille tid.
+""",
+    "danish_skov": """
+Skoven har i mange hundrede år været en vigtig del af det danske landskab. I de
+tætte skove vokser høje bøge og ege, hvorunder rådyr, harer og mange fugle gemmer
+sig. Om foråret dækker grønne blade træerne, og om efteråret farves skovene røde
+og gyldne. Mange mennesker går i skoven i weekenden for at vandre, trække frisk
+luft og nyde naturens ro. Skovfogeder passer træerne og sørger for, at skoven
+forbliver sund og vokser op igen. Skoven er også vigtig for klimaet, fordi
+træerne renser luften og beskytter jorden mod kraftig regn.
+""",
+    "french_mer": """
+La mer recouvre la plus grande partie de notre planète et reste un monde
+mystérieux et magnifique. Sous les vagues vivent des créatures étranges, depuis
+le minuscule plancton qui brille dans la nuit jusqu'aux baleines immenses qui
+chantent sur de longues distances. Les récifs de corail abritent d'innombrables
+poissons dans les eaux chaudes et peu profondes, tandis que dans l'obscurité des
+grands fonds certains animaux produisent leur propre lumière. De puissants
+courants transportent l'eau chaude de l'équateur vers les pôles et façonnent le
+climat de chaque continent. Les marins traversent ces eaux depuis des milliers
+d'années, guidés par les étoiles, et une grande partie de ce qui se cache sous la
+surface demeure encore inconnue.
+""",
+    "french_ville": """
+Une grande ville ne dort jamais vraiment, car même aux heures les plus sombres de
+la nuit, des gens travaillent pour la maintenir en vie. De hautes tours de verre
+et d'acier s'élèvent là où s'étendaient autrefois des champs, et sous les rues
+animées circulent des trains remplis de voyageurs fatigués. Les marchés vendent
+des aliments venus de tous les coins du monde, et à chaque carrefour des
+musiciens jouent tandis que des artistes peignent la foule qui passe. Au fil des
+années, la ville a grandi vers le ciel, avalant les villages voisins et attirant
+de nouveaux habitants venus chercher du travail et une vie meilleure. Pourtant,
+cachées parmi les immeubles modernes, de vieilles églises et d'étroites ruelles
+se souviennent d'une époque plus tranquille.
+""",
+    "french_montagne": """
+Haut dans les montagnes, l'air devient froid et rare, et seules les plantes et
+les bêtes les plus robustes peuvent survivre. De grands sommets de roche et de
+glace s'élèvent vers le ciel, sculptés pendant des millions d'années par le vent,
+l'eau et les lents fleuves de glace que l'on appelle glaciers. Dans les vallées
+en contrebas, les rivières naissent de petits ruisseaux nourris par la neige
+fondante et prennent de la force en descendant vers la mer lointaine. Des
+grimpeurs viennent de loin pour se mesurer aux pentes escarpées, portant des
+cordes, des tentes et assez de vivres pour de nombreux jours. Quand le soleil se
+couche derrière les crêtes, la neige devient rose et dorée, et les premières
+étoiles apparaissent dans un ciel si clair qu'il semble tout proche.
+""",
 }
 
 # Two transliterations of the German umlauts/eszett:
@@ -133,13 +203,21 @@ med gode venner og nær familie.
 # The tool now folds accented n-grams to a single base letter, so the SINGLE
 # corpora are the convention-matched ones; keeping both lets the eval compare
 # which transliteration the folded tables actually prefer (EVAL_CORPORA=...).
+_FRENCH = {   # single-char base folds; no ü (German's ue/u mapping wins that)
+    "à": "a", "â": "a", "ç": "c", "è": "e", "é": "e", "ê": "e", "ë": "e",
+    "î": "i", "ï": "i", "ô": "o", "ù": "u", "û": "u", "ÿ": "y",
+    "À": "a", "Â": "a", "Ç": "c", "È": "e", "É": "e", "Ê": "e", "Ë": "e",
+    "Î": "i", "Ï": "i", "Ô": "o", "Ù": "u", "Û": "u", "Ÿ": "y",
+}
 TRANS = str.maketrans({
     "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "ae", "Ö": "oe", "Ü": "ue", "ß": "ss",
     "å": "aa", "ø": "oe", "æ": "ae", "Å": "aa", "Ø": "oe", "Æ": "ae",
+    "œ": "oe", "Œ": "oe", **_FRENCH,
 })
 TRANS_SINGLE = str.maketrans({
     "ä": "a", "ö": "o", "ü": "u", "Ä": "a", "Ö": "o", "Ü": "u", "ß": "s",
     "å": "a", "ø": "o", "æ": "a", "Å": "a", "Ø": "o", "Æ": "a",
+    "œ": "o", "Œ": "o", **_FRENCH,
 })
 
 
