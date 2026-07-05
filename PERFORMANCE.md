@@ -62,7 +62,9 @@ plugboard-free IC scan as pre-filter (~0% recall); 5-grams / 4-bit scores (too
 sparse / too coarse); uncapped tier-1 IC climb (overfits, worse recall *and*
 slower); back-off / interpolated quadgram smoothing (`--backoff`, §6.2 — conditional
 form −20pp, joint-floor form neutral; the harsh flat floor is a discrimination
-*feature*).
+*feature*); trigram-target-at-short-end (§6.1 — with the tuned `-S i4qK` recipe quad
+beats trigram at the realistic 10-plug count, +~9pp L90 two seeds; the bare-model
+"trigram wins" was a weak-baseline artifact).
 
 **Constraints every proposal must respect:** `-T` thread determinism (all
 randomness rides the per-key splitmix64 stream seeded from the flat key index —
@@ -654,14 +656,17 @@ cross-key-seeded finalists vs the independent-per-key baseline at equal compute.
 
 ## 6. Scoring
 
-> **Measured update (unknown-key gate).** The scoring-failure gate is now built
-> and run (`CRACKQUALITY_TESTS.md` §1): with an *unknown* rotor start, `scoring-fail%`
-> is **0 at L ≥ 50** (still purely search-bound) and only **~7.5% at L40** (robust
-> over two seeds) — the first scoring failures the project has seen, right at the
-> identifiability floor. So this whole section stays parked *for the regime that
-> matters*; the sole measured opening is a narrow one at **L ≲ 40** (near-zero
-> recovery regardless), which is exactly what §6.1 (trigram-at-short-end) and §6.2
-> (back-off smoothing) target. Do not promote §6 above §3/§7 on the strength of it.
+> **Measured — §6 is effectively closed.** Three independent results all say the
+> plugboard tier is **search-bound, not scoring-bound**, and no scoring change moves
+> it: (1) the unknown-key **scoring-failure gate** (`CRACKQUALITY_TESTS.md` §1) finds
+> `scoring-fail% = 0` at L ≥ 50 and only ~7.5% at L40 (near-zero recovery regardless);
+> (2) **§6.2** back-off smoothing — built, measured worse-to-neutral, rejected; (3)
+> **§6.1** trigram-target — measured, rejected (quad wins at the realistic plug count
+> with the tuned recipe). The two remaining items (§6.3 MDL prior, §6.4 quad+λ·IC)
+> inherit this strong negative prior and both carry hot-path cost and a risk of
+> *introducing* scoring failures, so neither is worth building ahead of the search
+> ideas (§3/§7). **Do not promote §6 above §3/§7.** The larger scoring payoffs, if any,
+> await a future full-crack tier where rotor-key discrimination is in play.
 
 Per the §1 diagnosis, purely *monotone* rescales (likelihood-ratio null
 normalization, z-scoring, per-length normalization) **provably cannot change
@@ -673,43 +678,45 @@ below every §3/§7 item** in the shortlist: the tier is search-bound, so scorin
 only help as *landscape smoothing*, measured solely by whether the search-failure
 share drops. The larger scoring payoffs await the full-crack tier.
 
-### 6.1 Adaptive n-gram order by length; trigram target at the short end (MEDIUM priority)
+### 6.1 Adaptive n-gram order by length; trigram target at the short end (❌ MEASURED, REJECTED)
 
-*Merged from three researchers.*
+**The idea.** All four scorers exist; a scheduling change would make the
+target/ranking model a function of `textlength` (short → trigram, long → quad), on
+the "lower order = denser cells = smoother surface = fewer local optima" argument,
+plus the folk result (attributed to Williams) that a lower-order statistic *beats*
+trigrams for plugboard recovery because the plugboard maximally disrupts
+higher-order frequencies.
 
-**Form in this codebase.** All four scorers already exist; this is a scheduling
-change, **distinct from `-S iq`** (which is about the IC *pre-pass*, not the final
-ranking model). Make the target/ranking model a function of `textlength`:
-`<~60` letters → trigram, mid → a bi→tri phase, long → quad. Ostwald & Weierud
-deliberately end on trigrams for the operational limit. Lower order = denser cells
-= smoother surface = fewer local optima.
+**Measured (`crackquality`, plugboard tier, `-R 8`, 40 trials, English).** Trigram
+vs quad, both run with the **tuned staged recipe** `-S i4q10` / `-S i4t10` (only the
+target model swapped):
 
-> There is a folk result (attributed to Williams) that the *unigram* Sinkov
-> statistic **beat trigrams** for plugboard recovery, on the logic that the
-> plugboard maximally disrupts higher-order frequencies. **This is unverified
-> here** (the origin PDF was not reachable; see References) — treat it as a
-> hypothesis to *test*, not a settled fact, and do not let it alone justify going
-> below trigram. If it holds, it strengthens the "lower order is smoother" case;
-> if it does not, trigram-at-short-end still stands on the density argument.
+| | L50 | L60 | L90 | L120 |
+|---|--:|--:|--:|--:|
+| 6 plugs — quad `i4q10` | 57.6 | 74.9 | 95.7 | 100 |
+| 6 plugs — trigram `i4t10` | 54.5 | 80.4 | 97.0 | 100 |
+| 10 plugs — quad `i4q10` | 12.9 | 24.4 | **67.0 / 62.2** | 88.3 |
+| 10 plugs — trigram `i4t10` | 12.9 | 21.7 | **57.6 / 53.3** | 89.9 |
 
-**Why it helps at 50 chars.** ~47 quadgrams, many at the hapax floor, give a
-high-variance spiky surface; ~48 trigrams with far denser counts give a
-lower-variance, better-conditioned landscape for the *climb*.
+*(L90/10-plug shows both seeds.)* At 6 plugs it is a wash (mixed ±3–5pp); at the
+realistic **10 plugs quad wins**, decisively at L90 — **+9.4 and +8.9pp across two
+seeds** — and elsewhere ties within noise. **Quad-as-used is correct; the docs'
+"quad is the recommended model" stands.** Not shipped.
 
-**Honest payoff.** Medium — plausibly the single most likely *scoring* lever to
-move the plugboard tier, because it changes surface roughness (the search lever).
-Skeptical caveats: (a) the harness reports the true board already out-scoring
-under quad at 50 chars, so quad is not *mis*-ranking — trigram's payoff here is
-landscape smoothing, likely modest, and larger at 30–40 chars and in the future
-full-crack tier; (b) `-S iq` already shows lower-order is not a free lunch (IC
-pre-pass beat a bigram pre-pass), so the win, if any, is in the *final* model at
-the shortest lengths only. A length threshold is a new magic number — validate
-across all four languages, not just the harness's one passage.
+> **Methodology lesson (the reason this nearly shipped as a false win).** A first,
+> *un-staged* pass — bare `-q` vs bare `-t` — showed trigram beating quad by up to
+> +8pp, at *all* lengths. That was an artifact of a **weak baseline**: bare quad
+> without the IC pre-pass is far worse than quad as actually used (staging lifts
+> quad ~+40pp at L60/6-plug — `35.2 → 74.9`), so "trigram beats bare quad" is not
+> "trigram beats quad." **Any scoring-model comparison must use the tuned staged
+> recipe (`-S i4qK`), never bare models** — otherwise a weak baseline manufactures
+> a win. With the fair comparison the trigram edge collapses and quad leads at the
+> realistic plug count.
 
-**Experiment.** `make crackquality SPLIT=1` comparing `-S iq` vs `-S it` vs
-`-S ibt` across L40–160; watch mean %-correct and the search/scoring split at the
-short end. Ship the length switch only if trigram wins at 40–70 and quad wins
-longer.
+This also fits the broader §6 picture: the tier is search-bound (the §1 gate), the
+"denser/smoother surface helps" premise was already falsified by §6.2, and lower
+order trades its (real) density for a lower discrimination ceiling that costs most
+exactly where there is signal to lose (L90, 10 plugs).
 
 ### 6.2 Back-off / interpolated smoothing to replace the flat hapax floor (❌ BUILT, MEASURED, REJECTED)
 
@@ -1311,7 +1318,9 @@ GPU (gather-bound, breaks the portable design); rotor-stepping reuse (slower); S
 / chain-length sweeps (no help); `χ0=0.8` (lost 2×); plugboard-free IC scan pre-filter
 (~0% recall); primary 5-grams / 4-bit scores (too sparse / coarse); uncapped tier-1 IC
 climb (overfits); **back-off / interpolated quadgram smoothing** (`--backoff`, §6.2 —
-conditional form −20pp, joint-floor form neutral; harsh flat floor is a feature).
+conditional form −20pp, joint-floor form neutral; harsh flat floor is a feature);
+**trigram-target-at-short-end** (§6.1 — quad wins at 10 plugs with the tuned `-S i4qK`
+recipe; the bare-model "trigram wins" was a weak-baseline artifact).
 
 ---
 
