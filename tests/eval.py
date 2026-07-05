@@ -154,8 +154,13 @@ def git_sha(root, ignore=()):
                               universal_newlines=True).stdout.strip()
     sha = g(["rev-parse", "--short", "HEAD"]) or "unknown"
     ignore_set = {os.path.normpath(p) for p in ignore}
-    dirty = [ln for ln in g(["status", "--porcelain"]).splitlines()
-             if os.path.normpath(ln[3:].strip()) not in ignore_set]
+    # Parse the path as the token after the 2-char status code. Don't rely on a
+    # fixed offset: g() strips, which drops porcelain's leading status space.
+    status = subprocess.run(["git", "-C", root, "status", "--porcelain"],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            universal_newlines=True).stdout
+    dirty = [ln for ln in status.splitlines()
+             if ln.strip() and os.path.normpath(ln.split(maxsplit=1)[-1]) not in ignore_set]
     if dirty:
         sha += "-dirty"
     return sha
