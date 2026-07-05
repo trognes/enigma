@@ -120,11 +120,15 @@ each use a single built-in passage (less excerpt diversity).
   100% exact by ~L200. At short lengths the non-English languages are actually
   *easier* than english (L50 mean %-correct: english 15, french 34, german 35,
   danish 33). English is search-bound (0 scoring failures at every length).
-- **Accent-folding convention.** The tool folds accents to a single base letter
-  (`ä→A`). French matches this (its corpus strips accents to the base); the
-  german/danish corpora *expand* (`ä→ae`, `å→aa`), a small mismatch on accented
-  words (in practice negligible — german scores among the best). Single-letter
-  corpora would make the cross-language comparison fully clean.
+- **Accent-folding convention doesn't matter (measured).** The tool folds accents
+  to a single base letter (`ä→A`). The german corpora exist in both the historical
+  multi-letter form (`ä→ae`, `*.txt`) and a single-letter form matching the fold
+  (`ä→a`, `*_sl.txt`, via `build_corpora.py`). A matched german quad-greedy run
+  (L50/60/70/90, 80 each) found the two **tied within noise** (e.g. L50 24.8 vs
+  28.4, L90 81.5 vs 79.0) — umlaut words are only ~3% of the text, so once the
+  full table loads the transliteration is immaterial. (French already strips
+  accents to the base; danish would need a raw-accented passage to get an `_sl`
+  variant.)
 - **Genuine telegraphic German** remains a separate §6.6 residual (operational
   `Q`-for-`CH` / `X`-separator orthography), to be requantified under the fix.
 
