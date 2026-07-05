@@ -250,23 +250,34 @@ fig.savefig(os.path.join(OUT, "equal_restart_by_language.png"), bbox_inches="tig
 plt.close(fig)
 print("wrote equal_restart_by_language.png")
 
-# 11. IC pre-pass cap sweep: recovery vs N for -J -S iNq10 -R 10, N=1..8.
+# 11. IC pre-pass cap sweep: recovery vs N for -J -S iNq10 -R 10, N=1..10.
 # Ordered magnitude (message length) -> single-hue sequential ramp, light->dark;
 # lines are flat and vertically separated by length, so direct end-labels
 # (no legend). All four languages pooled (the effect is language-independent);
-# compute is flat across N (~5%), so this is a matched-compute sweep.
+# compute is flat across N (~5%), so this is a matched-compute sweep. Each line
+# carries a +/-SE band: the bands overlap across N, so the per-length wiggles
+# are sampling noise, not a real cap effect (pooled, every N is within ~1pp).
+import math as _m11
 IC_LENS = [40, 50, 60, 70, 80, 90, 120, 160]
-IC_NS = list(range(1, 9))
+IC_NS = list(range(1, 11))
 ic = defaultdict(list)
 for r in rows:
     cl = r["config_label"]
-    if len(cl) > 1 and cl[0] == "i" and cl[1:2].isdigit() and cl.endswith("q10.R10.J"):
-        ic[(int(cl[1]), r["length"])].append(r["pct"])
+    if len(cl) > 1 and cl[0] == "i" and cl[1:].split("q")[0].isdigit() \
+            and cl.endswith("q10.R10.J"):
+        ic[(int(cl[1:].split("q")[0]), r["length"])].append(r["pct"])
 ramp = [plt.cm.Blues(v) for v in
         [0.30, 0.42, 0.53, 0.63, 0.73, 0.82, 0.90, 1.0]]
 fig, ax = plt.subplots(figsize=(8.5, 5.5))
 for L, color in zip(IC_LENS, ramp):
-    ys = [sum(ic[(N, L)]) / len(ic[(N, L)]) for N in IC_NS]
+    ys, ses = [], []
+    for N in IC_NS:
+        v = ic[(N, L)]
+        mu = sum(v) / len(v)
+        ys.append(mu)
+        ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+    ax.fill_between(IC_NS, [y - s for y, s in zip(ys, ses)],
+                    [y + s for y, s in zip(ys, ses)], color=color, alpha=0.13, linewidth=0)
     ax.plot(IC_NS, ys, "-o", color=color, lw=2, ms=5,
             markeredgecolor="white", markeredgewidth=0.6)
     ax.annotate(f"L{L}", (IC_NS[-1], ys[-1]), xytext=(6, 0),
@@ -274,11 +285,12 @@ for L, color in zip(IC_LENS, ramp):
                 color=color, fontweight="bold")
 ax.set_xlabel("IC pre-pass plug cap  N   (-S iNq10)")
 ax.set_ylabel("letters correct (mean %)")
-ax.set_title("IC pre-pass cap is inert: recovery vs cap N\n"
-             "(-J -S iNq10 -R 10, quad, 10 plugs, all languages pooled, 2 seeds)",
-             fontsize=12, fontweight="bold", pad=10)
+ax.set_title("IC pre-pass cap is inert: recovery vs cap N (+/-SE bands)\n"
+             "per-length wiggles are noise -- pooled, every N is within ~1pp "
+             "(-J -S iNq10 -R 10, quad, 10 plugs, all langs, 2 seeds)",
+             fontsize=10.5, fontweight="bold", pad=10)
 ax.set_xticks(IC_NS)
-ax.set_xlim(0.7, 8.8)
+ax.set_xlim(0.7, 10.9)
 ax.set_ylim(0, 102)
 ax.margins(x=0.05)
 fig.tight_layout()
