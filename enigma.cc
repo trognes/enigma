@@ -362,6 +362,65 @@ inline char num2char(int x)
   return static_cast<char>('A' + x);
 }
 
+/* Fold one Unicode code point to an A-Z letter index (0..25), or -1 if it is not
+   a foldable Latin letter. Plain A-Z/a-z map directly; accented Latin letters
+   fold to their base (diacritics removed: e-acute -> E, u-umlaut -> U, o-slash
+   -> O, sharp-s -> S, ae/oe ligatures -> A/O). This lets the 26-letter machine
+   use the accented n-grams in the non-English tables (and accented plaintext)
+   instead of discarding them. */
+static int fold_codepoint(unsigned cp)
+{
+  if ((cp >= 'a') && (cp <= 'z'))
+    cp -= 32;
+  if ((cp >= 'A') && (cp <= 'Z'))
+    return static_cast<int>(cp - 'A');
+  /* Latin-1 supplement letters U+00C0..U+00FF -> base letter (' ' = not a letter);
+     lower half mirrors the upper except the final cell (sharp-s S vs y-diaeresis Y). */
+  static const char lat1[] =
+    "AAAAAAACEEEEIIIIDNOOOOO OUUUUY S"
+    "AAAAAAACEEEEIIIIDNOOOOO OUUUUY Y";
+  if ((cp >= 0xC0) && (cp <= 0xFF))
+    {
+      char b = lat1[cp - 0xC0];
+      return (b == ' ') ? -1 : (b - 'A');
+    }
+  switch (cp)
+    {
+    case 0x0152: case 0x0153: return 'O' - 'A';   /* OE ligature */
+    case 0x0178: return 'Y' - 'A';                /* Y with diaeresis */
+    default: return -1;
+    }
+}
+
+/* Fold a UTF-8 n-gram token (from the statistics files) to its A-Z base index.
+   Returns the number of letters produced, or -1 if the token holds a code point
+   that is not a foldable Latin letter. */
+static int fold_gram(const char * s, int * index_out)
+{
+  const unsigned char * p = reinterpret_cast<const unsigned char *>(s);
+  int idx = 0;
+  int letters = 0;
+  while (*p)
+    {
+      unsigned cp;
+      if (*p < 0x80)
+        { cp = *p; p += 1; }
+      else if (((*p & 0xE0) == 0xC0) && ((p[1] & 0xC0) == 0x80))
+        { cp = ((*p & 0x1Fu) << 6) | (p[1] & 0x3Fu); p += 2; }
+      else if (((*p & 0xF0) == 0xE0) && ((p[1] & 0xC0) == 0x80) && ((p[2] & 0xC0) == 0x80))
+        { cp = ((*p & 0x0Fu) << 12) | ((p[1] & 0x3Fu) << 6) | (p[2] & 0x3Fu); p += 3; }
+      else
+        return -1;
+      int b = fold_codepoint(cp);
+      if (b < 0)
+        return -1;
+      idx = idx * asize + b;
+      letters++;
+    }
+  * index_out = idx;
+  return letters;
+}
+
 /* Read an n-gram statistics table from "<language>_<suffix>.txt" into 'itable', the
    flat backing store of the corresponding uint8 array (mono8 / bi8 / tri8 / quad8),
    contiguous and row-major so the n letters of a record map to the single index
@@ -393,40 +452,41 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
     }
 
   uint64_t total = 0;   /* sum of all counts, in uint64 (can exceed uint32) */
+  int nonmappable = 0;  /* records skipped because a gram char could not fold */
   char line[256];
   while (fgets(line, sizeof(line), f))
     {
-      /* One record per line: "<GRAM> <count>". SKIP -- do not stop on -- any
-         record whose gram is not exactly n A-Z letters. The tables are frequency
-         sorted and the non-English languages interleave accented grams (German
-         umlauts a-e/o-e/u-e and eszett as single symbols, Danish/French accents)
-         from near the top; the earlier "stop at the first malformed record"
-         truncated the table there -- e.g. the german quadgram table to its first
-         29 of 366k entries (4.9% of the count), silently flooring the other 95%
-         as hapax and crippling non-English scoring. Skipping keeps every A-Z gram
-         the 26-letter machine can actually use. */
+      /* One record per line: "<GRAM> <count>". FOLD each gram to its A-Z base
+         (fold_gram: accents removed, e.g. u-umlaut -> U) and ACCUMULATE counts,
+         since several accented grams now collide onto one base gram. The tables
+         are frequency sorted and the non-English languages interleave accented
+         grams (German umlauts and eszett, Danish/French accents) from near the
+         top; the original parser stopped at the first such record, truncating
+         e.g. the german quadgram table to its first 29 of 366k entries (4.9% of
+         the count) and crippling non-English scoring. Folding keeps the whole
+         distribution the 26-letter machine can represent. A record whose gram
+         does not fold to exactly n A-Z letters (e.g. a stray digit) is skipped. */
       char gram[16];
       unsigned count;
       if (sscanf(line, "%15s %u", gram, & count) != 2)
         continue;
-      int index = 0;
-      int ok = 1;
-      for (int k = 0; k < n; k++)
+      int index;
+      int r = fold_gram(gram, & index);
+      if (r < 0)          /* a code point we cannot fold to A-Z: warn + skip */
         {
-          if ((gram[k] < 'A') || (gram[k] > 'Z'))
-            {
-              ok = 0;
-              break;
-            }
-          index = index * asize + char2num(gram[k]);
+          nonmappable++;
+          continue;
         }
-      if (! ok || (gram[n] != '\0'))   /* non-A-Z char, or gram longer than n */
+      if (r != n)         /* folds to the wrong number of letters: skip quietly */
         continue;
-      table[index] = count;
+      table[index] += count;
       total += count;
     }
 
   fclose(f);
+  if (nonmappable > 0)
+    fprintf(stderr, "Note: %s: skipped %d record(s) with non-mappable characters.\n",
+            filename, nonmappable);
   return total;
 }
 
@@ -2912,35 +2972,99 @@ void bruteforce(char * result)
 
 /* --- input, output, help, and CLI --------------------------------------- */
 
+/* Streaming UTF-8 text filter shared by the ciphertext and plaintext readers.
+   Carries the decode state (cp/need) across read() calls so a multi-byte code
+   point split over a buffer boundary still decodes. Each letter is folded to its
+   A-Z base (fold_codepoint); whitespace is dropped silently; every other
+   non-mappable code point is dropped and counted so the reader can warn. */
+struct textfilter
+{
+  unsigned cp;                 /* UTF-8 code-point accumulator */
+  int need;                    /* continuation bytes still expected */
+  unsigned long accented;      /* non-A-Z letters folded to a base letter */
+  unsigned long skipped;       /* non-mappable, non-whitespace code points dropped */
+};
+
+static void filter_bytes(textfilter * st, const unsigned char * buf, ssize_t len,
+                         char * out, int * j, const char * toolong)
+{
+  for (ssize_t i = 0; i < len; i++)
+    {
+      unsigned char b = buf[i];
+      int done = -1;
+      if (st->need > 0)
+        {
+          if ((b & 0xC0) == 0x80)
+            {
+              st->cp = (st->cp << 6) | (b & 0x3Fu);
+              if (--st->need == 0)
+                done = static_cast<int>(st->cp);
+            }
+          else
+            {
+              st->need = 0;   /* malformed: drop partial, reprocess b as a lead */
+              i--;
+              continue;
+            }
+        }
+      else if (b < 0x80)
+        done = b;
+      else if ((b & 0xE0) == 0xC0) { st->cp = b & 0x1Fu; st->need = 1; }
+      else if ((b & 0xF0) == 0xE0) { st->cp = b & 0x0Fu; st->need = 2; }
+      else if ((b & 0xF8) == 0xF0) { st->cp = b & 0x07u; st->need = 3; }
+      /* else: invalid lead byte -- ignored */
+
+      if (done < 0)
+        continue;
+
+      unsigned u = static_cast<unsigned>(done);
+      int base = fold_codepoint(u);
+      if (base >= 0)
+        {
+          if (! (((u >= 'A') && (u <= 'Z')) || ((u >= 'a') && (u <= 'z'))))
+            st->accented++;
+          if (*j >= maxlen)
+            fatal(toolong);
+          out[(*j)++] = num2char(base);
+        }
+      else if ((u == ' ') || (u == '\t') || (u == '\n') || (u == '\r')
+               || (u == '\f') || (u == '\v'))
+        { /* whitespace: silently skipped */ }
+      else
+        st->skipped++;   /* non-mappable, non-whitespace: skip and count */
+    }
+}
+
+static void warn_filtered(const textfilter * st, const char * what)
+{
+  if (st->accented > 0)
+    fprintf(stderr, "Note: %s contained %lu non-A-Z letter(s); folded accents to "
+            "their A-Z base form.\n", what, st->accented);
+  if (st->skipped > 0)
+    fprintf(stderr, "Note: %s contained %lu non-mappable character(s) (skipped).\n",
+            what, st->skipped);
+}
+
 void readciphertext()
 {
   unsigned char buffer[65536];
   ssize_t len;
   int j = 0;
+  textfilter st = {0, 0, 0, 0};
+  char toolong[64];
+  snprintf(toolong, sizeof(toolong),
+           "Ciphertext too long (maximum is %d letters)", maxlen);
 
   /* read() may return short; loop until EOF, filtering as we go */
   while ((len = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0)
-    for (ssize_t i = 0; i < len; i++)
-      {
-        char c = toupper(buffer[i]);
-        if ((c >= 'A') && (c <= 'Z'))
-          {
-            if (j >= maxlen)
-              {
-                char msg[64];
-                snprintf(msg, sizeof(msg),
-                         "Ciphertext too long (maximum is %d letters)", maxlen);
-                fatal(msg);
-              }
-            ciphertext[j++] = c;
-          }
-      }
+    filter_bytes(& st, buffer, len, ciphertext, & j, toolong);
 
   if (len < 0)
     fatal("Error reading ciphertext from standard input");
 
   ciphertext[j] = 0;
   textlength = j;
+  warn_filtered(& st, "ciphertext input");
 }
 
 void readplaintext(char * filename, const char * result)
@@ -2953,23 +3077,14 @@ void readplaintext(char * filename, const char * result)
   if (fd < 0)
     fatal("Unable to open plaintext file");
 
+  textfilter st = {0, 0, 0, 0};
+  char toolong[64];
+  snprintf(toolong, sizeof(toolong),
+           "Plaintext file too long (maximum is %d letters)", maxlen);
+
   /* read() may return short; loop until EOF, filtering as we go */
   while ((len = read(fd, buffer, sizeof(buffer))) > 0)
-    for (ssize_t i = 0; i < len; i++)
-      {
-        char c = toupper(buffer[i]);
-        if ((c >= 'A') && (c <= 'Z'))
-          {
-            if (j >= maxlen)
-              {
-                char msg[64];
-                snprintf(msg, sizeof(msg),
-                         "Plaintext file too long (maximum is %d letters)", maxlen);
-                fatal(msg);
-              }
-            altplaintext[j++] = c;
-          }
-      }
+    filter_bytes(& st, buffer, len, altplaintext, & j, toolong);
 
   int read_error = (len < 0);
   close(fd);
@@ -2977,6 +3092,7 @@ void readplaintext(char * filename, const char * result)
     fatal("Error reading plaintext file");
 
   altplaintext[j] = 0;
+  warn_filtered(& st, "plaintext file");
 
   if (textlength != j)
     fatal("Plaintext not same length as ciphertext");
