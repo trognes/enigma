@@ -99,20 +99,24 @@ test them in isolation.
 
 ## Key findings so far (10 plugs, `-J -R 10`)
 
-- **English is search-bound; German is scoring-bound (under quad).** English has
-  **0 scoring failures at every length** and is fully solved by ~L200. German
-  quad has ~50–60% scoring failures on short messages and never reaches 100%
-  exact even at L300 — a wrong plugboard out-scores the truth.
-- **The best n-gram order is language-dependent (`EVAL_MODEL`).** English → quad
-  (best at the short/hard end; trigram loses there — `PERFORMANCE.md` §6.1).
-  **German → bigram** (bigram > trigram > monogram > quad; §6.9): e.g. German
-  L90 mean %-correct is **quad 24.7 → tri 66.8 → bi 84.1**, and bigram solves
-  German by L160. Match the model order to the language, not just `-l`.
-- **Genuine telegraphic German is hardest.** The real Dönitz 1945 message
-  (`german_doenitz1945`) recovers worse than prose and is only partly rescued by
-  bigram/trigram; the 1930 manual message (`Q`-for-`CH`, dense `X` separators) is
-  a near-total scoring failure under quad — the case for an operational-corpus
-  table (§6.6).
+- **A table-loading bug crippled non-English scoring (found via this log, now
+  fixed).** `load_counts` stopped reading at the first accented gram, so the
+  German quad table loaded only its 29 most frequent entries (4.9%). The initial
+  eval round therefore showed German quad badly scoring-bound and a spurious
+  "bigram > trigram > quad" ordering (a truncation artifact — lower order = less
+  truncated). See `PERFORMANCE.md` §6.9 and commit `41eed72`.
+- **After the fix, German quad works like English.** German L90 mean %-correct
+  jumped **24.7 → 91.1** (before → after), scoring failures fell to ~0, and the
+  natural order returned (quad ≳ tri ≳ bi). **Model order is *not* meaningfully
+  language-dependent** once the tables load — use `-q`. Rows before/after are
+  distinguishable by `git_sha` (`41eed72`+ = fixed).
+- **English was never affected** (26 letters, no accents; loaded fully all along)
+  — search-bound, 0 scoring failures, solved by ~L200.
+- **Genuine telegraphic German remains the real residual.** The Dönitz 1945
+  message and the 1930 manual message (`Q`-for-`CH`, dense `X` separators,
+  `ae/oe/ue/ss` transliteration) score worse than prose even after the fix —
+  operational orthography off-distribution for the prose tables (§6.6), now
+  cleanly separated from the loading bug.
 
 ## Reproducing a single row
 

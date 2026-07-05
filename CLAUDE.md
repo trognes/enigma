@@ -320,18 +320,17 @@ directory, machine settings, plugboard, ciphertext length) to stderr.
 > (`-m/-b/-t`) tolerate a mismatch better, and `-i` (index of coincidence) is
 > language-independent and needs no `-l`. Use `-l` matching the plaintext.
 >
-> **Also match the *model order* to the language, not just `-l`.** Quad is the
-> sharpest model *for English*, but the best order is language-dependent
-> (measured in `eval/`, see `PERFORMANCE.md` §6.9): on short German messages `-q`
-> is badly scoring-bound (a wrong plugboard out-scores the truth ~50–60% of the
-> time), and **`-b` (bigram) or `-t` (trigram) recover far better** — German L90
-> mean %-correct at 10 plugs goes quad 24.7 → tri 66.8 → **bi 84.1**, and bigram
-> solves German by L160 where quad never reaches 100% even at L300. German's
-> quad cells are too sparse (compounds, inflection, `ae/oe/ue/ss` transliteration);
-> the denser bigram/trigram tables discriminate the true board better. So: `-q`
-> for English, **`-b`/`-t` for German**; don't carry one language's model choice
-> to another. (Trigram-at-short-end was *rejected for English*, §6.1 — the same
-> lever, opposite sign by language.)
+> **Quad works for every language (after the table-loading fix); `-q` is the
+> default recommendation.** An earlier eval round suggested German needed a
+> lower order (`-b`/`-t`), but that was a **bug**: `load_counts` truncated the
+> non-English tables at the first accented gram, so the "german quad" scorer ran
+> on only its 29 most frequent quadgrams (4.9% of the table). Fixed to skip
+> non-A-Z records (see `PERFORMANCE.md` §6.9); with the full table German quad is
+> search-bound and fully solvable like English (German L90 mean %-correct
+> 24.7 → **91.1** before → after the fix). Model order is *not* meaningfully
+> language-dependent once the tables load — use `-q`. The residual gap is
+> *genuine telegraphic* German (operational orthography off-distribution for the
+> prose tables — §6.6), not the model order.
 
 ## Architecture / how it works
 
