@@ -319,6 +319,18 @@ directory, machine settings, plugboard, ciphertext length) to stderr.
 > English quadgrams and the correct key does not stand out. Lower-order models
 > (`-m/-b/-t`) tolerate a mismatch better, and `-i` (index of coincidence) is
 > language-independent and needs no `-l`. Use `-l` matching the plaintext.
+>
+> **Quad works for every language (after the table-loading fix); `-q` is the
+> default recommendation.** An earlier eval round suggested German needed a
+> lower order (`-b`/`-t`), but that was a **bug**: `load_counts` truncated the
+> non-English tables at the first accented gram, so the "german quad" scorer ran
+> on only its 29 most frequent quadgrams (4.9% of the table). Fixed to skip
+> non-A-Z records (see `PERFORMANCE.md` §6.9); with the full table German quad is
+> search-bound and fully solvable like English (German L90 mean %-correct
+> 24.7 → **91.1** before → after the fix). Model order is *not* meaningfully
+> language-dependent once the tables load — use `-q`. The residual gap is
+> *genuine telegraphic* German (operational orthography off-distribution for the
+> prose tables — §6.6), not the model order.
 
 ## Architecture / how it works
 

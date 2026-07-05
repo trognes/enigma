@@ -903,6 +903,58 @@ Two methodology lessons, both now paid for twice (here and §6.1):
    trigram-target (§6.1) and the mono-stage passed the weak test and failed the
    strong one.
 
+### 6.9 German scoring was crippled by a table-loading bug (fixed); model order is **not** language-dependent after all — ✅ MEASURED (`eval/`)
+
+**This subsection corrects an earlier wrong conclusion.** The eval log first showed
+German badly **scoring**-bound under quad (a wrong plugboard out-scoring the truth in
+~50–60% of short-message misses) while lower orders recovered far better — reading as
+"German wants bigram, not quad." That was an **artifact of a table-loading bug**, not a
+property of German.
+
+**Root cause.** `load_counts()` stopped reading an n-gram file at the first record
+whose gram contained a non-A-Z character. The tables are frequency sorted and German
+interleaves umlaut/eszett grams (`ä ö ü ß` as single symbols) from near the top, so the
+table was **truncated** there. Measured records actually loaded:
+
+| german table | loaded / total | % of count kept |
+|---|---|---|
+| monograms | 22 / 30 | 97.9% |
+| bigrams | 114 / 895 | 73.7% |
+| trigrams | 95 / 23,484 | 27.5% |
+| **quadgrams** | **29 / 366,266** | **4.9%** |
+
+So the "german quad" scorer ran on its **29 most frequent quadgrams**, flooring the
+other 95% as hapax — and the apparent bigram > trigram > quad ordering was pure
+truncation (lower order = first umlaut appears later in the frequency ranking = more of
+the A-Z table survives). English (26 letters, no accents) loaded fully and was never
+affected.
+
+**Fix and re-measurement.** `load_counts()` now **skips** non-A-Z records instead of
+stopping (all 182 tests pass; English byte-identical). German quad, before → after:
+
+| L | quad BEFORE (truncated) | quad AFTER (full table) |
+|---|---|---|
+| 50 | 10.6 / 0 / 60% | **33.0 / 12 / 0%** |
+| 90 | 24.7 / 1 / 50% | **91.1 / 71 / 0%** |
+| 120 | 48.4 / 10 / 60% | **95.5 / 76 / 0%** |
+| 160 | 62.8 / 28 / 31% | **100 / 80 / 0%** |
+
+**Corrected conclusion.** With the full table, **German quad works** — search-bound
+(0 scoring failures), fully solved by L160, the same regime as English — and the natural
+order returns (at L90, quad 91.1 > tri 85.9 > bi 81.2). Quad, tri and bi are now all
+close for German prose (within a few pp; bigram edges quad only at the very shortest
+lengths, L50/L120), so **model order is *not* meaningfully language-dependent** once the
+tables load correctly. **Use `-q` for German as for English.** The lower-order preference
+is retracted. (The bug also silently truncated Danish and French — 29/42-symbol tables —
+so this fix helps every non-English language.)
+
+**What survives.** Genuine *telegraphic* German (the Dönitz P1030681 message, the 1930
+manual message) is still harder than prose even after the fix — real operational
+orthography (`Q`-for-`CH`, dense `X` separators, `ae/oe/ue/ss` transliteration that the
+prose-built table doesn't match) is off-distribution for the prose tables. That residual
+is the genuine §6.6 operational-corpus argument, now cleanly separated from the
+table-loading bug.
+
 ---
 
 ## 7. Speed / throughput
