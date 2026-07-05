@@ -344,4 +344,48 @@ fig.savefig(os.path.join(OUT, "prepass_model_sweep.png"), bbox_inches="tight", f
 plt.close(fig)
 print("wrote prepass_model_sweep.png")
 
+# 13. Intermediate-stage sweep judged at MATCHED COMPUTE (english, L40-90).
+# An extra middle climb stage (i3 <mid>B q10) costs more score_iter, so it is
+# only a real win if it sits ABOVE the baseline i3q10 recovery-vs-compute curve
+# (i3q10 swept over -R 10..18). x-axis = compute, not restarts.
+IS_SHORT = [40, 45, 50, 55, 60, 65, 70, 75, 80, 90]
+is_agg = defaultdict(list); is_si = defaultdict(list)
+for r in rows:
+    cl = r["config_label"]
+    if r["language"] != "english" or r["length"] not in IS_SHORT:
+        continue
+    is_agg[cl].append(r["pct"]); is_si[cl].append(int(r["score_iter"]))
+if any(k.startswith("i3m4") for k in is_agg):
+    def _pt(cl):
+        m, se = _mse(is_agg[cl]); return sum(is_si[cl]) / len(is_si[cl]), m, se
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    # baseline i3q10 recovery-vs-compute curve (-R 10..18)
+    bx, by, bse = zip(*[_pt(f"i3q10.R{R}.J") for R in (10, 12, 14, 16, 18)])
+    ax.plot(bx, by, "-", color="#444444", lw=2, zorder=3, label="baseline i3q10  (-R 10..18)")
+    ax.errorbar(bx, by, yerr=bse, fmt="o", color="#444444", ms=5, capsize=3,
+                markeredgecolor="white", markeredgewidth=0.6, zorder=4)
+    # middle-stage points, colored by model
+    IS_MODELS = [("mono middle", "m", "#E69F00"),
+                 ("bigram middle", "b", "#009E73"),
+                 ("trigram middle", "t", "#0072B2")]
+    for label, key, color in IS_MODELS:
+        pts = [_pt(f"i3{key}{B}q10.R10.J") for B in range(4, 9)]
+        xs, ys, ses = zip(*pts)
+        ax.errorbar(xs, ys, yerr=ses, fmt="o", color=color, ms=7, capsize=3,
+                    markeredgecolor="white", markeredgewidth=0.8, label=label, zorder=5)
+    ax.annotate("i3m8q10", (_pt("i3m8q10.R10.J")[0], _pt("i3m8q10.R10.J")[1]),
+                xytext=(6, 4), textcoords="offset points", fontsize=8.5,
+                color="#E69F00", fontweight="bold")
+    ax.set_xlabel("compute  (mean score_iter per key)")
+    ax.set_ylabel("letters correct (mean %)")
+    ax.set_title("An intermediate mono/bigram stage beats the baseline at MATCHED compute\n"
+                 "(points above the i3q10 curve = real staging win; english, quad, 10 plugs, L40-90)",
+                 fontsize=11, fontweight="bold", pad=10)
+    ax.legend(frameon=False, loc="lower right", fontsize=9)
+    ax.margins(0.08)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "intermediate_stage_compute.png"), bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print("wrote intermediate_stage_compute.png")
+
 print("done ->", OUT)
