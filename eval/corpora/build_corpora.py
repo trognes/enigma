@@ -114,6 +114,17 @@ zugenommen, von den Gesetzen der Bewegung bis zu den winzigen Bausteinen der
 Materie. Jede neue Antwort führt zu weiteren Fragen, und gerade darin liegt der
 Reiz der Forschung, denn das Streben nach Wahrheit findet niemals ein Ende.
 """,
+    "danish_danmark": """
+Danmark er et lille land i Nordeuropa som består af en stor halvø og mange små
+øer. Landet er kendt for sine flade marker, sine lange strande og sit milde
+klima. Om sommeren tager mange mennesker til stranden for at bade i det kølige
+vand og nyde solen. Langs kysten ligger små fiskerbyer hvor både sejler ud hver
+morgen for at fange fisk. I skovene lever rådyr og harer, og om foråret synger
+fuglene i de grønne træer. Danskerne cykler meget, både i byerne og på landet,
+fordi landet er fladt og let at komme rundt i. Selv om vintrene kan være kolde
+og mørke, holder folk humøret oppe med hygge, levende lys og varm kaffe sammen
+med gode venner og nær familie.
+""",
 }
 
 # Two transliterations of the German umlauts/eszett:
@@ -124,9 +135,11 @@ Reiz der Forschung, denn das Streben nach Wahrheit findet niemals ein Ende.
 # which transliteration the folded tables actually prefer (EVAL_CORPORA=...).
 TRANS = str.maketrans({
     "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "ae", "Ö": "oe", "Ü": "ue", "ß": "ss",
+    "å": "aa", "ø": "oe", "æ": "ae", "Å": "aa", "Ø": "oe", "Æ": "ae",
 })
 TRANS_SINGLE = str.maketrans({
     "ä": "a", "ö": "o", "ü": "u", "Ä": "a", "Ö": "o", "Ü": "u", "ß": "s",
+    "å": "a", "ø": "o", "æ": "a", "Å": "a", "Ø": "o", "Æ": "a",
 })
 
 
