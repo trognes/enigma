@@ -83,8 +83,8 @@ test them in isolation.
 | `wall_time_ms` | crack wall-time (machine-dependent, unlike `score_iter`) |
 | `recovered_plugs` | the plugboard the climb settled on |
 | `recovered_plaintext` | the tool's best decrypt |
-| `recovered_score` | quad log-prob of the recovered board |
-| `true_score` | quad log-prob of the true board (from an oracle decrypt) |
+| `recovered_score` | target-model log-prob of the recovered board (model per `cli_options` / `EVAL_MODEL`) |
+| `true_score` | target-model log-prob of the true board (from an oracle decrypt, same model) |
 
 ## Two things the data gives you for free
 
@@ -96,6 +96,23 @@ test them in isolation.
 - **A growing paired benchmark suite.** Because every instance is fully stored,
   a new strategy can be replayed on the *same* problems already in the file for a
   low-variance paired comparison — you never have to pre-commit a seed list.
+
+## Key findings so far (10 plugs, `-J -R 10`)
+
+- **English is search-bound; German is scoring-bound (under quad).** English has
+  **0 scoring failures at every length** and is fully solved by ~L200. German
+  quad has ~50–60% scoring failures on short messages and never reaches 100%
+  exact even at L300 — a wrong plugboard out-scores the truth.
+- **The best n-gram order is language-dependent (`EVAL_MODEL`).** English → quad
+  (best at the short/hard end; trigram loses there — `PERFORMANCE.md` §6.1).
+  **German → bigram** (bigram > trigram > monogram > quad; §6.9): e.g. German
+  L90 mean %-correct is **quad 24.7 → tri 66.8 → bi 84.1**, and bigram solves
+  German by L160. Match the model order to the language, not just `-l`.
+- **Genuine telegraphic German is hardest.** The real Dönitz 1945 message
+  (`german_doenitz1945`) recovers worse than prose and is only partly rescued by
+  bigram/trigram; the 1930 manual message (`Q`-for-`CH`, dense `X` separators) is
+  a near-total scoring failure under quad — the case for an operational-corpus
+  table (§6.6).
 
 ## Reproducing a single row
 

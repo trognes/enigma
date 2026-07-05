@@ -319,6 +319,19 @@ directory, machine settings, plugboard, ciphertext length) to stderr.
 > English quadgrams and the correct key does not stand out. Lower-order models
 > (`-m/-b/-t`) tolerate a mismatch better, and `-i` (index of coincidence) is
 > language-independent and needs no `-l`. Use `-l` matching the plaintext.
+>
+> **Also match the *model order* to the language, not just `-l`.** Quad is the
+> sharpest model *for English*, but the best order is language-dependent
+> (measured in `eval/`, see `PERFORMANCE.md` §6.9): on short German messages `-q`
+> is badly scoring-bound (a wrong plugboard out-scores the truth ~50–60% of the
+> time), and **`-b` (bigram) or `-t` (trigram) recover far better** — German L90
+> mean %-correct at 10 plugs goes quad 24.7 → tri 66.8 → **bi 84.1**, and bigram
+> solves German by L160 where quad never reaches 100% even at L300. German's
+> quad cells are too sparse (compounds, inflection, `ae/oe/ue/ss` transliteration);
+> the denser bigram/trigram tables discriminate the true board better. So: `-q`
+> for English, **`-b`/`-t` for German**; don't carry one language's model choice
+> to another. (Trigram-at-short-end was *rejected for English*, §6.1 — the same
+> lever, opposite sign by language.)
 
 ## Architecture / how it works
 
