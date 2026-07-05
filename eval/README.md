@@ -1,0 +1,84 @@
+# eval/ — persistent per-run evaluation log
+
+`results.tsv` is a committed, append-only benchmark of **short-message plugboard
+recovery** — the hard regime this project cares about. Every row is one crack
+run, recorded with enough detail to reproduce and to diagnose it. It is filled
+by `tests/eval.py` and grows over time; new experiments append, nothing is
+rewritten.
+
+Focus of the current campaign: **L=50, 10 plugs, quad final score, English +
+German**. The tier is *plugboard-recovery*: the true rotor key is handed to the
+search and only the plugboard is hill-climbed (the same cheap tier
+`tests/crack_quality.py` uses). This isolates plugboard search from rotor-key
+discrimination.
+
+## How it differs from `crack_quality.py`
+
+`crack_quality.py` prints per-length **aggregates** over a fixed, `SEED`-
+deterministic trial set — the right tool for an A/B on a code change.
+`eval.py` records **one row per individual run** with the plaintext, the full
+key, the recovered board and both scores — the right tool for building a durable
+corpus of solved/unsolved instances you can slice, re-score, and replay later.
+
+## Running
+
+```sh
+make                                   # build ./enigma first
+python3 tests/eval.py                  # 40 runs/lang, recommended recipe
+EVAL_RUNS=60 python3 tests/eval.py     # more runs
+EVAL_OPTS='-S i4q10 -R 10' EVAL_LABEL='i4q10.R10' python3 tests/eval.py
+```
+
+Env knobs: `EVAL_LANGS` (default `english german`), `EVAL_RUNS` (40),
+`EVAL_LENGTH` (50), `EVAL_PAIRS` (10), `EVAL_OPTS` (climb strategy, default
+`-J -S i4q10 -R 10`), `EVAL_LABEL`, `EVAL_THREADS` (1), `EVAL_SOLVER_SEED` (0),
+`EVAL_OUT`. Problems are drawn from fresh OS entropy, so each invocation adds
+new random instances.
+
+## Columns
+
+| column | meaning |
+|---|---|
+| `git_sha` | binary/code version (`-dirty` if the tree differs from HEAD, ignoring the results file itself) |
+| `timestamp_utc`, `host` | when/where the run happened |
+| `language`, `length`, `num_plugs` | the regime (english/german, 50, 10) |
+| `true_reflector`, `true_rotors`, `true_ring`, `true_grund`, `true_plugs` | the answer key (reflector A/B/C, 3 wheel digits, ring, start, plug pairs) |
+| `plaintext` | the true excerpt (A–Z only) |
+| `cli_options` | the strategy options used, with `<lang>` filled in — **excludes** the rotor key, which lives in the `true_*` columns |
+| `config_label` | short language-independent tag for grouping runs of one strategy |
+| `solver_seed` | `-e` restart seed (pinned 0, recorded) |
+| `threads` | `-T` (affects wall-time only; `score_iter` is thread-independent) |
+| `letters_matched_count`, `letters_matched_pct` | recovered-vs-true letter agreement over the 50 positions |
+| `exact_match` | 1 iff every letter matches |
+| `score_iter` | plugboards scored (the compute spent — compare configs at matched `score_iter`, never matched `-R`) |
+| `wall_time_ms` | crack wall-time (machine-dependent, unlike `score_iter`) |
+| `recovered_plugs` | the plugboard the climb settled on |
+| `recovered_plaintext` | the tool's best decrypt |
+| `recovered_score` | quad log-prob of the recovered board |
+| `true_score` | quad log-prob of the true board (from an oracle decrypt) |
+
+## Two things the data gives you for free
+
+- **Scoring vs search failure**, per row, without re-running: if
+  `recovered_score ≥ true_score` but `exact_match = 0`, the truth didn't win →
+  **scoring failure**; if `true_score > recovered_score`, the climb never
+  reached the truth → **search failure**. (At L50/10-plug most misses are search
+  failures; short German shows some scoring failures.)
+- **A growing paired benchmark suite.** Because every instance is fully stored,
+  a new strategy can be replayed on the *same* problems already in the file for a
+  low-variance paired comparison — you never have to pre-commit a seed list.
+
+## Reproducing a single row
+
+A row is self-contained. Let the `true_*` columns be `U W R G` and `PLUGS`, and
+`CT` the ciphertext:
+
+```sh
+# 1. reconstruct the ciphertext by enciphering the stored plaintext under the true key
+CT=$(printf '%s' "<plaintext>" | ./enigma -i -u U -w W -r R -g G -s "PLUGS")
+# 2. re-run the exact crack (cli_options + the true rotor key, held fixed)
+printf '%s' "$CT" | ./enigma <cli_options> -u U -w W -r R -g G
+```
+
+Check out the row's `git_sha` first for a byte-exact replay; `score_iter` is a
+deterministic checksum of `(git_sha, cli_options, solver_seed, instance)`.
