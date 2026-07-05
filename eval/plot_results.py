@@ -106,4 +106,63 @@ line_chart(
     "Transliteration convention: multi- vs single-letter (quad, greedy)",
     "letters correct (mean %)", "transliteration.png", xlim=(45, 100))
 
+# 5. quad vs trigram, small multiples per language (same greedy climb, 5 shared lengths)
+TRIG = "i4t10.R10.J"
+TRI_LENS = {50, 90, 120, 160, 200}
+MODELCOL = {"quad": "#0072B2", "trigram": "#E69F00"}
+fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    for mlabel, cfg in [("quad", GREEDY), ("trigram", TRIG)]:
+        xs, ys = curve(lambda r, L=lang, C=cfg: r["config_label"] == C
+                       and r["language"] == L and r["length"] in TRI_LENS, lambda r: r["pct"])
+        ax.plot(xs, ys, "-o", color=MODELCOL[mlabel], lw=2, ms=5, label=mlabel,
+                markeredgecolor="white", markeredgewidth=0.6)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8)
+    ax.set_axisbelow(True)
+axes[1, 0].set_xlabel("message length (letters)")
+axes[1, 1].set_xlabel("message length (letters)")
+axes[0, 0].set_ylabel("letters correct (mean %)")
+axes[1, 0].set_ylabel("letters correct (mean %)")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=9)
+fig.suptitle("Quad vs trigram model, by language (greedy climb, 10 plugs)",
+             fontsize=13, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "quad_vs_trigram.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote quad_vs_trigram.png")
+
+# 6. greedy vs steepest at matched compute: mean %-correct vs score_iter (english)
+STEEP = "i4q10.R10.steepest"
+fig, ax = plt.subplots(figsize=(8, 5))
+for clabel, cfg, color in [("greedy (-J)", GREEDY, "#009E73"),
+                           ("steepest ascent", STEEP, "#D55E00")]:
+    agg = defaultdict(lambda: [0.0, 0.0, 0])  # length -> [sum score_iter, sum pct, n]
+    for r in rows:
+        if r["config_label"] == cfg and r["language"] == "english" and r["score_iter"]:
+            a = agg[r["length"]]
+            a[0] += float(r["score_iter"]); a[1] += r["pct"]; a[2] += 1
+    pts = sorted((a[1] / a[2], a[0] / a[2], L) for L, a in agg.items())  # by mean%
+    ys = [p[0] for p in pts]; xs = [p[1] / 1000 for p in pts]
+    ax.plot(xs, ys, "-o", color=color, lw=2, ms=5, label=clabel,
+            markeredgecolor="white", markeredgewidth=0.6)
+    for pct, si, L in pts:
+        if L in (50, 90, 160, 300):
+            ax.annotate("L%d" % L, (si / 1000, pct), xytext=(4, -10),
+                        textcoords="offset points", color=color, fontsize=8)
+ax.set_xlabel("compute — mean score_iter per message (thousands)")
+ax.set_ylabel("letters correct (mean %)")
+ax.set_title("Greedy vs steepest ascent at matched compute (english, quad, 10 plugs)",
+             fontsize=12.5, fontweight="bold", pad=12)
+ax.set_ylim(0, 102); ax.set_xlim(0, 62)
+ax.legend(frameon=False, loc="lower right", fontsize=9)
+ax.annotate("same recovery,\n~2.4x less compute", (23, 60), (40, 40),
+            textcoords="data", fontsize=9, color="#555555",
+            arrowprops=dict(arrowstyle="->", color="#999999"))
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "greedy_vs_steepest_compute.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote greedy_vs_steepest_compute.png")
+
 print("done ->", OUT)
