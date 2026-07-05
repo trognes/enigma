@@ -250,4 +250,40 @@ fig.savefig(os.path.join(OUT, "equal_restart_by_language.png"), bbox_inches="tig
 plt.close(fig)
 print("wrote equal_restart_by_language.png")
 
+# 11. IC pre-pass cap sweep: recovery vs N for -J -S iNq10 -R 10, N=1..8.
+# Ordered magnitude (message length) -> single-hue sequential ramp, light->dark;
+# lines are flat and vertically separated by length, so direct end-labels
+# (no legend). All four languages pooled (the effect is language-independent);
+# compute is flat across N (~5%), so this is a matched-compute sweep.
+IC_LENS = [40, 50, 60, 70, 80, 90, 120, 160]
+IC_NS = list(range(1, 9))
+ic = defaultdict(list)
+for r in rows:
+    cl = r["config_label"]
+    if len(cl) > 1 and cl[0] == "i" and cl[1:2].isdigit() and cl.endswith("q10.R10.J"):
+        ic[(int(cl[1]), r["length"])].append(r["pct"])
+ramp = [plt.cm.Blues(v) for v in
+        [0.30, 0.42, 0.53, 0.63, 0.73, 0.82, 0.90, 1.0]]
+fig, ax = plt.subplots(figsize=(8.5, 5.5))
+for L, color in zip(IC_LENS, ramp):
+    ys = [sum(ic[(N, L)]) / len(ic[(N, L)]) for N in IC_NS]
+    ax.plot(IC_NS, ys, "-o", color=color, lw=2, ms=5,
+            markeredgecolor="white", markeredgewidth=0.6)
+    ax.annotate(f"L{L}", (IC_NS[-1], ys[-1]), xytext=(6, 0),
+                textcoords="offset points", va="center", fontsize=8.5,
+                color=color, fontweight="bold")
+ax.set_xlabel("IC pre-pass plug cap  N   (-S iNq10)")
+ax.set_ylabel("letters correct (mean %)")
+ax.set_title("IC pre-pass cap is inert: recovery vs cap N\n"
+             "(-J -S iNq10 -R 10, quad, 10 plugs, all languages pooled, 2 seeds)",
+             fontsize=12, fontweight="bold", pad=10)
+ax.set_xticks(IC_NS)
+ax.set_xlim(0.7, 8.8)
+ax.set_ylim(0, 102)
+ax.margins(x=0.05)
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "ic_cap_sweep.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote ic_cap_sweep.png")
+
 print("done ->", OUT)
