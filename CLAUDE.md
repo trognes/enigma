@@ -324,12 +324,15 @@ directory, machine settings, plugboard, ciphertext length) to stderr.
 > default recommendation.** An earlier eval round suggested German needed a
 > lower order (`-b`/`-t`), but that was a **bug**: `load_counts` truncated the
 > non-English tables at the first accented gram, so the "german quad" scorer ran
-> on only its 29 most frequent quadgrams (4.9% of the table). Fixed to skip
-> non-A-Z records (see `PERFORMANCE.md` §6.9); with the full table German quad is
-> search-bound and fully solvable like English (German L90 mean %-correct
-> 24.7 → **91.1** before → after the fix). Model order is *not* meaningfully
-> language-dependent once the tables load — use `-q`. The residual gap is
-> *genuine telegraphic* German (operational orthography off-distribution for the
+> on only its 29 most frequent quadgrams (4.9% of the table). Fixed by folding each
+> accented gram to its A-Z base and accumulating counts (`ä→A`, `ø→O`, `ç→C`, …;
+> `load_counts`, and the ciphertext/plaintext readers fold input the same way and
+> warn on non-mappable characters — see `PERFORMANCE.md` §6.9). With the full table
+> German quad is search-bound and fully solvable like English (German L90 mean
+> %-correct 24.7 → **91.1** before → after the fix); on an orthogonal four-language
+> grid german/danish/french all crack comparably to English. Model order is *not*
+> meaningfully language-dependent once the tables load — use `-q`. The residual gap
+> is *genuine telegraphic* German (operational orthography off-distribution for the
 > prose tables — §6.6), not the model order.
 
 ## Architecture / how it works

@@ -929,8 +929,12 @@ truncation (lower order = first umlaut appears later in the frequency ranking = 
 the A-Z table survives). English (26 letters, no accents) loaded fully and was never
 affected.
 
-**Fix and re-measurement.** `load_counts()` now **skips** non-A-Z records instead of
-stopping (all 182 tests pass; English byte-identical). German quad, before → after:
+**Fix and re-measurement.** `load_counts()` now **folds each accented gram to its A-Z
+base and accumulates counts** (`é→E`, `ü→U`, `ø→O`, `ß→S`, …; an initial skip-the-record
+fix was refined to this so the folded accented grams add to their base instead of being
+dropped). The plaintext/ciphertext readers fold the same way and warn on non-mappable
+characters. All 182 tests pass; English (no accents) byte-identical. German quad,
+before → after:
 
 | L | quad BEFORE (truncated) | quad AFTER (full table) |
 |---|---|---|
@@ -946,7 +950,9 @@ close for German prose (within a few pp; bigram edges quad only at the very shor
 lengths, L50/L120), so **model order is *not* meaningfully language-dependent** once the
 tables load correctly. **Use `-q` for German as for English.** The lower-order preference
 is retracted. (The bug also silently truncated Danish and French — 29/42-symbol tables —
-so this fix helps every non-English language.)
+so this fix helps every non-English language: re-run under the fix on an orthogonal
+four-language grid, german/danish/french all crack comparably to English, all reaching
+100% exact by ~L200 and *easier* than English at short lengths — `eval/`.)
 
 **What survives.** Genuine *telegraphic* German (the Dönitz P1030681 message, the 1930
 manual message) is still harder than prose even after the fix — real operational

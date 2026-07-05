@@ -99,31 +99,52 @@ test them in isolation.
 
 ## Current contents
 
-The log currently holds **English rows only**. All German rows were **removed**:
-they were produced before the n-gram parser was fixed, so they measured a
-crippled scorer (see below), and the entire batch that reached the correct
-folded tables was never rerun. German can be regenerated cleanly under the
-current binary whenever needed; the removal is recorded in `PERFORMANCE.md`
-§6.9 and the commit that dropped them.
+The log holds **all four languages** (english, german, danish, french), 10 plugs,
+on the fold-and-accumulate binary. **The main grid is orthogonal**: each language
+has **4 prose corpora** (english builtin/city/mountains/ocean, german
+builtin/wald/reise/wissenschaft, danish builtin/hav/by/skov, french
+builtin/mer/ville/montagne) and identical row counts per (config × length) —
+three configs (quad greedy `-J -S i4q10 -R 10`, quad steepest `-S i4q10 -R 10`,
+trigram `-J -S i4t10 -R 10`) across L40–L300, sampled to 140/160/160 at L50/60/70
+and 80 elsewhere.
+
+Separate experiments carry their own `config_label` suffix so they don't pollute
+the main grid: **`.translit`** (german and danish multi- vs single-letter
+transliteration, the `*_sl` / `danmark` corpora) and **`.genuine`** (the German
+genuine messages `doenitz1945` / `manual1930`). These are inherently
+language-specific (no accents in english, none of the accented/genuine text for
+the others) and are the only remaining non-orthogonality.
 
 ## Key findings so far (10 plugs, `-J -R 10`)
 
-- **English is search-bound** — 0 scoring failures at every length, fully solved
-  by ~L200. English was never affected by the table bug below (26 letters, no
-  accents; its tables always loaded fully).
 - **A table-loading bug crippled non-English scoring (found via this log, now
   fixed).** `load_counts` stopped reading at the first accented gram, so the
-  German quad table loaded only its 29 most frequent entries (4.9%). During the
-  investigation this produced a spurious "German wants bigram" reading — a
-  truncation artifact (lower order = less truncated), **now retracted**. The
-  parser was fixed to fold accented grams to their A–Z base and accumulate
-  counts (`PERFORMANCE.md` §6.9); model order is *not* meaningfully
-  language-dependent once the tables load — use `-q`. The German rows behind that
-  investigation have been removed as invalid.
-- **Genuine telegraphic German is the real residual** (independent of the bug):
-  operational orthography — `Q`-for-`CH`, dense `X` separators — is
-  off-distribution for the prose tables (§6.6). This will need genuine-text
-  rows regenerated under the fixed binary to quantify.
+  German quad table loaded only its 29 most frequent entries (4.9%). This
+  produced a spurious "German wants bigram" reading — a truncation artifact
+  (lower order = less truncated), **now retracted**. The parser was fixed to fold
+  accented grams to their A–Z base and accumulate counts (`PERFORMANCE.md` §6.9);
+  **model order is not meaningfully language-dependent — use `-q`.**
+- **After the fix every language cracks comparably** (quad greedy), all reaching
+  100% exact by ~L200. At short lengths the non-English languages are actually
+  *easier* than english (L50 mean %-correct: english 15, french 34, german 35,
+  danish 33). English is search-bound (0 scoring failures at every length).
+- **Accent-folding convention doesn't matter (measured).** The tool folds accents
+  to a single base letter (`ä→A`). The german corpora exist in both the historical
+  multi-letter form (`ä→ae`, `*.txt`) and a single-letter form matching the fold
+  (`ä→a`, `*_sl.txt`, via `build_corpora.py`). A matched german quad-greedy run
+  (L50/60/70/90, 80 each) found the two **tied within noise** (e.g. L50 24.8 vs
+  28.4, L90 81.5 vs 79.0) — umlaut words are only ~3% of the text, so once the
+  full table loads the transliteration is immaterial. The same holds for **danish**
+  (a raw-accented passage `danish_danmark` + its `_sl` variant): multi vs single
+  are mixed and noise-level (L50 27.1 vs 23.3, L90 76.5 vs 68.6). French already
+  strips accents to the base.
+- **Genuine telegraphic German — mostly the bug, small residual left.** Under the
+  fix the genuine Dönitz 1945 message cracks well (L160 95%, L250 100% exact; it
+  was 37.5%/75.4% under the truncated table), so most of its earlier difficulty
+  was the loading bug, not orthography. A real but modest §6.6 residual remains:
+  doenitz L90 61% and the 1930 manual message (extreme `Q`-for-`CH` / dense `X`)
+  L90 49% still lag prose German (~78%) — operational orthography off-distribution
+  for the prose tables.
 
 ## Reproducing a single row
 
