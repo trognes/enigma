@@ -133,11 +133,14 @@ fig.savefig(os.path.join(OUT, "quad_vs_trigram.png"), bbox_inches="tight", facec
 plt.close(fig)
 print("wrote quad_vs_trigram.png")
 
-# 6. greedy vs steepest at matched compute: mean %-correct vs score_iter (english)
+# 6. climb variants at matched compute: mean %-correct vs score_iter (english)
 STEEP = "i4q10.R10.steepest"
+FI = "i4q10.R10.I"
 fig, ax = plt.subplots(figsize=(8, 5))
-for clabel, cfg, color in [("greedy (-J)", GREEDY, "#009E73"),
-                           ("steepest ascent", STEEP, "#D55E00")]:
+for clabel, cfg, color, labelpts in [
+        ("-I  first-improvement", FI, "#0072B2", False),
+        ("-J  (+ dynamic order)", GREEDY, "#009E73", False),
+        ("steepest ascent", STEEP, "#D55E00", True)]:
     agg = defaultdict(lambda: [0.0, 0.0, 0])  # length -> [sum score_iter, sum pct, n]
     for r in rows:
         if r["config_label"] == cfg and r["language"] == "english" and r["score_iter"]:
@@ -147,18 +150,19 @@ for clabel, cfg, color in [("greedy (-J)", GREEDY, "#009E73"),
     ys = [p[0] for p in pts]; xs = [p[1] / 1000 for p in pts]
     ax.plot(xs, ys, "-o", color=color, lw=2, ms=5, label=clabel,
             markeredgecolor="white", markeredgewidth=0.6)
-    for pct, si, L in pts:
-        if L in (50, 90, 160, 300):
-            ax.annotate("L%d" % L, (si / 1000, pct), xytext=(4, -10),
-                        textcoords="offset points", color=color, fontsize=8)
+    if labelpts:  # length labels on one band orient the whole chart
+        for pct, si, L in pts:
+            if L in (50, 90, 160, 300):
+                ax.annotate("L%d" % L, (si / 1000, pct), xytext=(6, -3),
+                            textcoords="offset points", color=color, fontsize=8)
 ax.set_xlabel("compute — mean score_iter per message (thousands)")
 ax.set_ylabel("letters correct (mean %)")
-ax.set_title("Greedy vs steepest ascent at matched compute (english, quad, 10 plugs)",
-             fontsize=12.5, fontweight="bold", pad=12)
+ax.set_title("Climb variants at matched compute (english, quad, 10 plugs)",
+             fontsize=13, fontweight="bold", pad=12)
 ax.set_ylim(0, 102); ax.set_xlim(0, 62)
-ax.legend(frameon=False, loc="lower right", fontsize=9)
-ax.annotate("same recovery,\n~2.4x less compute", (23, 60), (40, 40),
-            textcoords="data", fontsize=9, color="#555555",
+ax.legend(frameon=False, loc="upper left", fontsize=9)
+ax.annotate("first-improvement (-I/-J): same\nrecovery at ~1/3 the compute",
+            (20, 72), (33, 52), textcoords="data", fontsize=9, color="#555555",
             arrowprops=dict(arrowstyle="->", color="#999999"))
 fig.tight_layout()
 fig.savefig(os.path.join(OUT, "greedy_vs_steepest_compute.png"), bbox_inches="tight", facecolor="white")
