@@ -33,8 +33,10 @@ make crackquality    # build, then measure short-message cracking quality
 ## Quick start
 
 The ciphertext (or plaintext) is read from **standard input**; the result is
-written to **standard output**. Only the letters A–Z are processed — spaces,
-punctuation and case are stripped on input.
+written to **standard output**. Only the letters A–Z are processed — accented
+Latin letters are folded to their base (`é→E`, `ü→U`, `ø→O`, `ß→S`), case is
+upper-cased, and spaces/punctuation are dropped; any other non-mappable
+character is skipped with an informational warning.
 
 ```sh
 # Encrypt. A fully specified machine with no -c just enciphers its input -- nothing
@@ -392,8 +394,9 @@ depth knob; keep it deep). Both compose with `-F`/`-T` when the rotor key is als
 
 ## Input, output and diagnostics
 
-- **Input** comes from stdin; only A–Z are kept (case, spaces and punctuation are
-  stripped).
+- **Input** comes from stdin; only A–Z are kept (accented letters folded to their
+  base, case upper-cased, spaces/punctuation dropped, other non-mappable
+  characters skipped with a warning).
 - **Output** is the single best-scoring plaintext, on stdout.
 - **Diagnostics** go to stderr: the resolved configuration is echoed at the
   start, the running best is shown during the search, and two final lines report
