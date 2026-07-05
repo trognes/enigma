@@ -116,23 +116,40 @@ Reiz der Forschung, denn das Streben nach Wahrheit findet niemals ein Ende.
 """,
 }
 
+# Two transliterations of the German umlauts/eszett:
+#  * MULTI  (historical Enigma convention): ae/oe/ue/ss  -> *.txt
+#  * SINGLE (matches the tool's accent folding: ae-umlaut -> A): a/o/u/s -> *_sl.txt
+# The tool now folds accented n-grams to a single base letter, so the SINGLE
+# corpora are the convention-matched ones; keeping both lets the eval compare
+# which transliteration the folded tables actually prefer (EVAL_CORPORA=...).
 TRANS = str.maketrans({
     "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "ae", "Ö": "oe", "Ü": "ue", "ß": "ss",
 })
+TRANS_SINGLE = str.maketrans({
+    "ä": "a", "ö": "o", "ü": "u", "Ä": "a", "Ö": "o", "Ü": "u", "ß": "s",
+})
 
 
-def clean(text):
-    return re.sub(r"[^A-Z]", "", text.translate(TRANS).upper())
+def clean(text, trans=TRANS):
+    return re.sub(r"[^A-Z]", "", text.translate(trans).upper())
 
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     for name, text in (list(BUILTIN.items()) + list(GENUINE.items())
                        + list(READABLE.items())):
-        cleaned = clean(text)
+        multi = clean(text)
         with open(os.path.join(here, name + ".txt"), "w") as fh:
-            fh.write(cleaned + "\n")
-        print("%-24s %5d chars" % (name + ".txt", len(cleaned)))
+            fh.write(multi + "\n")
+        # Emit a single-letter variant only when it actually differs (accented
+        # source), i.e. the German prose passages, as <name>_sl.txt.
+        single = clean(text, TRANS_SINGLE)
+        if single != multi:
+            with open(os.path.join(here, name + "_sl.txt"), "w") as fh:
+                fh.write(single + "\n")
+            print("%-26s %5d chars  (+ _sl variant)" % (name + ".txt", len(multi)))
+            continue
+        print("%-24s %5d chars" % (name + ".txt", len(multi)))
 
 
 if __name__ == "__main__":
