@@ -25,6 +25,25 @@ BUILTIN = {
     "german_builtin": "DIEENIGMAMASCHINEWURDEIMZWEITENWELTKRIEGVONDERDEUTSCHENWEHRMACHTVERWENDETUMGEHEIMENACHRICHTENZUVERSCHLUESSELNABERDIEALLIIERTENKONNTENDENGEHEIMENCODETROTZDEMBRECHENWEILDIEDEUTSCHENOFTDIEGLEICHENFLOSKELNVERWENDETENUNDWEILVIELEBEDIENERIMMERWIEDERDIESELBENFEHLERMACHTENDIEPOLNISCHENUNDBRITISCHENMATHEMATIKERBAUTENMASCHINENUMDIETAEGLICHENSCHLUESSELZUFINDENUNDLASENSODIEGEHEIMENFUNKSPRUECHEDESFEINDESMITUNDVERKUERZTENDADURCHDENKRIEGUMMEHREREJAHREUNDRETTETENVIELETAUSENDMENSCHENLEBEN",
 }
 
+# Genuine historical Enigma message plaintexts (already A-Z after cleaning;
+# umlauts/eszett transliterated ae/oe/ue/ss, X/Y/K/J procedure separators kept as
+# they are part of the operational telegraphic style). Provenance in comments.
+# These test whether real telegraphic German (unlike prose) scores under the
+# prose-trained n-gram tables.
+GENUINE = {
+    # Grossadmiral Doenitz message P1030681, May 1945 (Hitler naming Doenitz his
+    # successor) -- a genuine WW2 Kriegsmarine M4 message. Plaintext as commonly
+    # published (cryptomuseum.com/crypto/enigma/msg/p1030681.htm; the M4/U-534
+    # material at enigma.hoerenberg.com). Retrieved via web search; treat as
+    # genuine operational German, not a byte-verified transcription.
+    "german_doenitz1945": "KRKRALLEXXFOLGENDESISTSOFORTBEKANNTZUGEBENXXICHHABEFOLGENDENBEFEHLERHALTENXXJANSTELLEDESBISHERIGENREICHSMARSCHALLSJGOERINGJSETZTDERFUEHRERSIEYHERRGROSSADMIRALYALSSEINENNACHFOLGEREINXSCHRIFTLSCHEVOLLMACHTUNTERWEGSXABSOFORTSOLLENSIESAEMTLICHEMASSNAHMENVERFUEGENYDIESICHAUSDERGEGENWAERTIGENLAGEERGEBENXGEZXREICHSLEITERKKTULPEKKJBORMANNJXXOBXDXMMMDURCHFKSTXKOMXADMXUUUBOOTEXKP",
+    # The 1930 Enigma instruction-manual test message (Reichswehr; pre-war but the
+    # canonical genuine Enigma message). Plaintext as enciphered (Q for CH, X word
+    # separators). Documented at cryptocellar.org, Wikipedia ("grill" method),
+    # wiki.franklinheath.co.uk. Short (~90 chars) -- usable only at short lengths.
+    "german_manual1930": "FEINDLIQEINFANTERIEKOLONNEBEOBAQTETXANFANGSUEDAUSGANGBAERWALDEXENDEDREIKMOSTWAERTSNEUSTADT",
+}
+
 # Human-readable source passages (umlauts allowed; cleaned on write).
 READABLE = {
     "english_ocean": """
@@ -108,7 +127,8 @@ def clean(text):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    for name, text in list(BUILTIN.items()) + list(READABLE.items()):
+    for name, text in (list(BUILTIN.items()) + list(GENUINE.items())
+                       + list(READABLE.items())):
         cleaned = clean(text)
         with open(os.path.join(here, name + ".txt"), "w") as fh:
             fh.write(cleaned + "\n")

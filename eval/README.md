@@ -32,8 +32,9 @@ EVAL_OPTS='-S i4q10 -R 10' EVAL_LABEL='i4q10.R10' python3 tests/eval.py
 Env knobs: `EVAL_LANGS` (default `english german`), `EVAL_RUNS` (40),
 `EVAL_LENGTH` (50), `EVAL_PAIRS` (10), `EVAL_OPTS` (climb strategy, default
 `-J -S i4q10 -R 10`), `EVAL_LABEL`, `EVAL_THREADS` (1), `EVAL_SOLVER_SEED` (0),
-`EVAL_OUT`. Problems are drawn from fresh OS entropy, so each invocation adds
-new random instances.
+`EVAL_CORPORA` (comma-separated corpus names to restrict to, e.g.
+`doenitz1945`; default all), `EVAL_OUT`. Problems are drawn from fresh OS
+entropy, so each invocation adds new random instances.
 
 ## Corpora (`eval/corpora/`)
 
@@ -44,12 +45,21 @@ likely), and records which one in the `corpus` column. Passages live as plain
 (uppercased), so **you can add a corpus by dropping a raw text file there** — no
 code change. `<name>` becomes the `corpus` value.
 
-The seeded passages are **authored** (original prose on varied topics), not
+Most seeded passages are **authored** (original prose on varied topics), not
 fetched literature: this session's egress proxy denies general web hosts
-(`www.gutenberg.org` → 403), so external corpora could not be downloaded. Add
-real ones as files when you have them. German umlauts/eszett are transliterated
-`ae/oe/ue/ss` (the project convention). `eval/corpora/build_corpora.py` holds
-the human-readable sources and regenerates the `.txt` files.
+(`www.gutenberg.org`, `cryptocellar.org` → 403), so external corpora could not
+be downloaded. Add real ones as files when you have them. German umlauts/eszett
+are transliterated `ae/oe/ue/ss` (the project convention).
+`eval/corpora/build_corpora.py` holds the human-readable sources and
+regenerates the `.txt` files.
+
+Two **genuine** historical Enigma message plaintexts are included (retrieved via
+web search, provenance in `build_corpora.py`): `german_doenitz1945` (the May
+1945 Doenitz-succession M4 message P1030681 — real WW2 telegraphic German with
+`X`/`Y`/`KK` separators and procedure words) and `german_manual1930` (the
+canonical 1930 instruction-manual message, ~90 chars). Telegraphic German
+scores very differently under the prose-trained tables — use `EVAL_CORPORA` to
+test them in isolation.
 
 ## Columns
 

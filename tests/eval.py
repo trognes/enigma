@@ -135,17 +135,24 @@ def load_corpora(lang):
     """[(name, text), ...] for a language from eval/corpora/<lang>_*.txt (A-Z
     only, uppercased); falls back to the built-in passage if the dir has none.
     Drop more <lang>_<name>.txt files in eval/corpora/ to add corpora -- no code
-    change needed (any non-A-Z is stripped, so raw text files are fine)."""
+    change needed (any non-A-Z is stripped, so raw text files are fine).
+    EVAL_CORPORA (comma-separated corpus names) restricts to a subset, e.g.
+    EVAL_CORPORA=doenitz1945 to test one corpus in isolation."""
+    only = env("EVAL_CORPORA", "")
+    only_set = set(only.split(",")) if only else None
     out = []
     cdir = os.path.join("eval", "corpora")
     if os.path.isdir(cdir):
         for fn in sorted(os.listdir(cdir)):
             if fn.startswith(lang + "_") and fn.endswith(".txt"):
+                name = fn[len(lang) + 1:-4]
+                if only_set is not None and name not in only_set:
+                    continue
                 with open(os.path.join(cdir, fn)) as fh:
                     text = re.sub(r"[^A-Z]", "", fh.read().upper())
                 if text:
-                    out.append((fn[len(lang) + 1:-4], text))
-    if not out and lang in CORPORA:
+                    out.append((name, text))
+    if not out and lang in CORPORA and (only_set is None or "builtin" in only_set):
         out = [("builtin", CORPORA[lang])]
     return out
 
