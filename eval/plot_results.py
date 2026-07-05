@@ -286,4 +286,49 @@ fig.savefig(os.path.join(OUT, "ic_cap_sweep.png"), bbox_inches="tight", facecolo
 plt.close(fig)
 print("wrote ic_cap_sweep.png")
 
+# 12. Pre-pass MODEL sweep: IC vs mono vs bigram pre-pass, recovery vs cap N.
+# -J -S {i,m,b}Nq10 -R 10. Three models = categorical hues (Okabe-Ito, fixed
+# order). All langs pooled at short lengths (L40-90, where the pre-pass matters);
+# +/-SE band. Compute is matched across all three (~20-24k score_iter).
+import math as _math
+PP_SHORT = [40, 45, 50, 55, 60, 65, 70, 75, 80, 90]
+PP_MODELS = [("IC  (-S iNq10)", "i", range(1, 9), "#0072B2"),
+             ("mono  (-S mNq10)", "m", range(1, 11), "#E69F00"),
+             ("bigram  (-S bNq10)", "b", range(1, 11), "#009E73")]
+pp = defaultdict(list)
+for r in rows:
+    mo = r["config_label"]
+    if len(mo) > 4 and mo[0] in "imb" and mo[1:].split("q")[0].isdigit() \
+            and mo.endswith("q10.R10.J") and r["length"] in PP_SHORT:
+        pp[(mo[0], int(mo[1:].split("q")[0]))].append(r["pct"])
+
+
+def _mse(vals):
+    m = sum(vals) / len(vals)
+    se = _math.sqrt(sum((x - m) ** 2 for x in vals) / (len(vals) - 1)) / _math.sqrt(len(vals))
+    return m, se
+
+
+fig, ax = plt.subplots(figsize=(8.5, 5.5))
+for label, key, nrange, color in PP_MODELS:
+    ns = list(nrange)
+    ms, ses = zip(*[_mse(pp[(key, N)]) for N in ns])
+    ax.fill_between(ns, [m - s for m, s in zip(ms, ses)],
+                    [m + s for m, s in zip(ms, ses)], color=color, alpha=0.15, linewidth=0)
+    ax.plot(ns, ms, "-o", color=color, lw=2, ms=5, label=label,
+            markeredgecolor="white", markeredgewidth=0.6)
+ax.set_xlabel("pre-pass plug cap  N")
+ax.set_ylabel("letters correct (mean %)")
+ax.set_title("Pre-pass MODEL sets the level; cap N is inert: IC > mono > bigram\n"
+             "(-J -S <model>Nq10 -R 10, quad target, 10 plugs, all langs, L40-90, 2 seeds)",
+             fontsize=11.5, fontweight="bold", pad=10)
+ax.set_xticks(range(1, 11))
+ax.set_xlim(0.7, 10.3)
+ax.set_ylim(0, 60)
+ax.legend(frameon=False, loc="upper right", fontsize=9.5)
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "prepass_model_sweep.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote prepass_model_sweep.png")
+
 print("done ->", OUT)
