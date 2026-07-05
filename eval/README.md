@@ -126,11 +126,17 @@ each use a single built-in passage (less excerpt diversity).
   (`ä→a`, `*_sl.txt`, via `build_corpora.py`). A matched german quad-greedy run
   (L50/60/70/90, 80 each) found the two **tied within noise** (e.g. L50 24.8 vs
   28.4, L90 81.5 vs 79.0) — umlaut words are only ~3% of the text, so once the
-  full table loads the transliteration is immaterial. (French already strips
-  accents to the base; danish would need a raw-accented passage to get an `_sl`
-  variant.)
-- **Genuine telegraphic German** remains a separate §6.6 residual (operational
-  `Q`-for-`CH` / `X`-separator orthography), to be requantified under the fix.
+  full table loads the transliteration is immaterial. The same holds for **danish**
+  (a raw-accented passage `danish_danmark` + its `_sl` variant): multi vs single
+  are mixed and noise-level (L50 27.1 vs 23.3, L90 76.5 vs 68.6). French already
+  strips accents to the base.
+- **Genuine telegraphic German — mostly the bug, small residual left.** Under the
+  fix the genuine Dönitz 1945 message cracks well (L160 95%, L250 100% exact; it
+  was 37.5%/75.4% under the truncated table), so most of its earlier difficulty
+  was the loading bug, not orthography. A real but modest §6.6 residual remains:
+  doenitz L90 61% and the 1930 manual message (extreme `Q`-for-`CH` / dense `X`)
+  L90 49% still lag prose German (~78%) — operational orthography off-distribution
+  for the prose tables.
 
 ## Reproducing a single row
 
