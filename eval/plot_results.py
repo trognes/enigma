@@ -179,4 +179,15 @@ line_chart(
     "Climb variants: recovery vs length (english, quad, 10 plugs, R=10)",
     "letters correct (mean %)", "climb_variants_recovery.png")
 
+# 8. MATCHED-COMPUTE recovery vs length: -I R32, -J R24, steepest R10 (all ~55k)
+line_chart(
+    [("-I  R=32", "#0072B2",
+      *curve(lambda r: r["config_label"] == "i4q10.R32.I" and r["language"] == "english", lambda r: r["pct"])),
+     ("-J  R=24", "#009E73",
+      *curve(lambda r: r["config_label"] == "i4q10.R24.J" and r["language"] == "english", lambda r: r["pct"])),
+     ("steepest  R=10", "#D55E00",
+      *curve(lambda r: r["config_label"] == STEEP and r["language"] == "english", lambda r: r["pct"]))],
+    "Recovery vs length at MATCHED compute (~55k score_iter; english, quad, 10 plugs)",
+    "letters correct (mean %)", "matched_compute_recovery.png")
+
 print("done ->", OUT)
