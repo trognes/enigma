@@ -706,7 +706,7 @@ if RSW_HAVE:
         ax.annotate(f"L{L}", (lx[-1], ly[-1]), xytext=(6, 0), textcoords="offset points",
                     va="center", fontsize=8.5, color=color, fontweight="bold")
     ax.set_xticks(list(xpos.values()))
-    ax.set_xticklabels([str(R) for R in RSW_HAVE])
+    ax.set_xticklabels([str(R) for R in RSW_HAVE], rotation=45, ha="right", fontsize=8)
     ax.set_xlabel("restart budget  -R   (compute ~ linear in R; ~2.3k score_iter/restart)")
     ax.set_ylabel("mean % letters correct")
     ax.set_title("Restart gain at short lengths (german, -J -S i4q10, quad, 10 plugs, 2 seeds)\n"
