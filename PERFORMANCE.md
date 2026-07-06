@@ -699,10 +699,33 @@ not what helps — but almost free). Honest prior: as a hard *order* it likely u
 (bound ≠ benefit, plus the ct-half diversity risk); as a *prune* it is a clean, safe throughput
 gain. Do the prune first.
 
-**Experiment.** (1) Prune: `make bench hillclimb` for the throughput gain + `make crackquality` /
-`eval/` at L40–90 confirming the bounded-`ε` soft prune is recovery-neutral (and byte-identical at
-`ε=0`). (2) Order: influence-ordered `-I` vs `-J` at matched `score_iter`, with `DIVERSITY=1` to
-catch a ct-half diversity collapse. Judge on mean %-correct.
+**Measured — the prune is a dead end at our lengths (offline, english, 40 runs/length). ❌**
+Inert-move fraction (`infl=0`, both letters absent from the ciphertext *and* the current-board
+decrypt) and low-`infl` fractions, bracketed by a start-of-climb (empty board) and a solved board:
+
+| L | inert % (`infl=0`) | `infl≤2` % | `infl≤4` % |
+|---|---|---|---|
+| 40 | 0.2–0.6 | 5–9 | 26–33 |
+| 50 | 0.0–0.2 | 1–4 | 11–18 |
+| 60 | ~0 | 0.6–1.7 | 4.5–10 |
+| 70 | ~0 | 0.1–0.5 | 1–5 |
+| 90 | ~0 | ~0 | 0.1–1 |
+
+Two findings kill the exact prune and demote the soft one:
+1. **The `ε=0` exact prune is worthless from L50 up** (~0 inert moves; ≤2 pairs even at L40). The
+   union of the ~flat ciphertext and ~flat wrong-board decrypt covers ~25 of 26 letters
+   (`|active|≈25`), so almost nothing is doubly-absent. The pruning fires only at L≲30–40.
+2. **The `|Δ|` bound is rigorous but far too loose to justify a *bounded* soft prune.** The
+   per-window quad range is ~7 log10 units, so even a `k=1` move has bound `≈ 4·7 ≈ 28` log10 —
+   enormous next to real per-move improvements (~1 log10). So the bound is *tight only at `k=0`*;
+   for any `k≥1` no move is provably skippable for a small `ε`. A prune that drops `infl≤4`
+   (~15% of moves at L50, ~33% at L40, ~0 by L90) is therefore a **heuristic**, not the
+   bounded-loss guarantee the `≤ n·k·(vmax−vmin)` framing suggested — the loose constant is the
+   catch. Net: no rigorous prune lever at L50, and only a modest heuristic short-length one, so the
+   prune is not pursued.
+
+**Experiment (remaining — the order).** Influence-ordered `-I` vs `-J` at matched `score_iter`,
+L40–90, with `DIVERSITY=1` to catch a ct-half diversity collapse. Judge on mean %-correct.
 
 ---
 
