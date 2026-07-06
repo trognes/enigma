@@ -676,7 +676,7 @@ if all((("ord.F.R30", L) in os_d) for L in ORD_SHORT):
 # 21. Restart-gain sweep: recovery vs -R at short lengths (german, -J -S i4q10).
 # One line per length; x = restart budget (categorical, since R=0 has no log
 # point). Shows recovery is restart-limited and keeps climbing through R=80.
-RSW_RS = [0, 1, 2, 5, 10, 20, 40, 80, 160, 320, 640]
+RSW_RS = [0, 1, 2, 5, 10, 20, 40, 80, 160, 320, 640, 1280]
 RSW_LENS = [40, 45, 50, 55, 60, 65, 70]
 rsw = defaultdict(list)
 for r in rows:
@@ -710,7 +710,7 @@ if RSW_HAVE:
     ax.set_xlabel("restart budget  -R   (compute ~ linear in R; ~2.3k score_iter/restart)")
     ax.set_ylabel("mean % letters correct")
     ax.set_title("Restart gain at short lengths (german, -J -S i4q10, quad, 10 plugs, 2 seeds)\n"
-                 "L60-70 plateau ~95% by R160; L40-55 keep climbing (R640 tail run for the hardest lengths)",
+                 "L50-70 plateau ~85-96%; L40 flattens ~68% by R640; L40/L45 tail is noise-limited (~±5pp)",
                  fontsize=10, fontweight="bold", pad=10)
     ax.set_ylim(0, 100)
     ax.margins(x=0.08)
