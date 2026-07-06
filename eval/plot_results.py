@@ -482,4 +482,44 @@ fig.savefig(os.path.join(OUT, "recovery_vs_length_by_language.png"), bbox_inches
 plt.close(fig)
 print("wrote recovery_vs_length_by_language.png")
 
+# 16. i3m8q10 (mono intermediate stage) vs baseline i4q10, recovery vs length,
+# per language. NOT matched compute (i3m8q10 ~32k vs i4q10 ~22k score_iter) --
+# a "does the fancier config beat the default" view. Two configs = categorical
+# hues; +/-SE bands. Short-length win is english/french only (see #75).
+CMP = [("baseline i4q10", "i4q10.R10.J", "#444444"),
+       ("i3m8q10 (mono middle)", "i3m8q10.R10.J", "#E69F00")]
+cmp_d = defaultdict(list)
+for r in rows:
+    for _, cl, _ in CMP:
+        if r["config_label"] == cl:
+            cmp_d[(cl, r["language"], r["length"])].append(r["pct"])
+fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    for label, cl, color in CMP:
+        xs = sorted({L for (c, lg, L) in cmp_d if c == cl and lg == lang})
+        means, ses = [], []
+        for L in xs:
+            v = cmp_d[(cl, lang, L)]; mu = sum(v) / len(v)
+            means.append(mu)
+            ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+        ax.fill_between(xs, [m - s for m, s in zip(means, ses)],
+                        [m + s for m, s in zip(means, ses)], color=color, alpha=0.15, linewidth=0)
+        ax.plot(xs, means, "-o", color=color, lw=2, ms=5, markeredgecolor="white",
+                markeredgewidth=0.6, label=label)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+for ax in axes[1]:
+    ax.set_xlabel("message length (letters)")
+for ax in (axes[0, 0], axes[1, 0]):
+    ax.set_ylabel("mean % letters correct")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8.5)
+fig.suptitle("i3m8q10 (mono intermediate) vs baseline i4q10, per language "
+             "(NOT matched compute: ~32k vs ~22k score_iter; quad, 10 plugs, 2 seeds)",
+             fontsize=11.5, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "i3m8q10_vs_i4q10_by_language.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote i3m8q10_vs_i4q10_by_language.png")
+
 print("done ->", OUT)
