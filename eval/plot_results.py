@@ -676,7 +676,7 @@ if all((("ord.F.R30", L) in os_d) for L in ORD_SHORT):
 # 21. Restart-gain sweep: recovery vs -R at short lengths (german, -J -S i4q10).
 # One line per length; x = restart budget (categorical, since R=0 has no log
 # point). Shows recovery is restart-limited and keeps climbing through R=80.
-RSW_RS = [0, 1, 2, 5, 10, 20, 40, 80]
+RSW_RS = [0, 1, 2, 5, 10, 20, 40, 80, 160, 320]
 RSW_LENS = [40, 45, 50, 55, 60, 65, 70]
 rsw = defaultdict(list)
 for r in rows:
@@ -688,24 +688,25 @@ for r in rows:
             continue
         if R in RSW_RS and r["length"] in RSW_LENS:
             rsw[(R, r["length"])].append(r["pct"])
-if rsw:
+RSW_HAVE = [R for R in RSW_RS if all(rsw[(R, L)] for L in RSW_LENS)]
+if RSW_HAVE:
     ramp = [plt.cm.Blues(v) for v in
             [0.30, 0.40, 0.50, 0.60, 0.72, 0.84, 1.0]]
-    xs = list(range(len(RSW_RS)))
-    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    xs = list(range(len(RSW_HAVE)))
+    fig, ax = plt.subplots(figsize=(9, 5.5))
     for L, color in zip(RSW_LENS, ramp):
-        ys = [sum(rsw[(R, L)]) / len(rsw[(R, L)]) for R in RSW_RS]
+        ys = [sum(rsw[(R, L)]) / len(rsw[(R, L)]) for R in RSW_HAVE]
         ax.plot(xs, ys, "-o", color=color, lw=2, ms=5, markeredgecolor="white",
                 markeredgewidth=0.6)
         ax.annotate(f"L{L}", (xs[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
                     va="center", fontsize=8.5, color=color, fontweight="bold")
     ax.set_xticks(xs)
-    ax.set_xticklabels([str(R) for R in RSW_RS])
+    ax.set_xticklabels([str(R) for R in RSW_HAVE])
     ax.set_xlabel("restart budget  -R   (compute ~ linear in R; ~2.3k score_iter/restart)")
     ax.set_ylabel("mean % letters correct")
     ax.set_title("Restart gain at short lengths (german, -J -S i4q10, quad, 10 plugs, 2 seeds)\n"
-                 "recovery is restart-limited -- still climbing at R=80, no plateau",
-                 fontsize=10.5, fontweight="bold", pad=10)
+                 "L60-70 plateau near ~95% by R160; L40-55 still climbing at R320 (diminishing, not flat)",
+                 fontsize=10, fontweight="bold", pad=10)
     ax.set_ylim(0, 100)
     ax.margins(x=0.08)
     fig.tight_layout()
