@@ -724,8 +724,32 @@ Two findings kill the exact prune and demote the soft one:
    catch. Net: no rigorous prune lever at L50, and only a modest heuristic short-length one, so the
    prune is not pursued.
 
-**Experiment (remaining — the order).** Influence-ordered `-I` vs `-J` at matched `score_iter`,
-L40–90, with `DIVERSITY=1` to catch a ct-half diversity collapse. Judge on mean %-correct.
+**Measured — the influence order underperforms `-J`, as predicted (built as `--infl-order`;
+matched compute, 4 languages, L40–90, 2 seeds, 120 runs/cell). ❌** `--infl-order` ranks the
+first-improvement sweep by `w(a,b)=ct_count[a]+ct_count[b]+pt_count[a]+pt_count[b]` (two 26-bin
+histograms, ~free) instead of `-J`'s measured score-delta. At ~55k `score_iter` (`-J -R24` ≈
+`--infl-order -R30` ≈ `-I -R32`, pooled mean %-correct):
+
+| L | `-J` R24 | `--infl-order` R30 | `-I` R32 | infl−`J` (±SE) |
+|---|---|---|---|---|
+| 40 | 25.3 | 24.2 | 19.7 | −1.1 ± 2.0 |
+| 50 | 37.5 | 41.5 | 31.7 | +4.0 ± 2.6 |
+| 60 | 59.7 | 53.9 | 45.4 | −5.9 ± 2.7 |
+| 70 | 71.3 | 66.0 | 60.5 | −5.3 ± 2.7 |
+| 90 | 90.0 | 85.7 | 78.6 | −4.3 ± 1.9 |
+
+- **Confirms the prior:** influence-order **loses to `-J`** at L60–90 (−4 to −6pp) and ties at
+  L40; the only positive is L50 (+4±2.6 ≈ 1.5σ, and danish-negative — not robust). `-J`'s
+  score-delta order beats influence's cheaper bound-based order wherever there is enough signal to
+  rank on, and that signal sharpens with length — so the gap grows with L. The per-step-dynamic /
+  near-free angles do not overcome the weaker ordering signal.
+- **But influence-order clearly beats plain `-I`** everywhere (+5 to +10pp): the informed order
+  *is* genuinely useful — a cheap, free upgrade over lexicographic — just dominated by `-J`.
+- **Verdict:** `-J` stays the recommended order. `--infl-order` is kept as an experimental,
+  documented-dominated opt-in (bench-neutral, default path untouched); it is not recommended.
+  (Methodology note: the first pass was polluted by stale `i4q10.R24.J`/`R32.I` rows from earlier
+  matched-compute runs sharing those labels — filter the clean grid by `git_sha`, or use fresh
+  `config_label`s, for a paired read.)
 
 ---
 
