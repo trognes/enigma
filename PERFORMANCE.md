@@ -373,9 +373,10 @@ config artifact. Fails its own bar ("must beat spending that same 325× as raw `
 wide margin. Kept as an experimental opt-in (`--exhaust 1`), not recommended.
 
 **Untested variant.** A ranked ~150-pair shortlist (ciphertext × plaintext-language letter
-frequency, so the shortlist concentrates on likely-true pairs) would halve the cost, but each
-forced pair still gets one weak single climb and only true-plug pairs help — unlikely to
-close a 20–40pp gap. Not pursued.
+frequency, so the shortlist concentrates on likely-true pairs — see §4.5 for the concrete
+influence weight `w(X,Y)=(c_X+p_X)+(c_Y+p_Y)`) would halve the cost, but each forced pair still
+gets one weak single climb and only true-plug pairs help — unlikely to close a 20–40pp gap. Not
+pursued.
 
 ### 3.7 Multi-seed IC basin-hopping (LOW–MEDIUM priority)
 
@@ -547,6 +548,98 @@ greedy path (§4.1).
 **Experiment.** `make crackquality` at fixed `-A` budget: guided vs uniform;
 sweep bias strength; confirm it does not merely collapse SA toward the greedy
 result.
+
+### 4.5 Influence-weighted plug selection — ciphertext-exact + plaintext-prior (MEDIUM priority; sharpens §3.6 / §4.1 / §4.3)
+
+**The idea (Ostwald & Weierud).** Plugs are not equally worth searching: a plug on a
+*frequent* letter rewrites many message positions, so getting it right — or ruling it out —
+resolves far more of the plaintext than a plug on a rare letter. Weierud's method concentrates
+the exhaustive stage on plugs touching high-frequency letters for exactly this reason. This
+section turns "influence" into a concrete, computable weight and — the important part — keeps
+the **exact** contribution (ciphertext) separate from the **estimated** one (plaintext), because
+they are epistemically different.
+
+**Where a plug acts.** Decryption applies the plugboard `S` twice per position:
+`c --S--> a=S(c) --R--> b=R(a) --S--> out=S(b)` (R = rotors+reflector, fixed at that position).
+Toggling plug (X,Y) changes `S` only at entries X and Y, so a position's output changes iff
+**either** application is hit:
+- **input event** `c ∈ {X,Y}` — the ciphertext letter enters the plug (this always flips the
+  output, since R and S are permutations);
+- **output event** `b ∈ {X,Y}` — the pre-output-plug letter is X or Y.
+
+**Two probabilities — one exact, one prior.** For the message in hand:
+- `a = c_X + c_Y`, the **exact** ciphertext fractions (counted directly; zero model risk). A
+  letter absent from the ciphertext contributes *nothing* on the input side — a hard, certain
+  elimination.
+- `b = p_X + p_Y`, the plaintext fractions. `b` is the pre-output-plug letter and with a
+  roughly-correct board `b ≈ plaintext`, so this is the plaintext-language **prior** — the
+  estimated, model-risky part (drifts off in telegraphic/short text).
+
+**The estimate.** `b = R(S(c))` and R steps every character, so across the message `c` and `b`
+are ≈ independent; the union of two independent events gives the influenced fraction:
+
+```
+influence(X,Y) ≈ 1 − (1−a)(1−b) = a + b − ab      a = c_X+c_Y (exact),  b = p_X+p_Y (prior)
+```
+
+expected count = `n·(a + b − ab)`. The union form is the honest one: bounded in [0,1], degrades
+gracefully (letters absent from the ciphertext → influence ≈ `b`, output side alone;
+plaintext-rare letters → influence ≈ `a`, input side alone), and `−ab` discounts the
+double-counting where both are large.
+
+**For ranking it collapses to one cheap table.** `−ab` is second-order, so to *order* candidate
+plugs define a per-letter influence `ℓ(L) = c_L + p_L` and weight a plug `w(X,Y) = ℓ(X) + ℓ(Y)`
+— one 26-entry table summed two at a time. Use the full `1−(1−a)(1−b)` only when an actual
+fraction is wanted. Magnitudes: a uniform plug ≈ 15% of positions (`a=b=2/26`); an E-plug on a
+common ciphertext letter ≈ 26%; a plug on two ciphertext-*absent* letters, one being E, ≈ 15%
+(entirely via the output side — neither term is droppable).
+
+**Why the ciphertext term is not "just flat."** The *expected* ciphertext distribution is flat,
+but the *realized* histogram of the one message in hand is not, and it is **exact** — it is the
+plaintext term that is "average statistics" about an unknown. So the ciphertext side adds
+message-specific, zero-model-risk information the plaintext prior structurally cannot, and it can
+definitively zero out plugs on absent letters (plentiful at short lengths). In the hard short
+regime the two terms have comparable *contrast* and the ciphertext one carries no model risk, so
+weight it **at least as heavily** as the plaintext prior — not as a minor add-on.
+
+**Where to apply it (priority order).**
+1. **Focused `--exhaust` (best fit).** §3.6 is dominated largely because it forces *all* 325
+   first pairs, of which only ~10 are true (~315 wasted climbs). Restricting the forced set to
+   the top-influence pairs is exactly §3.6's "untested ranked-shortlist variant," now made
+   concrete: rank by `w(X,Y)`, exhaust only the top-M. It concentrates the exhaustive budget where
+   a correct plug resolves the most plaintext and directly tames the `E≥2` blow-up — the most
+   promising home, and could move §3.6's verdict.
+2. **Influence-weighted kick (§4.1).** Bias `--random` to draw pairs from the influence
+   distribution rather than uniform. Because the kick stays *stochastic*, restarts still get
+   different plug sets — so, unlike the static ordering below, it should keep restart diversity
+   *if the weighting is gentle*; a too-peaked weight re-injects the same E-plugs every restart and
+   slides back toward the §7.2 failure mode, so weight strength is a knob with a sweet spot.
+3. **Quantitative form of §4.3's soft down-weighting.** §4.3 flagged that plug frequency "must be
+   taken over *both* sides"; `w(X,Y) = (c_X+p_X)+(c_Y+p_Y)` *is* that both-sides quantity, so the
+   §4.3 soft restriction becomes "down-weight low-`w` plugs" with a principled weight instead of
+   an ad-hoc threshold.
+
+**The one overlap to respect (§7.2).** A **static** informed move order *by ciphertext letter
+frequency*, applied to the deterministic climb, was built and **rejected** (collapsed restart
+diversity, −4–5pp). Influence weighting is not that, on two axes: it is (a) a *plaintext*-informed
+weight (better motivated — influence ∝ positions affected), and (b) aimed at *exhaust/kick*, not
+the per-restart climb order. The kick application stays stochastic (diversity-preserving); the
+exhaust application is systematic, not a per-restart order at all. So it is a distinct idea — but
+the §7.2 lesson bounds how hard the kick may be biased.
+
+**Honest payoff & cautions.** Medium, best at `--exhaust`. It is a **mean-%-correct-friendly**
+heuristic: the plugs it de-prioritizes (two rare letters) are the ones that barely move the
+plaintext — good for the graded metric, but it *caps exact recovery* (a true Q–J plug is never
+reached under a hard restriction). And the ciphertext histogram is noisiest at the short lengths
+we care about (few counts), whereas the plaintext prior is length-robust — so lean on the
+language `p_L` for the prior part and treat the exact `c_L` as the message-specific correction.
+All of it is nearly free (two 26-entry histograms per key).
+
+**Experiment.** `eval/` (per-run) and `make crackquality`, matched `score_iter`, L40–90, 10
+plugs: (1) focused `--exhaust` over the top-M influence pairs vs the full 325 and vs greedy `-R`
+at equal budget; (2) influence-weighted `--random` vs uniform kick at high `-R`, sweeping the
+weight strength and checking with `DIVERSITY=1` (restart basin-collapse) that a gentle weight
+does *not* collapse diversity. Judge on mean %-correct per the harness guidance.
 
 ---
 
