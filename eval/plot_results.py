@@ -640,4 +640,37 @@ if od:
     plt.close(fig)
     print("wrote infl_order_matched.png")
 
+# 20. Ordering experiment, dense short range L40-60 (§4.6). Same matched-compute
+# configs, with L45/L55 filled in, +/-SE bands -- resolves where influence-order
+# crosses from competitive (short) to dominated by -J.
+import math as _m20
+ORD_SHORT = [40, 45, 50, 55, 60]
+os_d = defaultdict(list)
+for r in rows:
+    if r["config_label"] in ("ord.J.R24", "ord.F.R30", "ord.I.R32") and r["length"] in ORD_SHORT:
+        os_d[(r["config_label"], r["length"])].append(r["pct"])
+if all((("ord.F.R30", L) in os_d) for L in ORD_SHORT):
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    for label, cfg, color in ORD:
+        ms_, se_ = [], []
+        for L in ORD_SHORT:
+            v = os_d[(cfg, L)]; mu = sum(v) / len(v)
+            ms_.append(mu)
+            se_.append(_m20.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m20.sqrt(len(v)))
+        ax.fill_between(ORD_SHORT, [m - s for m, s in zip(ms_, se_)],
+                        [m + s for m, s in zip(ms_, se_)], color=color, alpha=0.15, linewidth=0)
+        ax.plot(ORD_SHORT, ms_, "-o", color=color, lw=2, ms=6, label=label,
+                markeredgecolor="white", markeredgewidth=0.7)
+    ax.set_xlabel("message length (letters)")
+    ax.set_ylabel("mean % letters correct")
+    ax.set_xticks(ORD_SHORT)
+    ax.set_title("Ordering at matched compute, dense short range (~55k score_iter, 4 langs, 2 seeds)\n"
+                 "influence-order ties -J through L55 (L50 blip is noise), falls behind from L60",
+                 fontsize=10.5, fontweight="bold", pad=10)
+    ax.legend(frameon=False, loc="upper left", fontsize=9.5)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "infl_order_short.png"), bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print("wrote infl_order_short.png")
+
 print("done ->", OUT)

@@ -738,11 +738,15 @@ histograms, ~free) instead of `-J`'s measured score-delta. At ~55k `score_iter` 
 | 70 | 71.3 | 66.0 | 60.5 | −5.3 ± 2.7 |
 | 90 | 90.0 | 85.7 | 78.6 | −4.3 ± 1.9 |
 
-- **Confirms the prior:** influence-order **loses to `-J`** at L60–90 (−4 to −6pp) and ties at
-  L40; the only positive is L50 (+4±2.6 ≈ 1.5σ, and danish-negative — not robust). `-J`'s
-  score-delta order beats influence's cheaper bound-based order wherever there is enough signal to
-  rank on, and that signal sharpens with length — so the gap grows with L. The per-step-dynamic /
-  near-free angles do not overcome the weaker ordering signal.
+- **Confirms the prior:** influence-order **ties `-J` through the short range and loses from
+  L60 up.** A dense L40–60 fill-in (L45/L55 added, `infl−J`: −1.1, −0.1, +4.0, −0.1, −5.9 at
+  40/45/50/55/60) shows the earlier L50 "+4" was an **isolated noise spike** — bracketed by ties
+  at L45 and L55 — not a short-length win. So the real picture is a **tie for L40–55, then a
+  clean loss from L60 up** (−4 to −6pp at L60–90; `infl_order_short.png`). `-J`'s score-delta
+  order beats influence's cheaper bound-based order wherever there is enough signal to rank on,
+  and that signal sharpens with length — so the two only tie where the message is too short for
+  `-J`'s order to help, and `-J` pulls away as soon as it can. The per-step-dynamic / near-free
+  angles do not overcome the weaker ordering signal.
 - **But influence-order clearly beats plain `-I`** everywhere (+5 to +10pp): the informed order
   *is* genuinely useful — a cheap, free upgrade over lexicographic — just dominated by `-J`.
 - **Verdict:** `-J` stays the recommended order. `--infl-order` is kept as an experimental,
