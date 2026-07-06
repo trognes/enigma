@@ -440,4 +440,46 @@ if any(k[1] == "i3m8q10.R10.J" and k[0] == "danish" for k in il_agg):
     plt.close(fig)
     print("wrote intermediate_stage_by_language.png")
 
+# 15. Recovery vs length, per language (the recommended config -J -S i4q10 -R 10).
+# 2x2 small multiples: graded mean %-correct (colored, +/-SE band) plus the
+# exact full-message recovery rate (gray) for context. Shows the tool's
+# short-message cracking curve for each language.
+RL_CFG = "-J-Si4q10-R10"
+rl = defaultdict(list); rl_exact = defaultdict(list)
+for r in rows:
+    if r["config_label"] == RL_CFG:
+        rl[(r["language"], r["length"])].append(r["pct"])
+        rl_exact[(r["language"], r["length"])].append(r["exact"])
+fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    xs = sorted({L for (lg, L) in rl if lg == lang})
+    means, ses, exacts = [], [], []
+    for L in xs:
+        v = rl[(lang, L)]; mu = sum(v) / len(v)
+        means.append(mu)
+        ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+        e = rl_exact[(lang, L)]; exacts.append(100.0 * sum(e) / len(e))
+    col = COL[lang]
+    ax.fill_between(xs, [m - s for m, s in zip(means, ses)],
+                    [m + s for m, s in zip(means, ses)], color=col, alpha=0.15, linewidth=0)
+    ax.plot(xs, means, "-o", color=col, lw=2, ms=5, markeredgecolor="white",
+            markeredgewidth=0.6, label="mean % letters correct", zorder=4)
+    ax.plot(xs, exacts, "--s", color="#888888", lw=1.6, ms=4, markeredgecolor="white",
+            markeredgewidth=0.5, label="exact full-message rate", zorder=3)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+for ax in axes[1]:
+    ax.set_xlabel("message length (letters)")
+for ax in (axes[0, 0], axes[1, 0]):
+    ax.set_ylabel("recovery (%)")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8.5)
+fig.suptitle("Recovery vs message length, per language "
+             "(-J -S i4q10 -R 10, quad, 10 plugs, prose corpora)",
+             fontsize=12.5, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "recovery_vs_length_by_language.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote recovery_vs_length_by_language.png")
+
 print("done ->", OUT)
