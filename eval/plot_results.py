@@ -250,23 +250,34 @@ fig.savefig(os.path.join(OUT, "equal_restart_by_language.png"), bbox_inches="tig
 plt.close(fig)
 print("wrote equal_restart_by_language.png")
 
-# 11. IC pre-pass cap sweep: recovery vs N for -J -S iNq10 -R 10, N=1..8.
+# 11. IC pre-pass cap sweep: recovery vs N for -J -S iNq10 -R 10, N=1..10.
 # Ordered magnitude (message length) -> single-hue sequential ramp, light->dark;
 # lines are flat and vertically separated by length, so direct end-labels
 # (no legend). All four languages pooled (the effect is language-independent);
-# compute is flat across N (~5%), so this is a matched-compute sweep.
+# compute is flat across N (~5%), so this is a matched-compute sweep. Each line
+# carries a +/-SE band: the bands overlap across N, so the per-length wiggles
+# are sampling noise, not a real cap effect (pooled, every N is within ~1pp).
+import math as _m11
 IC_LENS = [40, 50, 60, 70, 80, 90, 120, 160]
-IC_NS = list(range(1, 9))
+IC_NS = list(range(1, 11))
 ic = defaultdict(list)
 for r in rows:
     cl = r["config_label"]
-    if len(cl) > 1 and cl[0] == "i" and cl[1:2].isdigit() and cl.endswith("q10.R10.J"):
-        ic[(int(cl[1]), r["length"])].append(r["pct"])
+    if len(cl) > 1 and cl[0] == "i" and cl[1:].split("q")[0].isdigit() \
+            and cl.endswith("q10.R10.J"):
+        ic[(int(cl[1:].split("q")[0]), r["length"])].append(r["pct"])
 ramp = [plt.cm.Blues(v) for v in
         [0.30, 0.42, 0.53, 0.63, 0.73, 0.82, 0.90, 1.0]]
 fig, ax = plt.subplots(figsize=(8.5, 5.5))
 for L, color in zip(IC_LENS, ramp):
-    ys = [sum(ic[(N, L)]) / len(ic[(N, L)]) for N in IC_NS]
+    ys, ses = [], []
+    for N in IC_NS:
+        v = ic[(N, L)]
+        mu = sum(v) / len(v)
+        ys.append(mu)
+        ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+    ax.fill_between(IC_NS, [y - s for y, s in zip(ys, ses)],
+                    [y + s for y, s in zip(ys, ses)], color=color, alpha=0.13, linewidth=0)
     ax.plot(IC_NS, ys, "-o", color=color, lw=2, ms=5,
             markeredgecolor="white", markeredgewidth=0.6)
     ax.annotate(f"L{L}", (IC_NS[-1], ys[-1]), xytext=(6, 0),
@@ -274,11 +285,12 @@ for L, color in zip(IC_LENS, ramp):
                 color=color, fontweight="bold")
 ax.set_xlabel("IC pre-pass plug cap  N   (-S iNq10)")
 ax.set_ylabel("letters correct (mean %)")
-ax.set_title("IC pre-pass cap is inert: recovery vs cap N\n"
-             "(-J -S iNq10 -R 10, quad, 10 plugs, all languages pooled, 2 seeds)",
-             fontsize=12, fontweight="bold", pad=10)
+ax.set_title("IC pre-pass cap is inert: recovery vs cap N (+/-SE bands)\n"
+             "per-length wiggles are noise -- pooled, every N is within ~1pp "
+             "(-J -S iNq10 -R 10, quad, 10 plugs, all langs, 2 seeds)",
+             fontsize=10.5, fontweight="bold", pad=10)
 ax.set_xticks(IC_NS)
-ax.set_xlim(0.7, 8.8)
+ax.set_xlim(0.7, 10.9)
 ax.set_ylim(0, 102)
 ax.margins(x=0.05)
 fig.tight_layout()
@@ -343,5 +355,251 @@ fig.tight_layout()
 fig.savefig(os.path.join(OUT, "prepass_model_sweep.png"), bbox_inches="tight", facecolor="white")
 plt.close(fig)
 print("wrote prepass_model_sweep.png")
+
+# 13. Intermediate-stage sweep judged at MATCHED COMPUTE (english, L40-90).
+# An extra middle climb stage (i3 <mid>B q10) costs more score_iter, so it is
+# only a real win if it sits ABOVE the baseline i3q10 recovery-vs-compute curve
+# (i3q10 swept over -R 10..18). x-axis = compute, not restarts.
+IS_SHORT = [40, 45, 50, 55, 60, 65, 70, 75, 80, 90]
+is_agg = defaultdict(list); is_si = defaultdict(list)
+for r in rows:
+    cl = r["config_label"]
+    if r["language"] != "english" or r["length"] not in IS_SHORT:
+        continue
+    is_agg[cl].append(r["pct"]); is_si[cl].append(int(r["score_iter"]))
+if any(k.startswith("i3m4") for k in is_agg):
+    def _pt(cl):
+        m, se = _mse(is_agg[cl]); return sum(is_si[cl]) / len(is_si[cl]), m, se
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    # baseline i3q10 recovery-vs-compute curve (-R 10..18)
+    bx, by, bse = zip(*[_pt(f"i3q10.R{R}.J") for R in (10, 12, 14, 16, 18)])
+    ax.plot(bx, by, "-", color="#444444", lw=2, zorder=3, label="baseline i3q10  (-R 10..18)")
+    ax.errorbar(bx, by, yerr=bse, fmt="o", color="#444444", ms=5, capsize=3,
+                markeredgecolor="white", markeredgewidth=0.6, zorder=4)
+    # middle-stage points, colored by model
+    IS_MODELS = [("mono middle", "m", "#E69F00"),
+                 ("bigram middle", "b", "#009E73"),
+                 ("trigram middle", "t", "#0072B2")]
+    for label, key, color in IS_MODELS:
+        pts = [_pt(f"i3{key}{B}q10.R10.J") for B in range(4, 9)]
+        xs, ys, ses = zip(*pts)
+        ax.errorbar(xs, ys, yerr=ses, fmt="o", color=color, ms=7, capsize=3,
+                    markeredgecolor="white", markeredgewidth=0.8, label=label, zorder=5)
+    ax.annotate("i3m8q10", (_pt("i3m8q10.R10.J")[0], _pt("i3m8q10.R10.J")[1]),
+                xytext=(6, 4), textcoords="offset points", fontsize=8.5,
+                color="#E69F00", fontweight="bold")
+    ax.set_xlabel("compute  (mean score_iter per key)")
+    ax.set_ylabel("letters correct (mean %)")
+    ax.set_title("An intermediate mono/bigram stage beats the baseline at MATCHED compute\n"
+                 "(points above the i3q10 curve = real staging win; english, quad, 10 plugs, L40-90)",
+                 fontsize=11, fontweight="bold", pad=10)
+    ax.legend(frameon=False, loc="lower right", fontsize=9)
+    ax.margins(0.08)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "intermediate_stage_compute.png"), bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print("wrote intermediate_stage_compute.png")
+
+# 14. Intermediate mono-stage at matched compute, PER LANGUAGE (firming run).
+# 2x2: each panel = that language's baseline i3q10 recovery-vs-compute curve
+# (-R 10..18) + the mono-middle points (i3m4..m8 q10). Mono above the curve =
+# matched-compute win. Shows the english/french win does NOT reproduce in
+# german/danish -> the effect is a hard-language one, not universal.
+il_agg = defaultdict(list); il_si = defaultdict(list)
+for r in rows:
+    if r["length"] in IS_SHORT:
+        il_agg[(r["language"], r["config_label"])].append(r["pct"])
+        il_si[(r["language"], r["config_label"])].append(int(r["score_iter"]))
+if any(k[1] == "i3m8q10.R10.J" and k[0] == "danish" for k in il_agg):
+    def _ilpt(lg, cl):
+        v = il_agg[(lg, cl)]; m, se = _mse(v)
+        return sum(il_si[(lg, cl)]) / len(il_si[(lg, cl)]), m, se
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
+    for ax, lang in zip(axes.flat, LANG_ORDER):
+        bx, by, bse = zip(*[_ilpt(lang, f"i3q10.R{R}.J") for R in (10, 12, 14, 16, 18)])
+        ax.plot(bx, by, "-", color="#444444", lw=2, zorder=3, label="baseline i3q10 (-R 10..18)")
+        ax.errorbar(bx, by, yerr=bse, fmt="o", color="#444444", ms=4, capsize=2,
+                    markeredgecolor="white", markeredgewidth=0.5, zorder=4)
+        mx, my, mse_ = zip(*[_ilpt(lang, f"i3m{B}q10.R10.J") for B in range(4, 9)])
+        ax.errorbar(mx, my, yerr=mse_, fmt="o", color="#E69F00", ms=7, capsize=2,
+                    markeredgecolor="white", markeredgewidth=0.8, zorder=5,
+                    label="mono middle i3m{4..8}q10")
+        ax.set_title(lang, fontsize=11, fontweight="bold")
+        ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+    for ax in axes[1]:
+        ax.set_xlabel("compute (mean score_iter per key)")
+    for ax in (axes[0, 0], axes[1, 0]):
+        ax.set_ylabel("letters correct (mean %)")
+    axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8)
+    fig.suptitle("Intermediate mono stage at matched compute, per language "
+                 "(mono above baseline curve = win)\nreal only for english/french; "
+                 "german/danish within noise (quad, 10 plugs, L40-90, 2 seeds)",
+                 fontsize=11.5, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "intermediate_stage_by_language.png"), bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print("wrote intermediate_stage_by_language.png")
+
+# 15. Recovery vs length, per language (the recommended config -J -S i4q10 -R 10).
+# 2x2 small multiples: graded mean %-correct (colored, +/-SE band) plus the
+# exact full-message recovery rate (gray) for context. Shows the tool's
+# short-message cracking curve for each language.
+RL_CFG = "-J-Si4q10-R10"
+rl = defaultdict(list); rl_exact = defaultdict(list)
+for r in rows:
+    if r["config_label"] == RL_CFG:
+        rl[(r["language"], r["length"])].append(r["pct"])
+        rl_exact[(r["language"], r["length"])].append(r["exact"])
+fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    xs = sorted({L for (lg, L) in rl if lg == lang})
+    means, ses, exacts = [], [], []
+    for L in xs:
+        v = rl[(lang, L)]; mu = sum(v) / len(v)
+        means.append(mu)
+        ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+        e = rl_exact[(lang, L)]; exacts.append(100.0 * sum(e) / len(e))
+    col = COL[lang]
+    ax.fill_between(xs, [m - s for m, s in zip(means, ses)],
+                    [m + s for m, s in zip(means, ses)], color=col, alpha=0.15, linewidth=0)
+    ax.plot(xs, means, "-o", color=col, lw=2, ms=5, markeredgecolor="white",
+            markeredgewidth=0.6, label="mean % letters correct", zorder=4)
+    ax.plot(xs, exacts, "--s", color="#888888", lw=1.6, ms=4, markeredgecolor="white",
+            markeredgewidth=0.5, label="exact full-message rate", zorder=3)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+for ax in axes[1]:
+    ax.set_xlabel("message length (letters)")
+for ax in (axes[0, 0], axes[1, 0]):
+    ax.set_ylabel("recovery (%)")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8.5)
+fig.suptitle("Recovery vs message length, per language "
+             "(-J -S i4q10 -R 10, quad, 10 plugs, prose corpora)",
+             fontsize=12.5, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "recovery_vs_length_by_language.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote recovery_vs_length_by_language.png")
+
+# 16. i3m8q10 (mono intermediate stage) vs baseline i4q10, recovery vs length,
+# per language. NOT matched compute (i3m8q10 ~32k vs i4q10 ~22k score_iter) --
+# a "does the fancier config beat the default" view. Two configs = categorical
+# hues; +/-SE bands. Short-length win is english/french only (see #75).
+CMP = [("baseline i4q10", "i4q10.R10.J", "#444444"),
+       ("i3m8q10 (mono middle)", "i3m8q10.R10.J", "#E69F00")]
+cmp_d = defaultdict(list)
+for r in rows:
+    for _, cl, _ in CMP:
+        if r["config_label"] == cl:
+            cmp_d[(cl, r["language"], r["length"])].append(r["pct"])
+fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    for label, cl, color in CMP:
+        xs = sorted({L for (c, lg, L) in cmp_d if c == cl and lg == lang})
+        means, ses = [], []
+        for L in xs:
+            v = cmp_d[(cl, lang, L)]; mu = sum(v) / len(v)
+            means.append(mu)
+            ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+        ax.fill_between(xs, [m - s for m, s in zip(means, ses)],
+                        [m + s for m, s in zip(means, ses)], color=color, alpha=0.15, linewidth=0)
+        ax.plot(xs, means, "-o", color=color, lw=2, ms=5, markeredgecolor="white",
+                markeredgewidth=0.6, label=label)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+for ax in axes[1]:
+    ax.set_xlabel("message length (letters)")
+for ax in (axes[0, 0], axes[1, 0]):
+    ax.set_ylabel("mean % letters correct")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8.5)
+fig.suptitle("i3m8q10 (mono intermediate) vs baseline i4q10, per language "
+             "(NOT matched compute: ~32k vs ~22k score_iter; quad, 10 plugs, 2 seeds)",
+             fontsize=11.5, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "i3m8q10_vs_i4q10_by_language.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote i3m8q10_vs_i4q10_by_language.png")
+
+# 17. i3m8q10 vs its exact paired baseline i3q10, recovery vs length, per lang.
+# Both share the i3 pre-pass, so the ONLY difference is the added mono middle
+# stage -- the cleanest isolation of its effect. Equal restarts (R=10), so NOT
+# matched compute (i3m8q10 ~32k vs i3q10 ~23k score_iter).
+CMP2 = [("baseline i3q10", "i3q10.R10.J", "#444444"),
+        ("i3m8q10 (+ mono middle)", "i3m8q10.R10.J", "#E69F00")]
+cmp2 = defaultdict(list)
+for r in rows:
+    for _, cl, _ in CMP2:
+        if r["config_label"] == cl:
+            cmp2[(cl, r["language"], r["length"])].append(r["pct"])
+fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    for label, cl, color in CMP2:
+        xs = sorted({L for (c, lg, L) in cmp2 if c == cl and lg == lang})
+        means, ses = [], []
+        for L in xs:
+            v = cmp2[(cl, lang, L)]; mu = sum(v) / len(v)
+            means.append(mu)
+            ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+        ax.fill_between(xs, [m - s for m, s in zip(means, ses)],
+                        [m + s for m, s in zip(means, ses)], color=color, alpha=0.15, linewidth=0)
+        ax.plot(xs, means, "-o", color=color, lw=2, ms=5, markeredgecolor="white",
+                markeredgewidth=0.6, label=label)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+for ax in axes[1]:
+    ax.set_xlabel("message length (letters)")
+for ax in (axes[0, 0], axes[1, 0]):
+    ax.set_ylabel("mean % letters correct")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8.5)
+fig.suptitle("Effect of the mono middle stage: i3m8q10 vs paired baseline i3q10, per language "
+             "(equal restarts, NOT matched compute: ~32k vs ~23k score_iter)",
+             fontsize=11, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "i3m8q10_vs_i3q10_by_language.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote i3m8q10_vs_i3q10_by_language.png")
+
+# 18. i3m8q10 vs i3q10 at MATCHED COMPUTE, recovery vs length, per language.
+# i3m8q10 (~31k score_iter) is compared to the plain baseline given equal
+# compute via more restarts: i3q10 @ -R 14 (~30-31k, ratio 1.00-1.02). This is
+# the fair head-to-head -- any gap here is the staging, not the compute.
+CMP3 = [("i3q10 @R14 (matched compute)", "i3q10.R14.J", "#444444"),
+        ("i3m8q10 (mono middle)", "i3m8q10.R10.J", "#E69F00")]
+cmp3 = defaultdict(list)
+for r in rows:
+    for _, cl, _ in CMP3:
+        if r["config_label"] == cl:
+            cmp3[(cl, r["language"], r["length"])].append(r["pct"])
+fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
+for ax, lang in zip(axes.flat, LANG_ORDER):
+    for label, cl, color in CMP3:
+        xs = sorted({L for (c, lg, L) in cmp3 if c == cl and lg == lang})
+        means, ses = [], []
+        for L in xs:
+            v = cmp3[(cl, lang, L)]; mu = sum(v) / len(v)
+            means.append(mu)
+            ses.append(_m11.sqrt(sum((x - mu) ** 2 for x in v) / (len(v) - 1)) / _m11.sqrt(len(v)))
+        ax.fill_between(xs, [m - s for m, s in zip(means, ses)],
+                        [m + s for m, s in zip(means, ses)], color=color, alpha=0.15, linewidth=0)
+        ax.plot(xs, means, "-o", color=color, lw=2, ms=5, markeredgecolor="white",
+                markeredgewidth=0.6, label=label)
+    ax.set_title(lang, fontsize=11, fontweight="bold")
+    ax.set_ylim(0, 102)
+    ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+for ax in axes[1]:
+    ax.set_xlabel("message length (letters)")
+for ax in (axes[0, 0], axes[1, 0]):
+    ax.set_ylabel("mean % letters correct")
+axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8.5)
+fig.suptitle("i3m8q10 vs i3q10 at MATCHED compute (~31k score_iter), per language "
+             "-- any gap is the staging, not the compute",
+             fontsize=11.5, fontweight="bold")
+fig.tight_layout()
+fig.savefig(os.path.join(OUT, "i3m8q10_vs_i3q10_matched_by_language.png"), bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("wrote i3m8q10_vs_i3q10_matched_by_language.png")
 
 print("done ->", OUT)
