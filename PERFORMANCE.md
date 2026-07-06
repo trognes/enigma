@@ -511,6 +511,8 @@ uses:
 1. **Exact pruning (zero quality change):** skip candidate moves whose *both*
    endpoints are absent from both sets — their score delta is provably zero. This
    shrinks the 325-move grid at no risk. Guard with an assert-mode full scan.
+   (§4.6 generalizes this from the `k=0` special case to a graded `|Δscore|`
+   bound `≤ n·k·(vmax−vmin)`, so the same idea also *ranks* and *soft-prunes*.)
 2. **Soft down-weighting (quality change):** on very short messages, deprioritize
    or refuse *new* plugs on letters occurring 0–1 times in the ciphertext, since
    they are essentially unidentifiable and a classic source of spurious plugs.
@@ -640,6 +642,118 @@ plugs: (1) focused `--exhaust` over the top-M influence pairs vs the full 325 an
 at equal budget; (2) influence-weighted `--random` vs uniform kick at high `-R`, sweeping the
 weight strength and checking with `DIVERSITY=1` (restart basin-collapse) that a gentle weight
 does *not* collapse diversity. Judge on mean %-correct per the harness guidance.
+
+### 4.6 Exact board-state influence — the `|Δscore|` bound, prune before order (refines §4.5)
+
+**Form.** §4.5 weights a plug by `a + b − ab` with `a = c_X+c_Y` exact and `b = p_X+p_Y` a
+*language prior*. But that prior is only needed *before* a decrypt exists. **Inside the climb
+every candidate board already has a potential plaintext**, so replace `b` with the exact letter
+counts of the *current* decrypt: both halves become exact and board-specific, recomputed as the
+board evolves. For a plug on two currently-free letters the set of positions it can change is
+exactly
+
+```
+infl(X,Y) = |{p : ct_p ∈ {X,Y}}  ∪  {p : pt_p ∈ {X,Y}}|
+```
+
+(add move, free letters; for a *move*/*merge* test the pre-output-plug set `rows[i][steck[ct[i]]]`
+— equivalently `S⁻¹` of the plaintext — since the "off" state no longer maps X→X). The
+doubly-absent case `infl = 0` is §4.3's provably-inert move (exact-zero delta), now the `k=0` end
+of a graded quantity rather than a special case.
+
+**Influence bounds the delta — so the ranking has a proof under it.** An additive n-gram score is
+a sum over windows; a move that changes the decode at `k = infl(X,Y)` positions perturbs at most
+`n·k` windows (`n` = model order), each a bounded log-prob in the uint8 `[vmin, vmax]` range:
+
+```
+|Δscore(X,Y)|  ≤  n · infl(X,Y) · (vmax − vmin)
+```
+
+A low-influence move **provably cannot** be a large improvement. This upgrades "rank by
+importance" from a heuristic order into a **branch-and-bound-style prune with a quantified
+worst-case loss** (the lever §7.4 gestures at): sort by the bound; any move whose bound is below
+the current best improvement can be skipped *exactly*, or below a tolerance `ε` skipped *softly*
+for a loss bounded by `ε`.
+
+**Prune before order — the two uses split on the §7.2 fault line.**
+- **Soft prune / down-weight (recommended first).** Skip or defer the low-`infl` tail. It is a
+  *throughput filter with a bounded sacrifice*, not a per-restart move order, so §7.2's
+  diversity-collapse argument does not apply, and the `|Δ|` bound states exactly what is given up.
+  Cheapest safe win; `ε=0` is pure inert-move skipping (byte-identical).
+- **Focused `--exhaust`.** Rank the 325 first pairs by `infl`, force only the top-M — systematic,
+  not a per-restart order, so §7.2-immune (this is §4.5 point 1 with the exact `infl`).
+- **Climb move ordering — the trap.** Ordering the per-move sweep by `infl` is where §7.2 bites:
+  the *ciphertext half* (`ct_X+ct_Y`) is **fixed across the whole search and identical every
+  restart**, and ordering by ciphertext letter frequency is exactly the static informed order
+  §7.2 built and **rejected** (−4–5pp, diversity collapse). The *plaintext half* is what varies
+  per restart / per step and could rescue it — but on a wrong board the decrypt is ~flat, so that
+  half is weakest exactly at the start of the climb where the order matters, and only sharpens
+  once the board is nearly solved.
+
+**Why it is still worth testing (not just a §7.2 rerun).** (1) It is **per-step dynamic** —
+recomputed as the decrypt changes — which neither §7.2's static order nor `-J`'s once-per-restart
+order does; (2) it is **nearly free** (two histograms), against `-J`'s +24% full-move pre-scan.
+The trade is signal quality: `-J` orders by *measured* score-delta (strong, expensive); `infl`
+orders by a *bound* on `|Δ|` (weaker — it flags what could move the score in *either* direction,
+not what helps — but almost free). Honest prior: as a hard *order* it likely underperforms `-J`
+(bound ≠ benefit, plus the ct-half diversity risk); as a *prune* it is a clean, safe throughput
+gain. Do the prune first.
+
+**Measured — the prune is a dead end at our lengths (offline, english, 40 runs/length). ❌**
+Inert-move fraction (`infl=0`, both letters absent from the ciphertext *and* the current-board
+decrypt) and low-`infl` fractions, bracketed by a start-of-climb (empty board) and a solved board:
+
+| L | inert % (`infl=0`) | `infl≤2` % | `infl≤4` % |
+|---|---|---|---|
+| 40 | 0.2–0.6 | 5–9 | 26–33 |
+| 50 | 0.0–0.2 | 1–4 | 11–18 |
+| 60 | ~0 | 0.6–1.7 | 4.5–10 |
+| 70 | ~0 | 0.1–0.5 | 1–5 |
+| 90 | ~0 | ~0 | 0.1–1 |
+
+Two findings kill the exact prune and demote the soft one:
+1. **The `ε=0` exact prune is worthless from L50 up** (~0 inert moves; ≤2 pairs even at L40). The
+   union of the ~flat ciphertext and ~flat wrong-board decrypt covers ~25 of 26 letters
+   (`|active|≈25`), so almost nothing is doubly-absent. The pruning fires only at L≲30–40.
+2. **The `|Δ|` bound is rigorous but far too loose to justify a *bounded* soft prune.** The
+   per-window quad range is ~7 log10 units, so even a `k=1` move has bound `≈ 4·7 ≈ 28` log10 —
+   enormous next to real per-move improvements (~1 log10). So the bound is *tight only at `k=0`*;
+   for any `k≥1` no move is provably skippable for a small `ε`. A prune that drops `infl≤4`
+   (~15% of moves at L50, ~33% at L40, ~0 by L90) is therefore a **heuristic**, not the
+   bounded-loss guarantee the `≤ n·k·(vmax−vmin)` framing suggested — the loose constant is the
+   catch. Net: no rigorous prune lever at L50, and only a modest heuristic short-length one, so the
+   prune is not pursued.
+
+**Measured — the influence order underperforms `-J`, as predicted (built as `--infl-order`;
+matched compute, 4 languages, L40–90, 2 seeds, 120 runs/cell). ❌** `--infl-order` ranks the
+first-improvement sweep by `w(a,b)=ct_count[a]+ct_count[b]+pt_count[a]+pt_count[b]` (two 26-bin
+histograms, ~free) instead of `-J`'s measured score-delta. At ~55k `score_iter` (`-J -R24` ≈
+`--infl-order -R30` ≈ `-I -R32`, pooled mean %-correct):
+
+| L | `-J` R24 | `--infl-order` R30 | `-I` R32 | infl−`J` (±SE) |
+|---|---|---|---|---|
+| 40 | 25.3 | 24.2 | 19.7 | −1.1 ± 2.0 |
+| 50 | 37.5 | 41.5 | 31.7 | +4.0 ± 2.6 |
+| 60 | 59.7 | 53.9 | 45.4 | −5.9 ± 2.7 |
+| 70 | 71.3 | 66.0 | 60.5 | −5.3 ± 2.7 |
+| 90 | 90.0 | 85.7 | 78.6 | −4.3 ± 1.9 |
+
+- **Confirms the prior:** influence-order **ties `-J` through the short range and loses from
+  L60 up.** A dense L40–60 fill-in (L45/L55 added, `infl−J`: −1.1, −0.1, +4.0, −0.1, −5.9 at
+  40/45/50/55/60) shows the earlier L50 "+4" was an **isolated noise spike** — bracketed by ties
+  at L45 and L55 — not a short-length win. So the real picture is a **tie for L40–55, then a
+  clean loss from L60 up** (−4 to −6pp at L60–90; `infl_order_short.png`). `-J`'s score-delta
+  order beats influence's cheaper bound-based order wherever there is enough signal to rank on,
+  and that signal sharpens with length — so the two only tie where the message is too short for
+  `-J`'s order to help, and `-J` pulls away as soon as it can. The per-step-dynamic / near-free
+  angles do not overcome the weaker ordering signal.
+- **But influence-order clearly beats plain `-I`** everywhere (+5 to +10pp): the informed order
+  *is* genuinely useful — a cheap, free upgrade over lexicographic — just dominated by `-J`.
+- **Verdict:** `-J` stays the recommended order. `--infl-order` is kept as an experimental,
+  documented-dominated opt-in (bench-neutral, default path untouched); it is not recommended.
+  (Methodology note: the first pass was polluted by stale `i4q10.R24.J`/`R32.I` rows from earlier
+  matched-compute runs sharing those labels — filter the clean grid by `git_sha`, or use fresh
+  `config_label`s, for a paired read.)
 
 ---
 

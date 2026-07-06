@@ -141,6 +141,15 @@ static int opt_firstimprove;
    order). Measured win on the realistic ~10-plug regime (+2-6pp mean at matched compute);
    a loss when few plugs are truly set. Implies -I; off by default; needs -c. */
 static int opt_dynorder;
+/* --infl-order (experimental, PERFORMANCE.md 4.6): first-improvement (-I) with the move order
+   set by the board-state INFLUENCE instead of -J's measured score-delta. Each move (a,b) is
+   ranked by w = ct_count[a]+ct_count[b]+pt_count[a]+pt_count[b] over the current ciphertext and
+   the current decrypt (the 4.5/4.6 influence weight, sum form) -- an upper-bound proxy for how
+   many positions the toggle can change, computed from two 26-bin histograms, so it is ~free
+   (no per-move scoring, unlike -J's +24% pre-scan). Per-restart (order derived from the
+   perturbed starting board), deterministic (fixed board + index tie-break) -> -T-independent.
+   Implies -I; mutually exclusive with -J; off by default; needs -c. */
+static int opt_inflorder;
 /* -M: make the plug cap a strict descent TARGET, not just a growth ceiling. Default (0):
    at/over the cap only a brand-new add (both ends free) is blocked, so an over-cap board
    (a big --random kick handed to a small stage cap) can converge still over the cap, merely
@@ -1230,8 +1239,37 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      climb from the (perturbed) starting board, so it differs per restart; deterministic
      (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
   const bool dyn_order = (opt_dynorder != 0);
+  const bool infl_order = (opt_inflorder != 0);
   int visit[nmoves];
-  if (dyn_order)
+  if (infl_order)
+    {
+      /* --infl-order: rank moves by board-state influence (§4.6), ~free. Two 26-bin
+         histograms -- ciphertext letters and current-decrypt letters -- then
+         w(a,b) = cc[a]+cc[b]+pc[a]+pc[b] (sum form of the influence weight). Order once
+         from the starting board (per-restart, like -J), no per-move scoring. */
+      const unsigned char * const * __restrict rows = m.rows;
+      const unsigned char * __restrict ct = num_ciphertext;
+      int cc[asize] = { 0 };
+      int pc[asize] = { 0 };
+      for (int i = 0; i < textlength; i++)
+        {
+          cc[ct[i]]++;
+          pc[decode_at(steck, rows, ct, i)]++;
+        }
+      int infl[nmoves];
+      for (int mv = 0; mv < nmoves; mv++)
+        {
+          int a = P.a[mv], b = P.b[mv];
+          infl[mv] = cc[a] + cc[b] + pc[a] + pc[b];
+          visit[mv] = mv;
+        }
+      std::sort(visit, visit + nmoves, [&](int i, int j)
+      {
+        if (infl[i] != infl[j]) return infl[i] > infl[j];   /* most influential first */
+        return i < j;                                        /* deterministic tie-break */
+      });
+    }
+  else if (dyn_order)
     {
       double sc[nmoves];
       for (int mv = 0; mv < nmoves; mv++)
@@ -3288,7 +3326,8 @@ void show_settings()
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
-            opt_dynorder ? " (dynamic move order)" : "");
+            opt_dynorder ? " (dynamic move order)" :
+            opt_inflorder ? " (influence move order)" : "");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts >= 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));
@@ -3368,6 +3407,7 @@ int main(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_firstimprove = 0;
   opt_dynorder = 0;
+  opt_inflorder = 0;
   opt_capmerge = 0;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
@@ -3390,7 +3430,7 @@ int main(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP };
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3430,6 +3470,7 @@ int main(int argc, char * * argv)
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
+      { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3487,6 +3528,10 @@ int main(int argc, char * * argv)
         case 'J':
           opt_firstimprove = 1;   /* -J implies first-improvement */
           opt_dynorder = 1;
+          break;
+        case OPT_INFLORDER:
+          opt_firstimprove = 1;   /* --infl-order implies first-improvement */
+          opt_inflorder = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -3751,6 +3796,11 @@ int main(int argc, char * * argv)
   /* -I is a hill-climb strategy, so it needs -c. */
   if (opt_firstimprove && (! opt_hillclimb))
     fatal("First-improvement (-I) needs the plugboard hill-climb (-c)");
+
+  /* --infl-order and -J are two different move orders for the first-improvement climb;
+     asking for both is ambiguous. */
+  if (opt_inflorder && opt_dynorder)
+    fatal("--infl-order and -J (dynamic order) are mutually exclusive");
 
   /* -M changes the plug-cap rule in the climb, so it needs -c. */
   if (opt_capmerge && (! opt_hillclimb))
