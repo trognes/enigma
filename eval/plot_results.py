@@ -673,4 +673,50 @@ if all((("ord.F.R30", L) in os_d) for L in ORD_SHORT):
     plt.close(fig)
     print("wrote infl_order_short.png")
 
+# 21. Restart-gain sweep: recovery vs -R at short lengths (german, -J -S i4q10).
+# One line per length; x = restart budget (categorical, since R=0 has no log
+# point). Shows recovery is restart-limited and keeps climbing through R=80.
+RSW_RS = [0, 1, 2, 5, 10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240, 20480, 40960, 81920]
+RSW_LENS = [40, 45, 50, 55, 60, 65, 70]
+rsw = defaultdict(list)
+for r in rows:
+    cl = r["config_label"]
+    if cl.startswith("rsw.J.R") and r["language"] == "german":
+        try:
+            R = int(cl[len("rsw.J.R"):])
+        except ValueError:
+            continue
+        if R in RSW_RS and r["length"] in RSW_LENS:
+            rsw[(R, r["length"])].append(r["pct"])
+# x positions span every R present for ANY length; each length is drawn only
+# where it has data (the high-R tail was run for the hardest lengths only).
+RSW_HAVE = [R for R in RSW_RS if any(rsw[(R, L)] for L in RSW_LENS)]
+if RSW_HAVE:
+    xpos = {R: i for i, R in enumerate(RSW_HAVE)}
+    ramp = [plt.cm.Blues(v) for v in
+            [0.30, 0.40, 0.50, 0.60, 0.72, 0.84, 1.0]]
+    fig, ax = plt.subplots(figsize=(9.5, 5.5))
+    for L, color in zip(RSW_LENS, ramp):
+        pts = [(xpos[R], sum(rsw[(R, L)]) / len(rsw[(R, L)])) for R in RSW_HAVE if rsw[(R, L)]]
+        if not pts:
+            continue
+        lx, ly = zip(*pts)
+        ax.plot(lx, ly, "-o", color=color, lw=2, ms=5, markeredgecolor="white",
+                markeredgewidth=0.6)
+        ax.annotate(f"L{L}", (lx[-1], ly[-1]), xytext=(6, 0), textcoords="offset points",
+                    va="center", fontsize=8.5, color=color, fontweight="bold")
+    ax.set_xticks(list(xpos.values()))
+    ax.set_xticklabels([str(R) for R in RSW_HAVE], rotation=45, ha="right", fontsize=8)
+    ax.set_xlabel("restart budget  -R   (compute ~ linear in R; ~2.3k score_iter/restart)")
+    ax.set_ylabel("mean % letters correct")
+    ax.set_title("Restart gain at short lengths (german, -J -S i4q10, quad, 10 plugs, 2 seeds)\n"
+                 "L45+ reach ~95%; L40 still climbing (93% at R81920), heading to 95% -- no ceiling established; tail is noisy",
+                 fontsize=10, fontweight="bold", pad=10)
+    ax.set_ylim(0, 100)
+    ax.margins(x=0.08)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "restart_gain_german.png"), bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print("wrote restart_gain_german.png")
+
 print("done ->", OUT)
