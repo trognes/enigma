@@ -400,4 +400,44 @@ if any(k.startswith("i3m4") for k in is_agg):
     plt.close(fig)
     print("wrote intermediate_stage_compute.png")
 
+# 14. Intermediate mono-stage at matched compute, PER LANGUAGE (firming run).
+# 2x2: each panel = that language's baseline i3q10 recovery-vs-compute curve
+# (-R 10..18) + the mono-middle points (i3m4..m8 q10). Mono above the curve =
+# matched-compute win. Shows the english/french win does NOT reproduce in
+# german/danish -> the effect is a hard-language one, not universal.
+il_agg = defaultdict(list); il_si = defaultdict(list)
+for r in rows:
+    if r["length"] in IS_SHORT:
+        il_agg[(r["language"], r["config_label"])].append(r["pct"])
+        il_si[(r["language"], r["config_label"])].append(int(r["score_iter"]))
+if any(k[1] == "i3m8q10.R10.J" and k[0] == "danish" for k in il_agg):
+    def _ilpt(lg, cl):
+        v = il_agg[(lg, cl)]; m, se = _mse(v)
+        return sum(il_si[(lg, cl)]) / len(il_si[(lg, cl)]), m, se
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
+    for ax, lang in zip(axes.flat, LANG_ORDER):
+        bx, by, bse = zip(*[_ilpt(lang, f"i3q10.R{R}.J") for R in (10, 12, 14, 16, 18)])
+        ax.plot(bx, by, "-", color="#444444", lw=2, zorder=3, label="baseline i3q10 (-R 10..18)")
+        ax.errorbar(bx, by, yerr=bse, fmt="o", color="#444444", ms=4, capsize=2,
+                    markeredgecolor="white", markeredgewidth=0.5, zorder=4)
+        mx, my, mse_ = zip(*[_ilpt(lang, f"i3m{B}q10.R10.J") for B in range(4, 9)])
+        ax.errorbar(mx, my, yerr=mse_, fmt="o", color="#E69F00", ms=7, capsize=2,
+                    markeredgecolor="white", markeredgewidth=0.8, zorder=5,
+                    label="mono middle i3m{4..8}q10")
+        ax.set_title(lang, fontsize=11, fontweight="bold")
+        ax.grid(True, color="#e6e6e6", linewidth=0.8); ax.set_axisbelow(True)
+    for ax in axes[1]:
+        ax.set_xlabel("compute (mean score_iter per key)")
+    for ax in (axes[0, 0], axes[1, 0]):
+        ax.set_ylabel("letters correct (mean %)")
+    axes[0, 0].legend(frameon=False, loc="lower right", fontsize=8)
+    fig.suptitle("Intermediate mono stage at matched compute, per language "
+                 "(mono above baseline curve = win)\nreal only for english/french; "
+                 "german/danish within noise (quad, 10 plugs, L40-90, 2 seeds)",
+                 fontsize=11.5, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "intermediate_stage_by_language.png"), bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print("wrote intermediate_stage_by_language.png")
+
 print("done ->", OUT)
