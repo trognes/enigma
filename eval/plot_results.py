@@ -727,7 +727,7 @@ restart_gain_plot("german",
                   "L45+ reach ~95%; L40 still climbing (93% at R81920), no ceiling established; tail is noisy",
                   "restart_gain_german.png")
 restart_gain_plot("english",
-                  "English is harder: L65/L70 reach ~95% by R1280-2560; L40-60 need the high-R tail",
+                  "harder than german: L50-L70 reach 95% (R1280->R81920); L45 (92%) and L40 (86%) still short at R81920, still climbing",
                   "restart_gain_english.png")
 
 print("done ->", OUT)
