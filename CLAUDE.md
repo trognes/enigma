@@ -473,7 +473,14 @@ many re-reads. The four scorers
 small sliding window of the last *n* decoded letters that indexes the n-gram
 table, so the decoded message is never written to / read back from a scratch
 array (this is faster than the previous `decode_num` → `num_plaintext` → score
-two-pass on both compilers, markedly so on clang/ARM). An even earlier
+two-pass on both compilers, markedly so on clang/ARM). **Quantified once** (Bench
+CI, `make bench LONG=1` A/B storing-into-`m.plaintext` vs fused, hillclimb hot
+path): g++ **+6.8%** (x86_64) / **+7.0%** (arm64), clang **+28.4%** (x86_64) /
+**+45.6%** (arm64) slower with the store; the scan is +0.6–2.6% under g++,
++8.8–9.9% under clang. So the store is small-but-negative on g++ and a large
+regression on clang — the reason the fused form is kept (measurement PR #77,
+store-variant commit `71d8633`; the plaintext is materialised lazily only on a
+new best, so nothing needs it per-scoring). An even earlier
 16-byte-blocked decode was never shown to win and was removed too; the scalar
 fused loop is the current form.
 
