@@ -676,7 +676,7 @@ if all((("ord.F.R30", L) in os_d) for L in ORD_SHORT):
 # 21. Restart-gain sweep: recovery vs -R at short lengths (german, -J -S i4q10).
 # One line per length; x = restart budget (categorical, since R=0 has no log
 # point). Shows recovery is restart-limited and keeps climbing through R=80.
-RSW_RS = [0, 1, 2, 5, 10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240, 20480]
+RSW_RS = [0, 1, 2, 5, 10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240, 20480, 40960]
 RSW_LENS = [40, 45, 50, 55, 60, 65, 70]
 rsw = defaultdict(list)
 for r in rows:
