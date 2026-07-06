@@ -710,7 +710,7 @@ if RSW_HAVE:
     ax.set_xlabel("restart budget  -R   (compute ~ linear in R; ~2.3k score_iter/restart)")
     ax.set_ylabel("mean % letters correct")
     ax.set_title("Restart gain at short lengths (german, -J -S i4q10, quad, 10 plugs, 2 seeds)\n"
-                 "L55 at ceiling ~96%; L40 STILL climbing at R2560 (76%, no plateau); L40/45 tail noisy (~±4pp)",
+                 "L50-55 near ceiling; L40 STILL climbing at R5120 (83%), ~+7pp/doubling -- no plateau in tested range",
                  fontsize=10, fontweight="bold", pad=10)
     ax.set_ylim(0, 100)
     ax.margins(x=0.08)
