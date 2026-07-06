@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Plot performance graphs from eval/results.tsv. Writes PNGs to eval/plots/.
-Usage: python3 eval/plot_results.py"""
+"""Plot performance graphs from the eval log. Writes PNGs to eval/plots/.
+Reads eval/results.tsv AND every eval/results-<timestamp>.tsv shard (new eval
+batches are written to their own timestamped file to keep any one file under
+GitHub's 100MB limit -- see eval/README.md). Usage: python3 eval/plot_results.py"""
 import csv
+import glob
 import os
 from collections import defaultdict
 
@@ -27,7 +30,14 @@ plt.rcParams.update({
     "xtick.color": "#555555", "ytick.color": "#555555",
 })
 
-rows = list(csv.DictReader(open(TSV), delimiter="\t"))
+def _load(path):
+    with open(path) as f:
+        return list(csv.DictReader(f, delimiter="\t"))
+
+
+# results.tsv + all timestamped shards (eval/results-YYYYMMDD-HHMMSS.tsv)
+shards = [TSV] + sorted(glob.glob(os.path.join(ROOT, "eval", "results-*.tsv")))
+rows = [r for p in shards if os.path.exists(p) for r in _load(p)]
 for r in rows:
     r["length"] = int(r["length"])
     r["pct"] = float(r["letters_matched_pct"])
@@ -601,5 +611,33 @@ fig.tight_layout()
 fig.savefig(os.path.join(OUT, "i3m8q10_vs_i3q10_matched_by_language.png"), bbox_inches="tight", facecolor="white")
 plt.close(fig)
 print("wrote i3m8q10_vs_i3q10_matched_by_language.png")
+
+# 19. Ordering experiment (§4.6): influence-order vs -J vs plain -I at MATCHED
+# compute (~55k score_iter). Data in the timestamped shard, collision-free
+# labels ord.{J,F,I}.*. --infl-order beats plain -I but is dominated by -J.
+ORD = [("-J  R=24", "ord.J.R24", "#D55E00"),
+       ("--infl-order  R=30", "ord.F.R30", "#009E73"),
+       ("-I  R=32", "ord.I.R32", "#0072B2")]
+ORD_LENS = [40, 50, 60, 70, 90]
+od = defaultdict(list)
+for r in rows:
+    if r["config_label"] in ("ord.J.R24", "ord.F.R30", "ord.I.R32") and r["length"] in ORD_LENS:
+        od[(r["config_label"], r["length"])].append(r["pct"])
+if od:
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    for label, cfg, color in ORD:
+        ys = [sum(od[(cfg, L)]) / len(od[(cfg, L)]) for L in ORD_LENS]
+        ax.plot(ORD_LENS, ys, "-o", color=color, lw=2, ms=6, label=label,
+                markeredgecolor="white", markeredgewidth=0.7)
+    ax.set_xlabel("message length (letters)")
+    ax.set_ylabel("mean % letters correct")
+    ax.set_title("Ordering at MATCHED compute (~55k score_iter, quad, 10 plugs, 4 langs, 2 seeds)\n"
+                 "influence-order beats plain -I but is dominated by -J's score-order",
+                 fontsize=10.5, fontweight="bold", pad=10)
+    ax.legend(frameon=False, loc="upper left", fontsize=9.5)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "infl_order_matched.png"), bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print("wrote infl_order_matched.png")
 
 print("done ->", OUT)

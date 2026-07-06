@@ -170,6 +170,14 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
   compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected** (`PERFORMANCE.md` §7.2).
+- `--infl-order` **influence-ordered first-improvement** (experimental; implies `-I`; mutually
+  exclusive with `-J`; needs `-c`; off by default). Orders the move sweep by the board-state
+  **influence** `w(a,b)=ct_count[a]+ct_count[b]+pt_count[a]+pt_count[b]` (two 26-bin histograms
+  over the ciphertext and current decrypt — the §4.5/§4.6 weight) instead of `-J`'s measured
+  score-delta, so it is nearly **free** (no per-move pre-scan). Per-restart, deterministic
+  (`-T`-independent). **Measured, dominated**: at matched compute it beats plain `-I` (+5–10pp)
+  but loses to `-J` (−4 to −6pp at L60–90) — `-J`'s score-order wins wherever there is signal
+  to rank on (`PERFORMANCE.md` §4.6). Kept as a documented-dominated opt-in, not recommended.
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
   cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
   cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an

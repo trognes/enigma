@@ -38,6 +38,18 @@ Env knobs: `EVAL_LANGS` (default `english german`), `EVAL_RUNS` (40),
 -R 10'`), `EVAL_OUT`. Problems are drawn from fresh OS entropy, so each
 invocation adds new random instances.
 
+### File layout — sharded by batch (do NOT append to `results.tsv`)
+
+`results.tsv` reached GitHub's **100 MB per-file hard limit**, so it is now
+**frozen** and new eval batches go into their own **timestamped shard**
+`eval/results-YYYYMMDD-HHMMSS.tsv` (same header/columns) rather than being
+appended to `results.tsv`. This keeps every file well under the limit and makes
+each batch a self-contained unit. Readers glob the whole set: `plot_results.py`
+loads `results.tsv` + every `results-*.tsv`; ad-hoc analysis should do the same
+(`glob("eval/results*.tsv")`). Give each batch **collision-free `config_label`s**
+(a stale label shared with an earlier run silently pollutes a paired comparison —
+this bit the §4.6 ordering experiment; filter by `git_sha` if it happens).
+
 ## Corpora (`eval/corpora/`)
 
 Each run draws its excerpt from a randomly chosen source passage for the
