@@ -1196,10 +1196,10 @@ static bool try_repair_3(machine & m, double cur_score)
           const int L[6] = { plo[i], phi[i], plo[j], phi[j], plo[k], phi[k] };
           for (int mm = 0; mm < 8; mm++)
             {
-              for (int p = 0; p < 3; p++)
+              for (int q = 0; q < 6; q += 2)   /* the three pairs of the rematch */
                 {
-                  int u = L[REMATCH3[mm][2 * p]];
-                  int v = L[REMATCH3[mm][2 * p + 1]];
+                  int u = L[REMATCH3[mm][q]];
+                  int v = L[REMATCH3[mm][q + 1]];
                   m.steckerbrett[u] = static_cast<unsigned char>(v);
                   m.steckerbrett[v] = static_cast<unsigned char>(u);
                 }
@@ -1226,10 +1226,10 @@ static bool try_repair_3(machine & m, double cur_score)
 
   if (found)
     {
-      for (int p = 0; p < 3; p++)
+      for (int q = 0; q < 6; q += 2)   /* the three pairs of the winning rematch */
         {
-          int u = best_L[REMATCH3[best_mm][2 * p]];
-          int v = best_L[REMATCH3[best_mm][2 * p + 1]];
+          int u = best_L[REMATCH3[best_mm][q]];
+          int v = best_L[REMATCH3[best_mm][q + 1]];
           m.steckerbrett[u] = static_cast<unsigned char>(v);
           m.steckerbrett[v] = static_cast<unsigned char>(u);
         }
@@ -1610,9 +1610,9 @@ static double hillclimb(machine & m, int max_pairs)
          improves, loop back and let the cheap climb resume from the new board.
          With --repair3, and only when the 2-plug re-pair also found nothing, try the
          deeper 3-plug reshuffle as a further barrier cross. */
-      if (try_repair<EX>(m, cur))
-        progress = true;
-      else if (opt_repair3 && try_repair_3<EX>(m, cur))
+      /* short-circuit: try_repair_3 runs only when the 2-plug re-pair found nothing */
+      if (try_repair<EX>(m, cur)
+          || (opt_repair3 && try_repair_3<EX>(m, cur)))
         progress = true;
     }
   while (progress);
