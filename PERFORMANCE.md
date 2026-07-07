@@ -1250,6 +1250,15 @@ The **50/50 IC+mono portfolio was measured and is dominated** (lands between IC 
 below pure mono — `eval/prepass_portfolio.py`): once mono is the stronger base, mixing in
 the weaker IC half only dilutes it.
 
+**Bigram/trigram pre-passes (`-S b4q10` / `-S t4q10`) were also measured and do not beat
+the i/m/q envelope** (L40, `-R 10/2560/10240/40960`, english+german, `results-20260707-*.tsv`).
+Being sharper than mono, they inherit the worst of both ends: they over-commit and lose at
+low R (b4 < m4 at `-R 10`), and they are not diverse like pure quad, so they don't win at
+high R. They land *inside* the envelope everywhere — often below mono in german — and the
+lone apparent edge (english L40 `-R 40960`: t4 96 vs m4 94, +2pp) is within the n=40 noise
+and does not replicate in german. So the useful span of pre-pass orders is exactly the trio
+**IC → mono → none**; the intermediate orders just fill the gaps without beating it.
+
 **Scope / caveats.** Plugboard-recovery tier, 4 languages (L40 ladder english+german),
 L40–70, `-R 10 … 81920`; the residual mono edge at L40–45 and the `-R 10` IC margins are
 within noise (SE ~3–5pp), so the *trend* (crossover, q10→~100%) is the robust signal, not
