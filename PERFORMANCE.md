@@ -1168,6 +1168,67 @@ prose-built table doesn't match) is off-distribution for the prose tables. That 
 is the genuine §6.6 operational-corpus argument, now cleanly separated from the
 table-loading bug.
 
+### 6.10 Pre-pass value is restart-budget-dependent — IC dominated at high R, pure-quad diversity suffices — ✅ MEASURED (`eval/`)
+
+**§6.8 is a *low-R* result; at high R the pre-pass picture inverts.** §6.8 correctly
+rejected the mono pre-pass — but it measured at `-R 10/13` (and as an *inserted*
+`i4m4q10` stage). Re-run the pre-pass model itself across the **high-restart regime**
+(`-R 1280/2560`, the budget short-message cracking actually uses) and the conclusion
+flips: the IC pre-pass is the *worst* choice, and the pre-pass barely matters at all.
+
+**The grid** (`-J -S <pp> -R2560`, plugboard-recovery tier, 10 plugs, prose corpora,
+4 languages × L40–70 × 3 seeds × 20 runs = 6720 problems; `eval/prepass_grid.sh`,
+shard `results-20260707-201051.tsv`), pooled mean %-correct:
+
+| L | `q10` | `i4q10` | `m4q10` | `m6q10` |
+|---|---|---|---|---|
+| 40 | 72.5 | 72.5 | **80.5** | 78.2 |
+| 45 | 82.2 | 81.8 | **92.5** | 85.0 |
+| 50 | 91.8 | 86.2 | **92.8** | 92.2 |
+| 60 | 98.2 | 95.8 | 99.5 | **99.8** |
+| 70 | 99.5 | 98.5 | 99.5 | — |
+
+At *matched R*, mono leads and the IC default trails — but `q10` (no pre-pass) is
+**0.594× the `score_iter`** of `i4q10` (it skips the pre-pass stage entirely; `m4q10`
+is 0.983×). So matched-R silently under-resources pure quad by ~40%.
+
+**Matched-*compute* settles it.** Give `q10` the ~1.7× restarts its cheapness affords —
+`q10 @ R4240` vs `m4q10 @ R2560` (`score_iter` matched within 0.5%; `eval/prepass_grid.sh`
+with `CONFIGS="q10" R=4240`, shard `results-20260707-203354.tsv`), pooled mean %-correct:
+
+| L | `q10 @2560` | `q10 @4240` | `m4q10 @2560` | `i4q10 @2560` |
+|---|---|---|---|---|
+| 40 | 72.8 | 78.9 | **80.4** | 72.7 |
+| 45 | 82.4 | 90.0 | **92.3** | 81.6 |
+| 50 | 91.7 | **95.6** | 92.5 | 86.2 |
+| 55 | 95.7 | **97.5** | 97.3 | 94.4 |
+| 60 | 98.1 | 98.5 | **99.5** | 95.6 |
+| 70 | 99.5 | **100.0** | 99.6 | 98.6 |
+
+**Findings.**
+
+1. **The IC pre-pass (`i4q10`, the shipped default) is dominated at high R** — below
+   both mono *and* pure quad by 5–10pp at L50+, at 1.7× `q10`'s cost. It was tuned for
+   the low-R default (`-R 0`, where §6.8 keeps it) and does **not** carry to high R.
+2. **At matched compute, pure `q10` ties or beats mono for L≥50** and closes most of the
+   L40–45 gap; mono keeps only ~1.5–2.3pp there (≈1 SE at N=60, near noise). Most of
+   mono's matched-*R* lead was the compute artifact of q10 being 40% cheaper.
+3. **So at high R the pre-pass value collapses — diversity is the currency** (the same
+   conclusion the kick-size sweep reached: outcome diversity, not a smarter start, is
+   what more budget buys). This is *not* a §6.8 reversal: the mono/IC ordering is
+   genuinely **restart-budget-dependent** (IC ≥ mono at `-R 10`; mono ≥ IC, and both
+   ≈ pure-quad at matched compute, by `-R 1280`).
+
+**Recipe.** For high-R short-message cracking, prefer **pure `-S q10` with a large `-R`**
+— it matches mono at matched compute, needs no cap tuning, and is cheaper per restart
+(so more restarts per unit time). Avoid the IC pre-pass at high R; `m4q10` is a marginal
+L40–45 alternative. The **50/50 IC+mono portfolio was measured and is dominated** (lands
+between IC and mono, below pure mono — `eval/prepass_portfolio.py`): once mono is the
+stronger base, mixing in the weaker IC half only dilutes it.
+
+**Scope / caveats.** Plugboard-recovery tier, 4 languages, L40–70, 3 seeds, `-R 2560/4240`;
+the residual mono edge at L40–45 is within noise. The low-R default is unchanged.
+
 ---
 
 ## 7. Speed / throughput
