@@ -755,6 +755,30 @@ histograms, ~free) instead of `-J`'s measured score-delta. At ~55k `score_iter` 
   matched-compute runs sharing those labels — filter the clean grid by `git_sha`, or use fresh
   `config_label`s, for a paired read.)
 
+### 4.7 3-plug re-pair barrier cross (`--repair3`) — ❌ MEASURED, DOMINATED
+
+`try_repair` generalised from two plugs to three: at convergence, once the cheap toggle
+climb **and** the 2-plug `try_repair` have both stalled, `try_repair_3()` rematches three
+existing plugs (six letters) into a different pairing — the 8 genuine count-neutral
+reshufflings that share no pair with the original — and keeps the best strictly-improving
+one. A deeper local-optima escape than the single toggle or the 2-plug re-pair. Shipped
+opt-in (`--repair3`, default off, baseline byte-identical; needs `-c`).
+
+**Measured at matched *compute*, it loses.** Recovery-vs-`score_iter` curves (baseline
+interpolated to `--repair3`'s actual `score_iter`, so every comparison is at equal compute;
+4 languages × L40–70 × `-R {16,24,40,64}` × 2 seeds, `results-2026*.tsv`): **pooled −2.06pp**
+mean %-correct vs the baseline at equal `score_iter` (11 of 16 cells negative). The 3-plug
+scan costs ~960 `score_iter` per converged climb (~1.5× per-climb), and at matched compute
+that budget buys **more restarts, which win** — the loss is worst at the highest compute
+(`--repair3 @ R40` consistently −7…−11pp, where extra restarts help most) and only
+occasionally positive at the very lowest. Single cells swing ±15pp (noise); an early
+one-cell +17.6pp (german L50) did not survive the full grid (−7.8pp there).
+
+**Verdict — same as `--exhaust` (§3.6) and the IC+mono portfolio (§6.10): a deeper
+barrier-cross is dominated by spending the compute on diversity instead.** The mechanism is
+correct and clean (byte-identical default, `-Werror` g++/clang++, clang-tidy/ASan/UBSan
+clean, 182 tests pass), kept as a documented-dominated opt-in, not recommended.
+
 ---
 
 ## 5. Structural / constraint-based
