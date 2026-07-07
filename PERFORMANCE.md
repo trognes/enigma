@@ -1285,10 +1285,28 @@ tapering only in the final plug or two. Half the plugs (5/10) buys only ~42% of 
 - **Spurious plugs cost you:** at a fixed #correct, boards with **no** spurious plugs score
   higher (a clean 9-plug subset ≈ 98% vs 9-correct-with-a-spurious ≈ 90%) — a wrong plug
   actively corrupts letters.
-- **This is the shape under the "6–8 correct-plug basin gap"** (`archived/…` restart-diversity
-  analysis): because text gain per plug is tiny at low #correct, the text-driven climb score
-  has almost no gradient to follow until ~5–6 plugs are right, which is why partial boards
-  are hard to climb out of and the true basin is a small target for restarts to hit.
+- **This is the shape under the "5–9 correct-plug basin gap"** (restart-diversity analysis):
+  because text gain per plug is tiny at low #correct, the text-driven climb score has almost
+  no gradient to follow until ~5–6 plugs are right, which is why partial boards are hard to
+  climb out of and the true basin is a small target for restarts to hit.
+
+**The gap vs length** (`eval/plots/basin_gap_vs_length.png`; english, 20 msgs × R=1000 ×
+`-S i4q10`, ~20k converged boards/length). Dumping the converged optima at L40/50/60/70 shows
+the distribution is **bimodal at every length** — a junk cluster (0–4 correct, ~99% of boards)
+and a solution peak (~10), with **5–9 essentially empty**:
+
+| k=10 (solution) reached | L40 | L50 | L60 | L70 |
+|---|---|---|---|---|
+| % of restarts | 0.1 | 0.5 | 1.1 | 3.3 |
+
+The **gap location is ~length-invariant** (~5–9); what changes is the **size of the true
+basin** — the solution peak grows ~30× from L40 (0.1%) to L70 (3.3%). So a shorter message
+does not move the tipping point higher; it *shrinks the watershed* that drains to the true
+peak (less signal per plug → fewer kicks land in it), which is the quantitative reason L40
+needs ~30× the restarts of L70 (matching the restart sweeps). The L40 aggregate also hides a
+zero-basin tail: some short messages have the true board *not* at the score maximum (the
+scoring-failure / information-floor case, §6.8 / the `DM` example), unrecoverable at any R —
+why L40 exact-recovery plateaus below 100% rather than merely needing more restarts.
 
 ---
 
