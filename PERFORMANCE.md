@@ -1219,15 +1219,41 @@ with `CONFIGS="q10" R=4240`, shard `results-20260707-203354.tsv`), pooled mean %
    genuinely **restart-budget-dependent** (IC ≥ mono at `-R 10`; mono ≥ IC, and both
    ≈ pure-quad at matched compute, by `-R 1280`).
 
-**Recipe.** For high-R short-message cracking, prefer **pure `-S q10` with a large `-R`**
-— it matches mono at matched compute, needs no cap tuning, and is cheaper per restart
-(so more restarts per unit time). Avoid the IC pre-pass at high R; `m4q10` is a marginal
-L40–45 alternative. The **50/50 IC+mono portfolio was measured and is dominated** (lands
-between IC and mono, below pure mono — `eval/prepass_portfolio.py`): once mono is the
-stronger base, mixing in the weaker IC half only dilutes it.
+**The full R ladder makes the regime boundaries explicit.** Sweeping all three configs
+at **L40 across `-R 10 … 81920`** (english+german, `eval/prepass_grid.sh`, shards
+`results-20260707-211936.tsv` + `-213222.tsv`, plot `eval/plots/l40_highr_configs.png`)
+draws three crossing curves, and the win region is a clean function of `-R`:
 
-**Scope / caveats.** Plugboard-recovery tier, 4 languages, L40–70, 3 seeds, `-R 2560/4240`;
-the residual mono edge at L40–45 is within noise. The low-R default is unchanged.
+| regime | best pre-pass | why | evidence (L40) |
+|---|---|---|---|
+| **very low R (≈10, ≈ single-shot)** | **`i4q10`** (IC) | almost no restart diversity, so the *seed* is everything and IC's gentle, language-agnostic pre-pass is the most robust single climb | IC wins english L40/50/70 and german L40/70 at `-R 10`; it wins **nowhere above `-R 640`** |
+| **low–mid R (≈640–5120)** | **`m4q10`** (mono) | a sharper, language-specific seed that pays off once a few restarts can exploit it | mono leads the mid band both languages |
+| **high R (≳10k)** | **`q10`** (pure quad) | seed stops mattering; raw diversity wins, and quad is cheapest per restart | q10 overtakes past ~`-R 5k`, hits ~100% by `-R 81920` (L40 essentially solved) |
+
+`q10` is the **worst** config at low R (no seed help, too few restarts) — the exact mirror
+of it being best at high R. `i4q10`'s entire win region is `-R ≤ 640` (almost all at
+`-R 10`), which is precisely the regime the default was tuned in (§6.8, and `eval.py`'s
+default `-R 10`): it is optimal for a restart-starved default and superseded once real
+budget is spent, not wrong.
+
+**Recipe — make it `-R`-aware.** The recommended pre-pass should track the restart budget,
+because the harness default targets low R while anyone cracking a hard short message cranks
+`-R` high:
+
+- **default / restart-starved (`-R 0 … ~10`):** keep **`-S i4q10`** — the robust single-shot seed.
+- **modest budget (`-R ~10² … few·10³`):** **`-S m4q10`** — the language-specific seed pays off.
+- **high budget (`-R ≳ 10⁴`, hard short messages):** **pure `-S q10` with a large `-R`** —
+  matches/beats mono at matched compute, no cap tuning, cheapest per restart (so more
+  restarts per unit time). Avoid the IC pre-pass here.
+
+The **50/50 IC+mono portfolio was measured and is dominated** (lands between IC and mono,
+below pure mono — `eval/prepass_portfolio.py`): once mono is the stronger base, mixing in
+the weaker IC half only dilutes it.
+
+**Scope / caveats.** Plugboard-recovery tier, 4 languages (L40 ladder english+german),
+L40–70, `-R 10 … 81920`; the residual mono edge at L40–45 and the `-R 10` IC margins are
+within noise (SE ~3–5pp), so the *trend* (crossover, q10→~100%) is the robust signal, not
+any single cell. The shipped low-R default is unchanged.
 
 ---
 
