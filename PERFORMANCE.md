@@ -1264,6 +1264,32 @@ L40–70, `-R 10 … 81920`; the residual mono edge at L40–45 and the `-R 10` 
 within noise (SE ~3–5pp), so the *trend* (crossover, q10→~100%) is the robust signal, not
 any single cell. The shipped low-R default is unchanged.
 
+### 6.11 Correct plugs → text recovery is strongly convex — ✅ MEASURED (`eval/`)
+
+Aggregating **every** plugboard-recovery row across all shards (~289k runs, all
+lengths/languages/configs; `eval/plugs_vs_pct.py`, plot
+`eval/plots/correct_plugs_vs_pct.png`) gives the mean % letters correct as a function of
+how many of the 10 true plugs were recovered:
+
+| #correct | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| mean % letters | 7 | 9 | 14 | 22 | 32 | 42 | 53 | 65 | 81 | 95 | 100 |
+
+The curve is **strongly convex** — it bows well below the linear chord, and each correct
+plug is worth *more* than the last (marginal gain ~+2pp at the bottom, ~+16pp at 7→8),
+tapering only in the final plug or two. Half the plugs (5/10) buys only ~42% of the text.
+
+- **Why convex:** the plugboard is applied **twice** on each letter's path (input + output),
+  so a position decodes correctly only if *both* its contacts route right — roughly a
+  squaring effect, so partial board recovery gives sub-linear text recovery.
+- **Spurious plugs cost you:** at a fixed #correct, boards with **no** spurious plugs score
+  higher (a clean 9-plug subset ≈ 98% vs 9-correct-with-a-spurious ≈ 90%) — a wrong plug
+  actively corrupts letters.
+- **This is the shape under the "6–8 correct-plug basin gap"** (`archived/…` restart-diversity
+  analysis): because text gain per plug is tiny at low #correct, the text-driven climb score
+  has almost no gradient to follow until ~5–6 plugs are right, which is why partial boards
+  are hard to climb out of and the true basin is a small target for restarts to hit.
+
 ---
 
 ## 7. Speed / throughput
