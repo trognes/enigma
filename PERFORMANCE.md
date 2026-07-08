@@ -779,6 +779,45 @@ barrier-cross is dominated by spending the compute on diversity instead.** The m
 correct and clean (byte-identical default, `-Werror` g++/clang++, clang-tidy/ASan/UBSan
 clean, 182 tests pass), kept as a documented-dominated opt-in, not recommended.
 
+### 4.8 "Fix-and-finish" — pin a converged board, free the suspects, re-climb — ❌ MEASURED, DOMINATED
+
+The idea motivated by the convexity / basin-gap story (§6.11–6.13): once a restart climb has
+converged to a board that is *mostly* right (the outlier-score, near-solution regime — ~50%+
+correct letters, 5–6+ correct plugs), don't throw it away and restart blind. Instead **fix**
+the plugs that look trustworthy, **free** the few that look wrong, and re-climb from that
+seed — a targeted finish that should need far less compute than another full restart. Tested
+as a Python prototype over `tests/eval.py` (never shipped to `enigma.cc`), at **matched
+`score_iter`** (Phase-A restarts + Phase-B finish vs the same total spent purely on restarts;
+english+german × L50–70, 60 problems/cell). Three constructions, each fixing a different
+mechanism, all lose:
+
+1. **Consensus pins** (fix plugs shared across the top converged boards): **Δ −4.3 … −11.3pp**.
+   At short lengths the top boards are *junk that agrees on junk* (the basin-gap prediction,
+   §6.11) — 19–47% of the "consensus" pins are wrong, poisoning the finish.
+2. **Quadgram-crib pins** (per-position quad badness of the best decrypt aggregated onto plug
+   contacts; fix the low-badness plugs, free the high-badness ones): **Δ −0.4 … −2.6pp** — a
+   break-even improvement, but the crib still runs on a junk board at the lengths where help
+   is wanted (pins 13–41% true at L50).
+3. **Quad-crib + adaptive gate + K=1** — finish *only* on outlier-score boards (a per-problem
+   MAD gate on the Phase-A restart-score distribution, so the finish fires exactly where the
+   board is genuinely near-solution), freeing just the single most-suspect plug: still
+   **negative even on the gated subset** — gated-only Δ **+0.1 / −2.9 / −0.9** (english
+   L50/60/70), **−5.0 / −11.5 / −2.9** (german), with fixed-pin accuracy a healthy **72–94%
+   true** on that subset. The gate worked — it isolated boards averaging 91% correct — and the
+   finish *still* lost to more restarts.
+
+**Verdict — fix-and-finish is dominated, even in the near-solution regime it was built for.**
+Two mechanisms sink it, both already mapped this file: (a) even on gated boards the pins are
+only 72–94% true, so the crib fixes *some* wrong plugs; and (b) a fixed plug is
+**irreversible** (`-s` held during the climb) — one mis-pinned plug permanently locks the
+finish into a wrong basin, whereas a plain restart keeps the full 325-move freedom and can
+wander out. Trading that freedom for a narrow search that is only as good as its crib is a bad
+trade *precisely because* the score gradient near junk is weak (§6.11–6.13): the crib cannot
+reliably separate a wrong plug from a right one at exactly the short lengths where the finish
+would need to. Three independent constructions all land negative — a greedy restart climb
+remains the thing to beat, and pinning a few plugs from a converged board never earns back the
+compute it costs. Not shipped.
+
 ---
 
 ## 5. Structural / constraint-based
@@ -1378,6 +1417,61 @@ length below that, so score discriminates text recovery far better at long lengt
 It is also why *best-by-score works*: score is a faithful, if noisy, monotone proxy for
 #correct plugs — but it offers almost no gradient until past the ~5-plug knee, which is why
 restart **diversity** (landing past the knee by luck) beats a smarter local climb.
+
+### 6.14 What the residual "few wrong plugs" failures actually are — re-pairing tangles, not the info floor — ✅ MEASURED (`eval/`)
+
+Zooming in on the *near-solution* residual: every converged board that lands **1–3 plugs wrong**
+(true rotor key fixed, plugboard climbed best-of-`-R 40` with the standard `-J -S i4q10`; en+de,
+L55/60/65, 10 plugs, 720 problems). Two questions per board, plotted in
+`eval/plots/few_wrong_tangle.png`.
+
+**1. Search failure or scoring failure?** `gap = true_score − converged_score` (both quad). Of
+the **36** few-wrong boards, **35 are search failures** (`gap > 0` — the true board scores
+strictly higher, the climb stuck below it); only **1 is a scoring failure**, and it is a near-tie
+(gap +0.02 dits, one plug off at 89 % correct — the genuine information floor at L55). The gaps
+are *large*, not marginal: even at **1** wrong plug the true board scores **+0.15…+0.95
+dits/symbol** higher. So the score is a faithful uphill guide here — this is the opposite of the
+information-floor worry; the search simply is not reaching the top.
+
+**2. What are the wrong plugs?** Classifying each wrong plug by whether its letters are steckered
+in truth: **TANGLE 61 %** (both endpoints steckered, wired to the *wrong partner*), **HALF 30 %**
+(one endpoint steckered), **SPURIOUS 10 %** (neither — an invented plug). So **~90 % of
+wrong-plug endpoints are letters the climb correctly identified as steckered** — it just
+cross-wired them (e.g. truth G–M, B–P; the climb wired G–Z, M–P). The "swap-component" — the set
+of letters that must move **simultaneously** to go converged→truth — has **mean 5.6, median 5.5,
+max 10** letters. A ~6-letter component is a **3-plug simultaneous re-pairing**.
+
+**This is a connectivity problem, not an information problem.** Every *partial* step of that
+3-plug swap scores lower (the plugboard-applied-twice convexity, §6.11/§6.13), so the
+single-toggle greedy climb — which moves 2 letters and accepts only improvements — cannot cross
+the valley, even though the score rewards the far side.
+
+**But the geometric picture — "so a 3-plug re-pair would fix it" — does NOT hold operationally
+(measured, `eval/repair3_on_tangles.py`).** Re-running the same 720 problems with `--repair3`
+(both at `R 40`, so `--repair3` just pays its 1.55× compute) solves only **7 of the 36 tangles
+(19 %)**, improves none of the rest, and the swap-component size does *not* predict which get
+fixed (≤6 letters: 4/23; >6: 3/13 — roughly equal). Three measured reasons the move is not the
+cure: (a) `try_repair_3` is **count-neutral** (it only reshuffles the endpoints of 3 *existing*
+plugs), so it cannot express the 30 % HALF / 10 % SPURIOUS structure — those need an
+add/remove, not a re-pair; (b) it fires **along the whole trajectory**, so "best-of-R with
+`--repair3`" is a *different search*, not a surgical unknot of the identified board; (c) it can
+climb to a **scoring-failure** optimum (it broke 5 baseline solves). Its overall gain (+24 exact,
+304→328) is mostly **junk→solve escapes (~22), not tangles (7)** — a general deep-optima escape,
+not a tangle specialist — and at matched compute those restarts win (§4.7). Same story for
+**fix-and-finish** (§4.8): the score points to truth, but *selecting* which letters form the
+tangle from a partly-wrong board is unreliable.
+
+**Recognizing a tangle is easier than curing one (measured, `eval/tangle_detector.py`).** Score
+features separate a message whose best-of-R board is a solve from one stuck in a tangle at
+**AUC ≈ 0.90–0.95** (raw score within a length 0.95; best−2nd 0.91; best−median 0.90) — because a
+genuine solution *towers* over its restart pack while a tangle only pokes above it (oracle gap
+tiers cleanly: solve +0.00, tangle +0.63, junk +1.22 dits). Consensus (how many restarts hit the
+best board) is weak (AUC ~0.67 — short-message solution basins are too small to be re-hit). So a
+*detector* is on the table; what is missing is a **profitable action** once flagged — fixing
+failed (§4.8), `try_repair_3` catches only ~1/5, and the one untested lever is **reallocating
+restart budget** toward flagged-unfinished messages. Absent that, restart diversity stays the
+best use of compute. Reproduce: `python3 eval/few_wrong_tangle.py` (characterization),
+`eval/repair3_on_tangles.py` (the `--repair3` A/B), `eval/tangle_detector.py` (separability).
 
 ---
 
