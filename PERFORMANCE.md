@@ -1350,6 +1350,29 @@ entropy of English — each position scores a full overlapping quadgram). Measur
   out-score the truth. That thin short-message margin **is** the scoring-failure / information
   floor (§6.8, §6.11) expressed in score units, and it is why long traffic is easy and L40 hard.
 
+### 6.13 Quad score vs #correct plugs is convex — the three views are one — ✅ MEASURED (`eval/`)
+
+Pairing each converged board's **#correct plugs** with its **quad score** (english, all shards,
+`eval/plots/score_vs_correct_plugs.png`) gives a monotonic but **strongly convex** curve: the
+score barely moves below ~5 correct plugs, then drops steeply toward the true-board value.
+All lengths converge to the same ~13.9 bits/sym at 10 correct (the language score, length-free)
+and fan out at 0 correct (junk is worse at longer length — L40 ≈16.5, L120 ≈20.7 bits), so the
+**score span per plug grows with length**.
+
+The flat low end **is** the mechanism behind the basin gap: below ~5 correct the score gain per
+plug (~0.1 bits at L40) is *smaller than the per-run noise* (±~0.7 bits, §6.12), so the climb
+has no gradient to follow and stalls; above ~6 correct each plug is worth ~1–1.5 bits, well
+above noise, so the climb cascades to 10 (nothing rests in 6–9). This unifies the three
+convexity findings as one underlying shape seen through different variables:
+
+- **§6.11** #correct → **% letters** (convex),
+- **§6.12** length → **bits margin** true-vs-junk (grows),
+- **§6.13** #correct → **quad score** (convex; span grows with length).
+
+It is also why *best-by-score works*: score is a faithful, if noisy, monotone proxy for
+#correct plugs — but it offers almost no gradient until past the ~5-plug knee, which is why
+restart **diversity** (landing past the knee by luck) beats a smarter local climb.
+
 ---
 
 ## 7. Speed / throughput
