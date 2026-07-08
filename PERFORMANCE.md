@@ -1418,6 +1418,44 @@ It is also why *best-by-score works*: score is a faithful, if noisy, monotone pr
 #correct plugs — but it offers almost no gradient until past the ~5-plug knee, which is why
 restart **diversity** (landing past the knee by luck) beats a smarter local climb.
 
+### 6.14 What the residual "few wrong plugs" failures actually are — re-pairing tangles, not the info floor — ✅ MEASURED (`eval/`)
+
+Zooming in on the *near-solution* residual: every converged board that lands **1–3 plugs wrong**
+(true rotor key fixed, plugboard climbed best-of-`-R 40` with the standard `-J -S i4q10`; en+de,
+L55/60/65, 10 plugs, 720 problems). Two questions per board, plotted in
+`eval/plots/few_wrong_tangle.png`.
+
+**1. Search failure or scoring failure?** `gap = true_score − converged_score` (both quad). Of
+the **36** few-wrong boards, **35 are search failures** (`gap > 0` — the true board scores
+strictly higher, the climb stuck below it); only **1 is a scoring failure**, and it is a near-tie
+(gap +0.02 dits, one plug off at 89 % correct — the genuine information floor at L55). The gaps
+are *large*, not marginal: even at **1** wrong plug the true board scores **+0.15…+0.95
+dits/symbol** higher. So the score is a faithful uphill guide here — this is the opposite of the
+information-floor worry; the search simply is not reaching the top.
+
+**2. What are the wrong plugs?** Classifying each wrong plug by whether its letters are steckered
+in truth: **TANGLE 61 %** (both endpoints steckered, wired to the *wrong partner*), **HALF 30 %**
+(one endpoint steckered), **SPURIOUS 10 %** (neither — an invented plug). So **~90 % of
+wrong-plug endpoints are letters the climb correctly identified as steckered** — it just
+cross-wired them (e.g. truth G–M, B–P; the climb wired G–Z, M–P). The "swap-component" — the set
+of letters that must move **simultaneously** to go converged→truth — has **mean 5.6, median 5.5,
+max 10** letters. A ~6-letter component is a **3-plug simultaneous re-pairing**.
+
+**This is a connectivity problem, not an information problem.** Every *partial* step of that
+3-plug swap scores lower (the plugboard-applied-twice convexity, §6.11/§6.13), so the
+single-toggle greedy climb — which moves 2 letters and accepts only improvements — cannot cross
+the valley, even though the score rewards the far side. That is exactly the local optimum
+`try_repair` (2 plugs / 4 letters) and `try_repair_3` (3 plugs / 6 letters) target — and it
+explains why they are still **dominated** at matched compute (§4.7): the tangle cases are only
+**~5 %** of problems (36/720), too rare to amortize a per-climb 3-plug scan against the restarts
+it would replace, and a restart re-rolls the whole board into a possibly-correct basin more
+cheaply. It also re-diagnoses why **fix-and-finish** failed (§4.8) — not because the score is
+wrong (it points to truth) but because *selecting* which letters form the tangle from a
+partly-wrong board is unreliable, and the score alone cannot tell a recoverable tangle from deep
+junk (both just look like a mediocre converged score). **The lever that would change the math is
+a *cheap* tangle detector**, not a better local move; absent one, restart diversity stays the
+best use of compute. Reproduce: `python3 eval/few_wrong_tangle.py`.
+
 ---
 
 ## 7. Speed / throughput
