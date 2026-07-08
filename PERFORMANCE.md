@@ -1444,17 +1444,34 @@ max 10** letters. A ~6-letter component is a **3-plug simultaneous re-pairing**.
 **This is a connectivity problem, not an information problem.** Every *partial* step of that
 3-plug swap scores lower (the plugboard-applied-twice convexity, §6.11/§6.13), so the
 single-toggle greedy climb — which moves 2 letters and accepts only improvements — cannot cross
-the valley, even though the score rewards the far side. That is exactly the local optimum
-`try_repair` (2 plugs / 4 letters) and `try_repair_3` (3 plugs / 6 letters) target — and it
-explains why they are still **dominated** at matched compute (§4.7): the tangle cases are only
-**~5 %** of problems (36/720), too rare to amortize a per-climb 3-plug scan against the restarts
-it would replace, and a restart re-rolls the whole board into a possibly-correct basin more
-cheaply. It also re-diagnoses why **fix-and-finish** failed (§4.8) — not because the score is
-wrong (it points to truth) but because *selecting* which letters form the tangle from a
-partly-wrong board is unreliable, and the score alone cannot tell a recoverable tangle from deep
-junk (both just look like a mediocre converged score). **The lever that would change the math is
-a *cheap* tangle detector**, not a better local move; absent one, restart diversity stays the
-best use of compute. Reproduce: `python3 eval/few_wrong_tangle.py`.
+the valley, even though the score rewards the far side.
+
+**But the geometric picture — "so a 3-plug re-pair would fix it" — does NOT hold operationally
+(measured, `eval/repair3_on_tangles.py`).** Re-running the same 720 problems with `--repair3`
+(both at `R 40`, so `--repair3` just pays its 1.55× compute) solves only **7 of the 36 tangles
+(19 %)**, improves none of the rest, and the swap-component size does *not* predict which get
+fixed (≤6 letters: 4/23; >6: 3/13 — roughly equal). Three measured reasons the move is not the
+cure: (a) `try_repair_3` is **count-neutral** (it only reshuffles the endpoints of 3 *existing*
+plugs), so it cannot express the 30 % HALF / 10 % SPURIOUS structure — those need an
+add/remove, not a re-pair; (b) it fires **along the whole trajectory**, so "best-of-R with
+`--repair3`" is a *different search*, not a surgical unknot of the identified board; (c) it can
+climb to a **scoring-failure** optimum (it broke 5 baseline solves). Its overall gain (+24 exact,
+304→328) is mostly **junk→solve escapes (~22), not tangles (7)** — a general deep-optima escape,
+not a tangle specialist — and at matched compute those restarts win (§4.7). Same story for
+**fix-and-finish** (§4.8): the score points to truth, but *selecting* which letters form the
+tangle from a partly-wrong board is unreliable.
+
+**Recognizing a tangle is easier than curing one (measured, `eval/tangle_detector.py`).** Score
+features separate a message whose best-of-R board is a solve from one stuck in a tangle at
+**AUC ≈ 0.90–0.95** (raw score within a length 0.95; best−2nd 0.91; best−median 0.90) — because a
+genuine solution *towers* over its restart pack while a tangle only pokes above it (oracle gap
+tiers cleanly: solve +0.00, tangle +0.63, junk +1.22 dits). Consensus (how many restarts hit the
+best board) is weak (AUC ~0.67 — short-message solution basins are too small to be re-hit). So a
+*detector* is on the table; what is missing is a **profitable action** once flagged — fixing
+failed (§4.8), `try_repair_3` catches only ~1/5, and the one untested lever is **reallocating
+restart budget** toward flagged-unfinished messages. Absent that, restart diversity stays the
+best use of compute. Reproduce: `python3 eval/few_wrong_tangle.py` (characterization),
+`eval/repair3_on_tangles.py` (the `--repair3` A/B), `eval/tangle_detector.py` (separability).
 
 ---
 
