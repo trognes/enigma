@@ -209,6 +209,12 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   **Measured, dominated**: at matched compute it loses ~2pp mean %-correct — the per-climb
   cost is better spent on more `-R` restarts (`PERFORMANCE.md` §4.7). A documented-dominated
   opt-in, not recommended — same verdict as `--exhaust`.
+- `--no-repair` **disable the default 2-plug `try_repair` barrier cross** (needs `-c`; off by
+  default). An ablation/measurement flag: the 2-plug re-pair is normally always-on (it earns
+  its keep at long lengths — `archived/CODE_REVIEW_HISTORY.md` §9 item 7), and this turns it
+  off so its value can be A/B'd (e.g. at short lengths where its convergence scan is a larger
+  fraction of a fast climb). Default off keeps the climb byte-identical; the flag only skips the
+  `try_repair` call at each convergence.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
