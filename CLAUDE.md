@@ -198,6 +198,17 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   the IC-pre-pass cap in `--score i4q…` is a *flat plateau* by default is that without `-M` the
   cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
   `PERFORMANCE.md` §7.3.)
+- `--repair3` **3-plug re-pair barrier cross** (needs `-c`; off by default). The 3-plug
+  generalisation of `try_repair` (`try_repair_3()`): tried only at convergence, once the
+  toggle climb **and** the 2-plug `try_repair` have both stalled, it rematches three existing
+  plugs (six letters) into a different pairing (the 8 genuine count-neutral reshufflings that
+  share no pair with the original) and keeps the best improving one — a deeper local-optima
+  escape the single toggle and 2-plug re-pair can't express. Count-neutral (no cap gating);
+  costs O(C(np,3)·8) `score_iter` (960 at 10 plugs) per call, paid only at convergence.
+  Default off (baseline byte-identical); `template<bool EX>`/`plug_fixed` like `try_repair`.
+  **Measured, dominated**: at matched compute it loses ~2pp mean %-correct — the per-climb
+  cost is better spent on more `-R` restarts (`PERFORMANCE.md` §4.7). A documented-dominated
+  opt-in, not recommended — same verdict as `--exhaust`.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC

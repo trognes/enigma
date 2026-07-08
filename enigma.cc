@@ -162,6 +162,11 @@ static int opt_inflorder;
    it is also cheaper per climb (quad converges from a tidy basin). Off by default; needs -c.
    Most useful with a tight -S target cap; near-inert (harmless) with no cap. */
 static int opt_capmerge;
+/* --repair3: a last-resort 3-plug barrier cross, tried only once the cheap climb AND
+   try_repair have both converged. Rematches three existing plugs (six letters) into a
+   different pairing; a deeper generalisation of try_repair (which does two). Off by
+   default (baseline byte-identical); needs -c. See try_repair_3(). */
+static int opt_repair3;
 static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
                              0 (the default) = one deterministic climb from the seed,
                              no kick; N>=1 = exactly N kicked climbs, keep the best
@@ -1145,6 +1150,94 @@ static bool try_repair(machine & m, double cur_score)
   return found;
 }
 
+/* The 8 GENUINE rematchings of three plugs, indexing the six letters L[] =
+   {a,x, b,y, c,z} (original pairs (0,1),(2,3),(4,5)). Each row is three pairs of L[]
+   indices forming a perfect matching that shares NO edge with the original -- i.e. every
+   letter changes partner. (The other six of the 15 matchings keep one original pair and
+   are just a two-plug re-pair, already covered by try_repair, so they are omitted.) */
+static const unsigned char REMATCH3[8][6] =
+{
+  { 0, 2, 1, 4, 3, 5 }, { 0, 2, 1, 5, 3, 4 },
+  { 0, 3, 1, 4, 2, 5 }, { 0, 3, 1, 5, 2, 4 },
+  { 0, 4, 1, 3, 2, 5 }, { 0, 4, 1, 2, 3, 5 },
+  { 0, 5, 1, 3, 2, 4 }, { 0, 5, 1, 2, 3, 4 },
+};
+
+/* try_repair_3 (--repair3): the 3-plug generalisation of try_repair, tried only as a
+   last-resort barrier cross once the cheap climb AND try_repair have both converged.
+   Takes three existing (non-fixed) plugs -- six letters -- and scores every genuine
+   count-neutral rematch (the 8 above); keeps the single best strictly-improving one.
+   Count-neutral, so no cap gating is needed. Cost O(C(np,3)*8) score_iter per call
+   (960 at 10 plugs), paid only at convergence, so ~zero amortised -- like try_repair. */
+template<bool EX>
+static bool try_repair_3(machine & m, double cur_score)
+{
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
+  int plo[asize / 2];
+  int phi[asize / 2];
+  int np = 0;
+  for (int a = 0; a < asize; a++)
+    if ((m.steckerbrett[a] > a) && ! pf[a])   /* never rewire a fixed -s plug */
+      {
+        plo[np] = a;
+        phi[np] = m.steckerbrett[a];
+        np++;
+      }
+
+  double best = cur_score;
+  int best_L[6] = { 0, 0, 0, 0, 0, 0 };
+  int best_mm = -1;
+  bool found = false;
+
+  for (int i = 0; i < np; i++)
+    for (int j = i + 1; j < np; j++)
+      for (int k = j + 1; k < np; k++)
+        {
+          const int L[6] = { plo[i], phi[i], plo[j], phi[j], plo[k], phi[k] };
+          for (int mm = 0; mm < 8; mm++)
+            {
+              for (int q = 0; q < 6; q += 2)   /* the three pairs of the rematch */
+                {
+                  int u = L[REMATCH3[mm][q]];
+                  int v = L[REMATCH3[mm][q + 1]];
+                  m.steckerbrett[u] = static_cast<unsigned char>(v);
+                  m.steckerbrett[v] = static_cast<unsigned char>(u);
+                }
+
+              double s = score_iter(m);
+              if (s > best)
+                {
+                  best = s;
+                  found = true;
+                  best_mm = mm;
+                  for (int t = 0; t < 6; t++)
+                    best_L[t] = L[t];
+                }
+
+              /* restore the three original plugs */
+              m.steckerbrett[L[0]] = static_cast<unsigned char>(L[1]);
+              m.steckerbrett[L[1]] = static_cast<unsigned char>(L[0]);
+              m.steckerbrett[L[2]] = static_cast<unsigned char>(L[3]);
+              m.steckerbrett[L[3]] = static_cast<unsigned char>(L[2]);
+              m.steckerbrett[L[4]] = static_cast<unsigned char>(L[5]);
+              m.steckerbrett[L[5]] = static_cast<unsigned char>(L[4]);
+            }
+        }
+
+  if (found)
+    {
+      for (int q = 0; q < 6; q += 2)   /* the three pairs of the winning rematch */
+        {
+          int u = best_L[REMATCH3[best_mm][q]];
+          int v = best_L[REMATCH3[best_mm][q + 1]];
+          m.steckerbrett[u] = static_cast<unsigned char>(v);
+          m.steckerbrett[v] = static_cast<unsigned char>(u);
+        }
+      report_climb_progress(m, best);
+    }
+  return found;
+}
+
 /* Lexicographic table of the C(26,2)=325 unordered letter pairs, built once. */
 struct pairtab { unsigned char a[asize * (asize - 1) / 2], b[asize * (asize - 1) / 2]; };
 static pairtab make_pairtab()
@@ -1514,8 +1607,12 @@ static double hillclimb(machine & m, int max_pairs)
         }
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
-         improves, loop back and let the cheap climb resume from the new board. */
-      if (try_repair<EX>(m, cur))
+         improves, loop back and let the cheap climb resume from the new board.
+         With --repair3, and only when the 2-plug re-pair also found nothing, try the
+         deeper 3-plug reshuffle as a further barrier cross. */
+      /* short-circuit: try_repair_3 runs only when the 2-plug re-pair found nothing */
+      if (try_repair<EX>(m, cur)
+          || (opt_repair3 && try_repair_3<EX>(m, cur)))
         progress = true;
     }
   while (progress);
@@ -3238,6 +3335,9 @@ void help(FILE * out)
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
   fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--repair3",
+          "Last-resort 3-plug reshuffle at convergence (a");
+  fprintf(out, "  %-24s %s\n", "", "deeper try_repair; needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -3324,6 +3424,8 @@ void show_settings()
     }
   if (opt_hillclimb && opt_capmerge)
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
+  if (opt_hillclimb && opt_repair3)
+    fprintf(stderr, "            3-plug re-pair barrier cross at convergence\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" :
@@ -3409,6 +3511,7 @@ int main(int argc, char * * argv)
   opt_dynorder = 0;
   opt_inflorder = 0;
   opt_capmerge = 0;
+  opt_repair3 = 0;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -3430,7 +3533,7 @@ int main(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER };
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3 };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3471,6 +3574,7 @@ int main(int argc, char * * argv)
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
       { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
+      { "repair3",        no_argument,       nullptr, OPT_REPAIR3 },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3532,6 +3636,9 @@ int main(int argc, char * * argv)
         case OPT_INFLORDER:
           opt_firstimprove = 1;   /* --infl-order implies first-improvement */
           opt_inflorder = 1;
+          break;
+        case OPT_REPAIR3:
+          opt_repair3 = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -3805,6 +3912,10 @@ int main(int argc, char * * argv)
   /* -M changes the plug-cap rule in the climb, so it needs -c. */
   if (opt_capmerge && (! opt_hillclimb))
     fatal("Cap-as-target (-M) needs the plugboard hill-climb (-c)");
+
+  /* --repair3 is a climb barrier-cross move, so it needs -c. */
+  if (opt_repair3 && (! opt_hillclimb))
+    fatal("3-plug re-pair (--repair3) needs the plugboard hill-climb (-c)");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */
