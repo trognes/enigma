@@ -167,6 +167,9 @@ static int opt_capmerge;
    different pairing; a deeper generalisation of try_repair (which does two). Off by
    default (baseline byte-identical); needs -c. See try_repair_3(). */
 static int opt_repair3;
+/* --no-repair: disable the default 2-plug re-pair barrier cross (try_repair), for
+   ablation/measurement. Off by default (baseline byte-identical); needs -c. */
+static int opt_no_repair;
 static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
                              0 (the default) = one deterministic climb from the seed,
                              no kick; N>=1 = exactly N kicked climbs, keep the best
@@ -1611,7 +1614,7 @@ static double hillclimb(machine & m, int max_pairs)
          With --repair3, and only when the 2-plug re-pair also found nothing, try the
          deeper 3-plug reshuffle as a further barrier cross. */
       /* short-circuit: try_repair_3 runs only when the 2-plug re-pair found nothing */
-      if (try_repair<EX>(m, cur)
+      if ((! opt_no_repair && try_repair<EX>(m, cur))
           || (opt_repair3 && try_repair_3<EX>(m, cur)))
         progress = true;
     }
@@ -3338,6 +3341,9 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--repair3",
           "Last-resort 3-plug reshuffle at convergence (a");
   fprintf(out, "  %-24s %s\n", "", "deeper try_repair; needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--no-repair",
+          "Disable the 2-plug re-pair barrier cross (ablation;");
+  fprintf(out, "  %-24s %s\n", "", "needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -3426,6 +3432,8 @@ void show_settings()
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_repair3)
     fprintf(stderr, "            3-plug re-pair barrier cross at convergence\n");
+  if (opt_hillclimb && opt_no_repair)
+    fprintf(stderr, "            2-plug re-pair barrier cross disabled (--no-repair)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" :
@@ -3512,6 +3520,7 @@ int main(int argc, char * * argv)
   opt_inflorder = 0;
   opt_capmerge = 0;
   opt_repair3 = 0;
+  opt_no_repair = 0;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -3533,7 +3542,8 @@ int main(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3 };
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
+         OPT_NO_REPAIR };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3575,6 +3585,7 @@ int main(int argc, char * * argv)
       { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
       { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
       { "repair3",        no_argument,       nullptr, OPT_REPAIR3 },
+      { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3639,6 +3650,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_REPAIR3:
           opt_repair3 = 1;
+          break;
+        case OPT_NO_REPAIR:
+          opt_no_repair = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -3916,6 +3930,10 @@ int main(int argc, char * * argv)
   /* --repair3 is a climb barrier-cross move, so it needs -c. */
   if (opt_repair3 && (! opt_hillclimb))
     fatal("3-plug re-pair (--repair3) needs the plugboard hill-climb (-c)");
+
+  /* --no-repair disables a climb move, so it only means anything with -c. */
+  if (opt_no_repair && (! opt_hillclimb))
+    fatal("Disabling the 2-plug re-pair (--no-repair) needs the plugboard hill-climb (-c)");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */

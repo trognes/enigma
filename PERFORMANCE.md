@@ -818,6 +818,39 @@ would need to. Three independent constructions all land negative — a greedy re
 remains the thing to beat, and pinning a few plugs from a converged board never earns back the
 compute it costs. Not shipped.
 
+### 4.9 2-plug re-pair (`try_repair`) still pays at short lengths, matched compute — ✅ MEASURED (`eval/`)
+
+The always-on 2-plug `try_repair` barrier cross (§9 item 7 in `archived/CODE_REVIEW_HISTORY.md`)
+was originally validated only at **long** lengths (L140–250), where its gated convergence scan
+is negligible ("~zero cost"). At **short** lengths a climb converges fast, so that fixed scan is
+a *larger* fraction of the work — measured **~15% of `score_iter`** at L40–70 (e.g. 2321 vs 2001
+at `-R 1`). So its value there had to be re-checked at *matched compute*, not assumed. The
+`--no-repair` flag makes this a clean one-binary A/B (default vs the move disabled;
+`eval/repair2_matched.py`, `eval/plots/repair2_matched.png`).
+
+**It wins, and the win grows with budget.** en+de, L40/55/70, 10 plugs, 100/cell, `-J -S i4q10`,
+`-R {1,2,4,8,16}`, with the no-repair curve interpolated to the with-repair `score_iter` so the
+~15% extra cost is charged against it:
+
+| `score_iter` | with `try_repair` | `--no-repair` | Δ (matched) |
+|---:|---:|---:|---:|
+| 2,321 | 12.8 | 12.5 | **+0.26** |
+| 4,597 | 16.1 | 15.9 | +0.21 |
+| 9,166 | 22.2 | 21.1 | +1.08 |
+| 18,200 | 27.4 | 26.3 | +1.10 |
+| 36,422 | 35.7 | 32.9 | **+2.78** |
+
+Mean %-correct Δ **+0.2 → +2.8 pp**, positive at every budget and rising with restarts (exact
+recovery likewise, e.g. 24.5% vs 20.7% at `-R 16`). This is the **first clearly-positive
+matched-compute barrier-cross in the whole §3.6/§4.7/§4.8 string** — and it is exactly the
+opposite verdict from the *3-plug* `--repair3` (§4.7, dominated). The reason the 2-plug move pays
+where the 3-plug doesn't: `try_repair` fires at **every** convergence throughout the climb, so it
+is a broad, cheap local-optima escape that lifts the whole distribution of climb endpoints — not
+a rare, expensive last-resort. That the Δ *grows* with `-R` fits: more restarts → more
+convergences → more barrier-crosses. So the 2-plug re-pair is the last worthwhile move rung at
+short lengths too, not just the long ones where it was first validated. Reproduce:
+`python3 eval/repair2_matched.py`.
+
 ---
 
 ## 5. Structural / constraint-based
