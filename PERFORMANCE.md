@@ -1369,6 +1369,12 @@ convexity findings as one underlying shape seen through different variables:
 - **§6.12** length → **bits margin** true-vs-junk (grows),
 - **§6.13** #correct → **quad score** (convex; span grows with length).
 
+Plotting the same score against **% letters correct** instead of #plugs
+(`eval/plots/score_vs_pct_letters.png`) is monotone but *flatter / more linear* — because
+%-letters is itself a convex function of #plugs (§6.11), so composing the two convexities
+partly cancels. It converges to the same ~13.9 bits at 100 % (length-free) and fans out by
+length below that, so score discriminates text recovery far better at long lengths than short.
+
 It is also why *best-by-score works*: score is a faithful, if noisy, monotone proxy for
 #correct plugs — but it offers almost no gradient until past the ~5-plug knee, which is why
 restart **diversity** (landing past the knee by luck) beats a smarter local climb.
