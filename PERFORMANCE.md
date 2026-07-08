@@ -851,6 +851,73 @@ convergences → more barrier-crosses. So the 2-plug re-pair is the last worthwh
 short lengths too, not just the long ones where it was first validated. Reproduce:
 `python3 eval/repair2_matched.py`.
 
+### 4.10 Directed plug repair via quadgram "gain" (gain-cascade) — ⏳ PRELIMINARY (component validated, end-to-end open)
+
+§6.14 showed the residual near-solution failures are re-pairing *tangles* a greedy single-toggle
+climb can't cross. This explores a **directed** finisher: use the quad model to point at *which*
+plug is wrong and fix it, instead of blind restarts. The mechanism was built up from Enigma
+structure; each step below is a measured improvement (Python prototype over `tests/eval.py` and
+real tool-converged boards from `eval/results*.tsv`; exact rotor core extracted from the tool via
+26 empty-plugboard decodes of `x*n` — Enigma stepping is content-independent).
+
+**The pipeline.**
+1. **Per-position gain** — for the current decode, the best quad-score improvement obtainable by
+   changing one output letter, and to what (`bx`); only the ≤4 covering quadgrams change, so it's
+   `O(n·26·4)` lookups.
+2. **Dual (exit + entry) generation** — a position's output can be corrected two ways, because the
+   plugboard sits on both sides of the rotors: **exit** re-plug `{S[pt[j]], bx}`, or **entry**
+   re-plug `{ct[j], core_j[S[bx]]}` (reciprocal). Exit-only generation covers a correct plug 75–95%
+   on synthetic boards; adding the entry lever lifts it to **97–100%**.
+3. **No-self-encryption prune** — Enigma never maps a letter to itself (`P = S∘C∘S`, C
+   fixed-point-free), so any suggestion `bx == ct[j]` is impossible and pruned for free.
+4. **Full-plug (input-aware) ranking** — rank candidates by the *whole-message* re-decode Δ (both
+   contacts, freed partners), not the exit-only vote. Given coverage this ranks the correct plug at
+   #1 **~95%** on synthetic boards (the raw vote alone ~40%). Ranking is essentially solved;
+   generation is the bottleneck.
+
+**The real-board reality checks** (`eval/results*.tsv`, L40–70, 10 plugs):
+- **Near-solution boards are rare** — 168k converged boards: 32% solved, and of the non-exact,
+  **76% are deep junk (0–20% correct)**, only **~4.5% near-solution** (the basin gap, §6.13).
+- **Many "almost done" boards are scoring failures** — 86% of the 90–100% bucket have
+  `recovered_score ≥ true_score`: the converged board scores *at least as high as the truth*, so
+  the missing plug can't be found by any score-based method (the information floor, not a search
+  failure). The mid-range (50–80%) is 95%+ genuine search failures — fixable.
+- On fixable search-failure boards, single-plug hit@1 is **44–67%**.
+
+**The pair-coverage wall, and the cascade that breaks it (the key finding).** A converged board is
+a local optimum *for single moves*, so the correct fix is usually 2 plugs *together*. But scoring
+2-plug **combos** is capped at **32%** by pair-coverage — on a 2-plug tangle the two wrong plugs
+corrupt overlapping positions, so each masks the other's gain signal; both are rarely in the
+shortlist at once. The **cascade** sidesteps it: apply the one visible plug *even though it's
+downhill* (Δ<0), which **un-masks** the second, then accept the pair only if the net is positive.
+Correct-pair rate **32% → 62%**. (Removal candidates — freeing a spuriously-plugged letter — were
+added and measured **no effect**: forming a plug already ejects the old partner, so "add-with-eject"
+subsumes pure removal.)
+
+**The reclimb amplifies (the payoff).** The cascade only needs to *cross the barrier*; once a
+tangle is fixed and the score jumps, the ordinary climb resolves the rest. On real near-solution
+search-failure boards with **2–4** wrong plugs, **cascade-fix + reclimb solves 53%** (vs **8%**
+for reclimb alone), lifting mean correct-plugs **6.8 → 8.6**.
+
+**What's open — the end-to-end matched-compute verdict.** Does gain-cascade finishing beat spending
+the same compute on more restarts? *The prototype cannot answer it*: its simplified quad-only
+Python climb (no IC pre-pass) is too weak to *produce* near-solution boards (25 problems × 6
+restarts at L60 → 150 boards, all junk), so the loop never stages the test. And the CLI can't seed
+a climb from an arbitrary board. A faithful answer needs the cascade **inside `enigma.cc`**, where
+the real `-S i4q10` climb produces the boards and the finisher can reclimb — gated by the
+near-solution score detector (§6.12, AUC ~0.9) so it fires only on promising boards and skips the
+76% junk. The economics are genuinely uncertain: per near-solution board the cascade is far more
+efficient than *re-finding* one (converts 53% for ~2 climbs vs a ~4.5% near-solution rate), but the
+boards are rare and the enabling move (downhill-then-reclimb) is what restarts already do — so
+whether it nets a win hinges on that arithmetic.
+
+**Verdict — a validated component chain (53% solve on real fixable boards) with unresolved
+end-to-end economics.** Directed, reversible, and it addresses the specific failure modes that sank
+fix-and-finish (§4.8: irreversibility) and the badness heuristic (undirected). Documented for a
+future in-tool implementation; not shipped. Reproduce the component measurements:
+`eval/gain_cascade_probe.py` (dual generation, prune, full-plug ranking, cascade, and the
+cascade+reclimb solve rate, all against the real `eval/results*.tsv` boards).
+
 ---
 
 ## 5. Structural / constraint-based
