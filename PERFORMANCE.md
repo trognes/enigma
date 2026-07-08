@@ -779,6 +779,45 @@ barrier-cross is dominated by spending the compute on diversity instead.** The m
 correct and clean (byte-identical default, `-Werror` g++/clang++, clang-tidy/ASan/UBSan
 clean, 182 tests pass), kept as a documented-dominated opt-in, not recommended.
 
+### 4.8 "Fix-and-finish" — pin a converged board, free the suspects, re-climb — ❌ MEASURED, DOMINATED
+
+The idea motivated by the convexity / basin-gap story (§6.11–6.13): once a restart climb has
+converged to a board that is *mostly* right (the outlier-score, near-solution regime — ~50%+
+correct letters, 5–6+ correct plugs), don't throw it away and restart blind. Instead **fix**
+the plugs that look trustworthy, **free** the few that look wrong, and re-climb from that
+seed — a targeted finish that should need far less compute than another full restart. Tested
+as a Python prototype over `tests/eval.py` (never shipped to `enigma.cc`), at **matched
+`score_iter`** (Phase-A restarts + Phase-B finish vs the same total spent purely on restarts;
+english+german × L50–70, 60 problems/cell). Three constructions, each fixing a different
+mechanism, all lose:
+
+1. **Consensus pins** (fix plugs shared across the top converged boards): **Δ −4.3 … −11.3pp**.
+   At short lengths the top boards are *junk that agrees on junk* (the basin-gap prediction,
+   §6.11) — 19–47% of the "consensus" pins are wrong, poisoning the finish.
+2. **Quadgram-crib pins** (per-position quad badness of the best decrypt aggregated onto plug
+   contacts; fix the low-badness plugs, free the high-badness ones): **Δ −0.4 … −2.6pp** — a
+   break-even improvement, but the crib still runs on a junk board at the lengths where help
+   is wanted (pins 13–41% true at L50).
+3. **Quad-crib + adaptive gate + K=1** — finish *only* on outlier-score boards (a per-problem
+   MAD gate on the Phase-A restart-score distribution, so the finish fires exactly where the
+   board is genuinely near-solution), freeing just the single most-suspect plug: still
+   **negative even on the gated subset** — gated-only Δ **+0.1 / −2.9 / −0.9** (english
+   L50/60/70), **−5.0 / −11.5 / −2.9** (german), with fixed-pin accuracy a healthy **72–94%
+   true** on that subset. The gate worked — it isolated boards averaging 91% correct — and the
+   finish *still* lost to more restarts.
+
+**Verdict — fix-and-finish is dominated, even in the near-solution regime it was built for.**
+Two mechanisms sink it, both already mapped this file: (a) even on gated boards the pins are
+only 72–94% true, so the crib fixes *some* wrong plugs; and (b) a fixed plug is
+**irreversible** (`-s` held during the climb) — one mis-pinned plug permanently locks the
+finish into a wrong basin, whereas a plain restart keeps the full 325-move freedom and can
+wander out. Trading that freedom for a narrow search that is only as good as its crib is a bad
+trade *precisely because* the score gradient near junk is weak (§6.11–6.13): the crib cannot
+reliably separate a wrong plug from a right one at exactly the short lengths where the finish
+would need to. Three independent constructions all land negative — a greedy restart climb
+remains the thing to beat, and pinning a few plugs from a converged board never earns back the
+compute it costs. Not shipped.
+
 ---
 
 ## 5. Structural / constraint-based
