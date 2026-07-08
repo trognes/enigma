@@ -1332,6 +1332,24 @@ zero-basin tail: some short messages have the true board *not* at the score maxi
 scoring-failure / information-floor case, §6.8 / the `DM` example), unrecoverable at any R —
 why L40 exact-recovery plateaus below 100% rather than merely needing more restarts.
 
+### 6.12 Score separability, in bits/symbol — ✅ MEASURED (`eval/`)
+
+The scorer's per-symbol average is a **quadgram cross-entropy in dits** (log₁₀); × log₂10 =
+3.322 gives **bits/symbol** (per-position 4-gram surprisal, *not* the ~1–1.5 bit/char Shannon
+entropy of English — each position scores a full overlapping quadgram). Measured
+(`eval/plots/score_separation_bits.png`, english):
+
+- **Real language ≈ 13.9 bits/sym**, flat with length; **pure random letters ≈ 26.6 bits/sym**.
+  So language vs *uniform* gibberish is trivially separable — **0 % overlap at every length**
+  (d′ ≥ 12.7 even at L40).
+- **The cracking-relevant separation is language vs the best *optimized* junk** (wrong-key
+  decrypts the climb has maximized). The true board stays at ~13.9 bits; the best climbed junk
+  rises with length — **16.4 bits at L40 → 22.7 at L300**, so the margin **grows from ~2.5 to
+  ~8.8 bits**. Short messages give the climb room to overfit a wrong board toward language, so
+  the margin thins; at L40 it is only ~4–5 σ and the tails touch — a minority of junk boards
+  out-score the truth. That thin short-message margin **is** the scoring-failure / information
+  floor (§6.8, §6.11) expressed in score units, and it is why long traffic is easy and L40 hard.
+
 ---
 
 ## 7. Speed / throughput
