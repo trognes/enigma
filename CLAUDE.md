@@ -228,6 +228,14 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   small **matched-compute win** (+0.2–0.3pp mean / +0.5–0.6pp exact on short English, ~zero added
   `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
   `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
+- `--gainfix-best` **best-board-only gain cascade** (needs `-c`; mutually exclusive with `--gainfix`;
+  off by default). The fixed-cost alternative to per-convergence `--gainfix`: runs the gain cascade
+  **once, unconditionally (no score gate)**, on the single best board after all `-R` restarts (its key
+  + stecker recorded at the merge), then one finishing climb. Costs a **fixed** ~960 `score_iter`
+  independent of `-R`, so it is near-even with `--gainfix` at low `-R` and edges ahead at high `-R`
+  (at `-R 32`: +0.51pp mean vs base, ahead of per-convergence `--gainfix` at matched compute — the
+  fixed cost amortizes and the best board is reliably near-solution). Simple sweep only (not
+  `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC

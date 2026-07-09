@@ -182,6 +182,10 @@ static int opt_gainfix;
    spends its compute only on promising ones. Default -4.9 (English-quad calibrated:
    junk ~-5.3, near-solution 60%+ ~-4.8..-4.2); tune per language via --gainfix=VALUE. */
 static double opt_gainfix_gate;
+/* --gainfix-best: run the gain cascade ONCE, unconditionally (no score gate), on the
+   single best board after all restarts, instead of at every gated convergence. Only
+   one board is finished, so no gate is needed. Off by default; needs -c. */
+static int opt_gainfix_best;
 static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
                              0 (the default) = one deterministic climb from the seed,
                              no kick; N>=1 = exactly N kicked climbs, keep the best
@@ -2497,6 +2501,9 @@ struct best_result
   size_t idx = static_cast<size_t>(-1);   /* work index of the best (for the tie-break) */
   bool found = false;
   char plaintext[maxlen+1];
+  /* Winning plugboard, recorded at the merge so a post-search --gainfix-best pass can
+     reconstruct the machine (via the key from `idx`) and finish the single best board. */
+  unsigned char steckerbrett[asize];
   /* Highest score already ECHOED as a progress line -- display state only, never read
      by the merge logic, so it cannot affect which candidate wins (the -T-determinism
      contract is untouched). It can run ahead of `score`: an intermediate plugboard
@@ -2722,6 +2729,7 @@ void search_worker(machine & m,
                   best.idx = idx;
                   best.found = true;
                   memcpy(best.plaintext, m.plaintext, textlength + 1);
+                  memcpy(best.steckerbrett, m.steckerbrett, asize);   /* for --gainfix-best */
                   /* Echo the new best -- unless a progress line already showed this
                      score (a climb's last accepted move IS its converged board, so
                      reprinting it here would just duplicate the line). Ties that
@@ -3287,6 +3295,41 @@ void bruteforce(char * result)
                         rsize, gsize, next_key, schunk, restarts_par, best); });
     }
 
+  /* --gainfix-best: an alternative to the per-convergence --gainfix. Instead of firing
+     the gated cascade at every near-solution convergence, run ONE unconditional gain
+     cascade + finishing climb on the single best board after all restarts. Reconstruct
+     that board's machine from its key (best.idx) and the recorded steckerbrett. Only
+     the simple sweep records best.idx as key*restarts+restart, so it is guarded to
+     that path (no -F, no --exhaust). */
+  if (opt_gainfix_best && best.found)
+    {
+      machine & m = *machines[0];
+      size_t rg = rsize * gsize;
+      size_t rc12b = static_cast<size_t>(rc[1]) * rc[2];
+      size_t gc12b = static_cast<size_t>(gc[1]) * gc[2];
+      size_t cur_wo = static_cast<size_t>(-1);
+      int rg6[6];
+      key_to_machine(m, best.idx / restarts_par, tasks, range, rc, gc, all, rg, gsize,
+                     rc12b, gc12b, cur_wo, rg6);
+      for (int i = 0; i < asize; i++)
+        m.steckerbrett[i] = best.steckerbrett[i];
+      m.scoring = opt_scoring;
+      m.report = false;
+      int save_gf = opt_gainfix;
+      double save_gate = opt_gainfix_gate;
+      opt_gainfix = 1;
+      opt_gainfix_gate = score_min;   /* unconditional cascade on the one best board */
+      double s = hillclimb<false>(m, asize / 2);
+      opt_gainfix = save_gf;
+      opt_gainfix_gate = save_gate;
+      if (s > best.score)
+        {
+          best.score = s;
+          decode(m);
+          memcpy(best.plaintext, m.plaintext, textlength + 1);
+        }
+    }
+
   /* diagnostics: every rotor combination is analysed (brute force has no early
      exit), and each worker counted the plugboards it scored -- sum them up */
   g_keys_analysed = total_keys;
@@ -3544,6 +3587,9 @@ void help(FILE * out)
           "Quadgram-gain 2-ply directed-repair cascade at");
   fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
   fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off]");
+  fprintf(out, "  %-24s %s\n", "--gainfix-best",
+          "Run the gain cascade once, unconditionally, on");
+  fprintf(out, "  %-24s %s\n", "", "the best board after all restarts (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -3637,6 +3683,8 @@ void show_settings()
   if (opt_hillclimb && opt_gainfix)
     fprintf(stderr, "            quadgram-gain directed-repair cascade at convergence "
             "(--gainfix, near-solution gate %.2f)\n", opt_gainfix_gate);
+  if (opt_hillclimb && opt_gainfix_best)
+    fprintf(stderr, "            quadgram-gain cascade once on the best board (--gainfix-best)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" :
@@ -3726,6 +3774,7 @@ int main(int argc, char * * argv)
   opt_no_repair = 0;
   opt_gainfix = 0;
   opt_gainfix_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
+  opt_gainfix_best = 0;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -3748,7 +3797,7 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
-         OPT_NO_REPAIR, OPT_GAINFIX };
+         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3792,6 +3841,7 @@ int main(int argc, char * * argv)
       { "repair3",        no_argument,       nullptr, OPT_REPAIR3 },
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
       { "gainfix",        optional_argument, nullptr, OPT_GAINFIX },
+      { "gainfix-best",   no_argument,       nullptr, OPT_GAINFIX_BEST },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3864,6 +3914,9 @@ int main(int argc, char * * argv)
           opt_gainfix = 1;
           if (optarg != nullptr)
             opt_gainfix_gate = strtod(optarg, nullptr);
+          break;
+        case OPT_GAINFIX_BEST:
+          opt_gainfix_best = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -4149,6 +4202,15 @@ int main(int argc, char * * argv)
   /* --gainfix is a climb barrier-cross move, so it needs -c. */
   if (opt_gainfix && (! opt_hillclimb))
     fatal("Gain-cascade repair (--gainfix) needs the plugboard hill-climb (-c)");
+
+  /* --gainfix-best finishes the best board post-search; needs -c, and the simple sweep
+     (its best.idx = key*restarts+restart reconstruction does not hold under -F/--exhaust). */
+  if (opt_gainfix_best && (! opt_hillclimb))
+    fatal("Gain-cascade best-board finish (--gainfix-best) needs the plugboard hill-climb (-c)");
+  if (opt_gainfix_best && opt_gainfix)
+    fatal("--gainfix-best and --gainfix are alternatives; pick one");
+  if (opt_gainfix_best && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
+    fatal("--gainfix-best is not supported with -F or --exhaust");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */

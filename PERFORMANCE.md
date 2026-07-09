@@ -945,6 +945,29 @@ calibrated; other languages/lengths tune it via `--gainfix=GATE`. Reproduce the 
 measurements: `eval/gain_cascade_probe.py` (dual generation, prune, full-plug ranking, cascade, and
 the cascade+reclimb solve rate, all against the real `eval/results*.tsv` boards).
 
+**A best-board-only variant (`--gainfix-best`) — the fixed-cost alternative.** Instead of firing the
+gated cascade at *every* near-solution convergence, `--gainfix-best` runs the cascade **once,
+unconditionally (no score gate)**, on the single best board after all `-R` restarts, then hands it to
+one finishing climb. It reconstructs that board's machine from the winning key + recorded stecker
+(recorded at the merge), so it costs a **fixed** ~960 `score_iter` **independent of `-R`** — whereas
+per-convergence `--gainfix` costs scale (weakly, via the gate) with the number of near-solution
+convergences. A 3-way matched-compute A/B (English L40–50, 80/cell, `-J -S i4q10`):
+
+| `-R` | base %corr / exact | `--gainfix` %corr / exact | `--gainfix-best` %corr / exact | best si overhead |
+|---:|---:|---:|---:|---:|
+| 8  | 13.30 / 3.3 | 13.50 / 3.8 | 13.48 / 3.3 | +987 |
+| 16 | 18.77 / 7.5 | 18.97 / 7.9 | 19.15 / 7.5 | +984 |
+| 32 | 23.02 / 12.5 | 23.22 / 12.9 | **23.53 / 12.9** | +962 |
+
+The two variants are near-even at low `-R`; at `-R 32` the best-board finish gives the highest mean
+(+0.51pp vs base, ~+0.4pp over compute-matched base — ahead of per-convergence `--gainfix`) because
+its fixed cost amortizes and, at high `-R`, the single best board is reliably near-solution so the one
+unconditional cascade lands where it matters. So the two are peers with a `-R`-dependent trade: at low
+`-R` prefer the gated per-convergence `--gainfix` (its cost is near-zero when few boards are
+near-solution); at high `-R` `--gainfix-best` edges ahead. Both are opt-in and mutually exclusive;
+`--gainfix-best` runs only under the simple sweep (not `-F`/`--exhaust`, whose `best.idx` does not
+carry the key×restart reconstruction).
+
 ---
 
 ## 5. Structural / constraint-based
