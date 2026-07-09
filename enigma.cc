@@ -3721,13 +3721,10 @@ void help(FILE * out)
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
   fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--gainfix-best",
-          "Run the gain cascade once, unconditionally, on");
-  fprintf(out, "  %-24s %s\n", "", "the best board after all restarts (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--gainfix-best3",
-          "Like --gainfix-best but with a deeper 3-ply cascade");
-  fprintf(out, "  %-24s %s\n", "", "for 3-plug tangles; stronger finisher, near-free");
-  fprintf(out, "  %-24s %s\n", "", "at K=8 (needs -c) [off, recommended]");
+          "Gain cascade once on the best board, plus a deeper");
+  fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles; the recommended");
+  fprintf(out, "  %-24s %s\n", "", "finisher, near-free at K=8 (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -3752,11 +3749,14 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--no-repair",
           "Disable the 2-plug re-pair barrier cross");
   fprintf(out, "  %-24s %s\n", "", "(ablation/measurement flag; needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--gainfix-best",
+          "Gain cascade once on the best board; superseded");
+  fprintf(out, "  %-24s %s\n", "", "by --gainfix-best3, near-free (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--gainfix[=GATE]",
           "Quadgram-gain 2-ply directed-repair cascade at");
   fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
   fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off];");
-  fprintf(out, "  %-24s %s\n", "", "prefer --gainfix-best (kept for -F/--exhaust)");
+  fprintf(out, "  %-24s %s\n", "", "prefer --gainfix-best3 (kept for -F/--exhaust)");
   fprintf(out, "  %-24s %s\n", "--exhaust E",
           "Force E extra plug pairs among the free letters,");
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
