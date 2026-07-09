@@ -278,6 +278,10 @@ static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of t
    reach. Display-only -- it does not affect which candidate wins, so -T-deterministic
    results are preserved. Verbose; off by default. */
 static bool opt_dump_restarts;
+/* --restart-tt: maintain an in-binary Zobrist transposition table of converged restart
+   boards and print a basin-collapse summary (distinct optima + hit histogram) at the end.
+   Diagnostic only (never gates the winner), off by default. See the TT module below. */
+static bool opt_restart_tt;
 
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
@@ -582,6 +586,145 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
 }
 
 
+/* --- Restart transposition table (--restart-tt) -----------------------------
+   A Zobrist-hashed table of converged restart plugboards, for measuring restart
+   basin collapse in-binary: the distinct-optima dedup the external --dump-restarts
+   harness does, plus the full hit count per basin. Diagnostic only -- it never
+   affects which candidate wins, so results stay -T-deterministic; and since the
+   multiset of converged boards is a deterministic function of the work items, the
+   distinct-count and hit-histogram are themselves -T-invariant. The Zobrist words
+   are a FIXED deterministic table (splitmix64 from a constant, not random_device
+   or opt_seed) so the hash and every stat derived from it are reproducible. Each
+   bucket stores the exact board (so a hash collision is a probe-on, never a false
+   merge), its score, and how many restarts collapsed onto it. */
+static const int g_npairs = asize * (asize - 1) / 2;   /* 325 unordered letter pairs */
+static uint64_t g_zobrist[g_npairs];
+
+static void init_zobrist()
+{
+  uint64_t s = 0x9E3779B97F4A7C15ULL;   /* fixed seed -> reproducible across runs/threads */
+  for (int i = 0; i < g_npairs; i++)
+    {
+      s += 0x9E3779B97F4A7C15ULL;        /* splitmix64 */
+      uint64_t z = s;
+      z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+      z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+      z ^= z >> 31;
+      g_zobrist[i] = z;
+    }
+}
+
+/* Index of the unordered pair (a<b) in the lexicographic 0..324 order make_pairtab
+   enumerates (i<j): pairs with first element < a, plus the offset within a. */
+static inline int pair_index(int a, int b)
+{
+  return a * (asize - 1) - a * (a - 1) / 2 + (b - a - 1);
+}
+
+/* XOR of the Zobrist word of every set plug pair (each counted once, low<high). */
+static uint64_t board_hash(const unsigned char * steck)
+{
+  uint64_t h = 0;
+  for (int j = 0; j < asize; j++)
+    if (steck[j] > j)
+      h ^= g_zobrist[pair_index(j, steck[j])];
+  return h;
+}
+
+struct tt_bucket
+{
+  unsigned char board[asize];
+  double score;
+  uint32_t count;
+  bool occupied;
+};
+
+struct restart_tt
+{
+  tt_bucket * slots = nullptr;
+  size_t mask = 0;          /* size - 1 (size is a power of two) */
+  size_t nentries = 0;      /* distinct converged boards */
+  size_t nclimbs = 0;       /* total touches */
+  bool full = false;        /* set if we ever ran out of slots (then stop inserting) */
+};
+
+/* next power of two >= want, clamped to [1024, 4M slots (~160 MB)] */
+static size_t tt_size_for(size_t want)
+{
+  size_t n = 1024;
+  while (n < want && n < (static_cast<size_t>(1) << 22))
+    n <<= 1;
+  return n;
+}
+
+static void tt_alloc(restart_tt & tt, size_t want)
+{
+  size_t n = tt_size_for(want);
+  tt.slots = new tt_bucket[n]();   /* value-init: occupied == false everywhere */
+  tt.mask = n - 1;
+  tt.nentries = 0;
+  tt.nclimbs = 0;
+  tt.full = false;
+}
+
+static void tt_free(restart_tt & tt)
+{
+  delete[] tt.slots;
+  tt.slots = nullptr;
+}
+
+/* Insert the board or bump its counter. Open addressing, linear probe, exact compare. */
+static void tt_touch(restart_tt & tt, const unsigned char * steck, double score)
+{
+  tt.nclimbs++;
+  uint64_t h = board_hash(steck);
+  size_t i = h & tt.mask;
+  size_t probed = 0;
+  while (tt.slots[i].occupied)
+    {
+      if (memcmp(tt.slots[i].board, steck, asize) == 0)
+        {
+          tt.slots[i].count++;
+          return;
+        }
+      i = (i + 1) & tt.mask;
+      if (++probed > tt.mask)          /* table full -> give up (should not happen if sized right) */
+        { tt.full = true; return; }
+    }
+  memcpy(tt.slots[i].board, steck, asize);
+  tt.slots[i].score = score;
+  tt.slots[i].count = 1;
+  tt.slots[i].occupied = true;
+  tt.nentries++;
+}
+
+/* Summarise basin collapse: distinct optima, the heaviest basin, and Shannon entropy of
+   the hit distribution (uniform over N basins -> log2 N; all-collapsed -> 0). */
+static void tt_report(const restart_tt & tt)
+{
+  if (tt.nclimbs == 0)
+    return;
+  uint32_t maxc = 0;
+  double H = 0.0;
+  double tot = static_cast<double>(tt.nclimbs);
+  for (size_t i = 0; i <= tt.mask; i++)
+    if (tt.slots[i].occupied)
+      {
+        uint32_t c = tt.slots[i].count;
+        if (c > maxc)
+          maxc = c;
+        double p = static_cast<double>(c) / tot;
+        H -= p * log2(p);
+      }
+  fprintf(stderr,
+          "restart-tt: %zu distinct optima over %zu climbs "
+          "(max %u hits on one basin, entropy %.2f bits%s)\n",
+          tt.nentries, tt.nclimbs, maxc, H, tt.full ? ", TABLE FULL -- undercount" : "");
+}
+
+static restart_tt g_restart_tt;
+static std::mutex g_tt_mutex;
+
 /* --- machine model: setup, rotor stepping, precompute ------------------- */
 
 void init()
@@ -597,6 +740,8 @@ void init()
   for (int i=0; i < reflector_count; i++)
     for (int j=0; j < asize; j++)
       reflector[i][j] = char2num(reflector_string[i][j]);
+
+  init_zobrist();
 }
 
 /* Reset the plugboard to identity + the fixed -s pairs. Board-only (the fixed-letter set is
@@ -2569,6 +2714,11 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   double score = optimize_once(m, & rng);
   if (opt_dump_restarts)
     dump_restart(m, score);
+  if (opt_restart_tt)
+    {
+      std::lock_guard<std::mutex> lock(g_tt_mutex);
+      tt_touch(g_restart_tt, m.steckerbrett, score);
+    }
   return score;
 }
 
@@ -3320,6 +3470,9 @@ void bruteforce(char * result)
       ? units_per_key : 1;
   size_t work_items = total_keys * restarts_par;
 
+  if (opt_restart_tt)
+    tt_alloc(g_restart_tt, work_items);
+
   /* never start more threads than there is work to hand out */
   int nthreads = opt_threads;
   if (work_items < static_cast<size_t>(nthreads))
@@ -3487,6 +3640,12 @@ void bruteforce(char * result)
   g_plugboards_scored = 0;
   for (int t = 0; t < nthreads; t++)
     g_plugboards_scored += machines[t]->plugboards_scored;
+
+  if (opt_restart_tt)
+    {
+      tt_report(g_restart_tt);
+      tt_free(g_restart_tt);
+    }
 
   for (int t = 0; t < nthreads; t++)
     delete machines[t];
@@ -3771,6 +3930,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--dump-restarts",
           "With -c, print each converged restart's score");
   fprintf(out, "  %-24s %s\n", "", "and board to stderr (verbose) [off]");
+  fprintf(out, "  %-24s %s\n", "--restart-tt",
+          "With -c, hash converged restart boards into a");
+  fprintf(out, "  %-24s %s\n", "", "transposition table; print a basin-collapse");
+  fprintf(out, "  %-24s %s\n", "", "summary (distinct optima + hits) at the end [off]");
   fprintf(out, "  %-24s %s\n", "--infl-order",
           "Experimental: influence-ordered first-improvement");
   fprintf(out, "  %-24s %s\n", "", "(implies -I; measured, dominated by -J;");
@@ -3948,6 +4111,7 @@ int main(int argc, char * * argv)
   opt_gainfix_best = 0;
   opt_gainfix3 = 0;
   opt_gainfix_best3 = 0;
+  opt_restart_tt = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -3970,7 +4134,7 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
-         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3 };
+         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3, OPT_RESTART_TT };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -4010,6 +4174,7 @@ int main(int argc, char * * argv)
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
+      { "restart-tt",     no_argument,       nullptr, OPT_RESTART_TT },
       { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
       { "repair3",        no_argument,       nullptr, OPT_REPAIR3 },
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
@@ -4123,6 +4288,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_DUMP:
           opt_dump_restarts = true;
+          break;
+        case OPT_RESTART_TT:
+          opt_restart_tt = true;
           break;
         case 'e':
           opt_seed = strtoull(optarg, nullptr, 10);
@@ -4407,6 +4575,8 @@ int main(int argc, char * * argv)
   /* --dump-restarts is a per-restart climb diagnostic, so it needs -c. */
   if (opt_dump_restarts && (! opt_hillclimb))
     fatal("--dump-restarts needs the plugboard hill-climb (-c)");
+  if (opt_restart_tt && (! opt_hillclimb))
+    fatal("--restart-tt needs the plugboard hill-climb (-c)");
 
   /* --true-key reports the true key's tier-1 rank, so it needs the pre-filter (-F);
      it is a standard-Enigma diagnostic and parses into g_tk_* here. */

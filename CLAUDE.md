@@ -126,6 +126,23 @@ best-board hit-count across the `-R` restarts (§3, via `--dump-restarts`). The 
 `--true-key`/`--dump-restarts` flags are off-by-default binary diagnostics (default
 paths byte-identical and bench-neutral, ASan/TSan-clean).
 
+A third restart-diversity diagnostic, **`--restart-tt`**, does the basin dedup *in-binary*
+instead of via the external `--dump-restarts` harness: it hashes each converged restart
+board into a **Zobrist transposition table** (325 fixed pseudorandom 64-bit words, one per
+unordered letter pair, XORed over the set plugs; a deterministic splitmix64 seed, so the hash
+is reproducible and `-T`-invariant) and, at the end, prints a one-line **basin-collapse
+summary** — distinct optima, total climbs, the heaviest basin's hit count, and the Shannon
+entropy of the hit distribution (`log2 N` = maximally diverse, `0` = full collapse). Each
+bucket stores the **exact board** (so a hash collision is a probe-on, never a false merge),
+its score, and its hit count; open-addressing, linear-probe, sized to the work items. It is
+diagnostic-only — it never gates which candidate wins, and because the multiset of converged
+boards is a deterministic function of the work items, the reported stats are `-T`-invariant
+(verified T1 ≡ T4). Off by default (needs `-c`; default path byte-identical, all tests pass).
+Measured aside: at the standard `--random 10` kick, exact-board collapse is near-zero (restarts
+land on distinct boards, differing by at least a spurious plug), so meaningful collapse shows
+only as the kick shrinks (`--random 0` → 1 basin, entropy 0). The TT is the intended scaffold
+for the diversity-driven search ideas (a tabu visited-set, GA population dedup).
+
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
 are kept; everything else (spaces, punctuation, case) is stripped. The n-gram
