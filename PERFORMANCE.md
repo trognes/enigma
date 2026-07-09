@@ -1082,8 +1082,25 @@ wall-time): the reformulated best3 beats 2-ply by **~+1.3pp mean %-correct (Engl
 R)** and **+2…+5pp exact recovery** — roughly 3× the old explicit-plug3 best3's ~+0.4pp, at ~2–3 ms wall.
 The gain is real but still a **thin-slice** effect: it concentrates on near-solution 3-plug tangles, so
 averaged over *all* trials (mostly deep junk) it is the modest end-to-end number, not a headline. Shipped
-as the opt-in `--gainfix-best3`; the "sacrifice + reclimb" idea also generalises to deeper tangles (commit
-a 3-plug sacrifice) without any combinatorial plug search — the reclimb handles completion at any depth.
+as the opt-in `--gainfix-best3`.
+
+**4-ply (3-plug sacrifice) — ❌ MEASURED, REJECTED. The depth stops at 3-ply.** The "sacrifice +
+reclimb" idea *mechanically* generalises to deeper tangles — commit a **3-plug** sacrifice
+(`plug1+plug2+plug3`, all downhill), rank `(plug1,plug2,plug3)` triples by 3-plug score, reclimb the
+top-K — with no combinatorial plug search, since the reclimb handles completion at any depth. A probe
+(env-gated `gain_cascade_4ply`, `N1=N2=13, N3=6`, english+german L40, R80) shows it is **worthless and
+Pareto-dominated by a wide margin**: `best3+4ply` scores **33.06 mean / 20.0 exact** vs plain `best3`'s
+**33.25 / 20.0** — *identical* exact recovery, a hair lower mean — while nearly doubling `score_iter`
+(189k → 327k) and adding **+41 ms wall (+50%)**. Of the **90 search-failures** in the `best3` residual
+(only 6 were scoring-floor), 4-ply newly solved **0**. And the +41 ms it burns buys, via `-R` instead,
+`best3` at R200 — which runs in **less** wall (92.7 ms < 124 ms) and recovers **37.8 mean / 25.8 exact**
+(+7 boards). The reason is diagnostic: those 90 residual misses are **wrong-basin** failures — the
+converged board is not near the truth, so no *local* directed repair (2-, 3-, or 4-plug) reaches it; only
+a different **restart** *lands* near the solution (restarts crack ~7, a deeper sacrifice cracks none). The
+gain cascade's entire value is completing an *already-near* board, and the 2-plug sacrifice + reclimb
+(3-ply) already reaches everything greedily completable from there; a third forced downhill plug only
+spends compute on triples that lead nowhere new. So the sacrifice depth is fixed at 3-ply — deeper is
+strictly wasted compute, better spent on `-R`. (Probe discarded; this negative result is the artifact.)
 
 ## 5. Structural / constraint-based
 
