@@ -90,6 +90,19 @@ a local optimum) via an oracle run — telling you which lever to pull. (See
 `archived/CODE_REVIEW_HISTORY.md` §9 for the algorithmic ideas this is meant to measure; on the
 v1.1.0 baseline every miss is a *search* failure.)
 
+> **When evaluating a *search* change, exclude the scoring-failure cases first.**
+> A scoring failure — the true board is not the top-scoring one (operationally:
+> a non-exact trial with `recovered_score ≥ true_score`) — is an **information
+> floor of the scoring model**, unrecoverable by *any* search, so leaving it in
+> the stats only adds noise that no search improvement can move. The current work
+> is improving **search** (restarts, `-F`, SA, the `--gainfix*` finishers, tabu/GA),
+> not scoring, so measure search levers on the **search-failure + exact** population
+> only (drop the scoring failures via the oracle `recovered_score`/`true_score`, as
+> `SPLIT=1` classifies them). Judge on that filtered mean %-correct / exact rate;
+> a change that only shuffles unfixable scoring failures is not a real search win.
+> (A scoring change is the opposite case and *is* measured on the full population —
+> its whole job is to shrink the scoring-failure floor.)
+
 `crack_quality.py` also carries three opt-in test modes from `CRACKQUALITY_TESTS.md`
 (all off by default, the normal flow unchanged): `WILDCARD` wildcards the rotor key
 for the **scoring-failure gate** (§1); `FILTERRECALL=1` reports the true key's `-F`

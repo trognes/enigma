@@ -31,6 +31,20 @@ local optima) or where they prepare the ground for a *not-yet-built full-crack
 tier* (rotor key also unknown), where rotor-key discrimination may expose genuine
 scoring failures.
 
+> **Measurement rule for search work: exclude the scoring-failure cases.** Because
+> the goal now is improving **search** (not scoring), evaluate every search lever
+> (restarts, `-F`, SA, the `--gainfix*` finishers, and any future tabu/GA) on the
+> **search-failure + exact** population only — drop the trials where the true board
+> is *not* the top-scoring one, since no search can ever reach them. Operationally a
+> trial is a scoring failure when it is **non-exact and `recovered_score ≥ true_score`**
+> (the converged board already scores at least as high as the truth — the information
+> floor); `SPLIT=1`, or the oracle `recovered_score`/`true_score` columns in the
+> `eval/results-*.tsv` baselines, classify them. Leaving them in only injects noise a
+> search change cannot move (and, for an *unconditional* finisher like `--gainfix-best`,
+> they are where score-chasing can even *cost* exact hits — §4.10). A scoring change is
+> the mirror case: it *is* judged on the full population, because shrinking that floor
+> is its entire job.
+
 **Already shipped** (do not re-propose; tune only): steepest-ascent hill-climb
 (switch / remove / gated re-pair moves); random restarts `-R`/`--restarts` with a
 `--random`-sized kick (default `k=10` pairs); staged schedule `--score` with the general
