@@ -1265,7 +1265,8 @@ static bool try_repair_3(machine & m, double cur_score)
    over the whole shortlist per plug1, so cascade cost is ~CAP + N1*CAP score_iter. */
 static const int GAINFIX_CAP = 25;
 static const int GAINFIX_N1  = 6;
-static const int GAINFIX_N2  = 6;   /* --gainfix3: intermediate plug2 beam (plug3 = top-1) */
+static const int GAINFIX_N2  = 6;   /* --gainfix3: intermediate plug2 beam */
+static const int GAINFIX_K3  = 8;   /* --gainfix3: # of sacrifice pairs reclimbed */
 
 /* Form plug a-b in place, ejecting a's and b's old partners to self-steckered
    (an "add-with-eject" — a free endpoint is a no-op eject). */
@@ -1445,16 +1446,20 @@ static bool gain_cascade(machine & m, double cur_score)
   return found;
 }
 
-/* --gainfix3: the 3-ply generalisation of gain_cascade, a deeper escalation for 3-plug
-   tangles the 2-ply pair can't cross. Commits plug1 AND plug2 (both possibly downhill) to
-   progressively un-mask the completing plug3, and keeps the best net-positive TRIPLE. Beams:
-   plug1 top-GAINFIX_N1, plug2 (intermediate) top-GAINFIX_N2, plug3 (completing) = the single
-   best-scoring candidate (the un-masked completing plug is reliably top-1 -- measured, so no
-   plug3 beam is needed). Cost ~ (1 + N1 + N1*N2) candidate scans, so it is the heavy tier and
-   is tried only when the 2-ply cascade found nothing. template<bool EX>/plug_fixed like the
-   rest; -T-deterministic; PERFORMANCE.md 4.11. */
+template<bool EX> static double hillclimb(machine & m, int max_pairs);   /* fwd: reclimb below */
+
+/* --gainfix3 ("sacrifice + reclimb"): a deeper escalation for 3-plug tangles the 2-ply pair
+   can't cross, tried only when the 2-ply cascade found nothing. Rank the (plug1,plug2)
+   SACRIFICE pairs (both plugs, possibly downhill) by their 2-plug score, and for the top-K
+   commit the sacrifice and run a full PLAIN reclimb -- letting the ordinary climb find the
+   completing plug(s) AND shed spurious ones -- keeping the best-scoring result. No explicit
+   plug3 search: the completing plug is the top improving move after the sacrifice, so the
+   reclimb finds it (measured), which is both simpler and recovers MORE than committing one
+   fixed completing plug (a full climb per sacrifice beats a single triple; PERFORMANCE.md
+   4.11). The reclimb runs with gainfix off -> no recursion, capped at the same max_pairs.
+   template<bool EX>/plug_fixed like the rest; -T-deterministic. */
 template<bool EX>
-static bool gain_cascade_3ply(machine & m, double cur_score)
+static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
 {
   if (m.scoring != SCORE_QUAD || textlength < 8)
     return false;
@@ -1489,14 +1494,14 @@ static bool gain_cascade_3ply(machine & m, double cur_score)
       int so = order1[k]; order1[k] = order1[bi]; order1[bi] = so;
     }
 
-  double best = cur_score;
-  bool found = false;
-  int ba1 = 0, bb1 = 0, ba2 = 0, bb2 = 0, ba3 = 0, bb3 = 0;
-  unsigned char saveS1[asize], saveS2[asize];
-  unsigned char ca2[GAINFIX_CAP], cb2[GAINFIX_CAP], ca3[GAINFIX_CAP], cb3[GAINFIX_CAP];
+  /* build the (plug1,plug2) sacrifice boards + their 2-plug scores */
+  const int MAXP = GAINFIX_N1 * GAINFIX_N2;
+  double pscore[MAXP];
+  unsigned char pboard[MAXP][asize];
+  int npair = 0;
+  unsigned char saveS1[asize], ca2[GAINFIX_CAP], cb2[GAINFIX_CAP];
   double sc2[GAINFIX_CAP];
   int order2[GAINFIX_CAP];
-
   for (int t = 0; t < n1; t++)
     {
       int k1 = order1[t];
@@ -1504,8 +1509,7 @@ static bool gain_cascade_3ply(machine & m, double cur_score)
       gainfix_apply(steck, ca[k1], cb[k1]);               /* plug1 -> S1 (may be downhill) */
       for (int i = 0; i < asize; i++) saveS1[i] = steck[i];
       int nc2 = gainfix_candidates<EX>(m, ca2, cb2, GAINFIX_CAP);
-      /* rank plug2 (intermediate) by the full score, take the top-N2 */
-      for (int k = 0; k < nc2; k++)
+      for (int k = 0; k < nc2; k++)                       /* rank plug2 by 2-plug score */
         {
           gainfix_apply(steck, ca2[k], cb2[k]);
           sc2[k] = score_iter(m);
@@ -1527,33 +1531,47 @@ static bool gain_cascade_3ply(machine & m, double cur_score)
             continue;
           for (int i = 0; i < asize; i++) steck[i] = saveS1[i];
           gainfix_apply(steck, ca2[k2], cb2[k2]);         /* plug2 -> S2 (may be downhill) */
-          for (int i = 0; i < asize; i++) saveS2[i] = steck[i];
-          int nc3 = gainfix_candidates<EX>(m, ca3, cb3, GAINFIX_CAP);
-          for (int k = 0; k < nc3; k++)                   /* completing plug3: keep best net */
-            {
-              if ((ca3[k] == ca[k1] && cb3[k] == cb[k1]) ||
-                  (ca3[k] == ca2[k2] && cb3[k] == cb2[k2]))
-                continue;
-              gainfix_apply(steck, ca3[k], cb3[k]);
-              double s = score_iter(m);
-              for (int i = 0; i < asize; i++) steck[i] = saveS2[i];
-              if (s > best)
-                {
-                  best = s; found = true;
-                  ba1 = ca[k1]; bb1 = cb[k1];
-                  ba2 = ca2[k2]; bb2 = cb2[k2];
-                  ba3 = ca3[k]; bb3 = cb3[k];
-                }
-            }
+          pscore[npair] = sc2[k2];
+          for (int i = 0; i < asize; i++) pboard[npair][i] = steck[i];
+          npair++;
         }
     }
+
+  /* rank the sacrifice pairs by 2-plug score, take the top-K */
+  int po[MAXP];
+  for (int k = 0; k < npair; k++) po[k] = k;
+  int K = npair < GAINFIX_K3 ? npair : GAINFIX_K3;
+  for (int k = 0; k < K; k++)
+    {
+      int bi = k;
+      for (int i = k + 1; i < npair; i++)
+        if (pscore[po[i]] > pscore[po[bi]]) bi = i;
+      int so = po[k]; po[k] = po[bi]; po[bi] = so;
+    }
+
+  /* commit each top-K sacrifice and run a PLAIN reclimb (gainfix off -> no recursion), keep
+     the best result -- the reclimb finds the completing plug(s) and sheds spurious ones */
+  double best = cur_score;
+  bool found = false;
+  unsigned char bestboard[asize];
+  int save_gf = opt_gainfix, save_gf3 = opt_gainfix3;
+  opt_gainfix = 0; opt_gainfix3 = 0;
+  for (int k = 0; k < K; k++)
+    {
+      for (int i = 0; i < asize; i++) steck[i] = pboard[po[k]][i];
+      double s = hillclimb<EX>(m, max_pairs);
+      if (s > best)
+        {
+          best = s; found = true;
+          for (int i = 0; i < asize; i++) bestboard[i] = steck[i];
+        }
+    }
+  opt_gainfix = save_gf; opt_gainfix3 = save_gf3;
 
   for (int i = 0; i < asize; i++) steck[i] = saveS[i];     /* restore original board */
   if (found)
     {
-      gainfix_apply(steck, ba1, bb1);
-      gainfix_apply(steck, ba2, bb2);
-      gainfix_apply(steck, ba3, bb3);
+      for (int i = 0; i < asize; i++) steck[i] = bestboard[i];
       report_climb_progress(m, best);
     }
   return found;
@@ -1935,7 +1953,7 @@ static double hillclimb(machine & m, int max_pairs)
       if ((! opt_no_repair && try_repair<EX>(m, cur))
           || (opt_repair3 && try_repair_3<EX>(m, cur))
           || (opt_gainfix && gain_cascade<EX>(m, cur))
-          || (opt_gainfix3 && gain_cascade_3ply<EX>(m, cur)))
+          || (opt_gainfix3 && gain_cascade_3ply<EX>(m, cur, max_pairs)))
         progress = true;
     }
   while (progress);
