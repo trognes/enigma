@@ -1087,20 +1087,25 @@ as the opt-in `--gainfix-best3`.
 **4-ply (3-plug sacrifice) — ❌ MEASURED, REJECTED. The depth stops at 3-ply.** The "sacrifice +
 reclimb" idea *mechanically* generalises to deeper tangles — commit a **3-plug** sacrifice
 (`plug1+plug2+plug3`, all downhill), rank `(plug1,plug2,plug3)` triples by 3-plug score, reclimb the
-top-K — with no combinatorial plug search, since the reclimb handles completion at any depth. A probe
-(env-gated `gain_cascade_4ply`, `N1=N2=13, N3=6`, english+german L40, R80) shows it is **worthless and
-Pareto-dominated by a wide margin**: `best3+4ply` scores **33.06 mean / 20.0 exact** vs plain `best3`'s
-**33.25 / 20.0** — *identical* exact recovery, a hair lower mean — while nearly doubling `score_iter`
-(189k → 327k) and adding **+41 ms wall (+50%)**. Of the **90 search-failures** in the `best3` residual
-(only 6 were scoring-floor), 4-ply newly solved **0**. And the +41 ms it burns buys, via `-R` instead,
-`best3` at R200 — which runs in **less** wall (92.7 ms < 124 ms) and recovers **37.8 mean / 25.8 exact**
-(+7 boards). The reason is diagnostic: those 90 residual misses are **wrong-basin** failures — the
-converged board is not near the truth, so no *local* directed repair (2-, 3-, or 4-plug) reaches it; only
-a different **restart** *lands* near the solution (restarts crack ~7, a deeper sacrifice cracks none). The
-gain cascade's entire value is completing an *already-near* board, and the 2-plug sacrifice + reclimb
-(3-ply) already reaches everything greedily completable from there; a third forced downhill plug only
-spends compute on triples that lead nowhere new. So the sacrifice depth is fixed at 3-ply — deeper is
-strictly wasted compute, better spent on `-R`. (Probe discarded; this negative result is the artifact.)
+top-K — with no combinatorial plug search, since the reclimb handles completion at any depth. Probed
+env-gated (`gain_cascade_4ply`, english+german L40, R80) with a proper **K-sweep** (the 2-plug sweep's
+lesson — the winning sacrifice is not reliably top-ranked, so a small K under-tests). At the `6/6/6`
+beam (216 triples) sweeping `K = 6,8,12,16,20,24`, 4-ply recovers **at most ~1 of the 90 search-failures**
+in the `best3` residual (fixes by K: `1,1,0,0,1,1` — **flat noise, no K-trend**), for mean/exact of
+**33.7/20.8** at K=6 vs `best3`'s **33.25/20.0**. This is the qualitative tell: the depth-2 K-sweep rose
+**monotonically to K=169** (genuine winning pairs spread across ranks), whereas the depth-3 sweep is flat
+— there essentially are no winning triples the 2-plug sacrifice + reclimb didn't already reach, so the
+odd +1 is a single lucky board, not a systematic effect. (A wider `13/13/6, K=8` probe found **0** — an
+artifact of taking the top-8 from a ~1000-deep triple pool; the tighter beam is what surfaces the ~1.)
+And it stays **Pareto-dominated by a wide margin**: the best 4-ply point (K=6, **96 ms**, ~+15 ms/+50%
+score_iter over `best3`) is beaten outright by `best3` at **R160 (87 ms, 24.2 exact)** and **R200 (91 ms,
+25.8 exact)** — both *cheaper* in wall time and recovering **~4–5 more boards**. The reason is diagnostic:
+those 90 residual misses are **wrong-basin** failures — the converged board is not near the truth, so no
+*local* directed repair (2-, 3-, or 4-plug) reaches it; only a different **restart** *lands* near the
+solution (R200 cracks ~7, a deeper sacrifice ~1 at noise). The gain cascade's entire value is completing
+an *already-near* board, and the 2-plug sacrifice + reclimb (3-ply) already reaches everything greedily
+completable from there. So the sacrifice depth is fixed at 3-ply — deeper is wasted compute, better spent
+on `-R`. (Probe discarded; this negative result is the artifact.)
 
 ## 5. Structural / constraint-based
 
