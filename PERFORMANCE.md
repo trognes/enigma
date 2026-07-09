@@ -1047,8 +1047,12 @@ completing plug(s) *and* shed spurious ones — keeping the best result. No plug
 escalated (2-ply-fail) boards, "commit best-K + reclimb" **matches** the explicit 3-ply at K=6 (48%) and
 **beats** it at K=12 (61%): a full climb per sacrifice recovers more than committing one fixed completing
 plug. The winning sacrifice is *not* reliably top-ranked by 2-plug score (spread across ranks 0–11), so
-K must be moderate, not 1. Implementation: the internal reclimb reuses `hillclimb` with the gainfix flags
-saved+cleared (plain climb, no recursion), capped at the same `max_pairs`; `-T`-deterministic.
+K must be moderate, not 1. A **full K-sweep in the real capped tool** (K=1…24, `-R 80`, english+german
+L40) confirms **K=8 is the knee**: mean %-correct and exact recovery rise steeply through K=8 (+2.0pp
+mean / +3.3pp exact vs 2-ply) then **flatline from K=8 to K=20** while `score_iter` climbs ~+1000/K — so
+everything past 8 is pure cost, and `GAINFIX_K3 = 8` is fixed. Implementation: the internal reclimb
+reuses `hillclimb` with the gainfix flags saved+cleared (plain climb, no recursion), capped at the same
+`max_pairs`; `-T`-deterministic.
 
 **Real tool, capped @10, exact recovery.** On ≥80%-base non-exact boards, best3 solves **56% of the
 fixable** vs 2-ply's **41%** (+15pp) — the cap hurts 2-ply more than best3 (2-ply leans on an unconstrained
