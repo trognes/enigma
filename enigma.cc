@@ -3319,9 +3319,19 @@ void bruteforce(char * result)
       double save_gate = opt_gainfix_gate;
       opt_gainfix = 1;
       opt_gainfix_gate = score_min;   /* unconditional cascade on the one best board */
-      double s = hillclimb<false>(m, asize / 2);
+      /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
+         every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
+         the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
+         raise the noisy short-message quad score while hurting the truth (the over-plugging
+         avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
+      int fin_cap = opt_stages[opt_nstages - 1].cap;
+      double s = hillclimb<false>(m, fin_cap);
       opt_gainfix = save_gf;
       opt_gainfix_gate = save_gate;
+      /* Monotonic by construction: replace the best board ONLY when the finish scores
+         strictly higher, so gainfix-best never returns a worse-scoring board than the
+         search already found (a truth-vs-score chase at the information floor is a
+         separate matter -- unfixable by a score-only rule; see PERFORMANCE.md 4.10). */
       if (s > best.score)
         {
           best.score = s;
