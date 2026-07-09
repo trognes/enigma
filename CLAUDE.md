@@ -160,7 +160,10 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 > **Recommended vs. not.** The proven-good search knobs are `-c` + `-R` restarts with `-q`
 > quad scoring, `-S i4q10` staging, `-J` (dynamic move order, wins the realistic ~10-plug
-> regime), `-M` (with a tight cap), and `--gainfix-best` (Pareto-neutral-or-better finisher).
+> regime), `-M` (with a tight cap), and the best-board finishers `--gainfix-best` /
+> `--gainfix-best3` (both Pareto-neutral-or-better; `--gainfix-best3` is the stronger of the
+> two — strictly ≥ `--gainfix-best` at its near-free default K=8, so it is the better default
+> finisher).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-I`, `--infl-order`, `-F`, `--repair3`, `--no-repair`,
@@ -274,7 +277,8 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   recovery does saturate at extreme `-R` (all modes tie once restarts alone find every recoverable
   board — the residual is the scoring-failure floor), but the mean gain persists. Simple sweep only
   (not `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
-- `--gainfix-best3` **best-board finisher with a deeper 3-plug-tangle escalation** (needs `-c`;
+- `--gainfix-best3` **best-board finisher with a deeper 3-plug-tangle escalation** (**recommended** —
+  the stronger of the two finishers, strictly ≥ `--gainfix-best` at its near-free default K=8; needs `-c`;
   mutually exclusive with `--gainfix`/`--gainfix-best`; off by default). Like `--gainfix-best`, but the
   once-only best-board finisher also runs a **"sacrifice + reclimb"** step when the 2-ply cascade finds
   nothing: it ranks the `(plug1,plug2)` sacrifice pairs by 2-plug score and, for the top-`K` (K=8),

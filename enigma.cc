@@ -3725,8 +3725,9 @@ void help(FILE * out)
           "Run the gain cascade once, unconditionally, on");
   fprintf(out, "  %-24s %s\n", "", "the best board after all restarts (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--gainfix-best3",
-          "Like --gainfix-best but with a deeper 3-ply");
-  fprintf(out, "  %-24s %s\n", "", "cascade escalation for 3-plug tangles (needs -c) [off]");
+          "Like --gainfix-best but with a deeper 3-ply cascade");
+  fprintf(out, "  %-24s %s\n", "", "for 3-plug tangles; stronger finisher, near-free");
+  fprintf(out, "  %-24s %s\n", "", "at K=8 (needs -c) [off, recommended]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -3789,7 +3790,7 @@ void help(FILE * out)
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --score i4q10 --random 10 -R 40 -q -l english\n");
+  fprintf(out, "  greedy: -c -J --gainfix-best3 --score i4q10 --random 10 -R 40 -q -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score q10 -R 12 -q -l english\n");
   fprintf(out, "\n");
 }
