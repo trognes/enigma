@@ -899,24 +899,33 @@ tangle is fixed and the score jumps, the ordinary climb resolves the rest. On re
 search-failure boards with **2–4** wrong plugs, **cascade-fix + reclimb solves 53%** (vs **8%**
 for reclimb alone), lifting mean correct-plugs **6.8 → 8.6**.
 
-**What's open — the end-to-end matched-compute verdict.** Does gain-cascade finishing beat spending
-the same compute on more restarts? *The prototype cannot answer it*: its simplified quad-only
-Python climb (no IC pre-pass) is too weak to *produce* near-solution boards (25 problems × 6
-restarts at L60 → 150 boards, all junk), so the loop never stages the test. And the CLI can't seed
-a climb from an arbitrary board. A faithful answer needs the cascade **inside `enigma.cc`**, where
-the real `-S i4q10` climb produces the boards and the finisher can reclimb — gated by the
-near-solution score detector (§6.12, AUC ~0.9) so it fires only on promising boards and skips the
-76% junk. The economics are genuinely uncertain: per near-solution board the cascade is far more
-efficient than *re-finding* one (converts 53% for ~2 climbs vs a ~4.5% near-solution rate), but the
-boards are rare and the enabling move (downhill-then-reclimb) is what restarts already do — so
-whether it nets a win hinges on that arithmetic.
+**Now implemented in-tool as the opt-in `--gainfix` flag** (byte-identical default; needs `-c`;
+quad-only). The cascade fires at each quad-climb convergence and, on success, hands the improved
+board back to the cheap climb to finish — the reclimb amplification comes for free from the existing
+`do/while(progress)` loop. It reuses the tool's precomputed rotor core (`rows[j]`) so the entry-side
+(reciprocal) candidate is machine-exact, and is `-T`-deterministic (no RNG, fixed candidate order).
+It is **gated by a near-solution per-symbol score threshold** (`--gainfix=GATE`, default `-4.9`,
+English-quad calibrated: junk ~-5.3, near-solution 60%+ ~-4.8…-4.2) so it spends its ~`CAP + N1·CAP`
+`score_iter` per fire only on promising boards and skips the ~76% junk — verified: on an easy
+(solvable) message gated `--gainfix` is byte-for-byte the baseline `score_iter`, while ungated
+(`--gainfix=-99`) adds ~7%. Correct/clean: 182 tests pass, `-Werror` g++/clang++, ASan/UBSan and
+clang-tidy clean.
 
-**Verdict — a validated component chain (53% solve on real fixable boards) with unresolved
-end-to-end economics.** Directed, reversible, and it addresses the specific failure modes that sank
-fix-and-finish (§4.8: irreversibility) and the badness heuristic (undirected). Documented for a
-future in-tool implementation; not shipped. Reproduce the component measurements:
-`eval/gain_cascade_probe.py` (dual generation, prune, full-plug ranking, cascade, and the
-cascade+reclimb solve rate, all against the real `eval/results*.tsv` boards).
+**What's still open — the matched-compute verdict.** Does the gated cascade beat spending its
+compute on more restarts, on the hard/short messages where near-solution-but-stuck boards actually
+occur? The economics are genuinely uncertain: per near-solution board the cascade is far more
+efficient than *re-finding* one (converts 53% for ~2 climbs vs a ~4.5% near-solution rate), but the
+boards are rare and the enabling move (downhill-then-reclimb) is what restarts already do. This is
+measured via `make crackquality` / a recovery-vs-`score_iter` A/B (`-S i4q10 -R N` ± `--gainfix`);
+the gate makes it neutral where boards don't stick, so the question is whether it lifts recovery on
+the short-length regime. **[verdict TBD — measurement in progress]**
+
+**Verdict — a validated component chain (53% solve on real fixable boards), now shipped as an opt-in
+flag with an unresolved matched-compute economics.** Directed, reversible, and it addresses the
+specific failure modes that sank fix-and-finish (§4.8: irreversibility) and the badness heuristic
+(undirected). Reproduce the component measurements: `eval/gain_cascade_probe.py` (dual generation,
+prune, full-plug ranking, cascade, and the cascade+reclimb solve rate, all against the real
+`eval/results*.tsv` boards).
 
 ---
 

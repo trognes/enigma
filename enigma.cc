@@ -170,6 +170,18 @@ static int opt_repair3;
 /* --no-repair: disable the default 2-plug re-pair barrier cross (try_repair), for
    ablation/measurement. Off by default (baseline byte-identical); needs -c. */
 static int opt_no_repair;
+/* --gainfix: quadgram-gain directed-repair barrier cross, tried at quad convergence.
+   A 2-ply "cascade" that uses per-position gain to propose plug corrections (both
+   plugboard contacts, self-encryption pruned), ranks them by the full re-decode
+   score, applies the best pair even when the first plug is downhill (which un-masks
+   the second), and keeps it only if the pair nets an improvement. Off by default
+   (baseline byte-identical); needs -c; quad-only. See gain_cascade(); PERFORMANCE.md 4.10. */
+static int opt_gainfix;
+/* --gainfix near-solution gate: the cascade only fires on a converged board whose
+   per-symbol quad score clears this threshold, so it skips the ~76% junk boards and
+   spends its compute only on promising ones. Default -4.9 (English-quad calibrated:
+   junk ~-5.3, near-solution 60%+ ~-4.8..-4.2); tune per language via --gainfix=VALUE. */
+static double opt_gainfix_gate;
 static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
                              0 (the default) = one deterministic climb from the seed,
                              no kick; N>=1 = exactly N kicked climbs, keep the best
@@ -1241,6 +1253,189 @@ static bool try_repair_3(machine & m, double cur_score)
   return found;
 }
 
+/* --gainfix tuning: candidate shortlist size and plug1 beam width. Plug2 is scored
+   over the whole shortlist per plug1, so cascade cost is ~CAP + N1*CAP score_iter. */
+static const int GAINFIX_CAP = 25;
+static const int GAINFIX_N1  = 6;
+
+/* Form plug a-b in place, ejecting a's and b's old partners to self-steckered
+   (an "add-with-eject" — a free endpoint is a no-op eject). */
+static inline void gainfix_apply(unsigned char * steck, int a, int b)
+{
+  int pa = steck[a], pb = steck[b];
+  steck[pa] = static_cast<unsigned char>(pa);
+  steck[pb] = static_cast<unsigned char>(pb);
+  steck[a] = static_cast<unsigned char>(b);
+  steck[b] = static_cast<unsigned char>(a);
+}
+
+/* Generate the gain-vote candidate shortlist for the current board. For each
+   position, find the best single-letter quad improvement (skipping the current
+   letter and ct[j] — Enigma never self-encrypts), then vote its gain onto TWO
+   candidate plugs: the EXIT re-plug {steck[pt[j]], bx} and the reciprocal ENTRY
+   re-plug {ct[j], core_j(steck[bx])}. Writes the top `cap` plugs (endpoints a<b)
+   by descending vote into ca[]/cb[]; returns the count. */
+template<bool EX>
+static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * cb, int cap)
+{
+  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * const * __restrict rows = m.rows;
+  const unsigned char * __restrict ct = num_ciphertext;
+  const int n = textlength;
+
+  unsigned char pt[maxlen];
+  for (int i = 0; i < n; i++)
+    pt[i] = static_cast<unsigned char>(decode_at(steck, rows, ct, i));
+
+  long votes[asize][asize];
+  for (int a = 0; a < asize; a++)
+    for (int b = 0; b < asize; b++)
+      votes[a][b] = 0;
+
+  for (int j = 0; j < n; j++)
+    {
+      int lo = j - 3; if (lo < 0) lo = 0;
+      int hi = j;     if (hi > n - 4) hi = n - 4;
+      if (hi < lo) continue;
+      const int cj = ct[j];
+      long cur = 0;
+      for (int i = lo; i <= hi; i++)
+        cur += quad8[pt[i]][pt[i + 1]][pt[i + 2]][pt[i + 3]];
+      int orig = pt[j], bx = orig;
+      long bs = cur;
+      for (int x = 0; x < asize; x++)
+        {
+          if (x == orig || x == cj) continue;   /* no-self-encryption prune */
+          long s = 0;
+          for (int i = lo; i <= hi; i++)
+            {
+              unsigned char q0 = pt[i], q1 = pt[i + 1], q2 = pt[i + 2], q3 = pt[i + 3];
+              switch (j - i)
+                {
+                  case 0:  q0 = static_cast<unsigned char>(x); break;
+                  case 1:  q1 = static_cast<unsigned char>(x); break;
+                  case 2:  q2 = static_cast<unsigned char>(x); break;
+                  default: q3 = static_cast<unsigned char>(x); break;
+                }
+              s += quad8[q0][q1][q2][q3];
+            }
+          if (s > bs) { bs = s; bx = x; }
+        }
+      if (bs <= cur || bx == orig || bx == cj) continue;
+      const long g = bs - cur;
+      int r = steck[pt[j]];                      /* exit lever */
+      if (r != bx && ! pf[r] && ! pf[bx])
+        votes[r < bx ? r : bx][r < bx ? bx : r] += g;
+      int y = rows[j][steck[bx]];                /* entry lever (reciprocal) */
+      if (y != cj && ! pf[cj] && ! pf[y])
+        votes[cj < y ? cj : y][cj < y ? y : cj] += g;
+    }
+
+  unsigned char ta[asize * (asize - 1) / 2], tb[asize * (asize - 1) / 2];
+  long tv[asize * (asize - 1) / 2];
+  int tot = 0;
+  for (int a = 0; a < asize; a++)
+    for (int b = a + 1; b < asize; b++)
+      if (votes[a][b] > 0)
+        {
+          ta[tot] = static_cast<unsigned char>(a);
+          tb[tot] = static_cast<unsigned char>(b);
+          tv[tot] = votes[a][b];
+          tot++;
+        }
+  int out = tot < cap ? tot : cap;
+  for (int k = 0; k < out; k++)          /* partial selection sort: top `out` by vote */
+    {
+      int bi = k;
+      for (int i = k + 1; i < tot; i++)
+        if (tv[i] > tv[bi]) bi = i;
+      long sv = tv[k]; tv[k] = tv[bi]; tv[bi] = sv;
+      unsigned char sa = ta[k]; ta[k] = ta[bi]; ta[bi] = sa;
+      unsigned char sb = tb[k]; tb[k] = tb[bi]; tb[bi] = sb;
+      ca[k] = ta[k]; cb[k] = tb[k];
+    }
+  return out;
+}
+
+/* --gainfix: the 2-ply gain cascade barrier cross (PERFORMANCE.md 4.10). Quad-only,
+   run at convergence once the cheap climb / re-pairs have stalled. Ranks the shortlist
+   by the full re-decode score; then for each of the top-N1 plug1 candidates, applies it
+   (even if it does not improve — that un-masks a masked second plug) and scores every
+   plug2 candidate of the resulting board; keeps the (plug1, plug2) pair whose combined
+   score most beats the converged score. Returns true (and installs the pair) iff such a
+   strictly-improving pair exists, so the cheap climb resumes from it. Deterministic
+   (no RNG, fixed candidate order), so -T-independent. */
+template<bool EX>
+static bool gain_cascade(machine & m, double cur_score)
+{
+  if (m.scoring != SCORE_QUAD || textlength < 8)
+    return false;
+  if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
+    return false;
+
+  unsigned char * steck = m.steckerbrett;
+  unsigned char ca[GAINFIX_CAP], cb[GAINFIX_CAP];
+  int nc = gainfix_candidates<EX>(m, ca, cb, GAINFIX_CAP);
+  if (nc == 0)
+    return false;
+
+  unsigned char saveS[asize];
+  for (int i = 0; i < asize; i++) saveS[i] = steck[i];
+
+  /* rank plug1 candidates by the full re-decode score */
+  double sc1[GAINFIX_CAP];
+  int order[GAINFIX_CAP];
+  for (int k = 0; k < nc; k++)
+    {
+      gainfix_apply(steck, ca[k], cb[k]);
+      sc1[k] = score_iter(m);
+      for (int i = 0; i < asize; i++) steck[i] = saveS[i];
+      order[k] = k;
+    }
+  int n1 = nc < GAINFIX_N1 ? nc : GAINFIX_N1;
+  for (int k = 0; k < n1; k++)           /* partial selection of the top-N1 plug1 */
+    {
+      int bi = k;
+      for (int i = k + 1; i < nc; i++)
+        if (sc1[order[i]] > sc1[order[bi]]) bi = i;
+      int so = order[k]; order[k] = order[bi]; order[bi] = so;
+    }
+
+  double best = cur_score;
+  bool found = false;
+  int ba1 = 0, bb1 = 0, ba2 = 0, bb2 = 0;
+  unsigned char saveS1[asize], ca2[GAINFIX_CAP], cb2[GAINFIX_CAP];
+  for (int t = 0; t < n1; t++)
+    {
+      int k1 = order[t];
+      for (int i = 0; i < asize; i++) steck[i] = saveS[i];
+      gainfix_apply(steck, ca[k1], cb[k1]);                /* board -> S1 (may be downhill) */
+      for (int i = 0; i < asize; i++) saveS1[i] = steck[i];
+      int nc2 = gainfix_candidates<EX>(m, ca2, cb2, GAINFIX_CAP);
+      for (int k = 0; k < nc2; k++)
+        {
+          gainfix_apply(steck, ca2[k], cb2[k]);
+          double s = score_iter(m);
+          for (int i = 0; i < asize; i++) steck[i] = saveS1[i];
+          if (s > best)
+            {
+              best = s; found = true;
+              ba1 = ca[k1]; bb1 = cb[k1]; ba2 = ca2[k]; bb2 = cb2[k];
+            }
+        }
+    }
+
+  for (int i = 0; i < asize; i++) steck[i] = saveS[i];      /* restore original board */
+  if (found)
+    {
+      gainfix_apply(steck, ba1, bb1);
+      gainfix_apply(steck, ba2, bb2);
+      report_climb_progress(m, best);
+    }
+  return found;
+}
+
 /* Lexicographic table of the C(26,2)=325 unordered letter pairs, built once. */
 struct pairtab { unsigned char a[asize * (asize - 1) / 2], b[asize * (asize - 1) / 2]; };
 static pairtab make_pairtab()
@@ -1615,7 +1810,8 @@ static double hillclimb(machine & m, int max_pairs)
          deeper 3-plug reshuffle as a further barrier cross. */
       /* short-circuit: try_repair_3 runs only when the 2-plug re-pair found nothing */
       if ((! opt_no_repair && try_repair<EX>(m, cur))
-          || (opt_repair3 && try_repair_3<EX>(m, cur)))
+          || (opt_repair3 && try_repair_3<EX>(m, cur))
+          || (opt_gainfix && gain_cascade<EX>(m, cur)))
         progress = true;
     }
   while (progress);
@@ -3344,6 +3540,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--no-repair",
           "Disable the 2-plug re-pair barrier cross (ablation;");
   fprintf(out, "  %-24s %s\n", "", "needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--gainfix[=GATE]",
+          "Quadgram-gain 2-ply directed-repair cascade at");
+  fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
+  fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -3434,6 +3634,9 @@ void show_settings()
     fprintf(stderr, "            3-plug re-pair barrier cross at convergence\n");
   if (opt_hillclimb && opt_no_repair)
     fprintf(stderr, "            2-plug re-pair barrier cross disabled (--no-repair)\n");
+  if (opt_hillclimb && opt_gainfix)
+    fprintf(stderr, "            quadgram-gain directed-repair cascade at convergence "
+            "(--gainfix, near-solution gate %.2f)\n", opt_gainfix_gate);
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" :
@@ -3521,6 +3724,8 @@ int main(int argc, char * * argv)
   opt_capmerge = 0;
   opt_repair3 = 0;
   opt_no_repair = 0;
+  opt_gainfix = 0;
+  opt_gainfix_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -3543,7 +3748,7 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
-         OPT_NO_REPAIR };
+         OPT_NO_REPAIR, OPT_GAINFIX };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3586,6 +3791,7 @@ int main(int argc, char * * argv)
       { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
       { "repair3",        no_argument,       nullptr, OPT_REPAIR3 },
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
+      { "gainfix",        optional_argument, nullptr, OPT_GAINFIX },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3653,6 +3859,11 @@ int main(int argc, char * * argv)
           break;
         case OPT_NO_REPAIR:
           opt_no_repair = 1;
+          break;
+        case OPT_GAINFIX:
+          opt_gainfix = 1;
+          if (optarg != nullptr)
+            opt_gainfix_gate = strtod(optarg, nullptr);
           break;
         case 'M':
           opt_capmerge = 1;
@@ -3934,6 +4145,10 @@ int main(int argc, char * * argv)
   /* --no-repair disables a climb move, so it only means anything with -c. */
   if (opt_no_repair && (! opt_hillclimb))
     fatal("Disabling the 2-plug re-pair (--no-repair) needs the plugboard hill-climb (-c)");
+
+  /* --gainfix is a climb barrier-cross move, so it needs -c. */
+  if (opt_gainfix && (! opt_hillclimb))
+    fatal("Gain-cascade repair (--gainfix) needs the plugboard hill-climb (-c)");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */
