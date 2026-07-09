@@ -90,6 +90,19 @@ a local optimum) via an oracle run — telling you which lever to pull. (See
 `archived/CODE_REVIEW_HISTORY.md` §9 for the algorithmic ideas this is meant to measure; on the
 v1.1.0 baseline every miss is a *search* failure.)
 
+> **When evaluating a *search* change, exclude the scoring-failure cases first.**
+> A scoring failure — the true board is not the top-scoring one (operationally:
+> a non-exact trial with `recovered_score ≥ true_score`) — is an **information
+> floor of the scoring model**, unrecoverable by *any* search, so leaving it in
+> the stats only adds noise that no search improvement can move. The current work
+> is improving **search** (restarts, `-F`, SA, the `--gainfix*` finishers, tabu/GA),
+> not scoring, so measure search levers on the **search-failure + exact** population
+> only (drop the scoring failures via the oracle `recovered_score`/`true_score`, as
+> `SPLIT=1` classifies them). Judge on that filtered mean %-correct / exact rate;
+> a change that only shuffles unfixable scoring failures is not a real search win.
+> (A scoring change is the opposite case and *is* measured on the full population —
+> its whole job is to shrink the scoring-failure floor.)
+
 `crack_quality.py` also carries three opt-in test modes from `CRACKQUALITY_TESTS.md`
 (all off by default, the normal flow unchanged): `WILDCARD` wildcards the rotor key
 for the **scoring-failure gate** (§1); `FILTERRECALL=1` reports the true key's `-F`
@@ -215,6 +228,29 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   off so its value can be A/B'd (e.g. at short lengths where its convergence scan is a larger
   fraction of a fast climb). Default off keeps the climb byte-identical; the flag only skips the
   `try_repair` call at each convergence.
+- `--gainfix[=GATE]` **quadgram-gain directed-repair cascade** (needs `-c`; quad-only; off by
+  default). At each quad convergence, uses per-position quad **gain** to propose plug corrections on
+  *both* plugboard contacts — the exit re-plug `{S[pt[j]], bx}` and the reciprocal entry re-plug
+  `{ct[j], core_j(S[bx])}` (machine-exact via the precomputed rotor core; self-encryption pruned
+  since Enigma never maps a letter to itself) — ranks them by the full re-decode score, and runs a
+  **2-ply cascade**: apply the best plug *even if downhill* (which un-masks a masked second plug),
+  keep the pair only if the net beats the converged score, then let the cheap climb resume and
+  finish it (the reclimb amplification is free from the `do/while` loop). **Gated** by a
+  near-solution per-symbol score threshold (`GATE`, default `-4.9` English-quad-calibrated; tune per
+  language) so it fires only on promising boards and skips the ~76% junk — which is what makes it a
+  small **matched-compute win** (+0.2–0.3pp mean / +0.5–0.6pp exact on short English, ~zero added
+  `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
+  `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
+- `--gainfix-best` **best-board-only gain cascade** (needs `-c`; mutually exclusive with `--gainfix`;
+  off by default). The fixed-cost alternative to per-convergence `--gainfix`: runs the gain cascade
+  **once, unconditionally (no score gate)**, on the single best board after all `-R` restarts (its key
+  + stecker recorded at the merge), then one finishing climb. Costs a **fixed** ~950 `score_iter`
+  independent of `-R`, so it is ~free at high `-R` and generally ≥ per-convergence `--gainfix` (an
+  N=100 matched-compute sweep, English L40–50: both give +0.2–0.7pp mean %-correct vs base across the
+  whole `-R 8…2560` range with no decay; `--gainfix-best` wins or ties 8 of 10 `-R` rows). Exact
+  recovery does saturate at extreme `-R` (all modes tie once restarts alone find every recoverable
+  board — the residual is the scoring-failure floor), but the mean gain persists. Simple sweep only
+  (not `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC

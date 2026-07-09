@@ -31,6 +31,18 @@ local optima) or where they prepare the ground for a *not-yet-built full-crack
 tier* (rotor key also unknown), where rotor-key discrimination may expose genuine
 scoring failures.
 
+> **Measurement rule for search work: exclude the scoring-failure cases.** Because
+> the goal now is improving **search** (not scoring), evaluate every search lever
+> (restarts, `-F`, SA, the `--gainfix*` finishers, and any future tabu/GA) on the
+> **search-failure + exact** population only — drop the trials where the true board
+> is *not* the top-scoring one, since no search can ever reach them. Operationally a
+> trial is a scoring failure when it is **non-exact and `recovered_score ≥ true_score`**
+> (the converged board already scores at least as high as the truth — the information
+> floor); `SPLIT=1`, or the oracle `recovered_score`/`true_score` columns in the
+> `eval/results-*.tsv` baselines, classify them. Leaving them in only injects noise a
+> search change cannot move. A scoring change is the mirror case: it *is* judged on the
+> full population, because shrinking that floor is its entire job.
+
 **Already shipped** (do not re-propose; tune only): steepest-ascent hill-climb
 (switch / remove / gated re-pair moves); random restarts `-R`/`--restarts` with a
 `--random`-sized kick (default `k=10` pairs); staged schedule `--score` with the general
@@ -851,7 +863,155 @@ convergences → more barrier-crosses. So the 2-plug re-pair is the last worthwh
 short lengths too, not just the long ones where it was first validated. Reproduce:
 `python3 eval/repair2_matched.py`.
 
----
+### 4.10 Directed plug repair via quadgram "gain" (gain-cascade) — ⏳ PRELIMINARY (component validated, end-to-end open)
+
+§6.14 showed the residual near-solution failures are re-pairing *tangles* a greedy single-toggle
+climb can't cross. This explores a **directed** finisher: use the quad model to point at *which*
+plug is wrong and fix it, instead of blind restarts. The mechanism was built up from Enigma
+structure; each step below is a measured improvement (Python prototype over `tests/eval.py` and
+real tool-converged boards from `eval/results*.tsv`; exact rotor core extracted from the tool via
+26 empty-plugboard decodes of `x*n` — Enigma stepping is content-independent).
+
+**The pipeline.**
+1. **Per-position gain** — for the current decode, the best quad-score improvement obtainable by
+   changing one output letter, and to what (`bx`); only the ≤4 covering quadgrams change, so it's
+   `O(n·26·4)` lookups.
+2. **Dual (exit + entry) generation** — a position's output can be corrected two ways, because the
+   plugboard sits on both sides of the rotors: **exit** re-plug `{S[pt[j]], bx}`, or **entry**
+   re-plug `{ct[j], core_j[S[bx]]}` (reciprocal). Exit-only generation covers a correct plug 75–95%
+   on synthetic boards; adding the entry lever lifts it to **97–100%**.
+3. **No-self-encryption prune** — Enigma never maps a letter to itself (`P = S∘C∘S`, C
+   fixed-point-free), so any suggestion `bx == ct[j]` is impossible and pruned for free.
+4. **Full-plug (input-aware) ranking** — rank candidates by the *whole-message* re-decode Δ (both
+   contacts, freed partners), not the exit-only vote. Given coverage this ranks the correct plug at
+   #1 **~95%** on synthetic boards (the raw vote alone ~40%). Ranking is essentially solved;
+   generation is the bottleneck.
+
+**The real-board reality checks** (`eval/results*.tsv`, L40–70, 10 plugs):
+- **Near-solution boards are rare** — 168k converged boards: 32% solved, and of the non-exact,
+  **76% are deep junk (0–20% correct)**, only **~4.5% near-solution** (the basin gap, §6.13).
+- **Many "almost done" boards are scoring failures** — 86% of the 90–100% bucket have
+  `recovered_score ≥ true_score`: the converged board scores *at least as high as the truth*, so
+  the missing plug can't be found by any score-based method (the information floor, not a search
+  failure). The mid-range (50–80%) is 95%+ genuine search failures — fixable.
+- On fixable search-failure boards, single-plug hit@1 is **44–67%**.
+
+**The pair-coverage wall, and the cascade that breaks it (the key finding).** A converged board is
+a local optimum *for single moves*, so the correct fix is usually 2 plugs *together*. But scoring
+2-plug **combos** is capped at **32%** by pair-coverage — on a 2-plug tangle the two wrong plugs
+corrupt overlapping positions, so each masks the other's gain signal; both are rarely in the
+shortlist at once. The **cascade** sidesteps it: apply the one visible plug *even though it's
+downhill* (Δ<0), which **un-masks** the second, then accept the pair only if the net is positive.
+Correct-pair rate **32% → 62%**. (Removal candidates — freeing a spuriously-plugged letter — were
+added and measured **no effect**: forming a plug already ejects the old partner, so "add-with-eject"
+subsumes pure removal.)
+
+**The reclimb amplifies (the payoff).** The cascade only needs to *cross the barrier*; once a
+tangle is fixed and the score jumps, the ordinary climb resolves the rest. On real near-solution
+search-failure boards with **2–4** wrong plugs, **cascade-fix + reclimb solves 53%** (vs **8%**
+for reclimb alone), lifting mean correct-plugs **6.8 → 8.6**.
+
+**Now implemented in-tool as the opt-in `--gainfix` flag** (byte-identical default; needs `-c`;
+quad-only). The cascade fires at each quad-climb convergence and, on success, hands the improved
+board back to the cheap climb to finish — the reclimb amplification comes for free from the existing
+`do/while(progress)` loop. It reuses the tool's precomputed rotor core (`rows[j]`) so the entry-side
+(reciprocal) candidate is machine-exact, and is `-T`-deterministic (no RNG, fixed candidate order).
+It is **gated by a near-solution per-symbol score threshold** (`--gainfix=GATE`, default `-4.9`,
+English-quad calibrated: junk ~-5.3, near-solution 60%+ ~-4.8…-4.2) so it spends its ~`CAP + N1·CAP`
+`score_iter` per fire only on promising boards and skips the ~76% junk — verified: on an easy
+(solvable) message gated `--gainfix` is byte-for-byte the baseline `score_iter`, while ungated
+(`--gainfix=-99`) adds ~7%. Correct/clean: 182 tests pass, `-Werror` g++/clang++, ASan/UBSan and
+clang-tidy clean.
+
+**Matched-compute verdict — a small but consistent WIN, because the gate makes it near-free.**
+Recovery-vs-`score_iter` A/B (`-J -S i4q10 -R {8,16,32}` ± `--gainfix`, English L40–50, 60/cell,
+the no-gainfix curve interpolated to the gainfix `score_iter`): **+0.2–0.3pp mean %-correct and
++0.5–0.6pp exact** at matched compute, positive at every budget R≥8.
+
+| `score_iter` | baseline %corr | `--gainfix` %corr | Δ (matched) |
+|---:|---:|---:|---:|
+| 18,159 | 14.32 | 14.59 | **+0.27** |
+| 36,264 | 19.52 | 19.77 | **+0.25** |
+| 72,738 | 25.28 | 25.51 | **+0.23** |
+
+The win exists *because of the gate*: `score_iter` stays within 0.3% of baseline at every budget
+(the cascade fires only on near-solution boards and finds nothing on junk/solved), so the small
+recovery gain is essentially free. **Ungated it is dominated** (fires on every convergence including
+junk — the same wall as `--repair3`); the gate is what turns it from a loss into a win. This makes
+it the **second clearly-positive matched-compute barrier-cross** (with the 2-plug `try_repair`,
+§4.9), and the opposite verdict from `--repair3`/`--exhaust`/fix-and-finish — for the same reason
+`try_repair` pays: near-zero cost, so any gain is net-positive.
+
+A **second seed (N=100)** confirms and, on *exact* recovery, strengthens it: mean Δ +0.17/+0.21/+0.71
+at R 8/16/32, and **exact recovery 5.0→5.7, 6.0→7.3, 10.7→13.0** — a **+2.3pp (relative +21%) exact
+gain at R32**. The exact-recovery gain **grows with `-R`**, as expected: more restarts produce more
+near-solution boards for the gated cascade to finish. So across two seeds the mean gain is a steady
++0.2–0.7pp and the exact gain +0.6…+2.3pp (largest at high `-R`), at ~zero added `score_iter`.
+
+**Verdict — a validated component chain (53% solve on real fixable boards), shipped as the opt-in
+`--gainfix`, a small matched-compute win on short messages when gated.** Directed, reversible, and
+it addresses the specific failure modes that sank fix-and-finish (§4.8: irreversibility) and the
+badness heuristic (undirected). The gain is modest (the near-solution regime it targets is a thin
+slice of the search), so it is opt-in, not default. The gate default (`-4.9`) is English-quad
+calibrated; other languages/lengths tune it via `--gainfix=GATE`. Reproduce the component
+measurements: `eval/gain_cascade_probe.py` (dual generation, prune, full-plug ranking, cascade, and
+the cascade+reclimb solve rate, all against the real `eval/results*.tsv` boards).
+
+**A best-board-only variant (`--gainfix-best`) — the fixed-cost alternative.** Instead of firing the
+gated cascade at *every* near-solution convergence, `--gainfix-best` runs the cascade **once,
+unconditionally (no score gate)**, on the single best board after all `-R` restarts, then hands it to
+one finishing climb. It reconstructs that board's machine from the winning key + recorded stecker
+(recorded at the merge), so it costs a **fixed** ~960 `score_iter` **independent of `-R`** — whereas
+per-convergence `--gainfix` costs scale (weakly, via the gate) with the number of near-solution
+convergences. A 3-way matched-compute A/B, full `-R` sweep (English L40–50, **N=100/cell**,
+`-J -S i4q10`; `score_iter` within ~0.2–0.3% across modes at every `-R`, so these are matched):
+
+| `-R` | base %corr / exact | `--gainfix` %corr / exact | `--gainfix-best` %corr / exact | Δmean (gainfix / best) |
+|---:|---:|---:|---:|---:|
+| 8    | 13.48 / 3.0  | 13.65 / 3.3  | 13.63 / 3.0  | +0.17 / +0.15 |
+| 16   | 17.69 / 6.3  | 17.85 / 6.7  | 17.98 / 6.3  | +0.16 / +0.29 |
+| 32   | 21.78 / 10.7 | 21.94 / 11.0 | 22.19 / 11.0 | +0.16 / +0.41 |
+| 40   | 23.51 / 12.0 | 23.75 / 12.7 | 23.96 / 12.7 | +0.24 / +0.45 |
+| 80   | 27.65 / 15.0 | 28.34 / 17.0 | 28.16 / 16.0 | +0.69 / +0.51 |
+| 160  | 33.40 / 21.3 | 33.87 / 22.0 | 33.85 / 22.0 | +0.47 / +0.45 |
+| 320  | 43.00 / 30.7 | 43.47 / 31.0 | 43.66 / 31.7 | +0.47 / +0.66 |
+| 640  | 50.78 / 39.7 | 51.32 / 40.3 | 51.49 / 40.3 | +0.54 / +0.71 |
+| 1280 | 57.20 / 47.7 | 57.38 / 47.3 | 57.74 / 48.0 | +0.18 / +0.54 |
+| 2560 | 65.27 / 57.3 | 65.80 / 57.3 | 65.75 / 57.3 | +0.53 / +0.48 |
+
+**The mean gain persists across the whole `-R` range** — +0.2–0.7pp with no decay to zero, right out to
+`-R 2560`. The two variants are peers, `--gainfix-best` generally ≥ `--gainfix` (it wins or ties 8 of
+10 rows; `--gainfix` edges ahead only at `-R 80/160`): the best-board finish concentrates its one
+unconditional cascade on the reliably-near-solution best board, and its cost is **fixed** (~950
+`score_iter`) so it is ~free at high `-R`, whereas per-convergence `--gainfix`'s cost scales (still
+<0.3%). Both opt-in and mutually exclusive; `--gainfix-best` runs only under the simple sweep (not
+`-F`/`--exhaust`, whose `best.idx` does not carry the key×restart reconstruction).
+
+**What *does* saturate is exact recovery, not the mean.** At extreme `-R` the restart budget alone
+finds essentially every recoverable board, so *new exact* solves from the finisher dry up — at
+`-R 2560` all three modes tie at 57.3% exact (the residual is the §6.13/§6.14 **scoring-failure**
+floor: true board not top-scoring, uncrossable by any score-based method). But the cascade keeps
+lifting near-solution **non-exact** boards, so the **mean %-correct stays ahead** even where the exact
+rate has converged. (An earlier `-R {40…2560}` sweep at N=16–40/cell had suggested the modes go
+*byte-identical* at `-R ≥ 1280` — that was small-sample noise: those few high-`-R` cells happened to
+contain no fixable board. The N=100 sweep here corrects it — the finishers still help at every `-R`.)
+
+**A saturation exact-loss — diagnosed as over-plugging, and *fixed*.** An earlier build showed
+`--gainfix-best` *reducing* exact recovery at very high `-R`: on the tsv `-S m4q10` L40 baselines
+(scoring failures *removed*, so not pre-existing floor cases) it converted a handful of `b_ex=1
+(100%) → 95–97.5%` solves (2–3 per 40-trial cell), so exact dipped `−2.6…−5.1pp` at `-R ≥ 1280`. The
+cause was **not** the count-neutral cascade but the **finishing climb running uncapped** (`asize/2` =
+13 pairs) instead of at the schedule's target-stage cap — so on an already-solved 10-plug board it
+**added spurious plugs 11–13** that raise the noisy short-message quad score while corrupting the
+truth. Capping the finish at `opt_stages[last].cap` (like every other finisher/quench in the tool)
+removes it: re-measured on the identical boards, **every negative Δexact goes to ≥ 0** (the four dips
+−2.6/−5.1/−5.1/−5.0 → 0/0/+2.6/0), Δmean improves at the mega-`-R` cells, and `--gainfix-best` becomes
+**Pareto-neutral-or-better across the whole `-R 20…81920` range** (Δmean ≥ ~0, Δexact ≥ 0 every cell).
+The finisher is also **monotonic in score by construction** — the best board is replaced only when the
+finish scores strictly higher, so it never returns a lower-*scoring* board than the search found. (A
+residual truth-vs-score chase — a *count-neutral* cascade re-pair to a higher-scoring-but-wrong board
+at the information floor — is possible in principle but was not observed after the cap fix; it is
+unfixable by any score-only rule, since the wrong board genuinely scores higher.)
 
 ## 5. Structural / constraint-based
 
