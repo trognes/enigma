@@ -3590,13 +3590,6 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--random K",
           "Random-kick size: plug pairs injected per restart");
   fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = no kick, a control) [10]");
-  fprintf(out, "  %-24s %s\n", "--true-key KEY",
-          "Diagnostic: with -F, print the tier-1 rank of the");
-  fprintf(out, "  %-24s %s\n", "", "given standard key (e.g. B241AAAQEW = reflector,");
-  fprintf(out, "  %-24s %s\n", "", "3 wheels, 3 ring, 3 start) among all keys [off]");
-  fprintf(out, "  %-24s %s\n", "--dump-restarts",
-          "Diagnostic: with -c, print each converged restart's");
-  fprintf(out, "  %-24s %s\n", "", "score and board to stderr (verbose) [off]");
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
@@ -3624,6 +3617,19 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
   fprintf(out, "  %-24s %s\n", "", "exploration tool (E=1 = 325 climbs; E>1 explodes;");
   fprintf(out, "  %-24s %s\n", "", "needs -c; a high -R dominates it) [off]");
+  fprintf(out, "\n");
+  fprintf(out, "Diagnostic options (internal/experimental; for measurement):\n");
+  fprintf(out, "  %-24s %s\n", "--true-key KEY",
+          "With -F, print the tier-1 rank of the given");
+  fprintf(out, "  %-24s %s\n", "", "standard key (e.g. B241AAAQEW = reflector, 3");
+  fprintf(out, "  %-24s %s\n", "", "wheels, 3 ring, 3 start) among all keys [off]");
+  fprintf(out, "  %-24s %s\n", "--dump-restarts",
+          "With -c, print each converged restart's score");
+  fprintf(out, "  %-24s %s\n", "", "and board to stderr (verbose) [off]");
+  fprintf(out, "  %-24s %s\n", "--infl-order",
+          "Experimental: influence-ordered first-improvement");
+  fprintf(out, "  %-24s %s\n", "", "(implies -I; measured, dominated by -J;");
+  fprintf(out, "  %-24s %s\n", "", "needs -c) [off]");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
