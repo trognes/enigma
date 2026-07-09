@@ -1047,10 +1047,19 @@ completing plug(s) *and* shed spurious ones — keeping the best result. No plug
 escalated (2-ply-fail) boards, "commit best-K + reclimb" **matches** the explicit 3-ply at K=6 (48%) and
 **beats** it at K=12 (61%): a full climb per sacrifice recovers more than committing one fixed completing
 plug. The winning sacrifice is *not* reliably top-ranked by 2-plug score (spread across ranks 0–11), so
-K must be moderate, not 1. A **full K-sweep in the real capped tool** (K=1…24, `-R 80`, english+german
-L40) confirms **K=8 is the knee**: mean %-correct and exact recovery rise steeply through K=8 (+2.0pp
-mean / +3.3pp exact vs 2-ply) then **flatline from K=8 to K=20** while `score_iter` climbs ~+1000/K — so
-everything past 8 is pure cost, and `GAINFIX_K3 = 8` is fixed. Implementation: the internal reclimb
+K must be moderate, not 1. Two K-sweeps in the real capped tool (`-R 80`, english+german L40) fix
+`GAINFIX_K3 = 8`, but the reason is **compute-parity, not a diminishing-returns plateau**. At the shipped
+beam (`N1=N2=6`, so only 36 sacrifice pairs exist) mean/exact rise steeply through K=8 (+2.0pp mean /
++3.3pp exact vs 2-ply) then **appear to flatline K=8→20** — but that flat is an *artifact of the 36-pair
+ceiling*, not a knee. Widening the beam to `N1=N2=13` (up to 169 pairs) shows recovery keeps rising
+**monotonically all the way to K=169** (reclimb every pair): mean %-correct 31.7 → 32.7 → 34.1 → 34.6 →
+36.5 at K=8/16/48/96/169, exact 17.5 → 25.0. The tail is real — there is no plateau. **But it is not a
+matched-compute win.** K=169 costs ~413k `score_iter` (2.3× the 2-ply finisher's 181k); spending that
+same 2.3× on more `-R` restarts of plain `--gainfix-best` reaches ~36.9 mean / ~24.7 exact (interpolated
+between R160=36.4 and R200=37.4), statistically tied with K=169's 36.5 / 25.0. So high-K only converts
+compute into recovery at the same rate `-R` already does — the *free* win lives entirely in the small-K,
+fixed-cost regime (~+8000 `score_iter`, the whole point of a once-only best-board finisher). `K=8` is
+kept as that near-free operating point, not because further sacrifices stop helping. Implementation: the internal reclimb
 reuses `hillclimb` with the gainfix flags saved+cleared (plain climb, no recursion), capped at the same
 `max_pairs`; `-T`-deterministic.
 
