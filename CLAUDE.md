@@ -260,6 +260,19 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   recovery does saturate at extreme `-R` (all modes tie once restarts alone find every recoverable
   board — the residual is the scoring-failure floor), but the mean gain persists. Simple sweep only
   (not `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
+- `--gainfix-best3` **best-board finisher with a deeper 3-plug-tangle escalation** (needs `-c`;
+  mutually exclusive with `--gainfix`/`--gainfix-best`; off by default). Like `--gainfix-best`, but the
+  once-only best-board finisher also runs a **"sacrifice + reclimb"** step when the 2-ply cascade finds
+  nothing: it ranks the `(plug1,plug2)` sacrifice pairs by 2-plug score and, for the top-`K` (K=8),
+  commits the sacrifice (both plugs, possibly downhill) and runs a full plain reclimb — letting the
+  ordinary climb find the completing plug(s) and shed spurious ones — keeping the best. No explicit
+  plug3 search (the completing plug is the top move the reclimb finds anyway; a full climb per sacrifice
+  recovers *more* than committing one fixed plug — it matches the explicit 3-ply at K=6 and beats it at
+  K=12). Targets 3-plug tangles the 2-ply pair can't cross: real-tool capped, it solves **56% of fixable
+  ≥80%-base boards vs `--gainfix-best`'s 41%**, and beats 2-ply by **+~1.3pp mean / +2…5pp exact** at
+  matched compute (english+german L40), for ~+2–3 ms wall (<1% for `-R`≥640). Simple sweep only.
+  `-T`-deterministic (internal reclimb reuses `hillclimb` with gainfix off — no recursion). See
+  `PERFORMANCE.md` §4.11.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC

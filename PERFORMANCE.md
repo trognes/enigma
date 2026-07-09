@@ -1013,6 +1013,59 @@ residual truth-vs-score chase — a *count-neutral* cascade re-pair to a higher-
 at the information floor — is possible in principle but was not observed after the cap fix; it is
 unfixable by any score-only rule, since the wrong board genuinely scores higher.)
 
+---
+
+### 4.11 Deeper tangles: 3-ply escalation, and the "sacrifice + reclimb" reformulation — ✅ MEASURED (`--gainfix-best3`)
+
+The 2-ply cascade (§4.10) crosses **2-plug** tangles. The residual near-solution failures are **3-plug
+tangles** — three wrong plugs mutually masking, so no single pair un-masks the fix. This extends the
+finisher to them and lands a **better** design than a naïve deeper search.
+
+**The cost reality that framed the whole exploration.** `gainfix_candidates` (the gain scan) does
+`n·26·4` `quad8` lookups per position ≈ **~104 score_iter-equivalents** (a full `score_iter` is ~`n`
+quad lookups). It does **not** call `score_iter`, so the `score_iter` counter *undercounts* the cascade's
+real cost ~5×; wall-time is the honest axis. Two cheap-generation ideas were tested and **rejected**:
+(a) **reuse** the original candidate list for plug2 (skip the per-plug1 regeneration) — 9× cheaper but
+reverts to the 32% pair-coverage wall (§4.10): solve **57%→33%**, because only **45%** of accepted plug2
+are in the original list — the regeneration *is* the un-masking. (b) **incremental vote update** (patch
+only the plug positions a plug swap dirties) — *exact* (identical candidate list, same 57% solve) but on
+short messages a swap dirties **~75%** of positions, so only ~25% cheaper. The generation cost is
+largely irreducible on short text.
+
+**Beam tuning — plug3 is undisputed at top-1.** Sweeping the explicit 3-ply beams on real near-solution
+search-failure boards (`eval/results*.tsv`, english+german): plug1 saturates at N1≈6 (winning plug1 is
+top-3 89% of the time), plug2 at N2≈6, and **plug3 = top-1 (N3=1) is undisputed** — solve rate flat
+across N3 1/2/3. The completing plug is *always* the top move after un-masking: un-masking doesn't just
+surface the third plug, it makes it the highest-scoring one. Explicit 3-ply lifted component solve
+**55%→78%** on 2–4-missing boards.
+
+**The reformulation (the actual design).** Since the completing plug is the top improving move the
+*ordinary climb* would find anyway, the plug3 search is redundant. `--gainfix-best3` instead: rank the
+`(plug1,plug2)` **sacrifice** pairs by their 2-plug score, and for the **top-K (K=8)** commit the
+sacrifice (both plugs, possibly downhill) and run a full **plain reclimb** — letting the climb find the
+completing plug(s) *and* shed spurious ones — keeping the best result. No plug3 beam. Measured on the
+escalated (2-ply-fail) boards, "commit best-K + reclimb" **matches** the explicit 3-ply at K=6 (48%) and
+**beats** it at K=12 (61%): a full climb per sacrifice recovers more than committing one fixed completing
+plug. The winning sacrifice is *not* reliably top-ranked by 2-plug score (spread across ranks 0–11), so
+K must be moderate, not 1. Implementation: the internal reclimb reuses `hillclimb` with the gainfix flags
+saved+cleared (plain climb, no recursion), capped at the same `max_pairs`; `-T`-deterministic.
+
+**Real tool, capped @10, exact recovery.** On ≥80%-base non-exact boards, best3 solves **56% of the
+fixable** vs 2-ply's **41%** (+15pp) — the cap hurts 2-ply more than best3 (2-ply leans on an unconstrained
+reclimb; best3 commits the right plugs directly). By base bucket the best3-over-best edge is **+23pp at
+70–80%, +16pp at 80–90%, +0 at 90–100%** — it fades at the top only because **88%** of 90–100% boards are
+scoring failures (the fixable few sit right on the scoring-failure boundary: their per-symbol score margin
+is ~0.003 vs ~0.011 at 70–80%, so there's almost no signal to commit). Cost is negligible: the finisher
+fires once, ~+2–3 ms wall / ~+8000 `score_iter`, **<1% for R ≥ 640**.
+
+**End-to-end matched-compute A/B** (english+german L40, scoring failures removed, both `score_iter` and
+wall-time): the reformulated best3 beats 2-ply by **~+1.3pp mean %-correct (English, consistent across
+R)** and **+2…+5pp exact recovery** — roughly 3× the old explicit-plug3 best3's ~+0.4pp, at ~2–3 ms wall.
+The gain is real but still a **thin-slice** effect: it concentrates on near-solution 3-plug tangles, so
+averaged over *all* trials (mostly deep junk) it is the modest end-to-end number, not a headline. Shipped
+as the opt-in `--gainfix-best3`; the "sacrifice + reclimb" idea also generalises to deeper tangles (commit
+a 3-plug sacrifice) without any combinatorial plug search — the reclimb handles completion at any depth.
+
 ## 5. Structural / constraint-based
 
 These exploit machine structure the pure statistical search ignores. The two crib
