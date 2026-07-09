@@ -40,10 +40,8 @@ scoring failures.
 > (the converged board already scores at least as high as the truth — the information
 > floor); `SPLIT=1`, or the oracle `recovered_score`/`true_score` columns in the
 > `eval/results-*.tsv` baselines, classify them. Leaving them in only injects noise a
-> search change cannot move (and, for an *unconditional* finisher like `--gainfix-best`,
-> they are where score-chasing can even *cost* exact hits — §4.10). A scoring change is
-> the mirror case: it *is* judged on the full population, because shrinking that floor
-> is its entire job.
+> search change cannot move. A scoring change is the mirror case: it *is* judged on the
+> full population, because shrinking that floor is its entire job.
 
 **Already shipped** (do not re-propose; tune only): steepest-ascent hill-climb
 (switch / remove / gated re-pair moves); random restarts `-R`/`--restarts` with a
@@ -998,20 +996,22 @@ rate has converged. (An earlier `-R {40…2560}` sweep at N=16–40/cell had sug
 *byte-identical* at `-R ≥ 1280` — that was small-sample noise: those few high-`-R` cells happened to
 contain no fixable board. The N=100 sweep here corrects it — the finishers still help at every `-R`.)
 
-**A saturation-only liability of `--gainfix-best` being *unconditional on score*.** Because it runs the
-cascade with **no near-solution gate** (unlike per-convergence `--gainfix`, which fires only below the
-`-4.9` gate and so never touches an already-solved board), at very high `-R` it can fire on a board the
-restart budget *already solved exactly* and, if the scoring model has a board out-scoring the truth (a
-latent scoring failure the baseline had avoided by landing on truth), chase that higher score and
-**trade the exact hit for a 95–97.5%-correct wrong board** — it only checks `s > best.score`, and there
-score and truth diverge. Measured on the tsv `-S m4q10` L40 baselines (scoring failures *removed*, so
-these are not pre-existing floor cases — `--gainfix-best` is *introducing* the miss): at `-R ≥ 5120` a
-handful of `b_ex=1 (100%) → 95–97.5%` conversions (2–3 per 40-trial cell), slightly outnumbering the
-reverse gains, so exact recovery dips `−2.6…−5.1pp` while the mean stays ~flat. It only bites at
-saturation (where baseline exact rates are high); in the compute-limited regime the boards it fires on
-are genuinely unsolved, so the gate-free design is all upside there. This reinforces `--gainfix-best`
-as a **mid-budget** tool — and is why a *scoring failure introduced by the finisher* is a distinct
-thing from the pre-existing scoring-failure floor the §1 measurement rule tells you to exclude.
+**A saturation exact-loss — diagnosed as over-plugging, and *fixed*.** An earlier build showed
+`--gainfix-best` *reducing* exact recovery at very high `-R`: on the tsv `-S m4q10` L40 baselines
+(scoring failures *removed*, so not pre-existing floor cases) it converted a handful of `b_ex=1
+(100%) → 95–97.5%` solves (2–3 per 40-trial cell), so exact dipped `−2.6…−5.1pp` at `-R ≥ 1280`. The
+cause was **not** the count-neutral cascade but the **finishing climb running uncapped** (`asize/2` =
+13 pairs) instead of at the schedule's target-stage cap — so on an already-solved 10-plug board it
+**added spurious plugs 11–13** that raise the noisy short-message quad score while corrupting the
+truth. Capping the finish at `opt_stages[last].cap` (like every other finisher/quench in the tool)
+removes it: re-measured on the identical boards, **every negative Δexact goes to ≥ 0** (the four dips
+−2.6/−5.1/−5.1/−5.0 → 0/0/+2.6/0), Δmean improves at the mega-`-R` cells, and `--gainfix-best` becomes
+**Pareto-neutral-or-better across the whole `-R 20…81920` range** (Δmean ≥ ~0, Δexact ≥ 0 every cell).
+The finisher is also **monotonic in score by construction** — the best board is replaced only when the
+finish scores strictly higher, so it never returns a lower-*scoring* board than the search found. (A
+residual truth-vs-score chase — a *count-neutral* cascade re-pair to a higher-scoring-but-wrong board
+at the information floor — is possible in principle but was not observed after the cap fix; it is
+unfixable by any score-only rule, since the wrong board genuinely scores higher.)
 
 ## 5. Structural / constraint-based
 
