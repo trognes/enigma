@@ -998,7 +998,20 @@ rate has converged. (An earlier `-R {40…2560}` sweep at N=16–40/cell had sug
 *byte-identical* at `-R ≥ 1280` — that was small-sample noise: those few high-`-R` cells happened to
 contain no fixable board. The N=100 sweep here corrects it — the finishers still help at every `-R`.)
 
----
+**A saturation-only liability of `--gainfix-best` being *unconditional on score*.** Because it runs the
+cascade with **no near-solution gate** (unlike per-convergence `--gainfix`, which fires only below the
+`-4.9` gate and so never touches an already-solved board), at very high `-R` it can fire on a board the
+restart budget *already solved exactly* and, if the scoring model has a board out-scoring the truth (a
+latent scoring failure the baseline had avoided by landing on truth), chase that higher score and
+**trade the exact hit for a 95–97.5%-correct wrong board** — it only checks `s > best.score`, and there
+score and truth diverge. Measured on the tsv `-S m4q10` L40 baselines (scoring failures *removed*, so
+these are not pre-existing floor cases — `--gainfix-best` is *introducing* the miss): at `-R ≥ 5120` a
+handful of `b_ex=1 (100%) → 95–97.5%` conversions (2–3 per 40-trial cell), slightly outnumbering the
+reverse gains, so exact recovery dips `−2.6…−5.1pp` while the mean stays ~flat. It only bites at
+saturation (where baseline exact rates are high); in the compute-limited regime the boards it fires on
+are genuinely unsolved, so the gate-free design is all upside there. This reinforces `--gainfix-best`
+as a **mid-budget** tool — and is why a *scoring failure introduced by the finisher* is a distinct
+thing from the pre-existing scoring-failure floor the §1 measurement rule tells you to exclude.
 
 ## 5. Structural / constraint-based
 
