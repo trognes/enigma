@@ -3573,13 +3573,6 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "instead of the greedy climb; N = move budget");
   fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
   fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
-  fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
-          "Key pre-filter: rank by a cheap IC climb, then");
-  fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
-  fprintf(out, "  %-24s %s\n", "", "top N% of the keyspace (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "-I, --first-improve",
-          "First-improvement climb: ~2.8x cheaper per climb,");
-  fprintf(out, "  %-24s %s\n", "", "so pair with more -R for a net win (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-J, --dynamic-order",
           "Like -I with dynamic best-first move ordering;");
   fprintf(out, "  %-24s %s\n", "", "wins ~10-plug, may lose few-plug (implies -I) [off]");
@@ -3587,16 +3580,6 @@ void help(FILE * out)
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
   fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--repair3",
-          "Last-resort 3-plug reshuffle at convergence (a");
-  fprintf(out, "  %-24s %s\n", "", "deeper try_repair; needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--no-repair",
-          "Disable the 2-plug re-pair barrier cross (ablation;");
-  fprintf(out, "  %-24s %s\n", "", "needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--gainfix[=GATE]",
-          "Quadgram-gain 2-ply directed-repair cascade at");
-  fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
-  fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off]");
   fprintf(out, "  %-24s %s\n", "--gainfix-best",
           "Run the gain cascade once, unconditionally, on");
   fprintf(out, "  %-24s %s\n", "", "the best board after all restarts (needs -c) [off]");
@@ -3607,18 +3590,46 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--random K",
           "Random-kick size: plug pairs injected per restart");
   fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = no kick, a control) [10]");
+  fprintf(out, "\n");
+  fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
+  fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
+  fprintf(out, "  %-24s %s\n", "-I, --first-improve",
+          "First-improvement climb: ~2.8x cheaper per climb,");
+  fprintf(out, "  %-24s %s\n", "", "pair with more -R (needs -c) [off]; prefer -J");
+  fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
+          "Key pre-filter: rank by a cheap IC climb, then");
+  fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
+  fprintf(out, "  %-24s %s\n", "", "top N% of the keyspace (needs -c) [off];");
+  fprintf(out, "  %-24s %s\n", "", "long messages only, weak on short");
+  fprintf(out, "  %-24s %s\n", "--repair3",
+          "Last-resort 3-plug reshuffle at convergence (a");
+  fprintf(out, "  %-24s %s\n", "", "deeper try_repair; needs -c) [off]; dominated");
+  fprintf(out, "  %-24s %s\n", "--no-repair",
+          "Disable the 2-plug re-pair barrier cross");
+  fprintf(out, "  %-24s %s\n", "", "(ablation/measurement flag; needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--gainfix[=GATE]",
+          "Quadgram-gain 2-ply directed-repair cascade at");
+  fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
+  fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off];");
+  fprintf(out, "  %-24s %s\n", "", "prefer --gainfix-best (kept for -F/--exhaust)");
   fprintf(out, "  %-24s %s\n", "--exhaust E",
           "Force E extra plug pairs among the free letters,");
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
   fprintf(out, "  %-24s %s\n", "", "exploration tool (E=1 = 325 climbs; E>1 explodes;");
   fprintf(out, "  %-24s %s\n", "", "needs -c; a high -R dominates it) [off]");
+  fprintf(out, "\n");
+  fprintf(out, "Diagnostic options (internal/experimental; for measurement):\n");
   fprintf(out, "  %-24s %s\n", "--true-key KEY",
-          "Diagnostic: with -F, print the tier-1 rank of the");
-  fprintf(out, "  %-24s %s\n", "", "given standard key (e.g. B241AAAQEW = reflector,");
-  fprintf(out, "  %-24s %s\n", "", "3 wheels, 3 ring, 3 start) among all keys [off]");
+          "With -F, print the tier-1 rank of the given");
+  fprintf(out, "  %-24s %s\n", "", "standard key (e.g. B241AAAQEW = reflector, 3");
+  fprintf(out, "  %-24s %s\n", "", "wheels, 3 ring, 3 start) among all keys [off]");
   fprintf(out, "  %-24s %s\n", "--dump-restarts",
-          "Diagnostic: with -c, print each converged restart's");
-  fprintf(out, "  %-24s %s\n", "", "score and board to stderr (verbose) [off]");
+          "With -c, print each converged restart's score");
+  fprintf(out, "  %-24s %s\n", "", "and board to stderr (verbose) [off]");
+  fprintf(out, "  %-24s %s\n", "--infl-order",
+          "Experimental: influence-ordered first-improvement");
+  fprintf(out, "  %-24s %s\n", "", "(implies -I; measured, dominated by -J;");
+  fprintf(out, "  %-24s %s\n", "", "needs -c) [off]");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
