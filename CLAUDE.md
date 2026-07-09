@@ -149,7 +149,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > regime), `-M` (with a tight cap), and `--gainfix-best` (Pareto-neutral-or-better finisher).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
-> plain short-message sweep: `-I`, `--infl-order`, `-A`, `-F`, `--repair3`, `--no-repair`,
+> plain short-message sweep: `-I`, `--infl-order`, `-F`, `--repair3`, `--no-repair`,
 > `--gainfix` (superseded by `--gainfix-best`, kept for `-F`/`--exhaust` compatibility), and
 > `--exhaust`. Each is tagged **not recommended** in its entry below and in `--help`.
 
@@ -260,7 +260,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   recovery does saturate at extreme `-R` (all modes tie once restarts alone find every recoverable
   board — the residual is the scoring-failure floor), but the mean gain persists. Simple sweep only
   (not `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
-- `-A N` recover the plugboard by **simulated annealing** (**not recommended** — a peer of the greedy restart climb at equal compute, never proven to strictly dominate) instead of the greedy climb
+- `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
   pre-pass seeds the board (mirrors `-S iq`), acceptance-ratio calibration sets the

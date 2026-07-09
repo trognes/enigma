@@ -3573,7 +3573,6 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "instead of the greedy climb; N = move budget");
   fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
   fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
-  fprintf(out, "  %-24s %s\n", "", "Not recommended (a peer of greedy -R, not a win)");
   fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
           "Key pre-filter: rank by a cheap IC climb, then");
   fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
