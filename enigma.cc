@@ -698,6 +698,70 @@ static void tt_touch(restart_tt & tt, const unsigned char * steck, double score)
   tt.nentries++;
 }
 
+/* Render a board canonically (each pair low-high, pairs ordered by low letter). */
+static void tt_board_str(const unsigned char * board, char * out)
+{
+  char * p = out;
+  for (int j = 0; j < asize; j++)
+    if (board[j] > j)
+      {
+        if (p > out)
+          *p++ = ' ';
+        *p++ = num2char(j);
+        *p++ = num2char(static_cast<int>(board[j]));
+      }
+  *p = 0;
+}
+
+/* Env-gated detailed dump (ENIGMA_TT_DUMP): table load, per-basin score stats, the hit
+   histogram (hits -> #basins), and the top basins by hit count. Off the hot path. */
+static void tt_dump_verbose(const restart_tt & tt)
+{
+  std::vector<const tt_bucket *> b;
+  for (size_t i = 0; i <= tt.mask; i++)
+    if (tt.slots[i].occupied)
+      b.push_back(& tt.slots[i]);
+  if (b.empty())
+    return;
+
+  uint32_t maxc = 0;
+  double smin = 1e300, smax = -1e300, ssum = 0.0;
+  for (const tt_bucket * e : b)
+    {
+      if (e->count > maxc) maxc = e->count;
+      if (e->score < smin) smin = e->score;
+      if (e->score > smax) smax = e->score;
+      ssum += e->score;
+    }
+  std::vector<size_t> hist(maxc + 1, 0);
+  for (const tt_bucket * e : b)
+    hist[e->count]++;
+
+  std::sort(b.begin(), b.end(), [](const tt_bucket * x, const tt_bucket * y)
+            { if (x->count != y->count) return x->count > y->count;
+              return x->score > y->score; });
+
+  size_t size = tt.mask + 1;
+  fprintf(stderr, "  table: %zu slots, %zu entries, load %.3f%s\n",
+          size, tt.nentries, static_cast<double>(tt.nentries) / static_cast<double>(size),
+          tt.full ? " (FULL)" : "");
+  fprintf(stderr, "  per-basin score: min %.4f  mean %.4f  max %.4f\n",
+          smin, ssum / static_cast<double>(b.size()), smax);
+  fprintf(stderr, "  hit histogram (hits:#basins):");
+  for (uint32_t h = 1; h <= maxc; h++)
+    if (hist[h])
+      fprintf(stderr, " %u:%zu", h, hist[h]);
+  fprintf(stderr, "\n");
+  int K = b.size() < 10 ? static_cast<int>(b.size()) : 10;
+  fprintf(stderr, "  top %d basins (hits  score  board):\n", K);
+  char board[3 * 13];
+  for (int k = 0; k < K; k++)
+    {
+      tt_board_str(b[k]->board, board);
+      fprintf(stderr, "    %4u  %.4f  %s\n", b[k]->count, b[k]->score, board);
+    }
+}
+
 /* Summarise basin collapse: distinct optima, the heaviest basin, and Shannon entropy of
    the hit distribution (uniform over N basins -> log2 N; all-collapsed -> 0). */
 static void tt_report(const restart_tt & tt)
@@ -720,6 +784,8 @@ static void tt_report(const restart_tt & tt)
           "restart-tt: %zu distinct optima over %zu climbs "
           "(max %u hits on one basin, entropy %.2f bits%s)\n",
           tt.nentries, tt.nclimbs, maxc, H, tt.full ? ", TABLE FULL -- undercount" : "");
+  if (getenv("ENIGMA_TT_DUMP") != nullptr)
+    tt_dump_verbose(tt);
 }
 
 static restart_tt g_restart_tt;
