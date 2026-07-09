@@ -160,15 +160,16 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 > **Recommended vs. not.** The proven-good search knobs are `-c` + `-R` restarts with `-q`
 > quad scoring, `-S i4q10` staging, `-J` (dynamic move order, wins the realistic ~10-plug
-> regime), `-M` (with a tight cap), and the best-board finishers `--gainfix-best` /
-> `--gainfix-best3` (both Pareto-neutral-or-better; `--gainfix-best3` is the stronger of the
-> two — strictly ≥ `--gainfix-best` at its near-free default K=8, so it is the better default
-> finisher).
+> regime), `-M` (with a tight cap), and the best-board finisher `--gainfix-best3` (the recommended
+> finisher — strictly ≥ `--gainfix-best` at its near-free default K=8, so there is no short-message
+> case where `--gainfix-best` is preferred over it).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-I`, `--infl-order`, `-F`, `--repair3`, `--no-repair`,
-> `--gainfix` (superseded by `--gainfix-best`, kept for `-F`/`--exhaust` compatibility), and
-> `--exhaust`. Each is tagged **not recommended** in its entry below and in `--help`.
+> `--gainfix` (superseded by `--gainfix-best3`, kept for `-F`/`--exhaust` compatibility),
+> `--gainfix-best` (superseded by `--gainfix-best3`, which is strictly ≥ it at near-free cost;
+> kept as the simpler/lighter variant and for ablation), and `--exhaust`. Each is tagged
+> **not recommended** in its entry below and in `--help`.
 
 > **Search playbook — the measured priority (this is the whole game for search).** `-R` restarts are
 > the **primary quality lever**; spend compute there first, via `-T` (which parallelises the
@@ -269,7 +270,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   off so its value can be A/B'd (e.g. at short lengths where its convergence scan is a larger
   fraction of a fast climb). Default off keeps the climb byte-identical; the flag only skips the
   `try_repair` call at each convergence.
-- `--gainfix[=GATE]` **quadgram-gain directed-repair cascade** (**not recommended** — prefer `--gainfix-best` on the plain sweep; kept as the `-F`/`--exhaust`-compatible variant; needs `-c`; quad-only; off by
+- `--gainfix[=GATE]` **quadgram-gain directed-repair cascade** (**not recommended** — prefer `--gainfix-best3` on the plain sweep; kept as the `-F`/`--exhaust`-compatible variant; needs `-c`; quad-only; off by
   default). At each quad convergence, uses per-position quad **gain** to propose plug corrections on
   *both* plugboard contacts — the exit re-plug `{S[pt[j]], bx}` and the reciprocal entry re-plug
   `{ct[j], core_j(S[bx])}` (machine-exact via the precomputed rotor core; self-encryption pruned
@@ -282,7 +283,9 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   small **matched-compute win** (+0.2–0.3pp mean / +0.5–0.6pp exact on short English, ~zero added
   `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
   `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
-- `--gainfix-best` **best-board-only gain cascade** (needs `-c`; mutually exclusive with `--gainfix`;
+- `--gainfix-best` **best-board-only gain cascade** (**not recommended** — superseded by
+  `--gainfix-best3`, which is strictly ≥ it at near-free cost; kept as the simpler/lighter variant and
+  for ablation; needs `-c`; mutually exclusive with `--gainfix`;
   off by default). The fixed-cost alternative to per-convergence `--gainfix`: runs the gain cascade
   **once, unconditionally (no score gate)**, on the single best board after all `-R` restarts (its key
   + stecker recorded at the merge), then one finishing climb. Costs a **fixed** ~950 `score_iter`
