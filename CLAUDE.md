@@ -103,6 +103,20 @@ v1.1.0 baseline every miss is a *search* failure.)
 > (A scoring change is the opposite case and *is* measured on the full population —
 > its whole job is to shrink the scoring-failure floor.)
 
+> **For matched-compute A/Bs, measure actual wall time — do not judge cost on
+> `score_iter` alone.** The `score_iter` counter counts only calls through the fused
+> n-gram score loop; it does **not** count the auxiliary per-symbol work some search
+> moves do outside that loop — most notably the `--gainfix*` **gain scan**
+> (`gainfix_candidates` does ≈`n·26·4` quad8 lookups per cascade call, ≈100
+> `score_iter`-equivalents, uncounted). So on gain-cascade changes `score_iter`
+> **undercounts real cost by several×**, and the two axes can *disagree*: e.g.
+> `--gainfix-best3` at a large `K` can tie `--gainfix-best`+more-`-R` on `score_iter`
+> while being **Pareto-dominated** on wall time (`PERFORMANCE.md` §4.11 — K=169 at 131 ms
+> lost to R200 at 114 ms despite fewer counted iters). Take wall time as the min of a few
+> reps (per problem) to damp noise, and treat `score_iter` as the *cheap deterministic
+> proxy* it is — good for `-T`-independent A/Bs of moves that live **inside** the score
+> loop (restarts, climb order, caps), misleading for anything that adds work outside it.
+
 `crack_quality.py` also carries three opt-in test modes from `CRACKQUALITY_TESTS.md`
 (all off by default, the normal flow unchanged): `WILDCARD` wildcards the rotor key
 for the **scoring-failure gate** (§1); `FILTERRECALL=1` reports the true key's `-F`
@@ -146,7 +160,10 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 > **Recommended vs. not.** The proven-good search knobs are `-c` + `-R` restarts with `-q`
 > quad scoring, `-S i4q10` staging, `-J` (dynamic move order, wins the realistic ~10-plug
-> regime), `-M` (with a tight cap), and `--gainfix-best` (Pareto-neutral-or-better finisher).
+> regime), `-M` (with a tight cap), and the best-board finishers `--gainfix-best` /
+> `--gainfix-best3` (both Pareto-neutral-or-better; `--gainfix-best3` is the stronger of the
+> two — strictly ≥ `--gainfix-best` at its near-free default K=8, so it is the better default
+> finisher).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-I`, `--infl-order`, `-F`, `--repair3`, `--no-repair`,
@@ -260,6 +277,20 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   recovery does saturate at extreme `-R` (all modes tie once restarts alone find every recoverable
   board — the residual is the scoring-failure floor), but the mean gain persists. Simple sweep only
   (not `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
+- `--gainfix-best3` **best-board finisher with a deeper 3-plug-tangle escalation** (**recommended** —
+  the stronger of the two finishers, strictly ≥ `--gainfix-best` at its near-free default K=8; needs `-c`;
+  mutually exclusive with `--gainfix`/`--gainfix-best`; off by default). Like `--gainfix-best`, but the
+  once-only best-board finisher also runs a **"sacrifice + reclimb"** step when the 2-ply cascade finds
+  nothing: it ranks the `(plug1,plug2)` sacrifice pairs by 2-plug score and, for the top-`K` (K=8),
+  commits the sacrifice (both plugs, possibly downhill) and runs a full plain reclimb — letting the
+  ordinary climb find the completing plug(s) and shed spurious ones — keeping the best. No explicit
+  plug3 search (the completing plug is the top move the reclimb finds anyway; a full climb per sacrifice
+  recovers *more* than committing one fixed plug — it matches the explicit 3-ply at K=6 and beats it at
+  K=12). Targets 3-plug tangles the 2-ply pair can't cross: real-tool capped, it solves **56% of fixable
+  ≥80%-base boards vs `--gainfix-best`'s 41%**, and beats 2-ply by **+~1.3pp mean / +2…5pp exact** at
+  matched compute (english+german L40), for ~+2–3 ms wall (<1% for `-R`≥640). Simple sweep only.
+  `-T`-deterministic (internal reclimb reuses `hillclimb` with gainfix off — no recursion). See
+  `PERFORMANCE.md` §4.11.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC

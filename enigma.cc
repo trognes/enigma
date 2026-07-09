@@ -186,6 +186,10 @@ static double opt_gainfix_gate;
    single best board after all restarts, instead of at every gated convergence. Only
    one board is finished, so no gate is needed. Off by default; needs -c. */
 static int opt_gainfix_best;
+/* --gainfix3: enable the 3-ply gain cascade (a deeper escalation, tried only when the 2-ply
+   cascade found nothing). --gainfix-best3 turns it on for the single best-board finisher. */
+static int opt_gainfix3;
+static int opt_gainfix_best3;
 static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
                              0 (the default) = one deterministic climb from the seed,
                              no kick; N>=1 = exactly N kicked climbs, keep the best
@@ -1261,6 +1265,8 @@ static bool try_repair_3(machine & m, double cur_score)
    over the whole shortlist per plug1, so cascade cost is ~CAP + N1*CAP score_iter. */
 static const int GAINFIX_CAP = 25;
 static const int GAINFIX_N1  = 6;
+static const int GAINFIX_N2  = 6;   /* --gainfix3: intermediate plug2 beam */
+static const int GAINFIX_K3  = 8;   /* --gainfix3: # of sacrifice pairs reclimbed */
 
 /* Form plug a-b in place, ejecting a's and b's old partners to self-steckered
    (an "add-with-eject" — a free endpoint is a no-op eject). */
@@ -1435,6 +1441,137 @@ static bool gain_cascade(machine & m, double cur_score)
     {
       gainfix_apply(steck, ba1, bb1);
       gainfix_apply(steck, ba2, bb2);
+      report_climb_progress(m, best);
+    }
+  return found;
+}
+
+template<bool EX> static double hillclimb(machine & m, int max_pairs);   /* fwd: reclimb below */
+
+/* --gainfix3 ("sacrifice + reclimb"): a deeper escalation for 3-plug tangles the 2-ply pair
+   can't cross, tried only when the 2-ply cascade found nothing. Rank the (plug1,plug2)
+   SACRIFICE pairs (both plugs, possibly downhill) by their 2-plug score, and for the top-K
+   commit the sacrifice and run a full PLAIN reclimb -- letting the ordinary climb find the
+   completing plug(s) AND shed spurious ones -- keeping the best-scoring result. No explicit
+   plug3 search: the completing plug is the top improving move after the sacrifice, so the
+   reclimb finds it (measured), which is both simpler and recovers MORE than committing one
+   fixed completing plug (a full climb per sacrifice beats a single triple; PERFORMANCE.md
+   4.11). The reclimb runs with gainfix off -> no recursion, capped at the same max_pairs.
+   template<bool EX>/plug_fixed like the rest; -T-deterministic. */
+template<bool EX>
+static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
+{
+  if (m.scoring != SCORE_QUAD || textlength < 8)
+    return false;
+  if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
+    return false;
+
+  unsigned char * steck = m.steckerbrett;
+  unsigned char ca[GAINFIX_CAP], cb[GAINFIX_CAP];
+  int nc = gainfix_candidates<EX>(m, ca, cb, GAINFIX_CAP);
+  if (nc == 0)
+    return false;
+
+  unsigned char saveS[asize];
+  for (int i = 0; i < asize; i++) saveS[i] = steck[i];
+
+  /* rank plug1 by the full re-decode score, take the top-N1 */
+  double sc1[GAINFIX_CAP];
+  int order1[GAINFIX_CAP];
+  for (int k = 0; k < nc; k++)
+    {
+      gainfix_apply(steck, ca[k], cb[k]);
+      sc1[k] = score_iter(m);
+      for (int i = 0; i < asize; i++) steck[i] = saveS[i];
+      order1[k] = k;
+    }
+  int n1 = nc < GAINFIX_N1 ? nc : GAINFIX_N1;
+  for (int k = 0; k < n1; k++)
+    {
+      int bi = k;
+      for (int i = k + 1; i < nc; i++)
+        if (sc1[order1[i]] > sc1[order1[bi]]) bi = i;
+      int so = order1[k]; order1[k] = order1[bi]; order1[bi] = so;
+    }
+
+  /* build the (plug1,plug2) sacrifice boards + their 2-plug scores */
+  const int MAXP = GAINFIX_N1 * GAINFIX_N2;
+  double pscore[MAXP];
+  unsigned char pboard[MAXP][asize];
+  int npair = 0;
+  unsigned char saveS1[asize], ca2[GAINFIX_CAP], cb2[GAINFIX_CAP];
+  double sc2[GAINFIX_CAP];
+  int order2[GAINFIX_CAP];
+  for (int t = 0; t < n1; t++)
+    {
+      int k1 = order1[t];
+      for (int i = 0; i < asize; i++) steck[i] = saveS[i];
+      gainfix_apply(steck, ca[k1], cb[k1]);               /* plug1 -> S1 (may be downhill) */
+      for (int i = 0; i < asize; i++) saveS1[i] = steck[i];
+      int nc2 = gainfix_candidates<EX>(m, ca2, cb2, GAINFIX_CAP);
+      for (int k = 0; k < nc2; k++)                       /* rank plug2 by 2-plug score */
+        {
+          gainfix_apply(steck, ca2[k], cb2[k]);
+          sc2[k] = score_iter(m);
+          for (int i = 0; i < asize; i++) steck[i] = saveS1[i];
+          order2[k] = k;
+        }
+      int n2 = nc2 < GAINFIX_N2 ? nc2 : GAINFIX_N2;
+      for (int k = 0; k < n2; k++)
+        {
+          int bi = k;
+          for (int i = k + 1; i < nc2; i++)
+            if (sc2[order2[i]] > sc2[order2[bi]]) bi = i;
+          int so = order2[k]; order2[k] = order2[bi]; order2[bi] = so;
+        }
+      for (int u = 0; u < n2; u++)
+        {
+          int k2 = order2[u];
+          if (ca2[k2] == ca[k1] && cb2[k2] == cb[k1])     /* skip plug2 == plug1 */
+            continue;
+          for (int i = 0; i < asize; i++) steck[i] = saveS1[i];
+          gainfix_apply(steck, ca2[k2], cb2[k2]);         /* plug2 -> S2 (may be downhill) */
+          pscore[npair] = sc2[k2];
+          for (int i = 0; i < asize; i++) pboard[npair][i] = steck[i];
+          npair++;
+        }
+    }
+
+  /* rank the sacrifice pairs by 2-plug score, take the top-K */
+  int po[MAXP];
+  for (int k = 0; k < npair; k++) po[k] = k;
+  int K = npair < GAINFIX_K3 ? npair : GAINFIX_K3;
+  for (int k = 0; k < K; k++)
+    {
+      int bi = k;
+      for (int i = k + 1; i < npair; i++)
+        if (pscore[po[i]] > pscore[po[bi]]) bi = i;
+      int so = po[k]; po[k] = po[bi]; po[bi] = so;
+    }
+
+  /* commit each top-K sacrifice and run a PLAIN reclimb (gainfix off -> no recursion), keep
+     the best result -- the reclimb finds the completing plug(s) and sheds spurious ones */
+  double best = cur_score;
+  bool found = false;
+  unsigned char bestboard[asize];
+  int save_gf = opt_gainfix, save_gf3 = opt_gainfix3;
+  opt_gainfix = 0; opt_gainfix3 = 0;
+  for (int k = 0; k < K; k++)
+    {
+      for (int i = 0; i < asize; i++) steck[i] = pboard[po[k]][i];
+      double s = hillclimb<EX>(m, max_pairs);
+      if (s > best)
+        {
+          best = s; found = true;
+          for (int i = 0; i < asize; i++) bestboard[i] = steck[i];
+        }
+    }
+  opt_gainfix = save_gf; opt_gainfix3 = save_gf3;
+
+  for (int i = 0; i < asize; i++) steck[i] = saveS[i];     /* restore original board */
+  if (found)
+    {
+      for (int i = 0; i < asize; i++) steck[i] = bestboard[i];
       report_climb_progress(m, best);
     }
   return found;
@@ -1815,7 +1952,8 @@ static double hillclimb(machine & m, int max_pairs)
       /* short-circuit: try_repair_3 runs only when the 2-plug re-pair found nothing */
       if ((! opt_no_repair && try_repair<EX>(m, cur))
           || (opt_repair3 && try_repair_3<EX>(m, cur))
-          || (opt_gainfix && gain_cascade<EX>(m, cur)))
+          || (opt_gainfix && gain_cascade<EX>(m, cur))
+          || (opt_gainfix3 && gain_cascade_3ply<EX>(m, cur, max_pairs)))
         progress = true;
     }
   while (progress);
@@ -3301,7 +3439,7 @@ void bruteforce(char * result)
      that board's machine from its key (best.idx) and the recorded steckerbrett. Only
      the simple sweep records best.idx as key*restarts+restart, so it is guarded to
      that path (no -F, no --exhaust). */
-  if (opt_gainfix_best && best.found)
+  if ((opt_gainfix_best || opt_gainfix_best3) && best.found)
     {
       machine & m = *machines[0];
       size_t rg = rsize * gsize;
@@ -3316,8 +3454,10 @@ void bruteforce(char * result)
       m.scoring = opt_scoring;
       m.report = false;
       int save_gf = opt_gainfix;
+      int save_gf3 = opt_gainfix3;
       double save_gate = opt_gainfix_gate;
       opt_gainfix = 1;
+      opt_gainfix3 = opt_gainfix_best3;   /* --gainfix-best3 also enables the 3-ply escalation */
       opt_gainfix_gate = score_min;   /* unconditional cascade on the one best board */
       /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
          every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
@@ -3327,6 +3467,7 @@ void bruteforce(char * result)
       int fin_cap = opt_stages[opt_nstages - 1].cap;
       double s = hillclimb<false>(m, fin_cap);
       opt_gainfix = save_gf;
+      opt_gainfix3 = save_gf3;
       opt_gainfix_gate = save_gate;
       /* Monotonic by construction: replace the best board ONLY when the finish scores
          strictly higher, so gainfix-best never returns a worse-scoring board than the
@@ -3583,6 +3724,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--gainfix-best",
           "Run the gain cascade once, unconditionally, on");
   fprintf(out, "  %-24s %s\n", "", "the best board after all restarts (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--gainfix-best3",
+          "Like --gainfix-best but with a deeper 3-ply cascade");
+  fprintf(out, "  %-24s %s\n", "", "for 3-plug tangles; stronger finisher, near-free");
+  fprintf(out, "  %-24s %s\n", "", "at K=8 (needs -c) [off, recommended]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -3645,7 +3790,7 @@ void help(FILE * out)
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --score i4q10 --random 10 -R 40 -q -l english\n");
+  fprintf(out, "  greedy: -c -J --gainfix-best3 --score i4q10 --random 10 -R 40 -q -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score q10 -R 12 -q -l english\n");
   fprintf(out, "\n");
 }
@@ -3706,6 +3851,9 @@ void show_settings()
             "(--gainfix, near-solution gate %.2f)\n", opt_gainfix_gate);
   if (opt_hillclimb && opt_gainfix_best)
     fprintf(stderr, "            quadgram-gain cascade once on the best board (--gainfix-best)\n");
+  if (opt_hillclimb && opt_gainfix_best3)
+    fprintf(stderr, "            quadgram-gain 2-ply+3-ply cascade once on the best board "
+            "(--gainfix-best3)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" :
@@ -3796,6 +3944,8 @@ int main(int argc, char * * argv)
   opt_gainfix = 0;
   opt_gainfix_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
   opt_gainfix_best = 0;
+  opt_gainfix3 = 0;
+  opt_gainfix_best3 = 0;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -3818,7 +3968,7 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
-         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST };
+         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3 };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -3863,6 +4013,7 @@ int main(int argc, char * * argv)
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
       { "gainfix",        optional_argument, nullptr, OPT_GAINFIX },
       { "gainfix-best",   no_argument,       nullptr, OPT_GAINFIX_BEST },
+      { "gainfix-best3",  no_argument,       nullptr, OPT_GAINFIX_BEST3 },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -3938,6 +4089,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_GAINFIX_BEST:
           opt_gainfix_best = 1;
+          break;
+        case OPT_GAINFIX_BEST3:
+          opt_gainfix_best3 = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -4232,6 +4386,14 @@ int main(int argc, char * * argv)
     fatal("--gainfix-best and --gainfix are alternatives; pick one");
   if (opt_gainfix_best && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
     fatal("--gainfix-best is not supported with -F or --exhaust");
+
+  /* --gainfix-best3 = the best-board finisher with the 3-ply escalation; same guards. */
+  if (opt_gainfix_best3 && (! opt_hillclimb))
+    fatal("Gain-cascade 3-ply best-board finish (--gainfix-best3) needs the plugboard hill-climb (-c)");
+  if (opt_gainfix_best3 && (opt_gainfix || opt_gainfix_best))
+    fatal("--gainfix-best3, --gainfix-best and --gainfix are alternatives; pick one");
+  if (opt_gainfix_best3 && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
+    fatal("--gainfix-best3 is not supported with -F or --exhaust");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */
