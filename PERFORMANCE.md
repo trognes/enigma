@@ -951,35 +951,38 @@ unconditionally (no score gate)**, on the single best board after all `-R` resta
 one finishing climb. It reconstructs that board's machine from the winning key + recorded stecker
 (recorded at the merge), so it costs a **fixed** ~960 `score_iter` **independent of `-R`** — whereas
 per-convergence `--gainfix` costs scale (weakly, via the gate) with the number of near-solution
-convergences. A 3-way matched-compute A/B (English L40–50, 80/cell, `-J -S i4q10`):
+convergences. A 3-way matched-compute A/B, full `-R` sweep (English L40–50, **N=100/cell**,
+`-J -S i4q10`; `score_iter` within ~0.2–0.3% across modes at every `-R`, so these are matched):
 
-| `-R` | base %corr / exact | `--gainfix` %corr / exact | `--gainfix-best` %corr / exact | best si overhead |
+| `-R` | base %corr / exact | `--gainfix` %corr / exact | `--gainfix-best` %corr / exact | Δmean (gainfix / best) |
 |---:|---:|---:|---:|---:|
-| 8  | 13.30 / 3.3 | 13.50 / 3.8 | 13.48 / 3.3 | +987 |
-| 16 | 18.77 / 7.5 | 18.97 / 7.9 | 19.15 / 7.5 | +984 |
-| 32 | 23.02 / 12.5 | 23.22 / 12.9 | **23.53 / 12.9** | +962 |
+| 8    | 13.48 / 3.0  | 13.65 / 3.3  | 13.63 / 3.0  | +0.17 / +0.15 |
+| 16   | 17.69 / 6.3  | 17.85 / 6.7  | 17.98 / 6.3  | +0.16 / +0.29 |
+| 32   | 21.78 / 10.7 | 21.94 / 11.0 | 22.19 / 11.0 | +0.16 / +0.41 |
+| 40   | 23.51 / 12.0 | 23.75 / 12.7 | 23.96 / 12.7 | +0.24 / +0.45 |
+| 80   | 27.65 / 15.0 | 28.34 / 17.0 | 28.16 / 16.0 | +0.69 / +0.51 |
+| 160  | 33.40 / 21.3 | 33.87 / 22.0 | 33.85 / 22.0 | +0.47 / +0.45 |
+| 320  | 43.00 / 30.7 | 43.47 / 31.0 | 43.66 / 31.7 | +0.47 / +0.66 |
+| 640  | 50.78 / 39.7 | 51.32 / 40.3 | 51.49 / 40.3 | +0.54 / +0.71 |
+| 1280 | 57.20 / 47.7 | 57.38 / 47.3 | 57.74 / 48.0 | +0.18 / +0.54 |
+| 2560 | 65.27 / 57.3 | 65.80 / 57.3 | 65.75 / 57.3 | +0.53 / +0.48 |
 
-The two variants are near-even at low `-R`; at `-R 32` the best-board finish gives the highest mean
-(+0.51pp vs base, ~+0.4pp over compute-matched base — ahead of per-convergence `--gainfix`) because
-its fixed cost amortizes and, at high `-R`, the single best board is reliably near-solution so the one
-unconditional cascade lands where it matters. So the two are peers with a `-R`-dependent trade: at low
-`-R` prefer the gated per-convergence `--gainfix` (its cost is near-zero when few boards are
-near-solution); at high `-R` `--gainfix-best` edges ahead. Both are opt-in and mutually exclusive;
-`--gainfix-best` runs only under the simple sweep (not `-F`/`--exhaust`, whose `best.idx` does not
-carry the key×restart reconstruction).
+**The mean gain persists across the whole `-R` range** — +0.2–0.7pp with no decay to zero, right out to
+`-R 2560`. The two variants are peers, `--gainfix-best` generally ≥ `--gainfix` (it wins or ties 8 of
+10 rows; `--gainfix` edges ahead only at `-R 80/160`): the best-board finish concentrates its one
+unconditional cascade on the reliably-near-solution best board, and its cost is **fixed** (~950
+`score_iter`) so it is ~free at high `-R`, whereas per-convergence `--gainfix`'s cost scales (still
+<0.3%). Both opt-in and mutually exclusive; `--gainfix-best` runs only under the simple sweep (not
+`-F`/`--exhaust`, whose `best.idx` does not carry the key×restart reconstruction).
 
-**Both finishers are a mid-budget tool — they saturate to a no-op at very high `-R`.** Extending the
-sweep to `-R {40…2560}` (English L40–50) shows the gain fading as the restart budget grows: mean Δ vs
-base holds through `-R 320` (`--gainfix-best` +0.20…+0.56pp; per-convergence `--gainfix` decays to
-~0 by `-R 160` as the plain climb starts finding the near-solution basins on its own), and at
-`-R {1280, 2560}` **all three modes are byte-identical on every trial** (e.g. `-R 2560`: 59.5% mean /
-56% exact for base, `--gainfix`, and `--gainfix-best` alike). This is the expected end state: the
-directed cascade targets the thin near-solution *search*-failure slice, and enough blind restarts
-eventually reach those same basins — so the residual misses are all **scoring failures** (true board
-not top-scoring, the §6.13/§6.14 information floor), which no score-based finisher can cross. So the
-finishers pay in the **compute-limited** regime (roughly `-R ≤ 320` here) and add nothing once the
-search saturates; keep the claims scoped there. (The `-R 40…2560` sweep was N=16–40/cell — small, so
-the per-row decimals are noisy; the saturation-to-identical result at `-R ≥ 1280` is the robust part.)
+**What *does* saturate is exact recovery, not the mean.** At extreme `-R` the restart budget alone
+finds essentially every recoverable board, so *new exact* solves from the finisher dry up — at
+`-R 2560` all three modes tie at 57.3% exact (the residual is the §6.13/§6.14 **scoring-failure**
+floor: true board not top-scoring, uncrossable by any score-based method). But the cascade keeps
+lifting near-solution **non-exact** boards, so the **mean %-correct stays ahead** even where the exact
+rate has converged. (An earlier `-R {40…2560}` sweep at N=16–40/cell had suggested the modes go
+*byte-identical* at `-R ≥ 1280` — that was small-sample noise: those few high-`-R` cells happened to
+contain no fixable board. The N=100 sweep here corrects it — the finishers still help at every `-R`.)
 
 ---
 
