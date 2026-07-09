@@ -144,6 +144,15 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 ### Key CLI options (see `help()` in source for the full list)
 
+> **Recommended vs. not.** The proven-good search knobs are `-c` + `-R` restarts with `-q`
+> quad scoring, `-S i4q10` staging, `-J` (dynamic move order, wins the realistic ~10-plug
+> regime), `-M` (with a tight cap), and `--gainfix-best` (Pareto-neutral-or-better finisher).
+> Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
+> tools, or only conditionally useful, and have not been proven to strictly dominate on the
+> plain short-message sweep: `-I`, `--infl-order`, `-A`, `-F`, `--repair3`, `--no-repair`,
+> `--gainfix` (superseded by `--gainfix-best`, kept for `-F`/`--exhaust` compatibility), and
+> `--exhaust`. Each is tagged **not recommended** in its entry below and in `--help`.
+
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
 - `-x N` highest wheel number to consider when wildcarding (default 5)
@@ -157,7 +166,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   re-pair/toggle move), so `-s` supplies *known* plugs and the search recovers only the
   rest. They still seed a plain (no-climb) decrypt as before.
 - `-c` hill-climb the plugboard
-- `-I` **circular first-improvement** climb instead of steepest ascent (needs `-c`; off by
+- `-I` **circular first-improvement** climb (**not recommended** — worse per restart; prefer `-J`) instead of steepest ascent (needs `-c`; off by
   default). `hillclimb()` normally full-scans all 325 toggle moves per accepted move and takes
   the single best; `-I` sweeps the same fixed 325-pair toggle list (each pair a `toggle a-b`:
   already-paired → remove, else add/move/merge) with a cursor, applies the **first** improving
@@ -183,7 +192,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
   compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected** (`PERFORMANCE.md` §7.2).
-- `--infl-order` **influence-ordered first-improvement** (experimental; implies `-I`; mutually
+- `--infl-order` **influence-ordered first-improvement** (**not recommended** — measured, dominated by `-J`; experimental; implies `-I`; mutually
   exclusive with `-J`; needs `-c`; off by default). Orders the move sweep by the board-state
   **influence** `w(a,b)=ct_count[a]+ct_count[b]+pt_count[a]+pt_count[b]` (two 26-bin histograms
   over the ciphertext and current decrypt — the §4.5/§4.6 weight) instead of `-J`'s measured
@@ -211,7 +220,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   the IC-pre-pass cap in `--score i4q…` is a *flat plateau* by default is that without `-M` the
   cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
   `PERFORMANCE.md` §7.3.)
-- `--repair3` **3-plug re-pair barrier cross** (needs `-c`; off by default). The 3-plug
+- `--repair3` **3-plug re-pair barrier cross** (**not recommended** — measured, dominated; needs `-c`; off by default). The 3-plug
   generalisation of `try_repair` (`try_repair_3()`): tried only at convergence, once the
   toggle climb **and** the 2-plug `try_repair` have both stalled, it rematches three existing
   plugs (six letters) into a different pairing (the 8 genuine count-neutral reshufflings that
@@ -222,13 +231,13 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   **Measured, dominated**: at matched compute it loses ~2pp mean %-correct — the per-climb
   cost is better spent on more `-R` restarts (`PERFORMANCE.md` §4.7). A documented-dominated
   opt-in, not recommended — same verdict as `--exhaust`.
-- `--no-repair` **disable the default 2-plug `try_repair` barrier cross** (needs `-c`; off by
+- `--no-repair` **disable the default 2-plug `try_repair` barrier cross** (**not recommended** — ablation/measurement flag; needs `-c`; off by
   default). An ablation/measurement flag: the 2-plug re-pair is normally always-on (it earns
   its keep at long lengths — `archived/CODE_REVIEW_HISTORY.md` §9 item 7), and this turns it
   off so its value can be A/B'd (e.g. at short lengths where its convergence scan is a larger
   fraction of a fast climb). Default off keeps the climb byte-identical; the flag only skips the
   `try_repair` call at each convergence.
-- `--gainfix[=GATE]` **quadgram-gain directed-repair cascade** (needs `-c`; quad-only; off by
+- `--gainfix[=GATE]` **quadgram-gain directed-repair cascade** (**not recommended** — prefer `--gainfix-best` on the plain sweep; kept as the `-F`/`--exhaust`-compatible variant; needs `-c`; quad-only; off by
   default). At each quad convergence, uses per-position quad **gain** to propose plug corrections on
   *both* plugboard contacts — the exit re-plug `{S[pt[j]], bx}` and the reciprocal entry re-plug
   `{ct[j], core_j(S[bx])}` (machine-exact via the precomputed rotor core; self-encryption pruned
@@ -251,7 +260,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   recovery does saturate at extreme `-R` (all modes tie once restarts alone find every recoverable
   board — the residual is the scoring-failure floor), but the mean gain persists. Simple sweep only
   (not `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
-- `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
+- `-A N` recover the plugboard by **simulated annealing** (**not recommended** — a peer of the greedy restart climb at equal compute, never proven to strictly dominate) instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
   pre-pass seeds the board (mirrors `-S iq`), acceptance-ratio calibration sets the
@@ -285,7 +294,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   (0–13; default **10**, near the typical plug count). `--random 0` is a legal control
   (no perturbation — N restarts then repeat the seed climb). Needs `-c` (errors otherwise,
   since a kick does nothing in a bare rotor scan). Replaces the old `-S rN` token.
-- `--exhaust E` (long-only) **partial plugboard exhaustion** (§3.6 in `PERFORMANCE.md`):
+- `--exhaust E` (long-only) **partial plugboard exhaustion** (**not recommended** — measured, dominated; §3.6 in `PERFORMANCE.md`):
   force `E` **extra** plug pairs among the free letters (on top of any `-s` pairs) — `E`
   counts *forced* pairs, not total. It tries *every* set of `E` disjoint pairs (pinned like
   `-s`), runs the staged climb from that seed, and keeps the best. It **composes** with the
@@ -337,7 +346,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   or a selector vs a different `--score` target (`-m --score q`) — since the intent is
   genuinely ambiguous; agreement is silent (`-q -q`, `-q --score q`, `-q --score i4q10`).
 - `-p file` compare the recovered plaintext against a known plaintext file
-- `-F N` / `-F N%` key pre-filter (needs `-c`; `0` = off): a two-tier search — tier 1
+- `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a long-message throughput tool, unreliable on the short/hard end and proxy-measured; needs `-c`; `0` = off): a two-tier search — tier 1
   ranks *every* key by a single **cheap IC climb** and keeps the top `N` (or top `N%`
   of the resolved keyspace); tier 2 runs the full `-R`/`-S` climb on only those. The
   big *throughput* win (~8–20× over climbing every key), so more restarts are

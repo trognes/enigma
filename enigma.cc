@@ -3573,13 +3573,16 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "instead of the greedy climb; N = move budget");
   fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
   fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
+  fprintf(out, "  %-24s %s\n", "", "Not recommended (a peer of greedy -R, not a win)");
   fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
           "Key pre-filter: rank by a cheap IC climb, then");
   fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
   fprintf(out, "  %-24s %s\n", "", "top N% of the keyspace (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "", "Not recommended (long messages only; weak on short)");
   fprintf(out, "  %-24s %s\n", "-I, --first-improve",
           "First-improvement climb: ~2.8x cheaper per climb,");
   fprintf(out, "  %-24s %s\n", "", "so pair with more -R for a net win (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "", "Not recommended (worse per restart; prefer -J)");
   fprintf(out, "  %-24s %s\n", "-J, --dynamic-order",
           "Like -I with dynamic best-first move ordering;");
   fprintf(out, "  %-24s %s\n", "", "wins ~10-plug, may lose few-plug (implies -I) [off]");
@@ -3590,13 +3593,16 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--repair3",
           "Last-resort 3-plug reshuffle at convergence (a");
   fprintf(out, "  %-24s %s\n", "", "deeper try_repair; needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "", "Not recommended (measured, dominated)");
   fprintf(out, "  %-24s %s\n", "--no-repair",
           "Disable the 2-plug re-pair barrier cross (ablation;");
   fprintf(out, "  %-24s %s\n", "", "needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "", "Not recommended (ablation/measurement flag)");
   fprintf(out, "  %-24s %s\n", "--gainfix[=GATE]",
           "Quadgram-gain 2-ply directed-repair cascade at");
   fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
   fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off]");
+  fprintf(out, "  %-24s %s\n", "", "Not recommended (prefer --gainfix-best; -F/exhaust)");
   fprintf(out, "  %-24s %s\n", "--gainfix-best",
           "Run the gain cascade once, unconditionally, on");
   fprintf(out, "  %-24s %s\n", "", "the best board after all restarts (needs -c) [off]");
@@ -3612,6 +3618,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
   fprintf(out, "  %-24s %s\n", "", "exploration tool (E=1 = 325 climbs; E>1 explodes;");
   fprintf(out, "  %-24s %s\n", "", "needs -c; a high -R dominates it) [off]");
+  fprintf(out, "  %-24s %s\n", "", "Not recommended (measured, dominated)");
   fprintf(out, "  %-24s %s\n", "--true-key KEY",
           "Diagnostic: with -F, print the tier-1 rank of the");
   fprintf(out, "  %-24s %s\n", "", "given standard key (e.g. B241AAAQEW = reflector,");
