@@ -215,6 +215,19 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   off so its value can be A/B'd (e.g. at short lengths where its convergence scan is a larger
   fraction of a fast climb). Default off keeps the climb byte-identical; the flag only skips the
   `try_repair` call at each convergence.
+- `--gainfix[=GATE]` **quadgram-gain directed-repair cascade** (needs `-c`; quad-only; off by
+  default). At each quad convergence, uses per-position quad **gain** to propose plug corrections on
+  *both* plugboard contacts — the exit re-plug `{S[pt[j]], bx}` and the reciprocal entry re-plug
+  `{ct[j], core_j(S[bx])}` (machine-exact via the precomputed rotor core; self-encryption pruned
+  since Enigma never maps a letter to itself) — ranks them by the full re-decode score, and runs a
+  **2-ply cascade**: apply the best plug *even if downhill* (which un-masks a masked second plug),
+  keep the pair only if the net beats the converged score, then let the cheap climb resume and
+  finish it (the reclimb amplification is free from the `do/while` loop). **Gated** by a
+  near-solution per-symbol score threshold (`GATE`, default `-4.9` English-quad-calibrated; tune per
+  language) so it fires only on promising boards and skips the ~76% junk — which is what makes it a
+  small **matched-compute win** (+0.2–0.3pp mean / +0.5–0.6pp exact on short English, ~zero added
+  `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
+  `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC

@@ -911,21 +911,33 @@ English-quad calibrated: junk ~-5.3, near-solution 60%+ ~-4.8…-4.2) so it spen
 (`--gainfix=-99`) adds ~7%. Correct/clean: 182 tests pass, `-Werror` g++/clang++, ASan/UBSan and
 clang-tidy clean.
 
-**What's still open — the matched-compute verdict.** Does the gated cascade beat spending its
-compute on more restarts, on the hard/short messages where near-solution-but-stuck boards actually
-occur? The economics are genuinely uncertain: per near-solution board the cascade is far more
-efficient than *re-finding* one (converts 53% for ~2 climbs vs a ~4.5% near-solution rate), but the
-boards are rare and the enabling move (downhill-then-reclimb) is what restarts already do. This is
-measured via `make crackquality` / a recovery-vs-`score_iter` A/B (`-S i4q10 -R N` ± `--gainfix`);
-the gate makes it neutral where boards don't stick, so the question is whether it lifts recovery on
-the short-length regime. **[verdict TBD — measurement in progress]**
+**Matched-compute verdict — a small but consistent WIN, because the gate makes it near-free.**
+Recovery-vs-`score_iter` A/B (`-J -S i4q10 -R {8,16,32}` ± `--gainfix`, English L40–50, 60/cell,
+the no-gainfix curve interpolated to the gainfix `score_iter`): **+0.2–0.3pp mean %-correct and
++0.5–0.6pp exact** at matched compute, positive at every budget R≥8.
 
-**Verdict — a validated component chain (53% solve on real fixable boards), now shipped as an opt-in
-flag with an unresolved matched-compute economics.** Directed, reversible, and it addresses the
-specific failure modes that sank fix-and-finish (§4.8: irreversibility) and the badness heuristic
-(undirected). Reproduce the component measurements: `eval/gain_cascade_probe.py` (dual generation,
-prune, full-plug ranking, cascade, and the cascade+reclimb solve rate, all against the real
-`eval/results*.tsv` boards).
+| `score_iter` | baseline %corr | `--gainfix` %corr | Δ (matched) |
+|---:|---:|---:|---:|
+| 18,159 | 14.32 | 14.59 | **+0.27** |
+| 36,264 | 19.52 | 19.77 | **+0.25** |
+| 72,738 | 25.28 | 25.51 | **+0.23** |
+
+The win exists *because of the gate*: `score_iter` stays within 0.3% of baseline at every budget
+(the cascade fires only on near-solution boards and finds nothing on junk/solved), so the small
+recovery gain is essentially free. **Ungated it is dominated** (fires on every convergence including
+junk — the same wall as `--repair3`); the gate is what turns it from a loss into a win. This makes
+it the **second clearly-positive matched-compute barrier-cross** (with the 2-plug `try_repair`,
+§4.9), and the opposite verdict from `--repair3`/`--exhaust`/fix-and-finish — for the same reason
+`try_repair` pays: near-zero cost, so any gain is net-positive.
+
+**Verdict — a validated component chain (53% solve on real fixable boards), shipped as the opt-in
+`--gainfix`, a small matched-compute win on short messages when gated.** Directed, reversible, and
+it addresses the specific failure modes that sank fix-and-finish (§4.8: irreversibility) and the
+badness heuristic (undirected). The gain is modest (the near-solution regime it targets is a thin
+slice of the search), so it is opt-in, not default. The gate default (`-4.9`) is English-quad
+calibrated; other languages/lengths tune it via `--gainfix=GATE`. Reproduce the component
+measurements: `eval/gain_cascade_probe.py` (dual generation, prune, full-plug ranking, cascade, and
+the cascade+reclimb solve rate, all against the real `eval/results*.tsv` boards).
 
 ---
 
