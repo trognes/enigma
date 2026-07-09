@@ -103,6 +103,20 @@ v1.1.0 baseline every miss is a *search* failure.)
 > (A scoring change is the opposite case and *is* measured on the full population —
 > its whole job is to shrink the scoring-failure floor.)
 
+> **For matched-compute A/Bs, measure actual wall time — do not judge cost on
+> `score_iter` alone.** The `score_iter` counter counts only calls through the fused
+> n-gram score loop; it does **not** count the auxiliary per-symbol work some search
+> moves do outside that loop — most notably the `--gainfix*` **gain scan**
+> (`gainfix_candidates` does ≈`n·26·4` quad8 lookups per cascade call, ≈100
+> `score_iter`-equivalents, uncounted). So on gain-cascade changes `score_iter`
+> **undercounts real cost by several×**, and the two axes can *disagree*: e.g.
+> `--gainfix-best3` at a large `K` can tie `--gainfix-best`+more-`-R` on `score_iter`
+> while being **Pareto-dominated** on wall time (`PERFORMANCE.md` §4.11 — K=169 at 131 ms
+> lost to R200 at 114 ms despite fewer counted iters). Take wall time as the min of a few
+> reps (per problem) to damp noise, and treat `score_iter` as the *cheap deterministic
+> proxy* it is — good for `-T`-independent A/Bs of moves that live **inside** the score
+> loop (restarts, climb order, caps), misleading for anything that adds work outside it.
+
 `crack_quality.py` also carries three opt-in test modes from `CRACKQUALITY_TESTS.md`
 (all off by default, the normal flow unchanged): `WILDCARD` wildcards the rotor key
 for the **scoring-failure gate** (§1); `FILTERRECALL=1` reports the true key's `-F`
