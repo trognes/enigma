@@ -930,6 +930,12 @@ it the **second clearly-positive matched-compute barrier-cross** (with the 2-plu
 §4.9), and the opposite verdict from `--repair3`/`--exhaust`/fix-and-finish — for the same reason
 `try_repair` pays: near-zero cost, so any gain is net-positive.
 
+A **second seed (N=100)** confirms and, on *exact* recovery, strengthens it: mean Δ +0.17/+0.21/+0.71
+at R 8/16/32, and **exact recovery 5.0→5.7, 6.0→7.3, 10.7→13.0** — a **+2.3pp (relative +21%) exact
+gain at R32**. The exact-recovery gain **grows with `-R`**, as expected: more restarts produce more
+near-solution boards for the gated cascade to finish. So across two seeds the mean gain is a steady
++0.2–0.7pp and the exact gain +0.6…+2.3pp (largest at high `-R`), at ~zero added `score_iter`.
+
 **Verdict — a validated component chain (53% solve on real fixable boards), shipped as the opt-in
 `--gainfix`, a small matched-compute win on short messages when gated.** Directed, reversible, and
 it addresses the specific failure modes that sank fix-and-finish (§4.8: irreversibility) and the
