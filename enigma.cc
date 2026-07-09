@@ -3792,6 +3792,8 @@ void help(FILE * out)
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
   fprintf(out, "  greedy: -c -J --gainfix-best3 --score i4q10 --random 10 -R 40 -q -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score q10 -R 12 -q -l english\n");
+  fprintf(out, "-R is the main quality dial (use -T to keep it cheap); the gainfix\n");
+  fprintf(out, "finishers are a near-free bump, not a substitute for more restarts.\n");
   fprintf(out, "\n");
 }
 

@@ -1107,6 +1107,28 @@ an *already-near* board, and the 2-plug sacrifice + reclimb (3-ply) already reac
 completable from there. So the sacrifice depth is fixed at 3-ply — deeper is wasted compute, better spent
 on `-R`. (Probe discarded; this negative result is the artifact.)
 
+**depth-1 (`1sac`, the sacrifice+reclimb analogue of the explicit 2-ply cascade) — ⚠️ MEASURED, better
+recovery but `-R`-dominated. Closes the finisher family.** The other end of the family: commit **one**
+downhill plug1 sacrifice, then a **full reclimb**, over the top-K plug1 candidates — the sacrifice+reclimb
+form of what the shipped explicit 2-ply cascade (`gain_cascade`) does by *hand-picking* a single plug2 and
+keeping only net-positive pairs. Two clean results (env-gated `gain_cascade_1sac`, english+german L40):
+(1) **standalone it beats the explicit cascade** — 32.7 vs 31.2 mean, +0.8→1.6pp exact at K=6…24 — i.e.
+"let the full climb complete it" beats an explicit single-plug completion *at depth-1 too*, the same lesson
+as depth-3; (2) **swapped into `best3`'s layer-1** (`1sac + 3ply`) it **beats `best3` on recovery** —
+**+0.75pp mean / +0.8pp exact at K=8, +1.4 / +1.7 at K=24** (R80) — the *first and only* finisher variant in
+this whole exploration to out-recover `best3`. **But it is not free** the way the explicit cascade is: it
+runs K *full reclimbs* (vs a single-pass plug2 scan), so `score_iter` jumps 189k→266k→420k and wall +8→+23 ms,
+and at matched wall it is **Pareto-dominated by `-R`** — `best3 R240` (92.6 ms) beats `1sac3 R160 K=8` (93.5 ms)
+by **+4.5pp mean / +4.2pp exact at lower wall**. And the edge **fades as the baseline R rises**: the `1sac3`
+lift over `best3` roughly halves R80→R160 and **vanishes at K=24 by R160** (37.17 vs best3's 37.19), because
+restarts subsume the boards it targets. So the explicit cascade stays in `best3` **not because it recovers
+more** — `1sac` genuinely recovers more — but because it is **~free**, and `best3`'s whole value is being a
+free finisher; `1sac` trades that away for wall time `-R` converts into more. This **closes the
+sacrifice-finisher family**: depths 1–4 (and high-K) all lose to restarts at matched compute. The remaining
+search frontier is **restart diversity** (better basin-finding: kicks, seeds, SA/tabu/GA) or a **sharper
+scoring model** (to lower the scoring-failure floor) — *not* a deeper or better finisher. (Probe kept
+uncommitted; this measured-but-dominated result is the artifact.)
+
 ## 5. Structural / constraint-based
 
 These exploit machine structure the pure statistical search ignores. The two crib

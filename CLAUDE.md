@@ -170,6 +170,21 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > `--gainfix` (superseded by `--gainfix-best`, kept for `-F`/`--exhaust` compatibility), and
 > `--exhaust`. Each is tagged **not recommended** in its entry below and in `--help`.
 
+> **Search playbook — the measured priority (this is the whole game for search).** `-R` restarts are
+> the **primary quality lever**; spend compute there first, via `-T` (which parallelises the
+> `keys × restarts` space, so more cores buy more R at the same wall time). `--gainfix-best3` is a
+> **near-free bump on top** — turn it on and leave it on — but it is **not a substitute for restarts**:
+> at matched wall time *every* finisher variant tried (the explicit cascade, `--gainfix-best3`,
+> higher-K, the depth-1 `1sac` and depth-3/4-ply probes) is **Pareto-dominated by more `-R`**, and the
+> finisher's edge **fades as R grows** (restarts subsume the near-solution boards it targets — measured:
+> its lift roughly halves R80→R160 and can vanish by R160). The reason is that the hard residual is
+> **wrong-basin** failures — the climb converged somewhere not near the truth — which only a fresh
+> *restart* can *land* near; local plug repair (any finisher) can complete an already-near board but
+> cannot relocate a wrong basin. Raising R helps until the **scoring-failure floor** (boards where the
+> true plugboard does not score highest — an information limit no search can cross; ~5% at L40); past
+> that only a **sharper scoring model** moves the needle, not more search. Recipe:
+> `-c -J --gainfix-best3 --score i4q10 --random 10 -R <as high as -T affords> -q -l <lang> -T <cores>`.
+
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
 - `-x N` highest wheel number to consider when wildcarding (default 5)
