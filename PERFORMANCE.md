@@ -968,6 +968,19 @@ near-solution); at high `-R` `--gainfix-best` edges ahead. Both are opt-in and m
 `--gainfix-best` runs only under the simple sweep (not `-F`/`--exhaust`, whose `best.idx` does not
 carry the key×restart reconstruction).
 
+**Both finishers are a mid-budget tool — they saturate to a no-op at very high `-R`.** Extending the
+sweep to `-R {40…2560}` (English L40–50) shows the gain fading as the restart budget grows: mean Δ vs
+base holds through `-R 320` (`--gainfix-best` +0.20…+0.56pp; per-convergence `--gainfix` decays to
+~0 by `-R 160` as the plain climb starts finding the near-solution basins on its own), and at
+`-R {1280, 2560}` **all three modes are byte-identical on every trial** (e.g. `-R 2560`: 59.5% mean /
+56% exact for base, `--gainfix`, and `--gainfix-best` alike). This is the expected end state: the
+directed cascade targets the thin near-solution *search*-failure slice, and enough blind restarts
+eventually reach those same basins — so the residual misses are all **scoring failures** (true board
+not top-scoring, the §6.13/§6.14 information floor), which no score-based finisher can cross. So the
+finishers pay in the **compute-limited** regime (roughly `-R ≤ 320` here) and add nothing once the
+search saturates; keep the claims scoped there. (The `-R 40…2560` sweep was N=16–40/cell — small, so
+the per-row decimals are noisy; the saturation-to-identical result at `-R ≥ 1280` is the robust part.)
+
 ---
 
 ## 5. Structural / constraint-based
