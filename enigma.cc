@@ -594,6 +594,16 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   if (total == 0)
     total = 1;                        /* empty/degenerate table: avoid div-by-zero */
 
+  /* RAISED FLAT FLOOR (env ENIGMA_FLOOR = T, default 0 -> byte-identical): merge every
+     low-count gram (raw count <= T) onto ONE flat floor at the count-T level, on the theory
+     that counts of 1 or 2 are corpus noise, so distinguishing them from "unseen" only feeds
+     the wrong boards a noisy bottom-end gradient. This REMOVES gradient (unlike the graded
+     probes, which add it). T=2 collapses {0,1,2} to the count-2 value; T=0 keeps the old
+     behaviour (only count-0 unseen grams floored to a hapax). */
+  const char * fl = getenv("ENIGMA_FLOOR");
+  const int floor_t = (fl != nullptr) ? atoi(fl) : 0;
+  const double floor_val = (floor_t >= 1) ? static_cast<double>(floor_t) : floor_count;
+
   /* SMOOTHING PROBE (env ENIGMA_SMOOTHING): how an unseen gram is scored.
        (default) flat floor -- every unseen gram == count floor_count = 1 (byte-identical).
        laplace   -- add-one: every gram (seen too) gets +1, total -> N + V; un-merges
@@ -680,7 +690,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
         double bg = q * (BG_HI / denom);
         return (bg < BG_LO) ? BG_LO : (bg > BG_HI ? BG_HI : bg);
       }
-    return (c > 0.0) ? c : floor_count;              /* default flat floor */
+    return (c > floor_t) ? c : floor_val;            /* default flat floor (raisable) */
   };
 
   const double eff_total = laplace ? static_cast<double>(total) + delta * size
