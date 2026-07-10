@@ -774,7 +774,15 @@ restarts (`-R N`), the staged climb (`-S`), the **key pre-filter** (`-F N`, a
 cheap-IC-climb tier that shortlists keys so the full climb runs only on the top
 `N` — ~8–20× throughput, see `archived/CODE_REVIEW_HISTORY.md` §9 item 2), and **simulated annealing**
 (`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute —
-`archived/SIMULATED_ANNEALING.md` §15). Remaining open: the other heavier metaheuristics
-(tabu / GA) for the hardest cases. Read `CODE_REVIEW.md` (and, for the detailed
+`archived/SIMULATED_ANNEALING.md` §15). The heavier metaheuristics once listed as open —
+tabu and **GA** — have since been **measured down**: `--restart-tt` (PR #100) found restarts
+already almost never revisit a basin (near-total exact-board diversity at `--random 10`), so a
+tabu visited-set has nothing to forbid; and an oracle probe of the GA precondition
+(`PERFORMANCE.md` §3.10) found the crossover *material* exists (correct plugs union to ~8/10
+across restarts) but is **unselectable** — board-fitness picks only ~2.5/10 and per-plug consensus
+is worse (~1.1/10, amplifying the climb's decoy attractors). So the search frontier is no longer a
+heavier search metaheuristic at all; it is **restart diversity** (kicks/seeds) and, above all, a
+**sharper scoring model** to lift the short-message information floor that caps restarts,
+finishers, GA, and the memoization TTs alike. Read `CODE_REVIEW.md` (and, for the detailed
 design rationale and rejected experiments, `archived/CODE_REVIEW_HISTORY.md`) before changing
 the search or scoring code.
