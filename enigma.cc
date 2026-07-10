@@ -593,40 +593,76 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   const double floor_count = 1.0;   /* unseen gram == a single occurrence (a hapax) */
   if (total == 0)
     total = 1;                        /* empty/degenerate table: avoid div-by-zero */
-  const double log_total = log10(static_cast<double>(total));
 
-  uint32_t min_seen = 0, max_seen = 0;
-  bool any_unseen = false;
+  /* SMOOTHING PROBE (env ENIGMA_SMOOTHING): how an unseen gram is scored.
+       (default) flat floor -- every unseen gram == count floor_count = 1 (byte-identical).
+       laplace   -- add-one: every gram (seen too) gets +1, total -> N + V; un-merges
+                    hapax (2) from unseen (1). The blank/uniform pseudocount.
+       background-- grade an unseen gram by its letter-composition prior q = p(A)p(B)p(C)p(D)
+                    (monogram table, which is complete -> gap-free), mapped into a bounded
+                    band [BG_LO, BG_HI] BELOW a hapax so seen grams always outrank unseen.
+                    The wide letter-product range is why the adaptive scale is needed. */
+  const char * sm = getenv("ENIGMA_SMOOTHING");
+  const bool laplace    = (sm != nullptr) && (strcmp(sm, "laplace") == 0);
+  const bool background = (sm != nullptr) && (strcmp(sm, "background") == 0);
+  const double BG_HI = 0.5, BG_LO = 1e-4;   /* unseen graded within [1e-4, 0.5] < hapax */
+
+  double p_letter[asize]; double max_qbg = 1.0;
+  if (background)
+    {
+      std::vector<uint32_t> mono(asize, 0);
+      uint64_t mt = load_counts(1, mono, "monograms");
+      if (mt == 0) mt = 1;
+      double mx = 0.0;
+      for (int a = 0; a < asize; a++)
+        { p_letter[a] = static_cast<double>(mono[a]) / static_cast<double>(mt);
+          if (p_letter[a] > mx) mx = p_letter[a]; }
+      for (int j = 0; j < n; j++) max_qbg *= mx;   /* (max letter prob)^n */
+      if (max_qbg <= 0.0) max_qbg = 1.0;
+    }
+
+  /* effective count of gram idx (raw count c) under the selected smoothing */
+  auto eff_count = [&](int idx, double c) -> double
+  {
+    if (laplace) return c + 1.0;
+    if (background)
+      {
+        if (c > 0.0) return c;                       /* seen: keep MLE */
+        double q = 1.0; int t = idx;                 /* q = product of the letter priors */
+        for (int j = 0; j < n; j++) { q *= p_letter[t % asize]; t /= asize; }
+        double bg = q * (BG_HI / max_qbg);
+        return (bg < BG_LO) ? BG_LO : (bg > BG_HI ? BG_HI : bg);
+      }
+    return (c > 0.0) ? c : floor_count;              /* default flat floor */
+  };
+
+  const double eff_total = laplace ? static_cast<double>(total) + size
+                                   : static_cast<double>(total);
+  const double log_total = log10(eff_total);
+
+  double min_ec = 1e300, max_ec = 0.0;
   for (int i = 0; i < size; i++)
     {
-      if (table[i] == 0)
-        any_unseen = true;
-      else if ((min_seen == 0) || (table[i] < min_seen))
-        min_seen = table[i];
-      if (table[i] > max_seen)
-        max_seen = table[i];
+      double ec = eff_count(i, table[i]);
+      if (ec < min_ec) min_ec = ec;
+      if (ec > max_ec) max_ec = ec;
     }
-  /* min_seen == 0 only if no gram was seen at all, which also sets any_unseen; the
-     explicit check keeps min_eff provably positive (log10 argument) and covers the
-     degenerate empty-table case. */
-  double min_eff = (any_unseen || (min_seen == 0)) ? floor_count
-                                                   : static_cast<double>(min_seen);
-  double bias = log10(min_eff) - log_total;
+  if (min_ec <= 0.0) min_ec = floor_count;   /* degenerate guard */
+  double bias = log10(min_ec) - log_total;
   *bias_out = bias;
 
   /* Adaptive per-table scale: map the whole [vmin, vmax] span onto the full 0..255 byte
-     range, so a narrow table gets finer resolution than the old fixed 32. vmax is the
-     most-common gram; the span is log10(max_seen / min_eff). Guard the degenerate span==0
-     (empty or single-value table) with the old fixed 32 so the divide is always safe. */
-  double vmax = log10(max_seen > 0 ? static_cast<double>(max_seen) : min_eff) - log_total;
+     range. With graded smoothing the floor band extends the span downward, which is
+     exactly why the scale must adapt. Guard span==0 with the old fixed 32. */
+  double vmax = log10(max_ec) - log_total;
   double span = vmax - bias;
   double scale = (span > 0.0) ? 255.0 / span : 32.0;
   *scale_out = scale;
 
   for (int i = 0; i < size; i++)
     {
-      double c = table[i];
-      double v = (c > 0.0 ? log10(c) : log10(floor_count)) - log_total;
+      double ec = eff_count(i, table[i]);
+      double v = log10(ec) - log_total;
       double q = (v - bias) * scale;
       if (q < 0.0)
         q = 0.0;
