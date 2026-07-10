@@ -440,9 +440,39 @@ the keyspace: adaptive vs uniform `-R`.
   crossover *assembling complementary partial boards*. But multiple studies find
   GA no better than SA/tabu for substitution/transposition cryptanalysis, the
   repo's own audit ranks GA lowest, and it is the highest-complexity build here.
-  Only pursue if an oracle probe first confirms two elite boards *jointly* cover
-  the true pairs while neither does alone — otherwise consensus (§3.1) captures the
-  same signal more cheaply.
+  The bullet's own gate — *only pursue if an oracle probe confirms two elite boards
+  jointly cover the true pairs while neither does alone* — has now been **run
+  (❌ MEASURED, REJECTED)**, and it splits the precondition into a part that holds
+  and a part that kills the idea. Probe: `--dump-restarts` over 30 × L40 english,
+  R=60–100, true rotor key fixed, 10 true plugs; each converged restart board scored
+  by exact-pair overlap with the truth (chance = 0.30 true pairs in a random 10-pair
+  board).
+  - **Coverage precondition — MET.** The correct plugs *are* distributed across the
+    population: the **union across restarts reaches ~8/10** true pairs while the best
+    single board holds only ~3.7 and no board is complete. So complementary partial
+    boards genuinely exist — crossover has raw material.
+  - **Selectability — FAILS, and this is decisive.** A GA selects on fitness, and no
+    available fitness isolates the true plugs. The per-board correct count barely beats
+    chance (mean **0.47 vs 0.30**); `corr(board score, #correct plugs) = +0.20`; the
+    single best-**scoring** board yields only **2.5/10** true pairs and the top-10 boards
+    by score union to just ~4/10 (vs the 8/10 the full population holds). So board-fitness
+    selection captures **half** the available signal at best.
+  - **Consensus is *worse*, not the cheaper alternative this bullet assumed.** A per-plug
+    vote (frequency across the population, §3.1's idea) gives only **1.1/10** true in its
+    top-10 disjoint pick — below even the single best-scoring board — because the climb has
+    systematic **decoy attractors** (true plugs appear in ~5.5/100 boards, false ones in
+    ~3.6/100, only **1.5× separation**), so frequency amplifies popular *wrong* plugs. This
+    is the plug-level echo of the `--restart-tt` finding that the heaviest basins are not the
+    best (§6.14).
+
+  So the raw material for crossover is present but **unreachable**: neither board-fitness
+  nor consensus can pick the correct plugs out of the noise at short lengths. The bottleneck
+  is the **scoring model's information floor**, not the search or recombination mechanism —
+  the same wall the finishers (§4.11) and the score-cache (§7.9) hit. GA is squeezed exactly
+  like them: where it is needed (short messages) selection is blind; where selection works
+  (long messages, quad score sharp) plain restarts already solve it. The only thing that
+  would revive GA is a **per-plug truth signal that beats both board-score and vote-frequency**
+  — i.e. a sharper scoring/evidence model, which is the scoring frontier, not a GA build.
 - **GRASP greedy-randomized construction** and **basin-hopping (SA-quench ILS)**
   are largely subsumed by informed seeding (§4.2) + `-S iq` and by ILS (§3.3) +
   `-A` respectively. List as compositions to try only after the primitives land.
