@@ -605,6 +605,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   const char * sm = getenv("ENIGMA_SMOOTHING");
   const bool laplace    = (sm != nullptr) && (strcmp(sm, "laplace") == 0);
   const bool background = (sm != nullptr) && (strcmp(sm, "background") == 0);
+  const bool overlap    = (sm != nullptr) && (strcmp(sm, "overlap") == 0) && (n == 4);
   const double BG_HI = 0.5, BG_LO = 1e-4;   /* unseen graded within [1e-4, 0.5] < hapax */
   /* laplace add-delta (Lidstone): delta < 1 penalises unseen harder while keeping a FLAT
      floor (all unseen == delta), un-merged from a hapax (1 + delta). ENIGMA_DELTA, default 1. */
@@ -625,16 +626,58 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
       if (max_qbg <= 0.0) max_qbg = 1.0;
     }
 
+  /* overlap-corrected back-off (quad only): estimate an unseen quad ABCD's joint prob as
+     p(ABC)*p(BCD)/p(BC) -- the linear-chain Markov estimate through the shared trigram
+     overlap. The estimate is rank-mapped into the SAME [BG_LO, BG_HI] band below a hapax
+     as background, so seen grams always outrank unseen; only the gradient WITHIN the floor
+     band differs (a well-shaped tri/bi estimate vs background's crude monogram product).
+     A gram with no lower-order support (tri or bi == 0) gets q = 0 -> BG_LO (deepest). */
+  std::vector<uint32_t> tri_t, bi_t;
+  double tri_total = 1.0, bi_total = 1.0, max_qov = 1.0;
+  auto overlap_q = [&](int idx) -> double
+  {
+    int d = idx % asize, c3 = (idx / asize) % asize;
+    int b = (idx / (asize * asize)) % asize, a = idx / (asize * asize * asize);
+    uint32_t t_abc = tri_t[(a * asize + b) * asize + c3];
+    uint32_t t_bcd = tri_t[(b * asize + c3) * asize + d];
+    uint32_t b_bc  = bi_t[b * asize + c3];
+    if (t_abc == 0 || t_bcd == 0 || b_bc == 0) return 0.0;
+    double p_abc = static_cast<double>(t_abc) / tri_total;
+    double p_bcd = static_cast<double>(t_bcd) / tri_total;
+    double p_bc  = static_cast<double>(b_bc) / bi_total;
+    return p_abc * p_bcd / p_bc;
+  };
+  if (overlap)
+    {
+      tri_t.assign(asize * asize * asize, 0);
+      bi_t.assign(asize * asize, 0);
+      uint64_t tt = load_counts(3, tri_t, "trigrams");
+      uint64_t bt = load_counts(2, bi_t, "bigrams");
+      tri_total = tt ? static_cast<double>(tt) : 1.0;
+      bi_total  = bt ? static_cast<double>(bt) : 1.0;
+      double mx = 0.0;
+      for (int i = 0; i < size; i++)
+        if (table[i] == 0)
+          { double q = overlap_q(i); if (q > mx) mx = q; }
+      max_qov = (mx > 0.0) ? mx : 1.0;
+    }
+
   /* effective count of gram idx (raw count c) under the selected smoothing */
   auto eff_count = [&](int idx, double c) -> double
   {
     if (laplace) return c + delta;
-    if (background)
+    if (background || overlap)
       {
         if (c > 0.0) return c;                       /* seen: keep MLE */
-        double q = 1.0; int t = idx;                 /* q = product of the letter priors */
-        for (int j = 0; j < n; j++) { q *= p_letter[t % asize]; t /= asize; }
-        double bg = q * (BG_HI / max_qbg);
+        double q, denom;
+        if (overlap) { q = overlap_q(idx); denom = max_qov; }
+        else                                         /* background: letter-prior product */
+          {
+            q = 1.0; int t = idx;
+            for (int j = 0; j < n; j++) { q *= p_letter[t % asize]; t /= asize; }
+            denom = max_qbg;
+          }
+        double bg = q * (BG_HI / denom);
         return (bg < BG_LO) ? BG_LO : (bg > BG_HI ? BG_HI : bg);
       }
     return (c > 0.0) ? c : floor_count;              /* default flat floor */
