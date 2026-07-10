@@ -672,6 +672,53 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
       max_qov = (mx > 0.0) ? mx : 1.0;
     }
 
+  /* Jelinek-Mercer per-gram interpolation (quad only, env ENIGMA_INTERP="l4,l3,l2,l1"):
+     store the interpolated CONDITIONAL probability log10 P(D|ABC) with
+       P(D|ABC) = l4*c(ABCD)/c(ABC) + l3*c(BCD)/c(BC) + l2*c(CD)/c(C) + l1*c(D)/N
+     (weights normalised to sum 1). The mono term (complete table) keeps P>0 for every
+     quad, so no floor is needed -- unseen quads back off smoothly to the lower orders.
+     Unlike the floor probes this reshapes the SEEN scores, not just the tail. Note the
+     model becomes conditional (vs the default joint quad), so "off" != any l4. */
+  const char * ip = getenv("ENIGMA_INTERP");
+  const bool interp = (ip != nullptr) && (n == 4);
+  double lam[4] = {1.0, 0.0, 0.0, 0.0};
+  std::vector<uint32_t> mono_t;
+  double mono_total = 1.0;
+  if (interp)
+    {
+      double w[4] = {0.0, 0.0, 0.0, 0.0};
+      sscanf(ip, "%lf,%lf,%lf,%lf", &w[0], &w[1], &w[2], &w[3]);
+      double s = w[0] + w[1] + w[2] + w[3];
+      if (s <= 0.0) { w[0] = 1.0; s = 1.0; }
+      for (int j = 0; j < 4; j++) lam[j] = w[j] / s;
+      if (tri_t.empty()) tri_t.assign(static_cast<size_t>(asize) * asize * asize, 0);
+      if (bi_t.empty())  bi_t.assign(static_cast<size_t>(asize) * asize, 0);
+      mono_t.assign(asize, 0);
+      uint64_t tt = load_counts(3, tri_t, "trigrams");
+      uint64_t bt = load_counts(2, bi_t, "bigrams");
+      uint64_t mt = load_counts(1, mono_t, "monograms");
+      tri_total  = tt ? static_cast<double>(tt) : 1.0;
+      bi_total   = bt ? static_cast<double>(bt) : 1.0;
+      mono_total = mt ? static_cast<double>(mt) : 1.0;
+      (void) tri_total; (void) bi_total;   /* counts, not totals, drive the conditional terms */
+    }
+  auto interp_P = [&](int idx) -> double
+  {
+    int d = idx % asize, c3 = (idx / asize) % asize;
+    int b = (idx / (asize * asize)) % asize, a = idx / (asize * asize * asize);
+    uint32_t q_abcd = table[idx];
+    uint32_t t_abc = tri_t[(a * asize + b) * asize + c3];
+    uint32_t t_bcd = tri_t[(b * asize + c3) * asize + d];
+    uint32_t b_bc  = bi_t[b * asize + c3];
+    uint32_t b_cd  = bi_t[c3 * asize + d];
+    double p4 = (t_abc > 0) ? static_cast<double>(q_abcd) / t_abc : 0.0;
+    double p3 = (b_bc  > 0) ? static_cast<double>(t_bcd)  / b_bc  : 0.0;
+    double p2 = (mono_t[c3] > 0) ? static_cast<double>(b_cd) / mono_t[c3] : 0.0;
+    double p1 = static_cast<double>(mono_t[d]) / mono_total;
+    double P = lam[0] * p4 + lam[1] * p3 + lam[2] * p2 + lam[3] * p1;
+    return (P > 0.0) ? P : 1.0 / mono_total;   /* backstop (p1>0 whenever letter D is seen) */
+  };
+
   /* effective count of gram idx (raw count c) under the selected smoothing */
   auto eff_count = [&](int idx, double c) -> double
   {
@@ -697,30 +744,36 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
                                    : static_cast<double>(total);
   const double log_total = log10(eff_total);
 
-  double min_ec = 1e300, max_ec = 0.0;
+  /* per-gram stored log-value: interpolation stores log10 P(D|ABC) directly; every other
+     mode stores log10(effective_count / total). Byte-identical to the old two-line form for
+     the non-interp path (log is monotonic, so min/max of the count == min/max of the value). */
+  auto logval = [&](int idx) -> double
+  {
+    if (interp) return log10(interp_P(idx));
+    return log10(eff_count(idx, table[idx])) - log_total;
+  };
+
+  double vmin = 1e300, vmax = -1e300;
   for (int i = 0; i < size; i++)
     {
-      double ec = eff_count(i, table[i]);
-      if (ec < min_ec) min_ec = ec;
-      if (ec > max_ec) max_ec = ec;
+      double v = logval(i);
+      if (v < vmin) vmin = v;
+      if (v > vmax) vmax = v;
     }
-  if (min_ec <= 0.0) min_ec = floor_count;   /* degenerate guard */
-  double bias = log10(min_ec) - log_total;
+  if (vmin > vmax) { vmin = 0.0; vmax = 0.0; }   /* degenerate guard (empty table) */
+  double bias = vmin;
   *bias_out = bias;
 
   /* Adaptive per-table scale: map the whole [vmin, vmax] span onto the full 0..255 byte
-     range. With graded smoothing the floor band extends the span downward, which is
-     exactly why the scale must adapt. Guard span==0 with the old fixed 32. */
-  double vmax = log10(max_ec) - log_total;
-  double span = vmax - bias;
+     range. With graded smoothing / interpolation the span shifts, which is exactly why the
+     scale must adapt. Guard span==0 with the old fixed 32. */
+  double span = vmax - vmin;
   double scale = (span > 0.0) ? 255.0 / span : 32.0;
   *scale_out = scale;
 
   for (int i = 0; i < size; i++)
     {
-      double ec = eff_count(i, table[i]);
-      double v = log10(ec) - log_total;
-      double q = (v - bias) * scale;
+      double q = (logval(i) - bias) * scale;
       if (q < 0.0)
         q = 0.0;
       else if (q > 255.0)
