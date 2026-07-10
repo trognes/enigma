@@ -404,18 +404,20 @@ struct machine
    they use the same representation for consistency (and the int sum is exact and
    order-independent, a small determinism nicety).
 
-   Each entry is q = round((v - bias) * ngram_scale) with v = log10(count/total) and a
-   per-table bias = the table's minimum v (its floor, log10(1/total), since an unseen
-   gram is scored as a hapax -- see ngrams_read). Spending all 256 levels on the actual
-   [vmin, vmax] range (via the per-table bias) rather than a signed range around zero is
-   what makes 8 bits viable. ngram_scale = 32 gives a uint8 window of 255/32 ~= 8.0 log10
-   units; the widest table (english trigrams, ~7.9 units = log10(max_count) after the
-   hapax floor) fits without clipping. The scorers sum uint8 into a long, then recover
-   the true log-prob sum as isum/ngram_scale + n*bias (n = number of terms). The affine
-   (bias, scale) is invisible to ranking and to SA's acceptance calibration; the
-   reconstruction only keeps the reported score a faithful cross-entropy. Raw counts live
-   in a transient scratch buffer inside ngrams_read(). */
-static const int ngram_scale = 32;
+   Each entry is q = round((v - bias) * scale) with v = log10(count/total) and a per-table
+   bias = the table's minimum v (its floor, log10(1/total), since an unseen gram is scored
+   as a hapax -- see ngrams_read). Both the bias AND the scale are now **per-table adaptive**:
+   scale = 255 / (vmax - vmin) maps the rarest gram to byte 0 and the most-common to 255, so
+   *every* table spends the full 0..255 range regardless of its span (previously a fixed
+   scale=32 left the narrow tables short -- danish quad reached only byte 172). The scorers
+   sum uint8 into a long, then recover the true log-prob sum as isum/scale + n*bias (n = terms),
+   using the same per-table scale. The affine (bias, scale) is invisible to ranking and to SA's
+   acceptance calibration; the reconstruction only keeps the reported score a faithful
+   cross-entropy -- and the finer per-table step (up to ~1.8x more resolution on the narrow
+   tables) trims quantisation error on borderline rankings. The map MUST stay linear (an affine
+   image of log10 p) so the additive sum reconstructs; adaptive *scale* is the only free lever,
+   not a nonlinear curve. Raw counts live in a transient scratch buffer inside ngrams_read(). */
+static double ngram_scale[SCORE_QUAD + 1];  /* per-model: 255/(vmax-vmin), full 0..255 range */
 static double ngram_bias[SCORE_QUAD + 1];   /* per-model vmin; indexed by SCORE_* */
 static uint8_t mono8[asize];
 static uint8_t bi8[asize][asize];
@@ -568,7 +570,8 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
   return total;
 }
 
-void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix)
+void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
+                 const char * suffix)
 {
   int size = 1;
   for (int i = 0; i < n; i++)
@@ -590,30 +593,134 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
   const double floor_count = 1.0;   /* unseen gram == a single occurrence (a hapax) */
   if (total == 0)
     total = 1;                        /* empty/degenerate table: avoid div-by-zero */
-  const double log_total = log10(static_cast<double>(total));
 
-  uint32_t min_seen = 0;
-  bool any_unseen = false;
+  /* RAISED FLAT FLOOR (env ENIGMA_FLOOR = T, default 0 -> byte-identical): merge every
+     low-count gram (raw count <= T) onto ONE flat floor at the count-T level, on the theory
+     that counts of 1 or 2 are corpus noise, so distinguishing them from "unseen" only feeds
+     the wrong boards a noisy bottom-end gradient. This REMOVES gradient (unlike the graded
+     probes, which add it). T=2 collapses {0,1,2} to the count-2 value; T=0 keeps the old
+     behaviour (only count-0 unseen grams floored to a hapax). */
+  const char * fl = getenv("ENIGMA_FLOOR");
+  const int floor_t = (fl != nullptr) ? atoi(fl) : 0;
+  const double floor_val = (floor_t >= 1) ? static_cast<double>(floor_t) : floor_count;
+
+  /* SMOOTHING PROBE (env ENIGMA_SMOOTHING): how an unseen gram is scored.
+       (default) flat floor -- every unseen gram == count floor_count = 1 (byte-identical).
+       laplace   -- add-one: every gram (seen too) gets +1, total -> N + V; un-merges
+                    hapax (2) from unseen (1). The blank/uniform pseudocount.
+       background-- grade an unseen gram by its letter-composition prior q = p(A)p(B)p(C)p(D)
+                    (monogram table, which is complete -> gap-free), mapped into a bounded
+                    band [BG_LO, BG_HI] BELOW a hapax so seen grams always outrank unseen.
+                    The wide letter-product range is why the adaptive scale is needed. */
+  const char * sm = getenv("ENIGMA_SMOOTHING");
+  const bool laplace    = (sm != nullptr) && (strcmp(sm, "laplace") == 0);
+  const bool background = (sm != nullptr) && (strcmp(sm, "background") == 0);
+  const bool overlap    = (sm != nullptr) && (strcmp(sm, "overlap") == 0) && (n == 4);
+  const double BG_HI = 0.5, BG_LO = 1e-4;   /* unseen graded within [1e-4, 0.5] < hapax */
+  /* laplace add-delta (Lidstone): delta < 1 penalises unseen harder while keeping a FLAT
+     floor (all unseen == delta), un-merged from a hapax (1 + delta). ENIGMA_DELTA, default 1. */
+  const char * ed = getenv("ENIGMA_DELTA");
+  const double delta = (ed != nullptr) ? atof(ed) : 1.0;
+
+  double p_letter[asize]; double max_qbg = 1.0;
+  if (background)
+    {
+      std::vector<uint32_t> mono(asize, 0);
+      uint64_t mt = load_counts(1, mono, "monograms");
+      if (mt == 0) mt = 1;
+      double mx = 0.0;
+      for (int a = 0; a < asize; a++)
+        { p_letter[a] = static_cast<double>(mono[a]) / static_cast<double>(mt);
+          if (p_letter[a] > mx) mx = p_letter[a]; }
+      for (int j = 0; j < n; j++) max_qbg *= mx;   /* (max letter prob)^n */
+      if (max_qbg <= 0.0) max_qbg = 1.0;
+    }
+
+  /* overlap-corrected back-off (quad only): estimate an unseen quad ABCD's joint prob as
+     p(ABC)*p(BCD)/p(BC) -- the linear-chain Markov estimate through the shared trigram
+     overlap. The estimate is rank-mapped into the SAME [BG_LO, BG_HI] band below a hapax
+     as background, so seen grams always outrank unseen; only the gradient WITHIN the floor
+     band differs (a well-shaped tri/bi estimate vs background's crude monogram product).
+     A gram with no lower-order support (tri or bi == 0) gets q = 0 -> BG_LO (deepest). */
+  std::vector<uint32_t> tri_t, bi_t;
+  double tri_total = 1.0, bi_total = 1.0, max_qov = 1.0;
+  auto overlap_q = [&](int idx) -> double
+  {
+    int d = idx % asize, c3 = (idx / asize) % asize;
+    int b = (idx / (asize * asize)) % asize, a = idx / (asize * asize * asize);
+    uint32_t t_abc = tri_t[(a * asize + b) * asize + c3];
+    uint32_t t_bcd = tri_t[(b * asize + c3) * asize + d];
+    uint32_t b_bc  = bi_t[b * asize + c3];
+    if (t_abc == 0 || t_bcd == 0 || b_bc == 0) return 0.0;
+    double p_abc = static_cast<double>(t_abc) / tri_total;
+    double p_bcd = static_cast<double>(t_bcd) / tri_total;
+    double p_bc  = static_cast<double>(b_bc) / bi_total;
+    return p_abc * p_bcd / p_bc;
+  };
+  if (overlap)
+    {
+      tri_t.assign(static_cast<size_t>(asize) * asize * asize, 0);
+      bi_t.assign(static_cast<size_t>(asize) * asize, 0);
+      uint64_t tt = load_counts(3, tri_t, "trigrams");
+      uint64_t bt = load_counts(2, bi_t, "bigrams");
+      tri_total = tt ? static_cast<double>(tt) : 1.0;
+      bi_total  = bt ? static_cast<double>(bt) : 1.0;
+      double mx = 0.0;
+      for (int i = 0; i < size; i++)
+        if (table[i] == 0)
+          { double q = overlap_q(i); if (q > mx) mx = q; }
+      max_qov = (mx > 0.0) ? mx : 1.0;
+    }
+
+  /* effective count of gram idx (raw count c) under the selected smoothing */
+  auto eff_count = [&](int idx, double c) -> double
+  {
+    if (laplace) return c + delta;
+    if (background || overlap)
+      {
+        if (c > 0.0) return c;                       /* seen: keep MLE */
+        double q, denom;
+        if (overlap) { q = overlap_q(idx); denom = max_qov; }
+        else                                         /* background: letter-prior product */
+          {
+            q = 1.0; int t = idx;
+            for (int j = 0; j < n; j++) { q *= p_letter[t % asize]; t /= asize; }
+            denom = max_qbg;
+          }
+        double bg = q * (BG_HI / denom);
+        return (bg < BG_LO) ? BG_LO : (bg > BG_HI ? BG_HI : bg);
+      }
+    return (c > floor_t) ? c : floor_val;            /* default flat floor (raisable) */
+  };
+
+  const double eff_total = laplace ? static_cast<double>(total) + delta * size
+                                   : static_cast<double>(total);
+  const double log_total = log10(eff_total);
+
+  double min_ec = 1e300, max_ec = 0.0;
   for (int i = 0; i < size; i++)
     {
-      if (table[i] == 0)
-        any_unseen = true;
-      else if ((min_seen == 0) || (table[i] < min_seen))
-        min_seen = table[i];
+      double ec = eff_count(i, table[i]);
+      if (ec < min_ec) min_ec = ec;
+      if (ec > max_ec) max_ec = ec;
     }
-  /* min_seen == 0 only if no gram was seen at all, which also sets any_unseen; the
-     explicit check keeps min_eff provably positive (log10 argument) and covers the
-     degenerate empty-table case. */
-  double min_eff = (any_unseen || (min_seen == 0)) ? floor_count
-                                                   : static_cast<double>(min_seen);
-  double bias = log10(min_eff) - log_total;
+  if (min_ec <= 0.0) min_ec = floor_count;   /* degenerate guard */
+  double bias = log10(min_ec) - log_total;
   *bias_out = bias;
 
+  /* Adaptive per-table scale: map the whole [vmin, vmax] span onto the full 0..255 byte
+     range. With graded smoothing the floor band extends the span downward, which is
+     exactly why the scale must adapt. Guard span==0 with the old fixed 32. */
+  double vmax = log10(max_ec) - log_total;
+  double span = vmax - bias;
+  double scale = (span > 0.0) ? 255.0 / span : 32.0;
+  *scale_out = scale;
+
   for (int i = 0; i < size; i++)
     {
-      double c = table[i];
-      double v = (c > 0.0 ? log10(c) : log10(floor_count)) - log_total;
-      double q = (v - bias) * ngram_scale;
+      double ec = eff_count(i, table[i]);
+      double v = log10(ec) - log_total;
+      double q = (v - bias) * scale;
       if (q < 0.0)
         q = 0.0;
       else if (q > 255.0)
@@ -1139,7 +1246,7 @@ double quadgram_score_decode(machine & m)
       c = d;
     }
   /* recover the log-prob sum: q = (v - bias)*scale, so v = q/scale + bias per term */
-  score = static_cast<double>(isum) / ngram_scale + (textlength - 3) * ngram_bias[SCORE_QUAD];
+  score = static_cast<double>(isum) / ngram_scale[SCORE_QUAD] + (textlength - 3) * ngram_bias[SCORE_QUAD];
   return score;
 }
 
@@ -1163,7 +1270,7 @@ double trigram_score_decode(machine & m)
       a = b;
       b = c;
     }
-  score = static_cast<double>(isum) / ngram_scale + (textlength - 2) * ngram_bias[SCORE_TRI];
+  score = static_cast<double>(isum) / ngram_scale[SCORE_TRI] + (textlength - 2) * ngram_bias[SCORE_TRI];
   return score;
 }
 
@@ -1185,7 +1292,7 @@ double bigram_score_decode(machine & m)
       isum += bi8[a][b];
       a = b;
     }
-  score = static_cast<double>(isum) / ngram_scale + (textlength - 1) * ngram_bias[SCORE_BI];
+  score = static_cast<double>(isum) / ngram_scale[SCORE_BI] + (textlength - 1) * ngram_bias[SCORE_BI];
   return score;
 }
 
@@ -1198,7 +1305,7 @@ double monogram_score_decode(machine & m)
   long isum = 0;
   for (int i = 0; i < textlength; i++)
     isum += mono8[decode_at(steck, rows, ct, i)];
-  return static_cast<double>(isum) / ngram_scale + textlength * ngram_bias[SCORE_MONO];
+  return static_cast<double>(isum) / ngram_scale[SCORE_MONO] + textlength * ngram_bias[SCORE_MONO];
 }
 
 double ic_score_decode(machine & m)
@@ -2303,10 +2410,10 @@ void load_table(int model)
 {
   switch (model)
     {
-    case SCORE_MONO: ngrams_read(1, mono8, & ngram_bias[SCORE_MONO], "monograms"); break;
-    case SCORE_BI:   ngrams_read(2, & bi8[0][0], & ngram_bias[SCORE_BI], "bigrams"); break;
-    case SCORE_TRI:  ngrams_read(3, & tri8[0][0][0], & ngram_bias[SCORE_TRI], "trigrams"); break;
-    case SCORE_QUAD: ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], "quadgrams"); break;
+    case SCORE_MONO: ngrams_read(1, mono8, & ngram_bias[SCORE_MONO], & ngram_scale[SCORE_MONO], "monograms"); break;
+    case SCORE_BI:   ngrams_read(2, & bi8[0][0], & ngram_bias[SCORE_BI], & ngram_scale[SCORE_BI], "bigrams"); break;
+    case SCORE_TRI:  ngrams_read(3, & tri8[0][0][0], & ngram_bias[SCORE_TRI], & ngram_scale[SCORE_TRI], "trigrams"); break;
+    case SCORE_QUAD: ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], & ngram_scale[SCORE_QUAD], "quadgrams"); break;
     default: break;   /* IC: no table */
     }
 }
