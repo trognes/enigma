@@ -606,6 +606,10 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   const bool laplace    = (sm != nullptr) && (strcmp(sm, "laplace") == 0);
   const bool background = (sm != nullptr) && (strcmp(sm, "background") == 0);
   const double BG_HI = 0.5, BG_LO = 1e-4;   /* unseen graded within [1e-4, 0.5] < hapax */
+  /* laplace add-delta (Lidstone): delta < 1 penalises unseen harder while keeping a FLAT
+     floor (all unseen == delta), un-merged from a hapax (1 + delta). ENIGMA_DELTA, default 1. */
+  const char * ed = getenv("ENIGMA_DELTA");
+  const double delta = (ed != nullptr) ? atof(ed) : 1.0;
 
   double p_letter[asize]; double max_qbg = 1.0;
   if (background)
@@ -624,7 +628,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   /* effective count of gram idx (raw count c) under the selected smoothing */
   auto eff_count = [&](int idx, double c) -> double
   {
-    if (laplace) return c + 1.0;
+    if (laplace) return c + delta;
     if (background)
       {
         if (c > 0.0) return c;                       /* seen: keep MLE */
@@ -636,7 +640,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
     return (c > 0.0) ? c : floor_count;              /* default flat floor */
   };
 
-  const double eff_total = laplace ? static_cast<double>(total) + size
+  const double eff_total = laplace ? static_cast<double>(total) + delta * size
                                    : static_cast<double>(total);
   const double log_total = log10(eff_total);
 
