@@ -282,6 +282,32 @@ static bool opt_dump_restarts;
    boards and print a basin-collapse summary (distinct optima + hit histogram) at the end.
    Diagnostic only (never gates the winner), off by default. See the TT module below. */
 static bool opt_restart_tt;
+/* --score-tt: memoise score_iter in a per-worker plugboard score cache. Within one
+   rotor key and one scoring model, score_iter is a pure function of the plugboard, so
+   a board scored again returns the stored value instead of decoding afresh. Diagnostic
+   / performance only -- a hit returns exactly what a miss would compute, so results
+   (and -T-determinism) are byte-identical; only the number of real decodes falls, and
+   the hit rate measures how much score_iter work the cache saves. Off by default. */
+static bool opt_score_tt;
+
+/* One direct-mapped slot of the --score-tt cache. Stores the Zobrist tag AND the exact
+   board (a hash collision is then a miss, never a wrong score), plus the scoring model
+   and the rotor-key generation the score was computed under -- both must match on a hit,
+   which is how "everything but the plugboard is constant" is enforced. */
+struct sc_slot
+{
+  uint64_t tag;                  /* board_hash of the stored board */
+  double score;                  /* score_iter result for that board */
+  uint32_t gen;                  /* rotor-key generation; 0 = empty slot */
+  uint8_t scoring;               /* scoring model the score was computed under */
+  unsigned char board[asize];    /* exact board -> a hash collision is a miss */
+};
+
+/* 2^18 slots (~12 MB/worker at 48 B/slot): comfortably larger than the distinct-board
+   working set of a key's restarts, so eviction collisions are rare. Direct-mapped. */
+static const int    sc_bits  = 18;
+static const size_t sc_slots = static_cast<size_t>(1) << sc_bits;
+static const size_t sc_mask  = sc_slots - 1;
 
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
@@ -357,6 +383,17 @@ struct machine
 #if !defined(__clang__)
   bool plug_fixed_ex[asize];
 #endif
+
+  /* --score-tt plugboard score cache: heap-allocated per worker when the flag is on,
+     else null. Reached through a pointer so it never enlarges the struct or pushes the
+     hot decode tables above to large offsets. sc_gen is bumped by setup_mapping on every
+     new rotor key (invalidating every stored score in O(1)); sc_hits/sc_lookups are the
+     effectiveness counters, summed across workers for the final diagnostic. All cold --
+     touched once per score_iter call, never in the per-character scoring loop. */
+  sc_slot * sc_cache;
+  uint32_t  sc_gen;
+  uint64_t  sc_hits;
+  uint64_t  sc_lookups;
 };
 
 /* The n-gram scorers read uint8 fixed-point log10-probability tables. This is a
@@ -993,6 +1030,13 @@ void setup_mapping(machine & m, bool copy_rows)
   if (textlength > maxlen)
     fatal("Ciphertext too long");
 
+  /* A new rotor stack is being installed: every score_iter value now differs, so bump
+     the --score-tt generation to invalidate the whole cache in O(1). setup_mapping is
+     called exactly once per key (its restarts reuse the same rows), so the cache
+     persists across a key's restarts -- which is where the memoisation pays off. */
+  if (m.sc_cache)
+    m.sc_gen++;
+
   const unsigned char (* __restrict sa)[asize][asize][asize] = m.subst_array;
   const unsigned char ** __restrict rows = m.rows;
   const int w1 = m.walzenlage[1];   /* middle rotor (notch checked for stepping) */
@@ -1267,6 +1311,30 @@ void showconfig(machine & m, double score)
 double score_iter(machine & m)
 {
   m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
+
+  /* --score-tt: consult the plugboard score cache first. The key is the Zobrist hash
+     of the plugboard; a hit additionally requires the exact board, the current rotor-key
+     generation and the scoring model to match, so the stored value is EXACTLY what this
+     call would otherwise compute (a hash collision or a stale generation is a miss, never
+     a wrong score). On a hit the whole decode/score loop is skipped -- that is the work
+     the cache saves. Direct-mapped: `slot` is the (possibly evicted) home slot, reused
+     for the store below so the board hash is computed only once. */
+  sc_slot * slot = nullptr;
+  uint64_t h = 0;
+  if (m.sc_cache)
+    {
+      h = board_hash(m.steckerbrett);
+      slot = & m.sc_cache[h & sc_mask];
+      m.sc_lookups++;
+      if ((slot->gen == m.sc_gen) && (slot->tag == h)
+          && (slot->scoring == m.scoring)
+          && (memcmp(slot->board, m.steckerbrett, asize) == 0))
+        {
+          m.sc_hits++;
+          return slot->score;
+        }
+    }
+
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
 
@@ -1306,6 +1374,18 @@ double score_iter(machine & m)
      ranks highest -- only the scale of the reported score. */
   if (nterms > 0)
     score /= nterms;
+
+  /* Store the freshly computed score in its home slot (evicting whatever aliased there).
+     Correctness never depends on the stored contents -- the gen/tag/board/model guard on
+     lookup rejects any mismatch -- so eviction only ever costs a recomputation. */
+  if (slot)
+    {
+      slot->tag = h;
+      slot->score = score;
+      slot->gen = m.sc_gen;
+      slot->scoring = static_cast<uint8_t>(m.scoring);
+      memcpy(slot->board, m.steckerbrett, asize);
+    }
 
   return score;
 }
@@ -2943,6 +3023,8 @@ static size_t g_table_count = 0;
 static size_t g_table_bytes = 0;
 static size_t g_keys_analysed = 0;       /* rotor combinations examined */
 static uint64_t g_plugboards_scored = 0; /* total score_iter calls across workers */
+static uint64_t g_sc_hits = 0;           /* --score-tt: score_iter calls served from cache */
+static uint64_t g_sc_lookups = 0;        /* --score-tt: cache lookups (== calls with cache on) */
 
 /* base pointer into the rotor-stack table block: the same type as
    machine::subst_array, so 'all + i*asize' is task i's [asize]^4 table */
@@ -3550,7 +3632,14 @@ void bruteforce(char * result)
 
   std::vector<machine *> machines(static_cast<size_t>(nthreads));
   for (int t = 0; t < nthreads; t++)
-    machines[t] = new machine();   /* subst_array is pointed at 'all' per task */
+    {
+      machines[t] = new machine();   /* subst_array is pointed at 'all' per task */
+      /* --score-tt: give each worker its own zero-initialised score cache (gen 0 marks
+         every slot empty; setup_mapping bumps to 1 on the first key). Per-worker so no
+         locking is needed and the memoisation stays a pure-local optimisation. */
+      if (opt_score_tt)
+        machines[t]->sc_cache = new sc_slot[sc_slots]();
+    }
 
   /* phase 1: precompute every wheel order's table once, in parallel */
   std::atomic<size_t> next_task{0};
@@ -3704,8 +3793,14 @@ void bruteforce(char * result)
      exit), and each worker counted the plugboards it scored -- sum them up */
   g_keys_analysed = total_keys;
   g_plugboards_scored = 0;
+  g_sc_hits = 0;
+  g_sc_lookups = 0;
   for (int t = 0; t < nthreads; t++)
-    g_plugboards_scored += machines[t]->plugboards_scored;
+    {
+      g_plugboards_scored += machines[t]->plugboards_scored;
+      g_sc_hits += machines[t]->sc_hits;
+      g_sc_lookups += machines[t]->sc_lookups;
+    }
 
   if (opt_restart_tt)
     {
@@ -3714,7 +3809,10 @@ void bruteforce(char * result)
     }
 
   for (int t = 0; t < nthreads; t++)
-    delete machines[t];
+    {
+      delete[] machines[t]->sc_cache;
+      delete machines[t];
+    }
   delete[] all;
 
   if (! best.found)
@@ -4000,6 +4098,10 @@ void help(FILE * out)
           "With -c, hash converged restart boards into a");
   fprintf(out, "  %-24s %s\n", "", "transposition table; print a basin-collapse");
   fprintf(out, "  %-24s %s\n", "", "summary (distinct optima + hits) at the end [off]");
+  fprintf(out, "  %-24s %s\n", "--score-tt",
+          "With -c, memoise score_iter in a per-worker");
+  fprintf(out, "  %-24s %s\n", "", "plugboard score cache; report the % of scores");
+  fprintf(out, "  %-24s %s\n", "", "served from cache (results unchanged) [off]");
   fprintf(out, "  %-24s %s\n", "--infl-order",
           "Experimental: influence-ordered first-improvement");
   fprintf(out, "  %-24s %s\n", "", "(implies -I; measured, dominated by -J;");
@@ -4178,6 +4280,7 @@ int main(int argc, char * * argv)
   opt_gainfix3 = 0;
   opt_gainfix_best3 = 0;
   opt_restart_tt = false;
+  opt_score_tt = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -4200,7 +4303,8 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
-         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3, OPT_RESTART_TT };
+         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3, OPT_RESTART_TT,
+         OPT_SCORE_TT };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -4241,6 +4345,7 @@ int main(int argc, char * * argv)
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
       { "restart-tt",     no_argument,       nullptr, OPT_RESTART_TT },
+      { "score-tt",       no_argument,       nullptr, OPT_SCORE_TT },
       { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
       { "repair3",        no_argument,       nullptr, OPT_REPAIR3 },
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
@@ -4357,6 +4462,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_RESTART_TT:
           opt_restart_tt = true;
+          break;
+        case OPT_SCORE_TT:
+          opt_score_tt = true;
           break;
         case 'e':
           opt_seed = strtoull(optarg, nullptr, 10);
@@ -4643,6 +4751,9 @@ int main(int argc, char * * argv)
     fatal("--dump-restarts needs the plugboard hill-climb (-c)");
   if (opt_restart_tt && (! opt_hillclimb))
     fatal("--restart-tt needs the plugboard hill-climb (-c)");
+  /* --score-tt memoises the plugboard scoring, which only happens under the climb. */
+  if (opt_score_tt && (! opt_hillclimb))
+    fatal("--score-tt needs the plugboard hill-climb (-c)");
 
   /* --true-key reports the true key's tier-1 rank, so it needs the pre-filter (-F);
      it is a standard-Enigma diagnostic and parses into g_tk_* here. */
@@ -4829,6 +4940,19 @@ int main(int argc, char * * argv)
           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
           static_cast<unsigned long long>(g_plugboards_scored),
           (g_plugboards_scored == 1) ? "" : "s");
+  if (opt_score_tt)
+    {
+      /* Effectiveness of the --score-tt plugboard cache: what fraction of the logical
+         score_iter calls were served from the cache and so skipped a real decode. */
+      double pct = (g_sc_lookups > 0)
+                 ? 100.0 * static_cast<double>(g_sc_hits)
+                         / static_cast<double>(g_sc_lookups)
+                 : 0.0;
+      fprintf(stderr,
+              "score-tt: %llu/%llu score_iter served from cache (%.1f%% saved)\n",
+              static_cast<unsigned long long>(g_sc_hits),
+              static_cast<unsigned long long>(g_sc_lookups), pct);
+    }
   fprintf(stderr, "Finished in %.2f s using %d thread%s\n",
           secs, opt_threads, (opt_threads == 1) ? "" : "s");
   fprintf(stderr, "Precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",

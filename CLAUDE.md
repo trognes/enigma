@@ -143,6 +143,22 @@ land on distinct boards, differing by at least a spurious plug), so meaningful c
 only as the kick shrinks (`--random 0` → 1 basin, entropy 0). The TT is the intended scaffold
 for the diversity-driven search ideas (a tabu visited-set, GA population dedup).
 
+A fourth diagnostic, **`--score-tt`**, reuses that Zobrist board hash to answer a different
+question — *how much of the plugboard climb's scoring is repeated work a cache could recover?*
+It memoises `score_iter` in a per-worker **plugboard→score transposition table**: within one
+rotor key and scoring model `score_iter` is a pure function of the plugboard, so a board scored
+again returns the stored value instead of re-decoding. A hit requires the exact board, the
+current rotor-key generation (bumped once per key in `setup_mapping`, invalidating the cache in
+O(1)), and the scoring model all to match, so it is **semantically transparent** — byte-identical
+results, `-T`-invariant, on or off. It prints the fraction of `score_iter` served from cache at
+the end. **Measured result (PERFORMANCE.md §7.9): rejected as a speedup** — only ~7–13% of scores
+are cacheable, the rate is *flat in restarts and in table size* (so it is almost all intra-climb
+repeats; cross-restart score reuse is essentially nil, the board-probe-level echo of the §6.14 /
+`--restart-tt` basin-diversity finding), and the per-call hash+compare+copy against a cache-cold
+multi-MB table makes it a **net wall-time loss** at every config. Kept as an off-by-default
+diagnostic (needs `-c`; default path byte-identical) for the diversity-search line — the negative
+answer *is* the artifact.
+
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
 are kept; everything else (spaces, punctuation, case) is stripped. The n-gram

@@ -2086,6 +2086,62 @@ re-add. `-M` is what makes a tight cap actually bite. So the recipe is regime-de
 
 ---
 
+### 7.9 Plugboard-keyed score memoization (a `score_iter` transposition table) — ❌ MEASURED, REJECTED (net loss); shipped as the `--score-tt` diagnostic
+
+**Idea.** Within one rotor key and one scoring model, `score_iter(m)` is a pure function
+of the *plugboard* alone (the rotor stack `m.rows` is fixed per key). So a
+**transposition table keyed by the plugboard** could serve a board's score from a cache
+the second time it is reached, skipping the fused decode/score loop entirely — the
+canonical TT-as-memoization move. Reuses the §6.14 / PR #100 Zobrist board hash. The
+question this settles: **how much of the plugboard climb's scoring is actually repeated
+work a cache could recover?**
+
+**Build (`--score-tt`, off by default).** `score_iter` computes `board_hash(steckerbrett)`,
+probes a per-worker direct-mapped table, and on a matching entry — exact board *and* the
+current rotor-key generation *and* the scoring model all agree — returns the stored score.
+Any mismatch (hash collision, a new key, a different stage's model) is a miss, never a
+wrong value, so the cache is **semantically transparent**: results are byte-identical and
+`-T`-invariant with it on or off (verified: `-T1 ≡ -T4`, cache-on ≡ cache-off decrypt,
+182/182 tests green). The generation counter is bumped in `setup_mapping` (once per key),
+so the cache persists across a key's restarts — exactly where cross-restart reuse would
+show up — and is invalidated in O(1) when the key changes. It reports the hit rate (the
+fraction of `score_iter` served from cache) at the end.
+
+**Measurement (English, true rotor key fixed, plugboard hill-climbed, `-q`, min-of-reps).**
+
+| length | R=1 (intra-climb only) | R=640 | cross-restart Δ | wall @R640 (off → on) |
+|---|---|---|---|---|
+| L50  | 6.7% | 7.2% | **+0.5 pp** | 0.36 s → 0.71 s (**~2× slower**) |
+| L171 | 8.9% | 11.3% | **+2.4 pp** | 1.04 s → 1.21 s (slower) |
+
+**Findings.**
+- **Only ~7–13% of scores are cacheable, and the rate is flat in restarts and in table
+  size.** R=1→640 (640× more climbs) adds just 0.5–2.4 pp; a 32× larger table (2^23 = 8M
+  slots) adds ~0–2 pp — so eviction is *not* the limiter. Almost every hit is a repeat
+  *within a single climb*; **cross-restart score reuse is essentially nil.** The boards a
+  plugboard climb probes are ~90% unique within a climb and ~99% unique across restarts.
+- **It is a net wall-time loss at every config.** A TT's whole value is cross-branch reuse,
+  and there is almost none here to harvest; meanwhile every call pays a `board_hash`
+  (26 XORs) + `memcmp` + `memcpy` against a multi-MB cache-cold table, which costs more
+  than the ≤13% of decodes it saves. Larger tables make it worse (the 400 MB variant ran
+  ~5× slower from memory thrashing).
+
+**Why (the diagnostic part).** This is the same wall §6.14 / PR #100 hit, one level lower:
+at `--random 10` the *converged* restart boards are near-totally distinct (basin
+diversity), and this shows the boards *probed along the way* barely overlap either. The
+plugboard climb is a nearly-injective walk over board space — it does not revisit — so
+there is no transposition structure for a table to exploit. The `-R` restart budget is
+better spent on *more restarts*, not on remembering ones already done (consistent with the
+"restarts are the primary quality lever" playbook).
+
+**Disposition.** The speedup is rejected, but `--score-tt` is kept as an off-by-default
+**diagnostic** (like `--restart-tt` / `--true-key`): it directly measures "is there
+score-reuse to exploit?" for the diversity-search line of work, and the answer — *no,
+~7–13% and all intra-climb* — is the artifact. Needs `-c`; quad or any model; per-worker
+cache so no locking; the default path is byte-identical.
+
+---
+
 ## 8. Novel / higher-risk
 
 - **Distributional-assignment plug seed (§6.1's cousin, via Hungarian/matching).**
