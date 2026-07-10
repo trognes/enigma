@@ -681,16 +681,34 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
      model becomes conditional (vs the default joint quad), so "off" != any l4. */
   const char * ip = getenv("ENIGMA_INTERP");
   const bool interp = (ip != nullptr) && (n == 4);
-  double lam[4] = {1.0, 0.0, 0.0, 0.0};
+
+  /* Log-linear interpolation (quad only, env ENIGMA_LOGLIN="a,b,c,d"): store a WEIGHTED SUM
+     of the independent joint log-scores of the four orders that a window ABCD contains,
+       v(ABCD) = a*log p(ABCD) + b*log p(BCD) + c*log p(CD) + d*log p(D),
+     each order's own MLE joint log-prob with the usual hapax floor. Summed over the
+     message's windows this is a weighted sum of the overall quad/tri/bi/mono scores (up to a
+     3-letter boundary term). Stays JOINT -- no conditional reframing -- and weights (1,0,0,0)
+     are byte-identical to the default quad. A geometric (log-linear) mixture of the models. */
+  const char * lp = getenv("ENIGMA_LOGLIN");
+  const bool loglin = (lp != nullptr) && (n == 4) && !interp;
+  double lam[4] = {1.0, 0.0, 0.0, 0.0};   /* interp: normalised lambdas; loglin: raw weights */
   std::vector<uint32_t> mono_t;
   double mono_total = 1.0;
-  if (interp)
+  if (interp || loglin)
     {
       double w[4] = {0.0, 0.0, 0.0, 0.0};
-      sscanf(ip, "%lf,%lf,%lf,%lf", &w[0], &w[1], &w[2], &w[3]);
+      sscanf(interp ? ip : lp, "%lf,%lf,%lf,%lf", &w[0], &w[1], &w[2], &w[3]);
       double s = w[0] + w[1] + w[2] + w[3];
-      if (s <= 0.0) { w[0] = 1.0; s = 1.0; }
-      for (int j = 0; j < 4; j++) lam[j] = w[j] / s;
+      if (interp)                          /* JM linear: normalise to sum 1 */
+        {
+          if (s <= 0.0) { w[0] = 1.0; s = 1.0; }
+          for (int j = 0; j < 4; j++) lam[j] = w[j] / s;
+        }
+      else                                 /* log-linear: raw weights (overall scale is free) */
+        {
+          if (s <= 0.0) w[0] = 1.0;
+          for (int j = 0; j < 4; j++) lam[j] = w[j];
+        }
       if (tri_t.empty()) tri_t.assign(static_cast<size_t>(asize) * asize * asize, 0);
       if (bi_t.empty())  bi_t.assign(static_cast<size_t>(asize) * asize, 0);
       mono_t.assign(asize, 0);
@@ -700,8 +718,20 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
       tri_total  = tt ? static_cast<double>(tt) : 1.0;
       bi_total   = bt ? static_cast<double>(bt) : 1.0;
       mono_total = mt ? static_cast<double>(mt) : 1.0;
-      (void) tri_total; (void) bi_total;   /* counts, not totals, drive the conditional terms */
     }
+  /* joint log10(count/total) of one order with the hapax floor (unseen -> single occurrence) */
+  auto jlog = [](uint32_t c, double tot) -> double
+  { return log10((c > 0 ? static_cast<double>(c) : 1.0) / tot); };
+  auto loglin_v = [&](int idx) -> double
+  {
+    int d = idx % asize, c3 = (idx / asize) % asize;
+    int b = (idx / (asize * asize)) % asize;   /* v depends only on B,C,D (+ full quad) */
+    double vq = jlog(table[idx], static_cast<double>(total));
+    double vt = jlog(tri_t[(b * asize + c3) * asize + d], tri_total);
+    double vb = jlog(bi_t[c3 * asize + d], bi_total);
+    double vm = jlog(mono_t[d], mono_total);
+    return lam[0] * vq + lam[1] * vt + lam[2] * vb + lam[3] * vm;
+  };
   auto interp_P = [&](int idx) -> double
   {
     int d = idx % asize, c3 = (idx / asize) % asize;
@@ -750,6 +780,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   auto logval = [&](int idx) -> double
   {
     if (interp) return log10(interp_P(idx));
+    if (loglin) return loglin_v(idx);
     return log10(eff_count(idx, table[idx])) - log_total;
   };
 
