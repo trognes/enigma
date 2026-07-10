@@ -404,18 +404,20 @@ struct machine
    they use the same representation for consistency (and the int sum is exact and
    order-independent, a small determinism nicety).
 
-   Each entry is q = round((v - bias) * ngram_scale) with v = log10(count/total) and a
-   per-table bias = the table's minimum v (its floor, log10(1/total), since an unseen
-   gram is scored as a hapax -- see ngrams_read). Spending all 256 levels on the actual
-   [vmin, vmax] range (via the per-table bias) rather than a signed range around zero is
-   what makes 8 bits viable. ngram_scale = 32 gives a uint8 window of 255/32 ~= 8.0 log10
-   units; the widest table (english trigrams, ~7.9 units = log10(max_count) after the
-   hapax floor) fits without clipping. The scorers sum uint8 into a long, then recover
-   the true log-prob sum as isum/ngram_scale + n*bias (n = number of terms). The affine
-   (bias, scale) is invisible to ranking and to SA's acceptance calibration; the
-   reconstruction only keeps the reported score a faithful cross-entropy. Raw counts live
-   in a transient scratch buffer inside ngrams_read(). */
-static const int ngram_scale = 32;
+   Each entry is q = round((v - bias) * scale) with v = log10(count/total) and a per-table
+   bias = the table's minimum v (its floor, log10(1/total), since an unseen gram is scored
+   as a hapax -- see ngrams_read). Both the bias AND the scale are now **per-table adaptive**:
+   scale = 255 / (vmax - vmin) maps the rarest gram to byte 0 and the most-common to 255, so
+   *every* table spends the full 0..255 range regardless of its span (previously a fixed
+   scale=32 left the narrow tables short -- danish quad reached only byte 172). The scorers
+   sum uint8 into a long, then recover the true log-prob sum as isum/scale + n*bias (n = terms),
+   using the same per-table scale. The affine (bias, scale) is invisible to ranking and to SA's
+   acceptance calibration; the reconstruction only keeps the reported score a faithful
+   cross-entropy -- and the finer per-table step (up to ~1.8x more resolution on the narrow
+   tables) trims quantisation error on borderline rankings. The map MUST stay linear (an affine
+   image of log10 p) so the additive sum reconstructs; adaptive *scale* is the only free lever,
+   not a nonlinear curve. Raw counts live in a transient scratch buffer inside ngrams_read(). */
+static double ngram_scale[SCORE_QUAD + 1];  /* per-model: 255/(vmax-vmin), full 0..255 range */
 static double ngram_bias[SCORE_QUAD + 1];   /* per-model vmin; indexed by SCORE_* */
 static uint8_t mono8[asize];
 static uint8_t bi8[asize][asize];
@@ -568,7 +570,8 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
   return total;
 }
 
-void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix)
+void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
+                 const char * suffix)
 {
   int size = 1;
   for (int i = 0; i < n; i++)
@@ -592,7 +595,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
     total = 1;                        /* empty/degenerate table: avoid div-by-zero */
   const double log_total = log10(static_cast<double>(total));
 
-  uint32_t min_seen = 0;
+  uint32_t min_seen = 0, max_seen = 0;
   bool any_unseen = false;
   for (int i = 0; i < size; i++)
     {
@@ -600,6 +603,8 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
         any_unseen = true;
       else if ((min_seen == 0) || (table[i] < min_seen))
         min_seen = table[i];
+      if (table[i] > max_seen)
+        max_seen = table[i];
     }
   /* min_seen == 0 only if no gram was seen at all, which also sets any_unseen; the
      explicit check keeps min_eff provably positive (log10 argument) and covers the
@@ -609,11 +614,20 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, const char * suffix
   double bias = log10(min_eff) - log_total;
   *bias_out = bias;
 
+  /* Adaptive per-table scale: map the whole [vmin, vmax] span onto the full 0..255 byte
+     range, so a narrow table gets finer resolution than the old fixed 32. vmax is the
+     most-common gram; the span is log10(max_seen / min_eff). Guard the degenerate span==0
+     (empty or single-value table) with the old fixed 32 so the divide is always safe. */
+  double vmax = log10(max_seen > 0 ? static_cast<double>(max_seen) : min_eff) - log_total;
+  double span = vmax - bias;
+  double scale = (span > 0.0) ? 255.0 / span : 32.0;
+  *scale_out = scale;
+
   for (int i = 0; i < size; i++)
     {
       double c = table[i];
       double v = (c > 0.0 ? log10(c) : log10(floor_count)) - log_total;
-      double q = (v - bias) * ngram_scale;
+      double q = (v - bias) * scale;
       if (q < 0.0)
         q = 0.0;
       else if (q > 255.0)
@@ -1139,7 +1153,7 @@ double quadgram_score_decode(machine & m)
       c = d;
     }
   /* recover the log-prob sum: q = (v - bias)*scale, so v = q/scale + bias per term */
-  score = static_cast<double>(isum) / ngram_scale + (textlength - 3) * ngram_bias[SCORE_QUAD];
+  score = static_cast<double>(isum) / ngram_scale[SCORE_QUAD] + (textlength - 3) * ngram_bias[SCORE_QUAD];
   return score;
 }
 
@@ -1163,7 +1177,7 @@ double trigram_score_decode(machine & m)
       a = b;
       b = c;
     }
-  score = static_cast<double>(isum) / ngram_scale + (textlength - 2) * ngram_bias[SCORE_TRI];
+  score = static_cast<double>(isum) / ngram_scale[SCORE_TRI] + (textlength - 2) * ngram_bias[SCORE_TRI];
   return score;
 }
 
@@ -1185,7 +1199,7 @@ double bigram_score_decode(machine & m)
       isum += bi8[a][b];
       a = b;
     }
-  score = static_cast<double>(isum) / ngram_scale + (textlength - 1) * ngram_bias[SCORE_BI];
+  score = static_cast<double>(isum) / ngram_scale[SCORE_BI] + (textlength - 1) * ngram_bias[SCORE_BI];
   return score;
 }
 
@@ -1198,7 +1212,7 @@ double monogram_score_decode(machine & m)
   long isum = 0;
   for (int i = 0; i < textlength; i++)
     isum += mono8[decode_at(steck, rows, ct, i)];
-  return static_cast<double>(isum) / ngram_scale + textlength * ngram_bias[SCORE_MONO];
+  return static_cast<double>(isum) / ngram_scale[SCORE_MONO] + textlength * ngram_bias[SCORE_MONO];
 }
 
 double ic_score_decode(machine & m)
@@ -2303,10 +2317,10 @@ void load_table(int model)
 {
   switch (model)
     {
-    case SCORE_MONO: ngrams_read(1, mono8, & ngram_bias[SCORE_MONO], "monograms"); break;
-    case SCORE_BI:   ngrams_read(2, & bi8[0][0], & ngram_bias[SCORE_BI], "bigrams"); break;
-    case SCORE_TRI:  ngrams_read(3, & tri8[0][0][0], & ngram_bias[SCORE_TRI], "trigrams"); break;
-    case SCORE_QUAD: ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], "quadgrams"); break;
+    case SCORE_MONO: ngrams_read(1, mono8, & ngram_bias[SCORE_MONO], & ngram_scale[SCORE_MONO], "monograms"); break;
+    case SCORE_BI:   ngrams_read(2, & bi8[0][0], & ngram_bias[SCORE_BI], & ngram_scale[SCORE_BI], "bigrams"); break;
+    case SCORE_TRI:  ngrams_read(3, & tri8[0][0][0], & ngram_bias[SCORE_TRI], & ngram_scale[SCORE_TRI], "trigrams"); break;
+    case SCORE_QUAD: ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], & ngram_scale[SCORE_QUAD], "quadgrams"); break;
     default: break;   /* IC: no table */
     }
 }
