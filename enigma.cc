@@ -797,6 +797,29 @@ static void tt_dump_verbose(const restart_tt & tt)
       tt_board_str(b[k]->board, board);
       fprintf(stderr, "    %4u  %.4f  %s\n", b[k]->count, b[k]->score, board);
     }
+
+  /* top SCORE levels: group the distinct boards by score (descending) and show the plateau
+     at the top -- how many distinct boards, and how many restarts, sit at each best score.
+     A single board at the top score = search-limited; a wide top plateau = scoring-limited. */
+  std::vector<double> lv;
+  lv.reserve(b.size());
+  for (const tt_bucket * e : b)
+    lv.push_back(e->score);
+  std::sort(lv.begin(), lv.end(), [](double x, double y) { return x > y; });
+  fprintf(stderr, "  top score levels (score: #boards, #climbs):\n");
+  int shown = 0;
+  for (size_t i = 0; i < lv.size() && shown < 6; shown++)
+    {
+      double s = lv[i];
+      size_t nb = 0, nc = 0;
+      for (const tt_bucket * e : b)            /* distinct boards & total climbs at this score */
+        if (e->score == s)
+          { nb++; nc += e->count; }
+      fprintf(stderr, "    %.4f: %zu board%s, %zu climb%s\n",
+              s, nb, nb == 1 ? "" : "s", nc, nc == 1 ? "" : "s");
+      while (i < lv.size() && lv[i] == s)      /* advance past this score level */
+        i++;
+    }
 }
 
 /* Summarise basin collapse: distinct optima, the heaviest basin, and Shannon entropy of
@@ -821,6 +844,64 @@ static void tt_report(const restart_tt & tt)
           "restart-tt: %zu distinct optima over %zu climbs "
           "(max %u hits on one basin, entropy %.2f bits%s)\n",
           tt.nentries, tt.nclimbs, maxc, H, tt.full ? ", TABLE FULL -- undercount" : "");
+
+  /* Score-keyed view: the exact-board table over-counts basins because restarts differ by
+     spurious plugs that share a core (the #100 finding). Re-aggregating the same buckets by
+     SCORE asks the sharper question -- is the TOP of the score surface a unique board or a
+     tie? A unique top means the search can still be improved by finding it more often
+     (search-limited); a multi-board tie at the top means the scoring model cannot rank those
+     boards apart, so even a perfect search cannot pick the truth by score alone -- a
+     scoring-limited signal (the top-plateau half of the scoring-failure floor; it cannot see
+     the other half, a decoy out-scoring the truth, which needs the oracle true-score). */
+  {
+    std::vector<double> sc;
+    sc.reserve(tt.nentries);
+    double maxs = -1e300;
+    for (size_t i = 0; i <= tt.mask; i++)
+      if (tt.slots[i].occupied)
+        {
+          sc.push_back(tt.slots[i].score);
+          if (tt.slots[i].score > maxs)
+            maxs = tt.slots[i].score;
+        }
+    if (! sc.empty())
+      {
+        std::sort(sc.begin(), sc.end());   /* ascending; max is sc.back() */
+        size_t distinct_scores = 1;
+        for (size_t i = 1; i < sc.size(); i++)
+          if (sc[i] != sc[i - 1])
+            distinct_scores++;
+        size_t boards_top = 0;
+        for (size_t i = 0; i <= tt.mask; i++)
+          if (tt.slots[i].occupied && tt.slots[i].score == maxs)
+            boards_top++;
+        /* gap from the top score to the next distinct score below it -- how decisively the
+           best board wins. A wide gap = a clear winner; a hair-thin gap (or an exact tie) =
+           a fragile/ambiguous top. NB: this view is key-agnostic, so it cannot tell a true
+           winner from a decoy that out-scores the truth (that needs the oracle true-score,
+           as `crackquality SPLIT` does). It positively flags only ONE half of the
+           scoring-failure floor: a literal tie at the top, where no search can rank the
+           tied boards apart. Otherwise the gap is a fragility hint, not a verdict. */
+        double second = -1e300;
+        for (size_t i = sc.size(); i-- > 0; )
+          if (sc[i] != maxs) { second = sc[i]; break; }
+        if (boards_top > 1)
+          fprintf(stderr,
+                  "restart-tt score: %zu distinct scores over %zu boards; "
+                  "top %.4f is a %zu-board TIE -- scoring-limited (no search can rank them)\n",
+                  distinct_scores, tt.nentries, maxs, boards_top);
+        else if (second > -1e299)
+          fprintf(stderr,
+                  "restart-tt score: %zu distinct scores over %zu boards; "
+                  "top %.4f, +%.4f over 2nd (unique top; wider gap = more decisive)\n",
+                  distinct_scores, tt.nentries, maxs, maxs - second);
+        else
+          fprintf(stderr,
+                  "restart-tt score: %zu distinct scores over %zu boards; top %.4f (only one)\n",
+                  distinct_scores, tt.nentries, maxs);
+      }
+  }
+
   if (getenv("ENIGMA_TT_DUMP") != nullptr)
     tt_dump_verbose(tt);
 }

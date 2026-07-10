@@ -143,6 +143,20 @@ land on distinct boards, differing by at least a spurious plug), so meaningful c
 only as the kick shrinks (`--random 0` → 1 basin, entropy 0). The TT is the intended scaffold
 for the diversity-driven search ideas (a tabu visited-set, GA population dedup).
 
+`--restart-tt` also prints a **score-keyed** second line, re-aggregating the same buckets by
+*score* rather than exact board — because exact-board dedup over-counts basins (restarts differ
+by spurious plugs that share a core), the sharper question is how flat the **top** of the score
+surface is. It reports the distinct-score count and, for the best score, whether it is a **unique
+board** (with the `+gap` to the 2nd-best score — a wider gap = a more decisive winner) or an
+**exact multi-board tie** (a positive **scoring-limited** signal: no search can rank the tied
+boards apart). This is the top-plateau half of the scoring-failure floor; it is **key-agnostic**,
+so it cannot see the other half — a *decoy* out-scoring the truth — which needs the oracle
+true-score (as `crackquality SPLIT` does). So a unique top with a wide gap is *not* proof of
+search-limitation (the winner could be a decoy); only an exact top-tie is a firm verdict, and the
+gap is otherwise a fragility hint. Like the board summary it is `-T`-invariant (the converged-board
+multiset is deterministic). `ENIGMA_TT_DUMP=1` additionally lists the top score *levels*
+(score: #boards, #climbs) to show the plateau shape.
+
 A fourth diagnostic, **`--score-tt`**, reuses that Zobrist board hash to answer a different
 question — *how much of the plugboard climb's scoring is repeated work a cache could recover?*
 It memoises `score_iter` in a per-worker **plugboard→score transposition table**: within one
