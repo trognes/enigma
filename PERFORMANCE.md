@@ -2126,6 +2126,18 @@ fraction of `score_iter` served from cache) at the end.
   than the ≤13% of decodes it saves. Larger tables make it worse (the 400 MB variant ran
   ~5× slower from memory thrashing).
 
+**Independent confirmation at a heavy, realistic config (20 × L50 english, pooled).** Rerun
+with `-c --gainfix-best3 -S m4q10 -R 5120 --random 10` (8× the restarts, a two-model staged
+climb, and the best-board finisher — i.e. every knob that *could* create cross-restart reuse):
+the hit rate is **7.9%**, barely above the 7.2% at R=640, and the T=1-vs-T=8 gap — the direct
+measure of how much cross-restart reuse a single pooled cache can concentrate — is **+0.05 pp**
+(7.91% at T=1 vs 7.86% at T=8). And the cost gets *worse* with the bigger budget: cache-on is
+**~3× slower** here (0.52 s → 1.59 s/msg at T=8, vs ~2× at R=640), because every one of the
+~22 M `score_iter` calls pays the hash+compare while only ~8% skip a decode — a real TT
+amortises *better* with more work, this one amortises worse. Recovery is byte-identical across
+cache-on/off and T=1/T=8 (99.5% mean, 95% exact), reconfirming the transparency. So more
+restarts sharpen the verdict rather than soften it.
+
 **Why (the diagnostic part).** This is the same wall §6.14 / PR #100 hit, one level lower:
 at `--random 10` the *converged* restart boards are near-totally distinct (basin
 diversity), and this shows the boards *probed along the way* barely overlap either. The
