@@ -649,8 +649,8 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   };
   if (overlap)
     {
-      tri_t.assign(asize * asize * asize, 0);
-      bi_t.assign(asize * asize, 0);
+      tri_t.assign(static_cast<size_t>(asize) * asize * asize, 0);
+      bi_t.assign(static_cast<size_t>(asize) * asize, 0);
       uint64_t tt = load_counts(3, tri_t, "trigrams");
       uint64_t bt = load_counts(2, bi_t, "bigrams");
       tri_total = tt ? static_cast<double>(tt) : 1.0;
