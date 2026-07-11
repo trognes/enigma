@@ -58,19 +58,19 @@ echo "THE QUICK BROWN FOX" | ./enigma -u B -w 123 -r AAA -g AAA -s "AB CD"
 
 ```sh
 # You know the rotor key but not the plugboard: hill-climb the plugboard (-c),
-# scoring English quadgrams (-q, the sharpest model; -l gives the language). The
-# default model is the index of coincidence, so pass -q to use quadgrams.
-./enigma -c -q -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+# scoring with the weighted all-order model (-a, the sharpest; -l gives the
+# language). The default model is the index of coincidence, so pass -a to use it.
+./enigma -c -a -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 
 # You don't know the start positions either: wildcard them with '.' and the
 # program brute-forces all 26x26x26 of them, on 4 threads, while still
 # hill-climbing the plugboard.
-./enigma -c -q -l english -u B -w 123 -r AAA -g ... -T 4 < cipher.txt
+./enigma -c -a -l english -u B -w 123 -r AAA -g ... -T 4 < cipher.txt
 
 # You know almost nothing: wildcard the reflector, wheels, ring and start, and
 # let it try everything. (This is a large search — use as many threads as you
 # have cores, and see "Cracking strategy" below for the recommended options.)
-./enigma -c -q -l english -u . -w ... -r ... -g ... -T 8 < cipher.txt
+./enigma -c -a -l english -u . -w ... -r ... -g ... -T 8 < cipher.txt
 ```
 
 ### Other machines
@@ -144,20 +144,24 @@ distinct offsets rather than every ring×start pair.
 | --- | --- |
 | `-i` | Index of coincidence — language-independent, needs no `-l` (**default**) |
 | `-m` / `-b` / `-t` / `-q` | Mono- / bi- / tri- / quad-gram statistics |
-| `-l lang` | Scoring language: `english`, `german`, `danish`, `french`. **Required** for `-m`/`-b`/`-t`/`-q`; ignored by `-i` |
+| `-a` | Weighted all-order score — log-linear mixture of quad/tri/bi/mono (**recommended** when the language is known) |
+| `-l lang` | Scoring language: `english`, `german`, `danish`, `french`. **Required** for `-m`/`-b`/`-t`/`-q`/`-a`; ignored by `-i` |
 
 The **default model is the index of coincidence** (`-i`) — the only one that needs
-no language, so the tool runs out of the box with no scoring options. Quadgrams
-(`-q`) discriminate the correct key most sharply and are the recommended model when
-you know the language; pass `-q -l <lang>` to use them. Each selector is just an
-alias for a single-stage `--score <model>`, so setting the model to **conflicting**
-values — two disagreeing selectors (`-m -q`), or a selector against a different
-`--score` target (`-m --score q`) — is a **fatal error**; agreement (`-q --score q`,
-`-q --score i4q10`) is fine. The n-gram tables are highly
+no language, so the tool runs out of the box with no scoring options. When you know
+the language, **`-a` (weighted all-order) is the recommended and sharpest model**: it
+scores each quadgram window as a log-linear (geometric) mixture of all four n-gram
+orders, which recovers short messages measurably better than plain quadgrams (`-q`)
+across every language while remaining neutral on long ones. Plain quadgrams (`-q`) are
+the single-order alternative. Each selector is an alias for a single-stage
+`--score <model>` (`-a` is also a schedule token, e.g. `--score m4a10`), so setting the
+model to **conflicting** values — two disagreeing selectors (`-m -q`, `-q -a`), or a
+selector against a different `--score` target (`-m --score q`) — is a **fatal error**;
+agreement (`-a --score m4a10`, `-q --score i4q10`) is fine. The n-gram tables are highly
 language-specific — **`-l` must match the language of the plaintext**, especially
-for `-q` (scoring an English message with `-l german` typically fails). Note that
+for `-q`/`-a` (scoring an English message with `-l german` typically fails). Note that
 `-l` on its own does nothing: it only takes effect with an n-gram model, so it is
-`-q -l english`, not `-l english`, that scores with English quadgrams.
+`-a -l english`, not `-l english`, that scores with the English tables.
 
 ### Plugboard cracking
 
@@ -369,15 +373,18 @@ Increase `-R` for harder messages.
 
 ### Two recommended recipes (standard ~10-plug board)
 
-There are two strong plugboard solvers, and at **matched compute** they are **peers with a
-length-dependent crossover** — pick either, or run both:
+**Use the weighted all-order model `-a` when you know the language** — it recovers short
+messages measurably better than plain quad (`-q`) at no extra cost (a log-linear mixture of
+all four n-gram orders; see "Scoring" above), staged as `--score m4a10`. There are two strong
+plugboard solvers, and at **matched compute** they are **peers with a length-dependent
+crossover** — pick either, or run both:
 
 - **Greedy** — the tuned restart climb: dynamic move ordering (`-J`) over a capped staged
-  schedule (`--random 10` kick → IC pre-pass → quad capped at 10 plugs). Very cheap per
-  restart, so it affords many of them.
+  schedule (`--random 10` kick → mono pre-pass → weighted capped at 10 plugs), plus the
+  near-free best-board finisher `--gainfix-best3`. Very cheap per restart, so it affords many.
 
   ```sh
-  ./enigma -c -J --score i4q10 --random 10 -R 40 -q -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+  ./enigma -c -J --score m4a10 --gainfix-best3 --random 10 -R 40 -a -l english -u B -w 241 -r AAA -g QEW < cipher.txt
   ```
 
 - **Simulated annealing** (`-A`) — a *deep* anneal per restart (small `-A` starves it) with the

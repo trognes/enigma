@@ -803,9 +803,33 @@ already almost never revisit a basin (near-total exact-board diversity at `--ran
 tabu visited-set has nothing to forbid; and an oracle probe of the GA precondition
 (`PERFORMANCE.md` §3.10) found the crossover *material* exists (correct plugs union to ~8/10
 across restarts) but is **unselectable** — board-fitness picks only ~2.5/10 and per-plug consensus
-is worse (~1.1/10, amplifying the climb's decoy attractors). So the search frontier is no longer a
-heavier search metaheuristic at all; it is **restart diversity** (kicks/seeds) and, above all, a
-**sharper scoring model** to lift the short-message information floor that caps restarts,
-finishers, GA, and the memoization TTs alike. Read `CODE_REVIEW.md` (and, for the detailed
-design rationale and rejected experiments, `archived/CODE_REVIEW_HISTORY.md`) before changing
+is worse (~1.1/10, amplifying the climb's decoy attractors). So the search frontier was no
+longer a heavier search metaheuristic; it was **a sharper scoring model** and **restart
+diversity**. Both have since been resolved, and the result closes the short-message frontier
+to *smarter* methods (`PERFORMANCE.md` §6.15):
+
+- **Scoring — resolved, a win: the weighted all-order model `-a`** (PR #106). A log-linear
+  (geometric / Product-of-Experts) mixture of all four n-gram orders, folded once into a
+  quad-shaped table so the hot path is untouched — the **first measured short-message scoring
+  gain** (+~1–2pp mean %-correct at L40–100, all four languages; 2000-trial German confirmed).
+  It is now near-optimal on **both** scoring axes: the **scoring-failure floor is ~1%** (SPLIT
+  under `-a`: with the correct rotor key the true plugboard already scores highest ~99% of the
+  time — so *discrimination* has essentially no ceiling left to recover), and the **climb-surface
+  smoothness is flat** (an 8× sweep of the order weights moves search-fail% by <1pp). `-a` in fact
+  won by *smoothing the climb surface* (fewer search failures), not by lifting an information
+  floor. Scoring is tapped.
+- **Search — resolved, compute-bound with no selectable shortcut.** At short lengths the residual
+  is ~99% *search* failure, and the coverage curve is **still climbing at R=256** (~+15–25pp per
+  4× R — the true basin is reachable, just a rare deep target). The apparent restart diversity is
+  an illusion: 64 restarts give ~60 distinct *exact* boards but only **~15 distinct correct-plug
+  states** (a 4× overcount — the rest is spurious-plug noise on a few basins), with per-restart
+  depth ~0.7/10 and the truth assembled only in the **union (~9/10)**. Every *smart* lever to
+  exploit that — recombination (GA), a truth-targeted kick, coarse basin-repelling — needs a
+  truth-free way to tell the ~9/10 real plugs from the noise, and **per-plug consensus is only
+  ~1.1/10 correct** (the frequent plugs are decoys). No such signal exists in the converged-board
+  population, so the **only reliable lever is raw compute** — more restarts via `-T`, which scales
+  predictably.
+
+Read `CODE_REVIEW.md` (and, for the detailed design rationale, rejected experiments, and the
+frontier measurements, `PERFORMANCE.md` and `archived/CODE_REVIEW_HISTORY.md`) before changing
 the search or scoring code.
