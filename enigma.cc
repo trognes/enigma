@@ -691,6 +691,11 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
      are byte-identical to the default quad. A geometric (log-linear) mixture of the models. */
   const char * lp = getenv("ENIGMA_LOGLIN");
   const bool loglin = (lp != nullptr) && (n == 4) && !interp;
+  /* symmetric folding (ENIGMA_LOGLIN_SYM): fold EVERY sub-gram a window contains (2 tris,
+     3 bis, 4 monos) divided by its window-multiplicity (2/3/4), instead of only the trailing
+     BCD/CD/D. Interior grams net the same weight; the difference is that the leading grams at
+     the text start are now included (edge grams naturally down-weighted). Same one-lookup cost. */
+  const bool loglin_sym = loglin && (getenv("ENIGMA_LOGLIN_SYM") != nullptr);
   double lam[4] = {1.0, 0.0, 0.0, 0.0};   /* interp: normalised lambdas; loglin: raw weights */
   std::vector<uint32_t> mono_t;
   double mono_total = 1.0;
@@ -731,6 +736,22 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
     double vb = jlog(bi_t[c3 * asize + d], bi_total);
     double vm = jlog(mono_t[d], mono_total);
     return lam[0] * vq + lam[1] * vt + lam[2] * vb + lam[3] * vm;
+  };
+  /* symmetric folding: all sub-grams of ABCD, each order divided by its window-multiplicity
+     (tri/2, bi/3, mono/4) so interior grams net weight (b,c,d) and edge grams scale down. */
+  auto loglin_v_sym = [&](int idx) -> double
+  {
+    int d = idx % asize, c3 = (idx / asize) % asize;
+    int b = (idx / (asize * asize)) % asize, a = idx / (asize * asize * asize);
+    double vq = jlog(table[idx], static_cast<double>(total));
+    double vt = jlog(tri_t[(a * asize + b) * asize + c3], tri_total)
+              + jlog(tri_t[(b * asize + c3) * asize + d], tri_total);
+    double vb = jlog(bi_t[a * asize + b], bi_total)
+              + jlog(bi_t[b * asize + c3], bi_total)
+              + jlog(bi_t[c3 * asize + d], bi_total);
+    double vm = jlog(mono_t[a], mono_total) + jlog(mono_t[b], mono_total)
+              + jlog(mono_t[c3], mono_total) + jlog(mono_t[d], mono_total);
+    return lam[0] * vq + lam[1] * vt / 2.0 + lam[2] * vb / 3.0 + lam[3] * vm / 4.0;
   };
   auto interp_P = [&](int idx) -> double
   {
@@ -780,7 +801,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   auto logval = [&](int idx) -> double
   {
     if (interp) return log10(interp_P(idx));
-    if (loglin) return loglin_v(idx);
+    if (loglin) return loglin_sym ? loglin_v_sym(idx) : loglin_v(idx);
     return log10(eff_count(idx, table[idx])) - log_total;
   };
 
