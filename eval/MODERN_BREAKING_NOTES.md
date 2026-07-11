@@ -163,10 +163,42 @@ And since Appendix C is aggregate over the same HG Nord traffic family, the win 
 domain-matched table measured on in-domain real traffic, not a claim about arbitrary German
 (no message's plaintext went into the tables).
 
+## 7. Crib (known-word) finisher — measured-down (`--crib-file`, `eval/eval_crib.py`)
+
+The article's other pointer for the short-message floor is a "special assessment stage
+evaluating words we know are frequently used by HG Nord (Berta, Eins, Frage, Roem)" — a
+crib / known-word objective. Implemented as `--crib-file` (Option B, a re-ranking finisher):
+after each restart climb converges, the board is ranked by `n-gram score + weight·crib_score`,
+where `crib_score` sums the weights of known words (`cribs/german-hgnord.txt` — generic
+operational vocabulary: spelled numbers, phonetic alphabet, standard military nouns, chosen
+from telegraphy conventions, *not* fitted to the test messages) present in the decrypt. The
+climb still optimises n-grams (hot path untouched); only the cross-restart winner sees cribs.
+
+**Measured-down** (`eval/eval_crib.py`, the 69 held-out messages, on top of the telegraphic
+tables): net **−0.1 pp** at weight 0.5, **−1.7 pp** at 1.0.
+
+| band | n | tele | crib 0.5 | crib 1.0 |
+|---|---|---|---|---|
+| 40–69 | 14 | 24.3 | 24.1 | 22.9 |
+| 70–119 | 20 | 67.5 | 67.5 | 62.4 |
+| **all** | 69 | **60.2** | 60.0 | 58.5 |
+
+It scores the odd genuine scoring-failure win (No. 203: 79→100 %) but that is offset by
+**false-positive re-ranking** breaking already-recovered boards (No. 108: 100→17, No. 200:
+100→87 at higher weight). The reason is the escalation boundary: once the telegraphic tables
+*surface* the true board, the residual is dominated by **wrong-basin** failures — the true
+board isn't among the converged restarts — so a re-ranker has nothing true to promote. It's
+the board-selection echo of the project's "no truth-free selection signal" finding: the
+article's crib stage assumes the truth is already *found*; on our residual it usually isn't.
+Kept as an off-by-default, not-recommended opt-in (the negative answer is the artifact), like
+`--score-tt`/`--repair3`. A tie-breaker variant (crib only among near-equal-n-gram boards) or
+a crib-*directed repair* (Option A) is the untried next step if the line is revisited.
+
 ## Reproduce
 
 ```sh
 python3 eval/build_telegraphic_ngrams.py    # regenerate ngrams-telegraphic/ from Appendix C
+R=150 python3 eval/eval_crib.py             # crib finisher: telegraphic vs +crib over 69 msgs
 R=150 python3 eval/eval_telegraphic.py      # held-out eval: prose vs telegraphic over 69 msgs
 R=150 python3 eval/eval_prose_inverse.py    # inverse control: prose vs telegraphic on PROSE German
 python3 eval/build_enigma_messages.py       # regenerate + verify the 13 (Ostwald & Weierud 2017)

@@ -375,6 +375,15 @@ r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
 check "restarts: -R 8 result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -T 1)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -T 4)"
+
+# --crib-file (measured-down opt-in): the crib bonus is a deterministic function of the
+# board, so the re-ranked winner must stay -T-independent. Also exercises loading the file.
+crib_file=$(mktemp)
+printf 'ENGLISH 2\nLANGUAGE 2\nANALYSIS 2\n' > "$crib_file"
+check "crib: --crib-file result is -T-independent" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-file "$crib_file" -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-file "$crib_file" -T 4)"
+rm -f "$crib_file"
 # After random restarts the machine must hold the BEST restart's plugboard, not the
 # last one's -- showconfig() prints m.steckerbrett, so decrypting the ciphertext with
 # the displayed rotor + -s <plugboard> must reproduce the recovered plaintext. (It
