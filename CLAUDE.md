@@ -191,11 +191,13 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 ### Key CLI options (see `help()` in source for the full list)
 
-> **Recommended vs. not.** The proven-good search knobs are `-c` + `-R` restarts with `-q`
-> quad scoring, `-S i4q10` staging, `-J` (dynamic move order, wins the realistic ~10-plug
-> regime), `-M` (with a tight cap), and the best-board finisher `--gainfix-best3` (the recommended
-> finisher — strictly ≥ `--gainfix-best` at its near-free default K=8, so there is no short-message
-> case where `--gainfix-best` is preferred over it).
+> **Recommended vs. not.** The proven-good knobs are `-c` + `-R` restarts, the **`-a` weighted
+> all-order scoring** (log-linear mixture of quad/tri/bi/mono — the sharpest scoring model and the
+> one measured *scoring* win on short messages; strictly recommended over `-q` when the language is
+> known, see the `-a` entry below), `-S m4a10` staging (mono pre-pass then weighted), `-J` (dynamic
+> move order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the best-board finisher
+> `--gainfix-best3` (the recommended finisher — strictly ≥ `--gainfix-best` at its near-free default
+> K=8, so there is no short-message case where `--gainfix-best` is preferred over it).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-I`, `--infl-order`, `-F`, `--repair3`, `--no-repair`,
@@ -216,8 +218,10 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > *restart* can *land* near; local plug repair (any finisher) can complete an already-near board but
 > cannot relocate a wrong basin. Raising R helps until the **scoring-failure floor** (boards where the
 > true plugboard does not score highest — an information limit no search can cross; ~5% at L40); past
-> that only a **sharper scoring model** moves the needle, not more search. Recipe:
-> `-c -J --gainfix-best3 --score i4q10 --random 10 -R <as high as -T affords> -q -l <lang> -T <cores>`.
+> that only a **sharper scoring model** moves the needle, not more search — which is exactly what the
+> **`-a` weighted model** delivers (the first measured short-message *scoring* gain, +~1–2pp mean
+> %-correct at L40–100 across all four languages; PR #106). Recipe:
+> `-c -J --gainfix-best3 --score m4a10 --random 10 -R <as high as -T affords> -a -l <lang> -T <cores>`.
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -399,14 +403,17 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   is why `tests/` and the `crackquality`/`bench` harnesses pin `ENIGMA_SEED=0` for
   deterministic, cross-ref-comparable runs.
 - `-S <schedule>` / `--score <schedule>` staged plugboard climb — a string of
-  `<letter><optional cap>` **model tokens** `i`/`m`/`b`/`t`/`q` parsed by
+  `<letter><optional cap>` **model tokens** `i`/`m`/`b`/`t`/`q`/`a` parsed by
   `parse_schedule()` into `opt_stages[]`. Each is a climb stage run in order; the number
   caps the **plug pairs** that stage may set (1–13; omitted = uncapped, 13). The **last**
   model token is the target/ranking model (sets `opt_scoring`), so the target lives *in*
   the string — e.g. `--score i6q` = IC capped at 6 pairs, then quad uncapped. A lower-order
   early stage steers the first plugs into a better basin (its surface is smoother when few
-  plugs are set); **`--score i…q` (IC pre-pass) is the best measured** — much better than
-  bigram, extra stages after IC add little. The schedule carries **only** model stages: the
+  plugs are set); **`--score i…q` (IC pre-pass) is the best measured** for a quad target — much
+  better than bigram, extra stages after IC add little. **The recommended target is now `a`
+  (weighted), staged as `--score m4a10`** (mono pre-pass then weighted, both capped) — the `a`
+  stage reads the log-linear `all8` table, so `-S m4a10` is byte-identical to the winning tuning
+  recipe. The schedule carries **only** model stages: the
   per-restart kick and the exhaustion are their own options (`--random` / `--exhaust`), not
   schedule tokens (REDESIGN Part B moved the old `rN`/`aN` tokens out). Per-`machine`
   `scoring` field (never a global → race-free); deterministic; the `--score` stages,
@@ -415,18 +422,34 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   ranks by the target model (there is no climb to apply the stages to). (Replaces the
   earlier separate `-L` cap, which was folded into the per-stage numbers — see
   `archived/CODE_REVIEW_HISTORY.md` §9.)
-- `-l lang` scoring language — **required** for `-m/-b/-t/-q` (no default), not
+- `-l lang` scoring language — **required** for `-m/-b/-t/-q/-a` (no default), not
   used by `-i`. `-l` alone does nothing: it takes effect only with an n-gram model,
   so it is `-q -l english`, not `-l english`, that scores with English quadgrams.
-- `-i/-m/-b/-t/-q` scoring model: IC / mono / bi / tri / quad. **IC is the default**
-  — the only model needing no `-l`, so the tool runs with no scoring options (an
-  n-gram default would be inconsistent: it requires a language, which has no default).
-  Quad is the sharpest and the recommended model when the language is known. Each
-  selector is a **thin alias for a single uncapped `--score <model>` stage** (REDESIGN
-  Part C); it sets the scan **ranking** model and the climb **target** model. Setting the
-  model to *conflicting* values is a **fatal error** — two disagreeing selectors (`-m -q`)
-  or a selector vs a different `--score` target (`-m --score q`) — since the intent is
-  genuinely ambiguous; agreement is silent (`-q -q`, `-q --score q`, `-q --score i4q10`).
+- `-i/-m/-b/-t/-q/-a` scoring model: IC / mono / bi / tri / quad / weighted-all. **IC is
+  the default** — the only model needing no `-l`, so the tool runs with no scoring options
+  (an n-gram default would be inconsistent: it requires a language, which has no default).
+  **`-a` (weighted) is the sharpest and the recommended model when the language is known**
+  (see its entry below); quad (`-q`) is the plain single-order alternative. Each selector is
+  a **thin alias for a single uncapped `--score <model>` stage** (REDESIGN Part C); it sets
+  the scan **ranking** model and the climb **target** model. Setting the model to *conflicting*
+  values is a **fatal error** — two disagreeing selectors (`-m -q`, `-q -a`) or a selector vs a
+  different `--score` target (`-m --score q`) — since the intent is genuinely ambiguous;
+  agreement is silent (`-q -q`, `-a --score m4a10`, `-q --score i4q10`).
+- `-a` **weighted all-order scoring** (**recommended** when the language is known; needs `-l`;
+  a schedule token too — `-S m4a10`). Scores each quadgram window as a **log-linear mixture**
+  of all four orders — `a·log p(ABCD) + b·log p(BCD) + c·log p(CD) + d·log p(D)` with baked
+  weights `(1, 0.6, 0.3, 0.15)` and the **symmetric folding** (every sub-gram a window contains,
+  divided by its window-multiplicity 2/3/4, so leading edge grams are included). It is a
+  **geometric (Product-of-Experts) mixture** that stays in joint log-prob space (weights `(1,0,0,0)`
+  = plain quad), folded once into a quad-shaped `all8` table at load — so the per-character scoring
+  **hot path and gainfix are unchanged** (they treat `all8` exactly like `quad8`). Measured the
+  **first short-message scoring win** in the tuning history: +~1–2pp mean %-correct at L40–100 across
+  all four languages (2000-trial German confirms +1.3pp avg, all lengths positive), neutral by L≥190
+  where quad already saturates. The linear (Jelinek-Mercer) form was tried and **lost** (the
+  conditional reframing it forces is the cost); log-linear wins because it is *conjunctive* — a
+  candidate must look plausible at every order at once. See `PERFORMANCE.md` / PR #106. Because `-a`
+  is the sharpest model, the recommended recipe is `-c -S m4a10 -J --gainfix-best3 -a -l <lang>`.
+- `-p file` compare the recovered plaintext against a known plaintext file
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a long-message throughput tool, unreliable on the short/hard end and proxy-measured; needs `-c`; `0` = off): a two-tier search — tier 1
   ranks *every* key by a single **cheap IC climb** and keeps the top `N` (or top `N%`
