@@ -207,6 +207,15 @@ seed.
 | --- | --- |
 | `-d dir` | Directory holding the n-gram files (else `$ENIGMA_DATA`, else `ngrams`) `[ngrams]` |
 | `-T N` | Worker threads for the search, 1–256 `[1]` |
+
+For **authentic telegraphic German traffic** (real Wehrmacht messages: `X`
+separators, `Q` for *ch*, spelled-out numbers) the bundled prose German tables
+mis-score the plaintext; use the domain-matched tables in `ngrams-telegraphic/`
+instead — `-d ngrams-telegraphic -l german` — which recover **+20.9 pp** more
+(mean %-letters-correct) over a 69-message held-out set of real 1941 messages.
+Prose German (and `make crackquality`) should stay on the default `ngrams/`. See
+`ngrams-telegraphic/README.md`.
+
 | `-p file` | Compare the recovered plaintext against a known plaintext file |
 | `-v` / `-h` | Version / help |
 
