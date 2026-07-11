@@ -95,7 +95,7 @@ static const double score_min = -1e30;
 
 /* Plaintext scoring models; values match the scoring_name[] order and the
    *_score_decode dispatch in score_iter(). */
-enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD };
+enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD, SCORE_ALL };
 
 static const char * opt_ukw;
 static const char * opt_walzen;
@@ -417,12 +417,15 @@ struct machine
    tables) trims quantisation error on borderline rankings. The map MUST stay linear (an affine
    image of log10 p) so the additive sum reconstructs; adaptive *scale* is the only free lever,
    not a nonlinear curve. Raw counts live in a transient scratch buffer inside ngrams_read(). */
-static double ngram_scale[SCORE_QUAD + 1];  /* per-model: 255/(vmax-vmin), full 0..255 range */
-static double ngram_bias[SCORE_QUAD + 1];   /* per-model vmin; indexed by SCORE_* */
+static double ngram_scale[SCORE_ALL + 1];   /* per-model: 255/(vmax-vmin), full 0..255 range */
+static double ngram_bias[SCORE_ALL + 1];    /* per-model vmin; indexed by SCORE_* */
 static uint8_t mono8[asize];
 static uint8_t bi8[asize][asize];
 static uint8_t tri8[asize][asize][asize];
 static uint8_t quad8[asize][asize][asize][asize];
+/* SCORE_ALL ("weighted", -a): a quad-shaped table holding the log-linear symmetric
+   mixture of all four orders (see load_table); the scorer/gainfix treat it like quad8. */
+static uint8_t all8[asize][asize][asize][asize];
 
 /* --- diagnostics and n-gram table loading ------------------------------- */
 
@@ -571,7 +574,8 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
 }
 
 void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
-                 const char * suffix)
+                 const char * suffix,
+                 const double * force_ll = nullptr, bool force_sym = false)
 {
   int size = 1;
   for (int i = 0; i < n; i++)
@@ -689,20 +693,27 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
      message's windows this is a weighted sum of the overall quad/tri/bi/mono scores (up to a
      3-letter boundary term). Stays JOINT -- no conditional reframing -- and weights (1,0,0,0)
      are byte-identical to the default quad. A geometric (log-linear) mixture of the models. */
+  /* force_ll (the SCORE_ALL "-a" table) forces the log-linear symmetric fold with baked
+     weights, independent of the ENIGMA_LOGLIN env (which stays an experimental override on
+     the plain quad table). */
   const char * lp = getenv("ENIGMA_LOGLIN");
-  const bool loglin = (lp != nullptr) && (n == 4) && !interp;
+  const bool loglin = ((lp != nullptr) || (force_ll != nullptr)) && (n == 4) && !interp;
   /* symmetric folding (ENIGMA_LOGLIN_SYM): fold EVERY sub-gram a window contains (2 tris,
      3 bis, 4 monos) divided by its window-multiplicity (2/3/4), instead of only the trailing
      BCD/CD/D. Interior grams net the same weight; the difference is that the leading grams at
      the text start are now included (edge grams naturally down-weighted). Same one-lookup cost. */
-  const bool loglin_sym = loglin && (getenv("ENIGMA_LOGLIN_SYM") != nullptr);
+  const bool loglin_sym = loglin &&
+    (force_ll ? force_sym : (getenv("ENIGMA_LOGLIN_SYM") != nullptr));
   double lam[4] = {1.0, 0.0, 0.0, 0.0};   /* interp: normalised lambdas; loglin: raw weights */
   std::vector<uint32_t> mono_t;
   double mono_total = 1.0;
   if (interp || loglin)
     {
       double w[4] = {0.0, 0.0, 0.0, 0.0};
-      sscanf(interp ? ip : lp, "%lf,%lf,%lf,%lf", &w[0], &w[1], &w[2], &w[3]);
+      if (force_ll)
+        { for (int j = 0; j < 4; j++) w[j] = force_ll[j]; }
+      else
+        sscanf(interp ? ip : lp, "%lf,%lf,%lf,%lf", &w[0], &w[1], &w[2], &w[3]);
       double s = w[0] + w[1] + w[2] + w[3];
       if (interp)                          /* JM linear: normalise to sum 1 */
         {
@@ -1355,6 +1366,35 @@ double quadgram_score_decode(machine & m)
   return score;
 }
 
+/* The weighted "all-order" scorer: identical shape to the quad scorer, but reads all8 (the
+   log-linear mixture table) and its own bias/scale. A separate function (not a parameterised
+   quad scorer) so each stays a distinct global with no aliasing -- the hot-path rule. */
+double allgram_score_decode(machine & m)
+{
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * const * __restrict rows = m.rows;
+
+  double score = 0.0;
+  if (textlength < 4)
+    return score;
+
+  int a = decode_at(steck, rows, ct, 0);
+  int b = decode_at(steck, rows, ct, 1);
+  int c = decode_at(steck, rows, ct, 2);
+  long isum = 0;
+  for (int i = 3; i < textlength; i++)
+    {
+      int d = decode_at(steck, rows, ct, i);
+      isum += all8[a][b][c][d];
+      a = b;
+      b = c;
+      c = d;
+    }
+  score = static_cast<double>(isum) / ngram_scale[SCORE_ALL] + (textlength - 3) * ngram_bias[SCORE_ALL];
+  return score;
+}
+
 double trigram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
@@ -1573,6 +1613,11 @@ double score_iter(machine & m)
 
     case SCORE_QUAD:
       score = quadgram_score_decode(m);
+      nterms = textlength - 3;
+      break;
+
+    case SCORE_ALL:
+      score = allgram_score_decode(m);
       nterms = textlength - 3;
       break;
 
@@ -1796,6 +1841,10 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
   const unsigned char * const * __restrict rows = m.rows;
   const unsigned char * __restrict ct = num_ciphertext;
   const int n = textlength;
+  /* score gains against the ACTIVE model's table (all8 for -a, else quad8) so the
+     gain cascade stays consistent with the scorer for the weighted model too. */
+  const uint8_t (* __restrict qt)[asize][asize][asize] =
+    (m.scoring == SCORE_ALL) ? all8 : quad8;
 
   unsigned char pt[maxlen];
   for (int i = 0; i < n; i++)
@@ -1814,7 +1863,7 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
       const int cj = ct[j];
       long cur = 0;
       for (int i = lo; i <= hi; i++)
-        cur += quad8[pt[i]][pt[i + 1]][pt[i + 2]][pt[i + 3]];
+        cur += qt[pt[i]][pt[i + 1]][pt[i + 2]][pt[i + 3]];
       int orig = pt[j], bx = orig;
       long bs = cur;
       for (int x = 0; x < asize; x++)
@@ -1831,7 +1880,7 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
                   case 2:  q2 = static_cast<unsigned char>(x); break;
                   default: q3 = static_cast<unsigned char>(x); break;
                 }
-              s += quad8[q0][q1][q2][q3];
+              s += qt[q0][q1][q2][q3];
             }
           if (s > bs) { bs = s; bx = x; }
         }
@@ -1882,7 +1931,7 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
 template<bool EX>
 static bool gain_cascade(machine & m, double cur_score)
 {
-  if (m.scoring != SCORE_QUAD || textlength < 8)
+  if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
     return false;
   if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
     return false;
@@ -1964,7 +2013,7 @@ template<bool EX> static double hillclimb(machine & m, int max_pairs);   /* fwd:
 template<bool EX>
 static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
 {
-  if (m.scoring != SCORE_QUAD || textlength < 8)
+  if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
     return false;
   if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
     return false;
@@ -2519,6 +2568,15 @@ void load_table(int model)
     case SCORE_BI:   ngrams_read(2, & bi8[0][0], & ngram_bias[SCORE_BI], & ngram_scale[SCORE_BI], "bigrams"); break;
     case SCORE_TRI:  ngrams_read(3, & tri8[0][0][0], & ngram_bias[SCORE_TRI], & ngram_scale[SCORE_TRI], "trigrams"); break;
     case SCORE_QUAD: ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], & ngram_scale[SCORE_QUAD], "quadgrams"); break;
+    case SCORE_ALL:
+      {
+        /* the weighted all-order model: log-linear symmetric mixture of quad/tri/bi/mono,
+           weights tuned across four languages (PR #106): quad 1, tri .6, bi .3, mono .15. */
+        static const double AW[4] = { 1.0, 0.6, 0.3, 0.15 };
+        ngrams_read(4, & all8[0][0][0][0], & ngram_bias[SCORE_ALL], & ngram_scale[SCORE_ALL],
+                    "quadgrams", AW, true);
+        break;
+      }
     default: break;   /* IC: no table */
     }
 }
@@ -2533,6 +2591,7 @@ int model_of(char c)
     case 'b': return SCORE_BI;
     case 't': return SCORE_TRI;
     case 'q': return SCORE_QUAD;
+    case 'a': return SCORE_ALL;
     default:  return SCORE_IC;
     }
 }
@@ -2583,7 +2642,7 @@ void parse_schedule()
             }
         }
 
-      if (strchr("imbtq", letter))
+      if (strchr("imbtqa", letter))
         {
           if (opt_nstages >= max_stages)
             fatal("Illegal --score schedule: too many stages (max 16)");
@@ -2595,12 +2654,12 @@ void parse_schedule()
           opt_nstages++;
         }
       else
-        fatal("Illegal --score schedule (tokens are i/m/b/t/q + optional cap, "
-              "e.g. --score i4q10; use --random for the kick, --exhaust for forcing)");
+        fatal("Illegal --score schedule (tokens are i/m/b/t/q/a + optional cap, "
+              "e.g. --score m4a10; use --random for the kick, --exhaust for forcing)");
     }
 
   if (opt_nstages < 1)
-    fatal("Illegal --score schedule: needs at least one model stage (i/m/b/t/q)");
+    fatal("Illegal --score schedule: needs at least one model stage (i/m/b/t/q/a)");
 
   /* the last model stage is the target/ranking model */
   opt_scoring = opt_stages[opt_nstages - 1].model;
@@ -4224,9 +4283,9 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "climb; N = N kicked climbs, keep best [0]");
   fprintf(out, "  %-24s %s\n", "-S, --score schedule",
           "Staged plugboard climb: <letter><cap> tokens,");
-  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q (number caps plug pairs; the last");
+  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q/a (number caps plug pairs; the last");
   fprintf(out, "  %-24s %s\n", "", "stage is the target/ranking model). E.g. --score");
-  fprintf(out, "  %-24s %s\n", "", "i4q10 (bigram pre-pass then quad, both capped).");
+  fprintf(out, "  %-24s %s\n", "", "m4a10 (mono pre-pass then weighted, both capped).");
   fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
   fprintf(out, "  %-24s %s\n", "-l, --language language",
           "Scoring language (english/german/danish/french);");
@@ -4237,6 +4296,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "-b, --bi", "Bigram statistics for the plaintext score");
   fprintf(out, "  %-24s %s\n", "-t, --tri", "Trigram statistics for the plaintext score");
   fprintf(out, "  %-24s %s\n", "-q, --quad", "Quadgram statistics for the plaintext score");
+  fprintf(out, "  %-24s %s\n", "-a, --weighted",
+          "Weighted all-order score (log-linear mix of");
+  fprintf(out, "  %-24s %s\n", "", "quad/tri/bi/mono); sharper on short messages.");
+  fprintf(out, "  %-24s %s\n", "", "Recommended: -c -S m4a10 -J --gainfix-best3");
   fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
           "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
   fprintf(out, "  %-24s %s\n", "-T, --threads N",
@@ -4355,7 +4418,8 @@ void removespaces(char * p)
 void show_settings()
 {
   static const char * const scoring_name[] =
-    { "index of coincidence", "monograms", "bigrams", "trigrams", "quadgrams" };
+    { "index of coincidence", "monograms", "bigrams", "trigrams", "quadgrams",
+      "weighted all-orders" };
 
   fprintf(stderr, "Ciphertext: %d letters\n", textlength);
 
@@ -4547,6 +4611,7 @@ int main(int argc, char * * argv)
       { "bi",             no_argument,       nullptr, 'b' },
       { "tri",            no_argument,       nullptr, 't' },
       { "quad",           no_argument,       nullptr, 'q' },
+      { "weighted",       no_argument,       nullptr, 'a' },
       { "climb",          no_argument,       nullptr, 'c' },
       { "norway",         no_argument,       nullptr, 'n' },
       { "m4",             no_argument,       nullptr, '4' },
@@ -4569,7 +4634,7 @@ int main(int argc, char * * argv)
 
   int c;
   while ((c = getopt_long(argc, argv,
-                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqcvhn4",
+                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqacvhn4",
                           long_options, nullptr)) != -1)
     {
       switch (c)
@@ -4611,6 +4676,9 @@ int main(int argc, char * * argv)
           break;
         case 'q':
           select_model(SCORE_QUAD);
+          break;
+        case 'a':
+          select_model(SCORE_ALL);
           break;
         case 'c':
           opt_hillclimb = 1;
@@ -4863,7 +4931,7 @@ int main(int argc, char * * argv)
   if ((opt_model_selector != -1) && opt_staged && (opt_model_selector != opt_scoring))
     {
       static const char * const model_name[] =
-        { "IC", "monograms", "bigrams", "trigrams", "quadgrams" };
+        { "IC", "monograms", "bigrams", "trigrams", "quadgrams", "weighted" };
       char msg[128];
       snprintf(msg, sizeof msg,
                "Conflicting scoring models: selector picks %s but --score targets %s; "
@@ -5033,7 +5101,7 @@ int main(int argc, char * * argv)
   if ((! opt_hillclimb) && opt_staged && schedule_is_climb_only())
     {
       static const char * const model_name[] =
-        { "IC", "monograms", "bigrams", "trigrams", "quadgrams" };
+        { "IC", "monograms", "bigrams", "trigrams", "quadgrams", "weighted" };
       fprintf(stderr, "Warning: --score climb schedule ignored without -c; "
               "ranking by %s\n", model_name[opt_scoring]);
     }
@@ -5088,7 +5156,7 @@ int main(int argc, char * * argv)
      decrypt (which fell back to IC and needs no table). */
   if (needs_scoring || (opt_scoring != SCORE_IC))
     {
-      bool table_loaded[5] = { false, false, false, false, false };
+      bool table_loaded[SCORE_ALL + 1] = { false, false, false, false, false, false };
       load_table(opt_scoring);
       table_loaded[opt_scoring] = true;
       for (int i = 0; i < opt_nstages; i++)

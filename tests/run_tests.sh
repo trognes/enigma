@@ -530,20 +530,24 @@ check "staged: --score bq -R 4 result is -T-independent" \
 check "staged: --score bq recovers plugboard (long message)" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g AAA -c --score bq)" \
   "$r_pt"
-# --score schedule is validated: a non-model letter is rejected (the r/a tokens are gone,
-# moved to --random / --exhaust).
+# --score schedule is validated: a non-model letter is rejected. The old r token is gone
+# (moved to --random); a is now a valid MODEL token (the weighted all-order model, -a).
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score z >/dev/null 2>&1
 check "staged: bad --score schedule rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score r8q >/dev/null 2>&1
 check "staged: --score no longer accepts r token (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score a1q >/dev/null 2>&1
-check "staged: --score no longer accepts a token (exit code)" "$?" "1"
+check "staged: --score accepts a (weighted) model token (exit code)" "$?" "0"
 
 # Per-stage plug-pair caps (the number after a model letter) composed with the kick
 # (--random) and restarts must stay -T-independent.
 check "staged: --score i3q --random 2 -R 4 is -T-independent" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 1)" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 4)"
+# The weighted all-order model (a) with its gainfix finisher stays -T-independent too.
+check "staged: --score m4a10 (weighted) --gainfix-best3 is -T-independent" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --gainfix-best3 -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --gainfix-best3 -T 4)"
 # --random 0 injects no plugs, so N restarts all repeat the seed climb: --random 0 -R 8
 # equals the deterministic -R 0 (one seed climb).
 check "staged: --random 0 makes restarts a no-op" \
@@ -845,7 +849,7 @@ fi
 for lang in $crack_langs; do
   plain=$(plain_for "$lang")
   ct=$(run "$plain" -i -u B -w 123 -r AAA -g QXP)
-  for mode in -i -m -b -t -q; do
+  for mode in -i -m -b -t -q -a; do
     check "crack: start position, $lang $mode" \
       "$(run "$ct" $mode -u B -w 123 -r AAA -g "$crack_scan_g" -l "$lang")" \
       "$plain"
@@ -862,7 +866,7 @@ done
 for lang in $crack_langs; do
   plain=$(plain_for "$lang")
   ct=$(run "$plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
-  for mode in -i -m -b -t -q; do
+  for mode in -i -m -b -t -q -a; do
     check "crack: hill-climb plugboard, $lang $mode" \
       "$(run "$ct" $mode -c -u B -w 123 -r AAA -g AAA -l "$lang")" \
       "$plain"
