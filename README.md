@@ -171,6 +171,7 @@ for `-q`/`-a` (scoring an English message with `-l german` typically fails). Not
 | `-I` | First-improvement climb: ~2.8× cheaper per climb, so **pair with more `-R`** for a net matched-compute recovery win (needs `-c`; off by default) |
 | `-J` | Like `-I` but with **dynamic** best-first move ordering (implies `-I`); a further matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
 | `-M` | Make the plug cap a strict **descent target**: at/over the cap only merge/remove moves (no adds or reshuffles). A matched-compute win with a tight `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs `-c`; off by default) |
+| `--gainfix-best3` | **Recommended finisher**: runs a directed quadgram-gain repair (plus a deeper 3-plug-tangle escalation) once on the best board after all restarts. Near-free at its default, a small quality bump on top of `-R` (needs `-c`; off by default) |
 | `-R N` / `--restarts N` | Random restart attempts: `0` = one deterministic climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best `[0]` |
 | `--random K` | Random-kick size — plug pairs injected per restart (needs `-c`; `0` = no kick, a control) `[10]` |
 | `-S sched` / `--score sched` | Staged climb schedule — model stages only (see below) |
@@ -209,76 +210,12 @@ seed.
 | `-p file` | Compare the recovered plaintext against a known plaintext file |
 | `-v` / `-h` | Version / help |
 
-The full usage message (`./enigma -h`):
-
-```
-Usage: enigma [OPTIONS]
-
-Basic options:
-  -h, --help               Show help information
-  -v, --version            Show version information
-  -u, --reflector X        Reflector (umkehrwalze); A-C, N, M4 b/c, or . [.]
-  -w, --wheels XYZ         Wheels (walzen); 1-8 or . [...]
-  -r, --rings XYZ          Ring positions (ringstellung); A-Z or . [AA.]
-  -g, --start-position XYZ Start positions (grundstellung); A-Z or . [...]
-  -s, --plugboard AB...    Plugboard (steckerbrett) A-Z letter pairs [none];
-                           held fixed; the -c/-A climb finds the rest
-  -n, --norway             Norway Enigma: reflector N and wheels (1-5)
-  -4, --m4                 M4 (4-rotor naval) mode. -u selects the thin
-                           reflector b/c; -w/-r/-g take 4 chars (Greek
-                           wheel/ring/start first)
-  -c, --climb              Perform hill climbing to find plugboard settings
-  -R, --restarts N         Random restart attempts: 0 = one deterministic
-                           climb; N = N kicked climbs, keep best [0]
-  -S, --score schedule     Staged plugboard climb: <letter><cap> tokens,
-                           models i/m/b/t/q (number caps plug pairs; the last
-                           stage is the target/ranking model). E.g. --score
-                           i4q10 (bigram pre-pass then quad, both capped).
-                           Without -c only the target model is used (to rank).
-  -l, --language language  Scoring language (english/german/danish/french);
-                           required for -m/-b/-t/-q (no default); not for -i
-  -i, --ic                 Index of coincidence (IC); needs no -l [default]
-  -m, --mono               Monogram statistics for the plaintext score
-  -b, --bi                 Bigram statistics for the plaintext score
-  -t, --tri                Trigram statistics for the plaintext score
-  -q, --quad               Quadgram statistics for the plaintext score
-  -d, --ngrams directory   Dir with n-gram files (or $ENIGMA_DATA) [ngrams]
-  -T, --threads N          Worker threads for the search (1-256) [1]
-
-Advanced options:
-  -x, --max-wheel N        Highest wheel number to use (3-8) [5]
-  -A, --anneal N           Recover the plugboard by simulated annealing
-                           instead of the greedy climb; N = move budget
-                           (needs -c) [off]. Honours the -S target cap:
-                           -A N -S qK caps it at K plugs
-  -F, --prefilter N[%]     Key pre-filter: rank by a cheap IC climb, then
-                           run the full -c climb on only the top N keys, or
-                           top N% of the keyspace (needs -c) [off]
-  -I, --first-improve      First-improvement climb: ~2.8x cheaper per climb,
-                           so pair with more -R for a net win (needs -c) [off]
-  -J, --dynamic-order      Like -I with dynamic best-first move ordering;
-                           wins ~10-plug, may lose few-plug (implies -I) [off]
-  -M, --cap-target         Make the plug cap a strict descent target: only
-                           merge/remove at/over the cap; pair with a tight
-                           -S cap (needs -c) [off]
-  -e, --seed N             Random seed for restarts/annealing (also
-                           $ENIGMA_SEED); default fresh each run, echoed
-  -p, --compare filename   Plaintext file to compare the result against
-  --random K               Random-kick size: plug pairs injected per restart
-                           (needs -c; 0 = no kick, a control) [10]
-  --exhaust E              Force E extra plug pairs among the free letters,
-                           try every combination, keep the best climb. An
-                           exploration tool (E=1 = 325 climbs; E>1 explodes;
-                           needs -c; a high -R dominates it) [off]
-  --true-key KEY           Diagnostic: with -F, print the tier-1 rank of the
-                           given standard key (e.g. B241AAAQEW = reflector,
-                           3 wheels, 3 ring, 3 start) among all keys [off]
-  --dump-restarts          Diagnostic: with -c, print each converged restart's
-                           score and board to stderr (verbose) [off]
-```
-
-The last two are test-harness diagnostics used by `tests/crack_quality.py`'s
-`-F`-recall and restart-diversity modes (see `CRACKQUALITY_TESTS.md`).
+For the complete, authoritative option list — including the advanced finishers
+(`--gainfix-best3`, `-M`, `-A`) and the internal diagnostic flags — run
+`./enigma -h`. The tables above describe the everyday options; `-h` groups the
+rest as **recommended**, **advanced**, **non-recommended** (opt-in; dominated or
+situational), and **diagnostic** (measurement only), and prints the recommended
+short-message recipe at the end.
 
 ## Cracking strategy
 
@@ -327,6 +264,11 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   at equal compute, it recovers noticeably more of a short message (measured +8 percentage
   points of exact recovery, and up to +20 on messages with fewer plugs). Leave it off for a
   single climb (`-R 0`).
+
+The recipes below use quadgrams (`--score iq`/`i4q10`) to illustrate the schedule and
+plug-cap mechanics; when you know the language, use the **recommended weighted target**
+in place of the quad stage — e.g. `--score m4a10` with `-a` (see the two recommended
+recipes at the end of this section).
 
 A good general recipe for a hard (short) message with a known rotor key:
 
@@ -391,7 +333,7 @@ crossover** — pick either, or run both:
   same 10-plug cap:
 
   ```sh
-  ./enigma -c -A 12000 --score q10 -R 12 -q -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+  ./enigma -c -A 12000 --score a10 -R 12 -a -l english -u B -w 241 -r AAA -g QEW < cipher.txt
   ```
 
 Measured on 50–70-letter 10-plug messages at equal `score_iter`, **SA tends to win the very
