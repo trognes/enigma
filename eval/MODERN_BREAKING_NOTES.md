@@ -146,15 +146,29 @@ the second real lever for short real-message breaking, alongside the `-a` scorin
 
 Scope: these tables encode telegraphic orthography by construction, so they are for **real
 Wehrmacht traffic only** — on prose German (and the `make crackquality` benchmark) the
-bundled `ngrams/` tables remain correct. And since Appendix C is aggregate over the same
-HG Nord traffic family, this is a domain-matched table measured on in-domain real traffic,
-not a claim about arbitrary German (no message's plaintext went into the tables).
+bundled `ngrams/` tables remain correct. This is **measured, not asserted**
+(`eval/eval_prose_inverse.py`, the mirror control — random prose-German excerpts recovered
+under prose vs telegraphic):
+
+| length | prose | telegraphic |
+|---|---|---|
+| 40 | 47.2 | 16.7 |
+| 70 | 92.7 | 72.4 |
+| ≥100 | 100.0 | 100.0 |
+| **all** | **88.0** | **77.8** |
+
+The telegraphic tables lose **−10.2 pp** on prose (−30.5 at L40) — the exact mirror of the
++20.9 pp real-traffic win, same tables, opposite sign, biggest where the win was biggest.
+And since Appendix C is aggregate over the same HG Nord traffic family, the win itself is a
+domain-matched table measured on in-domain real traffic, not a claim about arbitrary German
+(no message's plaintext went into the tables).
 
 ## Reproduce
 
 ```sh
 python3 eval/build_telegraphic_ngrams.py    # regenerate ngrams-telegraphic/ from Appendix C
 R=150 python3 eval/eval_telegraphic.py      # held-out eval: prose vs telegraphic over 69 msgs
+R=150 python3 eval/eval_prose_inverse.py    # inverse control: prose vs telegraphic on PROSE German
 python3 eval/build_enigma_messages.py       # regenerate + verify the 13 (Ostwald & Weierud 2017)
 python3 eval/build_army_messages_1941.py    # regenerate + verify the 56 (Sullivan & Weierud 2005)
 python3 eval/build_challenge_1941.py        # regenerate the 18 unbroken challenge ciphertexts
