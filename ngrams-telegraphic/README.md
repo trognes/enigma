@@ -31,6 +31,11 @@ Army Ciphers"* (Cryptologia 2005), Appendix C: Fig 17 (single-letter frequencies
 Fig 18 (top-400 trigrams), over ~20 000 letters of 1941 Enigma decrypts. Marginal-matching
 strength A=0.5 (monogram) / B=2.0 (trigram), the net-best over the held-out set.
 
+The **original published Appendix-C tables** are committed here verbatim as reference data
+(the primary source, unmodified — not the derived `german_*.txt` scoring tables):
+`appendix-c-fig17-monograms.txt` (26 letters, %) and `appendix-c-fig18-trigrams.txt`
+(top-400 trigrams, counts per ~20 000 letters). The generator regenerates them too.
+
 Held-out validation (`eval/eval_telegraphic.py`, the 69 authentic messages in `eval/`,
 rotor key fixed, plugboard hidden and hill-climbed, mean %-of-letters correct):
 
