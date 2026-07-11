@@ -118,9 +118,43 @@ several are short (below the ~23-letter unicity distance), the source flags that
 "July Batch A" messages are **hand cipher** (Doppelkasten), the "Batch C" trio may not be
 Enigma at all, and a few carry a known day-key they demonstrably do **not** break on.
 
+## 6. Telegraphic scoring tables — the corpus payoff (`ngrams-telegraphic/`)
+
+The domain-matched corpus idea, realised. `eval/build_telegraphic_ngrams.py` bends the
+bundled prose German tables toward the **published telegraphic statistics** in the 2005
+paper's Appendix C (Fig 17 single-letter + Fig 18 top-400 trigram frequencies over ~20 000
+letters of 1941 decrypts), by marginal-matching the quad table's folded low-order marginals
+to telegraphic (strength A=0.5 mono / B=2.0 tri). Because `-a` folds every order from the
+quad windows, one corrected table makes the whole scorer telegraphic; use it with
+`-d ngrams-telegraphic -l german`.
+
+Validated on the full **69-message held-out set** (`eval/eval_telegraphic.py`; rotor key
+fixed, plugboard hidden and hill-climbed, mean %-letters-correct):
+
+| band | n | prose | telegraphic |
+|---|---|---|---|
+| <40 | 11 | 9.8 | 16.4 |
+| 40–69 | 14 | 15.3 | 24.3 |
+| 70–119 | 20 | 28.8 | **67.5** |
+| ≥120 | 24 | 75.5 | 95.4 |
+| **all** | 69 | **39.3** | **60.2** |
+
+**+20.9 pp mean, wins 36 / loses 12** — the biggest gains in the 70–119-letter band (above
+unicity, but short enough that prose can't rank the telegraphic truth). This is the corpus
+result §1 anticipated and §3 could not settle on the bimodal 13: a domain-matched corpus is
+the second real lever for short real-message breaking, alongside the `-a` scoring model.
+
+Scope: these tables encode telegraphic orthography by construction, so they are for **real
+Wehrmacht traffic only** — on prose German (and the `make crackquality` benchmark) the
+bundled `ngrams/` tables remain correct. And since Appendix C is aggregate over the same
+HG Nord traffic family, this is a domain-matched table measured on in-domain real traffic,
+not a claim about arbitrary German (no message's plaintext went into the tables).
+
 ## Reproduce
 
 ```sh
+python3 eval/build_telegraphic_ngrams.py    # regenerate ngrams-telegraphic/ from Appendix C
+R=150 python3 eval/eval_telegraphic.py      # held-out eval: prose vs telegraphic over 69 msgs
 python3 eval/build_enigma_messages.py       # regenerate + verify the 13 (Ostwald & Weierud 2017)
 python3 eval/build_army_messages_1941.py    # regenerate + verify the 56 (Sullivan & Weierud 2005)
 python3 eval/build_challenge_1941.py        # regenerate the 18 unbroken challenge ciphertexts
