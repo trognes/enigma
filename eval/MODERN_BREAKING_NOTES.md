@@ -108,11 +108,22 @@ telegraphic German — the statistical power the original 13 (bimodal, too small
 `-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
 statistics stay the *telegraphic corpus*; these 69 messages are *held-out validation*.
 
+## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
+
+The same collection's **18 still-unbroken ciphertexts** (no rotor key ever recovered),
+kept as a future challenge. There is no key or plaintext to verify against, so
+`eval/build_challenge_1941.py` only checks each transcription against the letter count on
+the message form (all match bar one known form-miscount, Nr 53). Attack with care:
+several are short (below the ~23-letter unicity distance), the source flags that many
+"July Batch A" messages are **hand cipher** (Doppelkasten), the "Batch C" trio may not be
+Enigma at all, and a few carry a known day-key they demonstrably do **not** break on.
+
 ## Reproduce
 
 ```sh
 python3 eval/build_enigma_messages.py       # regenerate + verify the 13 (Ostwald & Weierud 2017)
 python3 eval/build_army_messages_1941.py    # regenerate + verify the 56 (Sullivan & Weierud 2005)
+python3 eval/build_challenge_1941.py        # regenerate the 18 unbroken challenge ciphertexts
 R=256 python3 eval/crack_real.py            # real-traffic plugboard recovery, -a vs -q
 ```
 
