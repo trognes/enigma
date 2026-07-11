@@ -1814,6 +1814,101 @@ best use of compute. Reproduce: `python3 eval/few_wrong_tangle.py` (characteriza
 
 ---
 
+### 6.15 Weighted all-order scoring `-a` — ✅ SHIPPED (the short-message scoring win); and why it closes the scoring frontier
+
+This is the resolution of the "sharper scoring model" that §6.1–6.14 kept pointing at as the one
+lever able to move the short-message floor. The arc, and the ceiling analysis that followed, are
+summarized here; the negative rungs are in PR #105, the win in PR #106.
+
+**The dead ends (unseen-tail smoothing) — ❌ MEASURED (PR #105).** Everything that only re-scores
+the *unseen / rarely-seen* tail is neutral-to-negative: Laplace add-one and Lidstone add-δ (any δ)
+are **neutral** (a flat floor change; a transient +0.6pp German blip at 200 trials collapsed to
+~0 at 2000); the **graded** floors — `background` (unseen graded by the monogram product) and
+`overlap` (graded by the linear-chain estimate `tri(ABC)·tri(BCD)/bi(BC)`, capped below a hapax) —
+are **harmful**, in proportion to the table's unseen fraction (english 15% → ~0; danish 64% → −4
+to −6pp at L40–70). Two different unseen-gram estimators (crude monogram, good tri/bi) give the
+same negative: it is the *existence* of gradient in the unseen tail that roughens the climb
+surface, not the estimator quality. Raising/flattening the floor (`ENIGMA_FLOOR=T`, merge counts
+≤ T) is **neutral** — and `T=1 ≡ T=0` byte-identically (a hapax already sits on the floor). So the
+low-count tail is closed from both directions, and the discriminating signal lives in the
+**well-observed** grams. Reproduce (env probes): `ENIGMA_SMOOTHING=laplace|background|overlap`,
+`ENIGMA_DELTA`, `ENIGMA_FLOOR`.
+
+**Jelinek-Mercer (linear) interpolation — ❌ MEASURED (PR #106, `ENIGMA_INTERP`).** Mixing the
+orders as *probabilities*, `P(D|ABC) = λ4·c(ABCD)/c(ABC) + λ3·c(BCD)/c(BC) + …`, forces a
+**conditional** model (to make the orders dimensionally mixable), reframing the baseline's summed
+*joint* `log p(ABCD)`. Uniformly worse (avg Δ L40–140: english −1.6…−4.3, danish −6…−7.5), with a
+**non-monotonic** shape (a little mixing is worst, more partially recovers) that fingerprints the
+**conditional reframing** — dividing each window by the noisy `count(ABC)`, discarding the joint
+information — as the cost, not the interpolation.
+
+**Log-linear interpolation → `-a` — ✅ SHIPPED (PR #106).** Mixing the orders as *log-scores*,
+`v = a·log p(ABCD) + b·log p(BCD) + c·log p(CD) + d·log p(D)` — a **geometric (Product-of-Experts)
+mixture** (Klakow 1998) that stays in joint space (weights `(1,0,0,0)` = plain quad, byte-identical)
+and folds once into a quad-shaped `all8` table at load, so the per-character scorer and the gainfix
+gain scan are unchanged. **Symmetric folding**: every sub-gram a window contains, each order divided
+by its window-multiplicity (tri/2, bi/3, mono/4), so the leading edge grams are included and edge
+grams down-weighted. Tuned weights **`(1, 0.6, 0.3, 0.15)`** — an ablation showed all four orders
+contribute (`full` +1.68 > `tribi` +1.25 > `tri06` +0.99 aggregate Δ over L40–100), a lighter tri
+beats heavy, and the lower orders add **robustness** (tri-only *hurts* danish at short lengths;
+bi+mono flip it positive), so `full` is the only non-negative-everywhere choice. **Measured the
+first short-message scoring win**: +~1–2pp mean %-correct at L40–100 across all four languages
+(2000-trial German confirmed all lengths positive, +2.0 at L50/+1.8 at L100), neutral by L≥190.
+Why log-linear wins where linear failed: the geometric mixture is **conjunctive** (a candidate must
+look plausible at *every* order at once — sharper key discrimination) and needs no cross-order
+normalization (weights absorb the scale in log space). Shipped as the model `-a` / schedule token
+`a`; `-S m4a10` is byte-identical to the tuned env recipe. Reproduce: `-a` vs `-q` under
+`crackquality`; `ENIGMA_LOGLIN`/`ENIGMA_LOGLIN_SYM` are the experimental weight overrides.
+
+**Why this closes the scoring frontier — the ceiling probes (✅ MEASURED).** With `-a` shipped, two
+probes show it is near-optimal on *both* scoring axes, so there is no headroom left for a further
+scoring model (learned weights, added features, MERT):
+
+- **Discrimination floor ~1%** (`crackquality SPLIT`, MODEL=a). Of every short-message miss, the
+  fraction that is a *scoring* failure — the true plugboard not scoring highest even with the
+  correct rotor key — is **~0.3–2.3% at L40–60 and ~0 beyond**; the rest (86–96% of trials at L40)
+  are *search* failures. The true board **already scores highest ~99% of the time**, so better
+  discrimination has almost nothing to recover. Notably `-a`'s scoring-fail % ≈ `-q`'s — **`-a` won
+  by cutting *search* failures** (a smoother climb surface, more true boards made reachable), not by
+  lifting an information ceiling.
+- **Surface smoothness is flat.** An 8× sweep of the order weights (sharp tri 0.3 → smoothest tri
+  2.4), single stage at fixed R, moves search-fail% by **<1pp** (within 300-trial noise), with the
+  baseline `(1,0.6,0.3,0.15)` at the shallow optimum for both languages. There is no interior
+  smoothness that reaches more true basins, and no smooth-vs-exact tradeoff to convert into a
+  continuation (staging already supplies the smooth start). Reproduce: `eval/surface_probe.py`.
+
+Verdict: the scoring lever is **tapped** — `-a` is the win and is near-optimal on both discrimination
+and surface shape.
+
+### 6.16 The short-message frontier is compute-bound, with no selectable search shortcut — ✅ MEASURED
+
+Because the residual is ~99% *search* failure (§6.15), the question becomes whether a *smarter* use
+of restarts beats raw compute. Three measurements say no.
+
+- **Coverage is compute-bound, not floored.** exact-recovery vs R (recommended `-a` config, hard
+  lengths) is **still climbing at R=256** — ~+15–25pp per 4× R, no plateau (english L50 15.8→38.3→
+  60.8; german L60 53.3→78.3→91.7). The true basin *is* reachable; it is a rare deep target hit
+  stochastically, so more shots keep recovering more. Reproduce: `eval/restart_probe.py`.
+- **The restart "diversity" is mostly illusory.** At R=64, ~60/64 distinct *exact* boards — but
+  deduped by *correct* plugs (oracle), only **~15 distinct progress-states** (a 4× overcount; the
+  rest is spurious-plug noise on a few basins). Per-restart depth is mean ~0.7/10 and best ~5–7/10;
+  the truth is assembled only in the **union (~9/10)**, never in one board. So the failures are not
+  redundant shots clustering on the good basin (which spreading would fix) — they are shots
+  scattered across many shallow/wrong basins. Reproduce: `eval/basin_oracle.py` (and the harness
+  `DIVERSITY=1`).
+- **No truth-free selection signal exists.** Every smart lever — GA recombination (§3.10), a
+  truth-targeted kick, or coarse basin-repelling to reclaim the 4× collapse — needs a way to tell
+  the ~9/10 real plugs from the noise *without* the oracle. The available proxies fail: **per-plug
+  consensus across restarts is only ~1.1/10 correct** (the frequent plugs are decoys), and
+  board-fitness picks ~2.5/10 (§3.10). This is the same selection floor that measured GA down.
+
+Verdict: the **only reliable short-message lever is raw compute** — more restarts via `-T`, which
+Part 1 shows scales predictably. This is a *clean* close (there is provably no clever search or
+scoring trick hiding at short lengths), not a failure to find one. Both the scoring frontier
+(§6.15) and the search frontier are now mapped and closed to smarter methods.
+
+---
+
 ## 7. Speed / throughput
 
 At 50 chars, compute budget ≈ number of `score_iter` calls (restarts × passes ×
