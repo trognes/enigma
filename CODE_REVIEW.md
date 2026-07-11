@@ -25,7 +25,15 @@ quality on short messages, `SPLIT=1` for the scoring-vs-search failure split) an
 
 `make crackquality SPLIT=1` shows that on the plugboard-recovery tier every miss
 is a **search** failure, not a scoring failure (the true plugboard always
-out-scores what the climb reaches). The shipped search levers — random restarts
+out-scores what the climb reaches) — **re-confirmed under the shipped `-a` model**
+(the scoring-failure floor is ~1% at L40–60 and ~0 beyond; `PERFORMANCE.md` §6.15).
+And the residual is **compute-bound**: the exact-recovery curve is still climbing at
+`-R 256` (~+15–25pp per 4× R), because the true basin is a rare *deep* target — 64
+restarts give ~60 distinct exact boards but only ~15 distinct correct-plug states,
+per-restart depth ~0.7/10, the truth assembled only in the union (~9/10). No
+truth-free signal selects that union (per-plug consensus ~1.1/10; §3.10, §6.16), so
+every *smart* search lever is blocked and **raw `-R` (via `-T`) is the reliable lever**.
+The shipped search levers — random restarts
 (`-R`), the staged schedule (`-S`), the key pre-filter (`-F`), and simulated
 annealing (`-A`), and **first-improvement `-I`** — stack, with `-R 10 -S iq` a strong
 baseline recipe and `-I -R <higher>` a measured throughput win on top of it. Remaining
@@ -40,8 +48,10 @@ compute (paired with more `-R`) it recovers +8pp exact / +1–23pp mean at L40�
 first idea to beat the baseline at the ~50-char target. **`-J` adds dynamic per-restart
 best-first move ordering** on top of `-I` — a further matched-compute win (+2–6pp mean)
 on the realistic ~10-plug regime, regime-dependent so also opt-in (`PERFORMANCE.md` §7.2).
-Still open on that axis: ILS with incumbent-walk acceptance (`PERFORMANCE.md` §3.3). The
-**`max(greedy, SA)` portfolio was built and rejected** — greedy and SA are genuinely
+Still nominally open on that axis: ILS with incumbent-walk acceptance (`PERFORMANCE.md`
+§3.3) — but a **long shot**, since the basin analysis (§6.16) finds converged boards
+*scattered*, not clustered near the truth, which is the structure ILS would need to
+exploit. The **`max(greedy, SA)` portfolio was built and rejected** — greedy and SA are genuinely
 complementary (+10–17pp union at double budget), but at matched compute the budget split
 cancels it (~−3pp vs the best single solver; §3.2). **Don't-look bits were built and
 rejected** too — exact only for a separable objective (TSP), but the plugboard's global n-gram
@@ -55,7 +65,10 @@ on realistic 10-plug boards and a large win (+3–20pp, biggest at the short/har
 **known-few-plug** boards with a tight cap (`-S i4q6 -M`) — and cheaper per climb, so it
 buys more restarts too:
 
-- 🟢 **Planned `make crackquality` test additions** (`CRACKQUALITY_TESTS.md`).
+- ✅ **`make crackquality` test additions — SHIPPED** (`CRACKQUALITY_TESTS.md`): the
+  scoring-failure gate as `WILDCARD`, `-F` recall as `FILTERRECALL=1`, restart-diversity
+  as `DIVERSITY=1`, plus the routine `SPLIT=1` scoring-vs-search split used throughout
+  §6.15/§6.16. Original scope for reference:
   Three cheap, focused additions: (1) a **one-time scoring-failure gate** —
   wildcard only the start (`START` scope, ring pinned `AAA`, **unfiltered**) and
   check *once* whether a wrong (key, board) ever out-scores the true one; if not,
@@ -69,29 +82,38 @@ buys more restarts too:
   gate before betting on scoring changes.
 - 🟢 **Greedy plug-by-plug seed** (history §9 item 4). Pick the best single plug,
   fix it, repeat to a small budget, then refine with the swap climb — a better
-  start than the identity board. Cheap; modest expected gain.
-- 🟢 **Tabu search** (history §9 item 6). A short list of recently-reversed moves
-  to avoid cycling and cross plateaus; modest deterministic robustness.
-- 🟢 **Genetic / evolutionary** (history §9 item 8). Population + crossover; the
-  archive's assessment is that it rarely beats restart hill-climbing or SA for
-  plugboard recovery — likely overkill, lowest priority.
+  start than the identity board. Cheap; modest expected gain. The last search idea
+  not yet measured down, but temper expectations against the compute-bound /
+  rare-deep-basin frontier above. (**Tabu** and **genetic/GA** used to sit here and
+  have since been **measured down** — see the rejected list under Standing cautions.)
 
 ## 2. Cracking quality — scoring
 
-The plugboard tier is search-bound, so better scoring is unlikely to move it;
-these mostly pay off in the (unbuilt) full-crack tier of §1.
+Scoring is now **near-optimal and effectively resolved** (`PERFORMANCE.md` §6.15). The
+one measured win is the shipped **`-a` weighted all-order model** (a log-linear /
+Product-of-Experts mixture of the four n-gram orders; PR #106) — +~1–2pp mean %-correct
+at L40–100 across all four languages, the first short-message scoring gain. Two ceiling
+probes show there is essentially no headroom left for a *further* scoring model:
+discrimination floor ~1% (SPLIT under `-a`) and a **flat** surface-smoothness sweep (an
+8× weight change moves search-fail% <1pp). So the remaining scoring items below are for
+the (unbuilt) full-crack tier or real operational traffic, not the plugboard-recovery
+benchmark — do not expect them to move it.
 
 - 🟢 **Crib / known-plaintext objective** (history scoring item 4) — score by
   match to a suspected word/phrase instead of n-gram fitness. This is the most
   genuinely *new capability* here, and it composes cleanly with the shipped `-s`
-  plug-freeze (known plugs + known crib). Highest-value scoring item.
+  plug-freeze (known plugs + known crib). **Highest-value scoring item** — it attacks
+  from outside the statistical floor entirely (a crib is hard evidence, not a prior).
 - 🟢 **Domain-matched corpus** — tables built from telegraphic/period German
   (X-for-space, spelled-out numbers) rather than generic prose would model real
   Wehrmacht traffic better. Cheap to try (`-d` loads any `<lang>_<type>.txt`);
-  value expected mainly in the full-crack tier.
-- 🟢 **Interpolated / back-off n-gram** (blend orders, Kneser-Ney) and
-  **PPM/compression perplexity** / **z-score normalization** — documented in the
-  archive as marginal or overkill; only if a measured need appears.
+  value expected mainly for real traffic (invisible to the prose-excerpt benchmark).
+- ✅/❌ **Multi-order & smoothing — RESOLVED.** Log-linear interpolation shipped as `-a`
+  (above). The rest of the family was **measured down**: linear (Jelinek-Mercer)
+  interpolation loses (the conditional reframing it forces), and back-off / graded-floor
+  smoothing (Kneser-Ney-style, `background`/`overlap`) is neutral-to-harmful (PR #105,
+  §6.15). **PPM/compression perplexity** / **z-score normalization** remain archive-only
+  (marginal/overkill); revisit only on a measured need.
 
 ## 3. Maintainability
 
@@ -154,6 +176,14 @@ these mostly pay off in the (unbuilt) full-crack tier of §1.
   plugboard), 3-opt / 3-plug re-pair (cost > gain), rotor-stepping reuse across
   starts (history §6 "optimisation B"), `-march=native` / SIMD gathers and GPU (the
   scorer is gather-latency-bound, not throughput-bound), and 5-grams / 4-bit scores
-  (too sparse / too coarse).
+  (too sparse / too coarse). Added this cycle (`PERFORMANCE.md` §6.15/§6.16): **tabu**
+  (restarts already almost never revisit a basin at `--random 10` — near-total
+  exact-board diversity, so a visited-set has nothing to forbid; `--restart-tt`, §6.14);
+  **genetic / GA** (the crossover *material* exists — correct plugs union to ~9/10 across
+  restarts — but is **unselectable**: board-fitness picks ~2.5/10, per-plug consensus
+  ~1.1/10; §3.10); **linear (Jelinek-Mercer) interpolation** and **graded-floor / back-off
+  smoothing** (`background`/`overlap`) as scoring models (the log-linear form shipped as
+  `-a`, the rest lose or are neutral — §6.15); and, by extension, any **truth-targeted kick
+  or coarse basin-repel**, which need the same absent selection signal.
 - **Determinism is a contract.** Results must be independent of `-T`; the per-key
   RNG is seeded from the flat key index. Keep new randomness on that stream.
