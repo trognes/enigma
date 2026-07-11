@@ -172,3 +172,11 @@ printf '%s' "$CT" | ./enigma <cli_options> -u U -w W -r R -g G
 
 Check out the row's `git_sha` first for a byte-exact replay; `score_iter` is a
 deterministic checksum of `(git_sha, cli_options, solver_seed, instance)`.
+
+## Authentic message set (real traffic)
+
+`enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**
+(Ostwald & Weierud, *Cryptologia* 2017) — full keys, ciphertexts, and verified decrypts.
+`build_enigma_messages.py` regenerates and validates it; `crack_real.py` runs plugboard
+recovery on the real messages (`-a` vs `-q`). See **`MODERN_BREAKING_NOTES.md`** for the
+paper's method, how it maps onto this tool, and the real-traffic findings.

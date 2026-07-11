@@ -1,0 +1,276 @@
+# ============================================================================
+# enigma-messages.txt  --  13 authentic WWII Wehrmacht Enigma messages
+# ----------------------------------------------------------------------------
+# Source: Olaf Ostwald & Frode Weierud, "Modern breaking of Enigma ciphertexts",
+#         Cryptologia 41(5):395-421 (2017).  cryptocellar.org.  CC BY-NC-SA 4.0.
+# Transcribed from the authentic message forms (Spruchzettel); German Army (Heer),
+# standard 3-rotor Enigma I, reflector B, 10 plugs, summer/autumn 1941 (Ostfront).
+#
+# CONVENTIONS
+#   REFLECTOR B, WHEELS left->right (I..VIII); e.g. key group B423 = refl B, IV II III.
+#   RING / START are letters (a=1..z=26 on numbered machines).
+#   The KENNGRUPPE (1st 5-letter group on the form) is the discriminant, NOT
+#     ciphertext -- deciphering starts at the 2nd group. It is listed separately;
+#     CIPHERTEXT below already excludes it.
+#   DECRYPT is the raw machine output (letter-for-letter). Text uses operator
+#     orthography: X = word separator, Q often = ch/k, digits spelled out
+#     (EINS ZWO DREI ...), umlauts as AE/OE/UE, sz = SZ.
+#   A dash '-' in CIPHERTEXT/DECRYPT is an UNRECORDED-but-real letter (illegible on
+#     the form). It is a real rotor position: keep it as a placeholder (any letter)
+#     when deciphering -- do NOT strip it, or the stepping desyncs the rest.
+#   EMENDED = human-corrected German (garbles fixed); TRANSLATION = English.
+#   Each record is one ./enigma invocation (shown as CMD) and decrypts to DECRYPT.
+#
+# VALIDATION: every message decrypts EXACTLY at every known (non-dash) position.
+#   No. 233 has one garbled group (3 unrecorded letters, positions 117-119); held
+#   as placeholders, all other positions decrypt exactly. Those 3 letters are not
+#   recoverable (the surrounding ciphertext is itself garbled).
+# VERIFIED against the article PDF appendix (Ostwald & Weierud, Version 5, March 2017):
+#   all 13 keys/ciphertexts match. No. 2 (1 Oct 1941) start is ZAQ (as in the PDF); the
+#   cryptocellar WEB PAGE mis-prints DEI -- a web typo, corrected here.
+# ============================================================================
+
+### Message No. 25  --  13 July 1941  (outgoing)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      IV II III  (-w 423)
+RING:        GTO
+START:       SDV
+PLUGS:       AD EH GY IM KN LR OZ QV TX UW
+KENNGRUPPE:  FHPQX   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 423 -r GTO -g SDV -s "AD EH GY IM KN LR OZ QV TX UW"
+CIPHERTEXT:  FDZCJJDKVWPYFDWPOQZGTJQYYXAFRHSQESERKGJBWBYPEOOKFMMPOMKQDDOL
+             CPKHYPGUZYXBZYANYSAXIPXVQCPJBFFFDRDXFIJJPPPEYALCYKVLKXQHWIRZ
+             ANGWUJBWVJYCKESMJQRYKQHCQOKMMYWMCKVLZJDVZXRUMRMNWFDZBQGXJQAP
+             FFFZTAHJQZPWQWNIVZWUIJTHOYXGDCOJUW
+DECRYPT:     ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEIN
+             SZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAU
+             MXKANNNIQTEINFLIESZENXDAXDRITTEXINFXDIVXUNDXAQTEXPANZXDIVXBL
+             OQIERENUNDRANMBELEGTHALTEXDIVXKDRX
+EMENDED:     An x Panz x Gruppe x Vier x Siegfried Siegfried Toni x Div x
+             steht seit x Eins Zwo x Sieben x Eins Eins Null Null x Uhr
+             mit Anfaengen am Unterkunftsraum x Kann niqt einflieszen x
+             da x dritte x Inf x Div x und x Aqte x Panz x Div x
+             bloqieren und Raum belegt halten x Div x Kdr x
+TRANSLATION: To Tank Group 4: SST Div stands since 12 July 1100 hours
+             with vanguard at the accommodation space. Cannot enter, as
+             3rd Inf Div and 8th Tank Div are blocking and keeping place
+             occupied. Div Cmdr.
+NOTES:       raw RANM -> Raum; HALTE -> halten (operator/transmission)
+
+### Message No. 65  --  26 August 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      III II I   (-w 321)
+RING:        XBM
+START:       DOF
+PLUGS:       AE BT CF DK GJ HM IS LV OZ UX
+KENNGRUPPE:  EJRSB   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 321 -r XBM -g DOF -s "AE BT CF DK GJ HM IS LV OZ UX"
+CIPHERTEXT:  UNXXISVILMHHKZPJZU
+DECRYPT:     TAGESMMLDUNGFUNKEN
+EMENDED:     Tagesmeldung funken
+TRANSLATION: Send daily report by radio
+NOTES:       raw MMLDUNG -> Meldung
+
+### Message No. 1  --  1 October 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      V I IV     (-w 514)
+RING:        KBU
+START:       DEI
+PLUGS:       AG EL FN HU JV KM OP QR SW TX
+KENNGRUPPE:  PLVJH   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 514 -r KBU -g DEI -s "AG EL FN HU JV KM OP QR SW TX"
+CIPHERTEXT:  HBCZFWXKBEJDLUXCODAAQV
+DECRYPT:     MORGENMELDUNGENTFAELCT
+EMENDED:     Morgenmeldung entfaellt
+TRANSLATION: Morning report cancelled
+NOTES:       raw ENTFAELCT -> entfaellt
+
+### Message No. 2  --  1 October 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      V I IV     (-w 514)
+RING:        KBU
+START:       ZAQ
+PLUGS:       AG EL FN HU JV KM OP QR SW TX
+KENNGRUPPE:  OSMRV   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 514 -r KBU -g ZAQ -s "AG EL FN HU JV KM OP QR SW TX"
+CIPHERTEXT:  JMYDKAPZMJLRHTOVJTMPJZVA
+DECRYPT:     ZWISNENMELDCNGENTFAELLTX
+EMENDED:     Zwisqenmeldung entfaellt x
+TRANSLATION: Intermediate report cancelled.
+NOTES:       raw ZWISNEN/MELDCNG -> Zwisqenmeldung. Start ZAQ confirmed
+             against the article PDF appendix (Version 5); the
+             cryptocellar WEB PAGE mis-prints it as DEI (copied from
+             No.1) -- a web-transcription error, not in the article.
+             Recovered independently here.
+
+### Message No. 128  --  8 July 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      IV III II  (-w 432)
+RING:        PKF
+START:       SWV
+PLUGS:       CY EL FH GS IJ KQ MW PV RZ TU
+KENNGRUPPE:  TZLPT   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 432 -r PKF -g SWV -s "CY EL FH GS IJ KQ MW PV RZ TU"
+CIPHERTEXT:  XPDBQLJWFTULSZCDKQPSWIMGBYS
+DECRYPT:     WOROEMEINSBERTASTAFFELFRAGE
+EMENDED:     Wo Roem Eins Berta Staffel Frage
+TRANSLATION: Where [is] Roman One B squadron? [Ib = Chief of Supply]
+NOTES:       (none)
+
+### Message No. 71  --  27 August 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      I III II   (-w 132)
+RING:        LES
+START:       BEN
+PLUGS:       AY BJ DG EH FQ IM KO LP NW RT
+KENNGRUPPE:  AMERI   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 132 -r LES -g BEN -s "AY BJ DG EH FQ IM KO LP NW RT"
+CIPHERTEXT:  TDLYXLHUVKOGOTUXNVRBPVICIBWTSTYD
+DECRYPT:     ZWOXSTAFDELAMXZWOSIEBENXAQTXVIER
+EMENDED:     Zwo x Staffel am x Zwo Sieben x Aqt x Vier
+TRANSLATION: Second squadron on 27 Aug 41 [at] 1930 in Wjelikoje-Sjelok.
+             Schoeffler.
+NOTES:       raw STAFDEL -> Staffel; ciphertext on form incomplete (only
+             opening recorded)
+
+### Message No. 15  --  2 September 1941  (outgoing)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      IV III II  (-w 432)
+RING:        RIT
+START:       VOR
+PLUGS:       AH BO DP EX FN JQ KS LR MU TZ
+KENNGRUPPE:  PFCXY   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 432 -r RIT -g VOR -s "AH BO DP EX FN JQ KS LR MU TZ"
+CIPHERTEXT:  PSQDBCSFKHFJOMVCJAUXTOTQBBPBWACHZYXH
+DECRYPT:     ABENDMELDUNGENENTFALLENXHARTJENSTEIN
+EMENDED:     Abendmeldungen entfallen x Hartjenstein
+TRANSLATION: Evening reports cancelled. Hartjenstein
+NOTES:       (none)
+
+### Message No. 30  --  22 August 1941  (outgoing)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      III IV I   (-w 341)
+RING:        WGR
+START:       TOR
+PLUGS:       AC BE HW IP JZ KY LU OS QR VX
+KENNGRUPPE:  YYBRW   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 341 -r WGR -g TOR -s "AC BE HW IP JZ KY LU OS QR VX"
+CIPHERTEXT:  CFVUAHZHPIWNUCXTMJGXPMVWKFVHZJTJGXMSSDJYESRCNX
+DECRYPT:     WOGEFEQTSSTANDQUARTIERMEISTERABTXROEMEINSBERTA
+EMENDED:     Wo Gefeqtsstand Quartiermeisterabt x Roem Eins Berta
+TRANSLATION: Where is the command post of the Quartermaster's unit. Roman
+             One B
+NOTES:       NB: enciphered with the key of the day before (21 Aug 1941)
+
+### Message No. 36  --  6 September 1941  (outgoing)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      III II V   (-w 325)
+RING:        BYJ
+START:       SAU
+PLUGS:       AX BH ET FK GY IR JZ MS OU QW
+KENNGRUPPE:  HODSN   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 325 -r BYJ -g SAU -s "AX BH ET FK GY IR JZ MS OU QW"
+CIPHERTEXT:  ZLXAQIZTGHJYEECHRVPUSGYHYIVKYIBVAZDYNAPYNIDCUXRO
+DECRYPT:     DIVXNAQRXYUEHRERNIQTANWWSENDXSTEINECKEXSTEINECKE
+EMENDED:     Div x Naqr x Fuehrer niqt anwesend x Steinecke x Steinecke
+TRANSLATION: Division's Signals Officer [is] non-attendant. Steinecke
+NOTES:       raw YUEHRER -> Fuehrer; ANWWSEND -> anwesend
+
+### Message No. 46  --  14 September 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      II IV III  (-w 243)
+RING:        IXM
+START:       WAS
+PLUGS:       AV BE CX FW GU HT IS JR LP NZ
+KENNGRUPPE:  BOTKB   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 243 -r IXM -g WAS -s "AV BE CX FW GU HT IS JR LP NZ"
+CIPHERTEXT:  EXDFRWSTRGBVAJPVAFKEBRSRCTIQELDBHZXOKLEBADAXPLICYQTHTQCFHTQX
+             ANXDXKRVT
+DECRYPT:     NACHSCHUBDIENSTEXNULLAQTVIERNULFXOMYTSCIKINOXOMYTSCUKINOXHAR
+             TJENSTEIN
+EMENDED:     Nachschubdienste x Null Aqt Vier Null x Omytschkino x
+             Omytschkino x Hartjenstein
+TRANSLATION: Supply services 0840 Omychkino. Hartjenstein
+NOTES:       raw NULF -> Null; OMYTSCIKINO/OMYTSCUKINO -> Omytschkino
+
+### Message No. 94  --  24 September 1941  (outgoing)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      II III I   (-w 231)
+RING:        SZI
+START:       DRI
+PLUGS:       AQ BO CM DP EW FT HS JZ KX LU
+KENNGRUPPE:  ABPQX   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 231 -r SZI -g DRI -s "AQ BO CM DP EW FT HS JZ KX LU"
+CIPHERTEXT:  PWCQFEZLPXGENCLBOXJFVWWPXOOGLRIPJKOUIOTCTNSLZDKYYJQNTVCTMPLU
+             OAUNESZVKXRCTMHM
+DECRYPT:     UMZUGGEPAEQTROSSUNDRESTKOMMANDOSTOPFENXSQRIFTLIQERBEFEHLUNTE
+             RWEGSXSCHNEIDDRX
+EMENDED:     Umzug Gepaeqtross und Restkommando stopfen x Sqriftliqer
+             Befehl unterwegs x Schneider x
+TRANSLATION: Stop relocation [of] luggage train and last detachment.
+             Written order [is] on its way. Schneider.
+NOTES:       raw SCHNEIDDR -> Schneider
+
+### Message No. 203  --  14 July 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      V III I    (-w 531)
+RING:        LWB
+START:       BER
+PLUGS:       BT CH DR EW FU GK JO LV MS PZ
+KENNGRUPPE:  CFYZR   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 531 -r LWB -g BER -s "BT CH DR EW FU GK JO LV MS PZ"
+CIPHERTEXT:  NFOSOIFKXNEMBCXCWMSCMORVYWSVHFBZJHNEMQFWZQOLUIZBFFBSNKSQXSHR
+             DAMFRSESGJJD
+DECRYPT:     ANROEMEINSBERTAXQUARTIERMEISPCRPANZXGRUPPEXOSTROWOSTROWXKASE
+             RNENGELZENME
+EMENDED:     An Roem Eins Berta x Quartiermeister Panz x Gruppe x Ostrow
+             Ostrow x Kasernengelaende
+TRANSLATION: To Roman One B, Quartermaster, Tank Group, Ostrov barracks
+             area
+NOTES:       raw EISPCR -> -meister; GELZENME -> gelaende
+
+### Message No. 233  --  19 July 1941  (incoming)
+MODEL:       Enigma I (Heer), 3-rotor
+REFLECTOR:   B
+WHEELS:      IV II V    (-w 425)
+RING:        AGM
+START:       QAY
+PLUGS:       DM EP FL HI JR KY NQ OU SW TZ
+KENNGRUPPE:  XNRLR   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 425 -r AGM -g QAY -s "DM EP FL HI JR KY NQ OU SW TZ"
+CIPHERTEXT:  QKXETVPZQOHSXMBIZPHTCTRMAUZYSTJIMDUYOZBFRTZOUHBGOROUVRQEJRDR
+             JHZPZIBQQHKMMJZCIIRCUOLXLCIOQKHRLIGGFJFTLLGDRARDZQUQKLTK---
+             YKRUVFULBQLAYRZVJFULCGQJXFJURMURSELYFVFOKUHYUHSYLOMEFYAIIP
+DECRYPT:     WIEVIELKLEINSIEGFRIEDGWOSMFRIEDRICHXHEINWIGHMUNXINSQRZAQTEIN
+             SSIEBENSTRIQAINSAQHXSIEBENWILXPLESNAUXABGEHOLTFRAGEXWERP---
+             EFYHLKOMMADOHZATZUXOLENFRAGOVUNKANTWORTXDERQNAATYEKVEVSTER
+EMENDED:     Wie viel Klein Siegfried Grosz Friedrich x Heinrich Mun x
+             insgesamt Eins Sieben Striq Eins Aqt x Sieben wird Pleskau x
+             abgeholt Frage x Wer hat Befehl Komma dort abzuholen Frage
+             Funkantwort x Der Quartiermeister
+TRANSLATION: How much ammunition for heavy field howitzer (sFH) to be
+             collected altogether on 17-18 July in Pskov? Who is ordered
+             to collect it? Reply by radio. The Quartermaster
+NOTES:       NB: key of the day before (18 July 1941). ONE garbled group,
+             3 unrecorded letters at positions 117-119: shown as cipher K
+             ---Y and (its decrypt) plaintext P---E -- the SAME three
+             letters, one region, not two. The dashes are real positions:
+             feed 3 placeholder letters there to keep the rotor stepping
+             in sync (stripping them desyncs the rest). With placeholders
+             every other position decrypts exactly. The 3 letters are not
+             recoverable -- the surrounding cipher is itself garbled (raw
+             P@116, Y@122 should be H, E per the reconstruction), so
+             enciphering the guess would not give the true letters.
+
