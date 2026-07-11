@@ -20,8 +20,11 @@ Just point `-d` at this directory; everything else is the normal recommended rec
   `MELDUNG`/`BETRIEBSTOFF`/`MUNITION`, phonetic alphabet, `X` separators).
 - **Do NOT use for prose German**, or for the synthetic `make crackquality` benchmark
   (random prose excerpts) — there the bundled `../ngrams/` tables are correct. These tables
-  deliberately bake in telegraphic orthography, so on prose they are a domain *mis*match
-  (the inverse of the win below).
+  deliberately bake in telegraphic orthography, so on prose they are a domain *mis*match.
+  Measured (`eval/eval_prose_inverse.py`, prose-German recovery, mean %-letters-correct):
+  telegraphic **−10.2 pp** vs prose overall (47.2→16.7 at L40, 92.7→72.4 at L70; both hit
+  100 % by L100). The mirror image of the +20.9 pp real-traffic win below — same tables,
+  opposite sign, so the domain split is not a guess.
 
 ## How they were built & measured
 
