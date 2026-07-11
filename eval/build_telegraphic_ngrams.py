@@ -81,8 +81,27 @@ def main():
     reweight("bigrams", 2)
     reweight("trigrams", 3)
     reweight("quadgrams", 4)
+    write_source()
     print("wrote telegraphic German tables to %s  (A=%g mono, B=%g tri)" % (OUT, A, B))
     print("source: Sullivan & Weierud 2005, Appendix C (Fig 17 + Fig 18, 400 trigrams)")
+
+
+def write_source():
+    """Emit the ORIGINAL published Appendix-C tables verbatim (unmodified reference data,
+    not the derived scoring tables above)."""
+    with open(os.path.join(OUT, "appendix-c-fig17-monograms.txt"), "w") as o:
+        o.write("# Sullivan & Weierud, \"Breaking German Army Ciphers\" (Cryptologia 2005),\n"
+                "# Appendix C, Figure 17: single-letter frequencies in 1941 Enigma decrypts.\n"
+                "# Format: <LETTER> <frequency %>.  Sums to 100.00.  Original published values.\n")
+        for L, pct in sorted(FIG17.items(), key=lambda kv: (-kv[1], kv[0])):
+            o.write("%s %.2f\n" % (L, pct))
+    with open(os.path.join(OUT, "appendix-c-fig18-trigrams.txt"), "w") as o:
+        o.write("# Sullivan & Weierud, \"Breaking German Army Ciphers\" (Cryptologia 2005),\n"
+                "# Appendix C, Figure 18: the 400 most frequent trigrams in ~20,000 letters of\n"
+                "# 1941 Enigma decrypts.  Format: <TRIGRAM> <count per ~20,000 letters>.\n"
+                "# Original published values (top-400 only; not a complete 26^3 table).\n")
+        for g, c in sorted(TELE3.items(), key=lambda kv: (-kv[1], kv[0])):
+            o.write("%s %d\n" % (g, c))
 
 
 if __name__ == "__main__":
