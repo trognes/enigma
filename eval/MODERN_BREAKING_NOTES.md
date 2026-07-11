@@ -89,14 +89,36 @@ to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --gainfix-best3 -l 
   known-plaintext objective** — CODE_REVIEW §2's highest-value open item, now doubly motivated
   and with the crib vocabulary sitting in this very database.
 
+## 4. Expanded real-traffic set (`eval/enigma-army-messages-1941.txt`)
+
+**56 further authentic HG Nord messages** with keys + verified plaintext, from the older
+Sullivan & Weierud "Breaking German Army Ciphers" collection (Cryptologia 2005;
+cryptocellar.org/bgac). These are ciphertexts the authors originally **failed to break**
+(2003–04) whose day-keys were **recovered later** (released 04 Aug 2017) — the "messages
+we failed to break" and "July Batch A" pages. `eval/build_army_messages_1941.py` decrypts
+each at its stated key and reproduces the plaintext exactly; every one is clean
+telegraphic German (fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`,
+`ABENDMELDUNG`, phonetic `LUDWIG/FRIEDRICH/HEINRICH`, spelled numbers, `X` separators,
+`Q`→ch). Two that duplicate the 13-message set (No. 203 CFYZR — the 2005 paper's
+"singular unbroken" message, now broken — and No. 233 XNRLR) are dropped by
+ciphertext-dedup, so the two files are disjoint.
+
+Together the two files hold **69 authentic messages (~6,850 letters)** of real
+telegraphic German — the statistical power the original 13 (bimodal, too small to settle
+`-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
+statistics stay the *telegraphic corpus*; these 69 messages are *held-out validation*.
+
 ## Reproduce
 
 ```sh
-python3 eval/build_enigma_messages.py     # regenerate + verify eval/enigma-messages.txt
-R=256 python3 eval/crack_real.py          # real-traffic plugboard recovery, -a vs -q
+python3 eval/build_enigma_messages.py       # regenerate + verify the 13 (Ostwald & Weierud 2017)
+python3 eval/build_army_messages_1941.py    # regenerate + verify the 56 (Sullivan & Weierud 2005)
+R=256 python3 eval/crack_real.py            # real-traffic plugboard recovery, -a vs -q
 ```
 
 ## Source
 
 Olaf Ostwald & Frode Weierud, "Modern Breaking of Enigma Ciphertexts," *Cryptologia*
-41(5):395–421, 2017. Messages © the authors, CC BY-NC-SA 4.0; see cryptocellar.org.
+41(5):395–421, 2017 (the 13-message set). Geoff Sullivan & Frode Weierud, "Breaking
+German Army Ciphers," *Cryptologia* 29(3):193–232, 2005 (the 56-message set; keys
+released 2017). Messages © the authors, CC BY-NC-SA; see cryptocellar.org.
