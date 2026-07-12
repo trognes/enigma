@@ -20,7 +20,9 @@
 #include <new>
 #include <queue>
 #include <random>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 /* uwwwrrrggg = 3*8*7*6*26*26*26*26*26*26 = 311 387 102 208 */
@@ -190,6 +192,27 @@ static int opt_gainfix_best;
    cascade found nothing). --gainfix-best3 turns it on for the single best-board finisher. */
 static int opt_gainfix3;
 static int opt_gainfix_best3;
+/* --crib-file / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
+   "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
+   converges, its board is ranked not by the n-gram score alone but by
+   score + opt_crib_weight * crib_score(decrypt), where crib_score sums the weights of known
+   HG Nord words (BERTA, EINS, FRAGE, ...) present in the decrypt. The intent: lift the TRUE
+   board above a spurious one that scores higher on n-grams but contains no real words -- the
+   short-message scoring-failure floor. The climb itself still optimises the n-gram model
+   (hot path untouched); only the cross-restart winner selection sees cribs.
+     MEASURED-DOWN (eval/eval_crib.py, the 69-message held-out set, on top of the telegraphic
+   tables): net -0.1pp at weight 0.5, -1.7pp at 1.0. It scores the odd genuine scoring-failure
+   win (No. 203: 79->100%) but that is offset by false-positive re-ranking breaking already-good
+   boards. The reason: after the telegraphic tables surface the true board, the residual is
+   dominated by WRONG-BASIN failures (the true board is not among the converged restarts), so a
+   re-ranker has nothing true to promote. Kept as an off-by-default diagnostic (the negative
+   answer is the artifact) -- like --score-tt/--repair3. Off by default (no crib file ->
+   opt_crib 0 -> byte-identical); needs -c; -T-deterministic (the combined score is a
+   deterministic function of the board). See crib_score()/load_cribs(). */
+static const char * opt_crib_file = nullptr;
+static double opt_crib_weight = 0.5;   /* the least-harmful weight measured (still net ~0) */
+static int opt_crib = 0;               /* set once a non-empty crib file is loaded */
+static std::vector<std::pair<std::string, double>> g_cribs;   /* read-only after load */
 static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
                              0 (the default) = one deterministic climb from the seed,
                              no kick; N>=1 = exactly N kicked climbs, keep the best
@@ -1327,6 +1350,75 @@ inline void decode(machine & m)
   for (int i = 0; i < textlength; i++)
     pt[i] = num2char(decode_at(steck, rows, ct, i));
   pt[textlength] = 0;
+}
+
+/* Known-word ("crib") bonus for a converged board: sum the weights of every occurrence of
+   a known word as a SUBSTRING of the decrypt. Substring (not token) matching is deliberate
+   -- telegraphic traffic concatenates words within a clause (ROEMEINSBERTA, not
+   ROEM.X.EINS.X.BERTA; X separates clauses, not words), so token matching would miss them.
+   Read from m.plaintext, which the climb leaves holding the converged board's decrypt, so
+   no extra decode. Deterministic (a pure function of the board and the fixed word list),
+   hence -T-invariant. Only called when opt_crib is set, so the default path is untouched.
+   Longer words carry more weight (see the crib file), which keeps rare short-word
+   coincidences on garbage from swamping the genuine multi-word signal on the true board. */
+static double crib_score(const machine & m)
+{
+  const char * __restrict pt = m.plaintext;
+  double s = 0.0;
+  for (const std::pair<std::string, double> & cw : g_cribs)
+    {
+      const int k = static_cast<int>(cw.first.size());
+      const char * __restrict w = cw.first.data();
+      for (int i = 0; i + k <= textlength; i++)
+        if (memcmp(pt + i, w, static_cast<size_t>(k)) == 0)
+          {
+            s += cw.second;   /* presence: each distinct word counts once, so a garbage
+                                 board cannot win by repeating one coincidental short match */
+            break;
+          }
+    }
+  return s;
+}
+
+/* Load the known-word list for --crib-file: one word per line, an optional weight after
+   it (default 1.0); '#' starts a comment. Words are folded to A-Z uppercase (matching the
+   ciphertext/plaintext readers). Populates g_cribs and sets opt_crib. */
+static void load_cribs(const char * fname)
+{
+  FILE * f = fopen(fname, "r");
+  if (f == nullptr)
+    fatal("Cannot open crib file");
+  char line[256];
+  while (fgets(line, sizeof line, f) != nullptr)
+    {
+      char * p = line;
+      while ((*p == ' ') || (*p == '\t'))
+        p++;
+      if ((*p == '#') || (*p == '\n') || (*p == '\0'))
+        continue;
+      std::string word;
+      while ((*p != '\0') && (*p != ' ') && (*p != '\t') && (*p != '\n'))
+        {
+          int u = toupper(static_cast<unsigned char>(*p));
+          if ((u >= 'A') && (u <= 'Z'))
+            word += static_cast<char>(u);
+          p++;
+        }
+      double w = 1.0;
+      while ((*p == ' ') || (*p == '\t'))
+        p++;
+      if ((*p != '\0') && (*p != '\n') && (*p != '#'))
+        {
+          char * end = nullptr;
+          double v = strtod(p, &end);
+          if (end != p)
+            w = v;
+        }
+      if (! word.empty())
+        g_cribs.emplace_back(word, w);
+    }
+  fclose(f);
+  opt_crib = g_cribs.empty() ? 0 : 1;
 }
 
 /* --- plaintext scoring models ------------------------------------------- */
@@ -3425,6 +3517,11 @@ void search_worker(machine & m,
               score = score_iter(m);
             }
 
+          /* Crib finisher: rank the converged board by n-gram score + known-word bonus.
+             m.plaintext holds this board's decrypt on the climb path, so no extra decode. */
+          if (opt_crib && opt_hillclimb)
+            score += opt_crib_weight * crib_score(m);
+
           if (better_cand(score, idx, local_best, local_best_idx))
             {
               std::lock_guard<std::mutex> lock(best.mutex);
@@ -3642,6 +3739,10 @@ void finish_worker(machine & m,
 
       double score = opt_exhaust ? exhaust_all_combos(m, idx)
                                   : hillclimb_restarts(m, idx);
+
+      /* Crib finisher (see search_worker): rank by n-gram score + known-word bonus. */
+      if (opt_crib && opt_hillclimb)
+        score += opt_crib_weight * crib_score(m);
 
       if (better_cand(score, idx, local_best, local_best_idx))
         {
@@ -4323,6 +4424,12 @@ void help(FILE * out)
           "Gain cascade once on the best board, plus a deeper");
   fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles; the recommended");
   fprintf(out, "  %-24s %s\n", "", "finisher, near-free at K=8 (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--crib-file F",
+          "Known-word (crib) finisher: rank converged boards");
+  fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
+  fprintf(out, "  %-24s %s\n", "", "neutral/dominated (needs -c) [off], not recommended");
+  fprintf(out, "  %-24s %s\n", "--crib-weight X",
+          "Weight of the crib bonus vs the n-gram score [0.5]");
   fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
   fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
   fprintf(out, "  %-24s %s\n", "-p, --compare filename",
@@ -4556,6 +4663,10 @@ int main(int argc, char * * argv)
   opt_gainfix_best = 0;
   opt_gainfix3 = 0;
   opt_gainfix_best3 = 0;
+  opt_crib_file = nullptr;
+  opt_crib_weight = 0.5;
+  opt_crib = 0;
+  g_cribs.clear();
   opt_restart_tt = false;
   opt_score_tt = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
@@ -4581,7 +4692,7 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
          OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3, OPT_RESTART_TT,
-         OPT_SCORE_TT };
+         OPT_SCORE_TT, OPT_CRIB, OPT_CRIBWEIGHT };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -4630,6 +4741,8 @@ int main(int argc, char * * argv)
       { "gainfix",        optional_argument, nullptr, OPT_GAINFIX },
       { "gainfix-best",   no_argument,       nullptr, OPT_GAINFIX_BEST },
       { "gainfix-best3",  no_argument,       nullptr, OPT_GAINFIX_BEST3 },
+      { "crib-file",      required_argument, nullptr, OPT_CRIB },
+      { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -4746,6 +4859,12 @@ int main(int argc, char * * argv)
           break;
         case OPT_SCORE_TT:
           opt_score_tt = true;
+          break;
+        case OPT_CRIB:
+          opt_crib_file = optarg;
+          break;
+        case OPT_CRIBWEIGHT:
+          opt_crib_weight = strtod(optarg, nullptr);
           break;
         case 'e':
           opt_seed = strtoull(optarg, nullptr, 10);
@@ -5036,6 +5155,10 @@ int main(int argc, char * * argv)
   if (opt_score_tt && (! opt_hillclimb))
     fatal("--score-tt needs the plugboard hill-climb (-c)");
 
+  /* The crib finisher re-ranks converged plugboards, so it needs the climb. */
+  if (opt_crib_file && (! opt_hillclimb))
+    fatal("The crib finisher (--crib-file) needs the plugboard hill-climb (-c)");
+
   /* --true-key reports the true key's tier-1 rank, so it needs the pre-filter (-F);
      it is a standard-Enigma diagnostic and parses into g_tk_* here. */
   if (opt_true_key)
@@ -5170,6 +5293,11 @@ int main(int argc, char * * argv)
             }
         }
     }
+
+  /* Load the known-word list for the crib finisher (sets opt_crib), before consuming
+     stdin so a missing/empty file fails fast. */
+  if (opt_crib_file != nullptr)
+    load_cribs(opt_crib_file);
 
   /* read ciphertext */
 

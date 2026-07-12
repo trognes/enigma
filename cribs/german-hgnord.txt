@@ -1,0 +1,70 @@
+# Generic HG Nord / Wehrmacht telegraphic vocabulary for the --crib-file finisher.
+# Operational words that recur across German Army traffic (spelled numbers, the phonetic
+# alphabet, standard military nouns/verbs and abbreviations) -- chosen from general
+# telegraphy conventions and the words Ostwald & Weierud name (Berta, Eins, Frage, Roem),
+# NOT fitted to any particular message. Format: WORD [weight].  '#' starts a comment.
+#
+# spelled-out numbers
+EINS 1
+ZWEI 1
+DREI 1
+VIER 1
+FUENF 1
+SEQS 1
+SECHS 1
+SIEBEN 1
+ACHT 1
+NEUN 1
+NULL 1
+# phonetic alphabet
+ANTON 1.5
+BERTA 1.5
+CAESAR 1.5
+DORA 1.5
+EMIL 1.5
+FRIEDRICH 2
+GUSTAV 1.5
+HEINRICH 2
+JULIUS 1.5
+KAUFMANN 2
+LUDWIG 2
+MARTHA 1.5
+NORDPOL 2
+OTTO 1.5
+PAULA 1.5
+QUELLE 1.5
+RICHARD 2
+SIEGFRIED 2
+THEODOR 2
+ULRICH 1.5
+VIKTOR 1.5
+WILHELM 2
+# common operational vocabulary
+ROEM 1
+DIVISION 2
+KORPS 1.5
+PANZER 2
+ARMEE 1.5
+KOMPANIE 2
+ABTEILUNG 2
+GRUPPE 1.5
+KOLONNE 2
+MELDUNG 1.5
+ABENDMELDUNG 3
+MORGENMELDUNG 3
+TAGESMELDUNG 3
+MUNITION 2.5
+BETRIEBSTOFF 3
+VERPFLEGUNG 3
+VERBINDUNG 2.5
+FELDLAZARETT 3
+NACHRICHT 2
+FRAGE 1.5
+BEFEHL 2
+EMPFANG 2
+EMPFANGEN 2.5
+SOFORT 2
+UNTERWEGS 2.5
+STANDORT 2.5
+KLAMMER 2
+STRICH 1.5
