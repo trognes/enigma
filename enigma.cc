@@ -301,6 +301,12 @@ static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of t
    reach. Display-only -- it does not affect which candidate wins, so -T-deterministic
    results are preserved. Verbose; off by default. */
 static bool opt_dump_restarts;
+/* --dump-all: like --dump-restarts but prints the FULL setting of every converged (rotor
+   key, restart) climb -- "dumpall <refl+wheels> <ring> <start> <score> <plugboard>" -- so a
+   wildcarded search (not just a fixed key) can be inspected key-by-key. Display-only under
+   the same mutex, so it never affects which candidate wins (-T-deterministic results are
+   preserved; only the line ORDER is thread-timing dependent). Very verbose; off by default. */
+static bool opt_dump_all;
 /* --restart-tt: maintain an in-binary Zobrist transposition table of converged restart
    boards and print a basin-collapse summary (distinct optima + hit histogram) at the end.
    Diagnostic only (never gates the winner), off by default. See the TT module below. */
@@ -1578,17 +1584,17 @@ void showconfig_header(void)
   fprintf(stderr, progress_fmt, "Score", "W", "R", "G", "S", "Text");
 }
 
-void showconfig(machine & m, double score)
+/* Format m's rotor key into w (reflector+wheels), r (ring), g (start) -- the columns
+   showconfig prints, with the M4 Greek-offset and Norway-reflector handling. Shared with
+   the --dump-all diagnostic so the two can never diverge. */
+static void format_key(machine & m, char (&w)[8], char (&r)[8], char (&g)[8])
 {
-  char w[8], r[8], g[8], s[3 * 13], text[preview_len + 1];
-
   if (opt_m4)
     {
       /* M4: thin reflector (b/c) + static Greek wheel (B/G). Only the Greek
          (start - ring) offset is identifiable, so it is shown as start=offset,
-         ring=A. The reflector/Greek/ring/start columns list the Greek first. */
-      /* wheel numbers are single digits (1-8), printed as chars so the
-         compiler can see the buffer cannot truncate */
+         ring=A. The reflector/Greek/ring/start columns list the Greek first.
+         Wheel numbers are single digits (1-8), printed as chars. */
       snprintf(w, sizeof(w), "%c%c%c%c%c",
                (m.ukw == m4_thin_base) ? 'b' : 'c',
                (m.greek == greek_base) ? 'B' : 'G',
@@ -1625,7 +1631,12 @@ void showconfig(machine & m, double score)
                num2char(m.grundstellung[1]),
                num2char(m.grundstellung[2]));
     }
+}
 
+/* Format m's plugboard into s: canonical (each pair low-high, pairs ordered by low
+   letter), so a harness can dedupe boards by string equality. */
+static void format_plugboard(machine & m, char (&s)[3 * 13])
+{
   char * p = s;
   for (int j = 0; j < asize; j++)
     if (m.steckerbrett[j] > j)
@@ -1636,6 +1647,14 @@ void showconfig(machine & m, double score)
         *p++ = num2char(m.steckerbrett[j]);
       }
   *p = 0;
+}
+
+void showconfig(machine & m, double score)
+{
+  char w[8], r[8], g[8], s[3 * 13], text[preview_len + 1];
+
+  format_key(m, w, r, g);
+  format_plugboard(m, s);
 
   /* Decode the text preview on the fly from the machine's CURRENT board --
      m.plaintext can be stale here (inside a running climb it still holds an
@@ -3209,6 +3228,20 @@ static void dump_restart(machine & m, double score)
   fprintf(stderr, "restart %.4f %s\n", score, board);
 }
 
+/* --dump-all: emit one converged (rotor key, restart) climb's FULL setting -- the rotor
+   key (reflector+wheels / ring / start), the score, and the plugboard -- so a wildcarded
+   search can be inspected key-by-key. Reuses showconfig's format_key/format_plugboard so
+   the rotor key matches the progress line exactly (the climb path restored the true start
+   positions, so the key is correct here). Under the shared mutex; display-only. */
+static void dump_all(machine & m, double score)
+{
+  char w[8], r[8], g[8], s[3 * 13];
+  format_key(m, w, r, g);
+  format_plugboard(m, s);
+  std::lock_guard<std::mutex> lock(g_dump_mutex);
+  fprintf(stderr, "dumpall %s %s %s %.4f %s\n", w, r, g, score, s);
+}
+
 /* One plugboard-recovery climb from the seed board. In kicked mode (--restarts N>=1) every
    climb -- including index 0 -- injects a fresh --random kick first, so the un-kicked seed
    climb is not run (REDESIGN Option A). With --restarts 0 there is a single un-kicked climb.
@@ -3223,6 +3256,8 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   double score = optimize_once(m, & rng);
   if (opt_dump_restarts)
     dump_restart(m, score);
+  if (opt_dump_all)
+    dump_all(m, score);
   if (opt_restart_tt)
     {
       std::lock_guard<std::mutex> lock(g_tt_mutex);
@@ -4476,6 +4511,9 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--dump-restarts",
           "With -c, print each converged restart's score");
   fprintf(out, "  %-24s %s\n", "", "and board to stderr (verbose) [off]");
+  fprintf(out, "  %-24s %s\n", "--dump-all",
+          "With -c, print the full setting (rotor key, score,");
+  fprintf(out, "  %-24s %s\n", "", "plugboard) of every key x restart (verbose) [off]");
   fprintf(out, "  %-24s %s\n", "--restart-tt",
           "With -c, hash converged restart boards into a");
   fprintf(out, "  %-24s %s\n", "", "transposition table; print a basin-collapse");
@@ -4669,6 +4707,7 @@ int main(int argc, char * * argv)
   g_cribs.clear();
   opt_restart_tt = false;
   opt_score_tt = false;
+  opt_dump_all = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -4692,7 +4731,7 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
          OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3, OPT_RESTART_TT,
-         OPT_SCORE_TT, OPT_CRIB, OPT_CRIBWEIGHT };
+         OPT_SCORE_TT, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -4733,6 +4772,7 @@ int main(int argc, char * * argv)
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
+      { "dump-all",       no_argument,       nullptr, OPT_DUMPALL },
       { "restart-tt",     no_argument,       nullptr, OPT_RESTART_TT },
       { "score-tt",       no_argument,       nullptr, OPT_SCORE_TT },
       { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
@@ -4853,6 +4893,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_DUMP:
           opt_dump_restarts = true;
+          break;
+        case OPT_DUMPALL:
+          opt_dump_all = true;
           break;
         case OPT_RESTART_TT:
           opt_restart_tt = true;
@@ -5149,6 +5192,8 @@ int main(int argc, char * * argv)
   /* --dump-restarts is a per-restart climb diagnostic, so it needs -c. */
   if (opt_dump_restarts && (! opt_hillclimb))
     fatal("--dump-restarts needs the plugboard hill-climb (-c)");
+  if (opt_dump_all && (! opt_hillclimb))
+    fatal("--dump-all needs the plugboard hill-climb (-c)");
   if (opt_restart_tt && (! opt_hillclimb))
     fatal("--restart-tt needs the plugboard hill-climb (-c)");
   /* --score-tt memoises the plugboard scoring, which only happens under the climb. */

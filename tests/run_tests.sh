@@ -384,6 +384,17 @@ check "crib: --crib-file result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-file "$crib_file" -T 1)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-file "$crib_file" -T 4)"
 rm -f "$crib_file"
+
+# --dump-all (diagnostic): prints the full setting (rotor key + score + plugboard) of every
+# converged key x restart to stderr. The dumped SET (sorted) must be -T-invariant, and each
+# line carries the rotor key -- so grep for one specific key and check it appears.
+da1=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 --dump-all -T 1 2>&1 >/dev/null | grep '^dumpall' | sort)
+da4=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 --dump-all -T 4 2>&1 >/dev/null | grep '^dumpall' | sort)
+check "dump-all: dumped set is -T-independent" "$da1" "$da4"
+check "dump-all: lines carry the rotor key (B123 ...)" \
+  "$(printf '%s' "$da1" | grep -c '^dumpall B123 ')" "$(printf '%s' "$da1" | grep -c '^dumpall ')"
+printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA --dump-all >/dev/null 2>&1
+check "dump-all without -c rejected (exit code)" "$?" "1"
 # After random restarts the machine must hold the BEST restart's plugboard, not the
 # last one's -- showconfig() prints m.steckerbrett, so decrypting the ciphertext with
 # the displayed rotor + -s <plugboard> must reproduce the recovered plaintext. (It

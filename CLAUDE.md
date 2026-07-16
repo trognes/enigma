@@ -124,7 +124,12 @@ tier-1 **recall@N** (§2, via the binary's `--true-key` diagnostic flag); and
 `DIVERSITY=1` reports **restart basin-collapse** stats — distinct converged optima and
 best-board hit-count across the `-R` restarts (§3, via `--dump-restarts`). The two
 `--true-key`/`--dump-restarts` flags are off-by-default binary diagnostics (default
-paths byte-identical and bench-neutral, ASan/TSan-clean).
+paths byte-identical and bench-neutral, ASan/TSan-clean). **`--dump-all`** is the
+`--dump-restarts` companion that additionally prints the **rotor key** of each converged
+climb (`dumpall <refl+wheels> <ring> <start> <score> <plugboard>`), so a *wildcarded* search
+can be inspected key-by-key (not just a fixed key); it reuses `showconfig`'s
+`format_key`/`format_plugboard`, is display-only under the same mutex (so the dumped multiset
+is `-T`-invariant; only line order is thread-timing dependent), and needs `-c`.
 
 A third restart-diversity diagnostic, **`--restart-tt`**, does the basin dedup *in-binary*
 instead of via the external `--dump-restarts` harness: it hashes each converged restart
