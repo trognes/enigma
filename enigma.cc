@@ -4020,8 +4020,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--polish",
           "Gain cascade once on the best board, plus a deeper");
-  fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles; the recommended");
-  fprintf(out, "  %-24s %s\n", "", "finisher, near-free at K=8 (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles. The recommended");
+  fprintf(out, "  %-24s %s\n", "", "finisher: it runs once after all restarts, so its");
+  fprintf(out, "  %-24s %s\n", "", "cost is fixed and negligible at a high -R, but is");
+  fprintf(out, "  %-24s %s\n", "", "a few % of a low-R run (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -4083,8 +4085,8 @@ void help(FILE * out)
   fprintf(out, "  greedy: -c -J --polish --score m4a10 --random 10 -R 40 -a -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score a10 -R 12 -a -l english\n");
   fprintf(out, "-a (weighted all-order) is the recommended scoring model; -R is the main\n");
-  fprintf(out, "quality dial (use -T to keep it cheap); the gainfix finishers are a\n");
-  fprintf(out, "near-free bump, not a substitute for more restarts.\n");
+  fprintf(out, "quality dial (use -T to keep it cheap); the polisher is a small bump\n");
+  fprintf(out, "on top, not a substitute for more restarts.\n");
   fprintf(out, "\n");
 }
 

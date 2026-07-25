@@ -174,7 +174,7 @@ for `-q`/`-a` (scoring an English message with `-l german` typically fails). Not
 | `-c` | Hill-climb the plugboard for each candidate key. The climb rule is **steepest ascent** by default: score all 325 plug toggles, apply the single best, repeat to convergence |
 | `-J` | Change `-c`'s climb rule to **first-improvement in best-first order**: apply the first improving toggle instead of scanning for the best, ~2.8× cheaper per climb, so **pair with more `-R`**. A matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
 | `-M` | Make the plug cap a strict **descent target**: at/over the cap only merge/remove moves (no adds or reshuffles). A matched-compute win with a tight `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs `-c`; off by default) |
-| `--polish` | **Recommended finisher**: runs a directed quadgram-gain repair (plus a deeper 3-plug-tangle escalation) once on the best board after all restarts. Near-free at its default, a small quality bump on top of `-R` (needs `-c`; off by default) |
+| `--polish` | **Recommended finisher**: runs a directed quadgram-gain repair (plus a deeper 3-plug-tangle escalation) once on the best board after all restarts. It runs once after all restarts, so its cost is fixed — negligible at a high `-R`, a few % of a low-`R` run — for a small quality bump on top of `-R` (needs `-c`; off by default) |
 | `-R N` / `--restarts N` | Random restart attempts: `0` = one deterministic climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best `[0]` |
 | `--random K` | Random-kick size — plug pairs injected per restart (needs `-c`; `0` = no kick, a control) `[10]` |
 | `-S sched` / `--score sched` | Staged climb schedule — model stages only (see below) |
@@ -342,7 +342,8 @@ crossover** — pick either, or run both:
 
 - **Greedy** — the tuned restart climb: dynamic move ordering (`-J`) over a capped staged
   schedule (`--random 10` kick → mono pre-pass → weighted capped at 10 plugs), plus the
-  near-free best-board finisher `--polish`. Very cheap per restart, so it affords many.
+  best-board finisher `--polish` (one fixed-cost pass after all restarts). Very cheap
+  per restart, so it affords many.
 
   ```sh
   ./enigma -c -J --score m4a10 --polish --random 10 -R 40 -a -l english -u B -w 241 -r AAA -g QEW < cipher.txt

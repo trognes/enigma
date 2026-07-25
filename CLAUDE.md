@@ -175,7 +175,8 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > one measured *scoring* win on short messages; strictly recommended over `-q` when the language is
 > known, see the `-a` entry below), `-S m4a10` staging (mono pre-pass then weighted), `-J` (dynamic
 > move order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the best-board finisher
-> `--polish` (the recommended finisher, near-free at its default K=8).
+> `--polish` (the recommended finisher: one fixed-cost pass after all restarts, so it is
+> negligible at a high `-R`).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
@@ -191,7 +192,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > **Search playbook — the measured priority (this is the whole game for search).** `-R` restarts are
 > the **primary quality lever**; spend compute there first, via `-T` (which parallelises the
 > `keys × restarts` space, so more cores buy more R at the same wall time). `--polish` is a
-> **near-free bump on top** — turn it on and leave it on — but it is **not a substitute for restarts**:
+> **small bump on top** — turn it on and leave it on — but it is **not a substitute for restarts**:
 > at matched wall time *every* finisher variant tried (the explicit cascade, `--polish`,
 > higher-K, the depth-1 `1sac` and depth-3/4-ply probes) is **Pareto-dominated by more `-R`**, and the
 > finisher's edge **fades as R grows** (restarts subsume the near-solution boards it targets — measured:
@@ -277,10 +278,14 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
   `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
 - `--polish` **best-board finisher with a deeper 3-plug-tangle escalation** (**recommended** —
-  the finisher, near-free at its default K=8; needs `-c`; mutually exclusive with `--cascade`;
+  the finisher, a fixed-cost pass so it is negligible at a high `-R`; needs `-c`; mutually
+  exclusive with `--cascade`;
   off by default). Runs the gain cascade **once, unconditionally (no score gate)**, on the single
   best board after all restarts (its key + stecker recorded at the merge), then one finishing climb;
-  a fixed ~950 `score_iter` independent of `-R`, so it is ~free at high `-R`. The
+  a fixed ~6.5k `score_iter` independent of `-R` *and* of message length (measured L40–L190,
+  `-R` 160/640: a flat ~6500, i.e. 2.8–3.3% of the run at `-R 160` but only ~0.7% at `-R 640`),
+  so it is ~free at high `-R` and NOT free at low `-R`. Note `score_iter` undercounts it —
+  the gain scan runs outside the counted loop (see the matched-compute note above). The
   once-only best-board finisher also runs a **"sacrifice + reclimb"** step when the 2-ply cascade finds
   nothing: it ranks the `(plug1,plug2)` sacrifice pairs by 2-plug score and, for the top-`K` (K=8),
   commits the sacrifice (both plugs, possibly downhill) and runs a full plain reclimb — letting the
