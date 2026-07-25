@@ -4193,6 +4193,18 @@ void bruteforce(char * result)
           best.score = s;
           decode(m);
           memcpy(best.plaintext, m.plaintext, textlength + 1);
+          /* Echo the improved board: without this the finisher silently replaced the
+             winner, so the last progress line the user saw showed the PRE-finisher
+             score/wheels/plugboard while stdout held a different (better) decrypt.
+             The search threads are joined here and key_to_machine restored the true
+             start positions, so m holds the correct config to display. Guarded by
+             best.shown like every other echo, so a line already showing this score is
+             not repeated; display-only, so -T-determinism is untouched. */
+          if (s > best.shown.load(std::memory_order_relaxed))
+            {
+              best.shown.store(s, std::memory_order_relaxed);
+              progress_line(best, m, s);
+            }
         }
     }
 

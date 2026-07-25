@@ -420,6 +420,15 @@ pg_pb=$(printf '%s\n' "$pg_err" | last_plugboard | tr -d ' ')
 check "progress: last echoed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pg_pb")" \
   "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c)"
+# ...and the same must hold when the --gainfix-best3 FINISHER improves the best board
+# after all restarts: it used to replace the winner silently, so the last progress line
+# showed the PRE-finisher score/wheels/plugboard while stdout held a different decrypt.
+gfx_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 \
+  --random 10 --gainfix-best3 -e 1 2>&1 >/dev/null)
+gfx_pb=$(printf '%s\n' "$gfx_err" | last_plugboard | tr -d ' ')
+check "progress: last echoed plugboard matches the plaintext (--gainfix-best3)" \
+  "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$gfx_pb")" \
+  "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 --random 10 --gainfix-best3 -e 1)"
 # Progress line FORMAT: a column header (Score W R G S Text) printed exactly once,
 # each line ending in the first 15 characters of the decoded text, and the whole
 # line within 79 columns even with a full 13-pair plugboard.
