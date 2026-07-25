@@ -1570,18 +1570,45 @@ double ic_score_decode(machine & m)
     ? score / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
 }
 
-/* Progress-line columns (shared by the header and the lines): score %7.4f,
-   reflector+wheels up to 5 chars (M4 "bB123"), ring and start up to 4 (M4),
-   plugboard up to 13 pairs = 38 chars, then the first preview_len characters
-   of the decoded text. Worst case 7+1+5+1+4+1+4+1+38+1+15 = 78 chars, inside
-   a 79-column terminal. */
-static const int preview_len = 15;
-static const char progress_fmt[] = "%7s %-5s %-4s %-4s %-38s %s\n";
+/* Progress-line columns (shared by the header and the lines): score right-aligned in 8
+   (a 4-decimal score reaches 8 chars, e.g. "-12.7393", so 8 keeps the columns from
+   shifting), reflector+wheels up to 5 chars (M4 "bB123"), ring and start 3 each --
+   M4's 4-char ring/start simply print their extra character -- then the plugboard and
+   the first preview_len characters of the decoded text.
+
+   The plugboard column always reserves the full 13 pairs (38 chars), and every field is
+   exactly as wide as its content, so each column is separated by a single space.
+
+   The key is wider on the 4-wheel M4 (reflector+Greek+3 wheels = 5 chars, and a 4-char
+   ring/start) than on a 3-wheel machine (4/3/3), so the two use their own format and
+   their own preview length, each budgeted to land exactly on 80 columns:
+
+     3-wheel: 8+1+4+1+3+1+3+1+38+1+19 = 80
+     M4:      8+1+5+1+4+1+4+1+38+1+16 = 80
+
+   The preview is what absorbs the difference -- it is truncated to whatever the key
+   leaves, so a line never exceeds 80 columns for either machine. The header uses the
+   same format, so its columns line up with the lines below it. */
+static const int preview_len_3 = 19;   /* 3-wheel (standard / Norway) */
+static const int preview_len_4 = 16;   /* 4-wheel M4: the wider key costs 3 characters */
+static const int preview_max = 19;     /* buffer size: the larger of the two */
+static const char progress_fmt_3[] = "%8s %-4s %-3s %-3s %-38s %s\n";
+static const char progress_fmt_4[] = "%8s %-5s %-4s %-4s %-38s %s\n";
+
+static inline const char * progress_fmt(void)
+{
+  return opt_m4 ? progress_fmt_4 : progress_fmt_3;
+}
+
+static inline int preview_len(void)
+{
+  return opt_m4 ? preview_len_4 : preview_len_3;
+}
 
 /* Column header, printed once before the first progress line of a search. */
 void showconfig_header(void)
 {
-  fprintf(stderr, progress_fmt, "Score", "W", "R", "G", "S", "Text");
+  fprintf(stderr, progress_fmt(), "Score", "W", "R", "G", "S", "Text");
 }
 
 /* Format m's rotor key into w (reflector+wheels), r (ring), g (start) -- the columns
@@ -1651,7 +1678,7 @@ static void format_plugboard(machine & m, char (&s)[3 * 13])
 
 void showconfig(machine & m, double score)
 {
-  char w[8], r[8], g[8], s[3 * 13], text[preview_len + 1];
+  char w[8], r[8], g[8], s[3 * 13], text[preview_max + 1];
 
   format_key(m, w, r, g);
   format_plugboard(m, s);
@@ -1661,14 +1688,15 @@ void showconfig(machine & m, double score)
      earlier candidate). */
   const unsigned char * steck = m.steckerbrett;
   const unsigned char * const * rows = m.rows;
-  int n = (textlength < preview_len) ? textlength : preview_len;
+  const int plen = preview_len();
+  int n = (textlength < plen) ? textlength : plen;
   for (int i = 0; i < n; i++)
     text[i] = num2char(decode_at(steck, rows, num_ciphertext, i));
   text[n] = 0;
 
   char scorebuf[16];
   snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
-  fprintf(stderr, progress_fmt, scorebuf, w, r, g, s, text);
+  fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, text);
 }
 
 double score_iter(machine & m)

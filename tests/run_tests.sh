@@ -438,19 +438,30 @@ gfx_pb=$(printf '%s\n' "$gfx_err" | last_plugboard | tr -d ' ')
 check "progress: last echoed plugboard matches the plaintext (--gainfix-best3)" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$gfx_pb")" \
   "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 --random 10 --gainfix-best3 -e 1)"
-# Progress line FORMAT: a column header (Score W R G S Text) printed exactly once,
-# each line ending in the first 15 characters of the decoded text, and the whole
-# line within 79 columns even with a full 13-pair plugboard.
+# Progress line FORMAT: a column header (Score W R G S Text) printed exactly once, each
+# line ending in the first preview characters of the decoded text, and the whole line --
+# header included -- within 80 columns even with a full 13-pair plugboard. The 4-wheel M4
+# key is 3 characters wider than a 3-wheel one, so it uses its own format and a shorter
+# preview (16 vs 19); both land on exactly 80 in the worst case.
 fmt_pb="AB CD EF GH IJ KL MN OP QR ST UV WX YZ"
 fmt_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "$fmt_pb")
 fmt_err=$(printf '%s' "$fmt_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -s "$fmt_pb" 2>&1 >/dev/null)
 check "progress: column header printed exactly once" \
   "$(printf '%s\n' "$fmt_err" | grep -c '^ *Score ')" "1"
-check "progress: line ends with the first 15 decoded characters" \
+check "progress: line ends with the first 19 decoded characters (3-wheel)" \
   "$(printf '%s\n' "$fmt_err" | progress_lines | tail -1 | awk '{ print $NF }')" \
-  "$(printf '%s' "$r_pt" | cut -c1-15)"
-check "progress: lines stay within 79 columns (13-pair board)" \
-  "$(printf '%s\n' "$fmt_err" | awk 'length > m { m = length } END { print (m <= 79) ? "ok" : m }')" \
+  "$(printf '%s' "$r_pt" | cut -c1-19)"
+check "progress: lines stay within 80 columns (3-wheel, 13-pair board)" \
+  "$(printf '%s\n' "$fmt_err" | awk 'length > m { m = length } END { print (m <= 80) ? "ok" : m }')" \
+  "ok"
+# Same, for the 4-wheel M4: the wider key must not push the line past 80 either.
+fmt4_ct=$(run "$r_pt" -4 -i -u b -w B123 -r AAAA -g AAAA -s "$fmt_pb")
+fmt4_err=$(printf '%s' "$fmt4_ct" | "$ENIGMA" -4 -i -u b -w B123 -r AAAA -g AAAA -s "$fmt_pb" 2>&1 >/dev/null)
+check "progress: line ends with the first 16 decoded characters (M4)" \
+  "$(printf '%s\n' "$fmt4_err" | progress_lines | tail -1 | awk '{ print $NF }')" \
+  "$(printf '%s' "$r_pt" | cut -c1-16)"
+check "progress: lines stay within 80 columns (M4, 13-pair board)" \
+  "$(printf '%s\n' "$fmt4_err" | awk 'length > m { m = length } END { print (m <= 80) ? "ok" : m }')" \
   "ok"
 # The --random default kick is a fixed 10 pairs: a plain kicked -R run must equal an
 # explicit --random 10 run (REDESIGN Part B: default kick 8 -> 10).
