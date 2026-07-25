@@ -95,7 +95,7 @@ v1.1.0 baseline every miss is a *search* failure.)
 > a non-exact trial with `recovered_score ≥ true_score`) — is an **information
 > floor of the scoring model**, unrecoverable by *any* search, so leaving it in
 > the stats only adds noise that no search improvement can move. The current work
-> is improving **search** (restarts, `-F`, SA, the `--gainfix*` finishers, tabu/GA),
+> is improving **search** (restarts, `-F`, SA, the `--cascade`/`--polish` finishers, tabu/GA),
 > not scoring, so measure search levers on the **search-failure + exact** population
 > only (drop the scoring failures via the oracle `recovered_score`/`true_score`, as
 > `SPLIT=1` classifies them). Judge on that filtered mean %-correct / exact rate;
@@ -106,11 +106,11 @@ v1.1.0 baseline every miss is a *search* failure.)
 > **For matched-compute A/Bs, measure actual wall time — do not judge cost on
 > `score_iter` alone.** The `score_iter` counter counts only calls through the fused
 > n-gram score loop; it does **not** count the auxiliary per-symbol work some search
-> moves do outside that loop — most notably the `--gainfix*` **gain scan**
+> moves do outside that loop — most notably the `--cascade`/`--polish` **gain scan**
 > (`gainfix_candidates` does ≈`n·26·4` quad8 lookups per cascade call, ≈100
 > `score_iter`-equivalents, uncounted). So on gain-cascade changes `score_iter`
 > **undercounts real cost by several×**, and the two axes can *disagree*: e.g.
-> `--gainfix-best3` at a large `K` can tie a plain 2-ply cascade+more-`-R` on `score_iter`
+> `--polish` at a large `K` can tie a plain 2-ply cascade+more-`-R` on `score_iter`
 > while being **Pareto-dominated** on wall time (`PERFORMANCE.md` §4.11 — K=169 at 131 ms
 > lost to R200 at 114 ms despite fewer counted iters). Take wall time as the min of a few
 > reps (per problem) to damp noise, and treat `score_iter` as the *cheap deterministic
@@ -175,24 +175,24 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > one measured *scoring* win on short messages; strictly recommended over `-q` when the language is
 > known, see the `-a` entry below), `-S m4a10` staging (mono pre-pass then weighted), `-J` (dynamic
 > move order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the best-board finisher
-> `--gainfix-best3` (the recommended finisher, near-free at its default K=8).
+> `--polish` (the recommended finisher, near-free at its default K=8).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
-> plain short-message sweep: `-F`, `--no-repair`, `--gainfix` (superseded by
-> `--gainfix-best3`, kept because it is the only gain cascade that works with
+> plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
+> `--polish`, kept because it is the only gain cascade that works with
 > `-F`/`--exhaust`), `--crib-file` (measured-down) and `--exhaust`. Each is tagged
 > **not recommended** in its entry below and in `--help`.
 >
 > **Removed options** (dominated or subsumed; the measurements survive in `PERFORMANCE.md`):
 > `-I` (bare first-improvement — `-J` supersedes it; the internal climb path remains, set by
-> `-J`), `--infl-order`, `--repair3`, `--gainfix-best` (superseded by `--gainfix-best3`),
+> `-J`), `--infl-order`, `--repair3`, `--gainfix-best` (superseded by the finisher),
 > `--dump-restarts` (subsumed by `--dump-all`), `--restart-tt` and `--score-tt`.
 
 > **Search playbook — the measured priority (this is the whole game for search).** `-R` restarts are
 > the **primary quality lever**; spend compute there first, via `-T` (which parallelises the
-> `keys × restarts` space, so more cores buy more R at the same wall time). `--gainfix-best3` is a
+> `keys × restarts` space, so more cores buy more R at the same wall time). `--polish` is a
 > **near-free bump on top** — turn it on and leave it on — but it is **not a substitute for restarts**:
-> at matched wall time *every* finisher variant tried (the explicit cascade, `--gainfix-best3`,
+> at matched wall time *every* finisher variant tried (the explicit cascade, `--polish`,
 > higher-K, the depth-1 `1sac` and depth-3/4-ply probes) is **Pareto-dominated by more `-R`**, and the
 > finisher's edge **fades as R grows** (restarts subsume the near-solution boards it targets — measured:
 > its lift roughly halves R80→R160 and can vanish by R160). The reason is that the hard residual is
@@ -203,7 +203,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > that only a **sharper scoring model** moves the needle, not more search — which is exactly what the
 > **`-a` weighted model** delivers (the first measured short-message *scoring* gain, +~1–2pp mean
 > %-correct at L40–100 across all four languages; PR #106). Recipe:
-> `-c -J --gainfix-best3 --score m4a10 --random 10 -R <as high as -T affords> -a -l <lang> -T <cores>`.
+> `-c -J --polish --score m4a10 --random 10 -R <as high as -T affords> -a -l <lang> -T <cores>`.
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -217,7 +217,10 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   `opt_steckerbrett` before the threaded search, and skipped by every switch/remove/
   re-pair/toggle move), so `-s` supplies *known* plugs and the search recovers only the
   rest. They still seed a plain (no-climb) decrypt as before.
-- `-c` hill-climb the plugboard
+- `-c` hill-climb the plugboard. The climb rule is **steepest ascent** by default:
+  each step scans the whole 325-pair toggle operator and applies the single best
+  improving move, to convergence. `-J` swaps that rule for first-improvement (below);
+  every other climb option (`-R`, `-S`, `-M`, `--random`, `--polish`, …) needs `-c`.
 - `-J` **first-improvement climb with dynamic best-first move ordering** (needs
   `-c`; off by default). Instead of steepest ascent (full-scan all 325 toggles, take the
   single best), it applies the **first** improving move and sweeps the move list circularly,
@@ -260,7 +263,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   off so its value can be A/B'd (e.g. at short lengths where its convergence scan is a larger
   fraction of a fast climb). Default off keeps the climb byte-identical; the flag only skips the
   `try_repair` call at each convergence.
-- `--gainfix[=GATE]` **quadgram-gain directed-repair cascade** (**not recommended** — prefer `--gainfix-best3` on the plain sweep; kept as the `-F`/`--exhaust`-compatible variant; needs `-c`; quad-only; off by
+- `--cascade[=GATE]` **quadgram-gain directed-repair cascade** (**not recommended** — prefer `--polish` on the plain sweep; kept as the `-F`/`--exhaust`-compatible variant; needs `-c`; quad-only; off by
   default). At each quad convergence, uses per-position quad **gain** to propose plug corrections on
   *both* plugboard contacts — the exit re-plug `{S[pt[j]], bx}` and the reciprocal entry re-plug
   `{ct[j], core_j(S[bx])}` (machine-exact via the precomputed rotor core; self-encryption pruned
@@ -273,8 +276,8 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   small **matched-compute win** (+0.2–0.3pp mean / +0.5–0.6pp exact on short English, ~zero added
   `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
   `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
-- `--gainfix-best3` **best-board finisher with a deeper 3-plug-tangle escalation** (**recommended** —
-  the finisher, near-free at its default K=8; needs `-c`; mutually exclusive with `--gainfix`;
+- `--polish` **best-board finisher with a deeper 3-plug-tangle escalation** (**recommended** —
+  the finisher, near-free at its default K=8; needs `-c`; mutually exclusive with `--cascade`;
   off by default). Runs the gain cascade **once, unconditionally (no score gate)**, on the single
   best board after all restarts (its key + stecker recorded at the merge), then one finishing climb;
   a fixed ~950 `score_iter` independent of `-R`, so it is ~free at high `-R`. The
@@ -287,7 +290,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   K=12). Targets 3-plug tangles the 2-ply pair can't cross: real-tool capped, it solves **56% of fixable
   ≥80%-base boards vs the 2-ply cascade's 41%**, and beats 2-ply by **+~1.3pp mean / +2…5pp exact** at
   matched compute (english+german L40), for ~+2–3 ms wall (<1% for `-R`≥640). Simple sweep only.
-  `-T`-deterministic (internal reclimb reuses `hillclimb` with gainfix off — no recursion). See
+  `-T`-deterministic (internal reclimb reuses `hillclimb` with the cascade off — no recursion). See
   `PERFORMANCE.md` §4.11.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
@@ -385,13 +388,13 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   divided by its window-multiplicity 2/3/4, so leading edge grams are included). It is a
   **geometric (Product-of-Experts) mixture** that stays in joint log-prob space (weights `(1,0,0,0)`
   = plain quad), folded once into a quad-shaped `all8` table at load — so the per-character scoring
-  **hot path and gainfix are unchanged** (they treat `all8` exactly like `quad8`). Measured the
+  **hot path and the gain cascade are unchanged** (they treat `all8` exactly like `quad8`). Measured the
   **first short-message scoring win** in the tuning history: +~1–2pp mean %-correct at L40–100 across
   all four languages (2000-trial German confirms +1.3pp avg, all lengths positive), neutral by L≥190
   where quad already saturates. The linear (Jelinek-Mercer) form was tried and **lost** (the
   conditional reframing it forces is the cost); log-linear wins because it is *conjunctive* — a
   candidate must look plausible at every order at once. See `PERFORMANCE.md` / PR #106. Because `-a`
-  is the sharpest model, the recommended recipe is `-c -S m4a10 -J --gainfix-best3 -a -l <lang>`.
+  is the sharpest model, the recommended recipe is `-c -S m4a10 -J --polish -a -l <lang>`.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a long-message throughput tool, unreliable on the short/hard end and proxy-measured; needs `-c`; `0` = off): a two-tier search — tier 1

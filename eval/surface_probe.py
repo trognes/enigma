@@ -3,7 +3,7 @@
 # Climb-surface-smoothness probe (PERFORMANCE.md section 6.15).
 #
 # Varies ONLY the -a target weighting's smoothness (via ENIGMA_LOGLIN, symmetric),
-# holding the recommended recipe fixed (-c -R 10 -S m4q10 -J --gainfix-best3, mono
+# holding the recommended recipe fixed (-c -R 10 -S m4q10 -J --polish, mono
 # pre-pass, fixed R -> ~matched compute). Metric via SPLIT: search-fail% (the failures
 # we attack) and exact%. Baseline weights = -a's (1,0.6,0.3,0.15).
 #
@@ -35,7 +35,7 @@ def run_one(lang, name, weights):
     env = dict(os.environ)
     env.update(ENIGMA_DATA="ngrams", CLANG=lang, MODEL="q", TRIALS=TR, SEED="0",
                SPLIT="1", LENGTHS=LENGTHS, RESTARTS="10",
-               CRACKOPTS="-S m4q10 -J --gainfix-best3",
+               CRACKOPTS="-S m4q10 -J --polish",
                ENIGMA_LOGLIN=weights, ENIGMA_LOGLIN_SYM="1")
     p = subprocess.run(["python3", "tests/crack_quality.py"], stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, universal_newlines=True, env=env)

@@ -97,7 +97,9 @@ settings are left unspecified (a dot `.` wildcard), it searches:
    settings are almost always the correct ones.
 3. If `-c` is given, for each candidate key the plugboard is recovered by a
    **hill-climbing** search (greedily adding/swapping plug pairs to raise the
-   score) before the key is scored.
+   score) before the key is scored. `-c` on its own climbs by **steepest
+   ascent** — score all 325 plug toggles, apply the single best, repeat until
+   nothing improves; `-J` swaps that rule for a cheaper first-improvement one.
 
 The search is exhaustive over the rotor settings and heuristic over the
 plugboard (whose ~150-trillion 10-pair configurations are far too many to
@@ -169,10 +171,10 @@ for `-q`/`-a` (scoring an English message with `-l german` typically fails). Not
 
 | Option | Meaning |
 | --- | --- |
-| `-c` | Hill-climb the plugboard for each candidate key |
-| `-J` | First-improvement climb with **dynamic** best-first move ordering: ~2.8× cheaper per climb, so **pair with more `-R`**; a matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
+| `-c` | Hill-climb the plugboard for each candidate key. The climb rule is **steepest ascent** by default: score all 325 plug toggles, apply the single best, repeat to convergence |
+| `-J` | Change `-c`'s climb rule to **first-improvement in best-first order**: apply the first improving toggle instead of scanning for the best, ~2.8× cheaper per climb, so **pair with more `-R`**. A matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
 | `-M` | Make the plug cap a strict **descent target**: at/over the cap only merge/remove moves (no adds or reshuffles). A matched-compute win with a tight `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs `-c`; off by default) |
-| `--gainfix-best3` | **Recommended finisher**: runs a directed quadgram-gain repair (plus a deeper 3-plug-tangle escalation) once on the best board after all restarts. Near-free at its default, a small quality bump on top of `-R` (needs `-c`; off by default) |
+| `--polish` | **Recommended finisher**: runs a directed quadgram-gain repair (plus a deeper 3-plug-tangle escalation) once on the best board after all restarts. Near-free at its default, a small quality bump on top of `-R` (needs `-c`; off by default) |
 | `-R N` / `--restarts N` | Random restart attempts: `0` = one deterministic climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best `[0]` |
 | `--random K` | Random-kick size — plug pairs injected per restart (needs `-c`; `0` = no kick, a control) `[10]` |
 | `-S sched` / `--score sched` | Staged climb schedule — model stages only (see below) |
@@ -227,7 +229,7 @@ failures are wrong-basin, so re-ranking can't reach the truth); kept as a diagno
 | `-v` / `-h` | Version / help |
 
 For the complete, authoritative option list — including the advanced finishers
-(`--gainfix-best3`, `-M`, `-A`) and the internal diagnostic flags — run
+(`--polish`, `-M`, `-A`) and the internal diagnostic flags — run
 `./enigma -h`. The tables above describe the everyday options; `-h` groups the
 rest as **recommended**, **advanced**, **non-recommended** (opt-in; dominated or
 situational), and **diagnostic** (measurement only), and prints the recommended
@@ -273,13 +275,14 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   with a full plugboard even a good `N` recovers only around half of the hardest
   keys.
 
-- **`-J` — first-improvement climb with best-first move order.** Each plugboard climb is
-  ~2.8× cheaper (it applies the first improving move and sweeps circularly, instead of
-  full-scanning for the single best), and the move order is rebuilt per restart from the
-  starting board. A single `-J` climb recovers a bit *worse* than the default, so it only
-  pays off when you **spend the saved time on more restarts**: pair it with a larger `-R`
-  and, at equal compute, it recovers noticeably more of a short message. Leave it off for a
-  single climb (`-R 0`).
+- **`-J` — swap the climb rule for first-improvement in best-first order.** `-c` alone
+  climbs by **steepest ascent**: every step scores all 325 plug toggles and applies the
+  single best one. `-J` instead applies the **first** toggle that improves and sweeps the
+  move list circularly, with the order rebuilt per restart from the starting board — so a
+  climb costs ~2.8× less. A single `-J` climb recovers a bit *worse* than steepest ascent,
+  so it only pays off when you **spend the saved time on more restarts**: pair it with a
+  larger `-R` and, at equal compute, it recovers noticeably more of a short message. Leave
+  it off for a single climb (`-R 0`).
 
 The recipes below use quadgrams (`--score iq`/`i4q10`) to illustrate the schedule and
 plug-cap mechanics; when you know the language, use the **recommended weighted target**
@@ -339,10 +342,10 @@ crossover** — pick either, or run both:
 
 - **Greedy** — the tuned restart climb: dynamic move ordering (`-J`) over a capped staged
   schedule (`--random 10` kick → mono pre-pass → weighted capped at 10 plugs), plus the
-  near-free best-board finisher `--gainfix-best3`. Very cheap per restart, so it affords many.
+  near-free best-board finisher `--polish`. Very cheap per restart, so it affords many.
 
   ```sh
-  ./enigma -c -J --score m4a10 --gainfix-best3 --random 10 -R 40 -a -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+  ./enigma -c -J --score m4a10 --polish --random 10 -R 40 -a -l english -u B -w 241 -r AAA -g QEW < cipher.txt
   ```
 
 - **Simulated annealing** (`-A`) — a *deep* anneal per restart (small `-A` starves it) with the

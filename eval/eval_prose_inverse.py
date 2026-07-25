@@ -49,7 +49,7 @@ def enc(u, w, r, g, pb, plain):
 
 def recover(u, w, r, g, ct, d):
     out = subprocess.run([BIN, "-u", u, "-w", w, "-r", r, "-g", g, "-c", "-R", R,
-                          "--random", "10", "-a", "-S", "m4a10", "-J", "--gainfix-best3",
+                          "--random", "10", "-a", "-S", "m4a10", "-J", "--polish",
                           "-l", "german", "-d", os.path.join(ROOT, d), "-T", T],
                          input=ct, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                          universal_newlines=True).stdout.strip().upper()

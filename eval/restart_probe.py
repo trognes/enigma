@@ -26,7 +26,7 @@ ROW = re.compile(r"^\s*(\d+)\s+([\d.]+)\s+([\d.]+)\s*$")   # len mean exact
 def run_one(lang, R):
     env = dict(os.environ)
     env.update(ENIGMA_DATA="ngrams", CLANG=lang, MODEL="a", TRIALS=TR, SEED="0",
-               LENGTHS=LENGTHS, RESTARTS=R, CRACKOPTS="-S m4a10 -J --gainfix-best3 -T 8")
+               LENGTHS=LENGTHS, RESTARTS=R, CRACKOPTS="-S m4a10 -J --polish -T 8")
     p = subprocess.run(["python3", "tests/crack_quality.py"], stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, universal_newlines=True, env=env)
     rows = [(lang, R) + m.groups() for line in p.stdout.splitlines() if (m := ROW.match(line))]

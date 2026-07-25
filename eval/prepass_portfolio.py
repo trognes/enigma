@@ -4,7 +4,7 @@
 #
 # Tests whether *mixing* IC-pre-pass and mono-pre-pass restarts (a 50/50 algorithm
 # portfolio) beats either pure pre-pass at matched compute. For each random problem
-# it runs both `-S i4q10` and `-S m4q10` with --dump-restarts, then, per restart
+# it runs both `-S i4q10` and `-S m4q10` with --dump-all, then, per restart
 # budget R, compares three strategies by the best-scoring board each finds:
 #
 #   IC   = best of the first R  i4q10 restarts
@@ -45,17 +45,17 @@ CORP = {
 
 
 def dump(cfg, lang, key, ct, seed):
-    """Run one plugboard climb with --dump-restarts; return [(score, board_set), ...]
+    """Run one plugboard climb with --dump-all; return [(score, board_set), ...]
     in restart order (board_set = frozenset of frozenset pairs)."""
     u, w, r, g, _ = key
     _, err, _ = E.run(BIN, ["-q", "-l", lang, "-u", u, "-w", w, "-r", r, "-g", g,
                             "-c", "-S", cfg, "-R", str(RMAX), "--random", "10",
-                            "--dump-restarts", "-e", str(seed), "-T", "1"], ct)
+                            "--dump-all", "-e", str(seed), "-T", "1"], ct)
     out = []
     for line in err.splitlines():
-        if line.startswith("restart "):
+        if line.startswith("dumpall "):
             f = line.split()
-            out.append((float(f[1]), frozenset(frozenset(p) for p in f[2:])))
+            out.append((float(f[4]), frozenset(frozenset(p) for p in f[5:])))
     return out
 
 

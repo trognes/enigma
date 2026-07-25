@@ -424,15 +424,15 @@ pg_pb=$(printf '%s\n' "$pg_err" | last_plugboard | tr -d ' ')
 check "progress: last echoed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pg_pb")" \
   "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c)"
-# ...and the same must hold when the --gainfix-best3 FINISHER improves the best board
+# ...and the same must hold when the --polish FINISHER improves the best board
 # after all restarts: it used to replace the winner silently, so the last progress line
 # showed the PRE-finisher score/wheels/plugboard while stdout held a different decrypt.
 gfx_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 \
-  --random 10 --gainfix-best3 -e 1 2>&1 >/dev/null)
+  --random 10 --polish -e 1 2>&1 >/dev/null)
 gfx_pb=$(printf '%s\n' "$gfx_err" | last_plugboard | tr -d ' ')
-check "progress: last echoed plugboard matches the plaintext (--gainfix-best3)" \
+check "progress: last echoed plugboard matches the plaintext (--polish)" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$gfx_pb")" \
-  "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 --random 10 --gainfix-best3 -e 1)"
+  "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 --random 10 --polish -e 1)"
 # Progress line FORMAT: a column header (Score W R G S Text) printed exactly once, each
 # line ending in the first preview characters of the decoded text, and the whole line --
 # header included -- within 80 columns even with a full 13-pair plugboard. The 4-wheel M4
@@ -586,10 +586,10 @@ check "staged: --score accepts a (weighted) model token (exit code)" "$?" "0"
 check "staged: --score i3q --random 2 -R 4 is -T-independent" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 1)" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 4)"
-# The weighted all-order model (a) with its gainfix finisher stays -T-independent too.
-check "staged: --score m4a10 (weighted) --gainfix-best3 is -T-independent" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --gainfix-best3 -T 1)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --gainfix-best3 -T 4)"
+# The weighted all-order model (a) with its --polish finisher stays -T-independent too.
+check "staged: --score m4a10 (weighted) --polish is -T-independent" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --polish -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --polish -T 4)"
 # --random 0 injects no plugs, so N restarts all repeat the seed climb: --random 0 -R 8
 # equals the deterministic -R 0 (one seed climb).
 check "staged: --random 0 makes restarts a no-op" \

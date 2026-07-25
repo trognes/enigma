@@ -63,7 +63,7 @@ def true_score(rc, d):
 def recover(rc, d):
     r = subprocess.run([BIN, "-u", rc["u"], "-w", rc["w"], "-r", rc["r"], "-g", rc["g"],
                         "-c", "-R", R, "--random", "10", "-a", "-S", "m4a10", "-J",
-                        "--gainfix-best3", "-l", "german", "-d", d, "-T", T],
+                        "--polish", "-l", "german", "-d", d, "-T", T],
                        input=rc["body"].replace("-", "A"), stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE, universal_newlines=True)
     out = re.sub(r"[^A-Z]", "", r.stdout.strip().upper())

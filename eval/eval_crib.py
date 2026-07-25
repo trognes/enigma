@@ -43,7 +43,7 @@ def parse():
 
 def recover(rc, lam):
     args = [BIN, "-u", rc["u"], "-w", rc["w"], "-r", rc["r"], "-g", rc["g"], "-c", "-R", R,
-            "--random", "10", "-a", "-S", "m4a10", "-J", "--gainfix-best3",
+            "--random", "10", "-a", "-S", "m4a10", "-J", "--polish",
             "-l", "german", "-d", DIR, "-T", T]
     if lam is not None:
         args += ["--crib-file", CRIB, "--crib-weight", str(lam)]

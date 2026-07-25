@@ -29,7 +29,7 @@ for block in open(DB).read().split("### Message No. ")[1:]:
 def crack(rc, model):
     ct = rc["cipher"].replace("-", "A")   # placeholder keeps stepping in sync
     args = [BIN, "-u", rc["refl"], "-w", rc["wheels"], "-r", rc["ring"], "-g", rc["start"],
-            "-c", "-R", R, "-S", "m4%s10" % model, "-J", "--gainfix-best3",
+            "-c", "-R", R, "-S", "m4%s10" % model, "-J", "--polish",
             "-" + model, "-l", "german", "-T", "8", "-e", "0"]
     out = subprocess.run(args, input=ct, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                          universal_newlines=True).stdout.strip().upper()

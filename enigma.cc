@@ -158,22 +158,22 @@ static int opt_capmerge;
 /* --no-repair: disable the default 2-plug re-pair barrier cross (try_repair), for
    ablation/measurement. Off by default (baseline byte-identical); needs -c. */
 static int opt_no_repair;
-/* --gainfix: quadgram-gain directed-repair barrier cross, tried at quad convergence.
+/* --cascade: quadgram-gain directed-repair barrier cross, tried at quad convergence.
    A 2-ply "cascade" that uses per-position gain to propose plug corrections (both
    plugboard contacts, self-encryption pruned), ranks them by the full re-decode
    score, applies the best pair even when the first plug is downhill (which un-masks
    the second), and keeps it only if the pair nets an improvement. Off by default
    (baseline byte-identical); needs -c; quad-only. See gain_cascade(); PERFORMANCE.md 4.10. */
-static int opt_gainfix;
-/* --gainfix near-solution gate: the cascade only fires on a converged board whose
+static int opt_cascade;
+/* --cascade near-solution gate: the cascade only fires on a converged board whose
    per-symbol quad score clears this threshold, so it skips the ~76% junk boards and
    spends its compute only on promising ones. Default -4.9 (English-quad calibrated:
-   junk ~-5.3, near-solution 60%+ ~-4.8..-4.2); tune per language via --gainfix=VALUE. */
-static double opt_gainfix_gate;
-/* --gainfix3: enable the 3-ply gain cascade (a deeper escalation, tried only when the 2-ply
-   cascade found nothing). --gainfix-best3 turns it on for the single best-board finisher. */
-static int opt_gainfix3;
-static int opt_gainfix_best3;
+   junk ~-5.3, near-solution 60%+ ~-4.8..-4.2); tune per language via --cascade=VALUE. */
+static double opt_cascade_gate;
+/* Internal: enable the 3-ply gain cascade (a deeper escalation, tried only when the 2-ply
+   cascade found nothing). --polish turns it on for the single best-board finisher. */
+static int opt_cascade3;
+static int opt_polish;
 /* --crib-file / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
@@ -1547,12 +1547,12 @@ static bool try_repair(machine & m, double cur_score)
   return found;
 }
 
-/* --gainfix tuning: candidate shortlist size and plug1 beam width. Plug2 is scored
+/* --cascade tuning: candidate shortlist size and plug1 beam width. Plug2 is scored
    over the whole shortlist per plug1, so cascade cost is ~CAP + N1*CAP score_iter. */
 static const int GAINFIX_CAP = 25;
 static const int GAINFIX_N1  = 6;
-static const int GAINFIX_N2  = 6;   /* --gainfix3: intermediate plug2 beam */
-static const int GAINFIX_K3  = 8;   /* --gainfix3: # of sacrifice pairs reclimbed */
+static const int GAINFIX_N2  = 6;   /* 3-ply: intermediate plug2 beam */
+static const int GAINFIX_K3  = 8;   /* 3-ply: # of sacrifice pairs reclimbed */
 
 /* Form plug a-b in place, ejecting a's and b's old partners to self-steckered
    (an "add-with-eject" — a free endpoint is a no-op eject). */
@@ -1658,7 +1658,7 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
   return out;
 }
 
-/* --gainfix: the 2-ply gain cascade barrier cross (PERFORMANCE.md 4.10). Quad-only,
+/* --cascade: the 2-ply gain cascade barrier cross (PERFORMANCE.md 4.10). Quad-only,
    run at convergence once the cheap climb / re-pairs have stalled. Ranks the shortlist
    by the full re-decode score; then for each of the top-N1 plug1 candidates, applies it
    (even if it does not improve — that un-masks a masked second plug) and scores every
@@ -1671,7 +1671,7 @@ static bool gain_cascade(machine & m, double cur_score)
 {
   if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
     return false;
-  if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
+  if (cur_score < opt_cascade_gate)             /* near-solution gate: skip junk boards */
     return false;
 
   unsigned char * steck = m.steckerbrett;
@@ -1738,7 +1738,7 @@ static bool gain_cascade(machine & m, double cur_score)
 
 template<bool EX> static double hillclimb(machine & m, int max_pairs);   /* fwd: reclimb below */
 
-/* --gainfix3 ("sacrifice + reclimb"): a deeper escalation for 3-plug tangles the 2-ply pair
+/* 3-ply ("sacrifice + reclimb"): a deeper escalation for 3-plug tangles the 2-ply pair
    can't cross, tried only when the 2-ply cascade found nothing. Rank the (plug1,plug2)
    SACRIFICE pairs (both plugs, possibly downhill) by their 2-plug score, and for the top-K
    commit the sacrifice and run a full PLAIN reclimb -- letting the ordinary climb find the
@@ -1753,7 +1753,7 @@ static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
 {
   if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
     return false;
-  if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
+  if (cur_score < opt_cascade_gate)             /* near-solution gate: skip junk boards */
     return false;
 
   unsigned char * steck = m.steckerbrett;
@@ -1844,8 +1844,8 @@ static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
   double best = cur_score;
   bool found = false;
   unsigned char bestboard[asize];
-  int save_gf = opt_gainfix, save_gf3 = opt_gainfix3;
-  opt_gainfix = 0; opt_gainfix3 = 0;
+  int save_gf = opt_cascade, save_gf3 = opt_cascade3;
+  opt_cascade = 0; opt_cascade3 = 0;
   for (int k = 0; k < K; k++)
     {
       for (int i = 0; i < asize; i++) steck[i] = pboard[po[k]][i];
@@ -1856,7 +1856,7 @@ static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
           for (int i = 0; i < asize; i++) bestboard[i] = steck[i];
         }
     }
-  opt_gainfix = save_gf; opt_gainfix3 = save_gf3;
+  opt_cascade = save_gf; opt_cascade3 = save_gf3;
 
   for (int i = 0; i < asize; i++) steck[i] = saveS[i];     /* restore original board */
   if (found)
@@ -2209,8 +2209,8 @@ static double hillclimb(machine & m, int max_pairs)
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
          improves, loop back and let the cheap climb resume from the new board. */
       if ((! opt_no_repair && try_repair<EX>(m, cur))
-          || (opt_gainfix && gain_cascade<EX>(m, cur))
-          || (opt_gainfix3 && gain_cascade_3ply<EX>(m, cur, max_pairs)))
+          || (opt_cascade && gain_cascade<EX>(m, cur))
+          || (opt_cascade3 && gain_cascade_3ply<EX>(m, cur, max_pairs)))
         progress = true;
     }
   while (progress);
@@ -2902,7 +2902,7 @@ struct best_result
   size_t idx = static_cast<size_t>(-1);   /* work index of the best (for the tie-break) */
   bool found = false;
   char plaintext[maxlen+1];
-  /* Winning plugboard, recorded at the merge so a post-search --gainfix-best pass can
+  /* Winning plugboard, recorded at the merge so the post-search --polish pass can
      reconstruct the machine (via the key from `idx`) and finish the single best board. */
   unsigned char steckerbrett[asize];
   /* Highest score already ECHOED as a progress line -- display state only, never read
@@ -3135,7 +3135,7 @@ void search_worker(machine & m,
                   best.idx = idx;
                   best.found = true;
                   memcpy(best.plaintext, m.plaintext, textlength + 1);
-                  memcpy(best.steckerbrett, m.steckerbrett, asize);   /* for --gainfix-best */
+                  memcpy(best.steckerbrett, m.steckerbrett, asize);   /* for --polish */
                   /* Echo the new best -- unless a progress line already showed this
                      score (a climb's last accepted move IS its converged board, so
                      reprinting it here would just duplicate the line). Ties that
@@ -3707,13 +3707,13 @@ void bruteforce(char * result)
                         rsize, gsize, next_key, schunk, restarts_par, best); });
     }
 
-  /* --gainfix-best: an alternative to the per-convergence --gainfix. Instead of firing
+  /* --polish: an alternative to the per-convergence --cascade. Instead of firing
      the gated cascade at every near-solution convergence, run ONE unconditional gain
      cascade + finishing climb on the single best board after all restarts. Reconstruct
      that board's machine from its key (best.idx) and the recorded steckerbrett. Only
      the simple sweep records best.idx as key*restarts+restart, so it is guarded to
      that path (no -F, no --exhaust). */
-  if (opt_gainfix_best3 && best.found)
+  if (opt_polish && best.found)
     {
       machine & m = *machines[0];
       size_t rg = rsize * gsize;
@@ -3727,12 +3727,12 @@ void bruteforce(char * result)
         m.steckerbrett[i] = best.steckerbrett[i];
       m.scoring = opt_scoring;
       m.report = false;
-      int save_gf = opt_gainfix;
-      int save_gf3 = opt_gainfix3;
-      double save_gate = opt_gainfix_gate;
-      opt_gainfix = 1;
-      opt_gainfix3 = 1;   /* --gainfix-best3 also enables the 3-ply escalation */
-      opt_gainfix_gate = score_min;   /* unconditional cascade on the one best board */
+      int save_gf = opt_cascade;
+      int save_gf3 = opt_cascade3;
+      double save_gate = opt_cascade_gate;
+      opt_cascade = 1;
+      opt_cascade3 = 1;   /* --polish also enables the 3-ply escalation */
+      opt_cascade_gate = score_min;   /* unconditional cascade on the one best board */
       /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
          every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
          the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
@@ -3740,9 +3740,9 @@ void bruteforce(char * result)
          avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
       int fin_cap = opt_stages[opt_nstages - 1].cap;
       double s = hillclimb<false>(m, fin_cap);
-      opt_gainfix = save_gf;
-      opt_gainfix3 = save_gf3;
-      opt_gainfix_gate = save_gate;
+      opt_cascade = save_gf;
+      opt_cascade3 = save_gf3;
+      opt_cascade_gate = save_gate;
       /* Monotonic by construction: replace the best board ONLY when the finish scores
          strictly higher, so gainfix-best never returns a worse-scoring board than the
          search already found (a truth-vs-score chase at the information floor is a
@@ -3969,7 +3969,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "reflector b/c; -w/-r/-g take 4 chars (Greek");
   fprintf(out, "  %-24s %s\n", "", "wheel/ring/start first)");
   fprintf(out, "  %-24s %s\n", "-c, --climb",
-          "Perform hill climbing to find plugboard settings");
+          "Hill-climb the plugboard for each candidate key.");
+  fprintf(out, "  %-24s %s\n", "", "The climb rule is STEEPEST ASCENT by default:");
+  fprintf(out, "  %-24s %s\n", "", "score all 325 plug toggles, apply the single");
+  fprintf(out, "  %-24s %s\n", "", "best, repeat to convergence (see -J) [off]");
   fprintf(out, "  %-24s %s\n", "-R, --restarts N",
           "Random restart attempts: 0 = one deterministic");
   fprintf(out, "  %-24s %s\n", "", "climb; N = N kicked climbs, keep best [0]");
@@ -3991,7 +3994,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "-a, --weighted",
           "Weighted all-order score (log-linear mix of");
   fprintf(out, "  %-24s %s\n", "", "quad/tri/bi/mono); sharper on short messages.");
-  fprintf(out, "  %-24s %s\n", "", "Recommended: -c -S m4a10 -J --gainfix-best3");
+  fprintf(out, "  %-24s %s\n", "", "Recommended: -c -S m4a10 -J --polish");
   fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
           "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
   fprintf(out, "  %-24s %s\n", "-T, --threads N",
@@ -4005,13 +4008,17 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
   fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
   fprintf(out, "  %-24s %s\n", "-J, --dynamic-order",
-          "Like -I with dynamic best-first move ordering;");
-  fprintf(out, "  %-24s %s\n", "", "wins ~10-plug, may lose few-plug (implies -I) [off]");
+          "Change -c's climb rule to FIRST-IMPROVEMENT in");
+  fprintf(out, "  %-24s %s\n", "", "best-first order: apply the first improving");
+  fprintf(out, "  %-24s %s\n", "", "toggle instead of scanning for the best, ~2.8x");
+  fprintf(out, "  %-24s %s\n", "", "cheaper per climb -- so pair it with a larger -R.");
+  fprintf(out, "  %-24s %s\n", "", "Wins the realistic ~10-plug case, may lose with");
+  fprintf(out, "  %-24s %s\n", "", "few plugs (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-M, --cap-target",
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
   fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--gainfix-best3",
+  fprintf(out, "  %-24s %s\n", "--polish",
           "Gain cascade once on the best board, plus a deeper");
   fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles; the recommended");
   fprintf(out, "  %-24s %s\n", "", "finisher, near-free at K=8 (needs -c) [off]");
@@ -4039,11 +4046,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--no-repair",
           "Disable the 2-plug re-pair barrier cross");
   fprintf(out, "  %-24s %s\n", "", "(ablation/measurement flag; needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--gainfix[=GATE]",
+  fprintf(out, "  %-24s %s\n", "--cascade[=GATE]",
           "Quadgram-gain 2-ply directed-repair cascade at");
   fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
   fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off];");
-  fprintf(out, "  %-24s %s\n", "", "prefer --gainfix-best3 (kept for -F/--exhaust)");
+  fprintf(out, "  %-24s %s\n", "", "prefer --polish (kept for -F/--exhaust)");
   fprintf(out, "  %-24s %s\n", "--exhaust E",
           "Force E extra plug pairs among the free letters,");
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
@@ -4073,7 +4080,7 @@ void help(FILE * out)
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --gainfix-best3 --score m4a10 --random 10 -R 40 -a -l english\n");
+  fprintf(out, "  greedy: -c -J --polish --score m4a10 --random 10 -R 40 -a -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score a10 -R 12 -a -l english\n");
   fprintf(out, "-a (weighted all-order) is the recommended scoring model; -R is the main\n");
   fprintf(out, "quality dial (use -T to keep it cheap); the gainfix finishers are a\n");
@@ -4131,12 +4138,12 @@ void show_settings()
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_no_repair)
     fprintf(stderr, "            2-plug re-pair barrier cross disabled (--no-repair)\n");
-  if (opt_hillclimb && opt_gainfix)
+  if (opt_hillclimb && opt_cascade)
     fprintf(stderr, "            quadgram-gain directed-repair cascade at convergence "
-            "(--gainfix, near-solution gate %.2f)\n", opt_gainfix_gate);
-  if (opt_hillclimb && opt_gainfix_best3)
+            "(--cascade, near-solution gate %.2f)\n", opt_cascade_gate);
+  if (opt_hillclimb && opt_polish)
     fprintf(stderr, "            quadgram-gain 2-ply+3-ply cascade once on the best board "
-            "(--gainfix-best3)\n");
+            "(--polish)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
             opt_dynorder ? " (dynamic move order)" : "");
@@ -4221,10 +4228,10 @@ int main(int argc, char * * argv)
   opt_dynorder = 0;
   opt_capmerge = 0;
   opt_no_repair = 0;
-  opt_gainfix = 0;
-  opt_gainfix_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
-  opt_gainfix3 = 0;
-  opt_gainfix_best3 = 0;
+  opt_cascade = 0;
+  opt_cascade_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
+  opt_cascade3 = 0;
+  opt_polish = 0;
   opt_crib_file = nullptr;
   opt_crib_weight = 0.5;
   opt_crib = 0;
@@ -4251,8 +4258,8 @@ int main(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_GAINFIX,
-         OPT_GAINFIX_BEST3, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL };
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
+         OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -4293,8 +4300,8 @@ int main(int argc, char * * argv)
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-all",       no_argument,       nullptr, OPT_DUMPALL },
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
-      { "gainfix",        optional_argument, nullptr, OPT_GAINFIX },
-      { "gainfix-best3",  no_argument,       nullptr, OPT_GAINFIX_BEST3 },
+      { "cascade",        optional_argument, nullptr, OPT_CASCADE },
+      { "polish",         no_argument,       nullptr, OPT_POLISH },
       { "crib-file",      required_argument, nullptr, OPT_CRIB },
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { nullptr,          0,                 nullptr, 0   }
@@ -4358,13 +4365,13 @@ int main(int argc, char * * argv)
         case OPT_NO_REPAIR:
           opt_no_repair = 1;
           break;
-        case OPT_GAINFIX:
-          opt_gainfix = 1;
+        case OPT_CASCADE:
+          opt_cascade = 1;
           if (optarg != nullptr)
-            opt_gainfix_gate = strtod(optarg, nullptr);
+            opt_cascade_gate = strtod(optarg, nullptr);
           break;
-        case OPT_GAINFIX_BEST3:
-          opt_gainfix_best3 = 1;
+        case OPT_POLISH:
+          opt_polish = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -4644,19 +4651,19 @@ int main(int argc, char * * argv)
   if (opt_no_repair && (! opt_hillclimb))
     fatal("Disabling the 2-plug re-pair (--no-repair) needs the plugboard hill-climb (-c)");
 
-  /* --gainfix is a climb barrier-cross move, so it needs -c. */
-  if (opt_gainfix && (! opt_hillclimb))
-    fatal("Gain-cascade repair (--gainfix) needs the plugboard hill-climb (-c)");
+  /* --cascade is a climb barrier-cross move, so it needs -c. */
+  if (opt_cascade && (! opt_hillclimb))
+    fatal("Gain cascade (--cascade) needs the plugboard hill-climb (-c)");
 
-  /* --gainfix-best finishes the best board post-search; needs -c, and the simple sweep
+  /* --polish finishes the best board post-search; needs -c, and the simple sweep
      (its best.idx = key*restarts+restart reconstruction does not hold under -F/--exhaust). */
-  /* --gainfix-best3 = the best-board finisher with the 3-ply escalation; same guards. */
-  if (opt_gainfix_best3 && (! opt_hillclimb))
-    fatal("Gain-cascade 3-ply best-board finish (--gainfix-best3) needs the plugboard hill-climb (-c)");
-  if (opt_gainfix_best3 && opt_gainfix)
-    fatal("--gainfix-best3 and --gainfix are alternatives; pick one");
-  if (opt_gainfix_best3 && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
-    fatal("--gainfix-best3 is not supported with -F or --exhaust");
+  /* --polish = the best-board finisher with the 3-ply escalation; same guards. */
+  if (opt_polish && (! opt_hillclimb))
+    fatal("Best-board finisher (--polish) needs the plugboard hill-climb (-c)");
+  if (opt_polish && opt_cascade)
+    fatal("--polish and --cascade are alternatives; pick one");
+  if (opt_polish && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
+    fatal("--polish is not supported with -F or --exhaust");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */
