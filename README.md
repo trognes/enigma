@@ -252,13 +252,15 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   is a legal control (no perturbation — `N` restarts then repeat the seed climb).
 
 - **`-S <schedule>` / `--score <schedule>` — staged climb.** A schedule is a string of
-  `<letter><optional cap>` model tokens `i`/`m`/`b`/`t`/`q`, climb stages run in order;
+  `<letter><optional cap>` model tokens `i`/`m`/`b`/`t`/`q`/`a`, climb stages run in order;
   an optional number caps how many plug pairs that stage may set (omitted = uncapped).
   The **last** model token is the target/ranking model. Climbing a low-order model first
   (its scoring surface is smoother when only a few plugs are set) steers the early plugs
-  into a better basin. An **index-of-coincidence pre-pass works best**: `--score iq`
-  climbs IC, then refines under quadgrams. (The kick and the exhaustion are their own
-  options, `--random` / `--exhaust`, not schedule tokens.)
+  into a better basin. With the recommended weighted target the staging is a **mono
+  pre-pass**: `--score m4a10` climbs monograms (capped at 4 plugs), then refines under the
+  weighted model (capped at 10). For a plain **quad** target an index-of-coincidence
+  pre-pass measured best instead (`--score i4q10`). (The kick and the exhaustion are their
+  own options, `--random` / `--exhaust`, not schedule tokens.)
 
 - **`-F N` (or `-F N%`) — key pre-filter.** With `-c` the full `-R`/`-S` climb is
   paid on *every* candidate key, which dominates runtime when you wildcard rotor
@@ -284,35 +286,37 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   larger `-R` and, at equal compute, it recovers noticeably more of a short message. Leave
   it off for a single climb (`-R 0`).
 
-The recipes below use quadgrams (`--score iq`/`i4q10`) to illustrate the schedule and
-plug-cap mechanics; when you know the language, use the **recommended weighted target**
-in place of the quad stage — e.g. `--score m4a10` with `-a` (see the two recommended
-recipes at the end of this section).
+The recipes below build the schedule and plug-cap mechanics up on the **recommended**
+weighted target (`-a`, staged as `--score m4a10`). The percentages quoted alongside them
+were measured with a quad target (`--score iq` / `i4q10`); what they illustrate — pre-pass,
+plug cap, cap-as-target — is a property of the schedule rather than of the model, and `-a`
+is the sharper model to run it on (see "Scoring" above).
 
 A good general recipe for a hard (short) message with a known rotor key:
 
 ```sh
-./enigma -c -R 20 --score iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+./enigma -c -R 20 -a --score ma -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 
 # faster climbs → more restarts for the same time: add -J and raise -R
-./enigma -c -J -R 55 --score iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+./enigma -c -J -R 55 -a --score ma -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 **Cap the plug count in the schedule.** A real Wehrmacht board has ~10 plugs, so
-capping the final (quad) stage at 10 and the IC pre-pass lower — `--score i4q10` — keeps
+capping the final (weighted) stage at 10 and the pre-pass lower — `--score m4a10` — keeps
 the climb from adding spurious plugs on the noisy short-message score, and (being
-cheaper) buys more restarts for the same budget. On ~50–80-letter 10-plug messages
-this recovers several percentage points more than `--score iq` at equal compute. The
-final quad cap of 10 is what matters; the IC pre-pass cap is a **flat plateau**
-(≈3–6 all tie, so the exact value barely matters — `i4` is a fine representative).
+cheaper) buys more restarts for the same budget. Measured with a quad target on
+~50–80-letter 10-plug messages, capping recovered several percentage points more than the
+uncapped schedule at equal compute. The **final** cap of 10 is what matters; the pre-pass
+cap is a **flat plateau** (measured for the IC pre-pass: ≈3–6 all tie, so the exact value
+barely matters — `4` is a fine representative).
 The kick stays the default — a *small* kick like `--random 3` hurts:
 
 ```sh
-./enigma -c -R 26 --score i4q10 -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+./enigma -c -R 26 -a --score m4a10 -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 If you know the board uses **few** plugs (say 6), cap at that count instead
-(`--score i4q6` or so) — there the cap is a large win, and adding **`-M`** makes it
+(`--score m4a6` or so) — there the cap is a large win, and adding **`-M`** makes it
 larger still: `-M` turns the cap into a strict descent target (at/over the cap the
 climb may only merge or remove plugs, never add or reshuffle), so a restart's random
 kick is cleanly pruned back down to the true count instead of leaving spurious plugs.
@@ -320,14 +324,14 @@ On known-few-plug short messages this adds several more points (up to ~+20pp at 
 hardest lengths) at equal compute, and it climbs faster too:
 
 ```sh
-./enigma -c -R 26 --score i4q6 -M -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+./enigma -c -R 26 -a --score m4a6 -M -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 When you also brute-force the rotor key, add `-F` to shortlist keys and `-T` for
 threads:
 
 ```sh
-./enigma -c -R 20 --score i4q10 -F 10% -T 4 -l english -u . -w ... -r AAA -g ... < cipher.txt
+./enigma -c -R 20 -a --score m4a10 -F 10% -T 4 -l english -u . -w ... -r AAA -g ... < cipher.txt
 ```
 
 Increase `-R` for harder messages.
