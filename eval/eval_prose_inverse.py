@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Inverse control for eval_telegraphic.py: on PROSE German plaintext, do the telegraphic
-# tables (ngrams-telegraphic/, built for real telegraphic traffic) UNDERPERFORM the prose
+# tables (the "wehrmacht" language, built for real telegraphic traffic) UNDERPERFORM the prose
 # tables (ngrams/)? They should -- telegraphic orthography (X=space, Q=ch, spelled numbers)
 # is a domain mismatch for prose. This makes the "real traffic only" scope claim measured.
 #
@@ -17,7 +17,7 @@ R = os.environ.get("R", "150"); T = os.environ.get("T", "4")
 TRIALS = int(os.environ.get("TRIALS", "25"))
 LENGTHS = [int(x) for x in os.environ.get("LENGTHS", "40 70 100 140 190").split()]
 SEED = int(os.environ.get("SEED", "1"))
-TABLES = {"prose": "ngrams", "telegraphic": "ngrams-telegraphic"}
+LANGS = {"prose": "german", "telegraphic": "wehrmacht"}
 
 # Prose German passage (same text the crackquality harness uses for -l german).
 GERMAN = ("DIEENIGMAMASCHINEWURDEIMZWEITENWELTKRIEGVONDERDEUTSCHENWEHRMACHTVERWENDETUMGEHEIME"
@@ -47,10 +47,10 @@ def enc(u, w, r, g, pb, plain):
     return re.sub(r"[^A-Z]", "", out)
 
 
-def recover(u, w, r, g, ct, d):
+def recover(u, w, r, g, ct, lang):
     out = subprocess.run([BIN, "-u", u, "-w", w, "-r", r, "-g", g, "-c", "-R", R,
                           "--random", "10", "-a", "-S", "m4a10", "-J", "--polish",
-                          "-l", "german", "-d", os.path.join(ROOT, d), "-T", T],
+                          "-l", lang, "-T", T],
                          input=ct, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                          universal_newlines=True).stdout.strip().upper()
     return re.sub(r"[^A-Z]", "", out)
@@ -63,22 +63,22 @@ def pct(a, b):
 
 def main():
     print("PROSE-German inverse control  R=%s  TRIALS=%d  SEED=%d" % (R, TRIALS, SEED))
-    print("%-5s %6s  %s" % ("len", "n", "  ".join("%-11s" % l for l in TABLES)))
-    agg = {lab: [] for lab in TABLES}
+    print("%-5s %6s  %s" % ("len", "n", "  ".join("%-11s" % l for l in LANGS)))
+    agg = {lab: [] for lab in LANGS}
     for L in LENGTHS:
-        per = {lab: [] for lab in TABLES}
+        per = {lab: [] for lab in LANGS}
         for _ in range(TRIALS):
             off = rng.randint(0, len(GERMAN) - L)
             plain = GERMAN[off:off + L]
             u, w, r, g, pb = rand_key()
             ct = enc(u, w, r, g, pb, plain)
-            for lab, d in TABLES.items():
+            for lab, d in LANGS.items():
                 p = pct(plain, recover(u, w, r, g, ct, d))
                 per[lab].append(p); agg[lab].append(p)
-        print("%-5d %6d  %s" % (L, TRIALS, "  ".join("%-11.1f" % st.mean(per[lab]) for lab in TABLES)))
+        print("%-5d %6d  %s" % (L, TRIALS, "  ".join("%-11.1f" % st.mean(per[lab]) for lab in LANGS)))
         sys.stdout.flush()
-    print("%-5s %6d  %s" % ("ALL", sum(len(agg[list(TABLES)[0]]) for _ in [0]) // 1,
-          "  ".join("%-11.1f" % st.mean(agg[lab]) for lab in TABLES)))
+    print("%-5s %6d  %s" % ("ALL", sum(len(agg[list(LANGS)[0]]) for _ in [0]) // 1,
+          "  ".join("%-11.1f" % st.mean(agg[lab]) for lab in LANGS)))
     dp = st.mean(agg["telegraphic"]) - st.mean(agg["prose"])
     print("\ntelegraphic - prose on PROSE German: %+.1f pp  (expected negative -> domain mismatch)" % dp)
 

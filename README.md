@@ -149,7 +149,7 @@ distinct offsets rather than every ring×start pair.
 | `-i` | Index of coincidence — language-independent, needs no `-l` (**default**) |
 | `-m` / `-b` / `-t` / `-q` | Mono- / bi- / tri- / quad-gram statistics |
 | `-a` | Weighted all-order score — log-linear mixture of quad/tri/bi/mono (**recommended** when the language is known) |
-| `-l lang` | Scoring language: `english`, `german`, `danish`, `french`. **Required** for `-m`/`-b`/`-t`/`-q`/`-a`; ignored by `-i` |
+| `-l lang` | Scoring language: `english`, `german`, `danish`, `french`, or `wehrmacht` (telegraphic military German — see below). **Required** for `-m`/`-b`/`-t`/`-q`/`-a`; ignored by `-i` |
 
 The **default model is the index of coincidence** (`-i`) — the only one that needs
 no language, so the tool runs out of the box with no scoring options. When you know
@@ -212,12 +212,15 @@ seed.
 | `-T N` | Worker threads for the search, 1–256 `[1]` |
 
 For **authentic telegraphic German traffic** (real Wehrmacht messages: `X`
-separators, `Q` for *ch*, spelled-out numbers) the bundled prose German tables
-mis-score the plaintext; use the domain-matched tables in `ngrams-telegraphic/`
-instead — `-d ngrams-telegraphic -l german` — which recover **+20.9 pp** more
-(mean %-letters-correct) over a 69-message held-out set of real 1941 messages.
-Prose German (and `make crackquality`) should stay on the default `ngrams/`. See
-`ngrams-telegraphic/README.md`.
+separators, `Q` for *ch*, spelled-out numbers) the prose German tables mis-score
+the plaintext. Use **`-l wehrmacht`**, a domain-matched scoring language built
+from the published statistics of ~20 000 letters of 1941 Enigma decrypts: it
+recovers **+20.9 pp** more (mean %-letters-correct) over a 69-message held-out
+set of real 1941 messages. It is a *register*, not a language — on prose German
+it is a domain **mis**match and measured **−10.2 pp**, so ordinary German text
+(and `make crackquality`) should stay on `-l german`. Regenerate the tables with
+`python3 eval/build_telegraphic_ngrams.py`; see `eval/MODERN_BREAKING_NOTES.md`
+§6.
 
 A known-word (**crib**) finisher, `--crib-file <f>`, re-ranks converged plugboards by
 score + known words present in the decrypt (vocabulary in `cribs/`). It is **opt-in and

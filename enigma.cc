@@ -109,7 +109,7 @@ static const char * opt_steckerbrett;
    a mere seed (see plug_fixed / PLUG_FIXED_EX below for the storage and the parallel
    --exhaust arrangement, REDESIGN Part D). */
 static char * opt_plaintext; /* plaintext to compare to */
-static const char * opt_language; /* english, german, danish, french ...; no default */
+static const char * opt_language; /* english, german, danish, french, wehrmacht; no default */
 static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_m4;        /* use M4 (4-rotor naval) mode */
@@ -3983,7 +3983,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "m4a10 (mono pre-pass then weighted, both capped).");
   fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
   fprintf(out, "  %-24s %s\n", "-l, --language language",
-          "Scoring language (english/german/danish/french);");
+          "Scoring language: english/german/danish/french, or");
+  fprintf(out, "  %-24s %s\n", "", "wehrmacht (telegraphic military German -- X as");
+  fprintf(out, "  %-24s %s\n", "", "word separator, Q for ch, spelled-out numbers;");
+  fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German);");
   fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q (no default); not for -i");
   fprintf(out, "  %-24s %s\n", "-i, --ic",
           "Index of coincidence (IC); needs no -l [default]");

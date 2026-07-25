@@ -12,10 +12,19 @@ BIN = os.path.join(ROOT, "enigma")
 os.environ["ENIGMA_SEED"] = "0"
 R = os.environ.get("R", "150"); T = os.environ.get("T", "4")
 FILES = ["enigma-messages.txt", "enigma-army-messages-1941.txt"]
-# label -> data dir (relative to ROOT)
-TABLES = {"prose": "ngrams"}
-for spec in os.environ.get("TELE", "tele05_10:ngrams-tele-05-10,tele05_20:ngrams-tele-05-20").split(","):
-    lab, d = spec.split(":"); TABLES[lab] = d
+# label -> scoring language, optionally "lang@datadir" to A/B a candidate table set
+# generated elsewhere (see eval/build_telegraphic_ngrams.py: OUTDIR=/tmp/x LANG_NAME=foo).
+TABLES = {}
+for spec in os.environ.get("TELE", "prose:german,wehrmacht:wehrmacht").split(","):
+    lab, val = spec.split(":", 1); TABLES[lab] = val
+
+
+def lang_args(val):
+    """'lang' or 'lang@dir' -> the -l/-d arguments for it."""
+    if "@" in val:
+        lang, d = val.split("@", 1)
+        return ["-l", lang, "-d", d if os.path.isabs(d) else os.path.join(ROOT, d)]
+    return ["-l", val]
 
 CMD = re.compile(r"-u (\S+) -w (\S+) -r (\S+) -g (\S+) -s \"([^\"]*)\"")
 SCORE = re.compile(r"^\s*(-?\d+\.\d+)\s")
@@ -53,17 +62,17 @@ def score_of(err):
     return b
 
 
-def true_score(rc, d):
+def true_score(rc, val):
     r = subprocess.run([BIN, "-u", rc["u"], "-w", rc["w"], "-r", rc["r"], "-g", rc["g"],
-                        "-s", rc["s"], "-a", "-l", "german", "-d", d], input=rc["body"].replace("-", "A"),
+                        "-s", rc["s"], "-a"] + lang_args(val), input=rc["body"].replace("-", "A"),
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, universal_newlines=True)
     return score_of(r.stderr)
 
 
-def recover(rc, d):
+def recover(rc, val):
     r = subprocess.run([BIN, "-u", rc["u"], "-w", rc["w"], "-r", rc["r"], "-g", rc["g"],
                         "-c", "-R", R, "--random", "10", "-a", "-S", "m4a10", "-J",
-                        "--polish", "-l", "german", "-d", d, "-T", T],
+                        "--polish"] + lang_args(val) + ["-T", T],
                        input=rc["body"].replace("-", "A"), stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE, universal_newlines=True)
     out = re.sub(r"[^A-Z]", "", r.stdout.strip().upper())
@@ -88,9 +97,8 @@ def main():
     rows = []
     for rc in recs:
         L = len(rc["body"]); res = {}
-        for lab, d in TABLES.items():
-            dd = os.path.join(ROOT, d)
-            ts = true_score(rc, dd); pct, rs = recover(rc, dd)
+        for lab, val in TABLES.items():
+            ts = true_score(rc, val); pct, rs = recover(rc, val)
             gap = (rs - ts) if (rs is not None and ts is not None) else float("nan")
             res[lab] = (pct, gap); per[lab].append((L, pct))
         rows.append((rc["id"], L, res))

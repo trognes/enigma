@@ -71,7 +71,7 @@ raw machine decrypt, the emended German, a translation, and garble notes — plu
 ## 3. Real-traffic test (`eval/crack_real.py`) — findings
 
 Fix the (known) rotor key, **hide the plugboard**, hill-climb it back, and compare the decrypt
-to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --gainfix-best3 -l german`).
+to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --polish -l german`).
 
 - **The tool reproduces the article's breakability pattern exactly** — the long messages (214,
   174) and the "easy" 36-letter PFCXY solve at 100 %; BOTKB and the sub-unicity short ones do
@@ -118,15 +118,16 @@ several are short (below the ~23-letter unicity distance), the source flags that
 "July Batch A" messages are **hand cipher** (Doppelkasten), the "Batch C" trio may not be
 Enigma at all, and a few carry a known day-key they demonstrably do **not** break on.
 
-## 6. Telegraphic scoring tables — the corpus payoff (`ngrams-telegraphic/`)
+## 6. The `wehrmacht` scoring language — the corpus payoff
 
 The domain-matched corpus idea, realised. `eval/build_telegraphic_ngrams.py` bends the
 bundled prose German tables toward the **published telegraphic statistics** in the 2005
 paper's Appendix C (Fig 17 single-letter + Fig 18 top-400 trigram frequencies over ~20 000
 letters of 1941 decrypts), by marginal-matching the quad table's folded low-order marginals
 to telegraphic (strength A=0.5 mono / B=2.0 tri). Because `-a` folds every order from the
-quad windows, one corrected table makes the whole scorer telegraphic; use it with
-`-d ngrams-telegraphic -l german`.
+quad windows, one corrected table makes the whole scorer telegraphic. It ships as a
+scoring **language** of its own — `ngrams/wehrmacht_*.txt`, selected with `-l wehrmacht` —
+rather than a parallel data directory, so it needs no `-d` and composes with a custom one.
 
 Validated on the full **69-message held-out set** (`eval/eval_telegraphic.py`; rotor key
 fixed, plugboard hidden and hill-climbed, mean %-letters-correct):
@@ -144,9 +145,9 @@ unicity, but short enough that prose can't rank the telegraphic truth). This is 
 result §1 anticipated and §3 could not settle on the bimodal 13: a domain-matched corpus is
 the second real lever for short real-message breaking, alongside the `-a` scoring model.
 
-Scope: these tables encode telegraphic orthography by construction, so they are for **real
-Wehrmacht traffic only** — on prose German (and the `make crackquality` benchmark) the
-bundled `ngrams/` tables remain correct. This is **measured, not asserted**
+Scope: `wehrmacht` encodes telegraphic orthography by construction — it is a *register*,
+not a language — so it is for **real Wehrmacht traffic only**; on prose German (and the
+`make crackquality` benchmark) `-l german` remains correct. This is **measured, not asserted**
 (`eval/eval_prose_inverse.py`, the mirror control — random prose-German excerpts recovered
 under prose vs telegraphic):
 
@@ -197,7 +198,7 @@ a crib-*directed repair* (Option A) is the untried next step if the line is revi
 ## Reproduce
 
 ```sh
-python3 eval/build_telegraphic_ngrams.py    # regenerate ngrams-telegraphic/ from Appendix C
+python3 eval/build_telegraphic_ngrams.py    # regenerate ngrams/wehrmacht_*.txt from Appendix C
 R=150 python3 eval/eval_crib.py             # crib finisher: telegraphic vs +crib over 69 msgs
 R=150 python3 eval/eval_telegraphic.py      # held-out eval: prose vs telegraphic over 69 msgs
 R=150 python3 eval/eval_prose_inverse.py    # inverse control: prose vs telegraphic on PROSE German

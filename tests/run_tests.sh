@@ -885,6 +885,21 @@ for lang in $crack_langs; do
   done
 done
 
+# The 'wehrmacht' scoring language (telegraphic military German -- ngrams/wehrmacht_*.txt,
+# generated from the published Appendix-C statistics). Check its four tables load and that
+# it recovers a plugboard on telegraphic text, the register it is built for.
+pt_wehrmacht="ANROEMEINSBERTAXWIRTSQAFTLIQEUNTERSTELLUNGUNTERROEMXZEHNXARMKORPSDAUERTNURXZWOXTAGEXSTUERZBEQERX"
+w_ct=$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+# Capped at the true 2 pairs: uncapped, the climb adds a spurious third plug on this text
+# (JQ -- J is rare in telegraphic German, so the model tolerates it). -l german does the
+# same here, so it is over-plugging, not a wehrmacht-table problem.
+check "crack: hill-climb plugboard, wehrmacht -a" \
+  "$(run "$w_ct" -a -c --score a2 -u B -w 123 -r AAA -g AAA -l wehrmacht)" \
+  "$pt_wehrmacht"
+check "crack: start position, wehrmacht -a" \
+  "$(run "$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g QXP)" -a -u B -w 123 -r AAA -g "$crack_scan_g" -l wehrmacht)" \
+  "$pt_wehrmacht"
+
 # (2) Hill-climb the plugboard (rotor/ring/start known, plugboard unknown), for
 # every scoring model in every language. With long plaintext and a small (2-pair)
 # plugboard, even IC and monogram scoring have enough signal to converge to the
