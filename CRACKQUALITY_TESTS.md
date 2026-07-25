@@ -10,7 +10,7 @@
 > **Build status: all three are implemented.** §1's harness plumbing (the opt-in
 > `WILDCARD`/`FILTER`/`RESTARTS`/`FULLCRACK` knobs, `last_key`/`key_ok`, the `key%`
 > column and the generalized SPLIT). §2's `--true-key` binary hook + the
-> `FILTERRECALL` recall@N mode and `SCOREITER` column. §3's `--dump-restarts`
+> `FILTERRECALL` recall@N mode and `SCOREITER` column. §3's `--dump-all`
 > binary hook + the `DIVERSITY` basin-collapse mode. All three binary hooks are
 > **off by default** (default paths byte-identical and bench-neutral, verified),
 > and `WILDCARD=""` / no-mode runs are byte-identical to the original harness. The
@@ -270,7 +270,7 @@ here** (tabu / repulsion / guided-kick are deferred); this is instrumentation pl
 a comparison of shipped options, on the cheap fixed-key tier.
 
 **Diagnostic instrumentation (a small, off-by-default binary hook).** A
-`--dump-restarts` flag that, for the fixed key, emits each of the `-R` restarts'
+`--dump-all` flag that emits each of the `-R` restarts'
 **converged `(score, board)`** to stderr (gated off by default). The harness
 aggregates per key.
 
@@ -290,7 +290,7 @@ tracks recovery. New harness mode `DIVERSITY=1` printing, per length, mean
 distinct-optima, global-best-hit rate, and mean %-correct.
 
 ```
-make crackquality DIVERSITY=1 CRACKOPTS='--dump-restarts' LENGTHS='50 70 100' PAIRS=10 TRIALS=20 RESTARTS=32
+make crackquality DIVERSITY=1 CRACKOPTS='--dump-all' LENGTHS='50 70 100' PAIRS=10 TRIALS=20 RESTARTS=32
 # sweep the shipped knobs at matched score_iter (balance -R via SCOREITER):
 #   --random {4,8,13}; then {steepest, -I, -J}
 ```
@@ -313,7 +313,7 @@ would need to close, without committing to one now.
   `T=1/3/8`; keep all randomness on the per-key splitmix64 stream; pin
   `ENIGMA_SEED=0` / `-e 0` for A/B.
 - **`make bench` under both g++ and clang** for any hot-path touch — but note the
-  three binary hooks here (`--true-key`, `--dump-restarts`, and the
+  three binary hooks here (`--true-key`, `--dump-all`, and the
   `FILTERRECALL`/`SCOREITER`/`DIVERSITY` harness modes) are all **off-by-default
   diagnostics**, so the default paths must stay byte-identical and bench-neutral.
 - New harness env knobs must be **opt-in** and leave `WILDCARD=""` /

@@ -110,7 +110,7 @@ v1.1.0 baseline every miss is a *search* failure.)
 > (`gainfix_candidates` does ≈`n·26·4` quad8 lookups per cascade call, ≈100
 > `score_iter`-equivalents, uncounted). So on gain-cascade changes `score_iter`
 > **undercounts real cost by several×**, and the two axes can *disagree*: e.g.
-> `--gainfix-best3` at a large `K` can tie `--gainfix-best`+more-`-R` on `score_iter`
+> `--gainfix-best3` at a large `K` can tie a plain 2-ply cascade+more-`-R` on `score_iter`
 > while being **Pareto-dominated** on wall time (`PERFORMANCE.md` §4.11 — K=169 at 131 ms
 > lost to R200 at 114 ms despite fewer counted iters). Take wall time as the min of a few
 > reps (per problem) to damp noise, and treat `score_iter` as the *cheap deterministic
@@ -122,47 +122,21 @@ v1.1.0 baseline every miss is a *search* failure.)
 for the **scoring-failure gate** (§1); `FILTERRECALL=1` reports the true key's `-F`
 tier-1 **recall@N** (§2, via the binary's `--true-key` diagnostic flag); and
 `DIVERSITY=1` reports **restart basin-collapse** stats — distinct converged optima and
-best-board hit-count across the `-R` restarts (§3, via `--dump-restarts`). The two
-`--true-key`/`--dump-restarts` flags are off-by-default binary diagnostics (default
-paths byte-identical and bench-neutral, ASan/TSan-clean). **`--dump-all`** is the
-`--dump-restarts` companion that additionally prints the **rotor key** of each converged
+best-board hit-count across the `-R` restarts (§3, via `--dump-all`). `--true-key` and
+`--dump-all` are off-by-default binary diagnostics (default paths byte-identical and
+bench-neutral, ASan/TSan-clean). **`--dump-all`** prints the full setting of each converged
 climb (`dumpall <refl+wheels> <ring> <start> <score> <plugboard>`), so a *wildcarded* search
 can be inspected key-by-key (not just a fixed key); it reuses `showconfig`'s
-`format_key`/`format_plugboard`, is display-only under the same mutex (so the dumped multiset
+`format_key`/`format_plugboard`, is display-only under a mutex (so the dumped multiset
 is `-T`-invariant; only line order is thread-timing dependent), and needs `-c`.
 
-A third restart-diversity diagnostic, **`--restart-tt`**, does the basin dedup *in-binary*
-instead of via the external `--dump-restarts` harness: it hashes each converged restart
-board into a **Zobrist transposition table** (325 fixed pseudorandom 64-bit words, one per
-unordered letter pair, XORed over the set plugs; a deterministic splitmix64 seed, so the hash
-is reproducible and `-T`-invariant) and, at the end, prints a one-line **basin-collapse
-summary** — distinct optima, total climbs, the heaviest basin's hit count, and the Shannon
-entropy of the hit distribution (`log2 N` = maximally diverse, `0` = full collapse). Each
-bucket stores the **exact board** (so a hash collision is a probe-on, never a false merge),
-its score, and its hit count; open-addressing, linear-probe, sized to the work items. It is
-diagnostic-only — it never gates which candidate wins, and because the multiset of converged
-boards is a deterministic function of the work items, the reported stats are `-T`-invariant
-(verified T1 ≡ T4). Off by default (needs `-c`; default path byte-identical, all tests pass).
-Measured aside: at the standard `--random 10` kick, exact-board collapse is near-zero (restarts
-land on distinct boards, differing by at least a spurious plug), so meaningful collapse shows
-only as the kick shrinks (`--random 0` → 1 basin, entropy 0). The TT is the intended scaffold
-for the diversity-driven search ideas (a tabu visited-set, GA population dedup).
-
-A fourth diagnostic, **`--score-tt`**, reuses that Zobrist board hash to answer a different
-question — *how much of the plugboard climb's scoring is repeated work a cache could recover?*
-It memoises `score_iter` in a per-worker **plugboard→score transposition table**: within one
-rotor key and scoring model `score_iter` is a pure function of the plugboard, so a board scored
-again returns the stored value instead of re-decoding. A hit requires the exact board, the
-current rotor-key generation (bumped once per key in `setup_mapping`, invalidating the cache in
-O(1)), and the scoring model all to match, so it is **semantically transparent** — byte-identical
-results, `-T`-invariant, on or off. It prints the fraction of `score_iter` served from cache at
-the end. **Measured result (PERFORMANCE.md §7.9): rejected as a speedup** — only ~7–13% of scores
-are cacheable, the rate is *flat in restarts and in table size* (so it is almost all intra-climb
-repeats; cross-restart score reuse is essentially nil, the board-probe-level echo of the §6.14 /
-`--restart-tt` basin-diversity finding), and the per-call hash+compare+copy against a cache-cold
-multi-MB table makes it a **net wall-time loss** at every config. Kept as an off-by-default
-diagnostic (needs `-c`; default path byte-identical) for the diversity-search line — the negative
-answer *is* the artifact.
+Two further diagnostics were **removed** once their questions were settled (the findings
+survive in `PERFORMANCE.md` / `archived/`): `--restart-tt`, a Zobrist transposition table over
+converged restart boards, measured near-total basin diversity at the standard `--random 10`
+kick — which is what took a tabu visited-set and GA population dedup off the table; and
+`--score-tt`, a plugboard→score cache, measured **rejected as a speedup** (only ~7–13% of
+scores cacheable, flat in restarts and table size, a net wall-time loss —
+`PERFORMANCE.md` §7.9). `--dump-restarts` was removed as strictly subsumed by `--dump-all`.
 
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
@@ -201,15 +175,18 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > one measured *scoring* win on short messages; strictly recommended over `-q` when the language is
 > known, see the `-a` entry below), `-S m4a10` staging (mono pre-pass then weighted), `-J` (dynamic
 > move order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the best-board finisher
-> `--gainfix-best3` (the recommended finisher — strictly ≥ `--gainfix-best` at its near-free default
-> K=8, so there is no short-message case where `--gainfix-best` is preferred over it).
+> `--gainfix-best3` (the recommended finisher, near-free at its default K=8).
 > Several opt-in flags are **not recommended** — they are dominated, ablation/measurement
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
-> plain short-message sweep: `-I`, `--infl-order`, `-F`, `--repair3`, `--no-repair`,
-> `--gainfix` (superseded by `--gainfix-best3`, kept for `-F`/`--exhaust` compatibility),
-> `--gainfix-best` (superseded by `--gainfix-best3`, which is strictly ≥ it at near-free cost;
-> kept as the simpler/lighter variant and for ablation), and `--exhaust`. Each is tagged
+> plain short-message sweep: `-F`, `--no-repair`, `--gainfix` (superseded by
+> `--gainfix-best3`, kept because it is the only gain cascade that works with
+> `-F`/`--exhaust`), `--crib-file` (measured-down) and `--exhaust`. Each is tagged
 > **not recommended** in its entry below and in `--help`.
+>
+> **Removed options** (dominated or subsumed; the measurements survive in `PERFORMANCE.md`):
+> `-I` (bare first-improvement — `-J` supersedes it; the internal climb path remains, set by
+> `-J`), `--infl-order`, `--repair3`, `--gainfix-best` (superseded by `--gainfix-best3`),
+> `--dump-restarts` (subsumed by `--dump-all`), `--restart-tt` and `--score-tt`.
 
 > **Search playbook — the measured priority (this is the whole game for search).** `-R` restarts are
 > the **primary quality lever**; spend compute there first, via `-T` (which parallelises the
@@ -241,25 +218,15 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   re-pair/toggle move), so `-s` supplies *known* plugs and the search recovers only the
   rest. They still seed a plain (no-climb) decrypt as before.
 - `-c` hill-climb the plugboard
-- `-I` **circular first-improvement** climb (**not recommended** — worse per restart; prefer `-J`) instead of steepest ascent (needs `-c`; off by
-  default). `hillclimb()` normally full-scans all 325 toggle moves per accepted move and takes
-  the single best; `-I` sweeps the same fixed 325-pair toggle list (each pair a `toggle a-b`:
-  already-paired → remove, else add/move/merge) with a cursor, applies the **first** improving
-  move, and **continues from where it accepted** (circular — so each move is examined ~once per
-  sweep and attention rotates evenly instead of favouring low letters). ~2.8× fewer `score_iter` per climb, no data structure (which is why
-  it wins at 50 chars where the surrogate/delta ideas lost). Deterministic (fixed order +
-  acceptance, no RNG) → `-T`-independent; **not** byte-identical (different trajectory). It
-  recovers **worse per restart**, so it is a *throughput multiplier*, not a free win: pair it
-  with more `-R` and it wins at **matched compute** (+8pp exact / +1–23pp mean %-correct at
-  L40–60, scaling with how much signal the message has — `PERFORMANCE.md` §7.2). Because a
-  user at the default `-R 0` (a single deterministic climb) would get worse results, it is opt-in.
-- `-J` **first-improvement with dynamic best-first move ordering** (implies `-I`; needs
-  `-c`; off by default). Each climb first scores *every* move once against its starting
+- `-J` **first-improvement climb with dynamic best-first move ordering** (needs
+  `-c`; off by default). Instead of steepest ascent (full-scan all 325 toggles, take the
+  single best), it applies the **first** improving move and sweeps the move list circularly,
+  ~2.8× cheaper per climb. Each climb first scores *every* move once against its starting
   (perturbed) board, sorts, and runs the circular first-improvement in that order — the
   order is rebuilt **per restart**, so it front-loads good moves *without* collapsing the
   restart diversity that a *static* (fixed-across-restarts) informed order destroys. Costs
-  +24% `score_iter`/climb (the extra scan), so it is compared at matched compute
-  (`-J -R 18` ≈ `-I -R 22`). Measured a **robust win on the realistic ~10-plug regime**
+  +24% `score_iter`/climb (the extra scan), so it is compared at matched compute.
+  Measured a **robust win on the realistic ~10-plug regime**
   (+2–6pp mean %-correct at L40–60, two seeds) and a **loss at 6 plugs** (best-first
   over-commits when few plugs are truly needed), hence opt-in. 10 plugs is the
   `crackquality` default and standard Wehrmacht, so the win lands on the hard/realistic
@@ -267,14 +234,6 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
   compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected** (`PERFORMANCE.md` §7.2).
-- `--infl-order` **influence-ordered first-improvement** (**not recommended** — measured, dominated by `-J`; experimental; implies `-I`; mutually
-  exclusive with `-J`; needs `-c`; off by default). Orders the move sweep by the board-state
-  **influence** `w(a,b)=ct_count[a]+ct_count[b]+pt_count[a]+pt_count[b]` (two 26-bin histograms
-  over the ciphertext and current decrypt — the §4.5/§4.6 weight) instead of `-J`'s measured
-  score-delta, so it is nearly **free** (no per-move pre-scan). Per-restart, deterministic
-  (`-T`-independent). **Measured, dominated**: at matched compute it beats plain `-I` (+5–10pp)
-  but loses to `-J` (−4 to −6pp at L60–90) — `-J`'s score-order wins wherever there is signal
-  to rank on (`PERFORMANCE.md` §4.6). Kept as a documented-dominated opt-in, not recommended.
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
   cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
   cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an
@@ -295,17 +254,6 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   the IC-pre-pass cap in `--score i4q…` is a *flat plateau* by default is that without `-M` the
   cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
   `PERFORMANCE.md` §7.3.)
-- `--repair3` **3-plug re-pair barrier cross** (**not recommended** — measured, dominated; needs `-c`; off by default). The 3-plug
-  generalisation of `try_repair` (`try_repair_3()`): tried only at convergence, once the
-  toggle climb **and** the 2-plug `try_repair` have both stalled, it rematches three existing
-  plugs (six letters) into a different pairing (the 8 genuine count-neutral reshufflings that
-  share no pair with the original) and keeps the best improving one — a deeper local-optima
-  escape the single toggle and 2-plug re-pair can't express. Count-neutral (no cap gating);
-  costs O(C(np,3)·8) `score_iter` (960 at 10 plugs) per call, paid only at convergence.
-  Default off (baseline byte-identical); `template<bool EX>`/`plug_fixed` like `try_repair`.
-  **Measured, dominated**: at matched compute it loses ~2pp mean %-correct — the per-climb
-  cost is better spent on more `-R` restarts (`PERFORMANCE.md` §4.7). A documented-dominated
-  opt-in, not recommended — same verdict as `--exhaust`.
 - `--no-repair` **disable the default 2-plug `try_repair` barrier cross** (**not recommended** — ablation/measurement flag; needs `-c`; off by
   default). An ablation/measurement flag: the 2-plug re-pair is normally always-on (it earns
   its keep at long lengths — `archived/CODE_REVIEW_HISTORY.md` §9 item 7), and this turns it
@@ -325,21 +273,11 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   small **matched-compute win** (+0.2–0.3pp mean / +0.5–0.6pp exact on short English, ~zero added
   `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
   `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
-- `--gainfix-best` **best-board-only gain cascade** (**not recommended** — superseded by
-  `--gainfix-best3`, which is strictly ≥ it at near-free cost; kept as the simpler/lighter variant and
-  for ablation; needs `-c`; mutually exclusive with `--gainfix`;
-  off by default). The fixed-cost alternative to per-convergence `--gainfix`: runs the gain cascade
-  **once, unconditionally (no score gate)**, on the single best board after all `-R` restarts (its key
-  + stecker recorded at the merge), then one finishing climb. Costs a **fixed** ~950 `score_iter`
-  independent of `-R`, so it is ~free at high `-R` and generally ≥ per-convergence `--gainfix` (an
-  N=100 matched-compute sweep, English L40–50: both give +0.2–0.7pp mean %-correct vs base across the
-  whole `-R 8…2560` range with no decay; `--gainfix-best` wins or ties 8 of 10 `-R` rows). Exact
-  recovery does saturate at extreme `-R` (all modes tie once restarts alone find every recoverable
-  board — the residual is the scoring-failure floor), but the mean gain persists. Simple sweep only
-  (not `-F`/`--exhaust`). `-T`-deterministic. See `PERFORMANCE.md` §4.10.
 - `--gainfix-best3` **best-board finisher with a deeper 3-plug-tangle escalation** (**recommended** —
-  the stronger of the two finishers, strictly ≥ `--gainfix-best` at its near-free default K=8; needs `-c`;
-  mutually exclusive with `--gainfix`/`--gainfix-best`; off by default). Like `--gainfix-best`, but the
+  the finisher, near-free at its default K=8; needs `-c`; mutually exclusive with `--gainfix`;
+  off by default). Runs the gain cascade **once, unconditionally (no score gate)**, on the single
+  best board after all restarts (its key + stecker recorded at the merge), then one finishing climb;
+  a fixed ~950 `score_iter` independent of `-R`, so it is ~free at high `-R`. The
   once-only best-board finisher also runs a **"sacrifice + reclimb"** step when the 2-ply cascade finds
   nothing: it ranks the `(plug1,plug2)` sacrifice pairs by 2-plug score and, for the top-`K` (K=8),
   commits the sacrifice (both plugs, possibly downhill) and runs a full plain reclimb — letting the
@@ -347,7 +285,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   plug3 search (the completing plug is the top move the reclimb finds anyway; a full climb per sacrifice
   recovers *more* than committing one fixed plug — it matches the explicit 3-ply at K=6 and beats it at
   K=12). Targets 3-plug tangles the 2-ply pair can't cross: real-tool capped, it solves **56% of fixable
-  ≥80%-base boards vs `--gainfix-best`'s 41%**, and beats 2-ply by **+~1.3pp mean / +2…5pp exact** at
+  ≥80%-base boards vs the 2-ply cascade's 41%**, and beats 2-ply by **+~1.3pp mean / +2…5pp exact** at
   matched compute (english+german L40), for ~+2–3 ms wall (<1% for `-R`≥640). Simple sweep only.
   `-T`-deterministic (internal reclimb reuses `hillclimb` with gainfix off — no recursion). See
   `PERFORMANCE.md` §4.11.

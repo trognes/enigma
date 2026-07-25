@@ -107,13 +107,15 @@ for every improvement — each rotor setting that beats the best so far, and,
 with `-c`, each intermediate plugboard improvement inside a climb, so you can
 watch the board being built up plug by plug. The lines are fixed-width columns
 under a `Score W R G S Text` header — score, reflector+wheels, ring, start,
-plugboard and the first 15 characters of the decoded text:
+plugboard and the first characters of the decoded text (19 on a 3-wheel
+machine, 16 on the wider M4 key, so the line always fits 80 columns):
 
 ```
-  Score W     R    G    S                                      Text
--5.5715 B241  AAA  QEW  AB EF GH IJ                            PHEQUODLASYKYII
--4.9559 B241  AAA  QEW  AB EF GH IJ KL                         PHEQUIDKASALYSI
--4.3598 B241  AAA  QEW  AB CD EF GH IJ KL                      THEQUICKANALYSI
+ -7.0190 B241 AAA QEW AB IJ                                  PGFQUODLASYKYITSOEK
+ -6.5572 B241 AAA QEW AB EF IJ                               PGEQUODLASYKYITSOFK
+ -5.5984 B241 AAA QEW AB EF GH IJ                            PHEQUODLASYKYIISOFK
+ -4.8456 B241 AAA QEW AB EF GH IJ KL                         PHEQUIDKASALYSISOFL
+ -4.3335 B241 AAA QEW AB CD EF GH IJ KL                      THEQUICKANALYSISOFL
 ```
 
 ## Options
@@ -168,8 +170,7 @@ for `-q`/`-a` (scoring an English message with `-l german` typically fails). Not
 | Option | Meaning |
 | --- | --- |
 | `-c` | Hill-climb the plugboard for each candidate key |
-| `-I` | First-improvement climb: ~2.8× cheaper per climb, so **pair with more `-R`** for a net matched-compute recovery win (needs `-c`; off by default) |
-| `-J` | Like `-I` but with **dynamic** best-first move ordering (implies `-I`); a further matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
+| `-J` | First-improvement climb with **dynamic** best-first move ordering: ~2.8× cheaper per climb, so **pair with more `-R`**; a matched-compute win on the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by default) |
 | `-M` | Make the plug cap a strict **descent target**: at/over the cap only merge/remove moves (no adds or reshuffles). A matched-compute win with a tight `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs `-c`; off by default) |
 | `--gainfix-best3` | **Recommended finisher**: runs a directed quadgram-gain repair (plus a deeper 3-plug-tangle escalation) once on the best board after all restarts. Near-free at its default, a small quality bump on top of `-R` (needs `-c`; off by default) |
 | `-R N` / `--restarts N` | Random restart attempts: `0` = one deterministic climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best `[0]` |
@@ -272,12 +273,12 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   with a full plugboard even a good `N` recovers only around half of the hardest
   keys.
 
-- **`-I` — first-improvement climb.** Each plugboard climb is ~2.8× cheaper (it applies
-  the first improving move and sweeps circularly, instead of full-scanning for the single
-  best). A single `-I` climb recovers a bit *worse* than the default, so `-I` only pays
-  off when you **spend the saved time on more restarts**: pair it with a larger `-R` and,
-  at equal compute, it recovers noticeably more of a short message (measured +8 percentage
-  points of exact recovery, and up to +20 on messages with fewer plugs). Leave it off for a
+- **`-J` — first-improvement climb with best-first move order.** Each plugboard climb is
+  ~2.8× cheaper (it applies the first improving move and sweeps circularly, instead of
+  full-scanning for the single best), and the move order is rebuilt per restart from the
+  starting board. A single `-J` climb recovers a bit *worse* than the default, so it only
+  pays off when you **spend the saved time on more restarts**: pair it with a larger `-R`
+  and, at equal compute, it recovers noticeably more of a short message. Leave it off for a
   single climb (`-R 0`).
 
 The recipes below use quadgrams (`--score iq`/`i4q10`) to illustrate the schedule and
@@ -290,8 +291,8 @@ A good general recipe for a hard (short) message with a known rotor key:
 ```sh
 ./enigma -c -R 20 --score iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 
-# faster climbs → more restarts for the same time: add -I and raise -R
-./enigma -c -I -R 55 --score iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
+# faster climbs → more restarts for the same time: add -J and raise -R
+./enigma -c -J -R 55 --score iq -l english -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 **Cap the plug count in the schedule.** A real Wehrmacht board has ~10 plugs, so
