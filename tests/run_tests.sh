@@ -367,6 +367,15 @@ check "thread count 0 rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 257 >/dev/null 2>&1
 check "thread count 257 rejected (exit code)" "$?" "1"
 
+# -J and --infl-order IMPLY -I internally, so the "needs -c" error must name the option
+# the user actually passed, not always blame -I.
+check "climb-strategy without -c: -J names -J" \
+  "$(printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -J 2>&1 >/dev/null | grep -c -- '(-J)')" "1"
+check "climb-strategy without -c: --infl-order names itself" \
+  "$(printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA --infl-order 2>&1 >/dev/null | grep -c -- '(--infl-order)')" "1"
+check "climb-strategy without -c: -I names -I" \
+  "$(printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -I 2>&1 >/dev/null | grep -c -- '(-I)')" "1"
+
 # Plugboard hill-climb random restarts (-R): the per-key RNG is seeded from the
 # flat key index, so a restarting search must still be independent of -T. Recover
 # a plugboard with a wildcard start (several parallel keys) using -c -R 8.

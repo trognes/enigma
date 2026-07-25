@@ -5152,9 +5152,14 @@ int main(int argc, char * * argv)
   if ((opt_anneal > 0) && (! opt_hillclimb))
     fatal("Simulated annealing (-A) needs the plugboard hill-climb (-c)");
 
-  /* -I is a hill-climb strategy, so it needs -c. */
+  /* -I is a hill-climb strategy, so it needs -c. -J and --infl-order imply it, so name
+     the option the user actually passed rather than always blaming -I. */
   if (opt_firstimprove && (! opt_hillclimb))
-    fatal("First-improvement (-I) needs the plugboard hill-climb (-c)");
+    fatal(opt_dynorder
+          ? "Dynamic move order (-J) needs the plugboard hill-climb (-c)"
+          : opt_inflorder
+            ? "Influence move order (--infl-order) needs the plugboard hill-climb (-c)"
+            : "First-improvement (-I) needs the plugboard hill-climb (-c)");
 
   /* --infl-order and -J are two different move orders for the first-improvement climb;
      asking for both is ambiguous. */
