@@ -58,6 +58,13 @@ TSV = os.environ.get("TSV", "")
 # ENIGMA_SA_STAGES build flag that makes -A honour the whole schedule.
 SA_SCHED = os.environ.get("SA_SCHED", "a10")
 SA_STAGES = os.environ.get("SA_STAGES", "0") == "1"
+# CORPUS selects the plaintext substrate and the scoring language:
+#   "wehrmacht" (default) -- the 69 authentic telegraphic decrypts in eval/
+#   "english" / "german"  -- the PROSE corpora tests/crack_quality.py samples,
+#                            read from that file so the two benchmarks agree.
+# Prose is the control the shipped SA pre-pass was originally tuned on.
+CORPUS = os.environ.get("CORPUS", "wehrmacht")
+LANG = "wehrmacht" if CORPUS == "wehrmacht" else CORPUS
 
 KEY = ["-u", "B", "-w", "241", "-r", "AAA", "-g", "QEW"]
 SCORED = re.compile(r"scored (\d+) plugboard")
@@ -69,6 +76,22 @@ ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # degenerating into a greedy climb wearing an -A flag (which is what an earlier
 # naive calibrator did: it drove A to 1 and the result then "beat" real SA).
 A_MIN = 2000
+
+
+def prose_corpus(name):
+    """Lift CORPORA[name] out of tests/crack_quality.py without importing it
+    (module-level env reads there would otherwise leak into this run)."""
+    import ast
+    src = open(os.path.join(ROOT, "tests", "crack_quality.py")).read()
+    for node in ast.walk(ast.parse(src)):
+        if (isinstance(node, ast.Assign) and node.targets
+                and getattr(node.targets[0], "id", "") == "CORPORA"):
+            table = ast.literal_eval(node.value)
+            if name not in table:
+                raise SystemExit("no prose corpus %r (have %s)"
+                                 % (name, ", ".join(sorted(table))))
+            return table[name]
+    raise SystemExit("CORPORA not found in tests/crack_quality.py")
 
 
 def corpus():
@@ -86,7 +109,7 @@ def corpus():
     return "".join(p for p in out if len(p) >= 40)
 
 
-POOL = corpus()
+POOL = corpus() if CORPUS == "wehrmacht" else prose_corpus(CORPUS)
 
 
 def make_trials(n, length):
@@ -111,7 +134,7 @@ def run_one(args, ct, seed, sa_stages=False):
         env["ENIGMA_SA_STAGES"] = "1"
     else:
         env.pop("ENIGMA_SA_STAGES", None)
-    r = subprocess.run([BIN] + args + ["-a", "-l", "wehrmacht", "-T", "1"] + KEY,
+    r = subprocess.run([BIN] + args + ["-a", "-l", LANG, "-T", "1"] + KEY,
                        input=ct, capture_output=True, text=True, env=env)
     m = SCORED.search(r.stderr)
     return r.stdout.strip(), (int(m.group(1)) if m else 0)
@@ -273,9 +296,9 @@ G_SCHED, G_KICK, SA_R = "m4a10", 10, 12
 
 def stage2():
     print("wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)")
-    print("corpus %d letters | pairs=%d | trials=%d | budget=%dk score_iter"
-          " | seedfam=%d | jobs=%d" % (len(POOL), PAIRS, TRIALS,
-                                       BUDGET // 1000, SEEDFAM, JOBS))
+    print("corpus %s, %d letters (-l %s) | pairs=%d | trials=%d | budget=%dk"
+          " score_iter | seedfam=%d | jobs=%d" % (CORPUS, len(POOL), LANG, PAIRS,
+                                                  TRIALS, BUDGET // 1000, SEEDFAM, JOBS))
     print("arms: greedy -c -J --polish --score %s --random %d -R <cal>"
           "  |  SA -c --polish -A <cal> --score %s -R %d%s"
           % (G_SCHED, G_KICK, SA_SCHED, SA_R,
