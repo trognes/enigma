@@ -3935,7 +3935,7 @@ void alltoupper(char * text)
    exit 1. */
 void version(FILE * out)
 {
-  fprintf(out, "Enigma cipher tool version 1.1.0\n");
+  fprintf(out, "Enigma cipher tool version 2.0.0\n");
   fprintf(out, "Copyright (C) 2017-2026 Torbjørn Rognes\n");
   fprintf(out, "\n");
 }
@@ -3987,7 +3987,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "wehrmacht (telegraphic military German -- X as");
   fprintf(out, "  %-24s %s\n", "", "word separator, Q for ch, spelled-out numbers;");
   fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German);");
-  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q (no default); not for -i");
+  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q/-a (no default); not -i");
   fprintf(out, "  %-24s %s\n", "-i, --ic",
           "Index of coincidence (IC); needs no -l [default]");
   fprintf(out, "  %-24s %s\n", "-m, --mono", "Monogram statistics for the plaintext score");
@@ -4224,7 +4224,7 @@ int main(int argc, char * * argv)
   opt_ringstellung = 0;
   opt_grundstellung = 0;
   opt_steckerbrett = "";
-  opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q) */
+  opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q/-a) */
   opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "ngrams" */
   opt_plaintext = 0;
   opt_maxwheel = 5;
