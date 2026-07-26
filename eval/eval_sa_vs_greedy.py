@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 #
 # Greedy restart climb vs simulated annealing on SHORT WEHRMACHT messages,
-# at matched compute. Stage 1 of the two-stage design: tune each arm's own
-# free parameters separately, so the Stage-2 head-to-head compares each
-# algorithm in its best variant rather than in its prose-tuned default.
+# at matched compute.
+#
+#   STAGE=1  per-arm tuning at one length: sweep each arm's own free
+#            parameters, so stage 2 compares each algorithm in its best
+#            variant rather than in its prose-tuned default.
+#   STAGE=2  head-to-head across a length grid, paired, with a confidence
+#            interval on the paired difference.
 #
 # Why a separate harness from tests/crack_quality.py: that one samples PROSE
 # corpora, and `-l wehrmacht` is a register, not a language -- it only makes
 # sense on telegraphic plaintext. Here the plaintext is pooled from the 69
 # authentic decrypts in eval/, excerpted at random. The ciphertext is
 # re-enciphered under a random 10-plug board (the authentic ciphertext is
-# given up deliberately: the register lives in the plaintext, and one trial
-# per message is far too few to resolve a few-point difference).
+# given up deliberately: the register lives in the plaintext, and only 25
+# authentic messages are shorter than 70 letters -- far too few to resolve a
+# few-point difference).
 #
 # Scope: the plugboard-recovery tier -- the true rotor key is FIXED and given,
 # the plugboard is hidden and recovered. This isolates the two plugboard
@@ -21,34 +26,44 @@
 # ~0.2 s and dominated by n-gram table loading, so wall time measures startup.
 # score_iter's documented undercount (the --polish gain scan runs outside the
 # counted loop) does not bias this comparison, because every arm calls
-# --polish exactly once. Each config's knob is auto-calibrated to hit the
-# target budget, so variants that converge cheaply earn more restarts.
+# --polish exactly once.
 #
 # All configs see the SAME trial instances (excerpt, board, seed), so every
 # comparison is paired -- essential when per-trial outcomes are near-bimodal.
 #
 # Usage (from the repo root):
-#   python3 eval/eval_sa_vs_greedy.py
-# Env: LENGTH (90), TRIALS (300), BUDGET (200000), PAIRS (10), JOBS (nproc),
-#      SEEDFAM (1) -- change for an independent seed family.
+#   python3 eval/eval_sa_vs_greedy.py                 # stage 1
+#   STAGE=2 python3 eval/eval_sa_vs_greedy.py         # stage 2
+# Env: LENGTH (90, stage 1), LENGTHS ("50 60 70 80 90", stage 2), TRIALS (300),
+#      BUDGET (200000), PAIRS (10), JOBS (nproc), SEEDFAM (1), TSV (path).
 
-import os, re, random, subprocess, statistics as st
+import os, re, math, random, subprocess, statistics as st
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, os.pardir)
 BIN = os.path.join(ROOT, "enigma")
 
+STAGE = int(os.environ.get("STAGE", "1"))
 LENGTH = int(os.environ.get("LENGTH", "90"))
+LENGTHS = [int(x) for x in os.environ.get("LENGTHS", "50 60 70 80 90").split()]
 TRIALS = int(os.environ.get("TRIALS", "300"))
 BUDGET = int(os.environ.get("BUDGET", "200000"))
 PAIRS = int(os.environ.get("PAIRS", "10"))
 JOBS = int(os.environ.get("JOBS", str(os.cpu_count() or 4)))
 SEEDFAM = int(os.environ.get("SEEDFAM", "1"))
+TSV = os.environ.get("TSV", "")
 
 KEY = ["-u", "B", "-w", "241", "-r", "AAA", "-g", "QEW"]
 SCORED = re.compile(r"scored (\d+) plugboard")
 ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# Minimum move budget below which an "anneal" is starved into a plain quench --
+# i.e. no longer simulated annealing at all. Splits that cannot afford this many
+# moves per restart within BUDGET are reported infeasible rather than silently
+# degenerating into a greedy climb wearing an -A flag (which is what an earlier
+# naive calibrator did: it drove A to 1 and the result then "beat" real SA).
+A_MIN = 2000
 
 
 def corpus():
@@ -69,13 +84,13 @@ def corpus():
 POOL = corpus()
 
 
-def make_trials(n):
+def make_trials(n, length):
     """Fixed instance list, shared by every config so comparisons are paired."""
-    rng = random.Random(1000 * SEEDFAM + 7)
+    rng = random.Random(1000 * SEEDFAM + 7 + length)
     ts = []
-    for i in range(n):
-        off = rng.randrange(0, len(POOL) - LENGTH)
-        pt = POOL[off:off + LENGTH]
+    for _ in range(n):
+        off = rng.randrange(0, len(POOL) - length)
+        pt = POOL[off:off + length]
         letters = list(ALPHA)
         rng.shuffle(letters)
         board = " ".join(letters[2 * j] + letters[2 * j + 1] for j in range(PAIRS))
@@ -83,9 +98,6 @@ def make_trials(n):
                             capture_output=True, text=True).stdout.strip()
         ts.append((pt, ct, rng.randrange(1, 2**31)))
     return ts
-
-
-TRIALSET = make_trials(TRIALS)
 
 
 def run_one(args, ct, seed):
@@ -96,69 +108,26 @@ def run_one(args, ct, seed):
     return r.stdout.strip(), (int(m.group(1)) if m else 0)
 
 
-def evaluate(args, trials):
-    """Return (mean %-correct, exact%, mean score_iter) over the trial set."""
+def evaluate_trials(args, trials):
+    """Per-trial (%-correct, score_iter) -- retained so paired differences get
+    a real confidence interval rather than a comparison of two bare means."""
     def one(t):
         pt, ct, seed = t
         out, si = run_one(args, ct, seed)
-        pct = 100.0 * sum(a == b for a, b in zip(pt, out)) / len(pt)
-        return pct, si
+        return 100.0 * sum(a == b for a, b in zip(pt, out)) / len(pt), si
     with ThreadPoolExecutor(max_workers=JOBS) as ex:
-        res = list(ex.map(one, trials))
+        return list(ex.map(one, trials))
+
+
+def summarise(res):
     pcts = [p for p, _ in res]
     return (st.mean(pcts),
             100.0 * sum(1 for p in pcts if p > 99.99) / len(pcts),
             st.mean([s for _, s in res]))
 
 
-def calibrate(build, knob0, pilot=12):
-    """Scale the cost knob so mean score_iter ~= BUDGET (cost is ~linear in it)."""
-    sub = TRIALSET[:pilot]
-    knob = knob0
-    for _ in range(3):
-        _, _, si = evaluate(build(knob), sub)
-        if si <= 0:
-            break
-        k = max(1, round(knob * BUDGET / si))
-        if k == knob:
-            break
-        knob = k
-    return knob
-
-
-# Minimum move budget below which an "anneal" is starved into a plain quench --
-# i.e. no longer simulated annealing at all. Splits that cannot afford this many
-# moves per restart within BUDGET are reported infeasible rather than silently
-# degenerating into a greedy climb wearing an -A flag (which is what an earlier
-# naive calibrator did: it drove A to 1 and the result then "beat" real SA).
-A_MIN = 2000
-
-
-def sa_depth(split_r, pilot=12):
-    """Depth A for this restart count at the target budget; None if infeasible.
-
-    Purely measurement-driven, climbing from A_MIN. An analytic two-point cost
-    fit was tried and discarded: SA does not always consume its full move
-    budget, which flattens the fitted slope and inflates the intercept, and the
-    bad seed then rejected splits (e.g. R=12) that are in fact affordable --
-    including the shipped `-A 12000 -R 12` recipe. Feasibility is therefore
-    decided by measurement: a split is infeasible only when reaching the budget
-    would require starving the anneal below A_MIN."""
-    sub = TRIALSET[:pilot]
-    a = A_MIN
-    for _ in range(6):
-        _, _, si = evaluate(sa(split_r)(a), sub)
-        if si <= 0:
-            return None
-        if abs(si - BUDGET) < 0.03 * BUDGET:
-            return a
-        nxt = int(a * BUDGET / si)
-        if nxt < A_MIN:            # cannot fit a real anneal in this many restarts
-            return None
-        if nxt == a:
-            return a
-        a = nxt
-    return a
+def evaluate(args, trials):
+    return summarise(evaluate_trials(args, trials))
 
 
 GREEDY_BASE = ["-c", "-J", "--polish"]
@@ -175,7 +144,49 @@ def sa(split_r, polish=True):
                               "-R", str(split_r)])
 
 
-def report(title, rows):  # noqa
+def calibrate(build, knob0, trials, pilot=12):
+    """Scale the cost knob so mean score_iter ~= BUDGET (cost ~linear in it)."""
+    sub = trials[:pilot]
+    knob = knob0
+    for _ in range(4):
+        _, _, si = evaluate(build(knob), sub)
+        if si <= 0:
+            break
+        k = max(1, round(knob * BUDGET / si))
+        if k == knob:
+            break
+        knob = k
+    return knob
+
+
+def sa_depth(split_r, trials, pilot=12):
+    """Depth A for this restart count at the target budget; None if infeasible.
+
+    Purely measurement-driven, climbing from A_MIN. An analytic two-point cost
+    fit was tried and discarded: SA does not always consume its full move
+    budget, which flattens the fitted slope and inflates the intercept, and the
+    bad seed then rejected splits (e.g. R=12) that are in fact affordable --
+    including the shipped `-A 12000 -R 12` recipe. Feasibility is therefore
+    decided by measurement: a split is infeasible only when reaching the budget
+    would require starving the anneal below A_MIN."""
+    sub = trials[:pilot]
+    a = A_MIN
+    for _ in range(6):
+        _, _, si = evaluate(sa(split_r)(a), sub)
+        if si <= 0:
+            return None
+        if abs(si - BUDGET) < 0.03 * BUDGET:
+            return a
+        nxt = int(a * BUDGET / si)
+        if nxt < A_MIN:            # cannot fit a real anneal in this many restarts
+            return None
+        if nxt == a:
+            return a
+        a = nxt
+    return a
+
+
+def report(title, rows):
     print("\n=== %s ===" % title)
     print("%-34s %6s %8s %8s %10s" % ("config", "knob", "mean%", "exact%", "score_it"))
     for name, knob, mean, ex, si in rows:
@@ -185,13 +196,13 @@ def report(title, rows):  # noqa
             print("%-34s %6d %8.1f %8.1f %10.0f" % (name, knob, mean, ex, si))
 
 
-def main():
+def stage1():
+    trials = make_trials(TRIALS, LENGTH)
     print("wehrmacht SA-vs-greedy, STAGE 1 (per-arm tuning)")
     print("corpus %d letters | L=%d | pairs=%d | trials=%d | budget=%dk score_iter"
           " | seedfam=%d | jobs=%d"
           % (len(POOL), LENGTH, PAIRS, TRIALS, BUDGET // 1000, SEEDFAM, JOBS))
 
-    # --- arm A: greedy. Free knobs are the schedule and the kick; -R is the budget.
     greedy_cfgs = [
         ("m4a10  kick10  (recommended)", "m4a10", 10),
         ("m4a8   kick10", "m4a8", 10),
@@ -204,37 +215,33 @@ def main():
     rows = []
     for name, sched, kick in greedy_cfgs:
         b = greedy(sched, kick)
-        R = calibrate(b, 150)
-        mean, ex, si = evaluate(b(R), TRIALSET)
+        R = calibrate(b, 150, trials)
+        mean, ex, si = evaluate(b(R), trials)
         rows.append((name, R, mean, ex, si))
         print("  done: %-34s R=%-5d mean %.1f" % (name, R, mean))
     report("ARM A -- greedy (-c -J --polish), knob = -R", rows)
     best_greedy = max(rows, key=lambda r: r[2])
 
-    # --- arm B: SA. The depth/restart split is a real free parameter at fixed
-    # budget, and it is bounded: each restart costs a fixed pre-pass + quench
-    # regardless of depth, so beyond some R the budget cannot buy a real anneal.
     rows2 = []
     for r in (1, 2, 3, 6, 12, 24, 48):
-        A = sa_depth(r)
+        A = sa_depth(r, trials)
         if A is None:
             rows2.append(("R=%-3d  INFEASIBLE (<%d moves/restart)" % (r, A_MIN),
                           0, float("nan"), float("nan"), float("nan")))
             print("  skip: R=%-3d infeasible at this budget" % r)
             continue
-        mean, ex, si = evaluate(sa(r)(A), TRIALSET)
+        mean, ex, si = evaluate(sa(r)(A), trials)
         rows2.append(("A=%-6d R=%-3d --polish" % (A, r), A, mean, ex, si))
         print("  done: A=%-6d R=%-3d mean %.1f" % (A, r, mean))
     report("ARM B -- simulated annealing (-A), knob = -A depth", rows2)
-    feasible = [r for r in rows2 if r[2] == r[2]]   # drop NaN rows
+    feasible = [r for r in rows2 if r[2] == r[2]]
     best_sa = max(feasible, key=lambda r: r[2])
 
-    # --- control: does SA need the finisher? (isolates finisher from algorithm)
     r_best = int(re.search(r"R=(\d+)", best_sa[0]).group(1))
-    A = best_sa[1]
-    mean, ex, si = evaluate(sa(r_best, polish=False)(A), TRIALSET)
+    mean, ex, si = evaluate(sa(r_best, polish=False)(best_sa[1]), trials)
     report("CONTROL -- best SA split without --polish",
-           [("A=%-6d R=%-3d no polish" % (A, r_best), A, mean, ex, si)])
+           [("A=%-6d R=%-3d no polish" % (best_sa[1], r_best),
+             best_sa[1], mean, ex, si)])
 
     print("\n--- stage 1 winners (carry into stage 2) ---")
     print("  greedy: %s  (R=%d)  mean %.1f  exact %.1f"
@@ -242,9 +249,66 @@ def main():
              best_greedy[2], best_greedy[3]))
     print("  SA:     %s  mean %.1f  exact %.1f"
           % (best_sa[0].strip(), best_sa[2], best_sa[3]))
-    print("  head-to-head at this budget: SA - greedy = %+.1f pp mean, %+.1f pp exact"
+    print("  head-to-head: SA - greedy = %+.1f pp mean, %+.1f pp exact"
           % (best_sa[2] - best_greedy[2], best_sa[3] - best_greedy[3]))
 
 
+# Stage-2 arms. Both are the SHIPPED defaults, not the per-family stage-1
+# winners: stage 1 showed greedy's top three reorder between seed families and
+# SA's split is flat across R=2..24, so selecting a "winner" from one family
+# would be fitting noise. SA's best split reproduced the shipped -A .. -R 12
+# anyway. Both arms get --polish (it is not blocked with -A).
+G_SCHED, G_KICK, SA_R = "m4a10", 10, 12
+
+
+def stage2():
+    print("wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)")
+    print("corpus %d letters | pairs=%d | trials=%d | budget=%dk score_iter"
+          " | seedfam=%d | jobs=%d" % (len(POOL), PAIRS, TRIALS,
+                                       BUDGET // 1000, SEEDFAM, JOBS))
+    print("arms: greedy -c -J --polish --score %s --random %d -R <cal>"
+          "  |  SA -c --polish -A <cal> --score a10 -R %d"
+          % (G_SCHED, G_KICK, SA_R))
+    print("\n%4s %8s %7s %7s | %7s %7s | %-24s %s"
+          % ("L", "knobs", "g.mean", "g.exct", "sa.mean", "sa.exct",
+             "paired SA-greedy (95% CI)", "verdict"))
+
+    tsv = open(TSV, "w") if TSV else None
+    if tsv:
+        tsv.write("length\ttrial\tgreedy_pct\tsa_pct\tdiff\n")
+
+    for L in LENGTHS:
+        trials = make_trials(TRIALS, L)
+        gb = greedy(G_SCHED, G_KICK)
+        R = calibrate(gb, 150, trials)
+        A = sa_depth(SA_R, trials)
+        if A is None:
+            print("%4d  SA infeasible at this budget" % L)
+            continue
+        g = evaluate_trials(gb(R), trials)
+        s = evaluate_trials(sa(SA_R)(A), trials)
+
+        d = [si[0] - gi[0] for gi, si in zip(g, s)]
+        md = st.mean(d)
+        se = st.stdev(d) / math.sqrt(len(d)) if len(d) > 1 else 0.0
+        lo, hi = md - 1.96 * se, md + 1.96 * se
+        gm, gx, gsi = summarise(g)
+        sm, sx, ssi = summarise(s)
+        verdict = ("SA wins" if lo > 0 else
+                   "greedy wins" if hi < 0 else "tie")
+        print("%4d %8s %7.1f %7.1f | %7.1f %7.1f | %+6.1f pp [%+6.1f,%+6.1f]  %s"
+              % (L, "R%d/A%dk" % (R, A // 1000), gm, gx, sm, sx, md, lo, hi, verdict))
+        print("%4s %8s  (compute check: greedy %.0fk vs SA %.0fk score_iter)"
+              % ("", "", gsi / 1000.0, ssi / 1000.0))
+        if tsv:
+            for i, (gi, si) in enumerate(zip(g, s)):
+                tsv.write("%d\t%d\t%.4f\t%.4f\t%.4f\n"
+                          % (L, i, gi[0], si[0], si[0] - gi[0]))
+            tsv.flush()
+    if tsv:
+        tsv.close()
+        print("\nper-trial data: %s" % TSV)
+
+
 if __name__ == "__main__":
-    main()
+    (stage2 if STAGE == 2 else stage1)()
