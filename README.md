@@ -207,15 +207,27 @@ the English tables.
   (needs `-c`; `0` = no kick, a control) `[10]`
 - **`-S sched` / `--score sched`** — Staged climb schedule — model stages
   only (see below)
+- **`--cascade[=GATE]`** — Per-convergence quadgram-gain directed-repair
+  cascade, gated by a near-solution score threshold (needs `-c`;
+  quad-only) `[off]`. **Not recommended** — `--polish` supersedes it on a
+  plain sweep; kept because it's the only cascade variant that composes
+  with `-F`/`--exhaust`
+- **`--no-repair`** — Disable the always-on 2-plug re-pair barrier cross
+  (needs `-c`) `[off]`. **Not recommended** — an ablation/measurement
+  flag, not a quality lever
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters,
-  try every combination, keep the best climb (exploration tool; needs
-  `-c`; parallel over the first forced pair, so `-T` helps) `[off]`
+  try every combination, keep the best climb (needs `-c`; parallel over
+  the first forced pair, so `-T` helps) `[off]`. **Not recommended** — a
+  measured-dominated exploration tool; a higher `-R` beats it at equal
+  compute
 - **`-A N` / `--anneal N`** — Recover the plugboard by simulated annealing
   (move budget `N`) instead of the greedy climb (needs `-c`; `0` = off)
   `[0]`
 - **`-F N` / `-F N%` / `--prefilter`** — Key pre-filter: full climb only
   the top `N` keys, or top `N%` of the keyspace (needs `-c`; `0` = off)
-  `[0]`
+  `[0]`. **Not recommended** for short messages — a throughput tool for
+  long (~300+ letter) traffic, unreliable on the short/hard end (see
+  "Cracking strategy" below)
 - **`-e N` / `--seed N`** — Random seed for restarts / annealing (also
   `$ENIGMA_SEED`); default is a fresh random seed each run
 
