@@ -53,6 +53,11 @@ PAIRS = int(os.environ.get("PAIRS", "10"))
 JOBS = int(os.environ.get("JOBS", str(os.cpu_count() or 4)))
 SEEDFAM = int(os.environ.get("SEEDFAM", "1"))
 TSV = os.environ.get("TSV", "")
+# SA pre-pass probe (PERFORMANCE.md 3.11): by default -A ignores the leading
+# --score stages and always seeds with IC. SA_SCHED/SA_STAGES let stage 2 A/B the
+# ENIGMA_SA_STAGES build flag that makes -A honour the whole schedule.
+SA_SCHED = os.environ.get("SA_SCHED", "a10")
+SA_STAGES = os.environ.get("SA_STAGES", "0") == "1"
 
 KEY = ["-u", "B", "-w", "241", "-r", "AAA", "-g", "QEW"]
 SCORED = re.compile(r"scored (\d+) plugboard")
@@ -100,20 +105,24 @@ def make_trials(n, length):
     return ts
 
 
-def run_one(args, ct, seed):
+def run_one(args, ct, seed, sa_stages=False):
     env = dict(os.environ, ENIGMA_SEED=str(seed))
+    if sa_stages:
+        env["ENIGMA_SA_STAGES"] = "1"
+    else:
+        env.pop("ENIGMA_SA_STAGES", None)
     r = subprocess.run([BIN] + args + ["-a", "-l", "wehrmacht", "-T", "1"] + KEY,
                        input=ct, capture_output=True, text=True, env=env)
     m = SCORED.search(r.stderr)
     return r.stdout.strip(), (int(m.group(1)) if m else 0)
 
 
-def evaluate_trials(args, trials):
+def evaluate_trials(args, trials, sa_stages=False):
     """Per-trial (%-correct, score_iter) -- retained so paired differences get
     a real confidence interval rather than a comparison of two bare means."""
     def one(t):
         pt, ct, seed = t
-        out, si = run_one(args, ct, seed)
+        out, si = run_one(args, ct, seed, sa_stages)
         return 100.0 * sum(a == b for a, b in zip(pt, out)) / len(pt), si
     with ThreadPoolExecutor(max_workers=JOBS) as ex:
         return list(ex.map(one, trials))
@@ -138,9 +147,10 @@ def greedy(sched, kick):
                                      "-R", str(R)])
 
 
-def sa(split_r, polish=True):
+def sa(split_r, polish=True, sched=None):
     base = ["-c"] + (["--polish"] if polish else [])
-    return lambda A: (base + ["-A", str(A), "--score", "a10",
+    sc = sched if sched else SA_SCHED
+    return lambda A: (base + ["-A", str(A), "--score", sc,
                               "-R", str(split_r)])
 
 
@@ -172,7 +182,7 @@ def sa_depth(split_r, trials, pilot=12):
     sub = trials[:pilot]
     a = A_MIN
     for _ in range(6):
-        _, _, si = evaluate(sa(split_r)(a), sub)
+        _, _, si = summarise(evaluate_trials(sa(split_r)(a), sub, SA_STAGES))
         if si <= 0:
             return None
         if abs(si - BUDGET) < 0.03 * BUDGET:
@@ -267,8 +277,9 @@ def stage2():
           " | seedfam=%d | jobs=%d" % (len(POOL), PAIRS, TRIALS,
                                        BUDGET // 1000, SEEDFAM, JOBS))
     print("arms: greedy -c -J --polish --score %s --random %d -R <cal>"
-          "  |  SA -c --polish -A <cal> --score a10 -R %d"
-          % (G_SCHED, G_KICK, SA_R))
+          "  |  SA -c --polish -A <cal> --score %s -R %d%s"
+          % (G_SCHED, G_KICK, SA_SCHED, SA_R,
+             "  [ENIGMA_SA_STAGES=1]" if SA_STAGES else ""))
     print("\n%4s %8s %7s %7s | %7s %7s | %-24s %s"
           % ("L", "knobs", "g.mean", "g.exct", "sa.mean", "sa.exct",
              "paired SA-greedy (95% CI)", "verdict"))
@@ -286,7 +297,7 @@ def stage2():
             print("%4d  SA infeasible at this budget" % L)
             continue
         g = evaluate_trials(gb(R), trials)
-        s = evaluate_trials(sa(SA_R)(A), trials)
+        s = evaluate_trials(sa(SA_R)(A), trials, SA_STAGES)
 
         d = [si[0] - gi[0] for gi, si in zip(g, s)]
         md = st.mean(d)

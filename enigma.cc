@@ -2683,6 +2683,17 @@ static inline void apply_toggle(machine & m, int a, int b, int cap)
    board seen (incumbent), then finishes with a greedy quench so the result is at least
    a local optimum. Leaves m at the best board (m.plaintext set by the quench's decode).
    All randomness comes from the per-key *rng stream, so it is -T-independent. */
+/* ENIGMA_SA_STAGES probe: let -A run the leading --score stages as its pre-pass
+   instead of the built-in IC one. Read once (the getenv is not on any hot path, but
+   the answer is constant for a run and the SA path is per-restart). Off by default,
+   so the shipped SA trajectory stays byte-identical. See PERFORMANCE.md 3.11. */
+static bool sa_staged_prepass()
+{
+  static const bool on = (getenv("ENIGMA_SA_STAGES") != nullptr);
+  return on;
+}
+
+
 static double anneal_once(machine & m, uint64_t * rng)
 {
   /* The whole trajectory honours the -S target-stage plug cap (uncapped = 13 by
@@ -2699,7 +2710,22 @@ static double anneal_once(machine & m, uint64_t * rng)
      plug or two set, so annealing it from an empty board wanders; IC is far smoother
      and places the first plugs well (the same insight as the -S iq staged climb). */
   int target_model = m.scoring;
-  if (target_model != SCORE_IC)
+  if (sa_staged_prepass() && (opt_nstages > 1))
+    {
+      /* ENIGMA_SA_STAGES probe (PERFORMANCE.md 3.11): honour the WHOLE --score
+         schedule, not just its last stage's cap. By default SA ignores the leading
+         stages and always seeds with IC, so `-A --score m4a10` is byte-identical to
+         `-A --score a10` -- SA cannot use the mono pre-pass that is worth ~3-4pp over
+         IC to the greedy climb, which is part of why greedy beats SA outright on
+         telegraphic traffic. This runs each leading stage at its own cap instead. */
+      for (int i = 0; i < opt_nstages - 1; i++)
+        {
+          m.scoring = opt_stages[i].model;
+          hillclimb<false>(m, opt_stages[i].cap);
+        }
+      m.scoring = target_model;
+    }
+  else if (target_model != SCORE_IC)
     {
       m.scoring = SCORE_IC;
       hillclimb<false>(m, cap);
