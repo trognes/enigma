@@ -557,11 +557,36 @@ L50 −5.7→−3.6, L60 −8.5→−6.6, L70 −8.4→−7.8, L80 −14.2→−
 was the missing pre-pass; the remaining ~8pp is the search itself. Greedy still wins
 every length in L50–90.
 
-*Promotion decision deferred.* Honouring the whole schedule is arguably what a user
-typing `-A --score m4a10` already expects (today the leading stages are silently
-ignored), and it is a measured win — but it changes behaviour for existing multi-stage
-`-A` users and has only been measured on **wehrmacht at one budget**. Measure on prose
-before making it the default; the current IC pre-pass was itself tuned on prose.
+**Prose control — ❌ DO NOT PROMOTE TO DEFAULT. The lever is register-dependent.**
+The wehrmacht win alone was not enough to ship it: the IC pre-pass it replaces was
+tuned on prose, so prose is where a regression would appear. Re-run on the corpora
+`tests/crack_quality.py` samples (L50/70/90, 300 paired trials × 2 families each):
+
+| substrate | mono − IC pre-pass | n | verdict |
+|---|---:|---:|---|
+| wehrmacht (telegraphic) | **+2.3 pp** [+1.0, +3.6] | 3000 | helps |
+| english prose | **−2.6 pp** [−4.4, −0.7] | 1800 | **hurts** |
+| german prose | +0.1 pp [−1.5, +1.8] | 1800 | neutral |
+
+English is negative at all three lengths (−2.5/−2.9/−2.3) and the pooled CI excludes
+zero, so it is a real regression, not noise. The shape mirrors the tables themselves
+(§6.6: +20.9pp on real traffic, −10.2pp on prose) — what suits telegraphic orthography
+does not suit prose. So `ENIGMA_SA_STAGES` **stays an off-by-default probe**; making it
+the default would trade a 2.3pp telegraphic gain for a 2.6pp English loss.
+
+**And it has no operational value even where it wins.** The +2.3pp lifts SA from
+−10.4pp to roughly −8pp against greedy — it improves the *losing* arm without making it
+win at any length. A user on telegraphic traffic should run greedy, not SA with a mono
+pre-pass. The finding's worth is diagnostic: it confirms that the structural pre-pass
+handicap explains about a fifth of SA's deficit, and that the rest is genuinely the
+search. No CLI flag is warranted (cf. the option-surface cleanup in 2.0.0 — a knob that
+never produces the best answer is exactly the kind that was removed).
+
+*Prose caveat.* The prose corpora are ~477 letters against wehrmacht's 6473, so at L90
+only ~390 distinct offsets exist and 300 trials overlap heavily. Both arms see identical
+excerpts, so the paired comparison holds, but the prose CIs are optimistic relative to
+the wehrmacht ones. English prose at L90 is also near ceiling (93.1%), which compresses
+any effect there.
 
 **Tuning was a no-op — both shipped defaults are already right for this register.**
 A per-arm sweep (stage 1) found greedy's `m4a10`/kick-10 in the top group and SA's
@@ -2481,7 +2506,6 @@ open.) Full detail is in each section; this table is a scan-only index, not a su
 | 3.7 | Multi-seed IC basin-hopping | LOW–MEDIUM | cheaper cousin of §3.6 exhaustion; small M limits coverage |
 | 3.8 | Cross-entropy / EDA plug marginals | LOW | gated behind §3.1, which was built and rejected |
 | 3.9 | Adaptive restart budget / early-stop | LOW | throughput/allocation only, not a new capability |
-| 3.11 | Promote `ENIGMA_SA_STAGES` (mono pre-pass for `-A`) to default | MEDIUM | built and measured: +2.3pp for SA, but needs a prose A/B before it can be the default |
 | 4.1 | Guided (ILS-style) kick | MEDIUM | refines the already-tuned uniform `k=8` kick |
 | 4.2 | Informed single-plug seeding (GRASP) | LOW–MEDIUM | adjacent to what `-S iq` already does implicitly |
 | 4.3 | Evidence-restricted move set | MEDIUM | exact-prune half risk-free; soft half needs both-sides care |
@@ -2604,7 +2628,11 @@ per-restart best-first ordering** (opt-in; +2–6pp mean on the realistic ~10-pl
 at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in; at/over the
 `-S` cap only merge/remove moves; matched-compute win growing as true plugs fall below the
 cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
-Rejected (with reason): **static (fixed-across-restarts) informed move order** (greedy
+Rejected (with reason): **mono pre-pass for `-A`** (`ENIGMA_SA_STAGES`, §3.11 — built
+and measured on both substrates: +2.3pp on telegraphic but **−2.6pp on English prose**,
+register-dependent, and it improves the *losing* arm without making SA beat greedy at
+any length; kept as an off-by-default probe, no CLI flag);
+**static (fixed-across-restarts) informed move order** (greedy
 *and* diversity-collapsing — §7.2); **ciphertext/plaintext-influence move ordering**
 (`--infl-order`, §4.6 — ties `-J` at L40–55, a clean −4…−6pp loss from L60 up; *removed*
 from the CLI, not just deprioritized); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
