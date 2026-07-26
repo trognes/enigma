@@ -2364,6 +2364,39 @@ cache so no locking; the default path is byte-identical.
 
 ## 9. Prioritized shortlist and measurement plan
 
+### Open items at a glance
+
+Every idea below is genuinely open — audited against `enigma.cc`'s option surface and
+`eval/`'s scripts; none has a hidden shipped/measured verdict in its body text. (Two
+sections that looked open, §6.6 and §4.10/§4.11, turned out to already be shipped and
+have been corrected; §4.5/§4.6's climb-ordering sub-idea was found built/rejected as the
+now-removed `--infl-order` and is noted below, but its other two applications are still
+open.) Full detail is in each section; this table is a scan-only index, not a substitute.
+
+| § | Idea | Priority | One-line status |
+|---|---|---|---|
+| 3.3 | ILS with incumbent-walk acceptance | HIGH | top of "if you do three things" below; cheapest plausible win over `-R` |
+| 3.4 | Parallel tempering / replica exchange | MEDIUM | "a better SA," so inherits SA's ceiling as a peer of `-R` |
+| 3.5 | Tabu search over the climb | MEDIUM–LOW | survey consensus: comparable to SA/hill-climb, not superior |
+| 3.7 | Multi-seed IC basin-hopping | LOW–MEDIUM | cheaper cousin of §3.6 exhaustion; small M limits coverage |
+| 3.8 | Cross-entropy / EDA plug marginals | LOW | gated behind §3.1, which was built and rejected |
+| 3.9 | Adaptive restart budget / early-stop | LOW | throughput/allocation only, not a new capability |
+| 4.1 | Guided (ILS-style) kick | MEDIUM | refines the already-tuned uniform `k=8` kick |
+| 4.2 | Informed single-plug seeding (GRASP) | LOW–MEDIUM | adjacent to what `-S iq` already does implicitly |
+| 4.3 | Evidence-restricted move set | MEDIUM | exact-prune half risk-free; soft half needs both-sides care |
+| 4.4 | Surrogate-biased SA proposals | LOW–MEDIUM | risks collapsing the exploration that makes SA useful |
+| 4.5/4.6 | Influence-weighted `--exhaust`/kick | MEDIUM | climb-order variant tried & removed (`--infl-order`); exhaust/kick untested |
+| 5.1 | Crib-driven bombe closure deduction | HIGH (crib-only) | real deduction, unlike shipped `--crib-file`; needs a new harness |
+| 5.2 | Crib-drag soft seeding | MEDIUM (crib-only) | lighter cousin of 5.1; also needs the new harness |
+| 6.3 | Soft MDL / plug-count prior | LOW–MEDIUM | doc's own "weakest fit to the diagnosis" |
+| 6.4 | Weighted quad + λ·IC fitness | LOW–MEDIUM | `-S iq` staging likely already captures most of this |
+| 6.5 | Finer (uint16) score accumulation | LOW | conflicts with the shipped uint8 cache-residency win |
+| 7.3 | Amortize `-F` IC pre-pass into tier 2 | MEDIUM | confirmed: `finish_worker` still discards the tier-1 board |
+| 7.4 | Branch-and-bound early-exit | LOW | exact bound; distinct from §4.6's rejected approximate prune |
+| 7.5 | `quad8` row prefetch | LOW | may already be covered by out-of-order execution |
+| 7.6 | Finer `-F` work items (key,restart) | LOW | confirmed: `finish_worker` still one key at a time |
+| 7.7 | Quad table shrink/relayout | LOW | a priori judgment call, no empirical test — not really "open" |
+
 ### Planned test additions: `CRACKQUALITY_TESTS.md`
 
 The earlier top item here — *"build the full-crack tier that gates everything"* —
