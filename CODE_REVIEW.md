@@ -34,20 +34,25 @@ per-restart depth ~0.7/10, the truth assembled only in the union (~9/10). No
 truth-free signal selects that union (per-plug consensus ~1.1/10; §3.10, §6.16), so
 every *smart* search lever is blocked and **raw `-R` (via `-T`) is the reliable lever**.
 The shipped search levers — random restarts
-(`-R`), the staged schedule (`-S`), the key pre-filter (`-F`), and simulated
-annealing (`-A`), and **first-improvement `-I`** — stack, with `-R 10 -S iq` a strong
-baseline recipe and `-I -R <higher>` a measured throughput win on top of it. Remaining
+(`-R`), the staged schedule (`-S`), the key pre-filter (`-F`), simulated
+annealing (`-A`), and first-improvement climbing (reached only via **`-J`** now — the
+bare `-I` flag that used to expose it standalone was removed as a redundant CLI
+surface once `-J` superseded it; the climb mechanism itself lives on, set solely by
+`-J`) — stack, with `-R 10 -S iq` a strong baseline recipe and `-J -R <higher>` a
+measured throughput win on top of it. Remaining
 ideas, in rough order of expected payoff (all with **diminishing returns** — SA
 landed only as a *peer* of `-R -S iq`; 3-opt and **cross-restart consensus /
 plug fixation** were built and measured and rejected — consensus loses to a higher
 `-R` at equal compute and saturates as `-R` grows, `PERFORMANCE.md` §3.1). The
 first-order lever remains **raising `-R`** (it never plateaus through 256), so the
-best bets *buy more restarts*. The biggest such win shipped is **`-I` circular
-first-improvement** (`PERFORMANCE.md` §7.2): ~2.8× cheaper per climb, so at matched
-compute (paired with more `-R`) it recovers +8pp exact / +1–23pp mean at L40–60 — the
-first idea to beat the baseline at the ~50-char target. **`-J` adds dynamic per-restart
-best-first move ordering** on top of `-I` — a further matched-compute win (+2–6pp mean)
-on the realistic ~10-plug regime, regime-dependent so also opt-in (`PERFORMANCE.md` §7.2).
+best bets *buy more restarts*. The biggest such win shipped is **first-improvement
+climbing** (measured standalone as the now-removed `-I`, `PERFORMANCE.md` §7.2): ~2.8×
+cheaper per climb, so at matched compute (paired with more `-R`) it recovers +8pp exact
+/ +1–23pp mean at L40–60 — the first idea to beat the baseline at the ~50-char target.
+**`-J`, today's flag for this,** additionally applies dynamic per-restart best-first
+move ordering on top of that first-improvement base — a further matched-compute win
+(+2–6pp mean) on the realistic ~10-plug regime, regime-dependent so also opt-in
+(`PERFORMANCE.md` §7.2).
 Still nominally open on that axis: ILS with incumbent-walk acceptance (`PERFORMANCE.md`
 §3.3) — but a **long shot**, since the basin analysis (§6.16) finds converged boards
 *scattered*, not clustered near the truth, which is the structure ILS would need to
@@ -99,15 +104,31 @@ discrimination floor ~1% (SPLIT under `-a`) and a **flat** surface-smoothness sw
 the (unbuilt) full-crack tier or real operational traffic, not the plugboard-recovery
 benchmark — do not expect them to move it.
 
-- 🟢 **Crib / known-plaintext objective** (history scoring item 4) — score by
-  match to a suspected word/phrase instead of n-gram fitness. This is the most
-  genuinely *new capability* here, and it composes cleanly with the shipped `-s`
-  plug-freeze (known plugs + known crib). **Highest-value scoring item** — it attacks
-  from outside the statistical floor entirely (a crib is hard evidence, not a prior).
-- 🟢 **Domain-matched corpus** — tables built from telegraphic/period German
-  (X-for-space, spelled-out numbers) rather than generic prose would model real
-  Wehrmacht traffic better. Cheap to try (`-d` loads any `<lang>_<type>.txt`);
-  value expected mainly for real traffic (invisible to the prose-excerpt benchmark).
+- ✅/🟢 **Crib / known-plaintext objective — the scoring-rerank form SHIPPED and
+  was MEASURED DOWN; the structural form remains open.** The simple version — score
+  by match to a suspected word/phrase, additive with n-gram fitness — shipped as
+  `--crib-file`/`--crib-weight` (composes with `-s` as intended) and is net
+  **−0.1pp at weight 0.5, −1.7pp at 1.0** on the 69-message held-out set
+  (`cribs/README.md`, `eval/eval_crib.py`; kept as an off-by-default diagnostic, not
+  recommended). The reason it underperforms: once the plugboard climb converges on a
+  board, the residual misses are dominated by **wrong-basin** failures (the truth
+  isn't among the converged restarts), so a post-hoc re-ranker has nothing true left
+  to promote — false-positive re-ranking offsets its occasional genuine win. The
+  genuinely *new-capability* form is still 🟢 open and unbuilt: **crib-driven
+  menu/closure deduction** (`PERFORMANCE.md` §5.1) — hypothesize a plug, chain-deduce
+  forced plugs via the machine equation, reject contradictions (Turing/Welchman menu
+  logic) — which pins plugs *with certainty* before the climb even runs, rather than
+  re-ranking after it. §5.2 is a lighter soft-seeding cousin. Both need a new
+  crib-planting harness tier; neither is visible to `make crackquality` as written.
+- ✅ **Domain-matched corpus — SHIPPED as the `wehrmacht` scoring language.** Tables
+  built from telegraphic/period German (X-for-space, spelled-out numbers, Sullivan &
+  Weierud's 2005 Appendix C statistics), selected with `-l wehrmacht` (a first-class
+  language, not a `-d` directory override). Measured **+20.9pp mean %-correct** on
+  real 1941 Wehrmacht traffic vs the prose tables (69-message held-out set), and, as
+  expected, a **−10.2pp** domain mismatch on ordinary prose German — so it's a
+  *register*, not a general-German upgrade, and `-l german` stays correct for prose
+  and for the `make crackquality` benchmark. Details: `eval/MODERN_BREAKING_NOTES.md`
+  §6, `PERFORMANCE.md` §6.6.
 - ✅/❌ **Multi-order & smoothing — RESOLVED.** Log-linear interpolation shipped as `-a`
   (above). The rest of the family was **measured down**: linear (Jelinek-Mercer)
   interpolation loses (the conditional reframing it forces), and back-off / graded-floor
