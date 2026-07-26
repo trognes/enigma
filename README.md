@@ -439,12 +439,27 @@ crossover** — pick either, or run both:
            -u B -w 241 -r AAA -g QEW < cipher.txt
   ```
 
-Measured on 50–70-letter 10-plug messages at equal `score_iter`, **SA
-tends to win the very shortest / hardest lengths and greedy the slightly
-longer ones**, within a few points either way — so neither dominates.
-Scale `-R` up together for harder messages (and `-A` is the SA depth
-knob; keep it deep). Both compose with `-F`/`-T` when the rotor key is
-also unknown.
+Measured **on English prose**, 50–70-letter 10-plug messages at equal
+`score_iter`, **SA tends to win the very shortest / hardest lengths and
+greedy the slightly longer ones**, within a few points either way — so
+on prose neither dominates. Scale `-R` up together for harder messages
+(and `-A` is the SA depth knob; keep it deep). Both compose with
+`-F`/`-T` when the rotor key is also unknown.
+
+> **On telegraphic traffic (`-l wehrmacht`), that parity does not hold —
+> use greedy.** The peer framing above was measured on prose; re-measured
+> on authentic telegraphic plaintext it does not transfer. Over 3000
+> paired trials (L50–90, 10-plug boards, both solvers at the recipes
+> above and equal `score_iter`), greedy wins **every** length with a mean
+> advantage of **10.4 pp** letters correct — from **5.7 pp** at L50 to
+> **15.4 pp** at L90, every 95% CI excluding zero. The *direction* of the
+> prose result survives (SA closes the gap as messages get shorter, and
+> its per-trial win rate rises from 22% to 36%), but there is **no
+> crossover**: SA never reaches parity in this range. Part of the gap is
+> structural rather than algorithmic — `-A` uses only the *last* `--score`
+> stage's plug cap and seeds itself with a built-in IC pre-pass, so it
+> cannot use greedy's mono pre-pass, which is worth ~3–4 pp over IC. See
+> `eval/eval_sa_vs_greedy.py` and `PERFORMANCE.md` §3.11.
 
 ## Input, output and diagnostics
 

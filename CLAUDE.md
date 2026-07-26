@@ -316,8 +316,14 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   lost ~2×; reheating and chain-length sweeps didn't help). All randomness is from the
   per-key RNG stream (same `opt_seed + key_index` mix as `-R`), so `-A` is
   `-T`-independent. It composes with `-R` (each restart is an independent SA trajectory)
-  and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb, not a strict
-  win — see `archived/CODE_REVIEW_HISTORY.md` §9 item 5 and `archived/SIMULATED_ANNEALING.md` §15. **SA honours
+  and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb **on prose**,
+  not a strict win — see `archived/CODE_REVIEW_HISTORY.md` §9 item 5 and
+  `archived/SIMULATED_ANNEALING.md` §15. **That parity is register-dependent: on
+  telegraphic traffic (`-l wehrmacht`) greedy wins outright** — every length in L50–90,
+  −10.4pp mean over 3000 paired trials, no crossover (`PERFORMANCE.md` §3.11). Part of
+  that is structural: SA reads only the *last* `--score` stage's cap and seeds itself
+  with a built-in IC pre-pass, so it cannot use the mono pre-pass greedy benefits from.
+  **SA honours
   the `--score` target-stage plug cap** (`opt_stages[last].cap`): `-A N --score qK` caps the whole
   trajectory (IC pre-pass, the cap-aware `apply_toggle`, and the quench) at `K` pairs.
   When the true plug count is known and below 13, that prior is a *measured win on short
@@ -754,8 +760,9 @@ hill-climb sticking in local optima); the search levers shipped so far are rando
 restarts (`-R N`), the staged climb (`-S`), the **key pre-filter** (`-F N`, a
 cheap-IC-climb tier that shortlists keys so the full climb runs only on the top
 `N` — ~8–20× throughput, see `archived/CODE_REVIEW_HISTORY.md` §9 item 2), and **simulated annealing**
-(`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute —
-`archived/SIMULATED_ANNEALING.md` §15). The heavier metaheuristics once listed as open —
+(`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute **on
+prose** — `archived/SIMULATED_ANNEALING.md` §15 — but *beaten outright* on telegraphic
+traffic, `PERFORMANCE.md` §3.11). The heavier metaheuristics once listed as open —
 tabu and **GA** — have since been **measured down**: `--restart-tt` (PR #100) found restarts
 already almost never revisit a basin (near-total exact-board diversity at `--random 10`), so a
 tabu visited-set has nothing to forbid; and an oracle probe of the GA precondition

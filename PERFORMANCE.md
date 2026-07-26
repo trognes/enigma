@@ -486,6 +486,72 @@ the keyspace: adaptive vs uniform `-R`.
   approximations of "learn which plugs to propose" are the assignment seed (§8) and
   the EDA marginals (§3.8); prefer those.
 
+### 3.11 Greedy vs SA on **telegraphic** traffic — ✅ MEASURED: greedy wins outright, no crossover (`eval/eval_sa_vs_greedy.py`)
+
+**The prose "peers" result does not transfer to `-l wehrmacht`.** §3.2 and
+`archived/SIMULATED_ANNEALING.md` §15 establish SA as a *peer* of the greedy restart
+climb at equal compute, with the README adding a length-dependent crossover ("SA tends
+to win the very shortest/hardest lengths"). Both were measured on **English prose**.
+Re-measured on **authentic telegraphic plaintext**, greedy wins at every length tested.
+
+**Setup.** Plugboard-recovery tier (true rotor key fixed, plugboard hidden and
+recovered), 10-plug boards, matched at 200k `score_iter`, both arms at their shipped
+recipes *and* both given `--polish` (it is not blocked with `-A`). Plaintext is pooled
+from the 69 authentic decrypts in `eval/` (~6,470 letters) and excerpted at random —
+`make crackquality` samples *prose*, which is the wrong substrate for a register.
+300 paired trials per length per seed family, two independent families, **3000 paired
+trials**; per-trial values retained so the paired difference carries a CI.
+
+| L | mean SA − greedy | 95% CI | SA per-trial win rate |
+|---:|---:|---|---:|
+| 50 | **−5.7 pp** | [−7.9, −3.4] | 36.5% |
+| 60 | **−8.5 pp** | [−11.2, −5.9] | 32.2% |
+| 70 | **−8.4 pp** | [−11.6, −5.2] | 34.0% |
+| 80 | **−14.2 pp** | [−17.7, −10.7] | 26.8% |
+| 90 | **−15.4 pp** | [−19.0, −11.8] | 22.0% |
+| **all** | **−10.4 pp** | [−11.8, −9.1] | |
+
+**No crossover.** The prose result's *direction* survives — the gap shrinks steadily
+toward the short end and SA's win rate climbs 22% → 36.5% — but SA never reaches
+parity in L50–90, let alone overtakes. All ten cells (5 lengths × 2 families) favour
+greedy with the CI excluding zero.
+
+**Not compute, not the finisher.** Matching held within ~4% per cell (greedy 197–205k
+vs SA 194–200k); greedy's largest edge is +3.5%, and ~75% more restarts buys only
+~1–2pp, so that is worth ~0.1pp against 5–15pp gaps. The `--polish` control costs SA
+only ~1pp, so the finisher is not the mechanism either.
+
+**Part of the gap is structural, not algorithmic.** `-A` consumes only the *last*
+`--score` stage's plug cap and seeds itself with a **hardcoded IC pre-pass**, so it
+cannot use greedy's mono pre-pass — measured at +2.7/+3.9pp over an IC pre-pass and
+~+16pp over none. Comparing greedy's `i4a10` (IC-seeded) against SA narrows the gap
+from ~14pp to −12.2/−8.1pp. Greedy still wins, by less. **This is the actionable
+lever**: letting SA run the full staged schedule (a mono pre-pass before the anneal)
+is a concrete, untested change that would recover part of the difference.
+
+**Tuning was a no-op — both shipped defaults are already right for this register.**
+A per-arm sweep (stage 1) found greedy's `m4a10`/kick-10 in the top group and SA's
+best split reproducing the shipped `-A 12000 -R 12` (`A=11439 R=12`). Two negative
+results worth recording: greedy's top three configs **reorder between seed families**
+(~2pp spread), and SA's depth/restart split is **flat across R=2–24** (best split moved
+R=12 → R=6 between families) — only an un-restarted `R=1` anneal is consistently worst.
+Picking a winner from one family would be fitting noise; an 8-trial pilot did exactly
+that and crowned two configs that inverted at n=300.
+
+**Two calibration traps, for anyone re-running this.** (1) Cost per SA restart is
+`A + ~4900` — the pre-pass and quench are paid regardless of depth — so cost is **not**
+linear in `A`. A naive scaler chasing a budget drives `A → 1`, which is a greedy climb
+wearing an `-A` flag, and it then "wins". Enforce a floor and report over-restarted
+splits as *infeasible*. (2) An analytic two-point cost fit fails the other way: SA does
+not always consume its full move budget, which flattens the slope and inflates the
+intercept, and the bad seed rejects genuinely affordable splits (it rejected `R=12`,
+the shipped one). Let measurement decide feasibility.
+
+**Limits.** One budget (200k) at one plug count (10); the flat-split finding makes a
+budget-dependent reversal unlikely but it is untested. Per-cell *magnitudes* are
+draw-dependent (family 1 read −19.1pp at L80 where family 2 read −9.4pp), so the pooled
+per-length rows — not any single cell — are the result.
+
 ---
 
 ## 4. Move set & informed seeding
@@ -2381,6 +2447,7 @@ open.) Full detail is in each section; this table is a scan-only index, not a su
 | 3.7 | Multi-seed IC basin-hopping | LOW–MEDIUM | cheaper cousin of §3.6 exhaustion; small M limits coverage |
 | 3.8 | Cross-entropy / EDA plug marginals | LOW | gated behind §3.1, which was built and rejected |
 | 3.9 | Adaptive restart budget / early-stop | LOW | throughput/allocation only, not a new capability |
+| 3.11 | Let `-A` run the full staged schedule (mono pre-pass) | MEDIUM | the one actionable lever from the measured greedy-beats-SA result |
 | 4.1 | Guided (ILS-style) kick | MEDIUM | refines the already-tuned uniform `k=8` kick |
 | 4.2 | Informed single-plug seeding (GRASP) | LOW–MEDIUM | adjacent to what `-S iq` already does implicitly |
 | 4.3 | Evidence-restricted move set | MEDIUM | exact-prune half risk-free; soft half needs both-sides care |
