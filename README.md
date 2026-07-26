@@ -278,9 +278,11 @@ stay on `-l german`. Regenerate the tables with
 `eval/MODERN_BREAKING_NOTES.md` §6.
 
 A known-word (**crib**) finisher, `--crib-file <f>`, re-ranks converged
-plugboards by score + known words present in the decrypt (vocabulary in
-`cribs/`). It is **opt-in and not recommended** — measured net-neutral on
-real traffic (the residual short-message failures are wrong-basin, so
+plugboards by `score + --crib-weight × (known words present in the
+decrypt)`, with the word list read from `<f>` (vocabulary in `cribs/`) and
+`--crib-weight X` setting how much that bonus counts against the n-gram
+score `[0.5]`. It is **opt-in and not recommended** — measured net-neutral
+on real traffic (the residual short-message failures are wrong-basin, so
 re-ranking can't reach the truth); kept as a diagnostic. See
 `cribs/README.md` and `eval/MODERN_BREAKING_NOTES.md` §7.
 
