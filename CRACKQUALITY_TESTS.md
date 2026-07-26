@@ -347,6 +347,10 @@ CLAUDE.md (`-F` two-tier, progress-line display semantics, `-T` determinism).
 External framing: Gillogly (Cryptologia 19(4), 1995) and Williams (24(1), 2000)
 used 500–650 letters; Ostwald & Weierud (41(5), 2017) targeted 250 and call short
 messages "rarely successful" — the expectation floor for §1. Code anchors verified
-against the current source: stepping/turnover `enigma.cc:668–680`, `-F` activation
-`enigma.cc:2738`, `filter_climb_cap` `enigma.cc:201`; `crack_quality.py`
-`gen_trials` :166, `climb` :142, `oracle_score` :151, `last_score` :119.
+against the current source (line numbers drift as the file changes; re-check with
+`grep -n` before trusting them on a future edit): stepping/turnover
+`enigma.cc:1030` (`notch[w1][g1]`/`notch[w2][g2]`, no ring term) and `:1042` (the
+`(start − ring)` substitution offset, both in `setup_mapping`), `-F` tier-2 launch
+`enigma.cc:3649` (`finish_worker`), `filter_climb_cap` `enigma.cc:243`;
+`crack_quality.py` `gen_trials` :310, `climb` :276, `oracle_score` :295,
+`last_score` :173.
