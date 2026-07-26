@@ -63,6 +63,9 @@ SA_STAGES = os.environ.get("SA_STAGES", "0") == "1"
 #   "english" / "german"  -- the PROSE corpora tests/crack_quality.py samples,
 #                            read from that file so the two benchmarks agree.
 # Prose is the control the shipped SA pre-pass was originally tuned on.
+# STAGE=3 arms: paired greedy-vs-greedy schedule A/B (which pre-pass?).
+GA = os.environ.get("GA", "m4a10")     # arm A schedule (shipped recommendation)
+GB = os.environ.get("GB", "i4a10")     # arm B schedule
 CORPUS = os.environ.get("CORPUS", "wehrmacht")
 LANG = "wehrmacht" if CORPUS == "wehrmacht" else CORPUS
 
@@ -344,5 +347,45 @@ def stage2():
         print("\nper-trial data: %s" % TSV)
 
 
+def stage3():
+    """Paired greedy-vs-greedy: which --score pre-pass is right for THIS substrate?
+
+    Section 6.10 answered this for a QUAD target at R=2560; the shipped recipe is a
+    WEIGHTED target at R~40-90, which is a different regime. Both arms are calibrated
+    to the same score_iter budget, so a cheaper schedule earns more restarts."""
+    print("greedy pre-pass A/B, STAGE 3   %s vs %s" % (GA, GB))
+    print("corpus %s, %d letters (-l %s) | pairs=%d | trials=%d | budget=%dk"
+          " score_iter | seedfam=%d" % (CORPUS, len(POOL), LANG, PAIRS, TRIALS,
+                                        BUDGET // 1000, SEEDFAM))
+    print("\n%4s %9s %8s %8s | %-24s %s"
+          % ("L", "R(A/B)", GA[:8], GB[:8], "paired B-A (95% CI)", "verdict"))
+    tsv = open(TSV, "w") if TSV else None
+    if tsv:
+        tsv.write("length\ttrial\ta_pct\tb_pct\tdiff\n")
+    for L in LENGTHS:
+        trials = make_trials(TRIALS, L)
+        ba, bb = greedy(GA, G_KICK), greedy(GB, G_KICK)
+        Ra, Rb = calibrate(ba, 150, trials), calibrate(bb, 150, trials)
+        a = evaluate_trials(ba(Ra), trials)
+        b = evaluate_trials(bb(Rb), trials)
+        d = [bi[0] - ai[0] for ai, bi in zip(a, b)]
+        m = st.mean(d); se = st.stdev(d) / math.sqrt(len(d))
+        lo, hi = m - 1.96 * se, m + 1.96 * se
+        am, _, asi = summarise(a); bm, _, bsi = summarise(b)
+        v = ("%s better" % GB if lo > 0 else
+             "%s better" % GA if hi < 0 else "tie")
+        print("%4d %9s %8.1f %8.1f | %+6.1f pp [%+6.1f,%+6.1f]  %s"
+              % (L, "%d/%d" % (Ra, Rb), am, bm, m, lo, hi, v))
+        print("%4s %9s  (compute: %.0fk vs %.0fk score_iter)"
+              % ("", "", asi / 1000.0, bsi / 1000.0))
+        if tsv:
+            for i, (ai, bi) in enumerate(zip(a, b)):
+                tsv.write("%d\t%d\t%.4f\t%.4f\t%.4f\n"
+                          % (L, i, ai[0], bi[0], bi[0] - ai[0]))
+            tsv.flush()
+    if tsv:
+        tsv.close()
+
+
 if __name__ == "__main__":
-    (stage2 if STAGE == 2 else stage1)()
+    {1: stage1, 2: stage2, 3: stage3}[STAGE]()
