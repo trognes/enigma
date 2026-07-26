@@ -1,0 +1,98 @@
+# Stage 1: per-arm tuning, SA vs greedy on short wehrmacht messages.
+# Harness: eval/eval_sa_vs_greedy.py   Binary: enigma 2.0.0
+# L=90, 10-plug boards, 300 paired trials/config, budget 200k score_iter,
+# true rotor key fixed, plugboard hidden. Two independent seed families.
+# Generated: LENGTH=90 TRIALS=300 BUDGET=200000 SEEDFAM={1,2}
+
+############ SEED FAMILY 1 ############
+wehrmacht SA-vs-greedy, STAGE 1 (per-arm tuning)
+corpus 6473 letters | L=90 | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1 | jobs=4
+  done: m4a10  kick10  (recommended)       R=86    mean 54.8
+  done: m4a8   kick10                      R=91    mean 48.0
+  done: m4a13  kick10                      R=84    mean 54.0
+  done: i4a10  kick10                      R=83    mean 52.1
+  done: a10    kick10  (no pre-pass)       R=150   mean 38.7
+  done: m4a10  kick6                       R=104   mean 47.2
+  done: m4a10  kick13                      R=76    mean 54.4
+
+=== ARM A -- greedy (-c -J --polish), knob = -R ===
+config                               knob    mean%   exact%   score_it
+m4a10  kick10  (recommended)           86     54.8     45.7     199523
+m4a8   kick10                          91     48.0     34.7     199554
+m4a13  kick10                          84     54.0     44.0     197273
+i4a10  kick10                          83     52.1     43.0     198381
+a10    kick10  (no pre-pass)          150     38.7     29.3     203273
+m4a10  kick6                          104     47.2     39.0     200926
+m4a10  kick13                          76     54.4     45.0     196674
+  done: A=188237 R=1   mean 36.3
+  done: A=91732  R=2   mean 39.3
+  done: A=59281  R=3   mean 38.5
+  done: A=27199  R=6   mean 39.2
+  done: A=11439  R=12  mean 39.9
+  done: A=3124   R=24  mean 39.0
+  skip: R=48  infeasible at this budget
+
+=== ARM B -- simulated annealing (-A), knob = -A depth ===
+config                               knob    mean%   exact%   score_it
+A=188237 R=1   --polish            188237     36.3     29.3     199994
+A=91732  R=2   --polish             91732     39.3     31.7     200032
+A=59281  R=3   --polish             59281     38.5     31.7     198648
+A=27199  R=6   --polish             27199     39.2     31.7     197836
+A=11439  R=12  --polish             11439     39.9     30.0     199216
+A=3124   R=24  --polish              3124     39.0     29.7     195448
+R=48   INFEASIBLE (<2000 moves/restart)      -        -        -          -
+
+=== CONTROL -- best SA split without --polish ===
+config                               knob    mean%   exact%   score_it
+A=11439  R=12  no polish            11439     38.9     28.3     191654
+
+--- stage 1 winners (carry into stage 2) ---
+  greedy: m4a10  kick10  (R=86)  mean 54.8  exact 45.7
+  SA:     A=11439  R=12  --polish  mean 39.9  exact 30.0
+  head-to-head at this budget: SA - greedy = -14.9 pp mean, -15.7 pp exact
+############ SEED FAMILY 2 ############
+wehrmacht SA-vs-greedy, STAGE 1 (per-arm tuning)
+corpus 6473 letters | L=90 | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2 | jobs=4
+  done: m4a10  kick10  (recommended)       R=87    mean 50.0
+  done: m4a8   kick10                      R=91    mean 42.4
+  done: m4a13  kick10                      R=85    mean 51.0
+  done: i4a10  kick10                      R=84    mean 46.1
+  done: a10    kick10  (no pre-pass)       R=148   mean 36.4
+  done: m4a10  kick6                       R=104   mean 45.3
+  done: m4a10  kick13                      R=78    mean 52.2
+
+=== ARM A -- greedy (-c -J --polish), knob = -R ===
+config                               knob    mean%   exact%   score_it
+m4a10  kick10  (recommended)           87     50.0     40.3     201255
+m4a8   kick10                          91     42.4     27.7     199135
+m4a13  kick10                          85     51.0     41.0     198981
+i4a10  kick10                          84     46.1     36.7     200096
+a10    kick10  (no pre-pass)          148     36.4     27.3     200591
+m4a10  kick6                          104     45.3     37.0     200643
+m4a10  kick13                          78     52.2     42.7     201274
+  done: A=182319 R=1   mean 33.3
+  done: A=88047  R=2   mean 35.6
+  done: A=59026  R=3   mean 35.3
+  done: A=27174  R=6   mean 38.0
+  done: A=10937  R=12  mean 35.9
+  done: A=3217   R=24  mean 36.5
+  skip: R=48  infeasible at this budget
+
+=== ARM B -- simulated annealing (-A), knob = -A depth ===
+config                               knob    mean%   exact%   score_it
+A=182319 R=1   --polish            182319     33.3     25.3     194470
+A=88047  R=2   --polish             88047     35.6     26.3     192619
+A=59026  R=3   --polish             59026     35.3     27.0     197934
+A=27174  R=6   --polish             27174     38.0     31.0     197335
+A=10937  R=12  --polish             10937     35.9     27.0     192988
+A=3217   R=24  --polish              3217     36.5     28.7     196602
+R=48   INFEASIBLE (<2000 moves/restart)      -        -        -          -
+
+=== CONTROL -- best SA split without --polish ===
+config                               knob    mean%   exact%   score_it
+A=27174  R=6   no polish            27174     37.0     29.3     189867
+
+--- stage 1 winners (carry into stage 2) ---
+  greedy: m4a10  kick13  (R=78)  mean 52.2  exact 42.7
+  SA:     A=27174  R=6   --polish  mean 38.0  exact 31.0
+  head-to-head at this budget: SA - greedy = -14.1 pp mean, -11.7 pp exact
