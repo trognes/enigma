@@ -377,7 +377,11 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   better than bigram, extra stages after IC add little. **The recommended target is now `a`
   (weighted), staged as `--score m4a10`** (mono pre-pass then weighted, both capped) — the `a`
   stage reads the log-linear `all8` table, so `-S m4a10` is byte-identical to the winning tuning
-  recipe. The schedule carries **only** model stages: the
+  recipe. **The mono-vs-IC pre-pass choice is mildly register-dependent** (`PERFORMANCE.md` §6.10
+  follow-up; paired A/B, matched compute, n=1800 per corpus): mono wins on telegraphic traffic
+  (−2.2pp for IC), ties on English prose (−1.4pp, CI spans 0), and **loses on German prose**
+  (+2.2pp for IC). `m4a10` stays the general recommendation — the gap is ~2pp either way — but
+  `i4a10` is the better pick for German prose specifically. The schedule carries **only** model stages: the
   per-restart kick and the exhaustion are their own options (`--random` / `--exhaust`), not
   schedule tokens (REDESIGN Part B moved the old `rN`/`aN` tokens out). Per-`machine`
   `scoring` field (never a global → race-free); deterministic; the `--score` stages,

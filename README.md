@@ -324,6 +324,19 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   instead (`--score i4q10`). (The kick and the exhaustion are their own
   options, `--random` / `--exhaust`, not schedule tokens.)
 
+  > **Which pre-pass is best is mildly register-dependent.** `m4a10` is the
+  > general recommendation and is what the recipes below use, but a paired
+  > A/B against the IC pre-pass `i4a10` (same weighted target, matched
+  > compute, 1800 trials each) put mono ahead on telegraphic traffic
+  > (**−2.2 pp** for IC), level on English prose (−1.4 pp, CI spanning
+  > zero), and **behind on German prose** (**+2.2 pp** for IC). So on
+  > German prose specifically, `--score i4a10` is worth a try; everywhere
+  > else keep `m4a10`. The gap is ~2 pp either way, so this is a
+  > fine-tuning note, not a reason to change your default. The reason is
+  > that mono scores letter *identities* against one language's
+  > frequencies, while IC only measures how uneven the distribution is and
+  > is therefore language-blind. See `PERFORMANCE.md` §6.10.
+
 - **`-F N` (or `-F N%`) — key pre-filter.** With `-c` the full `-R`/`-S`
   climb is paid on *every* candidate key, which dominates runtime when you
   wildcard rotor settings. `-F` instead runs a single **cheap
