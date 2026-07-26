@@ -1424,23 +1424,36 @@ it to short/final-climb only. Bench under both compilers is mandatory.
 recovery; `make bench` (g++ and clang) to quantify the throughput hit and confirm
 it is confined to the short/final path.
 
-### 6.6 Telegraphic / operational corpus (HIGH value for real traffic; invisible to the current harness)
+### 6.6 Telegraphic / operational corpus — ✅ SHIPPED as the `wehrmacht` language (`eval/`)
 
-**Form in this codebase.** The shipped tables are generic web-corpus statistics.
-Real Enigma plaintext is telegraphic: `X`/`Y`/`J` separators, spelled numbers
-(`EINSNULL`), no punctuation, fixed procedure words. `X` alone dominates real
-n-gram statistics in ways absent from prose. Build German/English tables from
-decrypted Enigma traffic and ship them as a selectable table set.
+**Form in this codebase.** The bundled prose tables are generic web-corpus
+statistics. Real Enigma plaintext is telegraphic: `X`/`Y`/`J` separators, spelled
+numbers (`EINSNULL`), no punctuation, fixed procedure words. `X` alone dominates
+real n-gram statistics in ways absent from prose.
+`eval/build_telegraphic_ngrams.py` bends the bundled prose German tables toward
+the published telegraphic statistics in Sullivan & Weierud's 2005 Appendix C
+(single-letter + top-400 trigram frequencies over ~20,000 letters of 1941
+decrypts) by marginal-matching the quad table's folded low-order marginals to
+telegraphic strength. It ships as a first-class scoring **language** —
+`ngrams/wehrmacht_*.txt`, selected with `-l wehrmacht` alone — rather than a
+parallel data directory, so it needs no `-d` and composes with a custom one; the
+Appendix-C source tables live in `eval/` beside the generator.
 
-**Honest payoff.** High for *real* messages — a sharper matched model needs fewer
-attested grams for the true key to stand out. But the current harness samples clean
-prose with the matching-language table, so this is **not visible in `make
-crackquality` as-is**; it requires adding a telegraphic test corpus. A
-real-world-fidelity win, not a benchmark win. Keep prose tables to avoid
-over-fitting one traffic style.
+**Measured payoff.** Validated on the full 69-message held-out set
+(`eval/eval_telegraphic.py`; rotor key fixed, plugboard hidden and
+hill-climbed): **+20.9 pp mean %-correct** on real 1941 Wehrmacht traffic
+(wins 36 / loses 12 of 69), biggest in the 70–119-letter band. The mirror
+control (`eval/eval_prose_inverse.py`) confirms it is a *register*, not a
+general-German upgrade: the same tables lose **−10.2 pp** on ordinary prose
+German, so `-l german` remains correct for prose and for the `make
+crackquality` benchmark — `wehrmacht` is for real Wehrmacht/telegraphic traffic
+only. Full writeup and tables: `eval/MODERN_BREAKING_NOTES.md` §6.
 
-**Experiment.** Add an X-separated German corpus and matching table set to
-`crack_quality.py`'s corpora; cross-check on the bytereef.org M4 known messages.
+This was invisible to `make crackquality` as originally scoped (it samples
+clean prose), so it was validated by the two dedicated real-traffic harnesses
+above rather than by the standard suite — a real-world-fidelity win, not a
+`crackquality` benchmark win. `make crackquality` itself still correctly uses
+`-l german` (prose) and is unaffected.
 
 ### 6.7 Ceiling-limited (do not expect plugboard-tier movement)
 
@@ -2399,9 +2412,12 @@ throughput headroom from item 2 makes their extra cost affordable.
 ### For real operational traffic (a different goal than the current benchmark)
 
 The crib/bombe-closure work (§5.1–5.2) and the telegraphic corpus (§6.6) are the genuine
-50-char-barrier breakers, but both are **invisible to `make crackquality` as written** and
-each needs its own harness tier (crib-planting; telegraphic corpus). Do not expect them to
-move the current numbers; do not judge them by it.
+50-char-barrier breakers. The telegraphic corpus is **done** — shipped as the `wehrmacht`
+language and measured at +20.9pp on real traffic via its own harness
+(`eval/eval_telegraphic.py`) — while crib/bombe-closure remains open. Both are/were
+**invisible to `make crackquality` as written**, which needs its own harness tier per
+idea (crib-planting; the telegraphic real-message set already exists). Do not expect
+either to move the `crackquality` numbers; do not judge them by it.
 
 ### Measurement discipline (applies to every idea above)
 
