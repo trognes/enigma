@@ -1421,12 +1421,88 @@ void showconfig(machine & m, double score)
   fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, text);
 }
 
+/* ENIGMA_IC_BLEND probe (PERFORMANCE.md 6.4): fuse the index of coincidence into the
+   target score as `per-symbol ngram + lambda*IC` instead of STAGING IC then quad. The
+   premise is that the quad/weighted surface is nearly flat with only a plug or two set,
+   while IC still has gradient there -- and IC is permutation-INVARIANT, so unlike a
+   monogram/chi-squared term the plugboard cannot game it (see the tier-1 chi-squared
+   rejection, archived section 9 item 2). Off by default; 0 disables. */
+static double ic_blend_lambda()
+{
+  static const double lam = [] {
+    const char * s = getenv("ENIGMA_IC_BLEND");
+    return s ? atof(s) : 0.0;
+  }();
+  return lam;
+}
+
+
+/* Quad/weighted score AND the letter histogram in ONE pass, so the probe costs the
+   same number of decodes as the shipped scorer. A two-pass version would inflate wall
+   time per score_iter and quietly unfair any matched-score_iter A/B. Returns the
+   log-prob SUM (caller normalises); writes the IC through *ic_out. */
+static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize][asize],
+                              int model, double * ic_out)
+{
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * const * __restrict rows = m.rows;
+
+  int freq[asize];
+  for (int j = 0; j < asize; j++)
+    freq[j] = 0;
+
+  *ic_out = 0.0;
+  if (textlength < 4)
+    return 0.0;
+
+  int a = decode_at(steck, rows, ct, 0);
+  int b = decode_at(steck, rows, ct, 1);
+  int c = decode_at(steck, rows, ct, 2);
+  freq[a]++; freq[b]++; freq[c]++;
+  long isum = 0;
+  for (int i = 3; i < textlength; i++)
+    {
+      int d = decode_at(steck, rows, ct, i);
+      freq[d]++;
+      isum += table[a][b][c][d];
+      a = b;
+      b = c;
+      c = d;
+    }
+
+  double coin = 0.0;
+  for (int j = 0; j < asize; j++)
+    coin += static_cast<double>(freq[j]) * (freq[j] - 1);
+  *ic_out = (textlength > 1)
+    ? coin / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
+
+  return static_cast<double>(isum) / ngram_scale[model]
+         + (textlength - 3) * ngram_bias[model];
+}
+
+
 double score_iter(machine & m)
 {
   m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
 
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
+
+  /* ENIGMA_IC_BLEND probe: quad/weighted target only (the models the blend is meant
+     for). The blend is added AFTER per-symbol normalisation below, so lambda weighs
+     IC against a per-symbol cross-entropy rather than a length-scaled sum. */
+  const double lam = ic_blend_lambda();
+  if ((lam != 0.0) && ((m.scoring == SCORE_QUAD) || (m.scoring == SCORE_ALL)))
+    {
+      double ic = 0.0;
+      score = ngram_ic_decode(m, (m.scoring == SCORE_QUAD) ? quad8 : all8,
+                              m.scoring, &ic);
+      nterms = textlength - 3;
+      if (nterms > 0)
+        score /= nterms;
+      return score + lam * ic;
+    }
 
   switch(m.scoring)
     {

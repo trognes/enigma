@@ -66,6 +66,10 @@ SA_STAGES = os.environ.get("SA_STAGES", "0") == "1"
 # STAGE=3 arms: paired greedy-vs-greedy schedule A/B (which pre-pass?).
 GA = os.environ.get("GA", "m4a10")     # arm A schedule (shipped recommendation)
 GB = os.environ.get("GB", "i4a10")     # arm B schedule
+# ENIGMA_IC_BLEND lambda applied per arm in STAGE 3 ("" = probe off). Setting
+# GA==GB and only BLEND_B makes stage 3 a clean paired blend-off vs blend-on A/B.
+BLEND_A = os.environ.get("BLEND_A", "")
+BLEND_B = os.environ.get("BLEND_B", "")
 CORPUS = os.environ.get("CORPUS", "wehrmacht")
 LANG = "wehrmacht" if CORPUS == "wehrmacht" else CORPUS
 
@@ -131,24 +135,28 @@ def make_trials(n, length):
     return ts
 
 
-def run_one(args, ct, seed, sa_stages=False):
+def run_one(args, ct, seed, sa_stages=False, blend=""):
     env = dict(os.environ, ENIGMA_SEED=str(seed))
     if sa_stages:
         env["ENIGMA_SA_STAGES"] = "1"
     else:
         env.pop("ENIGMA_SA_STAGES", None)
+    if blend:
+        env["ENIGMA_IC_BLEND"] = str(blend)
+    else:
+        env.pop("ENIGMA_IC_BLEND", None)
     r = subprocess.run([BIN] + args + ["-a", "-l", LANG, "-T", "1"] + KEY,
                        input=ct, capture_output=True, text=True, env=env)
     m = SCORED.search(r.stderr)
     return r.stdout.strip(), (int(m.group(1)) if m else 0)
 
 
-def evaluate_trials(args, trials, sa_stages=False):
+def evaluate_trials(args, trials, sa_stages=False, blend=""):
     """Per-trial (%-correct, score_iter) -- retained so paired differences get
     a real confidence interval rather than a comparison of two bare means."""
     def one(t):
         pt, ct, seed = t
-        out, si = run_one(args, ct, seed, sa_stages)
+        out, si = run_one(args, ct, seed, sa_stages, blend)
         return 100.0 * sum(a == b for a, b in zip(pt, out)) / len(pt), si
     with ThreadPoolExecutor(max_workers=JOBS) as ex:
         return list(ex.map(one, trials))
@@ -353,7 +361,9 @@ def stage3():
     Section 6.10 answered this for a QUAD target at R=2560; the shipped recipe is a
     WEIGHTED target at R~40-90, which is a different regime. Both arms are calibrated
     to the same score_iter budget, so a cheaper schedule earns more restarts."""
-    print("greedy pre-pass A/B, STAGE 3   %s vs %s" % (GA, GB))
+    print("greedy A/B, STAGE 3   A=%s%s  vs  B=%s%s"
+          % (GA, " blend=" + BLEND_A if BLEND_A else "",
+             GB, " blend=" + BLEND_B if BLEND_B else ""))
     print("corpus %s, %d letters (-l %s) | pairs=%d | trials=%d | budget=%dk"
           " score_iter | seedfam=%d" % (CORPUS, len(POOL), LANG, PAIRS, TRIALS,
                                         BUDGET // 1000, SEEDFAM))
@@ -366,8 +376,8 @@ def stage3():
         trials = make_trials(TRIALS, L)
         ba, bb = greedy(GA, G_KICK), greedy(GB, G_KICK)
         Ra, Rb = calibrate(ba, 150, trials), calibrate(bb, 150, trials)
-        a = evaluate_trials(ba(Ra), trials)
-        b = evaluate_trials(bb(Rb), trials)
+        a = evaluate_trials(ba(Ra), trials, blend=BLEND_A)
+        b = evaluate_trials(bb(Rb), trials, blend=BLEND_B)
         d = [bi[0] - ai[0] for ai, bi in zip(a, b)]
         m = st.mean(d); se = st.stdev(d) / math.sqrt(len(d))
         lo, hi = m - 1.96 * se, m + 1.96 * se
