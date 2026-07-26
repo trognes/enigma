@@ -22,13 +22,20 @@ jobs:
       - name: Test
         run: make test CXX=${{ matrix.cxx }} EXTRA_CXXFLAGS=-Werror
 
-  # AddressSanitizer + UndefinedBehaviorSanitizer over the whole suite.
+  # AddressSanitizer + UndefinedBehaviorSanitizer over the suite. TEST_QUICK=1 shrinks
+  # the end-to-end cracking checks (one language, a 26-key wildcard instead of the full
+  # 26^3, so no 676-key x restart hill-climbs): ASan slows every key-scan ~10x, and the
+  # full matrix took ~8 min for zero extra *memory-safety* coverage (recovery and
+  # determinism are already verified by the fast g++/clang jobs). This still exercises
+  # every code path -- all scorers, scan, hill-climb, restarts, staging, pre-filter, M4,
+  # Norway, input handling -- in well under a minute.
   sanitizers:
     name: sanitizers (asan+ubsan)
     runs-on: ubuntu-latest
     env:
       EXTRA_CXXFLAGS: "-fsanitize=address,undefined -fno-sanitize-recover=all -g"
       UBSAN_OPTIONS: print_stacktrace=1
+      TEST_QUICK: "1"
     steps:
       - uses: actions/checkout@v5
       - name: Run suite under sanitizers
@@ -40,9 +47,23 @@ jobs:
           for s in -m -b -t -q; do
             printf 'BDZGOWCXLT' | ./enigma $s -u B -w 123 -r AAA -g AAA -l english >/dev/null
           done
+          # Simulated-annealing plugboard climb (-A): its own RNG/toggle/quench path,
+          # both uncapped and with the -S target cap (cap-aware apply_toggle).
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u B -w 123 -r AAA -g AAA -c -A 5000 >/dev/null
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u B -w 123 -r AAA -g AAA -c -A 5000 -S q6 >/dev/null
 
-  # ThreadSanitizer over the multi-threaded search (the suite includes a -T 4
-  # determinism check; plus an explicit multi-threaded crack here).
+  # ThreadSanitizer targets DATA RACES in the threaded search only, so it runs a
+  # small, high-concurrency workload rather than the whole suite. The single-
+  # threaded KATs/round-trips/cracks have no threads for TSan to inspect and are
+  # already covered by the g++/clang/ASan jobs -- running them under TSan added
+  # ~20 min for zero extra race coverage. The runs below drive both worker branches
+  # at -T 8 over a multi-task key space (parallel precompute across reflectors x
+  # wheel-orders, concurrent workers, the best-result mutex merge), including the
+  # restart RNG, the plugboard perturbation and the staged climb. halt_on_error=1
+  # makes any race fail the job; the -T-determinism contract itself is asserted in
+  # the regular (fast) suite.
   tsan:
     name: sanitizers (tsan)
     runs-on: ubuntu-latest
@@ -51,12 +72,26 @@ jobs:
       TSAN_OPTIONS: halt_on_error=1
     steps:
       - uses: actions/checkout@v5
-      - name: Run suite under ThreadSanitizer
-        run: make test EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS"
-      - name: Explicit multi-threaded search
+      - name: Build (ThreadSanitizer)
+        run: make EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS"
+      - name: Threaded scan is race-free (-T 8)
         run: |
+          # plain scan path (no hill-climb): concurrent workers + mutex merge over
+          # 3 reflectors x 2 wheel-orders x 26 starts.
           printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
-            | ./enigma -q -l english -u B -w ... -r AAA -g AAA -T 4 >/dev/null
+            | ./enigma -i -u . -w 12. -x 4 -r AAA -g .AA -T 8 >/dev/null
+      - name: Threaded hill-climb is race-free (-T 8)
+        run: |
+          # hill-climb path: adds restarts (-R), the plugboard perturbation (--random) and a
+          # staged IC->quad climb (--score) on top of the same parallel key space.
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u . -w 12. -x 4 -r AAA -g .AA -c -R 3 --score iq --random 2 -T 8 >/dev/null
+      - name: Threaded simulated-annealing climb is race-free (-T 8)
+        run: |
+          # -A path: per-key SA RNG stream + toggle moves + greedy quench across the
+          # same parallel key space; must stay race-free and -T-deterministic.
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u . -w 12. -x 4 -r AAA -g .AA -c -A 8000 -S q6 -T 8 >/dev/null
 
   # Valgrind adds detection of *uninitialised* memory use that ASan misses.
   valgrind:
@@ -97,5 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Run shellcheck on the test harness
-        run: shellcheck tests/run_tests.sh tests/bench.sh tests/crack_quality.sh
+      - name: Run shellcheck on the shell harness
+        run: shellcheck tests/run_tests.sh tests/bench.sh
+      - name: Byte-compile the Python harness
+        run: python3 -m py_compile tests/crack_quality.py

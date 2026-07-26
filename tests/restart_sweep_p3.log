@@ -1,0 +1,27 @@
+restart-perturbation sweep  trials=300 seed=1  model=-q lang=english pairs=3
+schedule = -S {iq | r<k>iq} -R <R>   (IC uncapped -> quad)
+KS=[-1, 1, 2, 3, 8]  RS=[8, 32]  LENGTHS=[70]
+
+ len    k    R    mean%           95% CI   exact%
+  70  leg    8    83.18  [ 80.1, 86.2]    16.00
+  70  leg   32    94.88  [ 93.8, 96.0]    27.33
+  70    1    8    80.61  [ 77.4, 83.8]    16.00
+  70    1   32    88.34  [ 86.0, 90.7]    19.67
+  70    2    8    84.03  [ 81.2, 86.9]    16.67
+  70    2   32    91.09  [ 89.1, 93.0]    25.67
+  70    3    8    84.70  [ 81.9, 87.5]    15.33
+  70    3   32    91.65  [ 89.7, 93.6]    27.33
+  70    8    8    85.56  [ 82.9, 88.2]    16.00
+  70    8   32    95.16  [ 94.3, 96.0]    28.67
+
+wrote tests/restart_sweep_p3.csv
+
+paired (k vs legacy full-random), per length & R:  mean(k-leg)  paired-t
+  L70  R8   k1    -2.57   t=-1.46
+  L70  R8   k2    +0.85   t=+0.53
+  L70  R8   k3    +1.51   t=+0.94
+  L70  R8   k8    +2.38   t=+1.56
+  L70  R32  k1    -6.54   t=-5.87 leg>k
+  L70  R32  k2    -3.80   t=-3.76 leg>k
+  L70  R32  k3    -3.23   t=-3.56 leg>k
+  L70  R32  k8    +0.28   t=+0.43

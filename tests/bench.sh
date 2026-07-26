@@ -46,6 +46,10 @@ set -u
 
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
 
+# Pin the restart RNG so the hill-climb timing is stable and the A/B is fair (the
+# default is a fresh random seed each run). Seed 0 matches pre-seed BASE refs too.
+export ENIGMA_SEED=0
+
 HEAD_BIN=./enigma
 if [ ! -x "$HEAD_BIN" ]; then
   echo "error: $HEAD_BIN not built; run 'make' first" >&2
@@ -59,6 +63,34 @@ QUICK_REPS=3
 LONG_REPS=2
 
 regressed=0
+
+# --- GitHub Actions job summary (markdown) -----------------------------------
+# When running under Actions, GITHUB_STEP_SUMMARY names a file whose markdown is
+# rendered on the workflow run page. We mirror each benchmark row into a table
+# there so the results are an obvious report, not buried in the log. Empty (and a
+# no-op) for local runs, so `make bench` on a workstation is unchanged.
+GH_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
+sumln() {
+  [ -n "$GH_SUMMARY" ] || return 0
+  printf '%s\n' "$1" >> "$GH_SUMMARY"
+}
+sum_header() {
+  [ -n "$GH_SUMMARY" ] || return 0
+  _mach="${CXX:-g++} / $(uname -m)"
+  sumln "## Bench — $_mach"
+  sumln ""
+  if [ -n "$BASE_BIN" ]; then
+    sumln "A/B vs \`$BASE\` · regression threshold ${THRESHOLD}% · LONG=$LONG (min of ${QUICK_REPS}/${LONG_REPS} reps)"
+    sumln ""
+    sumln "| benchmark | tier | base | head | Δ | |"
+    sumln "|:--|:--|--:|--:|--:|:-:|"
+  else
+    sumln "working-tree timings · LONG=$LONG (min of ${QUICK_REPS}/${LONG_REPS} reps)"
+    sumln ""
+    sumln "| benchmark | tier | time | throughput | solved |"
+    sumln "|:--|:--|--:|--:|:-:|"
+  fi
+}
 
 # Build the BASE binary in a throwaway worktree, if an A/B was requested.
 BASE_BIN=""
@@ -80,6 +112,20 @@ if [ -n "${BASE:-}" ]; then
   BASE_BIN="$base_dir/enigma"
 fi
 
+# Each binary loads its n-gram tables from its own tree: the working-tree binary
+# from ./ngrams, and a BASE binary from its worktree (ngrams/ if that ref carries
+# the folder, else the worktree root -- so an A/B spanning the data-dir move still
+# finds the tables for both refs).
+HEAD_DATA="$PWD/ngrams"
+BASE_DATA=""
+if [ -n "${BASE:-}" ]; then
+  if [ -d "$base_dir/ngrams" ]; then BASE_DATA="$base_dir/ngrams"; else BASE_DATA="$base_dir"; fi
+fi
+data_for() {
+  if [ -n "${BASE_BIN:-}" ] && [ "$1" = "$BASE_BIN" ]; then printf '%s' "$BASE_DATA"
+  else printf '%s' "$HEAD_DATA"; fi
+}
+
 # trunc LEN -> first LEN characters of the English benchmark plaintext (shares
 # the passage used by the cracking tests in run_tests.sh).
 PT="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSEWEFINDTHATCERTAINCOMMONWORDSANDLETTERPATTERNSREPEATSOOFTEN"
@@ -92,16 +138,17 @@ encrypt() { printf '%s' "$1" | "$HEAD_BIN" -i -u B -w 123 -r AAA -g AAA -s "$2" 
 # runs (after WARMUP discarded runs), feeding CT on stdin.
 min_time() {
   _bin=$1; _reps=$2; _warm=$3; _ct=$4; shift 4
+  _data=$(data_for "$_bin")
   _w=0
   while [ "$_w" -lt "$_warm" ]; do
-    printf '%s' "$_ct" | "$_bin" "$@" >/dev/null 2>&1
+    printf '%s' "$_ct" | ENIGMA_DATA="$_data" "$_bin" "$@" >/dev/null 2>&1
     _w=$((_w + 1))
   done
   _min=""
   _i=0
   while [ "$_i" -lt "$_reps" ]; do
     _t0=$(date +%s.%N)
-    printf '%s' "$_ct" | "$_bin" "$@" >/dev/null 2>&1
+    printf '%s' "$_ct" | ENIGMA_DATA="$_data" "$_bin" "$@" >/dev/null 2>&1
     _t1=$(date +%s.%N)
     _dt=$(awk -v a="$_t0" -v b="$_t1" 'BEGIN { printf "%.4f", b - a }')
     if [ -z "$_min" ] || awk -v d="$_dt" -v m="$_min" 'BEGIN { exit !(d < m) }'; then
@@ -115,7 +162,7 @@ min_time() {
 # solved BIN CT EXPECT ARGS... -> "ok" if the recovered plaintext matches.
 solved() {
   _bin=$1; _ct=$2; _exp=$3; shift 3
-  _out=$(printf '%s' "$_ct" | "$_bin" "$@" 2>/dev/null)
+  _out=$(printf '%s' "$_ct" | ENIGMA_DATA="$(data_for "$_bin")" "$_bin" "$@" 2>/dev/null)
   [ "$_out" = "$_exp" ] && echo ok || echo MISS
 }
 
@@ -140,10 +187,19 @@ bench() {
     fi
     printf '%-10s %-5s base %8.2fs  head %8.2fs  %7s%%%s\n' \
       "$_name" "$_tier" "$_bt" "$_ht" "$_delta" "$_flag"
+    if [ -n "$GH_SUMMARY" ]; then
+      _mk="✅"; [ -n "$_flag" ] && _mk="⚠️"
+      sumln "$(awk -v n="$_name" -v ti="$_tier" -v b="$_bt" -v h="$_ht" -v d="$_delta" -v e="$_mk" \
+        'BEGIN { printf "| `%s` | %s | %.2fs | %.2fs | %s%% | %s |", n, ti, b, h, d, e }')"
+    fi
   else
     _rate=$(awk -v w="$_work" -v t="$_ht" 'BEGIN { printf "%.0f", w / t }')
     printf '%-10s %-5s %8.2fs  %10s %-8s %s\n' \
       "$_name" "$_tier" "$_ht" "$_rate" "$_unit/s" "$_sol"
+    if [ -n "$GH_SUMMARY" ]; then
+      sumln "$(awk -v n="$_name" -v ti="$_tier" -v h="$_ht" -v r="$_rate" -v u="$_unit" -v so="$_sol" \
+        'BEGIN { printf "| `%s` | %s | %.2fs | %s %s/s | %s |", n, ti, h, r, u, so }')"
+    fi
   fi
 }
 
@@ -154,6 +210,7 @@ else
 fi
 printf 'LONG=%s  SCALE=%s  quick reps=%s  long reps=%s\n\n' \
   "$LONG" "$SCALE" "$QUICK_REPS" "$LONG_REPS"
+sum_header
 
 # --- search: brute-force scan, no plugboard (wildcard wheels + start) ---------
 ct_s=$(encrypt "$(trunc 80)" "")
@@ -222,9 +279,14 @@ if [ "$SCALE" = 1 ]; then
 fi
 
 echo
+sumln ""
 if [ "$regressed" -eq 1 ]; then
   echo "RESULT: regression detected (> ${THRESHOLD}% slower than BASE)"
+  sumln "**⚠️ regression detected — >${THRESHOLD}% slower than base on at least one benchmark (advisory: re-check on quiet hardware; the shared runners are bimodal on the climb tier).**"
   exit 1
 fi
-[ -n "$BASE_BIN" ] && echo "RESULT: no regression > ${THRESHOLD}%"
+if [ -n "$BASE_BIN" ]; then
+  echo "RESULT: no regression > ${THRESHOLD}%"
+  sumln "**✅ no regression > ${THRESHOLD}% vs base.**"
+fi
 exit 0

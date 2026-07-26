@@ -1,0 +1,165 @@
+# ============================================================================
+# enigma-challenge-1941.txt  --  authentic 1941 German Army ciphertexts, UNBROKEN
+# ----------------------------------------------------------------------------
+# Source: Geoff Sullivan & Frode Weierud, "Breaking German Army Ciphers"
+#         (Cryptologia 29(3):193-232, 2005); cryptocellar.org/bgac. HG Nord,
+#         Operation Barbarossa, Jun-Oct 1941. CC BY-NC-SA.
+#
+# These ciphertexts have NO recovered rotor key -- they remain unbroken. Presented
+# as a standing challenge (this is a companion to the solved sets in
+# enigma-messages.txt (13) and enigma-army-messages-1941.txt (56)). There is no
+# plaintext or key here to verify against; build_challenge_1941.py only checks that
+# each transcription matches the letter count written on the message form.
+#
+# CAVEATS (read before attacking):
+#   * The 1st 5-letter group is the KENNGRUPPE (discriminant), NOT ciphertext --
+#     remove it before deciphering. LEN below is the form count, which INCLUDES it.
+#   * A dash '-' is an unrecorded-but-real letter (illegible on the form): a real
+#     rotor position -- keep it as a placeholder, never strip it, or stepping desyncs.
+#   * "July Batch A" (Nr 87..285): the source notes MANY messages in this batch are
+#     hand cipher (a Doppelkasten variant), NOT Enigma, and the Enigma ones are short.
+#   * "Batch C" (BYQMZ, FKQLZ, XFEDT): the authors are unsure these are Enigma at all.
+#   * A few carry a known day-key that they do NOT break on (noted per message) --
+#     evidence of a different key/network or a non-Enigma system.
+#   * Most are short (below the ~23-letter unicity distance for HG Nord traffic),
+#     so several may be statistically unbreakable even as Enigma.
+# ============================================================================
+
+### Message No. 3  --  22 Jun 1941  (EHSTQ)
+KENNGRUPPE:  EHSTQ   (discriminant; strip before deciphering)
+LEN:         57  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  EHSTQJJAPYGERSYFZJSIABYQEKGZMGRNLZCLRDEEFTCUNFGVQYNKIYPIP
+NOTES:       (none)
+
+### Message No. 53  --  28 Jun 1941  (RXPSB)
+KENNGRUPPE:  RXPSB   (discriminant; strip before deciphering)
+LEN:         104  (form count, incl. Kenngruppe)  <-- transcription 112 != form 104
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  RXPSBRDHLUZNUQXTFYJJGX-WEOUBHLKSCGYMUTUPIGYGQGANNMPMQGASEQGT
+             MLGHTUAFAMSNRDDXHXRQOQAZLGWTUHJGPDDFJLUCMXXYMUNU-TED
+NOTES:       2 garble dashes; form group-count (104) disagrees with the transcription (112) -- form miscount, cf. Nr 136/153
+
+### Message No. 81  --  28 Aug 1941  (ALQFI)
+KENNGRUPPE:  ALQFI   (discriminant; strip before deciphering)
+LEN:         92  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  ALQFIGEELUIBOXEINKBYDDHXIFALWDLTINTZIPGMLFMYZKAGJDWGOCBPEZTE
+             RTJIAGVINPRJIXTENBUDFXQYIDZMAPLG
+NOTES:       (none)
+
+### Message No. 38  --  09 Sep 1941  (GEHRG)
+KENNGRUPPE:  GEHRG   (discriminant; strip before deciphering)
+LEN:         79  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  GEHRGLGKQIOKNGSMRUXRZCGVNGYIRWNIISZXWRUUNDFWYUPWCGWRGFNETXXX
+             GXINCIVXSYRGIGUWLOE
+NOTES:       (none)
+
+### Message No. 8-Oct  --  02 Oct 1941  (ALGXZ)
+KENNGRUPPE:  ALGXZ   (discriminant; strip before deciphering)
+LEN:         72  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOM
+             UGPVXXDYWTJG
+NOTES:       (none)
+
+### Message No. 8-C  --  30 Sep 1941  (BYQMZ)
+KENNGRUPPE:  BYQMZ   (discriminant; strip before deciphering)
+LEN:         172  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAI
+             KYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUE
+             AZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY
+NOTES:       Batch C: authors uncertain whether Enigma or another machine/system; 1 dash
+
+### Message No. 11-C  --  30 Sep 1941  (FKQLZ)
+KENNGRUPPE:  FKQLZ   (discriminant; strip before deciphering)
+LEN:         112  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  FKQLZDNXLIAGVIQBUWMHYCAMDFBAEQVGXMRCEPGARIHRKRTDLNYVCSWUFHIX
+             LXPUCESNOLNAHZDKPNVBFSOKBPCTGDKOFMTWGSYOUTQRMPWWZORK
+NOTES:       Batch C: authors uncertain whether Enigma or another machine/system
+
+### Message No. 12-C  --  30 Sep 1941  (XFEDT)
+KENNGRUPPE:  XFEDT   (discriminant; strip before deciphering)
+LEN:         102  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  XFEDTZYOQHTSAFRLQCHZURCWOILRXGMCBFZKAPYDUMHVCATDPSEAKYSZEGFK
+             GINXWRNQVOIDFANGLRXNUHGTVFCNEXBPWYMZFBXOAU
+NOTES:       Batch C: authors uncertain whether Enigma or another machine/system
+
+### Message No. 87  --  03 Jul 1941  (KLJBO)
+KENNGRUPPE:  KLJBO   (discriminant; strip before deciphering)
+LEN:         55  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  KLJBOYNGZOWCIRESGVEVKFGCNXDTLIKINLBOYL-NTNYBD-NWK-A-UVV
+NOTES:       several garble dashes
+
+### Message No. 100  --  05 Jul 1941  (LXACA)
+KENNGRUPPE:  LXACA   (discriminant; strip before deciphering)
+LEN:         25  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  LXACAZIXAGNQRKOHBPNKXRLFU
+NOTES:       does NOT break on the 5 Jul key; header time suggests it belongs to 4 Jul
+
+### Message No. 138  --  09 Jul 1941  (WEUWY)
+KENNGRUPPE:  WEUWY   (discriminant; strip before deciphering)
+LEN:         53  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  WEUWYWCZIEDSYTCDXOI-CDSXOXASIMEIORSRKRISSPCCOUIMDZYDM
+NOTES:       does NOT break on the 9 Jul key; 1 dash
+
+### Message No. 140  --  09 Jul 1941  (WEUWY)
+KENNGRUPPE:  WEUWY   (discriminant; strip before deciphering)
+LEN:         53  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  WEUWYTCTICBSEYTHDHXOXUSIMIEORHRKVEIXFICQUIMBZIDZMFEQM
+NOTES:       does NOT break on the 9 Jul key
+
+### Message No. 172  --  10 Jul 1941  (MVUEH)
+KENNGRUPPE:  MVUEH   (discriminant; strip before deciphering)
+LEN:         87  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  MVUEHIDEVSARMCCNQTATYEVFCDBZGGSMXWLPSYWZYTCBSWURRTBZCVGODVJU
+             SLSOOMJQJZSXSEBZPEYMDNXJFTC
+NOTES:       does NOT break on the 10 Jul key; suspected different network/key
+
+### Message No. 187  --  11 Jul 1941  (AWTZK)
+KENNGRUPPE:  AWTZK   (discriminant; strip before deciphering)
+LEN:         54  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  AWTZKTBXVAKXKLZIPPCZIPUCCRXHRKQUTDEGMGIKGCWEKLQNUMCWSS
+NOTES:       (none)
+
+### Message No. 189  --  11 Jul 1941  (ZNLZT)
+KENNGRUPPE:  ZNLZT   (discriminant; strip before deciphering)
+LEN:         74  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  ZNLZTKCBDBJDLAVPWLLUTSSHBWEYOWSQNB-
+             NORNKDTZJHPQFYAXCQQYFLSSKDZCGLSWYMBQBMF
+NOTES:       1 dash
+
+### Message No. 214  --  16 Jul 1941  (FTNBK)
+KENNGRUPPE:  FTNBK   (discriminant; strip before deciphering)
+LEN:         106  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  FTNBKXNQAEQNZLWFMQGTXOQZVXJKBOJKPCLJQZOVFLSVJBSRIYMRYWNUJVWY
+             KXAKKFMSQFBBARNKNHBRHQSLIUVNEHMJKAZRXLJLWISNZZ
+NOTES:       (none)
+
+### Message No. 242  --  20 Jul 1941  (JBIYH)
+KENNGRUPPE:  JBIYH   (discriminant; strip before deciphering)
+LEN:         60  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  JBIYHNVYMIVLOGGKTDKKOYXWRDLBHRRZYPILVVXOGBEFXAXCWBNGILRWARXO
+NOTES:       (none)
+
+### Message No. 285  --  31 Jul 1941  (FMNGI)
+KENNGRUPPE:  FMNGI   (discriminant; strip before deciphering)
+LEN:         63  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  FMNGIFGROVFDIVQMNMNILIFZBQVNQWLGBLJVRLEBXIQEXCSAQPEKFHEKFBIK
+             MCF
+NOTES:       (none)
+

@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 -pthread
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast -O3 -pthread
 
 # Appended after CXXFLAGS; used by CI to add e.g. -Werror or sanitizers
 # without dropping the base flags:  make EXTRA_CXXFLAGS=-Werror
@@ -26,9 +26,11 @@ bench : enigma
 # short-message regime). Separate from `bench` (speed) and `test` (pass/fail).
 #   make crackquality                  working-tree binary
 #   make crackquality BASE=<git-ref>   same-machine A/B vs <git-ref>
-# Tunables (env): MODEL, CLANG, TRIALS, LENGTHS, PAIRS, SEED.
+# Tunables (env): MODEL, CLANG, TRIALS, LENGTHS, PAIRS, SEED, SPLIT, CRACKOPTS.
+# Full-crack / scoring-gate knobs (CRACKQUALITY_TESTS.md §1): WILDCARD, XMAX,
+# FILTER, RESTARTS, FULLCRACK.
 crackquality : enigma
-	sh tests/crack_quality.sh
+	python3 tests/crack_quality.py
 
 clean :
 	rm -f enigma
