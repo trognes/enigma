@@ -1,0 +1,52 @@
+# Stage 2: head-to-head, SA vs greedy on short wehrmacht messages.
+# Harness: eval/eval_sa_vs_greedy.py (STAGE=2)   Binary: enigma 2.0.0
+# L=50..90, 10-plug boards, 300 paired trials/length/family, 200k score_iter,
+# true rotor key fixed, plugboard hidden. Two independent seed families.
+# Arms are the SHIPPED defaults (greedy m4a10/kick10; SA -R 12), both with --polish.
+# Generated: STAGE=2 LENGTHS='50 60 70 80 90' TRIALS=300 BUDGET=200000 SEEDFAM={1,2}
+
+############ SEED FAMILY 1 ############
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus 6473 letters | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score a10 -R 12
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    17.9     6.0 |    11.6     2.7 |   -6.4 pp [  -9.6,  -3.1]  greedy wins
+               (compute check: greedy 197k vs SA 197k score_iter)
+  60 R87/A11k    26.0    14.7 |    17.1     7.3 |   -9.0 pp [ -13.0,  -5.0]  greedy wins
+               (compute check: greedy 204k vs SA 197k score_iter)
+  70 R86/A11k    32.6    23.0 |    22.9    13.7 |   -9.7 pp [ -14.3,  -5.0]  greedy wins
+               (compute check: greedy 201k vs SA 195k score_iter)
+  80 R86/A11k    51.9    41.7 |    32.9    23.3 |  -19.1 pp [ -24.2, -13.9]  greedy wins
+               (compute check: greedy 199k vs SA 196k score_iter)
+  90 R87/A11k    53.6    45.7 |    36.7    30.3 |  -16.8 pp [ -21.7, -12.0]  greedy wins
+               (compute check: greedy 202k vs SA 200k score_iter)
+
+per-trial data: /tmp/stage2-fam1.tsv
+############ SEED FAMILY 2 ############
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus 6473 letters | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score a10 -R 12
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    17.8     7.0 |    12.7     3.3 |   -5.0 pp [  -8.2,  -1.8]  greedy wins
+               (compute check: greedy 198k vs SA 194k score_iter)
+  60 R85/A11k    25.3    13.0 |    17.2     7.3 |   -8.1 pp [ -11.5,  -4.6]  greedy wins
+               (compute check: greedy 199k vs SA 199k score_iter)
+  70 R87/A11k    30.7    18.3 |    23.6    12.3 |   -7.1 pp [ -11.6,  -2.6]  greedy wins
+               (compute check: greedy 203k vs SA 196k score_iter)
+  80 R88/A11k    38.6    30.7 |    29.2    21.0 |   -9.4 pp [ -14.1,  -4.7]  greedy wins
+               (compute check: greedy 205k vs SA 199k score_iter)
+  90 R86/A11k    50.8    40.3 |    36.7    28.3 |  -14.0 pp [ -19.3,  -8.8]  greedy wins
+               (compute check: greedy 200k vs SA 198k score_iter)
+
+per-trial data: /tmp/stage2-fam2.tsv
+
+### Pooled across both families (n=600 paired trials per length)
+   L     n  mean diff             95% CI  SA wins %       verdict
+  50   600      -5.7pp  [  -7.9,  -3.4]      36.5%   greedy wins
+  60   600      -8.5pp  [ -11.2,  -5.9]      32.2%   greedy wins
+  70   600      -8.4pp  [ -11.6,  -5.2]      34.0%   greedy wins
+  80   600     -14.2pp  [ -17.7, -10.7]      26.8%   greedy wins
+  90   600     -15.4pp  [ -19.0, -11.8]      22.0%   greedy wins
+  ALL 3000     -10.4pp  [ -11.8,  -9.1]
