@@ -593,7 +593,13 @@ greedy path (§4.1).
 sweep bias strength; confirm it does not merely collapse SA toward the greedy
 result.
 
-### 4.5 Influence-weighted plug selection — ciphertext-exact + plaintext-prior (MEDIUM priority; sharpens §3.6 / §4.1 / §4.3)
+### 4.5 Influence-weighted plug selection — ciphertext-exact + plaintext-prior (MEDIUM priority; sharpens §3.6 / §4.1 / §4.3; PARTIALLY EXAMINED, see §4.6)
+
+> One of the three applications below (climb move ordering, item 3 below / §4.6) was built,
+> measured, and **rejected** as `--infl-order` — which this repository has since **removed from
+> the CLI entirely** (dominated by `-J`; see `CLAUDE.md`'s removed-options list). The other two
+> applications (focused `--exhaust` restriction, influence-weighted `--random` kick) were never
+> built or measured — they remain genuinely open.
 
 **The idea (Ostwald & Weierud).** Plugs are not equally worth searching: a plug on a
 *frequent* letter rewrites many message positions, so getting it right — or ruling it out —
@@ -685,7 +691,12 @@ at equal budget; (2) influence-weighted `--random` vs uniform kick at high `-R`,
 weight strength and checking with `DIVERSITY=1` (restart basin-collapse) that a gentle weight
 does *not* collapse diversity. Judge on mean %-correct per the harness guidance.
 
-### 4.6 Exact board-state influence — the `|Δscore|` bound, prune before order (refines §4.5)
+### 4.6 Exact board-state influence — the `|Δscore|` bound, prune before order (refines §4.5) — ⚠️ PARTIALLY MEASURED
+
+Two of the three proposed uses below were built and measured to a clear verdict (soft/exact
+prune: ❌ dead end at realistic lengths; climb move ordering: ❌ built as `--infl-order`, dominated
+by `-J`, since **removed from the CLI**). The third (focused `--exhaust` restriction by influence)
+was never built or tested — same gap as §4.5's item 1, still open.
 
 **Form.** §4.5 weights a plug by `a + b − ab` with `a = c_X+c_Y` exact and `b = p_X+p_Y` a
 *language prior*. But that prior is only needed *before* a decrypt exists. **Inside the climb
@@ -791,8 +802,11 @@ histograms, ~free) instead of `-J`'s measured score-delta. At ~55k `score_iter` 
   angles do not overcome the weaker ordering signal.
 - **But influence-order clearly beats plain `-I`** everywhere (+5 to +10pp): the informed order
   *is* genuinely useful — a cheap, free upgrade over lexicographic — just dominated by `-J`.
-- **Verdict:** `-J` stays the recommended order. `--infl-order` is kept as an experimental,
-  documented-dominated opt-in (bench-neutral, default path untouched); it is not recommended.
+- **Verdict:** `-J` stays the recommended order. `--infl-order` was kept as an experimental,
+  documented-dominated opt-in for a time (bench-neutral, default path untouched) — it has since
+  been **removed from the CLI entirely**, since a dominated-with-no-niche-use-case flag is dead
+  weight rather than a useful diagnostic. The measurements above remain the record of why it
+  lost.
   (Methodology note: the first pass was polluted by stale `i4q10.R24.J`/`R32.I` rows from earlier
   matched-compute runs sharing those labels — filter the clean grid by `git_sha`, or use fresh
   `config_label`s, for a paired read.)
@@ -2457,7 +2471,9 @@ at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in;
 `-S` cap only merge/remove moves; matched-compute win growing as true plugs fall below the
 cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
 Rejected (with reason): **static (fixed-across-restarts) informed move order** (greedy
-*and* diversity-collapsing — §7.2); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
+*and* diversity-collapsing — §7.2); **ciphertext/plaintext-influence move ordering**
+(`--infl-order`, §4.6 — ties `-J` at L40–55, a clean −4…−6pp loss from L60 up; *removed*
+from the CLI, not just deprioritized); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
 chars — warm short-message quad decodes too cheap to skip; only wins ≥150 chars; the IC
 *ranker* also collapses recovery — §7.1); **cross-restart consensus / plug fixation
 (§3.1** — built and measured compute-neutral-to-negative; loses to a higher `-R` at
