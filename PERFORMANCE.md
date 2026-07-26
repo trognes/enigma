@@ -1828,6 +1828,34 @@ L40–70, `-R 10 … 81920`; the residual mono edge at L40–45 and the `-R 10` 
 within noise (SE ~3–5pp), so the *trend* (crossover, q10→~100%) is the robust signal, not
 any single cell. The shipped low-R default is unchanged.
 
+**Follow-up — the same question under the SHIPPED regime (weighted target, R≈85): the
+answer is register-dependent, and `m4a10` is not universally right — ✅ MEASURED.**
+Everything above used a **quad** target at **R=2560**. The shipped recommendation is
+`--score m4a10`: a **weighted** target at R≈40–90. Re-run as a paired greedy-vs-greedy
+A/B in exactly that regime (`STAGE=3` in `eval/eval_sa_vs_greedy.py`; L50/70/90, 300
+paired trials × 2 seed families per corpus, both arms calibrated to the same 200k
+`score_iter`, so the cheaper schedule earns more restarts):
+
+| corpus | pooled `i4a10` − `m4a10` | n | verdict |
+|---|---:|---:|---|
+| english prose | −1.4 pp [−3.2, +0.5] | 1800 | tie (mono nominally ahead) |
+| german prose | **+2.2 pp [+0.7, +3.6]** | 1800 | **IC better** |
+| wehrmacht | **−2.2 pp [−3.9, −0.5]** | 1800 | **mono better** |
+
+So the shipped `m4a10` is **right for telegraphic traffic, neutral on English prose, and
+measurably worse than `i4a10` on German prose** — the same register-dependence seen in the
+SA pre-pass probe (§3.11) and in the scoring tables themselves (§6.6: +20.9pp real traffic
+/ −10.2pp prose). It is *not* a universal recommendation, and the README presents it as
+one.
+
+The effect is modest (~2pp either way) and both prose cells are near ceiling at L90
+(english 95.8/96.1, german 98.8/99.4), which compresses it; the German result is carried
+by L50–70. Caveat as in §3.11: the prose corpora are ~477 letters, so excerpts overlap
+heavily and the prose CIs are optimistic relative to the wehrmacht ones. **A pilot at n=8
+showed mono ahead by +33pp on English; it vanished entirely at n=300** — the third
+small-sample result in this work to invert or evaporate, and a standing argument for not
+reading single cells.
+
 ### 6.11 Correct plugs → text recovery is strongly convex — ✅ MEASURED (`eval/`)
 
 Aggregating **every** plugboard-recovery row across all shards (~289k runs, all
