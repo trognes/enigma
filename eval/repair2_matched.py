@@ -13,7 +13,7 @@
 #
 # Result: it wins even at L40-70 -- mean %-correct +0.2..+2.8pp at matched compute,
 # growing with restart budget. So the 2-plug re-pair earns its cost at short
-# lengths too (the 3-plug --repair3, by contrast, is dominated -- section 4.7).
+# lengths too (the 3-plug variant, by contrast, was dominated -- section 4.7).
 #
 # Usage: python3 eval/repair2_matched.py   # solves, prints table, writes PNG
 # Env:   LANGS LENS PAIRS NPROB RGRID OPTS SEED

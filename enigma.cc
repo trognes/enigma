@@ -109,7 +109,7 @@ static const char * opt_steckerbrett;
    a mere seed (see plug_fixed / PLUG_FIXED_EX below for the storage and the parallel
    --exhaust arrangement, REDESIGN Part D). */
 static char * opt_plaintext; /* plaintext to compare to */
-static const char * opt_language; /* english, german, danish, french ...; no default */
+static const char * opt_language; /* english, german, danish, french, wehrmacht; no default */
 static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_m4;        /* use M4 (4-rotor naval) mode */
@@ -130,28 +130,19 @@ static int opt_scoring;   /* the resolved ranking/target model (SCORE_*) */
    or a selector vs a different --score target -- can be rejected as a fatal error. */
 static int opt_model_selector;
 static int opt_hillclimb;
-/* -I: circular first-improvement climb instead of steepest ascent. Applies the FIRST
-   improving move (cursor sweeps a fixed move list and continues from where it accepted),
-   so it does far fewer score_iter calls per climb -- ~2.8x cheaper. It recovers WORSE per
-   restart (a different, noisier trajectory), so it is a *throughput multiplier*: pair it
-   with more restarts (-R) and it wins at equal compute. Off by default; needs -c. */
+/* Circular first-improvement climb instead of steepest ascent: applies the FIRST improving
+   move (a cursor sweeps a fixed move list and continues from where it accepted), so it does
+   far fewer score_iter calls per climb -- ~2.8x cheaper -- at the cost of recovering worse
+   per restart. Set only by -J (the bare first-improvement flag was removed as dominated),
+   so it is always paired with the dynamic move order below. */
 static int opt_firstimprove;
-/* -J: first-improvement (-I) with DYNAMIC best-first move ordering. Each climb first
-   scores every move once against the starting (perturbed) board, sorts, and then runs the
-   circular first-improvement in that order. The order is rebuilt per restart, so it
-   front-loads good moves without collapsing restart diversity (unlike the rejected static
-   order). Measured win on the realistic ~10-plug regime (+2-6pp mean at matched compute);
-   a loss when few plugs are truly set. Implies -I; off by default; needs -c. */
+/* -J: first-improvement with DYNAMIC best-first move ordering. Each climb first scores every
+   move once against the starting (perturbed) board, sorts, and then runs the circular
+   first-improvement in that order. The order is rebuilt per restart, so it front-loads good
+   moves without collapsing restart diversity (unlike the rejected static order). Measured win
+   on the realistic ~10-plug regime (+2-6pp mean at matched compute); a loss when few plugs are
+   truly set. Off by default; needs -c. */
 static int opt_dynorder;
-/* --infl-order (experimental, PERFORMANCE.md 4.6): first-improvement (-I) with the move order
-   set by the board-state INFLUENCE instead of -J's measured score-delta. Each move (a,b) is
-   ranked by w = ct_count[a]+ct_count[b]+pt_count[a]+pt_count[b] over the current ciphertext and
-   the current decrypt (the 4.5/4.6 influence weight, sum form) -- an upper-bound proxy for how
-   many positions the toggle can change, computed from two 26-bin histograms, so it is ~free
-   (no per-move scoring, unlike -J's +24% pre-scan). Per-restart (order derived from the
-   perturbed starting board), deterministic (fixed board + index tie-break) -> -T-independent.
-   Implies -I; mutually exclusive with -J; off by default; needs -c. */
-static int opt_inflorder;
 /* -M: make the plug cap a strict descent TARGET, not just a growth ceiling. Default (0):
    at/over the cap only a brand-new add (both ends free) is blocked, so an over-cap board
    (a big --random kick handed to a small stage cap) can converge still over the cap, merely
@@ -164,34 +155,25 @@ static int opt_inflorder;
    it is also cheaper per climb (quad converges from a tidy basin). Off by default; needs -c.
    Most useful with a tight -S target cap; near-inert (harmless) with no cap. */
 static int opt_capmerge;
-/* --repair3: a last-resort 3-plug barrier cross, tried only once the cheap climb AND
-   try_repair have both converged. Rematches three existing plugs (six letters) into a
-   different pairing; a deeper generalisation of try_repair (which does two). Off by
-   default (baseline byte-identical); needs -c. See try_repair_3(). */
-static int opt_repair3;
 /* --no-repair: disable the default 2-plug re-pair barrier cross (try_repair), for
    ablation/measurement. Off by default (baseline byte-identical); needs -c. */
 static int opt_no_repair;
-/* --gainfix: quadgram-gain directed-repair barrier cross, tried at quad convergence.
+/* --cascade: quadgram-gain directed-repair barrier cross, tried at quad convergence.
    A 2-ply "cascade" that uses per-position gain to propose plug corrections (both
    plugboard contacts, self-encryption pruned), ranks them by the full re-decode
    score, applies the best pair even when the first plug is downhill (which un-masks
    the second), and keeps it only if the pair nets an improvement. Off by default
    (baseline byte-identical); needs -c; quad-only. See gain_cascade(); PERFORMANCE.md 4.10. */
-static int opt_gainfix;
-/* --gainfix near-solution gate: the cascade only fires on a converged board whose
+static int opt_cascade;
+/* --cascade near-solution gate: the cascade only fires on a converged board whose
    per-symbol quad score clears this threshold, so it skips the ~76% junk boards and
    spends its compute only on promising ones. Default -4.9 (English-quad calibrated:
-   junk ~-5.3, near-solution 60%+ ~-4.8..-4.2); tune per language via --gainfix=VALUE. */
-static double opt_gainfix_gate;
-/* --gainfix-best: run the gain cascade ONCE, unconditionally (no score gate), on the
-   single best board after all restarts, instead of at every gated convergence. Only
-   one board is finished, so no gate is needed. Off by default; needs -c. */
-static int opt_gainfix_best;
-/* --gainfix3: enable the 3-ply gain cascade (a deeper escalation, tried only when the 2-ply
-   cascade found nothing). --gainfix-best3 turns it on for the single best-board finisher. */
-static int opt_gainfix3;
-static int opt_gainfix_best3;
+   junk ~-5.3, near-solution 60%+ ~-4.8..-4.2); tune per language via --cascade=VALUE. */
+static double opt_cascade_gate;
+/* Internal: enable the 3-ply gain cascade (a deeper escalation, tried only when the 2-ply
+   cascade found nothing). --polish turns it on for the single best-board finisher. */
+static int opt_cascade3;
+static int opt_polish;
 /* --crib-file / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
@@ -206,7 +188,7 @@ static int opt_gainfix_best3;
    boards. The reason: after the telegraphic tables surface the true board, the residual is
    dominated by WRONG-BASIN failures (the true board is not among the converged restarts), so a
    re-ranker has nothing true to promote. Kept as an off-by-default diagnostic (the negative
-   answer is the artifact) -- like --score-tt/--repair3. Off by default (no crib file ->
+   answer is the artifact). Off by default (no crib file ->
    opt_crib 0 -> byte-identical); needs -c; -T-deterministic (the combined score is a
    deterministic function of the board). See crib_score()/load_cribs(). */
 static const char * opt_crib_file = nullptr;
@@ -295,48 +277,12 @@ static int g_tk_u, g_tk_w[3], g_tk_r[3], g_tk_g[3];   /* parsed --true-key (nume
 static std::vector<float> g_tk_scores;                /* tier-1 IC score per flat key idx */
 static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of the true key */
 
-/* --dump-restarts: a diagnostic for restart-diversity testing (CRACKQUALITY_TESTS.md
-   §3). With -c, every converged restart climb prints "restart <score> <board>" to
-   stderr (under a mutex), so a harness can count how many distinct optima the restarts
-   reach. Display-only -- it does not affect which candidate wins, so -T-deterministic
-   results are preserved. Verbose; off by default. */
-static bool opt_dump_restarts;
-/* --dump-all: like --dump-restarts but prints the FULL setting of every converged (rotor
+/* --dump-all: with -c, print the FULL setting of every converged (rotor
    key, restart) climb -- "dumpall <refl+wheels> <ring> <start> <score> <plugboard>" -- so a
    wildcarded search (not just a fixed key) can be inspected key-by-key. Display-only under
    the same mutex, so it never affects which candidate wins (-T-deterministic results are
    preserved; only the line ORDER is thread-timing dependent). Very verbose; off by default. */
 static bool opt_dump_all;
-/* --restart-tt: maintain an in-binary Zobrist transposition table of converged restart
-   boards and print a basin-collapse summary (distinct optima + hit histogram) at the end.
-   Diagnostic only (never gates the winner), off by default. See the TT module below. */
-static bool opt_restart_tt;
-/* --score-tt: memoise score_iter in a per-worker plugboard score cache. Within one
-   rotor key and one scoring model, score_iter is a pure function of the plugboard, so
-   a board scored again returns the stored value instead of decoding afresh. Diagnostic
-   / performance only -- a hit returns exactly what a miss would compute, so results
-   (and -T-determinism) are byte-identical; only the number of real decodes falls, and
-   the hit rate measures how much score_iter work the cache saves. Off by default. */
-static bool opt_score_tt;
-
-/* One direct-mapped slot of the --score-tt cache. Stores the Zobrist tag AND the exact
-   board (a hash collision is then a miss, never a wrong score), plus the scoring model
-   and the rotor-key generation the score was computed under -- both must match on a hit,
-   which is how "everything but the plugboard is constant" is enforced. */
-struct sc_slot
-{
-  uint64_t tag;                  /* board_hash of the stored board */
-  double score;                  /* score_iter result for that board */
-  uint32_t gen;                  /* rotor-key generation; 0 = empty slot */
-  uint8_t scoring;               /* scoring model the score was computed under */
-  unsigned char board[asize];    /* exact board -> a hash collision is a miss */
-};
-
-/* 2^18 slots (~12 MB/worker at 48 B/slot): comfortably larger than the distinct-board
-   working set of a key's restarts, so eviction collisions are rare. Direct-mapped. */
-static const int    sc_bits  = 18;
-static const size_t sc_slots = static_cast<size_t>(1) << sc_bits;
-static const size_t sc_mask  = sc_slots - 1;
 
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
@@ -412,17 +358,6 @@ struct machine
 #if !defined(__clang__)
   bool plug_fixed_ex[asize];
 #endif
-
-  /* --score-tt plugboard score cache: heap-allocated per worker when the flag is on,
-     else null. Reached through a pointer so it never enlarges the struct or pushes the
-     hot decode tables above to large offsets. sc_gen is bumped by setup_mapping on every
-     new rotor key (invalidating every stored score in O(1)); sc_hits/sc_lookups are the
-     effectiveness counters, summed across workers for the final diagnostic. All cold --
-     touched once per score_iter call, never in the per-character scoring loop. */
-  sc_slot * sc_cache;
-  uint32_t  sc_gen;
-  uint64_t  sc_hits;
-  uint64_t  sc_lookups;
 };
 
 /* The n-gram scorers read uint8 fixed-point log10-probability tables. This is a
@@ -875,210 +810,6 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
 }
 
 
-/* --- Restart transposition table (--restart-tt) -----------------------------
-   A Zobrist-hashed table of converged restart plugboards, for measuring restart
-   basin collapse in-binary: the distinct-optima dedup the external --dump-restarts
-   harness does, plus the full hit count per basin. Diagnostic only -- it never
-   affects which candidate wins, so results stay -T-deterministic; and since the
-   multiset of converged boards is a deterministic function of the work items, the
-   distinct-count and hit-histogram are themselves -T-invariant. The Zobrist words
-   are a FIXED deterministic table (splitmix64 from a constant, not random_device
-   or opt_seed) so the hash and every stat derived from it are reproducible. Each
-   bucket stores the exact board (so a hash collision is a probe-on, never a false
-   merge), its score, and how many restarts collapsed onto it. */
-static const int g_npairs = asize * (asize - 1) / 2;   /* 325 unordered letter pairs */
-static uint64_t g_zobrist[g_npairs];
-
-static void init_zobrist()
-{
-  uint64_t s = 0x9E3779B97F4A7C15ULL;   /* fixed seed -> reproducible across runs/threads */
-  for (int i = 0; i < g_npairs; i++)
-    {
-      s += 0x9E3779B97F4A7C15ULL;        /* splitmix64 */
-      uint64_t z = s;
-      z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-      z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-      z ^= z >> 31;
-      g_zobrist[i] = z;
-    }
-}
-
-/* Index of the unordered pair (a<b) in the lexicographic 0..324 order make_pairtab
-   enumerates (i<j): pairs with first element < a, plus the offset within a. */
-static inline int pair_index(int a, int b)
-{
-  return a * (asize - 1) - a * (a - 1) / 2 + (b - a - 1);
-}
-
-/* XOR of the Zobrist word of every set plug pair (each counted once, low<high). */
-static uint64_t board_hash(const unsigned char * steck)
-{
-  uint64_t h = 0;
-  for (int j = 0; j < asize; j++)
-    if (steck[j] > j)
-      h ^= g_zobrist[pair_index(j, steck[j])];
-  return h;
-}
-
-struct tt_bucket
-{
-  unsigned char board[asize];
-  double score;
-  uint32_t count;
-  bool occupied;
-};
-
-struct restart_tt
-{
-  tt_bucket * slots = nullptr;
-  size_t mask = 0;          /* size - 1 (size is a power of two) */
-  size_t nentries = 0;      /* distinct converged boards */
-  size_t nclimbs = 0;       /* total touches */
-  bool full = false;        /* set if we ever ran out of slots (then stop inserting) */
-};
-
-/* next power of two >= want, clamped to [1024, 4M slots (~160 MB)] */
-static size_t tt_size_for(size_t want)
-{
-  size_t n = 1024;
-  while (n < want && n < (static_cast<size_t>(1) << 22))
-    n <<= 1;
-  return n;
-}
-
-static void tt_alloc(restart_tt & tt, size_t want)
-{
-  size_t n = tt_size_for(want);
-  tt.slots = new tt_bucket[n]();   /* value-init: occupied == false everywhere */
-  tt.mask = n - 1;
-  tt.nentries = 0;
-  tt.nclimbs = 0;
-  tt.full = false;
-}
-
-static void tt_free(restart_tt & tt)
-{
-  delete[] tt.slots;
-  tt.slots = nullptr;
-}
-
-/* Insert the board or bump its counter. Open addressing, linear probe, exact compare. */
-static void tt_touch(restart_tt & tt, const unsigned char * steck, double score)
-{
-  tt.nclimbs++;
-  uint64_t h = board_hash(steck);
-  size_t i = h & tt.mask;
-  size_t probed = 0;
-  while (tt.slots[i].occupied)
-    {
-      if (memcmp(tt.slots[i].board, steck, asize) == 0)
-        {
-          tt.slots[i].count++;
-          return;
-        }
-      i = (i + 1) & tt.mask;
-      if (++probed > tt.mask)          /* table full -> give up (should not happen if sized right) */
-        { tt.full = true; return; }
-    }
-  memcpy(tt.slots[i].board, steck, asize);
-  tt.slots[i].score = score;
-  tt.slots[i].count = 1;
-  tt.slots[i].occupied = true;
-  tt.nentries++;
-}
-
-/* Render a board canonically (each pair low-high, pairs ordered by low letter). */
-static void tt_board_str(const unsigned char * board, char * out)
-{
-  char * p = out;
-  for (int j = 0; j < asize; j++)
-    if (board[j] > j)
-      {
-        if (p > out)
-          *p++ = ' ';
-        *p++ = num2char(j);
-        *p++ = num2char(static_cast<int>(board[j]));
-      }
-  *p = 0;
-}
-
-/* Env-gated detailed dump (ENIGMA_TT_DUMP): table load, per-basin score stats, the hit
-   histogram (hits -> #basins), and the top basins by hit count. Off the hot path. */
-static void tt_dump_verbose(const restart_tt & tt)
-{
-  std::vector<const tt_bucket *> b;
-  for (size_t i = 0; i <= tt.mask; i++)
-    if (tt.slots[i].occupied)
-      b.push_back(& tt.slots[i]);
-  if (b.empty())
-    return;
-
-  uint32_t maxc = 0;
-  double smin = 1e300, smax = -1e300, ssum = 0.0;
-  for (const tt_bucket * e : b)
-    {
-      if (e->count > maxc) maxc = e->count;
-      if (e->score < smin) smin = e->score;
-      if (e->score > smax) smax = e->score;
-      ssum += e->score;
-    }
-  std::vector<size_t> hist(maxc + 1, 0);
-  for (const tt_bucket * e : b)
-    hist[e->count]++;
-
-  std::sort(b.begin(), b.end(), [](const tt_bucket * x, const tt_bucket * y)
-            { if (x->count != y->count) return x->count > y->count;
-              return x->score > y->score; });
-
-  size_t size = tt.mask + 1;
-  fprintf(stderr, "  table: %zu slots, %zu entries, load %.3f%s\n",
-          size, tt.nentries, static_cast<double>(tt.nentries) / static_cast<double>(size),
-          tt.full ? " (FULL)" : "");
-  fprintf(stderr, "  per-basin score: min %.4f  mean %.4f  max %.4f\n",
-          smin, ssum / static_cast<double>(b.size()), smax);
-  fprintf(stderr, "  hit histogram (hits:#basins):");
-  for (uint32_t h = 1; h <= maxc; h++)
-    if (hist[h])
-      fprintf(stderr, " %u:%zu", h, hist[h]);
-  fprintf(stderr, "\n");
-  int K = b.size() < 10 ? static_cast<int>(b.size()) : 10;
-  fprintf(stderr, "  top %d basins (hits  score  board):\n", K);
-  char board[3 * 13];
-  for (int k = 0; k < K; k++)
-    {
-      tt_board_str(b[k]->board, board);
-      fprintf(stderr, "    %4u  %.4f  %s\n", b[k]->count, b[k]->score, board);
-    }
-}
-
-/* Summarise basin collapse: distinct optima, the heaviest basin, and Shannon entropy of
-   the hit distribution (uniform over N basins -> log2 N; all-collapsed -> 0). */
-static void tt_report(const restart_tt & tt)
-{
-  if (tt.nclimbs == 0)
-    return;
-  uint32_t maxc = 0;
-  double H = 0.0;
-  double tot = static_cast<double>(tt.nclimbs);
-  for (size_t i = 0; i <= tt.mask; i++)
-    if (tt.slots[i].occupied)
-      {
-        uint32_t c = tt.slots[i].count;
-        if (c > maxc)
-          maxc = c;
-        double p = static_cast<double>(c) / tot;
-        H -= p * log2(p);
-      }
-  fprintf(stderr,
-          "restart-tt: %zu distinct optima over %zu climbs "
-          "(max %u hits on one basin, entropy %.2f bits%s)\n",
-          tt.nentries, tt.nclimbs, maxc, H, tt.full ? ", TABLE FULL -- undercount" : "");
-  if (getenv("ENIGMA_TT_DUMP") != nullptr)
-    tt_dump_verbose(tt);
-}
-
-static restart_tt g_restart_tt;
-static std::mutex g_tt_mutex;
 
 /* --- machine model: setup, rotor stepping, precompute ------------------- */
 
@@ -1095,8 +826,6 @@ void init()
   for (int i=0; i < reflector_count; i++)
     for (int j=0; j < asize; j++)
       reflector[i][j] = char2num(reflector_string[i][j]);
-
-  init_zobrist();
 }
 
 /* Reset the plugboard to identity + the fixed -s pairs. Board-only (the fixed-letter set is
@@ -1281,13 +1010,6 @@ void setup_mapping(machine & m, bool copy_rows)
 {
   if (textlength > maxlen)
     fatal("Ciphertext too long");
-
-  /* A new rotor stack is being installed: every score_iter value now differs, so bump
-     the --score-tt generation to invalidate the whole cache in O(1). setup_mapping is
-     called exactly once per key (its restarts reuse the same rows), so the cache
-     persists across a key's restarts -- which is where the memoisation pays off. */
-  if (m.sc_cache)
-    m.sc_gen++;
 
   const unsigned char (* __restrict sa)[asize][asize][asize] = m.subst_array;
   const unsigned char ** __restrict rows = m.rows;
@@ -1703,29 +1425,6 @@ double score_iter(machine & m)
 {
   m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
 
-  /* --score-tt: consult the plugboard score cache first. The key is the Zobrist hash
-     of the plugboard; a hit additionally requires the exact board, the current rotor-key
-     generation and the scoring model to match, so the stored value is EXACTLY what this
-     call would otherwise compute (a hash collision or a stale generation is a miss, never
-     a wrong score). On a hit the whole decode/score loop is skipped -- that is the work
-     the cache saves. Direct-mapped: `slot` is the (possibly evicted) home slot, reused
-     for the store below so the board hash is computed only once. */
-  sc_slot * slot = nullptr;
-  uint64_t h = 0;
-  if (m.sc_cache)
-    {
-      h = board_hash(m.steckerbrett);
-      slot = & m.sc_cache[h & sc_mask];
-      m.sc_lookups++;
-      if ((slot->gen == m.sc_gen) && (slot->tag == h)
-          && (slot->scoring == m.scoring)
-          && (memcmp(slot->board, m.steckerbrett, asize) == 0))
-        {
-          m.sc_hits++;
-          return slot->score;
-        }
-    }
-
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
 
@@ -1770,18 +1469,6 @@ double score_iter(machine & m)
      ranks highest -- only the scale of the reported score. */
   if (nterms > 0)
     score /= nterms;
-
-  /* Store the freshly computed score in its home slot (evicting whatever aliased there).
-     Correctness never depends on the stored contents -- the gen/tag/board/model guard on
-     lookup rejects any mismatch -- so eviction only ever costs a recomputation. */
-  if (slot)
-    {
-      slot->tag = h;
-      slot->score = score;
-      slot->gen = m.sc_gen;
-      slot->scoring = static_cast<uint8_t>(m.scoring);
-      memcpy(slot->board, m.steckerbrett, asize);
-    }
 
   return score;
 }
@@ -1860,100 +1547,12 @@ static bool try_repair(machine & m, double cur_score)
   return found;
 }
 
-/* The 8 GENUINE rematchings of three plugs, indexing the six letters L[] =
-   {a,x, b,y, c,z} (original pairs (0,1),(2,3),(4,5)). Each row is three pairs of L[]
-   indices forming a perfect matching that shares NO edge with the original -- i.e. every
-   letter changes partner. (The other six of the 15 matchings keep one original pair and
-   are just a two-plug re-pair, already covered by try_repair, so they are omitted.) */
-static const unsigned char REMATCH3[8][6] =
-{
-  { 0, 2, 1, 4, 3, 5 }, { 0, 2, 1, 5, 3, 4 },
-  { 0, 3, 1, 4, 2, 5 }, { 0, 3, 1, 5, 2, 4 },
-  { 0, 4, 1, 3, 2, 5 }, { 0, 4, 1, 2, 3, 5 },
-  { 0, 5, 1, 3, 2, 4 }, { 0, 5, 1, 2, 3, 4 },
-};
-
-/* try_repair_3 (--repair3): the 3-plug generalisation of try_repair, tried only as a
-   last-resort barrier cross once the cheap climb AND try_repair have both converged.
-   Takes three existing (non-fixed) plugs -- six letters -- and scores every genuine
-   count-neutral rematch (the 8 above); keeps the single best strictly-improving one.
-   Count-neutral, so no cap gating is needed. Cost O(C(np,3)*8) score_iter per call
-   (960 at 10 plugs), paid only at convergence, so ~zero amortised -- like try_repair. */
-template<bool EX>
-static bool try_repair_3(machine & m, double cur_score)
-{
-  const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
-  int plo[asize / 2];
-  int phi[asize / 2];
-  int np = 0;
-  for (int a = 0; a < asize; a++)
-    if ((m.steckerbrett[a] > a) && ! pf[a])   /* never rewire a fixed -s plug */
-      {
-        plo[np] = a;
-        phi[np] = m.steckerbrett[a];
-        np++;
-      }
-
-  double best = cur_score;
-  int best_L[6] = { 0, 0, 0, 0, 0, 0 };
-  int best_mm = -1;
-  bool found = false;
-
-  for (int i = 0; i < np; i++)
-    for (int j = i + 1; j < np; j++)
-      for (int k = j + 1; k < np; k++)
-        {
-          const int L[6] = { plo[i], phi[i], plo[j], phi[j], plo[k], phi[k] };
-          for (int mm = 0; mm < 8; mm++)
-            {
-              for (int q = 0; q < 6; q += 2)   /* the three pairs of the rematch */
-                {
-                  int u = L[REMATCH3[mm][q]];
-                  int v = L[REMATCH3[mm][q + 1]];
-                  m.steckerbrett[u] = static_cast<unsigned char>(v);
-                  m.steckerbrett[v] = static_cast<unsigned char>(u);
-                }
-
-              double s = score_iter(m);
-              if (s > best)
-                {
-                  best = s;
-                  found = true;
-                  best_mm = mm;
-                  for (int t = 0; t < 6; t++)
-                    best_L[t] = L[t];
-                }
-
-              /* restore the three original plugs */
-              m.steckerbrett[L[0]] = static_cast<unsigned char>(L[1]);
-              m.steckerbrett[L[1]] = static_cast<unsigned char>(L[0]);
-              m.steckerbrett[L[2]] = static_cast<unsigned char>(L[3]);
-              m.steckerbrett[L[3]] = static_cast<unsigned char>(L[2]);
-              m.steckerbrett[L[4]] = static_cast<unsigned char>(L[5]);
-              m.steckerbrett[L[5]] = static_cast<unsigned char>(L[4]);
-            }
-        }
-
-  if (found)
-    {
-      for (int q = 0; q < 6; q += 2)   /* the three pairs of the winning rematch */
-        {
-          int u = best_L[REMATCH3[best_mm][q]];
-          int v = best_L[REMATCH3[best_mm][q + 1]];
-          m.steckerbrett[u] = static_cast<unsigned char>(v);
-          m.steckerbrett[v] = static_cast<unsigned char>(u);
-        }
-      report_climb_progress(m, best);
-    }
-  return found;
-}
-
-/* --gainfix tuning: candidate shortlist size and plug1 beam width. Plug2 is scored
+/* --cascade tuning: candidate shortlist size and plug1 beam width. Plug2 is scored
    over the whole shortlist per plug1, so cascade cost is ~CAP + N1*CAP score_iter. */
 static const int GAINFIX_CAP = 25;
 static const int GAINFIX_N1  = 6;
-static const int GAINFIX_N2  = 6;   /* --gainfix3: intermediate plug2 beam */
-static const int GAINFIX_K3  = 8;   /* --gainfix3: # of sacrifice pairs reclimbed */
+static const int GAINFIX_N2  = 6;   /* 3-ply: intermediate plug2 beam */
+static const int GAINFIX_K3  = 8;   /* 3-ply: # of sacrifice pairs reclimbed */
 
 /* Form plug a-b in place, ejecting a's and b's old partners to self-steckered
    (an "add-with-eject" — a free endpoint is a no-op eject). */
@@ -2059,7 +1658,7 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
   return out;
 }
 
-/* --gainfix: the 2-ply gain cascade barrier cross (PERFORMANCE.md 4.10). Quad-only,
+/* --cascade: the 2-ply gain cascade barrier cross (PERFORMANCE.md 4.10). Quad-only,
    run at convergence once the cheap climb / re-pairs have stalled. Ranks the shortlist
    by the full re-decode score; then for each of the top-N1 plug1 candidates, applies it
    (even if it does not improve — that un-masks a masked second plug) and scores every
@@ -2072,7 +1671,7 @@ static bool gain_cascade(machine & m, double cur_score)
 {
   if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
     return false;
-  if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
+  if (cur_score < opt_cascade_gate)             /* near-solution gate: skip junk boards */
     return false;
 
   unsigned char * steck = m.steckerbrett;
@@ -2139,7 +1738,7 @@ static bool gain_cascade(machine & m, double cur_score)
 
 template<bool EX> static double hillclimb(machine & m, int max_pairs);   /* fwd: reclimb below */
 
-/* --gainfix3 ("sacrifice + reclimb"): a deeper escalation for 3-plug tangles the 2-ply pair
+/* 3-ply ("sacrifice + reclimb"): a deeper escalation for 3-plug tangles the 2-ply pair
    can't cross, tried only when the 2-ply cascade found nothing. Rank the (plug1,plug2)
    SACRIFICE pairs (both plugs, possibly downhill) by their 2-plug score, and for the top-K
    commit the sacrifice and run a full PLAIN reclimb -- letting the ordinary climb find the
@@ -2154,7 +1753,7 @@ static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
 {
   if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
     return false;
-  if (cur_score < opt_gainfix_gate)             /* near-solution gate: skip junk boards */
+  if (cur_score < opt_cascade_gate)             /* near-solution gate: skip junk boards */
     return false;
 
   unsigned char * steck = m.steckerbrett;
@@ -2245,8 +1844,8 @@ static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
   double best = cur_score;
   bool found = false;
   unsigned char bestboard[asize];
-  int save_gf = opt_gainfix, save_gf3 = opt_gainfix3;
-  opt_gainfix = 0; opt_gainfix3 = 0;
+  int save_gf = opt_cascade, save_gf3 = opt_cascade3;
+  opt_cascade = 0; opt_cascade3 = 0;
   for (int k = 0; k < K; k++)
     {
       for (int i = 0; i < asize; i++) steck[i] = pboard[po[k]][i];
@@ -2257,7 +1856,7 @@ static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
           for (int i = 0; i < asize; i++) bestboard[i] = steck[i];
         }
     }
-  opt_gainfix = save_gf; opt_gainfix3 = save_gf3;
+  opt_cascade = save_gf; opt_cascade3 = save_gf3;
 
   for (int i = 0; i < asize; i++) steck[i] = saveS[i];     /* restore original board */
   if (found)
@@ -2280,7 +1879,7 @@ static pairtab make_pairtab()
   return t;
 }
 
-/* --- Circular first-improvement climb (-I) ------------------------------------
+/* --- Circular first-improvement climb (-J) ------------------------------------
 
    Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
    best. First-improvement instead applies the FIRST move that improves and keeps going.
@@ -2362,37 +1961,8 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      climb from the (perturbed) starting board, so it differs per restart; deterministic
      (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
   const bool dyn_order = (opt_dynorder != 0);
-  const bool infl_order = (opt_inflorder != 0);
   int visit[nmoves];
-  if (infl_order)
-    {
-      /* --infl-order: rank moves by board-state influence (§4.6), ~free. Two 26-bin
-         histograms -- ciphertext letters and current-decrypt letters -- then
-         w(a,b) = cc[a]+cc[b]+pc[a]+pc[b] (sum form of the influence weight). Order once
-         from the starting board (per-restart, like -J), no per-move scoring. */
-      const unsigned char * const * __restrict rows = m.rows;
-      const unsigned char * __restrict ct = num_ciphertext;
-      int cc[asize] = { 0 };
-      int pc[asize] = { 0 };
-      for (int i = 0; i < textlength; i++)
-        {
-          cc[ct[i]]++;
-          pc[decode_at(steck, rows, ct, i)]++;
-        }
-      int infl[nmoves];
-      for (int mv = 0; mv < nmoves; mv++)
-        {
-          int a = P.a[mv], b = P.b[mv];
-          infl[mv] = cc[a] + cc[b] + pc[a] + pc[b];
-          visit[mv] = mv;
-        }
-      std::sort(visit, visit + nmoves, [&](int i, int j)
-      {
-        if (infl[i] != infl[j]) return infl[i] > infl[j];   /* most influential first */
-        return i < j;                                        /* deterministic tie-break */
-      });
-    }
-  else if (dyn_order)
+  if (dyn_order)
     {
       double sc[nmoves];
       for (int mv = 0; mv < nmoves; mv++)
@@ -2486,7 +2056,7 @@ template<bool EX>
 static double hillclimb(machine & m, int max_pairs)
 {
   const bool * __restrict pf = EX ? PLUG_FIXED_EX : plug_fixed;
-  /* -I: circular first-improvement instead of steepest ascent (off by default, so the
+  /* -J: circular first-improvement instead of steepest ascent (off by default, so the
      baseline is byte-identical). */
   const bool firstimp = (opt_firstimprove != 0);
 
@@ -2637,14 +2207,10 @@ static double hillclimb(machine & m, int max_pairs)
         }
 
       /* Cheap moves converged: one last-resort re-pair barrier cross. If it
-         improves, loop back and let the cheap climb resume from the new board.
-         With --repair3, and only when the 2-plug re-pair also found nothing, try the
-         deeper 3-plug reshuffle as a further barrier cross. */
-      /* short-circuit: try_repair_3 runs only when the 2-plug re-pair found nothing */
+         improves, loop back and let the cheap climb resume from the new board. */
       if ((! opt_no_repair && try_repair<EX>(m, cur))
-          || (opt_repair3 && try_repair_3<EX>(m, cur))
-          || (opt_gainfix && gain_cascade<EX>(m, cur))
-          || (opt_gainfix3 && gain_cascade_3ply<EX>(m, cur, max_pairs)))
+          || (opt_cascade && gain_cascade<EX>(m, cur))
+          || (opt_cascade3 && gain_cascade_3ply<EX>(m, cur, max_pairs)))
         progress = true;
     }
   while (progress);
@@ -3234,27 +2800,9 @@ static inline uint64_t restart_seed(size_t key_index, int restart)
   return z ^ (z >> 31);
 }
 
-/* --dump-restarts: emit one converged restart's (score, plugboard) to stderr for the
-   restart-diversity diagnostic. The board is written canonically (each pair low-high,
-   pairs ordered by low letter) so a harness can dedupe boards by string equality. Under
-   a mutex; display-only, so results stay -T-deterministic. */
+/* Serialises the --dump-all diagnostic lines; display-only, so results stay
+   -T-deterministic. */
 static std::mutex g_dump_mutex;
-static void dump_restart(machine & m, double score)
-{
-  char board[3 * 13];
-  char * p = board;
-  for (int j = 0; j < asize; j++)
-    if (m.steckerbrett[j] > j)
-      {
-        if (p > board)
-          *p++ = ' ';
-        *p++ = num2char(j);
-        *p++ = num2char(m.steckerbrett[j]);
-      }
-  *p = 0;
-  std::lock_guard<std::mutex> lock(g_dump_mutex);
-  fprintf(stderr, "restart %.4f %s\n", score, board);
-}
 
 /* --dump-all: emit one converged (rotor key, restart) climb's FULL setting -- the rotor
    key (reflector+wheels / ring / start), the score, and the plugboard -- so a wildcarded
@@ -3282,15 +2830,8 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
   double score = optimize_once(m, & rng);
-  if (opt_dump_restarts)
-    dump_restart(m, score);
   if (opt_dump_all)
     dump_all(m, score);
-  if (opt_restart_tt)
-    {
-      std::lock_guard<std::mutex> lock(g_tt_mutex);
-      tt_touch(g_restart_tt, m.steckerbrett, score);
-    }
   return score;
 }
 
@@ -3361,7 +2902,7 @@ struct best_result
   size_t idx = static_cast<size_t>(-1);   /* work index of the best (for the tie-break) */
   bool found = false;
   char plaintext[maxlen+1];
-  /* Winning plugboard, recorded at the merge so a post-search --gainfix-best pass can
+  /* Winning plugboard, recorded at the merge so the post-search --polish pass can
      reconstruct the machine (via the key from `idx`) and finish the single best board. */
   unsigned char steckerbrett[asize];
   /* Highest score already ECHOED as a progress line -- display state only, never read
@@ -3449,8 +2990,6 @@ static size_t g_table_count = 0;
 static size_t g_table_bytes = 0;
 static size_t g_keys_analysed = 0;       /* rotor combinations examined */
 static uint64_t g_plugboards_scored = 0; /* total score_iter calls across workers */
-static uint64_t g_sc_hits = 0;           /* --score-tt: score_iter calls served from cache */
-static uint64_t g_sc_lookups = 0;        /* --score-tt: cache lookups (== calls with cache on) */
 
 /* base pointer into the rotor-stack table block: the same type as
    machine::subst_array, so 'all + i*asize' is task i's [asize]^4 table */
@@ -3596,7 +3135,7 @@ void search_worker(machine & m,
                   best.idx = idx;
                   best.found = true;
                   memcpy(best.plaintext, m.plaintext, textlength + 1);
-                  memcpy(best.steckerbrett, m.steckerbrett, asize);   /* for --gainfix-best */
+                  memcpy(best.steckerbrett, m.steckerbrett, asize);   /* for --polish */
                   /* Echo the new best -- unless a progress line already showed this
                      score (a climb's last accepted move IS its converged board, so
                      reprinting it here would just duplicate the line). Ties that
@@ -4053,9 +3592,6 @@ void bruteforce(char * result)
       ? units_per_key : 1;
   size_t work_items = total_keys * restarts_par;
 
-  if (opt_restart_tt)
-    tt_alloc(g_restart_tt, work_items);
-
   /* never start more threads than there is work to hand out */
   int nthreads = opt_threads;
   if (work_items < static_cast<size_t>(nthreads))
@@ -4069,11 +3605,6 @@ void bruteforce(char * result)
   for (int t = 0; t < nthreads; t++)
     {
       machines[t] = new machine();   /* subst_array is pointed at 'all' per task */
-      /* --score-tt: give each worker its own zero-initialised score cache (gen 0 marks
-         every slot empty; setup_mapping bumps to 1 on the first key). Per-worker so no
-         locking is needed and the memoisation stays a pure-local optimisation. */
-      if (opt_score_tt)
-        machines[t]->sc_cache = new sc_slot[sc_slots]();
     }
 
   /* phase 1: precompute every wheel order's table once, in parallel */
@@ -4176,13 +3707,13 @@ void bruteforce(char * result)
                         rsize, gsize, next_key, schunk, restarts_par, best); });
     }
 
-  /* --gainfix-best: an alternative to the per-convergence --gainfix. Instead of firing
+  /* --polish: an alternative to the per-convergence --cascade. Instead of firing
      the gated cascade at every near-solution convergence, run ONE unconditional gain
      cascade + finishing climb on the single best board after all restarts. Reconstruct
      that board's machine from its key (best.idx) and the recorded steckerbrett. Only
      the simple sweep records best.idx as key*restarts+restart, so it is guarded to
      that path (no -F, no --exhaust). */
-  if ((opt_gainfix_best || opt_gainfix_best3) && best.found)
+  if (opt_polish && best.found)
     {
       machine & m = *machines[0];
       size_t rg = rsize * gsize;
@@ -4196,12 +3727,12 @@ void bruteforce(char * result)
         m.steckerbrett[i] = best.steckerbrett[i];
       m.scoring = opt_scoring;
       m.report = false;
-      int save_gf = opt_gainfix;
-      int save_gf3 = opt_gainfix3;
-      double save_gate = opt_gainfix_gate;
-      opt_gainfix = 1;
-      opt_gainfix3 = opt_gainfix_best3;   /* --gainfix-best3 also enables the 3-ply escalation */
-      opt_gainfix_gate = score_min;   /* unconditional cascade on the one best board */
+      int save_gf = opt_cascade;
+      int save_gf3 = opt_cascade3;
+      double save_gate = opt_cascade_gate;
+      opt_cascade = 1;
+      opt_cascade3 = 1;   /* --polish also enables the 3-ply escalation */
+      opt_cascade_gate = score_min;   /* unconditional cascade on the one best board */
       /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
          every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
          the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
@@ -4209,9 +3740,9 @@ void bruteforce(char * result)
          avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
       int fin_cap = opt_stages[opt_nstages - 1].cap;
       double s = hillclimb<false>(m, fin_cap);
-      opt_gainfix = save_gf;
-      opt_gainfix3 = save_gf3;
-      opt_gainfix_gate = save_gate;
+      opt_cascade = save_gf;
+      opt_cascade3 = save_gf3;
+      opt_cascade_gate = save_gate;
       /* Monotonic by construction: replace the best board ONLY when the finish scores
          strictly higher, so gainfix-best never returns a worse-scoring board than the
          search already found (a truth-vs-score chase at the information floor is a
@@ -4240,26 +3771,11 @@ void bruteforce(char * result)
      exit), and each worker counted the plugboards it scored -- sum them up */
   g_keys_analysed = total_keys;
   g_plugboards_scored = 0;
-  g_sc_hits = 0;
-  g_sc_lookups = 0;
   for (int t = 0; t < nthreads; t++)
-    {
-      g_plugboards_scored += machines[t]->plugboards_scored;
-      g_sc_hits += machines[t]->sc_hits;
-      g_sc_lookups += machines[t]->sc_lookups;
-    }
-
-  if (opt_restart_tt)
-    {
-      tt_report(g_restart_tt);
-      tt_free(g_restart_tt);
-    }
+    g_plugboards_scored += machines[t]->plugboards_scored;
 
   for (int t = 0; t < nthreads; t++)
-    {
-      delete[] machines[t]->sc_cache;
-      delete machines[t];
-    }
+    delete machines[t];
   delete[] all;
 
   if (! best.found)
@@ -4419,7 +3935,7 @@ void alltoupper(char * text)
    exit 1. */
 void version(FILE * out)
 {
-  fprintf(out, "Enigma cipher tool version 1.1.0\n");
+  fprintf(out, "Enigma cipher tool version 2.0.0\n");
   fprintf(out, "Copyright (C) 2017-2026 Torbjørn Rognes\n");
   fprintf(out, "\n");
 }
@@ -4453,7 +3969,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "reflector b/c; -w/-r/-g take 4 chars (Greek");
   fprintf(out, "  %-24s %s\n", "", "wheel/ring/start first)");
   fprintf(out, "  %-24s %s\n", "-c, --climb",
-          "Perform hill climbing to find plugboard settings");
+          "Hill-climb the plugboard for each candidate key.");
+  fprintf(out, "  %-24s %s\n", "", "The climb rule is STEEPEST ASCENT by default:");
+  fprintf(out, "  %-24s %s\n", "", "score all 325 plug toggles, apply the single");
+  fprintf(out, "  %-24s %s\n", "", "best, repeat to convergence (see -J) [off]");
   fprintf(out, "  %-24s %s\n", "-R, --restarts N",
           "Random restart attempts: 0 = one deterministic");
   fprintf(out, "  %-24s %s\n", "", "climb; N = N kicked climbs, keep best [0]");
@@ -4464,8 +3983,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "m4a10 (mono pre-pass then weighted, both capped).");
   fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
   fprintf(out, "  %-24s %s\n", "-l, --language language",
-          "Scoring language (english/german/danish/french);");
-  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q (no default); not for -i");
+          "Scoring language: english/german/danish/french, or");
+  fprintf(out, "  %-24s %s\n", "", "wehrmacht (telegraphic military German -- X as");
+  fprintf(out, "  %-24s %s\n", "", "word separator, Q for ch, spelled-out numbers;");
+  fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German);");
+  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q/-a (no default); not -i");
   fprintf(out, "  %-24s %s\n", "-i, --ic",
           "Index of coincidence (IC); needs no -l [default]");
   fprintf(out, "  %-24s %s\n", "-m, --mono", "Monogram statistics for the plaintext score");
@@ -4475,7 +3997,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "-a, --weighted",
           "Weighted all-order score (log-linear mix of");
   fprintf(out, "  %-24s %s\n", "", "quad/tri/bi/mono); sharper on short messages.");
-  fprintf(out, "  %-24s %s\n", "", "Recommended: -c -S m4a10 -J --gainfix-best3");
+  fprintf(out, "  %-24s %s\n", "", "Recommended: -c -S m4a10 -J --polish");
   fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
           "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
   fprintf(out, "  %-24s %s\n", "-T, --threads N",
@@ -4489,16 +4011,22 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
   fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
   fprintf(out, "  %-24s %s\n", "-J, --dynamic-order",
-          "Like -I with dynamic best-first move ordering;");
-  fprintf(out, "  %-24s %s\n", "", "wins ~10-plug, may lose few-plug (implies -I) [off]");
+          "Change -c's climb rule to FIRST-IMPROVEMENT in");
+  fprintf(out, "  %-24s %s\n", "", "best-first order: apply the first improving");
+  fprintf(out, "  %-24s %s\n", "", "toggle instead of scanning for the best, ~2.8x");
+  fprintf(out, "  %-24s %s\n", "", "cheaper per climb -- so pair it with a larger -R.");
+  fprintf(out, "  %-24s %s\n", "", "Wins the realistic ~10-plug case, may lose with");
+  fprintf(out, "  %-24s %s\n", "", "few plugs (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-M, --cap-target",
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
   fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--gainfix-best3",
+  fprintf(out, "  %-24s %s\n", "--polish",
           "Gain cascade once on the best board, plus a deeper");
-  fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles; the recommended");
-  fprintf(out, "  %-24s %s\n", "", "finisher, near-free at K=8 (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles. The recommended");
+  fprintf(out, "  %-24s %s\n", "", "finisher: it runs once after all restarts, so its");
+  fprintf(out, "  %-24s %s\n", "", "cost is fixed and negligible at a high -R, but is");
+  fprintf(out, "  %-24s %s\n", "", "a few % of a low-R run (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -4515,28 +4043,19 @@ void help(FILE * out)
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
-  fprintf(out, "  %-24s %s\n", "-I, --first-improve",
-          "First-improvement climb: ~2.8x cheaper per climb,");
-  fprintf(out, "  %-24s %s\n", "", "pair with more -R (needs -c) [off]; prefer -J");
   fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
           "Key pre-filter: rank by a cheap IC climb, then");
   fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
   fprintf(out, "  %-24s %s\n", "", "top N% of the keyspace (needs -c) [off];");
   fprintf(out, "  %-24s %s\n", "", "long messages only, weak on short");
-  fprintf(out, "  %-24s %s\n", "--repair3",
-          "Last-resort 3-plug reshuffle at convergence (a");
-  fprintf(out, "  %-24s %s\n", "", "deeper try_repair; needs -c) [off]; dominated");
   fprintf(out, "  %-24s %s\n", "--no-repair",
           "Disable the 2-plug re-pair barrier cross");
   fprintf(out, "  %-24s %s\n", "", "(ablation/measurement flag; needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--gainfix-best",
-          "Gain cascade once on the best board; superseded");
-  fprintf(out, "  %-24s %s\n", "", "by --gainfix-best3, near-free (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--gainfix[=GATE]",
+  fprintf(out, "  %-24s %s\n", "--cascade[=GATE]",
           "Quadgram-gain 2-ply directed-repair cascade at");
   fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
   fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off];");
-  fprintf(out, "  %-24s %s\n", "", "prefer --gainfix-best3 (kept for -F/--exhaust)");
+  fprintf(out, "  %-24s %s\n", "", "prefer --polish (kept for -F/--exhaust)");
   fprintf(out, "  %-24s %s\n", "--exhaust E",
           "Force E extra plug pairs among the free letters,");
   fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
@@ -4548,24 +4067,9 @@ void help(FILE * out)
           "With -F, print the tier-1 rank of the given");
   fprintf(out, "  %-24s %s\n", "", "standard key (e.g. B241AAAQEW = reflector, 3");
   fprintf(out, "  %-24s %s\n", "", "wheels, 3 ring, 3 start) among all keys [off]");
-  fprintf(out, "  %-24s %s\n", "--dump-restarts",
-          "With -c, print each converged restart's score");
-  fprintf(out, "  %-24s %s\n", "", "and board to stderr (verbose) [off]");
   fprintf(out, "  %-24s %s\n", "--dump-all",
           "With -c, print the full setting (rotor key, score,");
   fprintf(out, "  %-24s %s\n", "", "plugboard) of every key x restart (verbose) [off]");
-  fprintf(out, "  %-24s %s\n", "--restart-tt",
-          "With -c, hash converged restart boards into a");
-  fprintf(out, "  %-24s %s\n", "", "transposition table; print a basin-collapse");
-  fprintf(out, "  %-24s %s\n", "", "summary (distinct optima + hits) at the end [off]");
-  fprintf(out, "  %-24s %s\n", "--score-tt",
-          "With -c, memoise score_iter in a per-worker");
-  fprintf(out, "  %-24s %s\n", "", "plugboard score cache; report the % of scores");
-  fprintf(out, "  %-24s %s\n", "", "served from cache (results unchanged) [off]");
-  fprintf(out, "  %-24s %s\n", "--infl-order",
-          "Experimental: influence-ordered first-improvement");
-  fprintf(out, "  %-24s %s\n", "", "(implies -I; measured, dominated by -J;");
-  fprintf(out, "  %-24s %s\n", "", "needs -c) [off]");
   fprintf(out, "\n");
   fprintf(out, "Defaults are indicated in [square brackets].\n");
   fprintf(out, "\n");
@@ -4581,11 +4085,11 @@ void help(FILE * out)
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --gainfix-best3 --score m4a10 --random 10 -R 40 -a -l english\n");
+  fprintf(out, "  greedy: -c -J --polish --score m4a10 --random 10 -R 40 -a -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score a10 -R 12 -a -l english\n");
   fprintf(out, "-a (weighted all-order) is the recommended scoring model; -R is the main\n");
-  fprintf(out, "quality dial (use -T to keep it cheap); the gainfix finishers are a\n");
-  fprintf(out, "near-free bump, not a substitute for more restarts.\n");
+  fprintf(out, "quality dial (use -T to keep it cheap); the polisher is a small bump\n");
+  fprintf(out, "on top, not a substitute for more restarts.\n");
   fprintf(out, "\n");
 }
 
@@ -4637,22 +4141,17 @@ void show_settings()
     }
   if (opt_hillclimb && opt_capmerge)
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
-  if (opt_hillclimb && opt_repair3)
-    fprintf(stderr, "            3-plug re-pair barrier cross at convergence\n");
   if (opt_hillclimb && opt_no_repair)
     fprintf(stderr, "            2-plug re-pair barrier cross disabled (--no-repair)\n");
-  if (opt_hillclimb && opt_gainfix)
+  if (opt_hillclimb && opt_cascade)
     fprintf(stderr, "            quadgram-gain directed-repair cascade at convergence "
-            "(--gainfix, near-solution gate %.2f)\n", opt_gainfix_gate);
-  if (opt_hillclimb && opt_gainfix_best)
-    fprintf(stderr, "            quadgram-gain cascade once on the best board (--gainfix-best)\n");
-  if (opt_hillclimb && opt_gainfix_best3)
+            "(--cascade, near-solution gate %.2f)\n", opt_cascade_gate);
+  if (opt_hillclimb && opt_polish)
     fprintf(stderr, "            quadgram-gain 2-ply+3-ply cascade once on the best board "
-            "(--gainfix-best3)\n");
+            "(--polish)\n");
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
-            opt_dynorder ? " (dynamic move order)" :
-            opt_inflorder ? " (influence move order)" : "");
+            opt_dynorder ? " (dynamic move order)" : "");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts >= 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));
@@ -4725,28 +4224,23 @@ int main(int argc, char * * argv)
   opt_ringstellung = 0;
   opt_grundstellung = 0;
   opt_steckerbrett = "";
-  opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q) */
+  opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q/-a) */
   opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "ngrams" */
   opt_plaintext = 0;
   opt_maxwheel = 5;
   opt_hillclimb = 0;
   opt_firstimprove = 0;
   opt_dynorder = 0;
-  opt_inflorder = 0;
   opt_capmerge = 0;
-  opt_repair3 = 0;
   opt_no_repair = 0;
-  opt_gainfix = 0;
-  opt_gainfix_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
-  opt_gainfix_best = 0;
-  opt_gainfix3 = 0;
-  opt_gainfix_best3 = 0;
+  opt_cascade = 0;
+  opt_cascade_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
+  opt_cascade3 = 0;
+  opt_polish = 0;
   opt_crib_file = nullptr;
   opt_crib_weight = 0.5;
   opt_crib = 0;
   g_cribs.clear();
-  opt_restart_tt = false;
-  opt_score_tt = false;
   opt_dump_all = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
@@ -4769,9 +4263,8 @@ int main(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_DUMP, OPT_INFLORDER, OPT_REPAIR3,
-         OPT_NO_REPAIR, OPT_GAINFIX, OPT_GAINFIX_BEST, OPT_GAINFIX_BEST3, OPT_RESTART_TT,
-         OPT_SCORE_TT, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL };
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
+         OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -4794,7 +4287,6 @@ int main(int argc, char * * argv)
       { "seed",           required_argument, nullptr, 'e' },
       { "anneal",         required_argument, nullptr, 'A' },
       { "ngrams",         required_argument, nullptr, 'd' },
-      { "first-improve",  no_argument,       nullptr, 'I' },
       { "dynamic-order",  no_argument,       nullptr, 'J' },
       { "cap-target",     no_argument,       nullptr, 'M' },
       { "ic",             no_argument,       nullptr, 'i' },
@@ -4811,16 +4303,10 @@ int main(int argc, char * * argv)
       { "random",         required_argument, nullptr, OPT_RANDOM  },
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
-      { "dump-restarts",  no_argument,       nullptr, OPT_DUMP    },
       { "dump-all",       no_argument,       nullptr, OPT_DUMPALL },
-      { "restart-tt",     no_argument,       nullptr, OPT_RESTART_TT },
-      { "score-tt",       no_argument,       nullptr, OPT_SCORE_TT },
-      { "infl-order",     no_argument,       nullptr, OPT_INFLORDER },
-      { "repair3",        no_argument,       nullptr, OPT_REPAIR3 },
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
-      { "gainfix",        optional_argument, nullptr, OPT_GAINFIX },
-      { "gainfix-best",   no_argument,       nullptr, OPT_GAINFIX_BEST },
-      { "gainfix-best3",  no_argument,       nullptr, OPT_GAINFIX_BEST3 },
+      { "cascade",        optional_argument, nullptr, OPT_CASCADE },
+      { "polish",         no_argument,       nullptr, OPT_POLISH },
       { "crib-file",      required_argument, nullptr, OPT_CRIB },
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { nullptr,          0,                 nullptr, 0   }
@@ -4828,7 +4314,7 @@ int main(int argc, char * * argv)
 
   int c;
   while ((c = getopt_long(argc, argv,
-                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:IJMimbtqacvhn4",
+                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:JMimbtqacvhn4",
                           long_options, nullptr)) != -1)
     {
       switch (c)
@@ -4877,33 +4363,20 @@ int main(int argc, char * * argv)
         case 'c':
           opt_hillclimb = 1;
           break;
-        case 'I':
-          opt_firstimprove = 1;
-          break;
         case 'J':
-          opt_firstimprove = 1;   /* -J implies first-improvement */
+          opt_firstimprove = 1;   /* -J is the first-improvement climb, best-first order */
           opt_dynorder = 1;
-          break;
-        case OPT_INFLORDER:
-          opt_firstimprove = 1;   /* --infl-order implies first-improvement */
-          opt_inflorder = 1;
-          break;
-        case OPT_REPAIR3:
-          opt_repair3 = 1;
           break;
         case OPT_NO_REPAIR:
           opt_no_repair = 1;
           break;
-        case OPT_GAINFIX:
-          opt_gainfix = 1;
+        case OPT_CASCADE:
+          opt_cascade = 1;
           if (optarg != nullptr)
-            opt_gainfix_gate = strtod(optarg, nullptr);
+            opt_cascade_gate = strtod(optarg, nullptr);
           break;
-        case OPT_GAINFIX_BEST:
-          opt_gainfix_best = 1;
-          break;
-        case OPT_GAINFIX_BEST3:
-          opt_gainfix_best3 = 1;
+        case OPT_POLISH:
+          opt_polish = 1;
           break;
         case 'M':
           opt_capmerge = 1;
@@ -4931,17 +4404,8 @@ int main(int argc, char * * argv)
           alltoupper(optarg);
           opt_true_key = optarg;
           break;
-        case OPT_DUMP:
-          opt_dump_restarts = true;
-          break;
         case OPT_DUMPALL:
           opt_dump_all = true;
-          break;
-        case OPT_RESTART_TT:
-          opt_restart_tt = true;
-          break;
-        case OPT_SCORE_TT:
-          opt_score_tt = true;
           break;
         case OPT_CRIB:
           opt_crib_file = optarg;
@@ -5180,52 +4644,31 @@ int main(int argc, char * * argv)
   if ((opt_anneal > 0) && (! opt_hillclimb))
     fatal("Simulated annealing (-A) needs the plugboard hill-climb (-c)");
 
-  /* -I is a hill-climb strategy, so it needs -c. -J and --infl-order imply it, so name
-     the option the user actually passed rather than always blaming -I. */
+  /* -J selects the first-improvement climb with dynamic move order, so it needs -c. */
   if (opt_firstimprove && (! opt_hillclimb))
-    fatal(opt_dynorder
-          ? "Dynamic move order (-J) needs the plugboard hill-climb (-c)"
-          : opt_inflorder
-            ? "Influence move order (--infl-order) needs the plugboard hill-climb (-c)"
-            : "First-improvement (-I) needs the plugboard hill-climb (-c)");
-
-  /* --infl-order and -J are two different move orders for the first-improvement climb;
-     asking for both is ambiguous. */
-  if (opt_inflorder && opt_dynorder)
-    fatal("--infl-order and -J (dynamic order) are mutually exclusive");
+    fatal("Dynamic move order (-J) needs the plugboard hill-climb (-c)");
 
   /* -M changes the plug-cap rule in the climb, so it needs -c. */
   if (opt_capmerge && (! opt_hillclimb))
     fatal("Cap-as-target (-M) needs the plugboard hill-climb (-c)");
 
-  /* --repair3 is a climb barrier-cross move, so it needs -c. */
-  if (opt_repair3 && (! opt_hillclimb))
-    fatal("3-plug re-pair (--repair3) needs the plugboard hill-climb (-c)");
-
   /* --no-repair disables a climb move, so it only means anything with -c. */
   if (opt_no_repair && (! opt_hillclimb))
     fatal("Disabling the 2-plug re-pair (--no-repair) needs the plugboard hill-climb (-c)");
 
-  /* --gainfix is a climb barrier-cross move, so it needs -c. */
-  if (opt_gainfix && (! opt_hillclimb))
-    fatal("Gain-cascade repair (--gainfix) needs the plugboard hill-climb (-c)");
+  /* --cascade is a climb barrier-cross move, so it needs -c. */
+  if (opt_cascade && (! opt_hillclimb))
+    fatal("Gain cascade (--cascade) needs the plugboard hill-climb (-c)");
 
-  /* --gainfix-best finishes the best board post-search; needs -c, and the simple sweep
+  /* --polish finishes the best board post-search; needs -c, and the simple sweep
      (its best.idx = key*restarts+restart reconstruction does not hold under -F/--exhaust). */
-  if (opt_gainfix_best && (! opt_hillclimb))
-    fatal("Gain-cascade best-board finish (--gainfix-best) needs the plugboard hill-climb (-c)");
-  if (opt_gainfix_best && opt_gainfix)
-    fatal("--gainfix-best and --gainfix are alternatives; pick one");
-  if (opt_gainfix_best && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
-    fatal("--gainfix-best is not supported with -F or --exhaust");
-
-  /* --gainfix-best3 = the best-board finisher with the 3-ply escalation; same guards. */
-  if (opt_gainfix_best3 && (! opt_hillclimb))
-    fatal("Gain-cascade 3-ply best-board finish (--gainfix-best3) needs the plugboard hill-climb (-c)");
-  if (opt_gainfix_best3 && (opt_gainfix || opt_gainfix_best))
-    fatal("--gainfix-best3, --gainfix-best and --gainfix are alternatives; pick one");
-  if (opt_gainfix_best3 && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
-    fatal("--gainfix-best3 is not supported with -F or --exhaust");
+  /* --polish = the best-board finisher with the 3-ply escalation; same guards. */
+  if (opt_polish && (! opt_hillclimb))
+    fatal("Best-board finisher (--polish) needs the plugboard hill-climb (-c)");
+  if (opt_polish && opt_cascade)
+    fatal("--polish and --cascade are alternatives; pick one");
+  if (opt_polish && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
+    fatal("--polish is not supported with -F or --exhaust");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */
@@ -5234,16 +4677,9 @@ int main(int argc, char * * argv)
   if (opt_exhaust && (! opt_hillclimb))
     fatal("Partial exhaustion (--exhaust) needs the plugboard hill-climb (-c)");
 
-  /* --dump-restarts is a per-restart climb diagnostic, so it needs -c. */
-  if (opt_dump_restarts && (! opt_hillclimb))
-    fatal("--dump-restarts needs the plugboard hill-climb (-c)");
+  /* --dump-all is a per-restart climb diagnostic, so it needs -c. */
   if (opt_dump_all && (! opt_hillclimb))
     fatal("--dump-all needs the plugboard hill-climb (-c)");
-  if (opt_restart_tt && (! opt_hillclimb))
-    fatal("--restart-tt needs the plugboard hill-climb (-c)");
-  /* --score-tt memoises the plugboard scoring, which only happens under the climb. */
-  if (opt_score_tt && (! opt_hillclimb))
-    fatal("--score-tt needs the plugboard hill-climb (-c)");
 
   /* The crib finisher re-ranks converged plugboards, so it needs the climb. */
   if (opt_crib_file && (! opt_hillclimb))
@@ -5439,19 +4875,6 @@ int main(int argc, char * * argv)
           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
           static_cast<unsigned long long>(g_plugboards_scored),
           (g_plugboards_scored == 1) ? "" : "s");
-  if (opt_score_tt)
-    {
-      /* Effectiveness of the --score-tt plugboard cache: what fraction of the logical
-         score_iter calls were served from the cache and so skipped a real decode. */
-      double pct = (g_sc_lookups > 0)
-                 ? 100.0 * static_cast<double>(g_sc_hits)
-                         / static_cast<double>(g_sc_lookups)
-                 : 0.0;
-      fprintf(stderr,
-              "score-tt: %llu/%llu score_iter served from cache (%.1f%% saved)\n",
-              static_cast<unsigned long long>(g_sc_hits),
-              static_cast<unsigned long long>(g_sc_lookups), pct);
-    }
   fprintf(stderr, "Finished in %.2f s using %d thread%s\n",
           secs, opt_threads, (opt_threads == 1) ? "" : "s");
   fprintf(stderr, "Precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",

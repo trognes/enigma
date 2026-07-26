@@ -11,7 +11,6 @@ ROOT = os.path.join(HERE, os.pardir)
 BIN = os.path.join(ROOT, "enigma")
 os.environ["ENIGMA_SEED"] = "0"
 R = os.environ.get("R", "150"); T = os.environ.get("T", "4")
-DIR = os.path.join(ROOT, "ngrams-telegraphic")
 CRIB = os.path.join(ROOT, "cribs", "german-hgnord.txt")
 FILES = ["enigma-messages.txt", "enigma-army-messages-1941.txt"]
 # label -> crib weight (None = no crib)
@@ -43,8 +42,8 @@ def parse():
 
 def recover(rc, lam):
     args = [BIN, "-u", rc["u"], "-w", rc["w"], "-r", rc["r"], "-g", rc["g"], "-c", "-R", R,
-            "--random", "10", "-a", "-S", "m4a10", "-J", "--gainfix-best3",
-            "-l", "german", "-d", DIR, "-T", T]
+            "--random", "10", "-a", "-S", "m4a10", "-J", "--polish",
+            "-l", "wehrmacht", "-T", T]
     if lam is not None:
         args += ["--crib-file", CRIB, "--crib-weight", str(lam)]
     out = subprocess.run(args, input=rc["body"].replace("-", "A"), stdout=subprocess.PIPE,

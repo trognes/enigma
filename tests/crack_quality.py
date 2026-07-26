@@ -87,7 +87,7 @@
 #   SCOREITER=1     §2 Test B: add a score_iter column (mean plugboards scored) to
 #                   the normal run, so a filtered vs unfiltered A/B can be balanced
 #                   at matched compute.
-#   DIVERSITY=1     §3: a fixed-key climb with --dump-restarts; report per length the
+#   DIVERSITY=1     §3: a fixed-key climb with --dump-all; report per length the
 #                   mean number of DISTINCT converged optima across the -R restarts,
 #                   the mean count of restarts reaching the best board (best-hits),
 #                   and mean %-correct -- a direct basin-collapse signal. Set RESTARTS.
@@ -237,17 +237,18 @@ def last_filter_rank(stderr):
 
 
 def parse_restarts(stderr):
-    """List of (score, board) from the 'restart <score> <board>' dump lines
-    (--dump-restarts). Board is the canonical plug-pair string ('' = empty)."""
+    """List of (score, board) from the 'dumpall <key> <ring> <start> <score> <board>'
+    dump lines (--dump-all). Board is the canonical plug-pair string ('' = empty).
+    This is a fixed-key diagnostic, so the key columns are skipped."""
     out = []
     for line in stderr.splitlines():
-        if line.startswith("restart "):
-            parts = line.split(None, 2)
+        if line.startswith("dumpall "):
+            parts = line.split(None, 5)
             try:
-                sc = float(parts[1])
+                sc = float(parts[4])
             except (ValueError, IndexError):
                 continue
-            out.append((sc, parts[2] if len(parts) > 2 else ""))
+            out.append((sc, parts[5] if len(parts) > 5 else ""))
     return out
 
 
@@ -401,12 +402,12 @@ def run_filter_recall(head, corpus):
         print("%4d %s %10.1f %8.1f" % (L, recs, median(ranks), 100.0 * notin / n))
 
 
-# --- §3: restart-diversity diagnostics (--dump-restarts) ---------------------
+# --- §3: restart-diversity diagnostics (--dump-all) ---------------------
 def diversity_run(binary, key, ct):
-    """Fixed-key climb with --dump-restarts; return (plaintext, [(score, board)])."""
+    """Fixed-key climb with --dump-all; return (plaintext, [(score, board)])."""
     u, w, r, g, _ = key   # always the fixed true key (diversity is a fixed-key test)
     args = ["-" + MODEL, "-l", CLANG, "-u", u, "-w", w, "-r", r, "-g", g,
-            "-c", "--dump-restarts"]
+            "-c", "--dump-all"]
     if RESTARTS:
         args += ["-R", RESTARTS]
     args += CRACKOPTS
@@ -415,7 +416,7 @@ def diversity_run(binary, key, ct):
 
 
 def run_diversity(head, corpus):
-    print("restart diversity (fixed key, --dump-restarts) -- working-tree binary")
+    print("restart diversity (fixed key, --dump-all) -- working-tree binary")
     print("model=-%s  lang=%s  trials=%d  pairs=%d  seed=%d  restarts=%s\n"
           % (MODEL, CLANG, TRIALS, PAIRS, SEED, RESTARTS or "0"))
     print("%4s %9s %10s %8s" % ("len", "distinct", "best-hits", "mean%"))

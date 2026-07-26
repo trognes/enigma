@@ -3,7 +3,7 @@
 # Tangle-vs-solve separability (PERFORMANCE.md section 6.14).
 #
 # Is a CHEAP tangle detector even theoretically possible? For each message, run
-# R restarts with --dump-restarts, take the best-of-R board, and classify it via
+# R restarts with --dump-all, take the best-of-R board, and classify it via
 # the oracle as SOLVE (0 wrong/0 miss) / TANGLE (1-3 wrong) / JUNK (4+ wrong).
 # Then ask: can any IN-THE-WILD score feature (no oracle) separate a message whose
 # best board is a SOLVE from one whose best is a TANGLE? If yes -> a detector that
@@ -42,14 +42,14 @@ def pairset(pb):
 def dump_solve(lang, key, ct):
     """Return list of (score, board_str) for the R restarts."""
     u, w, r, g, _ = key
-    args = ["-q", "-l", lang, "-c", "-R", str(R), "--dump-restarts",
+    args = ["-q", "-l", lang, "-c", "-R", str(R), "--dump-all",
             "-u", u, "-w", w, "-r", r, "-g", g] + OPTS
     _, err, _ = E.run(BIN, args, ct)
     out = []
     for line in err.splitlines():
-        f = line.split(maxsplit=2)
-        if len(f) >= 2 and f[0] == "restart":
-            out.append((float(f[1]), f[2] if len(f) == 3 else ""))
+        f = line.split(maxsplit=5)
+        if len(f) >= 5 and f[0] == "dumpall":
+            out.append((float(f[4]), f[5] if len(f) == 6 else ""))
     return out
 
 

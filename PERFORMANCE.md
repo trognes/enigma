@@ -33,7 +33,7 @@ scoring failures.
 
 > **Measurement rule for search work: exclude the scoring-failure cases.** Because
 > the goal now is improving **search** (not scoring), evaluate every search lever
-> (restarts, `-F`, SA, the `--gainfix*` finishers, and any future tabu/GA) on the
+> (restarts, `-F`, SA, the `--cascade`/`--polish` finishers, and any future tabu/GA) on the
 > **search-failure + exact** population only — drop the trials where the true board
 > is *not* the top-scoring one, since no search can ever reach them. Operationally a
 > trial is a scoring failure when it is **non-exact and `recovered_score ≥ true_score`**
@@ -593,7 +593,13 @@ greedy path (§4.1).
 sweep bias strength; confirm it does not merely collapse SA toward the greedy
 result.
 
-### 4.5 Influence-weighted plug selection — ciphertext-exact + plaintext-prior (MEDIUM priority; sharpens §3.6 / §4.1 / §4.3)
+### 4.5 Influence-weighted plug selection — ciphertext-exact + plaintext-prior (MEDIUM priority; sharpens §3.6 / §4.1 / §4.3; PARTIALLY EXAMINED, see §4.6)
+
+> One of the three applications below (climb move ordering, item 3 below / §4.6) was built,
+> measured, and **rejected** as `--infl-order` — which this repository has since **removed from
+> the CLI entirely** (dominated by `-J`; see `CLAUDE.md`'s removed-options list). The other two
+> applications (focused `--exhaust` restriction, influence-weighted `--random` kick) were never
+> built or measured — they remain genuinely open.
 
 **The idea (Ostwald & Weierud).** Plugs are not equally worth searching: a plug on a
 *frequent* letter rewrites many message positions, so getting it right — or ruling it out —
@@ -685,7 +691,12 @@ at equal budget; (2) influence-weighted `--random` vs uniform kick at high `-R`,
 weight strength and checking with `DIVERSITY=1` (restart basin-collapse) that a gentle weight
 does *not* collapse diversity. Judge on mean %-correct per the harness guidance.
 
-### 4.6 Exact board-state influence — the `|Δscore|` bound, prune before order (refines §4.5)
+### 4.6 Exact board-state influence — the `|Δscore|` bound, prune before order (refines §4.5) — ⚠️ PARTIALLY MEASURED
+
+Two of the three proposed uses below were built and measured to a clear verdict (soft/exact
+prune: ❌ dead end at realistic lengths; climb move ordering: ❌ built as `--infl-order`, dominated
+by `-J`, since **removed from the CLI**). The third (focused `--exhaust` restriction by influence)
+was never built or tested — same gap as §4.5's item 1, still open.
 
 **Form.** §4.5 weights a plug by `a + b − ab` with `a = c_X+c_Y` exact and `b = p_X+p_Y` a
 *language prior*. But that prior is only needed *before* a decrypt exists. **Inside the climb
@@ -791,8 +802,11 @@ histograms, ~free) instead of `-J`'s measured score-delta. At ~55k `score_iter` 
   angles do not overcome the weaker ordering signal.
 - **But influence-order clearly beats plain `-I`** everywhere (+5 to +10pp): the informed order
   *is* genuinely useful — a cheap, free upgrade over lexicographic — just dominated by `-J`.
-- **Verdict:** `-J` stays the recommended order. `--infl-order` is kept as an experimental,
-  documented-dominated opt-in (bench-neutral, default path untouched); it is not recommended.
+- **Verdict:** `-J` stays the recommended order. `--infl-order` was kept as an experimental,
+  documented-dominated opt-in for a time (bench-neutral, default path untouched) — it has since
+  been **removed from the CLI entirely**, since a dominated-with-no-niche-use-case flag is dead
+  weight rather than a useful diagnostic. The measurements above remain the record of why it
+  lost.
   (Methodology note: the first pass was polluted by stale `i4q10.R24.J`/`R32.I` rows from earlier
   matched-compute runs sharing those labels — filter the clean grid by `git_sha`, or use fresh
   `config_label`s, for a paired read.)
@@ -893,7 +907,7 @@ convergences → more barrier-crosses. So the 2-plug re-pair is the last worthwh
 short lengths too, not just the long ones where it was first validated. Reproduce:
 `python3 eval/repair2_matched.py`.
 
-### 4.10 Directed plug repair via quadgram "gain" (gain-cascade) — ⏳ PRELIMINARY (component validated, end-to-end open)
+### 4.10 Directed plug repair via quadgram "gain" (gain-cascade) — ✅ SHIPPED as `--cascade` (§4.11 ships the best-board finisher, `--polish`)
 
 §6.14 showed the residual near-solution failures are re-pairing *tangles* a greedy single-toggle
 climb can't cross. This explores a **directed** finisher: use the quad model to point at *which*
@@ -941,24 +955,24 @@ tangle is fixed and the score jumps, the ordinary climb resolves the rest. On re
 search-failure boards with **2–4** wrong plugs, **cascade-fix + reclimb solves 53%** (vs **8%**
 for reclimb alone), lifting mean correct-plugs **6.8 → 8.6**.
 
-**Now implemented in-tool as the opt-in `--gainfix` flag** (byte-identical default; needs `-c`;
-quad-only). The cascade fires at each quad-climb convergence and, on success, hands the improved
-board back to the cheap climb to finish — the reclimb amplification comes for free from the existing
-`do/while(progress)` loop. It reuses the tool's precomputed rotor core (`rows[j]`) so the entry-side
-(reciprocal) candidate is machine-exact, and is `-T`-deterministic (no RNG, fixed candidate order).
-It is **gated by a near-solution per-symbol score threshold** (`--gainfix=GATE`, default `-4.9`,
-English-quad calibrated: junk ~-5.3, near-solution 60%+ ~-4.8…-4.2) so it spends its ~`CAP + N1·CAP`
-`score_iter` per fire only on promising boards and skips the ~76% junk — verified: on an easy
-(solvable) message gated `--gainfix` is byte-for-byte the baseline `score_iter`, while ungated
-(`--gainfix=-99`) adds ~7%. Correct/clean: 182 tests pass, `-Werror` g++/clang++, ASan/UBSan and
-clang-tidy clean.
+**Now implemented in-tool as the opt-in `--cascade` flag** (renamed from the original `--gainfix`;
+byte-identical default; needs `-c`; quad-only). The cascade fires at each quad-climb convergence and,
+on success, hands the improved board back to the cheap climb to finish — the reclimb amplification
+comes for free from the existing `do/while(progress)` loop. It reuses the tool's precomputed rotor
+core (`rows[j]`) so the entry-side (reciprocal) candidate is machine-exact, and is `-T`-deterministic
+(no RNG, fixed candidate order). It is **gated by a near-solution per-symbol score threshold**
+(`--cascade=GATE`, default `-4.9`, English-quad calibrated: junk ~-5.3, near-solution 60%+
+~-4.8…-4.2) so it spends its ~`CAP + N1·CAP` `score_iter` per fire only on promising boards and skips
+the ~76% junk — verified: on an easy (solvable) message gated `--cascade` is byte-for-byte the
+baseline `score_iter`, while ungated (`--cascade=-99`) adds ~7%. Correct/clean: 182 tests pass,
+`-Werror` g++/clang++, ASan/UBSan and clang-tidy clean.
 
 **Matched-compute verdict — a small but consistent WIN, because the gate makes it near-free.**
-Recovery-vs-`score_iter` A/B (`-J -S i4q10 -R {8,16,32}` ± `--gainfix`, English L40–50, 60/cell,
-the no-gainfix curve interpolated to the gainfix `score_iter`): **+0.2–0.3pp mean %-correct and
+Recovery-vs-`score_iter` A/B (`-J -S i4q10 -R {8,16,32}` ± `--cascade`, English L40–50, 60/cell,
+the no-cascade curve interpolated to the cascade `score_iter`): **+0.2–0.3pp mean %-correct and
 +0.5–0.6pp exact** at matched compute, positive at every budget R≥8.
 
-| `score_iter` | baseline %corr | `--gainfix` %corr | Δ (matched) |
+| `score_iter` | baseline %corr | `--cascade` %corr | Δ (matched) |
 |---:|---:|---:|---:|
 | 18,159 | 14.32 | 14.59 | **+0.27** |
 | 36,264 | 19.52 | 19.77 | **+0.25** |
@@ -979,24 +993,26 @@ near-solution boards for the gated cascade to finish. So across two seeds the me
 +0.2–0.7pp and the exact gain +0.6…+2.3pp (largest at high `-R`), at ~zero added `score_iter`.
 
 **Verdict — a validated component chain (53% solve on real fixable boards), shipped as the opt-in
-`--gainfix`, a small matched-compute win on short messages when gated.** Directed, reversible, and
+`--cascade`, a small matched-compute win on short messages when gated.** Directed, reversible, and
 it addresses the specific failure modes that sank fix-and-finish (§4.8: irreversibility) and the
 badness heuristic (undirected). The gain is modest (the near-solution regime it targets is a thin
 slice of the search), so it is opt-in, not default. The gate default (`-4.9`) is English-quad
-calibrated; other languages/lengths tune it via `--gainfix=GATE`. Reproduce the component
+calibrated; other languages/lengths tune it via `--cascade=GATE`. Reproduce the component
 measurements: `eval/gain_cascade_probe.py` (dual generation, prune, full-plug ranking, cascade, and
 the cascade+reclimb solve rate, all against the real `eval/results*.tsv` boards).
 
-**A best-board-only variant (`--gainfix-best`) — the fixed-cost alternative.** Instead of firing the
-gated cascade at *every* near-solution convergence, `--gainfix-best` runs the cascade **once,
-unconditionally (no score gate)**, on the single best board after all `-R` restarts, then hands it to
-one finishing climb. It reconstructs that board's machine from the winning key + recorded stecker
-(recorded at the merge), so it costs a **fixed** ~960 `score_iter` **independent of `-R`** — whereas
-per-convergence `--gainfix` costs scale (weakly, via the gate) with the number of near-solution
-convergences. A 3-way matched-compute A/B, full `-R` sweep (English L40–50, **N=100/cell**,
-`-J -S i4q10`; `score_iter` within ~0.2–0.3% across modes at every `-R`, so these are matched):
+**A best-board-only variant — this measurement's `--gainfix-best`, later folded into and renamed
+`--polish` (§4.11 adds the 3-ply escalation on top) — the fixed-cost alternative.** Instead of firing
+the gated cascade at *every* near-solution convergence,
+this variant runs the cascade **once, unconditionally (no score gate)**, on the single best board
+after all `-R` restarts, then hands it to one finishing climb. It reconstructs that board's machine
+from the winning key + recorded stecker (recorded at the merge), so it costs a **fixed** ~960
+`score_iter` **independent of `-R`** — whereas per-convergence `--cascade` costs scale (weakly, via
+the gate) with the number of near-solution convergences. A 3-way matched-compute A/B, full `-R`
+sweep (English L40–50, **N=100/cell**, `-J -S i4q10`; `score_iter` within ~0.2–0.3% across modes at
+every `-R`, so these are matched):
 
-| `-R` | base %corr / exact | `--gainfix` %corr / exact | `--gainfix-best` %corr / exact | Δmean (gainfix / best) |
+| `-R` | base %corr / exact | `--cascade` %corr / exact | best-board-only %corr / exact | Δmean (cascade / best) |
 |---:|---:|---:|---:|---:|
 | 8    | 13.48 / 3.0  | 13.65 / 3.3  | 13.63 / 3.0  | +0.17 / +0.15 |
 | 16   | 17.69 / 6.3  | 17.85 / 6.7  | 17.98 / 6.3  | +0.16 / +0.29 |
@@ -1010,12 +1026,19 @@ convergences. A 3-way matched-compute A/B, full `-R` sweep (English L40–50, **
 | 2560 | 65.27 / 57.3 | 65.80 / 57.3 | 65.75 / 57.3 | +0.53 / +0.48 |
 
 **The mean gain persists across the whole `-R` range** — +0.2–0.7pp with no decay to zero, right out to
-`-R 2560`. The two variants are peers, `--gainfix-best` generally ≥ `--gainfix` (it wins or ties 8 of
-10 rows; `--gainfix` edges ahead only at `-R 80/160`): the best-board finish concentrates its one
-unconditional cascade on the reliably-near-solution best board, and its cost is **fixed** (~950
-`score_iter`) so it is ~free at high `-R`, whereas per-convergence `--gainfix`'s cost scales (still
-<0.3%). Both opt-in and mutually exclusive; `--gainfix-best` runs only under the simple sweep (not
-`-F`/`--exhaust`, whose `best.idx` does not carry the key×restart reconstruction).
+`-R 2560`. The two variants are peers, best-board-only generally ≥ per-convergence `--cascade` (it wins
+or ties 8 of 10 rows; `--cascade` edges ahead only at `-R 80/160`): the best-board finish concentrates
+its one unconditional cascade on the reliably-near-solution best board, and its cost is **fixed** (~950
+`score_iter`) so it is ~free at high `-R`, whereas per-convergence `--cascade`'s cost scales (still
+<0.3%). Both opt-in and mutually exclusive; the best-board variant runs only under the simple sweep
+(not `-F`/`--exhaust`, whose `best.idx` does not carry the key×restart reconstruction).
+
+> **This ~950–960 `score_iter` figure is for the 2-ply-only best-board variant measured here, and is
+> now stale as a description of the shipped `--polish`.** §4.11 folds in a 3-ply escalation plus a
+> "sacrifice + reclimb" step on top of this same once-only best-board pass, which costs more —
+> re-measured at a flat **~6,500 `score_iter`** (L40–L190, `-R` 160/640; see `CLAUDE.md`'s `--polish`
+> entry). The 2-ply-only numbers above are kept as the historical A/B that motivated shipping a
+> fixed-cost finisher at all; they are not `--polish`'s current cost.
 
 **What *does* saturate is exact recovery, not the mean.** At extreme `-R` the restart budget alone
 finds essentially every recoverable board, so *new exact* solves from the finisher dry up — at
@@ -1026,17 +1049,18 @@ rate has converged. (An earlier `-R {40…2560}` sweep at N=16–40/cell had sug
 *byte-identical* at `-R ≥ 1280` — that was small-sample noise: those few high-`-R` cells happened to
 contain no fixable board. The N=100 sweep here corrects it — the finishers still help at every `-R`.)
 
-**A saturation exact-loss — diagnosed as over-plugging, and *fixed*.** An earlier build showed
-`--gainfix-best` *reducing* exact recovery at very high `-R`: on the tsv `-S m4q10` L40 baselines
-(scoring failures *removed*, so not pre-existing floor cases) it converted a handful of `b_ex=1
-(100%) → 95–97.5%` solves (2–3 per 40-trial cell), so exact dipped `−2.6…−5.1pp` at `-R ≥ 1280`. The
-cause was **not** the count-neutral cascade but the **finishing climb running uncapped** (`asize/2` =
-13 pairs) instead of at the schedule's target-stage cap — so on an already-solved 10-plug board it
-**added spurious plugs 11–13** that raise the noisy short-message quad score while corrupting the
-truth. Capping the finish at `opt_stages[last].cap` (like every other finisher/quench in the tool)
-removes it: re-measured on the identical boards, **every negative Δexact goes to ≥ 0** (the four dips
-−2.6/−5.1/−5.1/−5.0 → 0/0/+2.6/0), Δmean improves at the mega-`-R` cells, and `--gainfix-best` becomes
-**Pareto-neutral-or-better across the whole `-R 20…81920` range** (Δmean ≥ ~0, Δexact ≥ 0 every cell).
+**A saturation exact-loss — diagnosed as over-plugging, and *fixed*.** An earlier build showed the
+best-board finisher (later shipped as `--polish`) *reducing* exact recovery at very high `-R`: on the
+tsv `-S m4q10` L40 baselines (scoring failures *removed*, so not pre-existing floor cases) it
+converted a handful of `b_ex=1 (100%) → 95–97.5%` solves (2–3 per 40-trial cell), so exact dipped
+`−2.6…−5.1pp` at `-R ≥ 1280`. The cause was **not** the count-neutral cascade but the **finishing
+climb running uncapped** (`asize/2` = 13 pairs) instead of at the schedule's target-stage cap — so on
+an already-solved 10-plug board it **added spurious plugs 11–13** that raise the noisy short-message
+quad score while corrupting the truth. Capping the finish at `opt_stages[last].cap` (like every other
+finisher/quench in the tool) removes it: re-measured on the identical boards, **every negative Δexact
+goes to ≥ 0** (the four dips −2.6/−5.1/−5.1/−5.0 → 0/0/+2.6/0), Δmean improves at the mega-`-R` cells,
+and it becomes **Pareto-neutral-or-better across the whole `-R 20…81920` range** (Δmean ≥ ~0, Δexact ≥
+0 every cell).
 The finisher is also **monotonic in score by construction** — the best board is replaced only when the
 finish scores strictly higher, so it never returns a lower-*scoring* board than the search found. (A
 residual truth-vs-score chase — a *count-neutral* cascade re-pair to a higher-scoring-but-wrong board
@@ -1045,7 +1069,7 @@ unfixable by any score-only rule, since the wrong board genuinely scores higher.
 
 ---
 
-### 4.11 Deeper tangles: 3-ply escalation, and the "sacrifice + reclimb" reformulation — ✅ MEASURED (`--gainfix-best3`)
+### 4.11 Deeper tangles: 3-ply escalation, and the "sacrifice + reclimb" reformulation — ✅ SHIPPED as `--polish`
 
 The 2-ply cascade (§4.10) crosses **2-plug** tangles. The residual near-solution failures are **3-plug
 tangles** — three wrong plugs mutually masking, so no single pair un-masks the fix. This extends the
@@ -1070,7 +1094,7 @@ surface the third plug, it makes it the highest-scoring one. Explicit 3-ply lift
 **55%→78%** on 2–4-missing boards.
 
 **The reformulation (the actual design).** Since the completing plug is the top improving move the
-*ordinary climb* would find anyway, the plug3 search is redundant. `--gainfix-best3` instead: rank the
+*ordinary climb* would find anyway, the plug3 search is redundant. `--polish` instead: rank the
 `(plug1,plug2)` **sacrifice** pairs by their 2-plug score, and for the **top-K (K=8)** commit the
 sacrifice (both plugs, possibly downhill) and run a full **plain reclimb** — letting the climb find the
 completing plug(s) *and* shed spurious ones — keeping the best result. No plug3 beam. Measured on the
@@ -1086,17 +1110,17 @@ ceiling*, not a knee. Widening the beam to `N1=N2=13` (up to 169 pairs) shows re
 36.5 at K=8/16/48/96/169, exact 17.5 → 25.0. The tail is real — there is no plateau. **But on wall time
 high-K is dominated, not merely un-winning** — and here `score_iter` and wall time *disagree*, because the
 counter never sees the gain scan (~100 quad-lookups per cascade call, ×K sacrifices). By `score_iter`
-K=169 (413k) sits *between* `--gainfix-best` at R160 (363k) and R200 (453k), so on that proxy it looks a
+K=169 (413k) sits *between* `--polish` at R160 (363k) and R200 (453k), so on that proxy it looks a
 wash. But by measured wall time (T=4, min of 3 reps) K=169 is the **most expensive of the four at 131 ms**,
 *above* R200's 114 ms despite R200 doing more `score_iter` — the uncounted gain scan is the gap. So
-`--gainfix-best` at R200 **Pareto-dominates** K=169: better on both axes (37.4 vs 36.5 mean, 25.8 vs 25.0
+`--polish` at R200 **Pareto-dominates** K=169: better on both axes (37.4 vs 36.5 mean, 25.8 vs 25.0
 exact) at lower wall (114 vs 131 ms), and R160 nearly matches K=169's quality at 110 ms. More restarts win
 outright. (The restart wall cost is near-flat here — R80→R200 is only 102 → 114 ms despite 2.5× the
 `score_iter` — because at L40/T4 the fixed overhead dominates and marginal restarts are cheap, whereas the
 K=169 finisher adds a chunky +29 ms.) The *free* win therefore lives entirely in the small-K, fixed-cost
 regime (~+8000 `score_iter`, one gain scan, the whole point of a once-only best-board finisher). `K=8` is
 kept as that near-free operating point, not because further sacrifices stop helping. Implementation: the internal reclimb
-reuses `hillclimb` with the gainfix flags saved+cleared (plain climb, no recursion), capped at the same
+reuses `hillclimb` with the cascade/polish flags saved+cleared (plain climb, no recursion), capped at the same
 `max_pairs`; `-T`-deterministic.
 
 **Real tool, capped @10, exact recovery.** On ≥80%-base non-exact boards, best3 solves **56% of the
@@ -1112,7 +1136,7 @@ wall-time): the reformulated best3 beats 2-ply by **~+1.3pp mean %-correct (Engl
 R)** and **+2…+5pp exact recovery** — roughly 3× the old explicit-plug3 best3's ~+0.4pp, at ~2–3 ms wall.
 The gain is real but still a **thin-slice** effect: it concentrates on near-solution 3-plug tangles, so
 averaged over *all* trials (mostly deep junk) it is the modest end-to-end number, not a headline. Shipped
-as the opt-in `--gainfix-best3`.
+as the opt-in `--polish` (originally `--gainfix-best3`; renamed — see `CLAUDE.md`'s `--polish` entry).
 
 **4-ply (3-plug sacrifice) — ❌ MEASURED, REJECTED. The depth stops at 3-ply.** The "sacrifice +
 reclimb" idea *mechanically* generalises to deeper tangles — commit a **3-plug** sacrifice
@@ -1424,23 +1448,36 @@ it to short/final-climb only. Bench under both compilers is mandatory.
 recovery; `make bench` (g++ and clang) to quantify the throughput hit and confirm
 it is confined to the short/final path.
 
-### 6.6 Telegraphic / operational corpus (HIGH value for real traffic; invisible to the current harness)
+### 6.6 Telegraphic / operational corpus — ✅ SHIPPED as the `wehrmacht` language (`eval/`)
 
-**Form in this codebase.** The shipped tables are generic web-corpus statistics.
-Real Enigma plaintext is telegraphic: `X`/`Y`/`J` separators, spelled numbers
-(`EINSNULL`), no punctuation, fixed procedure words. `X` alone dominates real
-n-gram statistics in ways absent from prose. Build German/English tables from
-decrypted Enigma traffic and ship them as a selectable table set.
+**Form in this codebase.** The bundled prose tables are generic web-corpus
+statistics. Real Enigma plaintext is telegraphic: `X`/`Y`/`J` separators, spelled
+numbers (`EINSNULL`), no punctuation, fixed procedure words. `X` alone dominates
+real n-gram statistics in ways absent from prose.
+`eval/build_telegraphic_ngrams.py` bends the bundled prose German tables toward
+the published telegraphic statistics in Sullivan & Weierud's 2005 Appendix C
+(single-letter + top-400 trigram frequencies over ~20,000 letters of 1941
+decrypts) by marginal-matching the quad table's folded low-order marginals to
+telegraphic strength. It ships as a first-class scoring **language** —
+`ngrams/wehrmacht_*.txt`, selected with `-l wehrmacht` alone — rather than a
+parallel data directory, so it needs no `-d` and composes with a custom one; the
+Appendix-C source tables live in `eval/` beside the generator.
 
-**Honest payoff.** High for *real* messages — a sharper matched model needs fewer
-attested grams for the true key to stand out. But the current harness samples clean
-prose with the matching-language table, so this is **not visible in `make
-crackquality` as-is**; it requires adding a telegraphic test corpus. A
-real-world-fidelity win, not a benchmark win. Keep prose tables to avoid
-over-fitting one traffic style.
+**Measured payoff.** Validated on the full 69-message held-out set
+(`eval/eval_telegraphic.py`; rotor key fixed, plugboard hidden and
+hill-climbed): **+20.9 pp mean %-correct** on real 1941 Wehrmacht traffic
+(wins 36 / loses 12 of 69), biggest in the 70–119-letter band. The mirror
+control (`eval/eval_prose_inverse.py`) confirms it is a *register*, not a
+general-German upgrade: the same tables lose **−10.2 pp** on ordinary prose
+German, so `-l german` remains correct for prose and for the `make
+crackquality` benchmark — `wehrmacht` is for real Wehrmacht/telegraphic traffic
+only. Full writeup and tables: `eval/MODERN_BREAKING_NOTES.md` §6.
 
-**Experiment.** Add an X-separated German corpus and matching table set to
-`crack_quality.py`'s corpora; cross-check on the bytereef.org M4 known messages.
+This was invisible to `make crackquality` as originally scoped (it samples
+clean prose), so it was validated by the two dedicated real-traffic harnesses
+above rather than by the standard suite — a real-world-fidelity win, not a
+`crackquality` benchmark win. `make crackquality` itself still correctly uses
+`-l german` (prose) and is unaffected.
 
 ### 6.7 Ceiling-limited (do not expect plugboard-tier movement)
 
@@ -1845,8 +1882,8 @@ information — as the cost, not the interpolation.
 **Log-linear interpolation → `-a` — ✅ SHIPPED (PR #106).** Mixing the orders as *log-scores*,
 `v = a·log p(ABCD) + b·log p(BCD) + c·log p(CD) + d·log p(D)` — a **geometric (Product-of-Experts)
 mixture** (Klakow 1998) that stays in joint space (weights `(1,0,0,0)` = plain quad, byte-identical)
-and folds once into a quad-shaped `all8` table at load, so the per-character scorer and the gainfix
-gain scan are unchanged. **Symmetric folding**: every sub-gram a window contains, each order divided
+and folds once into a quad-shaped `all8` table at load, so the per-character scorer and the
+`--cascade`/`--polish` gain scan are unchanged. **Symmetric folding**: every sub-gram a window contains, each order divided
 by its window-multiplicity (tri/2, bi/3, mono/4), so the leading edge grams are included and edge
 grams down-weighted. Tuned weights **`(1, 0.6, 0.3, 0.15)`** — an ablation showed all four orders
 contribute (`full` +1.68 > `tribi` +1.25 > `tri06` +0.99 aggregate Δ over L40–100), a lighter tri
@@ -2252,7 +2289,7 @@ fraction of `score_iter` served from cache) at the end.
   ~5× slower from memory thrashing).
 
 **Independent confirmation at a heavy, realistic config (20 × L50 english, pooled).** Rerun
-with `-c --gainfix-best3 -S m4q10 -R 5120 --random 10` (8× the restarts, a two-model staged
+with `-c --polish -S m4q10 -R 5120 --random 10` (8× the restarts, a two-model staged
 climb, and the best-board finisher — i.e. every knob that *could* create cross-restart reuse):
 the hit rate is **7.9%**, barely above the 7.2% at R=640, and the T=1-vs-T=8 gap — the direct
 measure of how much cross-restart reuse a single pooled cache can concentrate — is **+0.05 pp**
@@ -2327,6 +2364,39 @@ cache so no locking; the default path is byte-identical.
 
 ## 9. Prioritized shortlist and measurement plan
 
+### Open items at a glance
+
+Every idea below is genuinely open — audited against `enigma.cc`'s option surface and
+`eval/`'s scripts; none has a hidden shipped/measured verdict in its body text. (Two
+sections that looked open, §6.6 and §4.10/§4.11, turned out to already be shipped and
+have been corrected; §4.5/§4.6's climb-ordering sub-idea was found built/rejected as the
+now-removed `--infl-order` and is noted below, but its other two applications are still
+open.) Full detail is in each section; this table is a scan-only index, not a substitute.
+
+| § | Idea | Priority | One-line status |
+|---|---|---|---|
+| 3.3 | ILS with incumbent-walk acceptance | HIGH | top of "if you do three things" below; cheapest plausible win over `-R` |
+| 3.4 | Parallel tempering / replica exchange | MEDIUM | "a better SA," so inherits SA's ceiling as a peer of `-R` |
+| 3.5 | Tabu search over the climb | MEDIUM–LOW | survey consensus: comparable to SA/hill-climb, not superior |
+| 3.7 | Multi-seed IC basin-hopping | LOW–MEDIUM | cheaper cousin of §3.6 exhaustion; small M limits coverage |
+| 3.8 | Cross-entropy / EDA plug marginals | LOW | gated behind §3.1, which was built and rejected |
+| 3.9 | Adaptive restart budget / early-stop | LOW | throughput/allocation only, not a new capability |
+| 4.1 | Guided (ILS-style) kick | MEDIUM | refines the already-tuned uniform `k=8` kick |
+| 4.2 | Informed single-plug seeding (GRASP) | LOW–MEDIUM | adjacent to what `-S iq` already does implicitly |
+| 4.3 | Evidence-restricted move set | MEDIUM | exact-prune half risk-free; soft half needs both-sides care |
+| 4.4 | Surrogate-biased SA proposals | LOW–MEDIUM | risks collapsing the exploration that makes SA useful |
+| 4.5/4.6 | Influence-weighted `--exhaust`/kick | MEDIUM | climb-order variant tried & removed (`--infl-order`); exhaust/kick untested |
+| 5.1 | Crib-driven bombe closure deduction | HIGH (crib-only) | real deduction, unlike shipped `--crib-file`; needs a new harness |
+| 5.2 | Crib-drag soft seeding | MEDIUM (crib-only) | lighter cousin of 5.1; also needs the new harness |
+| 6.3 | Soft MDL / plug-count prior | LOW–MEDIUM | doc's own "weakest fit to the diagnosis" |
+| 6.4 | Weighted quad + λ·IC fitness | LOW–MEDIUM | `-S iq` staging likely already captures most of this |
+| 6.5 | Finer (uint16) score accumulation | LOW | conflicts with the shipped uint8 cache-residency win |
+| 7.3 | Amortize `-F` IC pre-pass into tier 2 | MEDIUM | confirmed: `finish_worker` still discards the tier-1 board |
+| 7.4 | Branch-and-bound early-exit | LOW | exact bound; distinct from §4.6's rejected approximate prune |
+| 7.5 | `quad8` row prefetch | LOW | may already be covered by out-of-order execution |
+| 7.6 | Finer `-F` work items (key,restart) | LOW | confirmed: `finish_worker` still one key at a time |
+| 7.7 | Quad table shrink/relayout | LOW | a priori judgment call, no empirical test — not really "open" |
+
 ### Planned test additions: `CRACKQUALITY_TESTS.md`
 
 The earlier top item here — *"build the full-crack tier that gates everything"* —
@@ -2399,9 +2469,12 @@ throughput headroom from item 2 makes their extra cost affordable.
 ### For real operational traffic (a different goal than the current benchmark)
 
 The crib/bombe-closure work (§5.1–5.2) and the telegraphic corpus (§6.6) are the genuine
-50-char-barrier breakers, but both are **invisible to `make crackquality` as written** and
-each needs its own harness tier (crib-planting; telegraphic corpus). Do not expect them to
-move the current numbers; do not judge them by it.
+50-char-barrier breakers. The telegraphic corpus is **done** — shipped as the `wehrmacht`
+language and measured at +20.9pp on real traffic via its own harness
+(`eval/eval_telegraphic.py`) — while crib/bombe-closure remains open. Both are/were
+**invisible to `make crackquality` as written**, which needs its own harness tier per
+idea (crib-planting; the telegraphic real-message set already exists). Do not expect
+either to move the `crackquality` numbers; do not judge them by it.
 
 ### Measurement discipline (applies to every idea above)
 
@@ -2431,7 +2504,9 @@ at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in;
 `-S` cap only merge/remove moves; matched-compute win growing as true plugs fall below the
 cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
 Rejected (with reason): **static (fixed-across-restarts) informed move order** (greedy
-*and* diversity-collapsing — §7.2); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
+*and* diversity-collapsing — §7.2); **ciphertext/plaintext-influence move ordering**
+(`--infl-order`, §4.6 — ties `-J` at L40–55, a clean −4…−6pp loss from L60 up; *removed*
+from the CLI, not just deprioritized); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50
 chars — warm short-message quad decodes too cheap to skip; only wins ≥150 chars; the IC
 *ranker* also collapses recovery — §7.1); **cross-restart consensus / plug fixation
 (§3.1** — built and measured compute-neutral-to-negative; loses to a higher `-R` at

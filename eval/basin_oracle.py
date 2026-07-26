@@ -2,10 +2,10 @@
 #
 # Restart basin structure at the oracle level (PERFORMANCE.md section 6.16).
 #
-# Dumps the R converged plugboard boards per problem (--dump-restarts, true rotor
+# Dumps the R converged plugboard boards per problem (--dump-all, true rotor
 # key fixed, recommended -a recipe) and, against the KNOWN true plugboard, measures
 # how many CORRECT plugs each restart recovers. This exposes what the exact-board
-# distinct-count (which the harness DIVERSITY mode and --restart-tt report) hides:
+# distinct-count (which the harness DIVERSITY mode reports) hides:
 #
 #   dist_exact    -- distinct converged boards           (~60/64: looks diverse)
 #   dist_correct  -- distinct sets of *correct* plugs     (~15/64: the real basins)
@@ -32,7 +32,7 @@ PAIRS = 10
 N = int(os.environ.get("N", "40"))
 LEN = int(os.environ.get("LEN", "50"))
 LANGS = ["english", "german"]
-CRACK = ["-c", "--dump-restarts", "-R", "64", "-S", "m4a10", "-J", "--gainfix-best3", "-T", "8"]
+CRACK = ["-c", "--dump-all", "-R", "64", "-S", "m4a10", "-J", "--polish", "-T", "8"]
 
 
 def pairset(pb):
@@ -54,8 +54,8 @@ def main():
             ct = E.encrypt(BIN, key, excerpt)
             args = ["-a", "-l", lang, "-u", u, "-w", w, "-r", r, "-g", g] + CRACK
             _, err, _ = E.run(BIN, args, ct)
-            rs = [line.split(None, 2)[2] if len(line.split(None, 2)) > 2 else ""
-                  for line in err.splitlines() if line.startswith("restart ")]
+            rs = [line.split(None, 5)[5] if len(line.split(None, 5)) > 5 else ""
+                  for line in err.splitlines() if line.startswith("dumpall ")]
             if not rs:
                 continue
             corr = [frozenset(pairset(b) & true) for b in rs]

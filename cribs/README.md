@@ -9,8 +9,8 @@ is used). The intent is Ostwald & Weierud's "assessment stage": lift the true bo
 spurious one that scores higher on n-grams but contains no real words.
 
 ```sh
-./enigma -c -a -l german -d ngrams-telegraphic --crib-file cribs/german-hgnord.txt \
-         -S m4a10 -J --gainfix-best3 -R 200 -T4 -u B -w 421 -r YHO -g WAS < cipher.txt
+./enigma -c -a -l wehrmacht --crib-file cribs/german-hgnord.txt \
+         -S m4a10 -J --polish -R 200 -T4 -u B -w 421 -r YHO -g WAS < cipher.txt
 ```
 
 ## `german-hgnord.txt`

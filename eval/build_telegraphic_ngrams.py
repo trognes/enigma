@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# Generate TELEGRAPHIC German n-gram tables for real Wehrmacht traffic, by bending the
-# bundled prose German tables (ngrams/german_*.txt) toward the published telegraphic
+# Generate the "wehrmacht" scoring language -- telegraphic German for real Wehrmacht
+# traffic -- as ngrams/wehrmacht_*.txt, by bending the bundled prose German tables
+# (ngrams/german_*.txt) toward the published telegraphic
 # statistics of Sullivan & Weierud, "Breaking German Army Ciphers" (Cryptologia 2005),
 # Appendix C -- Fig 17 (single-letter frequencies) and Fig 18 (top-400 trigrams), taken
 # over ~20,000 letters of 1941 Enigma decrypts.
@@ -19,15 +20,17 @@
 # r1 = telegraphic/prose monogram ratio (Fig 17); r3 = telegraphic/prose trigram ratio
 # (Fig 18, =1 outside the top-400 or absent from prose). This makes the quad table's
 # folded low-order marginals telegraphic, so -a (which folds all orders from the quad
-# windows) and -q/-t/-b/-m all become telegraphic. Usage:  -d ngrams-telegraphic -l german
+# windows) and -q/-t/-b/-m all become telegraphic. Usage:  -l wehrmacht
 #
 # Defaults A=0.5, B=2.0 were the net-best strength over the 69-message held-out set
 # (eval/eval_telegraphic.py); override with A=/B= env vars.
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROSE = os.path.join(HERE, os.pardir, "ngrams")
-OUT = os.environ.get("OUTDIR", os.path.join(HERE, os.pardir, "ngrams-telegraphic"))
+NGRAMS = os.path.join(HERE, os.pardir, "ngrams")
+PROSE = NGRAMS
+OUT = os.environ.get("OUTDIR", NGRAMS)
+LANG = os.environ.get("LANG_NAME", "wehrmacht")   # output language name
 A = float(os.environ.get("A", "0.5"))   # monogram-marginal strength
 B = float(os.environ.get("B", "2.0"))   # trigram-marginal strength
 
@@ -57,13 +60,13 @@ def main():
     r3 = {g: (c / tele3t) / (pt3[g] / pt3t) for g, c in TELE3.items() if pt3.get(g, 0) > 0}
 
     # monograms: telegraphic verbatim
-    with open(os.path.join(OUT, "german_monograms.txt"), "w") as o:
+    with open(os.path.join(OUT, "%s_monograms.txt" % LANG), "w") as o:
         for L, pct in sorted(FIG17.items()):
             o.write("%s %d\n" % (L, int(round(pct * 100000))))
 
     def reweight(suffix, order):
         pin = os.path.join(PROSE, "german_%s.txt" % suffix)
-        with open(os.path.join(OUT, "german_%s.txt" % suffix), "w") as o:
+        with open(os.path.join(OUT, "%s_%s.txt" % (LANG, suffix)), "w") as o:
             for ln in open(pin):
                 p = ln.split()
                 if len(p) != 2 or not p[1].isdigit():
@@ -82,20 +85,20 @@ def main():
     reweight("trigrams", 3)
     reweight("quadgrams", 4)
     write_source()
-    print("wrote telegraphic German tables to %s  (A=%g mono, B=%g tri)" % (OUT, A, B))
+    print("wrote %s_*.txt (telegraphic German) to %s  (A=%g mono, B=%g tri)" % (LANG, OUT, A, B))
     print("source: Sullivan & Weierud 2005, Appendix C (Fig 17 + Fig 18, 400 trigrams)")
 
 
 def write_source():
     """Emit the ORIGINAL published Appendix-C tables verbatim (unmodified reference data,
     not the derived scoring tables above)."""
-    with open(os.path.join(OUT, "appendix-c-fig17-monograms.txt"), "w") as o:
+    with open(os.path.join(HERE, "appendix-c-fig17-monograms.txt"), "w") as o:
         o.write("# Sullivan & Weierud, \"Breaking German Army Ciphers\" (Cryptologia 2005),\n"
                 "# Appendix C, Figure 17: single-letter frequencies in 1941 Enigma decrypts.\n"
                 "# Format: <LETTER> <frequency %>.  Sums to 100.00.  Original published values.\n")
         for L, pct in sorted(FIG17.items(), key=lambda kv: (-kv[1], kv[0])):
             o.write("%s %.2f\n" % (L, pct))
-    with open(os.path.join(OUT, "appendix-c-fig18-trigrams.txt"), "w") as o:
+    with open(os.path.join(HERE, "appendix-c-fig18-trigrams.txt"), "w") as o:
         o.write("# Sullivan & Weierud, \"Breaking German Army Ciphers\" (Cryptologia 2005),\n"
                 "# Appendix C, Figure 18: the 400 most frequent trigrams in ~20,000 letters of\n"
                 "# 1941 Enigma decrypts.  Format: <TRIGRAM> <count per ~20,000 letters>.\n"

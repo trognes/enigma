@@ -367,14 +367,9 @@ check "thread count 0 rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -T 257 >/dev/null 2>&1
 check "thread count 257 rejected (exit code)" "$?" "1"
 
-# -J and --infl-order IMPLY -I internally, so the "needs -c" error must name the option
-# the user actually passed, not always blame -I.
+# -J is the only climb-strategy flag; its "needs -c" error must name it.
 check "climb-strategy without -c: -J names -J" \
   "$(printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -J 2>&1 >/dev/null | grep -c -- '(-J)')" "1"
-check "climb-strategy without -c: --infl-order names itself" \
-  "$(printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA --infl-order 2>&1 >/dev/null | grep -c -- '(--infl-order)')" "1"
-check "climb-strategy without -c: -I names -I" \
-  "$(printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -I 2>&1 >/dev/null | grep -c -- '(-I)')" "1"
 
 # Plugboard hill-climb random restarts (-R): the per-key RNG is seeded from the
 # flat key index, so a restarting search must still be independent of -T. Recover
@@ -429,15 +424,15 @@ pg_pb=$(printf '%s\n' "$pg_err" | last_plugboard | tr -d ' ')
 check "progress: last echoed plugboard matches the recovered plaintext" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$pg_pb")" \
   "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c)"
-# ...and the same must hold when the --gainfix-best3 FINISHER improves the best board
+# ...and the same must hold when the --polish FINISHER improves the best board
 # after all restarts: it used to replace the winner silently, so the last progress line
 # showed the PRE-finisher score/wheels/plugboard while stdout held a different decrypt.
 gfx_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 \
-  --random 10 --gainfix-best3 -e 1 2>&1 >/dev/null)
+  --random 10 --polish -e 1 2>&1 >/dev/null)
 gfx_pb=$(printf '%s\n' "$gfx_err" | last_plugboard | tr -d ' ')
-check "progress: last echoed plugboard matches the plaintext (--gainfix-best3)" \
+check "progress: last echoed plugboard matches the plaintext (--polish)" \
   "$(run "$pbv_ct" -u B -w 241 -r AAA -g QEW -s "$gfx_pb")" \
-  "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 --random 10 --gainfix-best3 -e 1)"
+  "$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -R 3 --random 10 --polish -e 1)"
 # Progress line FORMAT: a column header (Score W R G S Text) printed exactly once, each
 # line ending in the first preview characters of the decoded text, and the whole line --
 # header included -- within 80 columns even with a full 13-pair plugboard. The 4-wheel M4
@@ -530,11 +525,9 @@ check "exhaustion --exhaust without -c rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -s "ABCDEFGHIJKLMNOPQRSTUV" -c --exhaust 3 -T 1 >/dev/null 2>&1
 check "exhaustion --exhaust E over the free pairs rejected (exit code)" "$?" "1"
 
-# --dump-restarts (§3 diagnostic): needs -c and prints one 'restart' line per restart.
-printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA --dump-restarts -T 1 >/dev/null 2>&1
-check "--dump-restarts without -c rejected (exit code)" "$?" "1"
-dr_n=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -R 4 --dump-restarts -T 1 2>&1 >/dev/null | grep -c '^restart ')
-check "--dump-restarts prints one line per restart (-R 4)" "$dr_n" "4"
+# --dump-all: one 'dumpall' line per converged (key, restart) climb.
+da_n=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -R 4 --dump-all -T 1 2>&1 >/dev/null | grep -c '^dumpall ')
+check "--dump-all prints one line per restart (-R 4)" "$da_n" "4"
 
 # --true-key (§2 diagnostic): needs -F and reports the true key's tier-1 rank. r_ct was
 # encrypted at reflector B, wheels 123, ring AAA, start AAA => true key B123AAAAAA, which
@@ -593,10 +586,10 @@ check "staged: --score accepts a (weighted) model token (exit code)" "$?" "0"
 check "staged: --score i3q --random 2 -R 4 is -T-independent" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 1)" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 4)"
-# The weighted all-order model (a) with its gainfix finisher stays -T-independent too.
-check "staged: --score m4a10 (weighted) --gainfix-best3 is -T-independent" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --gainfix-best3 -T 1)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --gainfix-best3 -T 4)"
+# The weighted all-order model (a) with its --polish finisher stays -T-independent too.
+check "staged: --score m4a10 (weighted) --polish is -T-independent" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --polish -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --polish -T 4)"
 # --random 0 injects no plugs, so N restarts all repeat the seed climb: --random 0 -R 8
 # equals the deterministic -R 0 (one seed climb).
 check "staged: --random 0 makes restarts a no-op" \
@@ -681,20 +674,7 @@ check "pre-filter: -F over 100% rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -F 8% >/dev/null 2>&1
 check "pre-filter: -F N% without -c rejected (exit code)" "$?" "1"
 
-# First-improvement climb (-I): a different (non-byte-identical) climb trajectory, so it
-# is checked by recovery + determinism, not equality. All order/acceptance is fixed (no
-# RNG), so the result must be -T-independent; it needs -c; and paired with restarts it
-# still recovers the plaintext on an easy long message.
-check "first-improve -I: recovers plaintext (long msg + restarts)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -I -R 8 -S iq)" \
-  "$f_pt"
-check "first-improve -I: result is -T-independent" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -I -R 8 -S iq -T 1)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -I -R 8 -S iq -T 4)"
-printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -I >/dev/null 2>&1
-check "first-improve -I: without -c rejected (exit code)" "$?" "1"
-
-# -J: first-improvement with dynamic best-first move ordering (implies -I). A different
+# -J: first-improvement with dynamic best-first move ordering. A different
 # trajectory again, so checked by recovery + determinism, not equality; deterministic
 # (order derived from the fixed board, fixed tie-break) so -T-independent; needs -c.
 check "dynamic-order -J: recovers plaintext (long msg + restarts)" \
@@ -904,6 +884,21 @@ for lang in $crack_langs; do
       "$plain"
   done
 done
+
+# The 'wehrmacht' scoring language (telegraphic military German -- ngrams/wehrmacht_*.txt,
+# generated from the published Appendix-C statistics). Check its four tables load and that
+# it recovers a plugboard on telegraphic text, the register it is built for.
+pt_wehrmacht="ANROEMEINSBERTAXWIRTSQAFTLIQEUNTERSTELLUNGUNTERROEMXZEHNXARMKORPSDAUERTNURXZWOXTAGEXSTUERZBEQERX"
+w_ct=$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+# Capped at the true 2 pairs: uncapped, the climb adds a spurious third plug on this text
+# (JQ -- J is rare in telegraphic German, so the model tolerates it). -l german does the
+# same here, so it is over-plugging, not a wehrmacht-table problem.
+check "crack: hill-climb plugboard, wehrmacht -a" \
+  "$(run "$w_ct" -a -c --score a2 -u B -w 123 -r AAA -g AAA -l wehrmacht)" \
+  "$pt_wehrmacht"
+check "crack: start position, wehrmacht -a" \
+  "$(run "$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g QXP)" -a -u B -w 123 -r AAA -g "$crack_scan_g" -l wehrmacht)" \
+  "$pt_wehrmacht"
 
 # (2) Hill-climb the plugboard (rotor/ring/start known, plugboard unknown), for
 # every scoring model in every language. With long plaintext and a small (2-pair)
