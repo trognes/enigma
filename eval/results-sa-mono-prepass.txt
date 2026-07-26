@@ -1,0 +1,59 @@
+# Stage 3: does a mono pre-pass help SA?  (ENIGMA_SA_STAGES probe)
+# Harness: eval/eval_sa_vs_greedy.py (STAGE=2 SA_SCHED=m4a10 SA_STAGES=1)
+# Binary: enigma 2.0.0 + ENIGMA_SA_STAGES probe. Same paired instances as stage 2,
+# so SA-mono vs SA-IC is a within-instance comparison; the greedy column reproduced
+# the stage-2 run exactly (0/3000 mismatches), which validates the pairing.
+
+############ SEED FAMILY 1 (SA staged pre-pass) ############
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus 6473 letters | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score m4a10 -R 12  [ENIGMA_SA_STAGES=1]
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A12k    17.9     6.0 |    13.6     4.0 |   -4.4 pp [  -7.6,  -1.2]  greedy wins
+               (compute check: greedy 197k vs SA 199k score_iter)
+  60 R87/A11k    26.0    14.7 |    19.2     9.0 |   -6.8 pp [ -10.8,  -2.9]  greedy wins
+               (compute check: greedy 204k vs SA 194k score_iter)
+  70 R86/A12k    32.6    23.0 |    23.4    12.3 |   -9.2 pp [ -13.7,  -4.8]  greedy wins
+               (compute check: greedy 201k vs SA 200k score_iter)
+  80 R86/A11k    51.9    41.7 |    33.7    24.0 |  -18.2 pp [ -23.0, -13.4]  greedy wins
+               (compute check: greedy 199k vs SA 195k score_iter)
+  90 R87/A12k    53.6    45.7 |    40.8    33.7 |  -12.8 pp [ -17.8,  -7.7]  greedy wins
+               (compute check: greedy 202k vs SA 199k score_iter)
+
+per-trial data: /tmp/stage3-fam1.tsv
+############ SEED FAMILY 2 (SA staged pre-pass) ############
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus 6473 letters | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score m4a10 -R 12  [ENIGMA_SA_STAGES=1]
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A12k    17.8     7.0 |    14.9     4.3 |   -2.8 pp [  -6.3,  +0.6]  tie
+               (compute check: greedy 198k vs SA 197k score_iter)
+  60 R85/A12k    25.3    13.0 |    18.8     7.7 |   -6.4 pp [ -10.3,  -2.5]  greedy wins
+               (compute check: greedy 199k vs SA 196k score_iter)
+  70 R87/A12k    30.7    18.3 |    24.4    13.7 |   -6.3 pp [ -10.6,  -2.0]  greedy wins
+               (compute check: greedy 203k vs SA 199k score_iter)
+  80 R88/A12k    38.6    30.7 |    30.5    22.0 |   -8.2 pp [ -13.1,  -3.2]  greedy wins
+               (compute check: greedy 205k vs SA 197k score_iter)
+  90 R86/A11k    50.8    40.3 |    44.4    35.7 |   -6.4 pp [ -11.7,  -1.1]  greedy wins
+               (compute check: greedy 200k vs SA 195k score_iter)
+
+per-trial data: /tmp/stage3-fam2.tsv
+
+### Q1 -- mono pre-pass vs the shipped IC pre-pass (paired, pooled, n=600/length)
+   L      n  SA base  SA mono     delta          95% CI    verdict
+  50    600     12.2     14.2    +2.1pp [ +0.2, +4.0] mono helps
+  60    600     17.1     19.0    +1.9pp [ -0.6, +4.3]        tie
+  70    600     23.3     23.9    +0.6pp [ -2.2, +3.5]        tie
+  80    600     31.1     32.1    +1.0pp [ -2.2, +4.2]        tie
+  90    600     36.7     42.6    +5.8pp [ +2.1, +9.6] mono helps
+  ALL  3000                      +2.3pp [ +1.0, +3.6] mono helps
+
+### Q2 -- remaining gap to greedy (SA mono - greedy), pooled
+  L50:  -3.6pp [ -5.9, -1.3]   was -5.7pp with the IC pre-pass
+  L60:  -6.6pp [ -9.4, -3.8]   was -8.5pp
+  L70:  -7.8pp [-10.9, -4.7]   was -8.4pp
+  L80: -13.2pp [-16.7, -9.7]   was -14.2pp
+  L90:  -9.6pp [-13.3, -5.9]   was -15.4pp
+  -> narrower at every length, but greedy still wins every length (all CIs exclude 0).

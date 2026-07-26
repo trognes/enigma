@@ -525,9 +525,43 @@ only ~1pp, so the finisher is not the mechanism either.
 `--score` stage's plug cap and seeds itself with a **hardcoded IC pre-pass**, so it
 cannot use greedy's mono pre-pass — measured at +2.7/+3.9pp over an IC pre-pass and
 ~+16pp over none. Comparing greedy's `i4a10` (IC-seeded) against SA narrows the gap
-from ~14pp to −12.2/−8.1pp. Greedy still wins, by less. **This is the actionable
-lever**: letting SA run the full staged schedule (a mono pre-pass before the anneal)
-is a concrete, untested change that would recover part of the difference.
+from ~14pp to −12.2/−8.1pp. Greedy still wins, by less. **This was the actionable
+lever, and it has since been built and measured — see below.**
+
+**Follow-up — giving SA the mono pre-pass: ✅ a real +2.3pp win, but it does not
+change the verdict (`ENIGMA_SA_STAGES`).** Confirmed first that the schedule really is
+inert under `-A`: `--score a10`, `m4a10` and `i4a10` produce **identical output and
+identical `score_iter`**. The probe makes `anneal_once` run the leading `--score`
+stages at their own caps instead of the built-in IC pre-pass (env-gated; default path
+byte-identical under g++ and clang). Re-run over the *same* paired instances as above
+(3000 trials; the greedy column reproduced exactly, 0/3000 mismatches, which validates
+the pairing):
+
+| L | SA + IC (shipped) | SA + mono | delta | 95% CI |
+|---:|---:|---:|---:|---|
+| 50 | 12.2 | 14.2 | **+2.1 pp** | [+0.2, +4.0] |
+| 60 | 17.1 | 19.0 | +1.9 pp | [−0.6, +4.3] |
+| 70 | 23.3 | 23.9 | +0.6 pp | [−2.2, +3.5] |
+| 80 | 31.1 | 32.1 | +1.0 pp | [−2.2, +4.2] |
+| 90 | 36.7 | 42.6 | **+5.8 pp** | [+2.1, +9.6] |
+| **all** | | | **+2.3 pp** | **[+1.0, +3.6]** |
+
+Pooled it is a genuine win (CI excludes zero) and every length is directionally
+positive, though only L50 and L90 reach significance individually. The size matches
+the ~3–4pp predicted from greedy's own IC-vs-mono comparison, which is a useful
+consistency check on the structural diagnosis.
+
+**But it does not overturn the result.** The gap to greedy narrows at every length —
+L50 −5.7→−3.6, L60 −8.5→−6.6, L70 −8.4→−7.8, L80 −14.2→−13.2, L90 −15.4→−9.6 — and
+**every one still excludes zero**. So roughly a fifth of SA's ~10.4pp average deficit
+was the missing pre-pass; the remaining ~8pp is the search itself. Greedy still wins
+every length in L50–90.
+
+*Promotion decision deferred.* Honouring the whole schedule is arguably what a user
+typing `-A --score m4a10` already expects (today the leading stages are silently
+ignored), and it is a measured win — but it changes behaviour for existing multi-stage
+`-A` users and has only been measured on **wehrmacht at one budget**. Measure on prose
+before making it the default; the current IC pre-pass was itself tuned on prose.
 
 **Tuning was a no-op — both shipped defaults are already right for this register.**
 A per-arm sweep (stage 1) found greedy's `m4a10`/kick-10 in the top group and SA's
@@ -2447,7 +2481,7 @@ open.) Full detail is in each section; this table is a scan-only index, not a su
 | 3.7 | Multi-seed IC basin-hopping | LOW–MEDIUM | cheaper cousin of §3.6 exhaustion; small M limits coverage |
 | 3.8 | Cross-entropy / EDA plug marginals | LOW | gated behind §3.1, which was built and rejected |
 | 3.9 | Adaptive restart budget / early-stop | LOW | throughput/allocation only, not a new capability |
-| 3.11 | Let `-A` run the full staged schedule (mono pre-pass) | MEDIUM | the one actionable lever from the measured greedy-beats-SA result |
+| 3.11 | Promote `ENIGMA_SA_STAGES` (mono pre-pass for `-A`) to default | MEDIUM | built and measured: +2.3pp for SA, but needs a prose A/B before it can be the default |
 | 4.1 | Guided (ILS-style) kick | MEDIUM | refines the already-tuned uniform `k=8` kick |
 | 4.2 | Informed single-plug seeding (GRASP) | LOW–MEDIUM | adjacent to what `-S iq` already does implicitly |
 | 4.3 | Evidence-restricted move set | MEDIUM | exact-prune half risk-free; soft half needs both-sides care |
