@@ -1,0 +1,55 @@
+# ENIGMA_IC_BLEND: lambda optimum + PROSE CONTROL (PERFORMANCE.md 6.4)
+# STAGE=3 GA=GB=m4a10 BLEND_B=<lambda>; L=50/70/90; 300 paired trials per
+# length per family; 2 families; both arms calibrated to 200k score_iter.
+# positive = BLEND BETTER
+
+## lambda curve (wehrmacht, pooled n=1800 each)
+  lam=10  +2.1pp [+1.1,+3.2]
+  lam=20  +3.6pp [+2.4,+4.8]
+  lam=30  +4.4pp [+3.1,+5.6]   <- optimum, broad plateau 20-40
+  lam=40  +3.8pp [+2.5,+5.0]
+  lam=60  +2.0pp [+0.7,+3.4]
+  lam=80  -8pp  (n=40 pilot)
+  lam=160 -28pp (n=40 pilot)
+
+## register control at lambda=30 (pooled n=1800 each)
+  wehrmacht  +4.4pp [+3.1,+5.6]  BLEND WINS
+  english    +3.0pp [+1.7,+4.4]  BLEND WINS
+  german     +3.1pp [+1.9,+4.3]  BLEND WINS
+  -> the FIRST scoring change in this work that is NOT register-dependent.
+     Expected mechanically: IC is language-independent, so unlike a mono
+     pre-pass it imports no register bias.
+
+## per-length detail
+######## wehrmacht lambda=40 family 1 ########
+  50     84/84     17.9     16.9 |   -1.0 pp [  -3.5,  +1.4]  tie
+  70     86/86     32.6     36.1 |   +3.5 pp [  +0.4,  +6.6]  m4a10 better
+  90     87/87     53.6     60.4 |   +6.8 pp [  +3.4, +10.2]  m4a10 better
+######## wehrmacht lambda=40 family 2 ########
+  50     84/84     17.8     22.0 |   +4.2 pp [  +1.7,  +6.8]  m4a10 better
+  70     87/87     30.7     33.6 |   +2.9 pp [  -0.7,  +6.5]  tie
+  90     86/86     50.8     56.9 |   +6.1 pp [  +2.6,  +9.6]  m4a10 better
+######## wehrmacht lambda=60 family 1 ########
+  50     84/84     17.9     14.4 |   -3.5 pp [  -6.5,  -0.6]  m4a10 better
+  70     86/86     32.6     34.3 |   +1.7 pp [  -1.7,  +5.0]  tie
+  90     87/87     53.6     60.0 |   +6.5 pp [  +2.7, +10.2]  m4a10 better
+######## wehrmacht lambda=60 family 2 ########
+  50     84/84     17.8     18.2 |   +0.4 pp [  -2.2,  +3.1]  tie
+  70     87/87     30.7     32.4 |   +1.7 pp [  -1.8,  +5.2]  tie
+  90     86/86     50.8     56.3 |   +5.5 pp [  +1.8,  +9.2]  m4a10 better
+######## english lambda=30 family 1 ########
+  50     84/84     45.2     46.6 |   +1.3 pp [  -2.9,  +5.6]  tie
+  70     86/86     83.1     87.6 |   +4.5 pp [  +1.2,  +7.7]  m4a10 better
+  90     88/88     95.7     98.6 |   +2.8 pp [  +0.9,  +4.8]  m4a10 better
+######## english lambda=30 family 2 ########
+  50     84/84     44.5     46.3 |   +1.8 pp [  -2.6,  +6.1]  tie
+  70     88/88     81.3     86.1 |   +4.8 pp [  +1.5,  +8.1]  m4a10 better
+  90     87/87     95.9     98.8 |   +2.9 pp [  +0.9,  +4.9]  m4a10 better
+######## german lambda=30 family 1 ########
+  50     84/84     70.0     73.4 |   +3.4 pp [  -0.8,  +7.6]  tie
+  70     85/85     92.6     97.0 |   +4.4 pp [  +1.9,  +6.9]  m4a10 better
+  90     87/87     99.1     99.9 |   +0.9 pp [  -0.2,  +1.9]  tie
+######## german lambda=30 family 2 ########
+  50     86/86     67.6     74.1 |   +6.4 pp [  +2.1, +10.8]  m4a10 better
+  70     88/88     93.2     96.0 |   +2.9 pp [  +0.5,  +5.2]  m4a10 better
+  90     84/84     98.5     99.0 |   +0.5 pp [  -0.7,  +1.7]  tie
