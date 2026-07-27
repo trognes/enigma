@@ -70,6 +70,10 @@ GB = os.environ.get("GB", "i4a10")     # arm B schedule
 # GA==GB and only BLEND_B makes stage 3 a clean paired blend-off vs blend-on A/B.
 BLEND_A = os.environ.get("BLEND_A", "")
 BLEND_B = os.environ.get("BLEND_B", "")
+# ENIGMA_IC_BLEND_MODE for arm B: ""/0 = blend both climbs and ranks, 1 = blend the
+# climb but rank on the pure model, 2 = climb pure but rank on the blend. Decomposes
+# the blend's surface-reshaping effect from its selection effect.
+BLEND_MODE_B = os.environ.get("BLEND_MODE_B", "")
 CORPUS = os.environ.get("CORPUS", "wehrmacht")
 LANG = "wehrmacht" if CORPUS == "wehrmacht" else CORPUS
 
@@ -135,7 +139,7 @@ def make_trials(n, length):
     return ts
 
 
-def run_one(args, ct, seed, sa_stages=False, blend=""):
+def run_one(args, ct, seed, sa_stages=False, blend="", blend_mode=""):
     env = dict(os.environ, ENIGMA_SEED=str(seed))
     if sa_stages:
         env["ENIGMA_SA_STAGES"] = "1"
@@ -145,18 +149,22 @@ def run_one(args, ct, seed, sa_stages=False, blend=""):
         env["ENIGMA_IC_BLEND"] = str(blend)
     else:
         env.pop("ENIGMA_IC_BLEND", None)
+    if blend_mode:
+        env["ENIGMA_IC_BLEND_MODE"] = str(blend_mode)
+    else:
+        env.pop("ENIGMA_IC_BLEND_MODE", None)
     r = subprocess.run([BIN] + args + ["-a", "-l", LANG, "-T", "1"] + KEY,
                        input=ct, capture_output=True, text=True, env=env)
     m = SCORED.search(r.stderr)
     return r.stdout.strip(), (int(m.group(1)) if m else 0)
 
 
-def evaluate_trials(args, trials, sa_stages=False, blend=""):
+def evaluate_trials(args, trials, sa_stages=False, blend="", blend_mode=""):
     """Per-trial (%-correct, score_iter) -- retained so paired differences get
     a real confidence interval rather than a comparison of two bare means."""
     def one(t):
         pt, ct, seed = t
-        out, si = run_one(args, ct, seed, sa_stages, blend)
+        out, si = run_one(args, ct, seed, sa_stages, blend, blend_mode)
         return 100.0 * sum(a == b for a, b in zip(pt, out)) / len(pt), si
     with ThreadPoolExecutor(max_workers=JOBS) as ex:
         return list(ex.map(one, trials))
@@ -377,7 +385,7 @@ def stage3():
         ba, bb = greedy(GA, G_KICK), greedy(GB, G_KICK)
         Ra, Rb = calibrate(ba, 150, trials), calibrate(bb, 150, trials)
         a = evaluate_trials(ba(Ra), trials, blend=BLEND_A)
-        b = evaluate_trials(bb(Rb), trials, blend=BLEND_B)
+        b = evaluate_trials(bb(Rb), trials, blend=BLEND_B, blend_mode=BLEND_MODE_B)
         d = [bi[0] - ai[0] for ai, bi in zip(a, b)]
         m = st.mean(d); se = st.stdev(d) / math.sqrt(len(d))
         lo, hi = m - 1.96 * se, m + 1.96 * se

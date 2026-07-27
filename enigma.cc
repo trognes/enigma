@@ -1427,13 +1427,33 @@ void showconfig(machine & m, double score)
    while IC still has gradient there -- and IC is permutation-INVARIANT, so unlike a
    monogram/chi-squared term the plugboard cannot game it (see the tier-1 chi-squared
    rejection, archived section 9 item 2). Off by default; 0 disables. */
-static double ic_blend_lambda()
+/* Configured lambda (constant after startup) and the ACTIVE one the scorer reads.
+   ENIGMA_IC_BLEND_MODE decomposes the blend's two conflated jobs:
+     0 / unset  both  -- blend shapes the climb AND ranks converged boards (shipped probe)
+     1          climb -- blend shapes the climb; converged boards ranked by the PURE model
+     2          rank  -- climb on the pure model; converged boards ranked by the BLEND
+   Modes 1/2 flip g_ic_blend_active around the re-score in hillclimb_one, so they are
+   NOT thread-safe: run them with -T 1 (the eval harness already does). Mode 0 never
+   writes the global, so the shipped probe path stays -T-safe. */
+static double g_ic_blend_cfg = -1.0;   /* <0 = not yet read from the environment */
+static double g_ic_blend_active = 0.0;
+static int g_ic_blend_mode = 0;
+
+static void ic_blend_init()
 {
-  static const double lam = [] {
-    const char * s = getenv("ENIGMA_IC_BLEND");
-    return s ? atof(s) : 0.0;
-  }();
-  return lam;
+  if (g_ic_blend_cfg >= 0.0)
+    return;
+  const char * s = getenv("ENIGMA_IC_BLEND");
+  g_ic_blend_cfg = s ? atof(s) : 0.0;
+  const char * md = getenv("ENIGMA_IC_BLEND_MODE");
+  g_ic_blend_mode = md ? atoi(md) : 0;
+  /* mode 2 (rank-only) climbs on the pure model, so start inactive */
+  g_ic_blend_active = (g_ic_blend_mode == 2) ? 0.0 : g_ic_blend_cfg;
+}
+
+static inline double ic_blend_lambda()
+{
+  return g_ic_blend_active;
 }
 
 
@@ -2932,6 +2952,22 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
   double score = optimize_once(m, & rng);
+  /* Decomposition probe: re-score the converged board under the OTHER setting, so the
+     value that ranks restarts comes from a different objective than the one climbed.
+     Costs one extra score_iter per restart (~0.1% of a climb), which is why it does
+     not disturb the matched-score_iter accounting. */
+  if (g_ic_blend_mode == 1)          /* climbed blended -> rank on the pure model */
+    {
+      g_ic_blend_active = 0.0;
+      score = score_iter(m);
+      g_ic_blend_active = g_ic_blend_cfg;
+    }
+  else if (g_ic_blend_mode == 2)     /* climbed pure -> rank on the blend */
+    {
+      g_ic_blend_active = g_ic_blend_cfg;
+      score = score_iter(m);
+      g_ic_blend_active = 0.0;
+    }
   if (opt_dump_all)
     dump_all(m, score);
   return score;
@@ -4929,6 +4965,7 @@ int main(int argc, char * * argv)
 
   /* read ciphertext */
 
+  ic_blend_init();
   readciphertext();
 
   show_settings();
