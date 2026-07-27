@@ -157,23 +157,39 @@ enumerates the distinct offsets rather than every ring×start pair.
   (**default**)
 - **`-m` / `-b` / `-t` / `-q`** — Mono- / bi- / tri- / quad-gram statistics
 - **`-a`** — Weighted all-order score — log-linear mixture of
-  quad/tri/bi/mono (**recommended** when the language is known)
+  quad/tri/bi/mono
+- **`-f`** — Weighted all-order score **plus the index of coincidence**
+  (**recommended** when the language is known)
 - **`-l lang`** — Scoring language: `english`, `german`, `danish`, `french`,
   or `wehrmacht` (telegraphic military German — see below). **Required**
-  for `-m`/`-b`/`-t`/`-q`/`-a`; ignored by `-i`
+  for `-m`/`-b`/`-t`/`-q`/`-a`/`-f`; ignored by `-i`
 
 The **default model is the index of coincidence** (`-i`) — the only one
 that needs no language, so the tool runs out of the box with no scoring
-options. When you know the language, **`-a` (weighted all-order) is the
-recommended and sharpest model**: it scores each quadgram window as a
-log-linear (geometric) mixture of all four n-gram orders, which recovers
-short messages measurably better than plain quadgrams (`-q`) across every
-language while remaining neutral on long ones. Plain quadgrams (`-q`) are
-the single-order alternative. Each selector is an alias for a single-stage
-`--score <model>` (`-a` is also a schedule token, e.g. `--score m4a10`), so
+options. When you know the language, **`-f` (fused) is the recommended
+model**. It takes the weighted all-order score `-a` — a log-linear (geometric)
+mixture of all four n-gram orders, itself measurably better than plain
+quadgrams (`-q`) on short messages — and adds a weighted **index of
+coincidence** term. Measured **+3 to +4.4 pp** mean letters correct over
+`-a` alone, on English, German *and* telegraphic traffic alike.
+
+The IC term works differently from the four n-gram orders. Those are
+combined *per quadgram window* and folded into one table when the tables
+load, so they cost nothing extra at run time. IC cannot be folded in that
+way — it is quadratic in the whole-message letter histogram rather than
+additive per position — so it is computed alongside the n-gram sum and
+added to the per-symbol score. What it buys is a better **climb**, not
+better discrimination: IC is language-independent and, being blind to
+which letter is which, it is the one signal the plugboard cannot fake, so
+it supplies gradient where the n-gram surface is flat. Its weight is
+baked in (the optimum is a broad plateau, so there is nothing to tune).
+Plain quadgrams (`-q`) remain the simple single-order alternative.
+
+Each selector is an alias for a single-stage
+`--score <model>` (`-f` is also a schedule token, e.g. `--score m4f10`), so
 setting the model to **conflicting** values — two disagreeing selectors
-(`-m -q`, `-q -a`), or a selector against a different `--score` target
-(`-m --score q`) — is a **fatal error**; agreement (`-a --score m4a10`,
+(`-m -q`, `-q -f`), or a selector against a different `--score` target
+(`-m --score q`) — is a **fatal error**; agreement (`-f --score m4f10`,
 `-q --score i4q10`) is fine. The n-gram tables are highly language-specific
 — **`-l` must match the language of the plaintext**, especially for
 `-q`/`-a` (scoring an English message with `-l german` typically fails).
@@ -317,9 +333,9 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   that stage may set (omitted = uncapped). The **last** model token is the
   target/ranking model. Climbing a low-order model first (its scoring
   surface is smoother when only a few plugs are set) steers the early
-  plugs into a better basin. With the recommended weighted target the
-  staging is a **mono pre-pass**: `--score m4a10` climbs monograms (capped
-  at 4 plugs), then refines under the weighted model (capped at 10). For a
+  plugs into a better basin. With the recommended fused target the
+  staging is a **mono pre-pass**: `--score m4f10` climbs monograms (capped
+  at 4 plugs), then refines under the fused model (capped at 10). For a
   plain **quad** target an index-of-coincidence pre-pass measured best
   instead (`--score i4q10`). (The kick and the exhaustion are their own
   options, `--random` / `--exhaust`, not schedule tokens.)
@@ -331,7 +347,9 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   > (**−2.2 pp** for IC), level on English prose (−1.4 pp, CI spanning
   > zero), and **behind on German prose** (**+2.2 pp** for IC). So on
   > German prose specifically, `--score i4a10` is worth a try; everywhere
-  > else keep `m4a10`. The gap is ~2 pp either way, so this is a
+  > else keep `m4a10`. (Measured with the `-a` target; not re-checked
+  > against `-f`, whose IC term may change the calculus.) The gap is ~2 pp
+  > either way, so this is a
   > fine-tuning note, not a reason to change your default. The reason is
   > that mono scores letter *identities* against one language's
   > frequencies, while IC only measures how uneven the distribution is and
@@ -366,7 +384,7 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   climb (`-R 0`).
 
 The recipes below build the schedule and plug-cap mechanics up on the
-**recommended** weighted target (`-a`, staged as `--score m4a10`). The
+**recommended** fused target (`-f`, staged as `--score m4f10`). The
 percentages quoted alongside them were measured with a quad target
 (`--score iq` / `i4q10`); what they illustrate — pre-pass, plug cap,
 cap-as-target — is a property of the schedule rather than of the model,
@@ -375,17 +393,17 @@ and `-a` is the sharper model to run it on (see "Scoring" above).
 A good general recipe for a hard (short) message with a known rotor key:
 
 ```sh
-./enigma -c -R 20 -a --score ma -l english \
+./enigma -c -R 20 -f --score mf -l english \
          -u B -w 241 -r AAA -g QEW < cipher.txt
 
 # faster climbs → more restarts for the same time: add -J and raise -R
-./enigma -c -J -R 55 -a --score ma -l english \
+./enigma -c -J -R 55 -f --score mf -l english \
          -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 **Cap the plug count in the schedule.** A real Wehrmacht board has ~10
 plugs, so capping the final (weighted) stage at 10 and the pre-pass
-lower — `--score m4a10` — keeps the climb from adding spurious plugs on
+lower — `--score m4f10` — keeps the climb from adding spurious plugs on
 the noisy short-message score, and (being cheaper) buys more restarts for
 the same budget. Measured with a quad target on ~50–80-letter 10-plug
 messages, capping recovered several percentage points more than the
@@ -396,12 +414,12 @@ representative). The kick stays the default — a *small* kick like
 `--random 3` hurts:
 
 ```sh
-./enigma -c -R 26 -a --score m4a10 -l english \
+./enigma -c -R 26 -f --score m4f10 -l english \
          -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
 If you know the board uses **few** plugs (say 6), cap at that count
-instead (`--score m4a6` or so) — there the cap is a large win, and adding
+instead (`--score m4f6` or so) — there the cap is a large win, and adding
 **`-M`** makes it larger still: `-M` turns the cap into a strict descent
 target (at/over the cap the climb may only merge or remove plugs, never
 add or reshuffle), so a restart's random kick is cleanly pruned back down
@@ -410,7 +428,7 @@ short messages this adds several more points (up to ~+20pp at the hardest
 lengths) at equal compute, and it climbs faster too:
 
 ```sh
-./enigma -c -R 26 -a --score m4a6 -M -l english \
+./enigma -c -R 26 -f --score m4f6 -M -l english \
          -u B -w 241 -r AAA -g QEW < cipher.txt
 ```
 
@@ -418,7 +436,7 @@ When you also brute-force the rotor key, add `-F` to shortlist keys and
 `-T` for threads:
 
 ```sh
-./enigma -c -R 20 -a --score m4a10 -F 10% -T 4 -l english \
+./enigma -c -R 20 -f --score m4f10 -F 10% -T 4 -l english \
          -u . -w ... -r AAA -g ... < cipher.txt
 ```
 
@@ -429,7 +447,7 @@ Increase `-R` for harder messages.
 **Use the weighted all-order model `-a` when you know the language** — it
 recovers short messages measurably better than plain quad (`-q`) at no
 extra cost (a log-linear mixture of all four n-gram orders; see "Scoring"
-above), staged as `--score m4a10`. There are two strong plugboard solvers,
+above), staged as `--score m4f10`. There are two strong plugboard solvers,
 and at **matched compute** they are **peers with a length-dependent
 crossover** — pick either, or run both:
 
@@ -440,7 +458,7 @@ crossover** — pick either, or run both:
   affords many.
 
   ```sh
-  ./enigma -c -J --score m4a10 --polish --random 10 -R 40 -a -l english \
+  ./enigma -c -J --score m4f10 --polish --random 10 -R 40 -f -l english \
            -u B -w 241 -r AAA -g QEW < cipher.txt
   ```
 

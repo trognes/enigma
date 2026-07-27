@@ -97,7 +97,8 @@ static const double score_min = -1e30;
 
 /* Plaintext scoring models; values match the scoring_name[] order and the
    *_score_decode dispatch in score_iter(). */
-enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD, SCORE_ALL };
+enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD, SCORE_ALL,
+               SCORE_FUSED };
 
 static const char * opt_ukw;
 static const char * opt_walzen;
@@ -381,8 +382,8 @@ struct machine
    tables) trims quantisation error on borderline rankings. The map MUST stay linear (an affine
    image of log10 p) so the additive sum reconstructs; adaptive *scale* is the only free lever,
    not a nonlinear curve. Raw counts live in a transient scratch buffer inside ngrams_read(). */
-static double ngram_scale[SCORE_ALL + 1];   /* per-model: 255/(vmax-vmin), full 0..255 range */
-static double ngram_bias[SCORE_ALL + 1];    /* per-model vmin; indexed by SCORE_* */
+static double ngram_scale[SCORE_FUSED + 1];   /* per-model: 255/(vmax-vmin), full 0..255 range */
+static double ngram_bias[SCORE_FUSED + 1];    /* per-model vmin; indexed by SCORE_* */
 static uint8_t mono8[asize];
 static uint8_t bi8[asize][asize];
 static uint8_t tri8[asize][asize][asize];
@@ -1427,33 +1428,20 @@ void showconfig(machine & m, double score)
    while IC still has gradient there -- and IC is permutation-INVARIANT, so unlike a
    monogram/chi-squared term the plugboard cannot game it (see the tier-1 chi-squared
    rejection, archived section 9 item 2). Off by default; 0 disables. */
-/* Configured lambda (constant after startup) and the ACTIVE one the scorer reads.
-   ENIGMA_IC_BLEND_MODE decomposes the blend's two conflated jobs:
-     0 / unset  both  -- blend shapes the climb AND ranks converged boards (shipped probe)
-     1          climb -- blend shapes the climb; converged boards ranked by the PURE model
-     2          rank  -- climb on the pure model; converged boards ranked by the BLEND
-   Modes 1/2 flip g_ic_blend_active around the re-score in hillclimb_one, so they are
-   NOT thread-safe: run them with -T 1 (the eval harness already does). Mode 0 never
-   writes the global, so the shipped probe path stays -T-safe. */
-static double g_ic_blend_cfg = -1.0;   /* <0 = not yet read from the environment */
-static double g_ic_blend_active = 0.0;
-static int g_ic_blend_mode = 0;
+/* -f (SCORE_FUSED) weight on the index of coincidence, added to the weighted
+   all-order score. Baked like -a's order weights rather than exposed as a knob:
+   the optimum is a broad plateau (lambda 20/30/40 measured +3.6/+4.4/+3.8pp and
+   statistically indistinguishable from each other), so there is nothing for a user
+   to tune. ENIGMA_IC_BLEND overrides it for experiments, exactly as ENIGMA_LOGLIN
+   overrides -a's weights. See PERFORMANCE.md 6.4. */
+static const double fused_lambda_default = 30.0;
+static double g_fused_lambda = fused_lambda_default;
 
 static void ic_blend_init()
 {
-  if (g_ic_blend_cfg >= 0.0)
-    return;
   const char * s = getenv("ENIGMA_IC_BLEND");
-  g_ic_blend_cfg = s ? atof(s) : 0.0;
-  const char * md = getenv("ENIGMA_IC_BLEND_MODE");
-  g_ic_blend_mode = md ? atoi(md) : 0;
-  /* mode 2 (rank-only) climbs on the pure model, so start inactive */
-  g_ic_blend_active = (g_ic_blend_mode == 2) ? 0.0 : g_ic_blend_cfg;
-}
-
-static inline double ic_blend_lambda()
-{
-  return g_ic_blend_active;
+  if (s)
+    g_fused_lambda = atof(s);
 }
 
 
@@ -1509,19 +1497,19 @@ double score_iter(machine & m)
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
 
-  /* ENIGMA_IC_BLEND probe: quad/weighted target only (the models the blend is meant
-     for). The blend is added AFTER per-symbol normalisation below, so lambda weighs
-     IC against a per-symbol cross-entropy rather than a length-scaled sum. */
-  const double lam = ic_blend_lambda();
-  if ((lam != 0.0) && ((m.scoring == SCORE_QUAD) || (m.scoring == SCORE_ALL)))
+  /* -f: the weighted all-order score fused with the index of coincidence. The IC term
+     is added AFTER per-symbol normalisation, so lambda weighs it against a per-symbol
+     cross-entropy rather than a length-scaled sum. IC cannot be folded into the n-gram
+     table like -a's four orders are: those are additive over positions, whereas IC is
+     quadratic in the whole-message letter histogram. */
+  if (m.scoring == SCORE_FUSED)
     {
       double ic = 0.0;
-      score = ngram_ic_decode(m, (m.scoring == SCORE_QUAD) ? quad8 : all8,
-                              m.scoring, &ic);
+      score = ngram_ic_decode(m, all8, SCORE_ALL, &ic);
       nterms = textlength - 3;
       if (nterms > 0)
         score /= nterms;
-      return score + lam * ic;
+      return score + g_fused_lambda * ic;
     }
 
   switch(m.scoring)
@@ -1678,7 +1666,7 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
   /* score gains against the ACTIVE model's table (all8 for -a, else quad8) so the
      gain cascade stays consistent with the scorer for the weighted model too. */
   const uint8_t (* __restrict qt)[asize][asize][asize] =
-    (m.scoring == SCORE_ALL) ? all8 : quad8;
+    ((m.scoring == SCORE_ALL) || (m.scoring == SCORE_FUSED)) ? all8 : quad8;
 
   unsigned char pt[maxlen];
   for (int i = 0; i < n; i++)
@@ -1765,7 +1753,8 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
 template<bool EX>
 static bool gain_cascade(machine & m, double cur_score)
 {
-  if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
+  if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL
+       && m.scoring != SCORE_FUSED) || textlength < 8)
     return false;
   if (cur_score < opt_cascade_gate)             /* near-solution gate: skip junk boards */
     return false;
@@ -1847,7 +1836,8 @@ template<bool EX> static double hillclimb(machine & m, int max_pairs);   /* fwd:
 template<bool EX>
 static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
 {
-  if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL) || textlength < 8)
+  if ((m.scoring != SCORE_QUAD && m.scoring != SCORE_ALL
+       && m.scoring != SCORE_FUSED) || textlength < 8)
     return false;
   if (cur_score < opt_cascade_gate)             /* near-solution gate: skip junk boards */
     return false;
@@ -2370,6 +2360,7 @@ void load_table(int model)
     case SCORE_TRI:  ngrams_read(3, & tri8[0][0][0], & ngram_bias[SCORE_TRI], & ngram_scale[SCORE_TRI], "trigrams"); break;
     case SCORE_QUAD: ngrams_read(4, & quad8[0][0][0][0], & ngram_bias[SCORE_QUAD], & ngram_scale[SCORE_QUAD], "quadgrams"); break;
     case SCORE_ALL:
+    case SCORE_FUSED:   /* -f reuses all8; only the IC term differs at score time */
       {
         /* the weighted all-order model: log-linear symmetric mixture of quad/tri/bi/mono,
            weights tuned across four languages (PR #106): quad 1, tri .6, bi .3, mono .15. */
@@ -2393,18 +2384,19 @@ int model_of(char c)
     case 't': return SCORE_TRI;
     case 'q': return SCORE_QUAD;
     case 'a': return SCORE_ALL;
+    case 'f': return SCORE_FUSED;
     default:  return SCORE_IC;
     }
 }
 
-/* Record a bare model selector (-i/-m/-b/-t/-q) as a single uncapped --score <model>
+/* Record a bare model selector (-i/-m/-b/-t/-q/-a/-f) as a single uncapped --score <model>
    stage (REDESIGN Part C). Two selectors that disagree (e.g. -m -q) make the intended
    model ambiguous, so reject them; repeats that agree (-q -q) are fine. Sets opt_scoring
    so a run with no --score ranks by the selected model. */
 static void select_model(int model)
 {
   if ((opt_model_selector != -1) && (opt_model_selector != model))
-    fatal("Conflicting scoring models: the -i/-m/-b/-t/-q selectors disagree; "
+    fatal("Conflicting scoring models: the -i/-m/-b/-t/-q/-a/-f selectors disagree; "
           "pick one");
   opt_model_selector = model;
   opt_scoring = model;
@@ -2443,7 +2435,7 @@ void parse_schedule()
             }
         }
 
-      if (strchr("imbtqa", letter))
+      if (strchr("imbtqaf", letter))
         {
           if (opt_nstages >= max_stages)
             fatal("Illegal --score schedule: too many stages (max 16)");
@@ -2455,8 +2447,8 @@ void parse_schedule()
           opt_nstages++;
         }
       else
-        fatal("Illegal --score schedule (tokens are i/m/b/t/q/a + optional cap, "
-              "e.g. --score m4a10; use --random for the kick, --exhaust for forcing)");
+        fatal("Illegal --score schedule (tokens are i/m/b/t/q/a/f + optional cap, "
+              "e.g. --score m4f10; use --random for the kick, --exhaust for forcing)");
     }
 
   if (opt_nstages < 1)
@@ -2952,22 +2944,6 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
   double score = optimize_once(m, & rng);
-  /* Decomposition probe: re-score the converged board under the OTHER setting, so the
-     value that ranks restarts comes from a different objective than the one climbed.
-     Costs one extra score_iter per restart (~0.1% of a climb), which is why it does
-     not disturb the matched-score_iter accounting. */
-  if (g_ic_blend_mode == 1)          /* climbed blended -> rank on the pure model */
-    {
-      g_ic_blend_active = 0.0;
-      score = score_iter(m);
-      g_ic_blend_active = g_ic_blend_cfg;
-    }
-  else if (g_ic_blend_mode == 2)     /* climbed pure -> rank on the blend */
-    {
-      g_ic_blend_active = g_ic_blend_cfg;
-      score = score_iter(m);
-      g_ic_blend_active = 0.0;
-    }
   if (opt_dump_all)
     dump_all(m, score);
   return score;
@@ -4116,16 +4092,16 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "climb; N = N kicked climbs, keep best [0]");
   fprintf(out, "  %-24s %s\n", "-S, --score schedule",
           "Staged plugboard climb: <letter><cap> tokens,");
-  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q/a (number caps plug pairs; the last");
+  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q/a/f (number caps plug pairs; last");
   fprintf(out, "  %-24s %s\n", "", "stage is the target/ranking model). E.g. --score");
-  fprintf(out, "  %-24s %s\n", "", "m4a10 (mono pre-pass then weighted, both capped).");
+  fprintf(out, "  %-24s %s\n", "", "m4f10 (mono pre-pass then fused, both capped).");
   fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
   fprintf(out, "  %-24s %s\n", "-l, --language language",
           "Scoring language: english/german/danish/french, or");
   fprintf(out, "  %-24s %s\n", "", "wehrmacht (telegraphic military German -- X as");
   fprintf(out, "  %-24s %s\n", "", "word separator, Q for ch, spelled-out numbers;");
   fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German);");
-  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q/-a (no default); not -i");
+  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q/-a/-f (no default); not -i");
   fprintf(out, "  %-24s %s\n", "-i, --ic",
           "Index of coincidence (IC); needs no -l [default]");
   fprintf(out, "  %-24s %s\n", "-m, --mono", "Monogram statistics for the plaintext score");
@@ -4134,8 +4110,14 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "-q, --quad", "Quadgram statistics for the plaintext score");
   fprintf(out, "  %-24s %s\n", "-a, --weighted",
           "Weighted all-order score (log-linear mix of");
-  fprintf(out, "  %-24s %s\n", "", "quad/tri/bi/mono); sharper on short messages.");
-  fprintf(out, "  %-24s %s\n", "", "Recommended: -c -S m4a10 -J --polish");
+  fprintf(out, "  %-24s %s\n", "", "quad/tri/bi/mono); sharper on short messages");
+  fprintf(out, "  %-24s %s\n", "-f, --fused",
+          "Weighted all-order score PLUS the index of");
+  fprintf(out, "  %-24s %s\n", "", "coincidence. IC is language-independent and the");
+  fprintf(out, "  %-24s %s\n", "", "plugboard cannot game it, so it adds gradient");
+  fprintf(out, "  %-24s %s\n", "", "where the n-gram surface is flat -- a better");
+  fprintf(out, "  %-24s %s\n", "", "CLIMB, not better discrimination. Recommended:");
+  fprintf(out, "  %-24s %s\n", "", "-c -S m4f10 -J --polish");
   fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
           "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
   fprintf(out, "  %-24s %s\n", "-T, --threads N",
@@ -4223,9 +4205,9 @@ void help(FILE * out)
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --polish --score m4a10 --random 10 -R 40 -a -l english\n");
+  fprintf(out, "  greedy: -c -J --polish --score m4f10 --random 10 -R 40 -f -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score a10 -R 12 -a -l english\n");
-  fprintf(out, "-a (weighted all-order) is the recommended scoring model; -R is the main\n");
+  fprintf(out, "-f (weighted all-order + IC) is the recommended scoring model; -R is the main\n");
   fprintf(out, "quality dial (use -T to keep it cheap); the polisher is a small bump\n");
   fprintf(out, "on top, not a substitute for more restarts.\n");
   fprintf(out, "\n");
@@ -4247,7 +4229,7 @@ void show_settings()
 {
   static const char * const scoring_name[] =
     { "index of coincidence", "monograms", "bigrams", "trigrams", "quadgrams",
-      "weighted all-orders" };
+      "weighted all-orders", "weighted all-orders + IC" };
 
   fprintf(stderr, "Ciphertext: %d letters\n", textlength);
 
@@ -4433,6 +4415,7 @@ int main(int argc, char * * argv)
       { "tri",            no_argument,       nullptr, 't' },
       { "quad",           no_argument,       nullptr, 'q' },
       { "weighted",       no_argument,       nullptr, 'a' },
+      { "fused",          no_argument,       nullptr, 'f' },
       { "climb",          no_argument,       nullptr, 'c' },
       { "norway",         no_argument,       nullptr, 'n' },
       { "m4",             no_argument,       nullptr, '4' },
@@ -4452,7 +4435,7 @@ int main(int argc, char * * argv)
 
   int c;
   while ((c = getopt_long(argc, argv,
-                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:JMimbtqacvhn4",
+                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:JMimbtqafcvhn4",
                           long_options, nullptr)) != -1)
     {
       switch (c)
@@ -4497,6 +4480,10 @@ int main(int argc, char * * argv)
           break;
         case 'a':
           select_model(SCORE_ALL);
+          break;
+
+        case 'f':
+          select_model(SCORE_FUSED);
           break;
         case 'c':
           opt_hillclimb = 1;
@@ -4944,7 +4931,7 @@ int main(int argc, char * * argv)
      decrypt (which fell back to IC and needs no table). */
   if (needs_scoring || (opt_scoring != SCORE_IC))
     {
-      bool table_loaded[SCORE_ALL + 1] = { false, false, false, false, false, false };
+      bool table_loaded[SCORE_FUSED + 1] = { false, false, false, false, false, false, false };
       load_table(opt_scoring);
       table_loaded[opt_scoring] = true;
       for (int i = 0; i < opt_nstages; i++)

@@ -1538,22 +1538,100 @@ variant to the harness; compare against the hard cap at the true count as an ora
 upper bound; confirm the scoring/search classification shifts without raising
 search failures.
 
-### 6.4 Combined weighted fitness quad + λ·IC (LOW–MEDIUM priority)
+### 6.4 Fused score: weighted all-order + λ·IC — ✅ SHIPPED as `-f`
 
-**Form in this codebase.** Instead of *staging* IC then quad, fuse a term:
-`score = quad_loglik + λ·IC` (both cheap; IC is one pass over the same decoded
-stream). IC is language-independent and roughly monotone in "how many plugs are
-right," so a small weight tilts the surface toward the IC gradient where quad is
-flat, while quad still picks the winner.
+**The idea.** Instead of *staging* IC then the n-gram model, fuse them:
+`score = per-symbol ngram + λ·IC`. With only a plug or two set the quad/weighted
+surface is nearly flat — almost every 4-gram is unseen and floored at the hapax value,
+so a toggle barely moves the score — while IC still responds as soon as the letter
+histogram starts to skew. Fusing gives one continuous surface instead of a hard
+handover: the n-gram term dominates where it has signal, λ·IC supplies gradient where
+it does not.
 
-**Honest payoff.** Low–medium. Introduces λ (tune per length/model); too large
-blurs quad's true peak. IC and quad already coexist via staging, so the marginal
-gain over `-S iq` may be small. Cheap to sweep. The extra IC accumulation is a
-measurable hot-path cost — bench it.
+**Why IC is the right term to add.** It is **permutation-invariant** — it reads only
+the multiset of letter counts, never which letter holds which count. That matters
+because the plugboard *is* a letter permutation: any identity-sensitive unigram
+objective can be driven by choosing the permutation rather than by finding the truth,
+which is exactly how χ²-monogram collapsed to 12.5% tier-1 recall against IC's 68.8%
+(archived §9 item 2). IC is the one unigram signal the board cannot manufacture. It is
+also language-independent, which is why the result does not inherit a register bias.
 
-**Experiment.** `make crackquality` sweeping λ ∈ {0, 0.25, 0.5, 1} at L40–100;
-require it to beat both plain quad *and* `-S iq`. `make bench` to bound the added
-per-score cost.
+**Measured — the largest short-message scoring gain in this codebase.** Paired within
+instance, 300 trials per length per family, two seed families, both arms calibrated to
+200k `score_iter` with identical `-R`:
+
+| corpus | λ=30 vs no blend | n |
+|---|---:|---:|
+| wehrmacht | **+4.4 pp** [+3.1, +5.6] | 1800 |
+| english prose | **+3.0 pp** [+1.7, +4.4] | 1800 |
+| german prose | **+3.1 pp** [+1.9, +4.3] | 1800 |
+
+**The first scoring change here that is not register-dependent** — contrast the mono
+pre-pass (+2.2pp telegraphic / −2.2pp German prose, §6.10) and the SA staged pre-pass
+(+2.3pp / −2.6pp, §3.11). For scale, `-a` itself was +1–2pp.
+
+**λ: baked at 30, and the scale is the whole story.** Per-move quad deltas run ~0.07
+early to ~2.0 late; per-move IC deltas are ~0.005. So λ must be ~20–40 to matter at
+all, and this section's *original* proposed sweep of λ ∈ {0, 0.25, 0.5, 1} is
+**inert** — λ=1 and λ=10 give byte-identical output to λ=0. Running the section as
+first written would have produced a false negative. Measured curve (wehrmacht,
+n=1800/point): 10→+2.1, 20→+3.6, **30→+4.4**, 40→+3.8, 60→+2.0, and 80→−8 (n=40).
+The plateau is broad — paired blend-vs-blend puts λ30−λ20 at +0.81 [−0.12,+1.74] and
+λ30−λ40 at +0.62 [−0.29,+1.53], i.e. **20/30/40 are statistically indistinguishable**
+— so λ is baked like `-a`'s order weights rather than exposed as a knob
+(`ENIGMA_IC_BLEND` overrides it for experiments, as `ENIGMA_LOGLIN` does for `-a`).
+A finer scan is *not* worth running: resolving ~0.5pp would need ~7× the trials to
+locate a difference no user could feel.
+
+**λ's optimum is length-dependent, which is why it is not set higher.** λ60−λ30 costs
+**−4.22 pp [−5.87,−2.56] at L50** but only −0.90 (ns) at L90; the milder λ40−λ20 step
+even turns positive at L90. IC's sampling noise scales ~1/√n, so on 50 letters over 26
+bins the term is mostly noise. λ=30 ties λ=20 at L50 and beats it at L90, so it
+dominates across the range — the length-dependence argues against going above ~40, not
+for making λ adaptive.
+
+**It is a better CLIMB, not better discrimination — this is the load-bearing finding.**
+The fused score does two separable jobs: it shapes the climb, and it ranks converged
+boards. Decomposed (`ENIGMA_IC_BLEND_MODE`, since removed; wehrmacht, same instances):
+
+| component | effect |
+|---|---:|
+| surface (blend the climb, rank pure) | **+3.4 pp** [+2.2, +4.6] |
+| selection alone (climb pure, rank blended) | **−0.0 pp** [−0.6, +0.5] |
+| consistency (rank blended *given* a blended climb) | +1.0 pp [+0.4, +1.6] |
+
+Blending the ranking is worth **nothing** on its own; it adds ~1pp only once the climb
+is blended too, which is objective-*consistency* (rank by what you optimised), not
+discrimination. **So §6.15's ~1% discrimination floor is NOT contradicted.** What
+§6.15 does over-claim is that the climb surface is tapped: its smoothness probe swept
+the `-a` **order weights** 8× and moved search-fail <1pp, but that is one direction.
+An orthogonal, permutation-invariant term moves recovery +3.4pp. The surface was
+under-explored along a single axis, not exhausted.
+
+**Cross-key: no harm.** Every measurement above fixes the rotor key. With `-g` partly
+wildcarded so the score must rank *keys* (10 plugs, `-R 20`, compute matched within
+~2%): +2.8pp at 26 keys/L70, +6.3pp at 26 keys/L90, +5.8pp at 676 keys/L90. The gain
+matches the fixed-key case, which — given selection contributes −0.0pp — says the
+benefit is still the per-key climb carrying over, and that the fused objective does not
+distort key selection. *Scope limit:* 676 keys is far short of the 17,576-key full
+start wildcard and further short of the real 60-order keyspace.
+
+**It does not replace staging.** Three arms, same 1800 instances, matched compute:
+`m4a10` (no blend) 33.9, `a10`+blend (one pass) 35.3, `m4a10`+blend 38.3. The single
+blended pass *ties* the staged recipe (+1.4pp [−0.4,+3.2]) — it earns ~1.7× the
+restarts, since dropping the pre-pass is ~0.59× the cost (§6.10) — but keeping both is
+**+3.0pp [+1.3,+4.7]** over it. Pre-pass and fusion are complementary: the pre-pass
+selects a basin on a smoother surface, the fused term shapes the gradient on the target
+surface.
+
+**Cost.** Wall-time neutral: `-R 400`, min of 3 — off .213s, λ=10 .209s, λ=20 .210s,
+λ=30 .205s. The 26-bin histogram is cheap beside the gather-bound decode, and it is
+accumulated in the *same* decode pass as the n-gram sum (a two-pass version would have
+inflated wall time per `score_iter` and quietly unfaired every matched-compute A/B).
+IC cannot be folded into the table the way `-a`'s four orders are: those are additive
+over positions, IC is quadratic in the whole-message histogram.
+
+Reproduce: `eval/eval_sa_vs_greedy.py` (STAGE=3), `eval/results-ic-blend*.txt`.
 
 ### 6.5 Finer score accumulation on short text (LOW priority)
 
@@ -2054,6 +2132,13 @@ normalization (weights absorb the scale in log space). Shipped as the model `-a`
 probes show it is near-optimal on *both* scoring axes, so there is no headroom left for a further
 scoring model (learned weights, added features, MERT):
 
+> **Narrowed by §6.4 (`-f`).** The discrimination half of this section stands: the
+> fused model adds **−0.0pp** when it only ranks converged boards, so it does not move
+> the floor below. The *smoothness* half does not: the sweep below varies the `-a`
+> **order weights**, one direction in the space, and an orthogonal permutation-invariant
+> term (IC) moves recovery **+3.4pp**. The surface was under-explored along a single
+> axis, not exhausted.
+
 - **Discrimination floor ~1%** (`crackquality SPLIT`, MODEL=a). Of every short-message miss, the
   fraction that is a *scoring* failure — the true plugboard not scoring highest even with the
   correct rotor key — is **~0.3–2.3% at L40–60 and ~0 beyond**; the rest (86–96% of trials at L40)
@@ -2542,7 +2627,6 @@ open.) Full detail is in each section; this table is a scan-only index, not a su
 | 5.1 | Crib-driven bombe closure deduction | HIGH (crib-only) | real deduction, unlike shipped `--crib-file`; needs a new harness |
 | 5.2 | Crib-drag soft seeding | MEDIUM (crib-only) | lighter cousin of 5.1; also needs the new harness |
 | 6.3 | Soft MDL / plug-count prior | LOW–MEDIUM | doc's own "weakest fit to the diagnosis" |
-| 6.4 | Weighted quad + λ·IC fitness | LOW–MEDIUM | `-S iq` staging likely already captures most of this |
 | 6.5 | Finer (uint16) score accumulation | LOW | conflicts with the shipped uint8 cache-residency win |
 | 7.3 | Amortize `-F` IC pre-pass into tier 2 | MEDIUM | confirmed: `finish_worker` still discards the tier-1 board |
 | 7.4 | Branch-and-bound early-exit | LOW | exact bound; distinct from §4.6's rejected approximate prune |

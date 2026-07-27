@@ -177,10 +177,9 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 ### Key CLI options (see `help()` in source for the full list)
 
-> **Recommended vs. not.** The proven-good knobs are `-c` + `-R` restarts, the **`-a` weighted
-> all-order scoring** (log-linear mixture of quad/tri/bi/mono — the sharpest scoring model and the
-> one measured *scoring* win on short messages; strictly recommended over `-q` when the language is
-> known, see the `-a` entry below), `-S m4a10` staging (mono pre-pass then weighted), `-J` (dynamic
+> **Recommended vs. not.** The proven-good knobs are `-c` + `-R` restarts, the **`-f` fused scoring model**
+> (`-a`'s weighted all-order mixture plus a weighted index of coincidence — the strongest measured
+> scoring model, and the only one that is not register-dependent; see the `-f` entry below), `-S m4f10` staging (mono pre-pass then fused), `-J` (dynamic
 > move order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the best-board finisher
 > `--polish` (the recommended finisher: one fixed-cost pass after all restarts, so it is
 > negligible at a high `-R`).
@@ -211,7 +210,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > that only a **sharper scoring model** moves the needle, not more search — which is exactly what the
 > **`-a` weighted model** delivers (the first measured short-message *scoring* gain, +~1–2pp mean
 > %-correct at L40–100 across all four languages; PR #106). Recipe:
-> `-c -J --polish --score m4a10 --random 10 -R <as high as -T affords> -a -l <lang> -T <cores>`.
+> `-c -J --polish --score m4f10 --random 10 -R <as high as -T affords> -f -l <lang> -T <cores>`.
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -367,7 +366,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   is why `tests/` and the `crackquality`/`bench` harnesses pin `ENIGMA_SEED=0` for
   deterministic, cross-ref-comparable runs.
 - `-S <schedule>` / `--score <schedule>` staged plugboard climb — a string of
-  `<letter><optional cap>` **model tokens** `i`/`m`/`b`/`t`/`q`/`a` parsed by
+  `<letter><optional cap>` **model tokens** `i`/`m`/`b`/`t`/`q`/`a`/`f` parsed by
   `parse_schedule()` into `opt_stages[]`. Each is a climb stage run in order; the number
   caps the **plug pairs** that stage may set (1–13; omitted = uncapped, 13). The **last**
   model token is the target/ranking model (sets `opt_scoring`), so the target lives *in*
@@ -393,7 +392,8 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q/-a` (no default), not
   used by `-i`. `-l` alone does nothing: it takes effect only with an n-gram model,
   so it is `-q -l english`, not `-l english`, that scores with English quadgrams.
-- `-i/-m/-b/-t/-q/-a` scoring model: IC / mono / bi / tri / quad / weighted-all. **IC is
+- `-i/-m/-b/-t/-q/-a/-f` scoring model: IC / mono / bi / tri / quad / weighted-all /
+  fused (weighted-all + IC). **IC is
   the default** — the only model needing no `-l`, so the tool runs with no scoring options
   (an n-gram default would be inconsistent: it requires a language, which has no default).
   **`-a` (weighted) is the sharpest and the recommended model when the language is known**
@@ -416,7 +416,23 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   where quad already saturates. The linear (Jelinek-Mercer) form was tried and **lost** (the
   conditional reframing it forces is the cost); log-linear wins because it is *conjunctive* — a
   candidate must look plausible at every order at once. See `PERFORMANCE.md` / PR #106. Because `-a`
-  is the sharpest model, the recommended recipe is `-c -S m4a10 -J --polish -a -l <lang>`.
+  is the sharpest single-family model, the recipe built on it is
+  `-c -S m4a10 -J --polish -a -l <lang>` -- but see `-f` below, which supersedes it.
+- `-f` **fused: weighted all-order + index of coincidence** (**recommended** when the
+  language is known; needs `-l`; a schedule token too -- `-S m4f10`). Takes `-a`'s
+  `all8` table unchanged and adds `lambda * IC` to the **per-symbol** score, with
+  `lambda = 30` baked in (`ENIGMA_IC_BLEND` overrides it, mirroring `ENIGMA_LOGLIN`
+  for `-a`'s weights). IC cannot be folded into the table the way `-a`'s four orders
+  are -- they are additive over positions, IC is quadratic in the whole-message letter
+  histogram -- so it is accumulated in the same decode pass and added after
+  normalisation. Measured **+3.0 to +4.4pp** mean %-correct over `-a` on english,
+  german AND wehrmacht (n=1800 each), the first scoring change in this codebase that is
+  **not register-dependent** -- expected, since IC is language-independent. Wall-time
+  neutral (the histogram is cheap beside the gather-bound decode). **It is a better
+  CLIMB, not better discrimination**: a decomposition (`PERFORMANCE.md` 6.4) puts the
+  whole gain in surface reshaping (+3.4pp) with selection contributing -0.0pp, so it
+  does *not* move the scoring-failure floor. Recommended recipe:
+  `-c -S m4f10 -J --polish -f -l <lang>`.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a long-message throughput tool, unreliable on the short/hard end and proxy-measured; needs `-c`; `0` = off): a two-tier search — tier 1
