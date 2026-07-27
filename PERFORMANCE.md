@@ -2182,6 +2182,99 @@ Part 1 shows scales predictably. This is a *clean* close (there is provably no c
 scoring trick hiding at short lengths), not a failure to find one. Both the scoring frontier
 (§6.15) and the search frontier are now mapped and closed to smarter methods.
 
+### 6.17 The wehrmacht quadgram table had an unbounded reweighting blow-up + a silent uint32 overflow (fixed) — ✅ FIXED
+
+**How the question came up.** Asked how well `wehrmacht_quadgrams.txt` (built by
+`eval/build_telegraphic_ngrams.py` from the prose German table, reweighted toward the
+published Sullivan & Weierud Appendix-C statistics — §"Overview") actually matches the
+quadgrams in the 69 authentic held-out messages. Measuring it directly (not just the
+end-to-end recovery rate) surfaced two compounding bugs, not just "sparse published
+evidence."
+
+**Root cause 1 — the reweight ratio was unbounded.** The generator scales each prose
+quadgram count by `w = r1(A)^0.5 · r1(B)^0.5 · r1(C)^0.5 · r1(D)^0.5 · r3(ABC)^2 · r3(BCD)^2`,
+where `r1`/`r3` are telegraphic/prose frequency ratios for single letters and Fig 18's
+400 published trigrams. `r3` is a ratio of two *small* counts for most of those 400
+trigrams (median prose trigram count in the teens) — for the minority with a near-zero
+prose denominator the ratio is denominator noise, not signal. Measured: `r3` ranges
+0.26 to **4.08 × 10⁶** over the 400 entries (the max, `QTX`, from a prose trigram count
+of 1), and a quadgram multiplies *two* such ratios, squared. The single worst case,
+`QSXA` (prose quadgram count 1), reweighted to **8.3 × 10²⁰**.
+
+**Root cause 2 — the C++ loader silently saturated instead of erroring.** `load_counts()`
+parsed each count straight into a 32-bit `unsigned` via `sscanf("%u", ...)`. Parsing a
+value that doesn't fit the target type is **undefined behaviour** in C; empirically, on
+this glibc, it **saturates to `UINT32_MAX`** rather than failing. Consequence, measured
+directly on the checked-in table: **843 of 366,266 quadgram entries (0.23%) were tied at
+the exact same clamped value** — including real telegraphic markers (`NULL`, `XEIN`,
+`SEQU`/`NSEQ`, `XKON`, `DERX`, `XBOX`) that should have had distinct, informative
+weights. Those 843 tied entries alone held **~68.5%** of the table's total probability
+mass as actually loaded, and the resulting log-probability dynamic range (~9.6 log10
+units, vs. the prose table's ~6.6) forced the uint8 quantizer's adaptive
+`ngram_scale`/`ngram_bias` (§"Performance notes" — `scale = 255/(vmax−vmin)`) into a
+coarser step, blurring resolution across the other 99.97% of the table.
+
+**Measured practical impact (69-message held-out corpus, 6,582 quadgram instances):**
+using the counts exactly as the (buggy) binary loaded them, the true plaintext's own
+quadgram stream scored **worse on average under the wehrmacht table than under plain
+prose** — mean log10 P(actual quadgram) −8.03 (wehrmacht) vs. −5.85 (prose), i.e. the
+"telegraphic" table assigned *lower* likelihood to real telegraphic text than the prose
+table did, at the raw quad level. 7.9% of the corpus's actual quadgram instances (204
+distinct grams) landed on one of the saturated, artificially-tied cells. This didn't
+show up as a broken end-to-end result because the tool's measured wehrmacht win
+(CLAUDE.md, +20.9pp on real messages) comes overwhelmingly from the **monogram
+marginal** (`X` ~7% telegraphic vs. ~0.07% prose, taken verbatim from Fig 17 and
+untouched by this bug) folded in by `-a`/`-f`, not from the quad table's own fit — so a
+materially broken quad table was masked by a much stronger, unrelated signal.
+
+**Fix.**
+- `eval/build_telegraphic_ngrams.py`: clip the per-gram weight, `w = min(w, W_MAX)`
+  with `W_MAX = 1000` (overridable via env). Chosen to sit above the well-evidenced
+  bulk (median weight ~1.1, p90 ~7) and below the denominator-noise tail (p99 ~99,300),
+  and to keep every possible output count under ~4.7 × 10⁸ — 11% of `UINT32_MAX`,
+  comfortable headroom against the largest prose quadgram count (~3.7 × 10⁶) even at
+  the cap.
+- `enigma.cc`'s `load_counts()`: parse into `unsigned long long`, explicitly clamp to
+  `UINT32_MAX` with a printed warning if a (future/external) table still overflows,
+  instead of relying on `sscanf("%u", ...)`'s undefined/implementation-defined
+  overflow behaviour.
+
+**Re-measured after the fix:** the new table's max count is 4.65 × 10⁸ (10.8% of
+`UINT32_MAX`, no entries clamped), dynamic range 8.7 log10 units, and its top quadgrams
+are now interpretable telegraphic content (`EINS`/`VIER`/`DREI` — spelled-out numbers)
+rather than a denominator-noise artifact. Fit to the held-out corpus improved
+materially: mean log10 P(actual quadgram) −6.07 (wehrmacht) vs. −5.85 (prose) — near
+parity instead of a 2.2-log10-unit deficit — and the Pearson correlation between
+observed corpus frequency and table probability (grams seen ≥3×) rose from 0.196 to
+**0.267**, now *exceeding* prose's 0.193.
+
+**End-to-end recovery is unchanged within noise**, as expected given the win's real
+source is the untouched monogram marginal — paired A/B on the same 69 messages
+(`eval/eval_telegraphic.py`, `-c -R 100 -J --polish -a`, prose vs. old-table vs.
+new-table, `-T 4`):
+
+| band | n | prose | old (buggy) table | new (fixed) table |
+|---|---:|---:|---:|---:|
+| <40 | 11 | 9.8 | 18.3 | 8.4 |
+| 40–69 | 14 | 16.0 | 26.1 | 23.6 |
+| 70–119 | 20 | 33.1 | 58.4 | **68.7** |
+| ≥120 | 24 | 75.1 | 96.1 | 95.4 |
+| **ALL** | 69 | 40.5 | 58.6 | 59.2 |
+
+Pooled mean is a wash (58.6 → 59.2, well within n=69 noise), with the realistic
+70–119-letter band improving (+10.3pp) and the sparse `<40` band (n=11) moving the
+other way — too small a sample to read as a regression. All 205 tests pass; `-T`
+determinism and the uint8 quantization pipeline are unaffected (this is table content
+only, not a hot-path change). The value of the fix is **correctness and future
+robustness**, not a measured recovery win: the table is now a well-formed distribution
+(no single quadgrams silently tied at an arbitrary ceiling, no reliance on
+undefined/implementation-defined parsing behaviour), which matters for any future
+retuning of `A`/`B`/`W_MAX` or a similarly-constructed table for another register.
+
+Reproduce: `python3 eval/build_telegraphic_ngrams.py` (regenerates
+`ngrams/wehrmacht_*.txt`); `R=100 T=4 python3 eval/eval_telegraphic.py` for the
+recovery comparison.
+
 ---
 
 ## 7. Speed / throughput

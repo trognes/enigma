@@ -24,8 +24,26 @@
 #
 # Defaults A=0.5, B=2.0 were the net-best strength over the 69-message held-out set
 # (eval/eval_telegraphic.py); override with A=/B= env vars.
+#
+# W_MAX caps the per-gram reweight factor w (below). r3(g) = telegraphic/prose ratio
+# is a ratio of two small counts for most of Fig 18's 400 trigrams (median prose
+# trigram count in the teens), so for the minority with a near-zero prose denominator
+# (e.g. QSX: prose count 2) the ratio is not a signal, it is denominator noise --
+# r3 ranges from 0.26 to 4.08e6 over the 400 entries, and quadgrams multiply TWO such
+# ratios (B=2.0 each), so a single quadgram's weight was observed reaching 8.3e20
+# (QSXA, from a prose count of 1). Uncapped, that overflowed the 32-bit unsigned
+# `load_counts()` parses counts into (enigma.cc): sscanf("%u", ...) on an out-of-range
+# value is undefined behaviour in C, and on this glibc it happened to saturate to
+# UINT32_MAX -- so 843 distinct quadgrams (0.23% of the table, including real
+# telegraphic markers like NULL, XEIN, XKON) were silently tied at one indistinguishable
+# value, together holding ~68% of the table's total probability mass. W_MAX=1000 clips
+# the tail (roughly the top 1.5% of quadgram weights) while leaving the well-evidenced
+# bulk untouched (median weight ~1.1, p90 ~7) and keeps every possible output count
+# below ~4.7e8 -- under 11% of UINT32_MAX, comfortable headroom against the largest
+# prose count (~3.7e6) at the cap. See PERFORMANCE.md 6.17.
 import os
 
+W_MAX = float(os.environ.get("W_MAX", "1000"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 NGRAMS = os.path.join(HERE, os.pardir, "ngrams")
 PROSE = NGRAMS
@@ -79,13 +97,15 @@ def main():
                     w *= r3.get(g, 1.0) ** B
                 if B and order == 4:
                     w *= r3.get(g[0:3], 1.0) ** B * r3.get(g[1:4], 1.0) ** B
+                w = min(w, W_MAX)   # clip denominator-noise outliers -- see W_MAX above
                 o.write("%s %d\n" % (g, max(1, int(round(c * w)))))
 
     reweight("bigrams", 2)
     reweight("trigrams", 3)
     reweight("quadgrams", 4)
     write_source()
-    print("wrote %s_*.txt (telegraphic German) to %s  (A=%g mono, B=%g tri)" % (LANG, OUT, A, B))
+    print("wrote %s_*.txt (telegraphic German) to %s  (A=%g mono, B=%g tri, W_MAX=%g)"
+          % (LANG, OUT, A, B, W_MAX))
     print("source: Sullivan & Weierud 2005, Appendix C (Fig 17 + Fig 18, 400 trigrams)")
 
 

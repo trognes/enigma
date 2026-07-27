@@ -501,6 +501,7 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
 
   uint64_t total = 0;   /* sum of all counts, in uint64 (can exceed uint32) */
   int nonmappable = 0;  /* records skipped because a gram char could not fold */
+  int overflowed = 0;   /* records whose count exceeded UINT32_MAX and was clamped */
   char line[256];
   while (fgets(line, sizeof(line), f))
     {
@@ -513,11 +514,28 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
          e.g. the german quadgram table to its first 29 of 366k entries (4.9% of
          the count) and crippling non-English scoring. Folding keeps the whole
          distribution the 26-letter machine can represent. A record whose gram
-         does not fold to exactly n A-Z letters (e.g. a stray digit) is skipped. */
+         does not fold to exactly n A-Z letters (e.g. a stray digit) is skipped.
+
+         `count` is parsed as unsigned long long (not directly into the uint32_t
+         `table` cell): a generated table can contain a count that overflows 32
+         bits -- the wehrmacht_quadgrams.txt generator (eval/build_telegraphic_ngrams.py)
+         once emitted values up to ~8.3e20 from an unclamped reweighting ratio, and
+         parsing that straight into `unsigned` via "%u" is undefined behaviour on
+         overflow (glibc happened to saturate to UINT32_MAX, silently tying 843
+         distinct quadgrams at one value -- see PERFORMANCE.md 6.17). The generator
+         is now capped and should never produce this again, but the loader clamps
+         explicitly and audibly rather than depending on that, or on unspecified
+         sscanf behaviour, to stay correct for any future/external table. */
       char gram[16];
-      unsigned count;
-      if (sscanf(line, "%15s %u", gram, & count) != 2)
+      unsigned long long count64;
+      if (sscanf(line, "%15s %llu", gram, & count64) != 2)
         continue;
+      if (count64 > UINT32_MAX)
+        {
+          count64 = UINT32_MAX;
+          overflowed++;
+        }
+      unsigned count = static_cast<unsigned>(count64);
       int index;
       int r = fold_gram(gram, & index);
       if (r < 0)          /* a code point we cannot fold to A-Z: warn + skip */
@@ -535,6 +553,9 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
   if (nonmappable > 0)
     fprintf(stderr, "Note: %s: skipped %d record(s) with non-mappable characters.\n",
             filename, nonmappable);
+  if (overflowed > 0)
+    fprintf(stderr, "Warning: %s: clamped %d record(s) with a count exceeding %u.\n",
+            filename, overflowed, UINT32_MAX);
   return total;
 }
 
