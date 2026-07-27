@@ -177,10 +177,9 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 
 ### Key CLI options (see `help()` in source for the full list)
 
-> **Recommended vs. not.** The proven-good knobs are `-c` + `-R` restarts, the **`-a` weighted
-> all-order scoring** (log-linear mixture of quad/tri/bi/mono — the sharpest scoring model and the
-> one measured *scoring* win on short messages; strictly recommended over `-q` when the language is
-> known, see the `-a` entry below), `-S m4a10` staging (mono pre-pass then weighted), `-J` (dynamic
+> **Recommended vs. not.** The proven-good knobs are `-c` + `-R` restarts, the **`-f` fused scoring model**
+> (`-a`'s weighted all-order mixture plus a weighted index of coincidence — the strongest measured
+> scoring model, and the only one that is not register-dependent; see the `-f` entry below), `-S m4f10` staging (mono pre-pass then fused), `-J` (dynamic
 > move order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the best-board finisher
 > `--polish` (the recommended finisher: one fixed-cost pass after all restarts, so it is
 > negligible at a high `-R`).
@@ -211,7 +210,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > that only a **sharper scoring model** moves the needle, not more search — which is exactly what the
 > **`-a` weighted model** delivers (the first measured short-message *scoring* gain, +~1–2pp mean
 > %-correct at L40–100 across all four languages; PR #106). Recipe:
-> `-c -J --polish --score m4a10 --random 10 -R <as high as -T affords> -a -l <lang> -T <cores>`.
+> `-c -J --polish --score m4f10 --random 10 -R <as high as -T affords> -f -l <lang> -T <cores>`.
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -316,8 +315,14 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   lost ~2×; reheating and chain-length sweeps didn't help). All randomness is from the
   per-key RNG stream (same `opt_seed + key_index` mix as `-R`), so `-A` is
   `-T`-independent. It composes with `-R` (each restart is an independent SA trajectory)
-  and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb, not a strict
-  win — see `archived/CODE_REVIEW_HISTORY.md` §9 item 5 and `archived/SIMULATED_ANNEALING.md` §15. **SA honours
+  and `-F` (SA runs in tier 2). SA is a *peer* of the greedy restart climb **on prose**,
+  not a strict win — see `archived/CODE_REVIEW_HISTORY.md` §9 item 5 and
+  `archived/SIMULATED_ANNEALING.md` §15. **That parity is register-dependent: on
+  telegraphic traffic (`-l wehrmacht`) greedy wins outright** — every length in L50–90,
+  −10.4pp mean over 3000 paired trials, no crossover (`PERFORMANCE.md` §3.11). Part of
+  that is structural: SA reads only the *last* `--score` stage's cap and seeds itself
+  with a built-in IC pre-pass, so it cannot use the mono pre-pass greedy benefits from.
+  **SA honours
   the `--score` target-stage plug cap** (`opt_stages[last].cap`): `-A N --score qK` caps the whole
   trajectory (IC pre-pass, the cap-aware `apply_toggle`, and the quench) at `K` pairs.
   When the true plug count is known and below 13, that prior is a *measured win on short
@@ -361,7 +366,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   is why `tests/` and the `crackquality`/`bench` harnesses pin `ENIGMA_SEED=0` for
   deterministic, cross-ref-comparable runs.
 - `-S <schedule>` / `--score <schedule>` staged plugboard climb — a string of
-  `<letter><optional cap>` **model tokens** `i`/`m`/`b`/`t`/`q`/`a` parsed by
+  `<letter><optional cap>` **model tokens** `i`/`m`/`b`/`t`/`q`/`a`/`f` parsed by
   `parse_schedule()` into `opt_stages[]`. Each is a climb stage run in order; the number
   caps the **plug pairs** that stage may set (1–13; omitted = uncapped, 13). The **last**
   model token is the target/ranking model (sets `opt_scoring`), so the target lives *in*
@@ -371,7 +376,11 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   better than bigram, extra stages after IC add little. **The recommended target is now `a`
   (weighted), staged as `--score m4a10`** (mono pre-pass then weighted, both capped) — the `a`
   stage reads the log-linear `all8` table, so `-S m4a10` is byte-identical to the winning tuning
-  recipe. The schedule carries **only** model stages: the
+  recipe. **The mono-vs-IC pre-pass choice is mildly register-dependent** (`PERFORMANCE.md` §6.10
+  follow-up; paired A/B, matched compute, n=1800 per corpus): mono wins on telegraphic traffic
+  (−2.2pp for IC), ties on English prose (−1.4pp, CI spans 0), and **loses on German prose**
+  (+2.2pp for IC). `m4a10` stays the general recommendation — the gap is ~2pp either way — but
+  `i4a10` is the better pick for German prose specifically. The schedule carries **only** model stages: the
   per-restart kick and the exhaustion are their own options (`--random` / `--exhaust`), not
   schedule tokens (REDESIGN Part B moved the old `rN`/`aN` tokens out). Per-`machine`
   `scoring` field (never a global → race-free); deterministic; the `--score` stages,
@@ -383,7 +392,8 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 - `-l lang` scoring language — **required** for `-m/-b/-t/-q/-a` (no default), not
   used by `-i`. `-l` alone does nothing: it takes effect only with an n-gram model,
   so it is `-q -l english`, not `-l english`, that scores with English quadgrams.
-- `-i/-m/-b/-t/-q/-a` scoring model: IC / mono / bi / tri / quad / weighted-all. **IC is
+- `-i/-m/-b/-t/-q/-a/-f` scoring model: IC / mono / bi / tri / quad / weighted-all /
+  fused (weighted-all + IC). **IC is
   the default** — the only model needing no `-l`, so the tool runs with no scoring options
   (an n-gram default would be inconsistent: it requires a language, which has no default).
   **`-a` (weighted) is the sharpest and the recommended model when the language is known**
@@ -406,7 +416,23 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   where quad already saturates. The linear (Jelinek-Mercer) form was tried and **lost** (the
   conditional reframing it forces is the cost); log-linear wins because it is *conjunctive* — a
   candidate must look plausible at every order at once. See `PERFORMANCE.md` / PR #106. Because `-a`
-  is the sharpest model, the recommended recipe is `-c -S m4a10 -J --polish -a -l <lang>`.
+  is the sharpest single-family model, the recipe built on it is
+  `-c -S m4a10 -J --polish -a -l <lang>` -- but see `-f` below, which supersedes it.
+- `-f` **fused: weighted all-order + index of coincidence** (**recommended** when the
+  language is known; needs `-l`; a schedule token too -- `-S m4f10`). Takes `-a`'s
+  `all8` table unchanged and adds `lambda * IC` to the **per-symbol** score, with
+  `lambda = 30` baked in (`ENIGMA_IC_BLEND` overrides it, mirroring `ENIGMA_LOGLIN`
+  for `-a`'s weights). IC cannot be folded into the table the way `-a`'s four orders
+  are -- they are additive over positions, IC is quadratic in the whole-message letter
+  histogram -- so it is accumulated in the same decode pass and added after
+  normalisation. Measured **+3.0 to +4.4pp** mean %-correct over `-a` on english,
+  german AND wehrmacht (n=1800 each), the first scoring change in this codebase that is
+  **not register-dependent** -- expected, since IC is language-independent. Wall-time
+  neutral (the histogram is cheap beside the gather-bound decode). **It is a better
+  CLIMB, not better discrimination**: a decomposition (`PERFORMANCE.md` 6.4) puts the
+  whole gain in surface reshaping (+3.4pp) with selection contributing -0.0pp, so it
+  does *not* move the scoring-failure floor. Recommended recipe:
+  `-c -S m4f10 -J --polish -f -l <lang>`.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a long-message throughput tool, unreliable on the short/hard end and proxy-measured; needs `-c`; `0` = off): a two-tier search — tier 1
@@ -754,8 +780,9 @@ hill-climb sticking in local optima); the search levers shipped so far are rando
 restarts (`-R N`), the staged climb (`-S`), the **key pre-filter** (`-F N`, a
 cheap-IC-climb tier that shortlists keys so the full climb runs only on the top
 `N` — ~8–20× throughput, see `archived/CODE_REVIEW_HISTORY.md` §9 item 2), and **simulated annealing**
-(`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute —
-`archived/SIMULATED_ANNEALING.md` §15). The heavier metaheuristics once listed as open —
+(`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute **on
+prose** — `archived/SIMULATED_ANNEALING.md` §15 — but *beaten outright* on telegraphic
+traffic, `PERFORMANCE.md` §3.11). The heavier metaheuristics once listed as open —
 tabu and **GA** — have since been **measured down**: `--restart-tt` (PR #100) found restarts
 already almost never revisit a basin (near-total exact-board diversity at `--random 10`), so a
 tabu visited-set has nothing to forbid; and an oracle probe of the GA precondition

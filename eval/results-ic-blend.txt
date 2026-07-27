@@ -1,0 +1,91 @@
+# ENIGMA_IC_BLEND probe: quad/weighted target + lambda*IC (PERFORMANCE.md 6.4).
+# Harness: eval/eval_sa_vs_greedy.py STAGE=3 GA=GB=m4a10 BLEND_B=<lambda>
+# wehrmacht, L=50/70/90, 300 paired trials/length/family, 2 families,
+# both arms calibrated to 200k score_iter (identical -R: 84/84, 86/86, 87/87).
+# positive = BLEND BETTER
+
+  lam=10  L50 +1.5pp [-0.1,+3.0]  L70 +2.3pp [+0.6,+4.0]  L90 +2.7pp [+0.7,+4.7]  ALL +2.1pp [+1.1,+3.2]
+  lam=20  L50 +2.4pp [+0.7,+4.1]  L70 +3.7pp [+1.6,+5.8]  L90 +4.6pp [+2.3,+7.0]  ALL +3.6pp [+2.4,+4.8]
+  lam=30  L50 +2.7pp [+0.8,+4.5]  L70 +3.6pp [+1.4,+5.7]  L90 +6.9pp [+4.4,+9.3]  ALL +4.4pp [+3.1,+5.6]
+
+# Scale calibration (single instance, L90): lambda=1 and lambda=10 give
+# BYTE-IDENTICAL output to lambda=0 on that instance; the term only starts
+# changing decisions around lambda=40. Section 6.4's proposed sweep of
+# {0,0.25,0.5,1} is entirely inert and would have produced a false negative.
+# n=40 pilot at L70: lambda=80 -> -8.0pp, lambda=160 -> -27.7pp, so there is
+# an optimum between 30 and 80.
+
+# COMPUTE FAIRNESS (the confound this probe could have had): the blend adds a
+# 26-bin histogram per score, so matched score_iter is not automatically matched
+# wall time. Measured at -R 400, min of 3, L90 wehrmacht:
+#   off .213s | lam=10 .209s | lam=20 .210s | lam=30 .205s
+# i.e. within noise -- the histogram is cheap next to the gather-bound decode,
+# and the one-pass implementation avoids a second decode. Both arms also run the
+# same -R. So the gain is not bought with extra compute on either axis.
+
+######## lambda=10 / family 1 ########
+greedy A/B, STAGE 3   A=m4a10  vs  B=m4a10 blend=10
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1
+
+   L    R(A/B)    m4a10    m4a10 | paired B-A (95% CI)      verdict
+  50     84/84     17.9     17.9 |   +0.0 pp [  -2.0,  +2.0]  tie
+                (compute: 197k vs 196k score_iter)
+  70     86/86     32.6     33.5 |   +0.9 pp [  -1.5,  +3.2]  tie
+                (compute: 201k vs 201k score_iter)
+  90     87/87     53.6     57.7 |   +4.1 pp [  +1.1,  +7.2]  m4a10 better
+                (compute: 202k vs 201k score_iter)
+######## lambda=10 / family 2 ########
+greedy A/B, STAGE 3   A=m4a10  vs  B=m4a10 blend=10
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2
+
+   L    R(A/B)    m4a10    m4a10 | paired B-A (95% CI)      verdict
+  50     84/84     17.8     20.7 |   +2.9 pp [  +0.4,  +5.4]  m4a10 better
+                (compute: 198k vs 198k score_iter)
+  70     87/87     30.7     34.4 |   +3.7 pp [  +1.2,  +6.2]  m4a10 better
+                (compute: 203k vs 203k score_iter)
+  90     86/86     50.8     52.0 |   +1.2 pp [  -1.5,  +4.0]  tie
+                (compute: 200k vs 200k score_iter)
+######## lambda=20 / family 1 ########
+greedy A/B, STAGE 3   A=m4a10  vs  B=m4a10 blend=20
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1
+
+   L    R(A/B)    m4a10    m4a10 | paired B-A (95% CI)      verdict
+  50     84/84     17.9     19.4 |   +1.5 pp [  -1.0,  +3.9]  tie
+                (compute: 197k vs 197k score_iter)
+  70     86/86     32.6     34.6 |   +2.0 pp [  -0.7,  +4.7]  tie
+                (compute: 201k vs 201k score_iter)
+  90     87/87     53.6     59.5 |   +5.9 pp [  +2.4,  +9.4]  m4a10 better
+                (compute: 202k vs 202k score_iter)
+######## lambda=20 / family 2 ########
+greedy A/B, STAGE 3   A=m4a10  vs  B=m4a10 blend=20
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2
+
+   L    R(A/B)    m4a10    m4a10 | paired B-A (95% CI)      verdict
+  50     84/84     17.8     21.1 |   +3.3 pp [  +1.0,  +5.6]  m4a10 better
+                (compute: 198k vs 198k score_iter)
+  70     87/87     30.7     36.0 |   +5.3 pp [  +2.2,  +8.5]  m4a10 better
+                (compute: 203k vs 203k score_iter)
+  90     86/86     50.8     54.1 |   +3.3 pp [  +0.2,  +6.5]  m4a10 better
+                (compute: 200k vs 201k score_iter)
+######## lambda=30 / family 1 ########
+greedy A/B, STAGE 3   A=m4a10  vs  B=m4a10 blend=30
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1
+
+   L    R(A/B)    m4a10    m4a10 | paired B-A (95% CI)      verdict
+  50     84/84     17.9     19.1 |   +1.2 pp [  -1.2,  +3.6]  tie
+                (compute: 197k vs 198k score_iter)
+  70     86/86     32.6     35.2 |   +2.6 pp [  -0.1,  +5.4]  tie
+                (compute: 201k vs 202k score_iter)
+  90     87/87     53.6     61.7 |   +8.1 pp [  +4.6, +11.7]  m4a10 better
+                (compute: 202k vs 202k score_iter)
+######## lambda=30 / family 2 ########
+greedy A/B, STAGE 3   A=m4a10  vs  B=m4a10 blend=30
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2
+
+   L    R(A/B)    m4a10    m4a10 | paired B-A (95% CI)      verdict
+  50     84/84     17.8     21.9 |   +4.1 pp [  +1.3,  +6.9]  m4a10 better
+                (compute: 198k vs 199k score_iter)
+  70     87/87     30.7     35.2 |   +4.5 pp [  +1.2,  +7.8]  m4a10 better
+                (compute: 203k vs 204k score_iter)
+  90     86/86     50.8     56.4 |   +5.6 pp [  +2.2,  +9.0]  m4a10 better
+                (compute: 200k vs 201k score_iter)

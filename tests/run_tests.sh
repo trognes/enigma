@@ -871,14 +871,14 @@ fi
 
 # (1) Brute-force the start position with every scoring model in every language.
 # Each plaintext is encrypted at start QXP (no plugboard) and recovered by
-# wildcarding the start. All languages x 5 models must recover when -l matches the
+# wildcarding the start. All languages x 6 models must recover when -l matches the
 # plaintext language. (This also guards the IC formula fix: the old -i formula could
 # not distinguish plaintext from gibberish and returned the wrong key. Note quadgrams
 # need the matching -l -- they are the most language-specific model; see CLAUDE.md.)
 for lang in $crack_langs; do
   plain=$(plain_for "$lang")
   ct=$(run "$plain" -i -u B -w 123 -r AAA -g QXP)
-  for mode in -i -m -b -t -q -a; do
+  for mode in -i -m -b -t -q -a -f; do
     check "crack: start position, $lang $mode" \
       "$(run "$ct" $mode -u B -w 123 -r AAA -g "$crack_scan_g" -l "$lang")" \
       "$plain"
@@ -910,7 +910,7 @@ check "crack: start position, wehrmacht -a" \
 for lang in $crack_langs; do
   plain=$(plain_for "$lang")
   ct=$(run "$plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
-  for mode in -i -m -b -t -q -a; do
+  for mode in -i -m -b -t -q -a -f; do
     check "crack: hill-climb plugboard, $lang $mode" \
       "$(run "$ct" $mode -c -u B -w 123 -r AAA -g AAA -l "$lang")" \
       "$plain"

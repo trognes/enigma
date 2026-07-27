@@ -1,0 +1,43 @@
+# Can one blended pass replace the staged pre-pass? (PERFORMANCE.md 6.4)
+# wehrmacht, L50/70/90, 300 paired trials/length/family, 2 families,
+# all arms calibrated to the same score_iter.
+
+## three arms, same 1800 paired instances
+   m4a10 (shipped, no blend)     33.9
+   a10 + blend lam=30 (one pass) 35.3
+   m4a10 + blend lam=30 (both)   38.3
+
+   one-pass  vs shipped   +1.4pp [-0.4,+3.2]   tie
+   both      vs shipped   +4.4pp [+3.1,+5.6]
+   both      vs one-pass  +3.0pp [+1.3,+4.7]   staging still earns its place
+
+## restarts earned (the reason one-pass is even competitive)
+   staged m4a10 calibrated to R=84-87; single-pass a10 to R=146-148.
+   Dropping the pre-pass is ~0.59x the cost (section 6.10), so the single
+   pass buys ~1.7x the restarts at matched compute -- and that is exactly
+   enough to offset losing the pre-pass, but not enough to beat keeping it.
+
+## reading
+   YES, a single blended pass can replace staging: it matches the shipped
+   recipe (tie, nominally +1.4pp) while being simpler and dropping a knob
+   whose best value is register-dependent (m4a10 telegraphic / i4a10 german
+   prose, section 6.10 follow-up).
+   NO, it should not: keeping both is +3.0pp over the single pass. The
+   pre-pass and the blend are COMPLEMENTARY, not redundant -- consistent
+   with them acting by different mechanisms (pre-pass = basin selection on a
+   smoother surface; blend = gradient shaping on the target surface).
+
+######## single-pass a10+blend vs staged m4a10, family 1 ########
+  50    84/146     17.9     17.2 |   -0.8 pp [  -4.1,  +2.5]  tie
+                (compute: 197k vs 206k score_iter)
+  70    86/147     32.6     33.5 |   +0.9 pp [  -3.4,  +5.3]  tie
+                (compute: 201k vs 206k score_iter)
+  90    87/148     53.6     54.9 |   +1.3 pp [  -3.5,  +6.1]  tie
+                (compute: 202k vs 208k score_iter)
+######## single-pass a10+blend vs staged m4a10, family 2 ########
+  50    84/148     17.8     20.6 |   +2.8 pp [  -0.5,  +6.2]  tie
+                (compute: 198k vs 209k score_iter)
+  70    87/145     30.7     33.0 |   +2.3 pp [  -2.2,  +6.7]  tie
+                (compute: 203k vs 204k score_iter)
+  90    86/147     50.8     52.5 |   +1.8 pp [  -3.5,  +7.1]  tie
+                (compute: 200k vs 207k score_iter)

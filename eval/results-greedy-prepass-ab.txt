@@ -1,0 +1,91 @@
+# Greedy pre-pass A/B: mono (m4a10) vs IC (i4a10) under the WEIGHTED target.
+# Harness: eval/eval_sa_vs_greedy.py STAGE=3 GA=m4a10 GB=i4a10
+# L=50/70/90, 300 paired trials/length/family, 2 families, 200k score_iter,
+# both arms calibrated to the same budget (R~85 each), 10-plug boards.
+# Fills the gap left by section 6.10, which compared the same pre-passes but
+# under a QUAD target at R=2560 -- a different regime from the shipped recipe.
+
+### pooled, paired (positive = IC better, negative = mono better)
+  english    L50  -1.8pp [ -5.7, +2.0]  tie
+  english    L70  -2.6pp [ -6.0, +0.8]  tie
+  english    L90  +0.3pp [ -1.7, +2.4]  tie
+  english    ALL  -1.4pp [ -3.2, +0.5]  tie          (n=1800)
+  german     L50  +3.3pp [ -0.3, +6.9]  tie
+  german     L70  +2.6pp [ +0.3, +5.0]  IC better
+  german     L90  +0.6pp [ -0.2, +1.5]  tie (ceiling, 98.8/99.4)
+  german     ALL  +2.2pp [ +0.7, +3.6]  IC BETTER     (n=1800)
+  wehrmacht  L50  -0.4pp [ -2.9, +2.2]  tie
+  wehrmacht  L70  -3.4pp [ -6.3, -0.4]  mono better
+  wehrmacht  L90  -2.8pp [ -6.3, +0.6]  tie
+  wehrmacht  ALL  -2.2pp [ -3.9, -0.5]  MONO BETTER   (n=1800)
+
+-> The shipped --score m4a10 recommendation is right for telegraphic traffic,
+   neutral on English prose, and measurably WORSE than i4a10 on German prose.
+   Same register-dependence as the SA pre-pass probe and as the tables (6.6).
+
+######## english / family 1 ########
+greedy pre-pass A/B, STAGE 3   m4a10 vs i4a10
+corpus english, 477 letters (-l english) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1
+
+   L    R(A/B)    m4a10    i4a10 | paired B-A (95% CI)      verdict
+  50     84/85     45.2     44.8 |   -0.4 pp [  -5.9,  +5.1]  tie
+                (compute: 196k vs 203k score_iter)
+  70     86/84     83.1     77.1 |   -6.0 pp [ -10.7,  -1.3]  m4a10 better
+                (compute: 200k vs 202k score_iter)
+  90     88/83     95.7     96.9 |   +1.2 pp [  -1.6,  +4.0]  tie
+                (compute: 204k vs 200k score_iter)
+######## english / family 2 ########
+greedy pre-pass A/B, STAGE 3   m4a10 vs i4a10
+corpus english, 477 letters (-l english) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2
+
+   L    R(A/B)    m4a10    i4a10 | paired B-A (95% CI)      verdict
+  50     84/84     44.5     41.3 |   -3.3 pp [  -8.6,  +2.1]  tie
+                (compute: 197k vs 201k score_iter)
+  70     88/84     81.3     82.1 |   +0.8 pp [  -4.1,  +5.8]  tie
+                (compute: 204k vs 202k score_iter)
+  90     87/83     95.9     95.4 |   -0.5 pp [  -3.5,  +2.4]  tie
+                (compute: 201k vs 200k score_iter)
+######## german / family 1 ########
+greedy pre-pass A/B, STAGE 3   m4a10 vs i4a10
+corpus german, 476 letters (-l german) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1
+
+   L    R(A/B)    m4a10    i4a10 | paired B-A (95% CI)      verdict
+  50     84/84     70.0     72.0 |   +2.1 pp [  -2.9,  +7.0]  tie
+                (compute: 198k vs 200k score_iter)
+  70     85/82     92.6     95.2 |   +2.6 pp [  -0.6,  +5.9]  tie
+                (compute: 198k vs 196k score_iter)
+  90     87/84     99.1     99.4 |   +0.3 pp [  -0.7,  +1.4]  tie
+                (compute: 202k vs 197k score_iter)
+######## german / family 2 ########
+greedy pre-pass A/B, STAGE 3   m4a10 vs i4a10
+corpus german, 476 letters (-l german) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2
+
+   L    R(A/B)    m4a10    i4a10 | paired B-A (95% CI)      verdict
+  50     86/84     67.6     72.1 |   +4.5 pp [  -0.8,  +9.7]  tie
+                (compute: 201k vs 200k score_iter)
+  70     88/86     93.2     95.7 |   +2.6 pp [  -0.8,  +6.0]  tie
+                (compute: 204k vs 204k score_iter)
+  90     84/85     98.5     99.4 |   +0.9 pp [  -0.4,  +2.3]  tie
+                (compute: 194k vs 198k score_iter)
+######## wehrmacht / family 1 ########
+greedy pre-pass A/B, STAGE 3   m4a10 vs i4a10
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1
+
+   L    R(A/B)    m4a10    i4a10 | paired B-A (95% CI)      verdict
+  50     84/84     17.9     16.5 |   -1.5 pp [  -5.1,  +2.2]  tie
+                (compute: 197k vs 198k score_iter)
+  70     86/84     32.6     29.2 |   -3.4 pp [  -7.8,  +0.9]  tie
+                (compute: 201k vs 201k score_iter)
+  90     87/84     53.6     48.6 |   -5.0 pp [  -9.7,  -0.2]  m4a10 better
+                (compute: 202k vs 201k score_iter)
+######## wehrmacht / family 2 ########
+greedy pre-pass A/B, STAGE 3   m4a10 vs i4a10
+corpus wehrmacht, 6473 letters (-l wehrmacht) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2
+
+   L    R(A/B)    m4a10    i4a10 | paired B-A (95% CI)      verdict
+  50     84/85     17.8     18.5 |   +0.7 pp [  -2.9,  +4.3]  tie
+                (compute: 198k vs 201k score_iter)
+  70     87/85     30.7     27.4 |   -3.3 pp [  -7.3,  +0.6]  tie
+                (compute: 203k vs 202k score_iter)
+  90     86/84     50.8     50.0 |   -0.7 pp [  -5.8,  +4.4]  tie
+                (compute: 200k vs 201k score_iter)

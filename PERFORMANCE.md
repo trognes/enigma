@@ -486,6 +486,131 @@ the keyspace: adaptive vs uniform `-R`.
   approximations of "learn which plugs to propose" are the assignment seed (§8) and
   the EDA marginals (§3.8); prefer those.
 
+### 3.11 Greedy vs SA on **telegraphic** traffic — ✅ MEASURED: greedy wins outright, no crossover (`eval/eval_sa_vs_greedy.py`)
+
+**The prose "peers" result does not transfer to `-l wehrmacht`.** §3.2 and
+`archived/SIMULATED_ANNEALING.md` §15 establish SA as a *peer* of the greedy restart
+climb at equal compute, with the README adding a length-dependent crossover ("SA tends
+to win the very shortest/hardest lengths"). Both were measured on **English prose**.
+Re-measured on **authentic telegraphic plaintext**, greedy wins at every length tested.
+
+**Setup.** Plugboard-recovery tier (true rotor key fixed, plugboard hidden and
+recovered), 10-plug boards, matched at 200k `score_iter`, both arms at their shipped
+recipes *and* both given `--polish` (it is not blocked with `-A`). Plaintext is pooled
+from the 69 authentic decrypts in `eval/` (~6,470 letters) and excerpted at random —
+`make crackquality` samples *prose*, which is the wrong substrate for a register.
+300 paired trials per length per seed family, two independent families, **3000 paired
+trials**; per-trial values retained so the paired difference carries a CI.
+
+| L | mean SA − greedy | 95% CI | SA per-trial win rate |
+|---:|---:|---|---:|
+| 50 | **−5.7 pp** | [−7.9, −3.4] | 36.5% |
+| 60 | **−8.5 pp** | [−11.2, −5.9] | 32.2% |
+| 70 | **−8.4 pp** | [−11.6, −5.2] | 34.0% |
+| 80 | **−14.2 pp** | [−17.7, −10.7] | 26.8% |
+| 90 | **−15.4 pp** | [−19.0, −11.8] | 22.0% |
+| **all** | **−10.4 pp** | [−11.8, −9.1] | |
+
+**No crossover.** The prose result's *direction* survives — the gap shrinks steadily
+toward the short end and SA's win rate climbs 22% → 36.5% — but SA never reaches
+parity in L50–90, let alone overtakes. All ten cells (5 lengths × 2 families) favour
+greedy with the CI excluding zero.
+
+**Not compute, not the finisher.** Matching held within ~4% per cell (greedy 197–205k
+vs SA 194–200k); greedy's largest edge is +3.5%, and ~75% more restarts buys only
+~1–2pp, so that is worth ~0.1pp against 5–15pp gaps. The `--polish` control costs SA
+only ~1pp, so the finisher is not the mechanism either.
+
+**Part of the gap is structural, not algorithmic.** `-A` consumes only the *last*
+`--score` stage's plug cap and seeds itself with a **hardcoded IC pre-pass**, so it
+cannot use greedy's mono pre-pass — measured at +2.7/+3.9pp over an IC pre-pass and
+~+16pp over none. Comparing greedy's `i4a10` (IC-seeded) against SA narrows the gap
+from ~14pp to −12.2/−8.1pp. Greedy still wins, by less. **This was the actionable
+lever, and it has since been built and measured — see below.**
+
+**Follow-up — giving SA the mono pre-pass: ✅ a real +2.3pp win, but it does not
+change the verdict (`ENIGMA_SA_STAGES`).** Confirmed first that the schedule really is
+inert under `-A`: `--score a10`, `m4a10` and `i4a10` produce **identical output and
+identical `score_iter`**. The probe makes `anneal_once` run the leading `--score`
+stages at their own caps instead of the built-in IC pre-pass (env-gated; default path
+byte-identical under g++ and clang). Re-run over the *same* paired instances as above
+(3000 trials; the greedy column reproduced exactly, 0/3000 mismatches, which validates
+the pairing):
+
+| L | SA + IC (shipped) | SA + mono | delta | 95% CI |
+|---:|---:|---:|---:|---|
+| 50 | 12.2 | 14.2 | **+2.1 pp** | [+0.2, +4.0] |
+| 60 | 17.1 | 19.0 | +1.9 pp | [−0.6, +4.3] |
+| 70 | 23.3 | 23.9 | +0.6 pp | [−2.2, +3.5] |
+| 80 | 31.1 | 32.1 | +1.0 pp | [−2.2, +4.2] |
+| 90 | 36.7 | 42.6 | **+5.8 pp** | [+2.1, +9.6] |
+| **all** | | | **+2.3 pp** | **[+1.0, +3.6]** |
+
+Pooled it is a genuine win (CI excludes zero) and every length is directionally
+positive, though only L50 and L90 reach significance individually. The size matches
+the ~3–4pp predicted from greedy's own IC-vs-mono comparison, which is a useful
+consistency check on the structural diagnosis.
+
+**But it does not overturn the result.** The gap to greedy narrows at every length —
+L50 −5.7→−3.6, L60 −8.5→−6.6, L70 −8.4→−7.8, L80 −14.2→−13.2, L90 −15.4→−9.6 — and
+**every one still excludes zero**. So roughly a fifth of SA's ~10.4pp average deficit
+was the missing pre-pass; the remaining ~8pp is the search itself. Greedy still wins
+every length in L50–90.
+
+**Prose control — ❌ DO NOT PROMOTE TO DEFAULT. The lever is register-dependent.**
+The wehrmacht win alone was not enough to ship it: the IC pre-pass it replaces was
+tuned on prose, so prose is where a regression would appear. Re-run on the corpora
+`tests/crack_quality.py` samples (L50/70/90, 300 paired trials × 2 families each):
+
+| substrate | mono − IC pre-pass | n | verdict |
+|---|---:|---:|---|
+| wehrmacht (telegraphic) | **+2.3 pp** [+1.0, +3.6] | 3000 | helps |
+| english prose | **−2.6 pp** [−4.4, −0.7] | 1800 | **hurts** |
+| german prose | +0.1 pp [−1.5, +1.8] | 1800 | neutral |
+
+English is negative at all three lengths (−2.5/−2.9/−2.3) and the pooled CI excludes
+zero, so it is a real regression, not noise. The shape mirrors the tables themselves
+(§6.6: +20.9pp on real traffic, −10.2pp on prose) — what suits telegraphic orthography
+does not suit prose. So `ENIGMA_SA_STAGES` **stays an off-by-default probe**; making it
+the default would trade a 2.3pp telegraphic gain for a 2.6pp English loss.
+
+**And it has no operational value even where it wins.** The +2.3pp lifts SA from
+−10.4pp to roughly −8pp against greedy — it improves the *losing* arm without making it
+win at any length. A user on telegraphic traffic should run greedy, not SA with a mono
+pre-pass. The finding's worth is diagnostic: it confirms that the structural pre-pass
+handicap explains about a fifth of SA's deficit, and that the rest is genuinely the
+search. No CLI flag is warranted (cf. the option-surface cleanup in 2.0.0 — a knob that
+never produces the best answer is exactly the kind that was removed).
+
+*Prose caveat.* The prose corpora are ~477 letters against wehrmacht's 6473, so at L90
+only ~390 distinct offsets exist and 300 trials overlap heavily. Both arms see identical
+excerpts, so the paired comparison holds, but the prose CIs are optimistic relative to
+the wehrmacht ones. English prose at L90 is also near ceiling (93.1%), which compresses
+any effect there.
+
+**Tuning was a no-op — both shipped defaults are already right for this register.**
+A per-arm sweep (stage 1) found greedy's `m4a10`/kick-10 in the top group and SA's
+best split reproducing the shipped `-A 12000 -R 12` (`A=11439 R=12`). Two negative
+results worth recording: greedy's top three configs **reorder between seed families**
+(~2pp spread), and SA's depth/restart split is **flat across R=2–24** (best split moved
+R=12 → R=6 between families) — only an un-restarted `R=1` anneal is consistently worst.
+Picking a winner from one family would be fitting noise; an 8-trial pilot did exactly
+that and crowned two configs that inverted at n=300.
+
+**Two calibration traps, for anyone re-running this.** (1) Cost per SA restart is
+`A + ~4900` — the pre-pass and quench are paid regardless of depth — so cost is **not**
+linear in `A`. A naive scaler chasing a budget drives `A → 1`, which is a greedy climb
+wearing an `-A` flag, and it then "wins". Enforce a floor and report over-restarted
+splits as *infeasible*. (2) An analytic two-point cost fit fails the other way: SA does
+not always consume its full move budget, which flattens the slope and inflates the
+intercept, and the bad seed rejects genuinely affordable splits (it rejected `R=12`,
+the shipped one). Let measurement decide feasibility.
+
+**Limits.** One budget (200k) at one plug count (10); the flat-split finding makes a
+budget-dependent reversal unlikely but it is untested. Per-cell *magnitudes* are
+draw-dependent (family 1 read −19.1pp at L80 where family 2 read −9.4pp), so the pooled
+per-length rows — not any single cell — are the result.
+
 ---
 
 ## 4. Move set & informed seeding
@@ -1413,22 +1538,100 @@ variant to the harness; compare against the hard cap at the true count as an ora
 upper bound; confirm the scoring/search classification shifts without raising
 search failures.
 
-### 6.4 Combined weighted fitness quad + λ·IC (LOW–MEDIUM priority)
+### 6.4 Fused score: weighted all-order + λ·IC — ✅ SHIPPED as `-f`
 
-**Form in this codebase.** Instead of *staging* IC then quad, fuse a term:
-`score = quad_loglik + λ·IC` (both cheap; IC is one pass over the same decoded
-stream). IC is language-independent and roughly monotone in "how many plugs are
-right," so a small weight tilts the surface toward the IC gradient where quad is
-flat, while quad still picks the winner.
+**The idea.** Instead of *staging* IC then the n-gram model, fuse them:
+`score = per-symbol ngram + λ·IC`. With only a plug or two set the quad/weighted
+surface is nearly flat — almost every 4-gram is unseen and floored at the hapax value,
+so a toggle barely moves the score — while IC still responds as soon as the letter
+histogram starts to skew. Fusing gives one continuous surface instead of a hard
+handover: the n-gram term dominates where it has signal, λ·IC supplies gradient where
+it does not.
 
-**Honest payoff.** Low–medium. Introduces λ (tune per length/model); too large
-blurs quad's true peak. IC and quad already coexist via staging, so the marginal
-gain over `-S iq` may be small. Cheap to sweep. The extra IC accumulation is a
-measurable hot-path cost — bench it.
+**Why IC is the right term to add.** It is **permutation-invariant** — it reads only
+the multiset of letter counts, never which letter holds which count. That matters
+because the plugboard *is* a letter permutation: any identity-sensitive unigram
+objective can be driven by choosing the permutation rather than by finding the truth,
+which is exactly how χ²-monogram collapsed to 12.5% tier-1 recall against IC's 68.8%
+(archived §9 item 2). IC is the one unigram signal the board cannot manufacture. It is
+also language-independent, which is why the result does not inherit a register bias.
 
-**Experiment.** `make crackquality` sweeping λ ∈ {0, 0.25, 0.5, 1} at L40–100;
-require it to beat both plain quad *and* `-S iq`. `make bench` to bound the added
-per-score cost.
+**Measured — the largest short-message scoring gain in this codebase.** Paired within
+instance, 300 trials per length per family, two seed families, both arms calibrated to
+200k `score_iter` with identical `-R`:
+
+| corpus | λ=30 vs no blend | n |
+|---|---:|---:|
+| wehrmacht | **+4.4 pp** [+3.1, +5.6] | 1800 |
+| english prose | **+3.0 pp** [+1.7, +4.4] | 1800 |
+| german prose | **+3.1 pp** [+1.9, +4.3] | 1800 |
+
+**The first scoring change here that is not register-dependent** — contrast the mono
+pre-pass (+2.2pp telegraphic / −2.2pp German prose, §6.10) and the SA staged pre-pass
+(+2.3pp / −2.6pp, §3.11). For scale, `-a` itself was +1–2pp.
+
+**λ: baked at 30, and the scale is the whole story.** Per-move quad deltas run ~0.07
+early to ~2.0 late; per-move IC deltas are ~0.005. So λ must be ~20–40 to matter at
+all, and this section's *original* proposed sweep of λ ∈ {0, 0.25, 0.5, 1} is
+**inert** — λ=1 and λ=10 give byte-identical output to λ=0. Running the section as
+first written would have produced a false negative. Measured curve (wehrmacht,
+n=1800/point): 10→+2.1, 20→+3.6, **30→+4.4**, 40→+3.8, 60→+2.0, and 80→−8 (n=40).
+The plateau is broad — paired blend-vs-blend puts λ30−λ20 at +0.81 [−0.12,+1.74] and
+λ30−λ40 at +0.62 [−0.29,+1.53], i.e. **20/30/40 are statistically indistinguishable**
+— so λ is baked like `-a`'s order weights rather than exposed as a knob
+(`ENIGMA_IC_BLEND` overrides it for experiments, as `ENIGMA_LOGLIN` does for `-a`).
+A finer scan is *not* worth running: resolving ~0.5pp would need ~7× the trials to
+locate a difference no user could feel.
+
+**λ's optimum is length-dependent, which is why it is not set higher.** λ60−λ30 costs
+**−4.22 pp [−5.87,−2.56] at L50** but only −0.90 (ns) at L90; the milder λ40−λ20 step
+even turns positive at L90. IC's sampling noise scales ~1/√n, so on 50 letters over 26
+bins the term is mostly noise. λ=30 ties λ=20 at L50 and beats it at L90, so it
+dominates across the range — the length-dependence argues against going above ~40, not
+for making λ adaptive.
+
+**It is a better CLIMB, not better discrimination — this is the load-bearing finding.**
+The fused score does two separable jobs: it shapes the climb, and it ranks converged
+boards. Decomposed (`ENIGMA_IC_BLEND_MODE`, since removed; wehrmacht, same instances):
+
+| component | effect |
+|---|---:|
+| surface (blend the climb, rank pure) | **+3.4 pp** [+2.2, +4.6] |
+| selection alone (climb pure, rank blended) | **−0.0 pp** [−0.6, +0.5] |
+| consistency (rank blended *given* a blended climb) | +1.0 pp [+0.4, +1.6] |
+
+Blending the ranking is worth **nothing** on its own; it adds ~1pp only once the climb
+is blended too, which is objective-*consistency* (rank by what you optimised), not
+discrimination. **So §6.15's ~1% discrimination floor is NOT contradicted.** What
+§6.15 does over-claim is that the climb surface is tapped: its smoothness probe swept
+the `-a` **order weights** 8× and moved search-fail <1pp, but that is one direction.
+An orthogonal, permutation-invariant term moves recovery +3.4pp. The surface was
+under-explored along a single axis, not exhausted.
+
+**Cross-key: no harm.** Every measurement above fixes the rotor key. With `-g` partly
+wildcarded so the score must rank *keys* (10 plugs, `-R 20`, compute matched within
+~2%): +2.8pp at 26 keys/L70, +6.3pp at 26 keys/L90, +5.8pp at 676 keys/L90. The gain
+matches the fixed-key case, which — given selection contributes −0.0pp — says the
+benefit is still the per-key climb carrying over, and that the fused objective does not
+distort key selection. *Scope limit:* 676 keys is far short of the 17,576-key full
+start wildcard and further short of the real 60-order keyspace.
+
+**It does not replace staging.** Three arms, same 1800 instances, matched compute:
+`m4a10` (no blend) 33.9, `a10`+blend (one pass) 35.3, `m4a10`+blend 38.3. The single
+blended pass *ties* the staged recipe (+1.4pp [−0.4,+3.2]) — it earns ~1.7× the
+restarts, since dropping the pre-pass is ~0.59× the cost (§6.10) — but keeping both is
+**+3.0pp [+1.3,+4.7]** over it. Pre-pass and fusion are complementary: the pre-pass
+selects a basin on a smoother surface, the fused term shapes the gradient on the target
+surface.
+
+**Cost.** Wall-time neutral: `-R 400`, min of 3 — off .213s, λ=10 .209s, λ=20 .210s,
+λ=30 .205s. The 26-bin histogram is cheap beside the gather-bound decode, and it is
+accumulated in the *same* decode pass as the n-gram sum (a two-pass version would have
+inflated wall time per `score_iter` and quietly unfaired every matched-compute A/B).
+IC cannot be folded into the table the way `-a`'s four orders are: those are additive
+over positions, IC is quadratic in the whole-message histogram.
+
+Reproduce: `eval/eval_sa_vs_greedy.py` (STAGE=3), `eval/results-ic-blend*.txt`.
 
 ### 6.5 Finer score accumulation on short text (LOW priority)
 
@@ -1703,6 +1906,34 @@ L40–70, `-R 10 … 81920`; the residual mono edge at L40–45 and the `-R 10` 
 within noise (SE ~3–5pp), so the *trend* (crossover, q10→~100%) is the robust signal, not
 any single cell. The shipped low-R default is unchanged.
 
+**Follow-up — the same question under the SHIPPED regime (weighted target, R≈85): the
+answer is register-dependent, and `m4a10` is not universally right — ✅ MEASURED.**
+Everything above used a **quad** target at **R=2560**. The shipped recommendation is
+`--score m4a10`: a **weighted** target at R≈40–90. Re-run as a paired greedy-vs-greedy
+A/B in exactly that regime (`STAGE=3` in `eval/eval_sa_vs_greedy.py`; L50/70/90, 300
+paired trials × 2 seed families per corpus, both arms calibrated to the same 200k
+`score_iter`, so the cheaper schedule earns more restarts):
+
+| corpus | pooled `i4a10` − `m4a10` | n | verdict |
+|---|---:|---:|---|
+| english prose | −1.4 pp [−3.2, +0.5] | 1800 | tie (mono nominally ahead) |
+| german prose | **+2.2 pp [+0.7, +3.6]** | 1800 | **IC better** |
+| wehrmacht | **−2.2 pp [−3.9, −0.5]** | 1800 | **mono better** |
+
+So the shipped `m4a10` is **right for telegraphic traffic, neutral on English prose, and
+measurably worse than `i4a10` on German prose** — the same register-dependence seen in the
+SA pre-pass probe (§3.11) and in the scoring tables themselves (§6.6: +20.9pp real traffic
+/ −10.2pp prose). It is *not* a universal recommendation, and the README presents it as
+one.
+
+The effect is modest (~2pp either way) and both prose cells are near ceiling at L90
+(english 95.8/96.1, german 98.8/99.4), which compresses it; the German result is carried
+by L50–70. Caveat as in §3.11: the prose corpora are ~477 letters, so excerpts overlap
+heavily and the prose CIs are optimistic relative to the wehrmacht ones. **A pilot at n=8
+showed mono ahead by +33pp on English; it vanished entirely at n=300** — the third
+small-sample result in this work to invert or evaporate, and a standing argument for not
+reading single cells.
+
 ### 6.11 Correct plugs → text recovery is strongly convex — ✅ MEASURED (`eval/`)
 
 Aggregating **every** plugboard-recovery row across all shards (~289k runs, all
@@ -1900,6 +2131,13 @@ normalization (weights absorb the scale in log space). Shipped as the model `-a`
 **Why this closes the scoring frontier — the ceiling probes (✅ MEASURED).** With `-a` shipped, two
 probes show it is near-optimal on *both* scoring axes, so there is no headroom left for a further
 scoring model (learned weights, added features, MERT):
+
+> **Narrowed by §6.4 (`-f`).** The discrimination half of this section stands: the
+> fused model adds **−0.0pp** when it only ranks converged boards, so it does not move
+> the floor below. The *smoothness* half does not: the sweep below varies the `-a`
+> **order weights**, one direction in the space, and an orthogonal permutation-invariant
+> term (IC) moves recovery **+3.4pp**. The surface was under-explored along a single
+> axis, not exhausted.
 
 - **Discrimination floor ~1%** (`crackquality SPLIT`, MODEL=a). Of every short-message miss, the
   fraction that is a *scoring* failure — the true plugboard not scoring highest even with the
@@ -2389,7 +2627,6 @@ open.) Full detail is in each section; this table is a scan-only index, not a su
 | 5.1 | Crib-driven bombe closure deduction | HIGH (crib-only) | real deduction, unlike shipped `--crib-file`; needs a new harness |
 | 5.2 | Crib-drag soft seeding | MEDIUM (crib-only) | lighter cousin of 5.1; also needs the new harness |
 | 6.3 | Soft MDL / plug-count prior | LOW–MEDIUM | doc's own "weakest fit to the diagnosis" |
-| 6.4 | Weighted quad + λ·IC fitness | LOW–MEDIUM | `-S iq` staging likely already captures most of this |
 | 6.5 | Finer (uint16) score accumulation | LOW | conflicts with the shipped uint8 cache-residency win |
 | 7.3 | Amortize `-F` IC pre-pass into tier 2 | MEDIUM | confirmed: `finish_worker` still discards the tier-1 board |
 | 7.4 | Branch-and-bound early-exit | LOW | exact bound; distinct from §4.6's rejected approximate prune |
@@ -2503,7 +2740,11 @@ per-restart best-first ordering** (opt-in; +2–6pp mean on the realistic ~10-pl
 at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in; at/over the
 `-S` cap only merge/remove moves; matched-compute win growing as true plugs fall below the
 cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
-Rejected (with reason): **static (fixed-across-restarts) informed move order** (greedy
+Rejected (with reason): **mono pre-pass for `-A`** (`ENIGMA_SA_STAGES`, §3.11 — built
+and measured on both substrates: +2.3pp on telegraphic but **−2.6pp on English prose**,
+register-dependent, and it improves the *losing* arm without making SA beat greedy at
+any length; kept as an off-by-default probe, no CLI flag);
+**static (fixed-across-restarts) informed move order** (greedy
 *and* diversity-collapsing — §7.2); **ciphertext/plaintext-influence move ordering**
 (`--infl-order`, §4.6 — ties `-J` at L40–55, a clean −4…−6pp loss from L60 up; *removed*
 from the CLI, not just deprioritized); **§7.1a surrogate-ranked ascent** (built; ~1.5× slower at 50

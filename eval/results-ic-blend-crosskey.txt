@@ -1,0 +1,50 @@
+# Cross-key gate for the IC blend (PERFORMANCE.md 6.4), lambda=30.
+# STAGE=5: -g partly wildcarded so the score must rank ROTOR KEYS, not just
+# plugboards. 10 PLUGS (realistic Wehrmacht) throughout -- the keyspace was
+# reduced to find signal rather than the plug count, since a result at 6-8
+# plugs would answer a question nobody has.
+# -R 20 fixed for both arms (identical keys x restarts by construction).
+
+## regime selection (10 plugs, R=20, n=12 pilot -- noise-dominated, see below)
+  -g QEW (1 key)    L70 31.0  L90 39.9
+  -g QE. (26 keys)  L70 29.3  L90 44.5
+  -g Q.. (676 keys) L70  5.1  L90 43.3   <- L70 is at the floor
+  (the pilot had 676 keys scoring ABOVE 1 key at L90, which is impossible in
+   expectation -- more keys can only be harder -- so those cells are noise;
+   only the paired runs below are load-bearing.)
+
+## result, paired, pooled over 2 seed families
+   26 keys  L70  n=400  19.0 -> 21.8   +2.8pp [+0.6,+4.9]  blend better
+   26 keys  L90  n=400  34.8 -> 41.1   +6.3pp [+3.2,+9.4]  blend better
+   26 keys  ALL  n=800               +4.6pp [+2.7,+6.5]  blend better
+  676 keys  L90  n=300  35.1 -> 40.9   +5.8pp [+2.2,+9.4]  blend better
+  compute parity: 54k vs 54-55k score_iter in every cell
+
+## reading
+  The gate was 'does the blend BREAK key ranking?'. It does not -- and the
+  gain is the same size as the fixed-key case (+4.4pp), which given the
+  decomposition (rank-only = -0.0pp) says the benefit is still the CLIMB
+  surface carrying over per key, not better key discrimination. The blended
+  objective does not distort key selection.
+
+## scope limits
+  676 keys is far short of the 17,576-key full start wildcard, and further
+  short of the real 60-wheel-order keyspace. This bounds the risk at a
+  reduced scope; it does not clear it outright.
+
+######## 26 keys (-g QE.) family 1 ########
+  70     19.6     21.1 |   +1.5 pp [  -1.2,  +4.2]  tie
+               (compute: 54k vs 55k score_iter)
+  90     35.9     40.1 |   +4.1 pp [  +0.4,  +7.9]  blend better
+               (compute: 54k vs 55k score_iter)
+######## 26 keys (-g QE.) family 2 ########
+  70     18.4     22.5 |   +4.1 pp [  +0.6,  +7.5]  blend better
+               (compute: 55k vs 54k score_iter)
+  90     33.7     42.2 |   +8.6 pp [  +3.6, +13.5]  blend better
+               (compute: 54k vs 54k score_iter)
+######## 676 keys (-g Q..) family 1 ########
+  90     35.1     39.4 |   +4.3 pp [  -0.3,  +9.0]  tie
+               (compute: 54k vs 55k score_iter)
+######## 676 keys (-g Q..) family 2 ########
+  90     35.2     42.4 |   +7.2 pp [  +1.7, +12.7]  blend better
+               (compute: 54k vs 54k score_iter)

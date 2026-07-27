@@ -1,0 +1,135 @@
+# Prose control for the ENIGMA_SA_STAGES probe (mono pre-pass for -A).
+# Harness: eval/eval_sa_vs_greedy.py STAGE=2 CORPUS=english|german
+# L=50/70/90, 300 paired trials/length/family, 2 seed families, 200k score_iter.
+# Prose corpora are the ones tests/crack_quality.py samples (~477 letters), so at
+# L90 only ~390 distinct offsets exist and 300 trials overlap heavily: both arms see
+# identical excerpts so the PAIRED comparison holds, but the prose CIs are optimistic
+# relative to the wehrmacht ones (6473-letter pool).
+
+### mono pre-pass minus shipped IC pre-pass, paired, pooled over both families
+  english  L50  -2.5pp [ -6.0, +1.1]   tie
+  english  L70  -2.9pp [ -6.4, +0.6]   tie
+  english  L90  -2.3pp [ -4.8, +0.1]   tie
+  english  ALL  -2.6pp [ -4.4, -0.7]   MONO HURTS  (n=1800)
+  german   L50  -0.0pp [ -3.8, +3.8]   tie
+  german   L70  +0.9pp [ -1.9, +3.7]   tie
+  german   L90  -0.5pp [ -2.1, +1.1]   tie
+  german   ALL  +0.1pp [ -1.5, +1.8]   tie        (n=1800)
+
+### Against the wehrmacht result (eval/results-sa-mono-prepass.txt)
+  wehrmacht ALL +2.3pp [ +1.0, +3.6]   mono helps  (n=3000)
+  -> register-dependent: helps telegraphic, HURTS english prose, neutral german.
+  -> do NOT promote to default. Greedy reproducibility 0 mismatches in every cell.
+
+######## english / family 1 / SA baseline (IC pre-pass) ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus english, 477 letters (-l english) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score a10 -R 12
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    45.2    36.7 |    39.1    32.0 |   -6.1 pp [ -11.2,  -1.0]  greedy wins
+               (compute check: greedy 196k vs SA 198k score_iter)
+  70 R86/A11k    83.1    80.7 |    73.4    70.0 |   -9.7 pp [ -14.7,  -4.7]  greedy wins
+               (compute check: greedy 200k vs SA 199k score_iter)
+  90 R88/A11k    95.7    95.3 |    93.9    93.3 |   -1.8 pp [  -4.9,  +1.2]  tie
+               (compute check: greedy 204k vs SA 198k score_iter)
+
+per-trial data: /tmp/prose-english-ic-f1.tsv
+######## english / family 1 / SA mono pre-pass ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus english, 477 letters (-l english) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score m4a10 -R 12  [ENIGMA_SA_STAGES=1]
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    45.2    36.7 |    36.2    26.0 |   -9.1 pp [ -14.1,  -4.0]  greedy wins
+               (compute check: greedy 196k vs SA 194k score_iter)
+  70 R86/A12k    83.1    80.7 |    71.2    68.0 |  -11.9 pp [ -16.8,  -7.1]  greedy wins
+               (compute check: greedy 200k vs SA 199k score_iter)
+  90 R88/A11k    95.7    95.3 |    90.5    89.7 |   -5.3 pp [  -8.9,  -1.7]  greedy wins
+               (compute check: greedy 204k vs SA 194k score_iter)
+
+per-trial data: /tmp/prose-english-mono-f1.tsv
+######## english / family 2 / SA baseline (IC pre-pass) ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus english, 477 letters (-l english) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score a10 -R 12
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    44.5    35.7 |    38.8    30.3 |   -5.7 pp [ -11.2,  -0.3]  greedy wins
+               (compute check: greedy 197k vs SA 200k score_iter)
+  70 R88/A10k    81.3    78.0 |    70.9    67.7 |  -10.3 pp [ -15.3,  -5.3]  greedy wins
+               (compute check: greedy 204k vs SA 192k score_iter)
+  90 R87/A10k    95.9    95.3 |    92.2    91.3 |   -3.7 pp [  -7.2,  -0.2]  greedy wins
+               (compute check: greedy 201k vs SA 193k score_iter)
+
+per-trial data: /tmp/prose-english-ic-f2.tsv
+######## english / family 2 / SA mono pre-pass ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus english, 477 letters (-l english) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score m4a10 -R 12  [ENIGMA_SA_STAGES=1]
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    44.5    35.7 |    36.9    27.7 |   -7.7 pp [ -13.2,  -2.1]  greedy wins
+               (compute check: greedy 197k vs SA 197k score_iter)
+  70 R88/A11k    81.3    78.0 |    67.3    63.3 |  -13.9 pp [ -19.3,  -8.5]  greedy wins
+               (compute check: greedy 204k vs SA 197k score_iter)
+  90 R87/A11k    95.9    95.3 |    91.0    89.7 |   -4.9 pp [  -8.4,  -1.4]  greedy wins
+               (compute check: greedy 201k vs SA 195k score_iter)
+
+per-trial data: /tmp/prose-english-mono-f2.tsv
+######## german / family 1 / SA baseline (IC pre-pass) ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus german, 476 letters (-l german) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score a10 -R 12
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    70.0    62.0 |    62.3    53.7 |   -7.7 pp [ -13.1,  -2.3]  greedy wins
+               (compute check: greedy 198k vs SA 197k score_iter)
+  70 R85/A11k    92.6    90.7 |    86.4    83.3 |   -6.2 pp [  -9.9,  -2.5]  greedy wins
+               (compute check: greedy 198k vs SA 199k score_iter)
+  90 R87/A11k    99.1    98.7 |    97.5    97.0 |   -1.6 pp [  -3.6,  +0.4]  tie
+               (compute check: greedy 202k vs SA 199k score_iter)
+
+per-trial data: /tmp/prose-german-ic-f1.tsv
+######## german / family 1 / SA mono pre-pass ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus german, 476 letters (-l german) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=1 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score m4a10 -R 12  [ENIGMA_SA_STAGES=1]
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R84/A11k    70.0    62.0 |    66.3    58.7 |   -3.7 pp [  -8.8,  +1.4]  tie
+               (compute check: greedy 198k vs SA 195k score_iter)
+  70 R85/A11k    92.6    90.7 |    86.1    83.3 |   -6.5 pp [ -10.3,  -2.6]  greedy wins
+               (compute check: greedy 198k vs SA 194k score_iter)
+  90 R87/A11k    99.1    98.7 |    96.6    96.0 |   -2.4 pp [  -4.5,  -0.4]  greedy wins
+               (compute check: greedy 202k vs SA 196k score_iter)
+
+per-trial data: /tmp/prose-german-mono-f1.tsv
+######## german / family 2 / SA baseline (IC pre-pass) ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus german, 476 letters (-l german) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score a10 -R 12
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R86/A11k    67.6    59.3 |    60.5    51.7 |   -7.1 pp [ -12.5,  -1.8]  greedy wins
+               (compute check: greedy 201k vs SA 197k score_iter)
+  70 R88/A11k    93.2    92.0 |    87.2    85.3 |   -6.0 pp [  -9.6,  -2.3]  greedy wins
+               (compute check: greedy 204k vs SA 200k score_iter)
+  90 R84/A11k    98.5    98.3 |    96.3    96.0 |   -2.1 pp [  -4.1,  -0.2]  greedy wins
+               (compute check: greedy 194k vs SA 197k score_iter)
+
+per-trial data: /tmp/prose-german-ic-f2.tsv
+######## german / family 2 / SA mono pre-pass ########
+wehrmacht SA-vs-greedy, STAGE 2 (head-to-head across lengths)
+corpus german, 476 letters (-l german) | pairs=10 | trials=300 | budget=200k score_iter | seedfam=2 | jobs=4
+arms: greedy -c -J --polish --score m4a10 --random 10 -R <cal>  |  SA -c --polish -A <cal> --score m4a10 -R 12  [ENIGMA_SA_STAGES=1]
+
+   L    knobs  g.mean  g.exct | sa.mean sa.exct | paired SA-greedy (95% CI) verdict
+  50 R86/A11k    67.6    59.3 |    56.4    48.7 |  -11.2 pp [ -16.9,  -5.5]  greedy wins
+               (compute check: greedy 201k vs SA 191k score_iter)
+  70 R88/A12k    93.2    92.0 |    89.2    87.7 |   -3.9 pp [  -7.6,  -0.3]  greedy wins
+               (compute check: greedy 204k vs SA 198k score_iter)
+  90 R84/A11k    98.5    98.3 |    96.2    95.7 |   -2.3 pp [  -4.4,  -0.1]  greedy wins
+               (compute check: greedy 194k vs SA 194k score_iter)
+
+per-trial data: /tmp/prose-german-mono-f2.tsv
