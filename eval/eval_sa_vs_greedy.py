@@ -74,6 +74,11 @@ BLEND_B = os.environ.get("BLEND_B", "")
 # climb but rank on the pure model, 2 = climb pure but rank on the blend. Decomposes
 # the blend's surface-reshaping effect from its selection effect.
 BLEND_MODE_B = os.environ.get("BLEND_MODE_B", "")
+# STAGE=5 (cross-key): wildcard part of the start position so the score must rank
+# KEYS, not just plugboards. FIXR fixes -R for both arms, giving structural compute
+# parity (identical keys x restarts) without calibration.
+WILDG = os.environ.get("WILDG", "Q..")
+FIXR = os.environ.get("FIXR", "4")
 CORPUS = os.environ.get("CORPUS", "wehrmacht")
 LANG = "wehrmacht" if CORPUS == "wehrmacht" else CORPUS
 
@@ -363,6 +368,55 @@ def stage2():
         print("\nper-trial data: %s" % TSV)
 
 
+def stage5():
+    """Cross-key: does the blended score still rank ROTOR KEYS correctly?
+
+    Every other measurement fixes the rotor key, so the blend has only ever been
+    judged on plugboard selection. Here -g is partly wildcarded, so the score also
+    decides which key wins -- the riskiest place to change a scoring model."""
+    key = list(KEY)
+    key[key.index("-g") + 1] = WILDG
+    nkeys = 26 ** WILDG.count(".")
+    print("cross-key blend A/B, STAGE 5   -g %s (%d keys), -R %s fixed"
+          % (WILDG, nkeys, FIXR))
+    print("corpus %s (-l %s) | pairs=%d | trials=%d | seedfam=%d"
+          % (CORPUS, LANG, PAIRS, TRIALS, SEEDFAM))
+    print("arms: A = blend off | B = blend %s%s\n"
+          % (BLEND_B or "(unset)", " mode " + BLEND_MODE_B if BLEND_MODE_B else ""))
+    print("%4s %8s %8s | %-24s %s"
+          % ("L", "off", "blend", "paired B-A (95% CI)", "verdict"))
+    tsv = open(TSV, "w") if TSV else None
+    if tsv:
+        tsv.write("length\ttrial\ta_pct\tb_pct\tdiff\n")
+    for L in LENGTHS:
+        trials = make_trials(TRIALS, L)
+        args = (GREEDY_BASE + ["--score", GA, "--random", str(G_KICK), "-R", FIXR])
+        with ThreadPoolExecutor(max_workers=JOBS) as ex:
+            a = list(ex.map(lambda t: _one(args, t, ""), trials))
+            b = list(ex.map(lambda t: _one(args, t, BLEND_B), trials))
+        d = [bi[0] - ai[0] for ai, bi in zip(a, b)]
+        m = st.mean(d); se = st.stdev(d) / math.sqrt(len(d))
+        lo, hi = m - 1.96 * se, m + 1.96 * se
+        am, _, asi = summarise(a); bm, _, bsi = summarise(b)
+        v = ("blend better" if lo > 0 else
+             "BLEND HURTS KEYS" if hi < 0 else "tie")
+        print("%4d %8.1f %8.1f | %+6.1f pp [%+6.1f,%+6.1f]  %s" % (L, am, bm, m, lo, hi, v))
+        print("%4s %8s  (compute: %.0fk vs %.0fk score_iter)" % ("", "", asi/1000.0, bsi/1000.0))
+        if tsv:
+            for i, (ai, bi) in enumerate(zip(a, b)):
+                tsv.write("%d\t%d\t%.4f\t%.4f\t%.4f\n" % (L, i, ai[0], bi[0], bi[0]-ai[0]))
+            tsv.flush()
+    if tsv:
+        tsv.close()
+
+
+def _one(args, t, blend):
+    pt, ct, seed = t
+    out, si = run_one(args, ct, seed, False, blend,
+                      BLEND_MODE_B if blend else "")
+    return 100.0 * sum(x == y for x, y in zip(pt, out)) / len(pt), si
+
+
 def stage3():
     """Paired greedy-vs-greedy: which --score pre-pass is right for THIS substrate?
 
@@ -406,4 +460,4 @@ def stage3():
 
 
 if __name__ == "__main__":
-    {1: stage1, 2: stage2, 3: stage3}[STAGE]()
+    {1: stage1, 2: stage2, 3: stage3, 5: stage5}[STAGE]()
