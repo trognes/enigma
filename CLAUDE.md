@@ -646,6 +646,13 @@ therefore always `A`. Only fires when *both* are wildcarded together — either 
 enumerates genuinely distinct, necessary offsets. Full derivation, measurements, and the
 still-open (riskier, approximate) extension to wheels 1/2: `PERFORMANCE.md` §7.10.
 
+This is not a niche precondition to arrange deliberately: the non-M4 default (no `-r`
+given at all) is `opt_ringstellung = "AA."` and the default `-g` is `"..."` — ring0/ring1
+default to `A`, ring2 (rightmost) and every start default to wildcarded. So "ring2 +
+start2 both wildcarded" is live in the tool's bare default invocation whenever a caller
+doesn't explicitly pin ring, which is exactly the precondition wheel 2's (measured,
+not-yet-shipped) sparse-sampling idea needs — see `PERFORMANCE.md` §7.11.
+
 ### Performance notes
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is

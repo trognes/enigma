@@ -2792,14 +2792,89 @@ wildcard together). Reported ring position for wheel 0 is always `A` — the dir
 analogue of the Greek wheel's already-documented unidentifiable ring. 230/230 tests pass;
 ASan+UBSan clean.
 
-**Scope — this is the "safe half" of the user's idea; the risky half is still open.**
-Wheels 1 and 2 do **not** get this treatment (confirmed above: real, non-trivial
-corruption even at small δ) — extending sparse/approximate ring-sampling to them, betting
-that n-gram scoring tolerates the resulting handful of wrong letters, is a genuinely
-different, riskier lever that needs a real `crackquality`-style matched-compute A/B
-(does skipping ring values net-improve recovery once the freed compute buys something
-else, or does the corruption occasionally cost the true key against an unrelated wrong
-one?) before it could ship. Not yet built or measured.
+**Scope — this is the "safe half" of the user's idea; the risky half is measured in
+§7.11, below.** Wheels 1 and 2 do **not** get this treatment (confirmed above: real,
+non-trivial corruption even at small δ) — extending sparse/approximate ring-sampling to
+them, betting that n-gram scoring tolerates the resulting handful of wrong letters, is a
+genuinely different, riskier lever.
+
+**Practical relevance: this is not a niche scenario.** When `-r` is not given at all, the
+non-M4 default is `opt_ringstellung = "AA."` (M4: `"AAA."`) — ring0/ring1 default to `A`,
+ring2 (the rightmost wheel) defaults to **wildcarded**, and the default `-g` is `"..."`
+(fully wildcarded). So the "ring2 and start2 both wildcarded" precondition this section's
+collapse needs, and the precondition §7.11's stride experiment needs, is live in the
+tool's **bare default invocation** whenever a caller doesn't explicitly pin ring — not
+just a deliberately-constructed full-wildcard scenario.
+
+### 7.11 Sparse ring sampling for the rightmost wheel — 📊 MEASURED (not yet shipped)
+
+The risky half of the same user idea: wheel 2 (rightmost) lacks wheel 0's unconditional
+exactness (§7.10), but its corruption under a ring+start shift is small and grows
+smoothly (§7.10's table: 2/6/10/18 mismatches at δ=1/2/3/5, a 98-letter message) — small
+enough that scoring might still reliably identify the true region from a coarser,
+stride-K sample of ring values, with a cheap local refinement recovering the exact key
+afterward. Measured with the real binary (not a toy simulation): reflector + wheel order
+given, plugboard given via `-s` (isolating rotor-key discrimination from plugboard
+search), ring0/start0 auto-collapsed by §7.10, ring1/start1/start2 fully wildcarded;
+baseline is one full search, "stride-K" runs one search per candidate ring2 in
+`{0, K, 2K, ...}` and keeps the best. "Recoverable" = the winning candidate's ring2 lands
+within `⌊K/2⌋` of the true ring2 — i.e. checking its immediate neighbors would find the
+exact key. 30 paired trials per cell (same instances reused across K), English quadgram
+scoring, L=60/90/150:
+
+| L | K=2 | K=3 | K=4 |
+|---:|---:|---:|---:|
+| 60 | 100% (dist 0.57) | 90% (0.70) | 86.7% (1.23) |
+| 90 | 100% (0.60) | 83.3% (0.77) | 100% (0.80) |
+| 150 | 100% (0.47) | 100% (0.70) | 100% (0.87) |
+
+A follow-up swept K=5..13 at L=60 only (same setup, n=30):
+
+| K | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| recoverable | 83.3% | 93.3% | 86.7% | 93.3% | 90.0% | 100% | 96.7% | 100% | 96.7% |
+| mean dist | 1.50 | 1.57 | 1.77 | 2.10 | 2.33 | 2.23 | 2.57 | 2.70 | 3.13 |
+
+**The high recoverable% at large K is partly an artifact, not a free lunch — this is
+the load-bearing methodological finding.** The "recoverable" threshold `⌊K/2⌋` loosens
+in lockstep with K, so a flat ~90-100% across K=5..13 does not mean large K is cheap:
+at K=13 only 2 candidates are tested, and "recoverable" merely asks whether the winner is
+within 6 of the truth. The real signal is mean distance, which grows almost exactly
+linearly and matches the naive "distance to nearest grid point" prediction (`K/4`) at
+every K tested (e.g. K=8 predicts 2.0, measures 2.10; K=13 predicts 3.25, measures 3.13)
+— confirming the scoring reliably identifies the geometrically nearest candidate as
+best, not that large strides are free.
+
+**Total-cost accounting is what should drive the choice of K, not recoverable% alone.**
+Coarse-scan cost ≈ `26/K`; refinement cost (checking the candidates within the
+recoverable radius) ≈ `K`. Total ≈ `26/K + K`, minimized at `K ≈ √26 ≈ 5`, giving
+≈`26/5 + 5 ≈ 10` evaluations vs. 26 uncollapsed — **≈2.5× at best**, not the 13× a naive
+reading of "K=13 only tests 2 candidates" would suggest, because the refinement radius
+(and cost) scales with K right along with the coarse-scan saving.
+
+**Verdict: K=2 is the one clearly worth shipping.** 100% recoverable across all 90
+trials tested (L=60/90/150 combined, 0 misses — a rule-of-three 95% upper bound on the
+true miss rate of roughly 3%), mean distance 0.57 (refinement is checking one neighbor),
+directly matching the original "every other ring position" framing, and it stacks
+multiplicatively with §7.10's exact 26× — a genuine, low-risk, ready-to-build 2× on top.
+**K≥5 is not recommended as designed**: the ≈2.5× ceiling is a modest improvement over
+K=2's 2× for a real, non-trivial single-pass miss rate (10-17%, refining only the single
+best coarse candidate) — a bad trade for a tool whose whole point is *exact* recovery,
+not approximate. The one open, untested mitigation that could change this verdict:
+**refining the top-M coarse candidates instead of just the best one** (M=3, say) might
+recover most of K=5/6's miss rate at a small added cost, keeping more of the coarse-scan
+saving — a concrete, well-motivated next experiment, not yet built or measured.
+
+**Status: measured only, not implemented.** Unlike §7.10 (shipped in `build_key_space()`
+as an unconditional, always-on collapse), this section is a validated but unbuilt
+finding — implementing K=2 would need a real strided-candidate representation in
+`build_key_space()`/`search_worker()` (the current flat mixed-radix decode assumes
+contiguous ranges, so this needs either an explicit candidate list like the M4
+Greek-wheel's `offset_list`, or a post-hoc refinement pass bolted onto a stride-2 coarse
+search), plus a `crackquality`-style validation at the *rotor-key* tier before shipping
+(this section's harness isolates the ring dimension with plugboard/reflector/wheel-order
+given; a real feature needs the full search-with-plugboard-hidden picture measured too).
+Reproduce: `eval/ring_stride_probe.py` (not yet committed — currently a scratch harness).
 
 ---
 
