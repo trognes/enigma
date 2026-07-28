@@ -2726,6 +2726,81 @@ score-reuse to exploit?" for the diversity-search line of work, and the answer �
 ~7–13% and all intra-climb* — is the artifact. Needs `-c`; quad or any model; per-worker
 cache so no locking; the default path is byte-identical.
 
+### 7.10 Leftmost wheel's ring × start collapses to a pure offset — ✅ SHIPPED (rotor-keyspace, not plugboard)
+
+**A different axis from everything else in this section.** §7.1–7.9 are all about the
+per-character plugboard score loop; this is about the size of the *rotor-key* search
+space itself — `build_key_space()` — and it applies whenever ring **and** start are both
+wildcarded for a wheel, independent of scoring model or plugboard climb. Origin: a user
+observation that for most texts only the *offset* between a wheel's ring and start
+matters, and asked whether ring enumeration could be thinned out.
+
+**The mechanism, precisely (verified against `setup_mapping()`, not assumed).** The
+notch/stepping check for each wheel — `notch[w1][g1]` (wheel 1, checked every character)
+and `notch[w2][g2]` (wheel 2) — tests the **raw window position**, never the
+ring-adjusted offset; ring only enters at the final lookup,
+`sa[mod26(g0-r0)][mod26(g1-r1)][mod26(g2-r2)]`. So shifting a wheel's ring and start by
+the same δ (preserving the offset used for its own substitution) leaves that wheel's
+per-character substitution exactly correct throughout the message — *provided nothing
+downstream depends on that wheel's own absolute window value*. That proviso is met by
+**wheel 0 (leftmost) and only wheel 0**: it has no notch check of its own (there is no
+wheel further left for it to step), so nothing about its trajectory feeds forward into
+any stepping decision — its own advancement is driven entirely by wheel 1's notch, a pure
+additive step-count wholly untouched by ring0 or start0. Wheels 1 and 2's own window
+values, by contrast, gate further stepping (wheel 1's notch triggers wheel 0 *and* its own
+double-step; wheel 2's notch drives wheel 1), so shifting *their* ring+start together
+shifts *when* those downstream events fire — an approximation, not an equivalence.
+
+**Measured, to confirm the derivation rather than trust it.** Ring+start shifted together
+by δ = 1..25, single characters compared against the true decode (127-letter message,
+enough for wheel 0 to step several times over):
+
+| wheel shifted | δ=1 | δ=2 | δ=3 | δ=5 | δ=13 | δ=25 |
+|---|---:|---:|---:|---:|---:|---:|
+| **wheel 0 (leftmost)** | 0 mismatches | 0 | 0 | 0 | 0 | 0 (exact at every δ) |
+| wheel 1 (middle) | 26 | 51 | 77 | 27 | — | — |
+| wheel 2 (rightmost, 98-letter msg) | 2 | 6 | 10 | 18 | 49 | — |
+
+Wheel 0 is **exact at every tested δ, unconditionally** — not "usually," not "unless an
+unfortunate step occurs." Wheels 1/2 show real, generally-growing corruption even at
+small δ (wheel 1's is large and non-monotonic because its own notch feeds the double-step
+directly) — confirming they need the cautious, *empirically-validated-before-shipping*
+treatment, not this unconditional one. (A companion simulation swept realistic rotor/notch
+combinations for wheel 0's stepping alone, finding it never steps at all — an even
+stronger, simpler win *when true* — in 70–90% of cases at the 40–90-letter lengths this
+tool targets; but the shift-equivalence above makes that distinction moot for wheel 0: an
+exact win either way, whether it steps or not.)
+
+**Shipped: `build_key_space()`**, right after the per-wheel ring/start range setup — when
+`opt_ringstellung[0]=='.'` **and** `opt_grundstellung[0]=='.'` (both wildcarded; if only
+one is, every value of it is a distinct necessary offset and no redundancy exists),
+`ring0`'s range collapses from the full 0–25 to the single sentinel `0`, leaving `start0`
+to enumerate the 26 offsets directly — the exact same pattern already used for the M4
+Greek wheel's `(start − ring)` collapse (`offset_list` a few lines above), because the
+underlying reason is identical: nothing depends on that wheel's *absolute* value, only
+relative offset. No other code changes needed — `rc`/`gc`/`rsize` are already generic
+products over the per-wheel ranges, so pinning `rc[0]` to 1 propagates through
+`search_worker`'s mixed-radix decode and the parallel chunking automatically. Applies
+uniformly to standard, Norway, and M4 (M4's wheel 0 is the leftmost of its 3 *stepping*
+wheels — distinct from the already-collapsed static Greek wheel).
+
+**Measured reduction and verification.** `-r ..Z -g ..P` (wheel 0 both wildcarded, wheels
+1/2 fixed): 456,976 combinations → 17,576 (exactly ÷26, as predicted), 0.387s → 0.094s
+single-threaded on the same key. Correct plaintext recovered in every mode tested
+(standard, Norway, M4; single wheel-order and full reflector+wheel-order+ring0+start0
+wildcard together). Reported ring position for wheel 0 is always `A` — the direct
+analogue of the Greek wheel's already-documented unidentifiable ring. 230/230 tests pass;
+ASan+UBSan clean.
+
+**Scope — this is the "safe half" of the user's idea; the risky half is still open.**
+Wheels 1 and 2 do **not** get this treatment (confirmed above: real, non-trivial
+corruption even at small δ) — extending sparse/approximate ring-sampling to them, betting
+that n-gram scoring tolerates the resulting handful of wrong letters, is a genuinely
+different, riskier lever that needs a real `crackquality`-style matched-compute A/B
+(does skipping ring values net-improve recovery once the freed compute buys something
+else, or does the corruption occasionally cost the true key against an unrelated wrong
+one?) before it could ship. Not yet built or measured.
+
 ---
 
 ## 8. Novel / higher-risk

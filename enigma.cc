@@ -3603,6 +3603,31 @@ static key_space build_key_space()
         }
     }
 
+  /* The LEFTMOST of the 3 stepping wheels (index 0) is the one place besides the
+     M4 Greek wheel where a ring x start collapse is EXACT, not approximate, and
+     unconditional -- not just "when it happens not to step" (some settings ARE
+     merely unidentifiable per instance; this is a stronger, always-true fact).
+     Nothing in setup_mapping() ever reads ringstellung[0] or grundstellung[0]
+     except the final subst_array lookup mod26(g0-r0): wheel 0 has no notch
+     check of its own (there is no wheel to its left to step), and its own
+     stepping (driven entirely by wheel 1's notch) advances g0 by a pure
+     additive constant untouched by r0 -- so shifting ring0 and start0 by the
+     same delta leaves mod26(g0(i)-r0) identical at every character position i,
+     for the ENTIRE message, regardless of length or how many times wheel 0
+     steps (verified: -R/-g shifted together by 1..25 produced byte-identical
+     decodes at 127 characters, vs. the middle/right wheels which visibly
+     diverge after a handful of characters -- their own notch checks feed
+     forward into further stepping, so they lack this property). Collapsing
+     ring0's range to the single sentinel value 0 -- leaving grund0's 0..25
+     range to enumerate the offsets directly, exactly like the M4 Greek wheel's
+     offset_list above -- is therefore a lossless 26x reduction whenever BOTH
+     are wildcarded (if only one is wildcarded there is no redundancy: every
+     value of the wildcarded one is then a distinct, necessary offset). Reported
+     ring position is always 'A' in this case, the direct analogue of the Greek
+     wheel's unidentifiable ring. */
+  if ((opt_ringstellung[0] == '.') && (opt_grundstellung[0] == '.'))
+    ks.range.r_min[0] = ks.range.r_max[0] = 0;
+
   for (int i = 0; i < wheels; i++)
     {
       ks.rc[i] = ks.range.r_max[i] - ks.range.r_min[i] + 1;

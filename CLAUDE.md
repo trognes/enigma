@@ -624,6 +624,28 @@ stepping, scorers) is unchanged — the fold is paid only in `precompute()`.
   the wiring tables). Only the `(start − ring)` offset of the Greek wheel is
   recoverable, so `showconfig` reports it as start = offset, ring = A.
 
+### Leftmost stepping wheel's ring is likewise unidentifiable — offset-only search
+
+The Greek wheel isn't the only place a ring × start pair collapses to a pure offset:
+`walzenlage[0]` (the leftmost of the 3 *stepping* wheels, in every mode — standard,
+Norway, and M4's 3-wheel core alike) has the same property, and for a stronger reason
+than "it happens not to step on this message." `setup_mapping()`'s notch checks —
+`notch[w1][g1]`, `notch[w2][g2]` — test each wheel's raw window position, never the
+ring-adjusted offset; wheel 0 has no notch check of its own (nothing sits further left
+for it to step), so nothing downstream ever depends on its *absolute* ring/start, only
+their difference. Shifting `ringstellung[0]` and `grundstellung[0]` by the same amount
+therefore reproduces the identical decode **unconditionally** — verified empirically
+across every shift 1–25 at 127 characters, not just "usually" the way wheels 1/2 are
+(their own window value gates further stepping, so shifting them is a real, measurable
+approximation — see `PERFORMANCE.md` §7.10 for the mismatch-vs-shift data). When both
+`-r`'s and `-g`'s first character are wildcarded together, `build_key_space()`
+collapses `ring0`'s range to the single sentinel `0` (leaving
+`start0` to enumerate the 26 offsets directly) — the same `offset_list` pattern as the
+Greek wheel above, a lossless 26× reduction. Reported ring position for wheel 0 is
+therefore always `A`. Only fires when *both* are wildcarded together — either alone
+enumerates genuinely distinct, necessary offsets. Full derivation, measurements, and the
+still-open (riskier, approximate) extension to wheels 1/2: `PERFORMANCE.md` §7.10.
+
 ### Performance notes
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
