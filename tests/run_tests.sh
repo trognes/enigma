@@ -900,6 +900,46 @@ check "crack: start position, wehrmacht -a" \
   "$(run "$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g QXP)" -a -u B -w 123 -r AAA -g "$crack_scan_g" -l wehrmacht)" \
   "$pt_wehrmacht"
 
+# Non-English-corpus languages added after the original english/german/danish/french set
+# (swedish, finnish, icelandic, polish, spanish -- see fold_codepoint() in enigma.cc for
+# the accented-letter folding this exercises, e.g. Polish ogonek/stroke/acute letters and
+# Icelandic thorn, which once silently dropped up to ~20%/~5% of a table's mass). Each
+# language's four tables must load with ZERO "non-mappable character" records -- a cheap
+# guard against a future table reintroducing an unfolded code point -- and a plugboard
+# must be recoverable under its own table. Not folded into the full crack_langs matrix
+# above: these languages don't have a curated long public-domain passage yet, so this is
+# a lighter smoke test, not the full start-position + hill-climb x 7-model matrix.
+for lang in swedish finnish icelandic polish spanish; do
+  for suffix in monograms bigrams trigrams quadgrams; do
+    case $suffix in
+      monograms) mode=-m ;; bigrams) mode=-b ;; trigrams) mode=-t ;; quadgrams) mode=-q ;;
+    esac
+    err=$(printf 'ABCDE' | "$ENIGMA" "$mode" -l "$lang" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+    check "language table loads cleanly: $lang $suffix" \
+      "$(printf '%s' "$err" | grep -c 'non-mappable')" "0"
+  done
+done
+# A representative sentence per language, already folded to plain A-Z the way the
+# plaintext reader folds real accented input (the Polish sentence below reads
+# "Wlasciwie nie wiem..." with plain L/E/S standing in for the original Polish
+# text's L-stroke/E-ogonek/S-acute letters), plugboard hidden, hill-climbed and
+# expected back exactly.
+pt_swedish="JAGVETINTERIKTIGTVARFORDETSVENSKASPRAKETARSAVARTATTLARASIGMENDETARNOGFORATTVIHARSAMANGAORD"
+pt_finnish="ENTIEDAMIKSISUOMENKIELIONNIINVAIKEAAOPPIAMUTTASESSAONVARMASTIPALJONKAUNIITAJASOINTUVIASANOJA"
+pt_icelandic="EKKIVEITEGHVERSVEGNAISLENSKAERSVONAERFIDENHUNERLIKAMJOGFALLEGOGFULLAFGOMLUMNORRAENUMORDUM"
+pt_polish="WLASCIWIENIEWIEMDLACZEGOJEZYKPOLSKIJESTTAKTRUDNYALEJESTTEZBARDZOPIEKNYIPELENCIEKAWYCHSLOW"
+pt_spanish="NOSEMUYBIENPORQUEELIDIOMAESPANOLESTANDIFICILDEAPRENDERPEROTIENEMUCHASPALABRASMUYBONITAS"
+for lang in swedish finnish icelandic polish spanish; do
+  case $lang in
+    swedish) plain=$pt_swedish ;; finnish) plain=$pt_finnish ;;
+    icelandic) plain=$pt_icelandic ;; polish) plain=$pt_polish ;; spanish) plain=$pt_spanish ;;
+  esac
+  ct=$(run "$plain" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
+  check "crack: hill-climb plugboard, $lang -q" \
+    "$(run "$ct" -q -c -u B -w 123 -r AAA -g AAA -l "$lang")" \
+    "$plain"
+done
+
 # (2) Hill-climb the plugboard (rotor/ring/start known, plugboard unknown), for
 # every scoring model in every language. With long plaintext and a small (2-pair)
 # plugboard, even IC and monogram scoring have enough signal to converge to the
