@@ -450,8 +450,8 @@ static int fold_codepoint(unsigned cp)
     case 0x0141: case 0x0142: return 'L' - 'A';   /* L-stroke (Ł/ł) */
     case 0x0143: case 0x0144: return 'N' - 'A';   /* N-acute (Ń/ń) */
     case 0x015A: case 0x015B: return 'S' - 'A';   /* S-acute (Ś/ś) */
-    case 0x0179: case 0x017A: return 'Z' - 'A';   /* Z-acute (Ź/ź) */
-    case 0x017B: case 0x017C: return 'Z' - 'A';   /* Z-dot-above (Ż/ż) */
+    /* Z-acute and Z-dot-above both fold to Z, so they share one case list. */
+    case 0x0179: case 0x017A: case 0x017B: case 0x017C: return 'Z' - 'A';
     default: return -1;
     }
 }

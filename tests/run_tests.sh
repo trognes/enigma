@@ -914,7 +914,7 @@ for lang in swedish finnish icelandic polish spanish; do
     case $suffix in
       monograms) mode=-m ;; bigrams) mode=-b ;; trigrams) mode=-t ;; quadgrams) mode=-q ;;
     esac
-    err=$(printf 'ABCDE' | "$ENIGMA" $mode -l "$lang" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
+    err=$(printf 'ABCDE' | "$ENIGMA" "$mode" -l "$lang" -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null)
     check "language table loads cleanly: $lang $suffix" \
       "$(printf '%s' "$err" | grep -c 'non-mappable')" "0"
   done
