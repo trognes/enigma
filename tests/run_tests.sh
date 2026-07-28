@@ -969,6 +969,26 @@ for K in 2 3 5; do
     "$rs_pt"
 done
 
+# Regression: true ring2=Z with a K=2 coarse winner landing at the A(0) boundary needs
+# TWO things the initial implementation got wrong. (1) The refinement window must WRAP
+# at the 0/25 boundary rather than clamp -- a clamped [0,1] window only ever checks
+# {A,B}, never Z, even though ring2=Z is "recoverable" per the documented |K/2| distance
+# metric. (2) On the plain-scan path, search_worker() leaves the machine's
+# ringstellung/grundstellung in a stale, stepped state after scanning (a "lazy restore"
+# perf optimisation -- only the hillclimb path restores per key), so re-reading
+# ring0/start0 from the live machine between refinement segments picks up whatever key
+# the PRIOR segment's scan last touched rather than the coarse winner's actual pin.
+# These specific keys were found by a random sweep to trigger both bugs; -T 1 keeps it
+# deterministic and reproducible.
+for key in "B 451 AAZ VKZ" "B 351 AAZ NLV" "C 324 AAZ JEY"; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $key
+  wr_ct=$(run "$rs_pt" -i -u "$1" -w "$2" -r "$3" -g "$4")
+  check "crack: --ring-stride 2 wraps at ring2=Z boundary ($1 $2 $3 $4)" \
+    "$(run "$wr_ct" -q -l english -u "$1" -w "$2" --ring-stride 2 -T 1)" \
+    "$rs_pt"
+done
+
 # Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)

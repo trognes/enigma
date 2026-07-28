@@ -3951,80 +3951,148 @@ void bruteforce(char * result)
          range.g_min/max[1] -- collapses back to a pin automatically if the caller had
          explicitly pinned ring1/start1 rather than wildcarding it), narrowing only ring2
          (to the skipped-neighbour window) and leaving start2 open, mirroring the
-         measurement harness's per-candidate re-search (eval/ring_stride_probe.py). A
-         small, self-contained search reusing search_worker (a single-task, mostly-pinned
-         key_space) so the skipped neighbours get the exact same treatment -- restarts,
-         staged climb, everything -- as the coarse pass got. Reuses the already-
-         precomputed subst_array (same wheel order, so no re-precompute); a fresh
+         measurement harness's per-candidate re-search (eval/ring_stride_probe.py). The
+         window wraps at the 0/25 ring2 boundary (see the nseg/seg_lo/seg_hi split
+         below) rather than clamping, since ring2 is circular and a clamp would silently
+         drop the wrapped-around neighbour. A small, self-contained search reusing
+         search_worker (a single-task, mostly-pinned key_space) so the skipped
+         neighbours get the exact same treatment -- restarts, staged climb, everything
+         -- as the coarse pass got, once per window segment. Reuses the already-
+         precomputed subst_array (same wheel order, so no re-precompute); each segment's
          best_result keeps its (mini-range-relative) idx from leaking into the outer
          best.idx, which nothing reads again after this point. */
       if (opt_ring_stride > 1)
         {
           int half = opt_ring_stride / 2;
-          int rmin2 = m.ringstellung[2] - half;
-          int rmax2 = m.ringstellung[2] + half;
-          if (rmin2 < 0) rmin2 = 0;
-          if (rmax2 > 25) rmax2 = 25;
+          int center2 = m.ringstellung[2];
+          int raw_min2 = center2 - half;
+          int raw_max2 = center2 + half;
 
-          std::vector<wheel_task> rtasks(1, wheel_task{
-              m.ukw, { m.walzenlage[0], m.walzenlage[1], m.walzenlage[2] },
-              m.greek, m.greek_offset });
-          search_range rrange;
-          rrange.r_min[0] = rrange.r_max[0] = m.ringstellung[0];
-          rrange.r_min[1] = range.r_min[1];
-          rrange.r_max[1] = range.r_max[1];
-          rrange.r_min[2] = rmin2;
-          rrange.r_max[2] = rmax2;
-          rrange.g_min[0] = rrange.g_max[0] = m.grundstellung[0];
-          rrange.g_min[1] = range.g_min[1];
-          rrange.g_max[1] = range.g_max[1];
-          rrange.g_min[2] = 0;
-          rrange.g_max[2] = 25;
-          int rrc[wheels] = { 1, range.r_max[1] - range.r_min[1] + 1, rmax2 - rmin2 + 1 };
-          int rgc[wheels] = { 1, range.g_max[1] - range.g_min[1] + 1, 26 };
-          size_t rrsize = static_cast<size_t>(rrc[0]) * rrc[1] * rrc[2];
-          size_t rgsize = static_cast<size_t>(rgc[0]) * rgc[1] * rgc[2];
-          size_t rwork = rrsize * rgsize * restarts_par;
-          extra_keys_analysed = rrsize * rgsize;
+          /* Snapshot everything each segment pins (ring0/start0/wheel order/
+             reflector/Greek wheel) BEFORE any segment's search_worker() call runs.
+             The plain-scan path leaves m's ringstellung/grundstellung in a stale,
+             stepped state after scanning (a documented "lazy restore" perf
+             optimisation below in search_worker() -- only the hillclimb path
+             restores them per key), so re-reading m.ringstellung[0]/
+             m.grundstellung[0] fresh from m between segments picks up whatever key
+             the PRIOR segment's scan last touched, not the intended pin -- confirmed
+             by a concrete miss during testing (start0 silently drifted by one
+             wheel0 step between segments, corrupting the second segment's window
+             even though the first segment found nothing better). ring0/start0 are
+             pin-equivalent regardless of which segment is running (the offset
+             collapse is ring2-independent, PERFORMANCE.md §7.10), so reusing this
+             one snapshot for every segment is correct, not just convenient. */
+          int fixed_ring0 = m.ringstellung[0];
+          int fixed_start0 = m.grundstellung[0];
+          int fixed_w0 = m.walzenlage[0];
+          int fixed_w1 = m.walzenlage[1];
+          int fixed_w2 = m.walzenlage[2];
+          int fixed_ukw = m.ukw;
+          int fixed_greek = m.greek;
+          int fixed_greek_offset = m.greek_offset;
+
+          /* ring2 is circular (mod 26); the window must WRAP at the 0/25 boundary,
+             not clamp, or the opposite edge's neighbour is silently never checked --
+             e.g. a coarse winner at A(0) with the true ring2 at Z(25) is
+             "recoverable" per the |K/2| distance metric (PERFORMANCE.md §7.11), but
+             a clamped [0,1] window only ever tests {A,B}, never Z. Confirmed by a
+             concrete miss during testing. At most one edge can wrap: the window
+             width (2*half+1) is well under 26 for every valid K (<=13), so both
+             edges can't wrap at once. Two disjoint segments (rather than one
+             modular range) because search_range/rc[] -- like search_worker's and
+             key_to_machine's flat mixed-radix decode generally -- only represent a
+             single contiguous interval per wheel position. */
+          int seg_lo[2];
+          int seg_hi[2];
+          int nseg;
+          if ((raw_min2 >= 0) && (raw_max2 <= 25))
+            {
+              nseg = 1;
+              seg_lo[0] = raw_min2;
+              seg_hi[0] = raw_max2;
+            }
+          else if (raw_min2 < 0)
+            {
+              nseg = 2;
+              seg_lo[0] = 0;
+              seg_hi[0] = raw_max2;
+              seg_lo[1] = 26 + raw_min2;
+              seg_hi[1] = 25;
+            }
+          else
+            {
+              nseg = 2;
+              seg_lo[0] = raw_min2;
+              seg_hi[0] = 25;
+              seg_lo[1] = 0;
+              seg_hi[1] = raw_max2 - 26;
+            }
 
           int save_stride = opt_ring_stride;
-          opt_ring_stride = 1;   /* rrc[2] is already the exact (non-strided) window */
+          opt_ring_stride = 1;   /* each segment's rrc[2] is already exact, non-strided */
 
-          best_result rbest;
-          std::atomic<size_t> rnext_key{0};
-          int rnthreads = opt_threads;
-          if (rwork < static_cast<size_t>(rnthreads))
-            rnthreads = static_cast<int>(rwork);
-          if (rnthreads < 1)
-            rnthreads = 1;
-          size_t rchunk = rwork / (static_cast<size_t>(rnthreads) * 16);
-          if (rchunk < 1)
-            rchunk = 1;
-          run_parallel(rnthreads, [&](int t)
-            { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
-                            rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
-
-          if (rbest.found && (rbest.score > best.score))
+          for (int s = 0; s < nseg; s++)
             {
-              size_t rrg = rrsize * rgsize;
-              size_t rrc12 = static_cast<size_t>(rrc[1]) * rrc[2];
-              size_t rgc12 = static_cast<size_t>(rgc[1]) * rgc[2];
-              size_t rcur_wo = static_cast<size_t>(-1);
-              int rrg6[6];
-              /* opt_ring_stride is still 1 here (restored below) -- rrc[2] is
-                 already the exact, non-strided refinement window, so this decode
-                 must not re-apply the stride multiplier. */
-              key_to_machine(m, rbest.idx / restarts_par, rtasks, rrange, rrc, rgc,
-                             m.subst_array, rrg, rgsize, rrc12, rgc12, rcur_wo, rrg6);
-              for (int i = 0; i < asize; i++)
-                m.steckerbrett[i] = rbest.steckerbrett[i];
-              best.score = rbest.score;
-              memcpy(best.plaintext, rbest.plaintext, textlength + 1);
-              memcpy(best.steckerbrett, rbest.steckerbrett, asize);
-              if (rbest.score > best.shown.load(std::memory_order_relaxed))
+              int rmin2 = seg_lo[s];
+              int rmax2 = seg_hi[s];
+
+              std::vector<wheel_task> rtasks(1, wheel_task{
+                  fixed_ukw, { fixed_w0, fixed_w1, fixed_w2 },
+                  fixed_greek, fixed_greek_offset });
+              search_range rrange;
+              rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
+              rrange.r_min[1] = range.r_min[1];
+              rrange.r_max[1] = range.r_max[1];
+              rrange.r_min[2] = rmin2;
+              rrange.r_max[2] = rmax2;
+              rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
+              rrange.g_min[1] = range.g_min[1];
+              rrange.g_max[1] = range.g_max[1];
+              rrange.g_min[2] = 0;
+              rrange.g_max[2] = 25;
+              int rrc[wheels] = { 1, range.r_max[1] - range.r_min[1] + 1, rmax2 - rmin2 + 1 };
+              int rgc[wheels] = { 1, range.g_max[1] - range.g_min[1] + 1, 26 };
+              size_t rrsize = static_cast<size_t>(rrc[0]) * rrc[1] * rrc[2];
+              size_t rgsize = static_cast<size_t>(rgc[0]) * rgc[1] * rgc[2];
+              size_t rwork = rrsize * rgsize * restarts_par;
+              extra_keys_analysed += rrsize * rgsize;
+
+              best_result rbest;
+              std::atomic<size_t> rnext_key{0};
+              int rnthreads = opt_threads;
+              if (rwork < static_cast<size_t>(rnthreads))
+                rnthreads = static_cast<int>(rwork);
+              if (rnthreads < 1)
+                rnthreads = 1;
+              size_t rchunk = rwork / (static_cast<size_t>(rnthreads) * 16);
+              if (rchunk < 1)
+                rchunk = 1;
+              run_parallel(rnthreads, [&](int t)
+                { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
+                                rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+
+              if (rbest.found && (rbest.score > best.score))
                 {
-                  best.shown.store(rbest.score, std::memory_order_relaxed);
-                  progress_line(best, m, rbest.score);
+                  size_t rrg = rrsize * rgsize;
+                  size_t rrc12 = static_cast<size_t>(rrc[1]) * rrc[2];
+                  size_t rgc12 = static_cast<size_t>(rgc[1]) * rgc[2];
+                  size_t rcur_wo = static_cast<size_t>(-1);
+                  int rrg6[6];
+                  /* opt_ring_stride is still 1 here (restored below) -- rrc[2] is
+                     already the exact, non-strided segment window, so this decode
+                     must not re-apply the stride multiplier. */
+                  key_to_machine(m, rbest.idx / restarts_par, rtasks, rrange, rrc, rgc,
+                                 m.subst_array, rrg, rgsize, rrc12, rgc12, rcur_wo, rrg6);
+                  for (int i = 0; i < asize; i++)
+                    m.steckerbrett[i] = rbest.steckerbrett[i];
+                  best.score = rbest.score;
+                  memcpy(best.plaintext, rbest.plaintext, textlength + 1);
+                  memcpy(best.steckerbrett, rbest.steckerbrett, asize);
+                  if (rbest.score > best.shown.load(std::memory_order_relaxed))
+                    {
+                      best.shown.store(rbest.score, std::memory_order_relaxed);
+                      progress_line(best, m, rbest.score);
+                    }
                 }
             }
 

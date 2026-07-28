@@ -2896,10 +2896,51 @@ spot-checked key across K=2/3/5/13, `-c`+`--polish` composes correctly (rotor-ke
 refinement runs before the plugboard climb/polish), and ring0/start0 stay validly pinned
 (§7.10's collapse holds regardless of ring2, so that half of the original assumption was
 correct). `-F`/`--exhaust` are rejected together with `--ring-stride` (same `best.idx`
-simple-sweep-encoding fragility `--polish` already has). ASan/UBSan clean; 230/230 tests
-pass under g++ and clang++ (`tests/run_tests.sh` now includes a `--ring-stride`
-regression: K=2/3/5 exact recovery plus the four validation-error paths). Reproduce the
-original measurement: `eval/ring_stride_probe.py`.
+simple-sweep-encoding fragility `--polish` already has).
+
+**Two more implementation-only bugs, both caught by a targeted random sweep (true ring2
+pinned to A or Z, the two values a K=2 coarse pass is most likely to land exactly on or
+adjacent to) rather than by the original spot checks, which happened not to trigger
+either:**
+
+1. **The refinement window clamped at the 0/25 ring2 boundary instead of wrapping.**
+   ring2 is circular, so the correct neighbourhood of a coarse winner at A(0) includes
+   Z(25) — but `if (rmin2 < 0) rmin2 = 0;` simply threw that neighbour away, silently
+   turning a documented-"recoverable" case (winner within `⌊K/2⌋` of the truth, mod 26)
+   into a guaranteed miss whenever the winner sat at the opposite edge from the truth.
+   Fixed by splitting the window into up to two disjoint contiguous segments (`nseg`/
+   `seg_lo`/`seg_hi`) when it would wrap — `search_range`/`rc[]`, like the rest of the
+   flat mixed-radix decode `search_worker()`/`key_to_machine()` share, can only express
+   one contiguous interval per wheel position, so a true modular range needs two
+   sub-searches merged by best-of, not a single call.
+2. **A live machine object was read for the next segment's pin *after* being used as
+   search_worker's own scratch state.** `m` (`machines[0]`) doubled as both "the coarse
+   winner's decoded state, which each segment's pin (ring0/start0/wheel order) is read
+   from" and one of `search_worker`'s per-thread scratch machines for the mini-search
+   itself. On the plain-scan path, `search_worker` deliberately leaves
+   `m.grundstellung`/`m.ringstellung` in whatever state the *last scanned key* stepped
+   them to (a documented "lazy restore" — only the hillclimb path restores per key,
+   since nothing on the scan path is supposed to need the true position back). Reading
+   `m.grundstellung[0]` again for a second segment's pin therefore picked up that stale,
+   stepped value instead of the coarse winner's actual start0 — confirmed by a
+   concrete case where start0 silently drifted from V to W between segments (98
+   characters of stepping is enough to carry a step into the leftmost wheel), pinning
+   the second segment's search 26 keys away from where the true key actually was, a
+   pure implementation defect rather than an approximation. Fixed by snapshotting
+   ring0/start0/wheel-order/reflector/Greek-wheel into local variables once, before any
+   segment's `search_worker` call, and reusing that snapshot for every segment instead
+   of re-reading `m`.
+
+Re-verified after both fixes: 0/100 mismatches on a targeted boundary sweep (ring2
+pinned to A or Z, random reflector/wheel-order/starts), cross-checked against the K=1
+(no-stride) baseline to separate genuine `--ring-stride` bugs from the pre-existing
+scoring-information floor (a handful of *baseline* misses exist too — a decoy
+outscoring the truth by a hair even under exhaustive search — and those are unaffected
+by either fix, exactly the "scoring failure, not search failure" distinction this
+document uses elsewhere). ASan/UBSan clean; g++ and clang++ both pass the full suite
+(`tests/run_tests.sh` now includes the two originally-failing keys as an explicit
+`--ring-stride` regression, plus K=2/3/5 exact recovery and the four validation-error
+paths). Reproduce the original measurement: `eval/ring_stride_probe.py`.
 
 ---
 

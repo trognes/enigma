@@ -696,6 +696,25 @@ harness's actual per-candidate re-search rather than the cheaper "just check `K`
 neighbours" reading of the total-cost accounting. Full measurement, the K=2..13 sweep,
 and this implementation gotcha: `PERFORMANCE.md` §7.11.
 
+**Two further implementation-only bugs, caught by a targeted boundary sweep (true ring2
+pinned to A or Z) rather than the original spot checks:** the refinement window must
+*wrap* at the 0/25 ring2 boundary, not clamp — ring2 is circular, so a coarse winner at
+A(0) with the true ring2 at Z(25) is a documented-"recoverable" case that a clamped
+window silently never checks; fixed by splitting into up to two contiguous segments
+when the window would wrap (`search_range` can only express one contiguous interval per
+wheel position, so a genuinely modular range needs two sub-searches). Separately, the
+refinement was reading `m.ringstellung[0]`/`m.grundstellung[0]` fresh from the live
+machine to pin each segment — but on the plain-scan path `search_worker()` deliberately
+leaves those fields in whatever state the *last scanned key* stepped them to (a
+documented "lazy restore" perf optimisation; only the hillclimb path restores per key),
+so a second segment picked up a stale, stepped pin instead of the coarse winner's actual
+value. Fixed by snapshotting everything each segment pins (ring0/start0/wheel
+order/reflector/Greek wheel) into locals once, before any segment runs, instead of
+re-reading the live machine between segments. Both confirmed with concrete failing keys
+before the fix and a 0/100 targeted sweep after (cross-checked against the K=1 baseline
+to rule out the separate, pre-existing scoring-floor cases, which neither fix touches).
+Full writeup: `PERFORMANCE.md` §7.11.
+
 ### Performance notes
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
