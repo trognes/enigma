@@ -2275,6 +2275,67 @@ Reproduce: `python3 eval/build_telegraphic_ngrams.py` (regenerates
 `ngrams/wehrmacht_*.txt`); `R=100 T=4 python3 eval/eval_telegraphic.py` for the
 recovery comparison.
 
+### 6.18 Five languages added (swedish, finnish, icelandic, polish, spanish); `fold_codepoint()` extended for thorn and Polish diacritics — ✅ FIXED
+
+**What was added.** N-gram tables (mono/bi/tri/quad, from the same Practical
+Cryptography source as the existing four languages) for `swedish`, `finnish`,
+`icelandic`, `polish` and `spanish` — 20 files, already in this tool's native
+`<GRAM> <count>` format with no conversion needed.
+
+**What was found while checking them.** `fold_codepoint()` (the function that
+folds a table's or the plaintext's accented Unicode letters to an A-Z base —
+§"Conventions", the same mechanism §6.9 fixed for German) covers the Latin-1
+Supplement block (U+00C0–00FF: à/ä/ö/ø/ñ/ü/ß etc.), which is everything Swedish,
+Finnish and Spanish need, and everything Icelandic needs **except one letter**.
+Two gaps, both silent (an unfolded code point makes `fold_gram` return -1, and
+that record is dropped, counted only in an easy-to-miss "skipped N records"
+note):
+
+- **Icelandic þ/Þ (thorn)** *is* in the Latin-1 block (U+00DE/00FE) but the
+  existing `lat1[]` table had it as the explicit "not a letter" placeholder
+  (shared with the ×/÷ non-letter symbols) — nobody had mapped it, because no
+  supported language needed to before now. Measured impact if left unmapped:
+  1.5% of the monogram table's mass, rising to 5.4% of the quadgram table's
+  (longer grams have more chances to contain a þ).
+- **Polish `Ą Ć Ę Ł Ń Ś Ź Ż`** (8 of its 9 diacritic letters — only `Ó` happens
+  to land in Latin-1) are in the **Latin Extended-A** block (U+0100–017F),
+  a different block `fold_codepoint()` never looked at. Measured impact: 5.5%
+  of monograms up to **20.4%** of the quadgram table's mass — not a rounding
+  error, close to a fifth of the table silently discarded.
+
+**Fix.** `lat1[]`'s thorn cells now map to `T` (pairing with eth → `D`, mirroring
+the voiced/voiceless dental-fricative pair the two letters represent in
+Icelandic). Eight new `switch` cases fold the Polish Extended-A letters to their
+base (diacritic stripped, same convention as `ß`→`S`; `Ź`/`Ż` — acute vs.
+dot-above — both fold to `Z`, same "closest base letter" precedent). No other
+new-language code point falls outside the existing coverage (verified by
+enumerating every distinct non-ASCII character across all 20 new files and
+checking each by hand against the fold table before writing the fix, not just
+by absence of a warning after).
+
+**Verification.** All 20 tables load with **zero** "non-mappable character"
+records (previously silent data loss, now directly checked — `tests/run_tests.sh`
+gained a load-cleanliness guard per language/order, §"Conventions" precedent for
+regression-guarding a table-loading bug). A round-trip smoke test per language —
+own diacritics folded exactly as the table's (Polish `WŁAŚCIWIE`→`WLASCIWIE`,
+Icelandic `ÞETTA`→`TETTA`, `MJÖG`→`MJOG`) — hill-climbs a hidden 2-pair plugboard
+back exactly. 230/230 tests pass under g++ and clang++; ASan+UBSan clean, including
+a synthetic worst-case string packing every new special character together.
+
+**Not done (flagged, not silently skipped or silently added).** The five new
+languages are **not** folded into the full `crack_langs` start-position +
+7-model hill-climb matrix (§"Overview" — currently `german english danish
+french`): that matrix uses long (~450–480 letter), curated public-domain prose
+passages per language, which these five don't have yet, and adding them would
+roughly double that matrix's already-noted-as-slow (8+ minutes under
+sanitizers) runtime. The lighter load-cleanliness + single-model smoke test
+added here is a deliberately smaller guarantee — a real user should not expect
+these five to have had the same depth of correctness testing as the original
+four until that passage-sourcing work is done.
+
+Reproduce: `./enigma -q -l polish ...` (or any of the five); `bash
+tests/run_tests.sh`.
+
 ---
 
 ## 7. Speed / throughput

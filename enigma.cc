@@ -110,7 +110,8 @@ static const char * opt_steckerbrett;
    a mere seed (see plug_fixed / PLUG_FIXED_EX below for the storage and the parallel
    --exhaust arrangement, REDESIGN Part D). */
 static char * opt_plaintext; /* plaintext to compare to */
-static const char * opt_language; /* english, german, danish, french, wehrmacht; no default */
+static const char * opt_language; /* english, german, danish, french, swedish, finnish,
+                                      icelandic, polish, spanish, wehrmacht; no default */
 static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
 static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
 static int opt_m4;        /* use M4 (4-rotor naval) mode */
@@ -413,9 +414,13 @@ inline char num2char(int x)
 /* Fold one Unicode code point to an A-Z letter index (0..25), or -1 if it is not
    a foldable Latin letter. Plain A-Z/a-z map directly; accented Latin letters
    fold to their base (diacritics removed: e-acute -> E, u-umlaut -> U, o-slash
-   -> O, sharp-s -> S, ae/oe ligatures -> A/O). This lets the 26-letter machine
-   use the accented n-grams in the non-English tables (and accented plaintext)
-   instead of discarding them. */
+   -> O, sharp-s -> S, ae/oe ligatures -> A/O, thorn -> T [pairs with eth -> D as
+   the voiceless/voiced dental-fricative counterpart, Icelandic]). This lets the
+   26-letter machine use the accented n-grams in the non-English tables (and
+   accented plaintext) instead of discarding them. Added for Swedish/Finnish
+   (A-ring, A/O-diaeresis -- already Latin-1), Icelandic (thorn) and Polish (the
+   Latin Extended-A ogonek/stroke/acute/dot-above letters below): dropping them
+   loses up to ~20% of a table's mass (Polish quadgrams), not a rounding error. */
 static int fold_codepoint(unsigned cp)
 {
   if ((cp >= 'a') && (cp <= 'z'))
@@ -425,8 +430,8 @@ static int fold_codepoint(unsigned cp)
   /* Latin-1 supplement letters U+00C0..U+00FF -> base letter (' ' = not a letter);
      lower half mirrors the upper except the final cell (sharp-s S vs y-diaeresis Y). */
   static const char lat1[] =
-    "AAAAAAACEEEEIIIIDNOOOOO OUUUUY S"
-    "AAAAAAACEEEEIIIIDNOOOOO OUUUUY Y";
+    "AAAAAAACEEEEIIIIDNOOOOO OUUUUYTS"
+    "AAAAAAACEEEEIIIIDNOOOOO OUUUUYTY";
   if ((cp >= 0xC0) && (cp <= 0xFF))
     {
       char b = lat1[cp - 0xC0];
@@ -436,6 +441,17 @@ static int fold_codepoint(unsigned cp)
     {
     case 0x0152: case 0x0153: return 'O' - 'A';   /* OE ligature */
     case 0x0178: return 'Y' - 'A';                /* Y with diaeresis */
+    /* Latin Extended-A: Polish diacritics, diacritic stripped to the base letter
+       (Z-acute and Z-dot-above both fold to Z, same "closest base letter"
+       convention as sharp-s -> S above). */
+    case 0x0104: case 0x0105: return 'A' - 'A';   /* A-ogonek (Ą/ą) */
+    case 0x0106: case 0x0107: return 'C' - 'A';   /* C-acute (Ć/ć) */
+    case 0x0118: case 0x0119: return 'E' - 'A';   /* E-ogonek (Ę/ę) */
+    case 0x0141: case 0x0142: return 'L' - 'A';   /* L-stroke (Ł/ł) */
+    case 0x0143: case 0x0144: return 'N' - 'A';   /* N-acute (Ń/ń) */
+    case 0x015A: case 0x015B: return 'S' - 'A';   /* S-acute (Ś/ś) */
+    case 0x0179: case 0x017A: return 'Z' - 'A';   /* Z-acute (Ź/ź) */
+    case 0x017B: case 0x017C: return 'Z' - 'A';   /* Z-dot-above (Ż/ż) */
     default: return -1;
     }
 }
@@ -4118,7 +4134,8 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "m4f10 (mono pre-pass then fused, both capped).");
   fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
   fprintf(out, "  %-24s %s\n", "-l, --language language",
-          "Scoring language: english/german/danish/french, or");
+          "Scoring language: english/german/danish/french/");
+  fprintf(out, "  %-24s %s\n", "", "swedish/finnish/icelandic/polish/spanish, or");
   fprintf(out, "  %-24s %s\n", "", "wehrmacht (telegraphic military German -- X as");
   fprintf(out, "  %-24s %s\n", "", "word separator, Q for ch, spelled-out numbers;");
   fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German);");

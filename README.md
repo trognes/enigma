@@ -161,8 +161,9 @@ enumerates the distinct offsets rather than every ring×start pair.
 - **`-f`** — Weighted all-order score **plus the index of coincidence**
   (**recommended** when the language is known)
 - **`-l lang`** — Scoring language: `english`, `german`, `danish`, `french`,
-  or `wehrmacht` (telegraphic military German — see below). **Required**
-  for `-m`/`-b`/`-t`/`-q`/`-a`/`-f`; ignored by `-i`
+  `swedish`, `finnish`, `icelandic`, `polish`, `spanish`, or `wehrmacht`
+  (telegraphic military German — see below). **Required** for
+  `-m`/`-b`/`-t`/`-q`/`-a`/`-f`; ignored by `-i`
 
 The **default model is the index of coincidence** (`-i`) — the only one
 that needs no language, so the tool runs out of the box with no scoring
@@ -535,10 +536,15 @@ and roughly length-independent (a more language-like decrypt scores
 closer to zero). The index of coincidence (`-i`) is a separate normalised
 statistic and is unaffected.
 
-Tables for `english`, `german`, `danish` and `french` ship in this
-repository. They were obtained from the
+Tables for `english`, `german`, `danish`, `french`, `swedish`, `finnish`,
+`icelandic`, `polish` and `spanish` ship in this repository. They were
+obtained from the
 [Practical Cryptography](http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/)
 website, where additional languages are available in the same format.
+Language-specific letters outside plain A-Z are folded to a base A-Z
+letter when a table loads (diacritics stripped: `Ä`/`Å`/`Ö` → `A`/`A`/`O`,
+`Ñ` → `N`, `Ł` → `L`, Icelandic `Þ` → `T` pairing with `Ð` → `D`, etc.) — see
+`fold_codepoint()` in `enigma.cc`.
 
 ## Performance
 
