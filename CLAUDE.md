@@ -225,6 +225,17 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 - `-4` M4 (4-rotor) mode: `-u` selects thin reflector `b`/`c`; `-w`/`-r`/`-g` take
   **four** characters with the Greek wheel (`B`=Beta/`G`=Gamma) / ring / start first
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
+- `--ring-stride K` sparse ring sampling for the rightmost wheel (K=1..13, default 1 =
+  off; needs both `-r` and `-g` to wildcard the rightmost wheel's position, else there is
+  nothing to thin out; incompatible with `-F`/`--exhaust`, the same `best.idx`-encoding
+  fragility `--polish` has). The coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then a
+  small refinement pass checks the skipped neighbours around the best coarse hit — see
+  "Sparse ring sampling for the rightmost wheel" below and `PERFORMANCE.md` §7.11 for the
+  measurement and the implementation gotcha (the refinement must re-open ring1/start1,
+  not pin them to the coarse winner). **K=2 is the only value backed by solid
+  measurement** (100% recovery across 90 trials); K≥5 trades a real 10-17% single-pass
+  miss rate for only a modest extra saving over K=2, a bad trade for a tool whose whole
+  point is exact recovery — not recommended.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the climb/SA
   never remove or rewire them (their letters are marked in `plug_fixed[]`, set once from
   `opt_steckerbrett` before the threaded search, and skipped by every switch/remove/
@@ -650,8 +661,40 @@ This is not a niche precondition to arrange deliberately: the non-M4 default (no
 given at all) is `opt_ringstellung = "AA."` and the default `-g` is `"..."` — ring0/ring1
 default to `A`, ring2 (rightmost) and every start default to wildcarded. So "ring2 +
 start2 both wildcarded" is live in the tool's bare default invocation whenever a caller
-doesn't explicitly pin ring, which is exactly the precondition wheel 2's (measured,
-not-yet-shipped) sparse-sampling idea needs — see `PERFORMANCE.md` §7.11.
+doesn't explicitly pin ring, which is exactly the precondition the `--ring-stride`
+sparse-sampling option needs — see `PERFORMANCE.md` §7.11.
+
+### Sparse ring sampling for the rightmost wheel — `--ring-stride`
+
+Unlike wheel 0, the rightmost wheel (`walzenlage[2]`) has a real notch that gates further
+stepping, so a ring+start shift there is only an *approximation* — small and smoothly
+growing with the shift, not an unconditional equivalence (`PERFORMANCE.md` §7.10's
+mismatch table). `--ring-stride K` (K=1..13, default 1 = off) exploits this: the coarse
+search tests only ring2 ∈ {0, K, 2K, ...} (`build_key_space()` shrinks `rc[2]`;
+`search_worker()`/`key_to_machine()` scale the decoded index back up by `K`), then
+`bruteforce()` runs one small refinement pass — reusing `search_worker` on a
+self-contained mini key-space — over the ring2 values the coarse pass skipped around the
+best hit, keeping the improvement only if it beats the coarse result. Requires both `-r`
+and `-g` to wildcard the rightmost wheel's position (else every ring2 value is distinct
+and necessary, same precondition as the leftmost wheel's exact collapse above); rejected
+together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / restarts_par,
+...)` reconstruction shares `--polish`'s dependency on the "simple sweep" `best.idx`
+encoding).
+
+**The refinement must re-open ring1/start1, not pin them to the coarse winner** — the one
+place the initial design (and the measurement harness, which independently
+re-optimizes ring1/start1 per candidate ring2) got it wrong. The coarse winner's
+ring1/start1 are only optimal for *its own* possibly-corrupted ring2 row; a nearby ring2
+— including the true one — can need a different ring1/start1 entirely. Confirmed by a
+concrete miss during implementation testing: a manually-constructed key whose true ring2
+fell inside the refinement window still failed to recover, because a completely
+different (also-approximated) ring1 had outscored the truth's row in the coarse pass.
+The refinement now re-opens ring1/start1 to the *original* search's bounds (`range.r_min/
+max[1]`, `range.g_min/max[1]` — this collapses back to a pin automatically if the caller
+had explicitly pinned ring1 rather than wildcarding it), matching the measurement
+harness's actual per-candidate re-search rather than the cheaper "just check `K`
+neighbours" reading of the total-cost accounting. Full measurement, the K=2..13 sweep,
+and this implementation gotcha: `PERFORMANCE.md` §7.11.
 
 ### Performance notes
 

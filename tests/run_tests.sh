@@ -957,6 +957,30 @@ for lang in $crack_langs; do
   done
 done
 
+# --ring-stride: sparse ring sampling for the rightmost wheel (PERFORMANCE.md §7.11).
+# Needs both -r and -g to wildcard ring2/start2; ring0 auto-collapses (§7.10), and the
+# default ring "AA." pins ring0/ring1 to A -- exactly the tool's bare-default keyspace
+# (26 ring2 x 26^3 starts), kept small so this stays fast under the sanitizers too.
+rs_pt="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGANDTHENRANAWAYINTOTHEDARKFORESTNEARTHERIVERWHERETHEWATERWASCOLD"
+rs_ct=$(run "$rs_pt" -i -u B -w 123 -r AAZ -g XKP)
+for K in 2 3 5; do
+  check "crack: --ring-stride $K recovers exact key" \
+    "$(run "$rs_ct" -q -l english -u B -w 123 --ring-stride "$K" -T 1)" \
+    "$rs_pt"
+done
+
+# Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
+# with a clear error rather than silently misbehaving.
+rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)
+check "--ring-stride 0 rejected" "$(printf '%s' "$rs_err" | grep -c 'Illegal ring stride')" "1"
+rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 14 2>&1 >/dev/null)
+check "--ring-stride 14 rejected" "$(printf '%s' "$rs_err" | grep -c 'Illegal ring stride')" "1"
+rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r AAZ -g AAA --ring-stride 2 2>&1 >/dev/null)
+check "--ring-stride needs ring2/start2 wildcarded" \
+  "$(printf '%s' "$rs_err" | grep -c 'ring-stride needs')" "1"
+rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -c --ring-stride 2 -F 100 2>&1 >/dev/null)
+check "--ring-stride rejects -F" "$(printf '%s' "$rs_err" | grep -c 'not supported with -F')" "1"
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]

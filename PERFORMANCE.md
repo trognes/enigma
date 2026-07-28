@@ -2806,7 +2806,7 @@ collapse needs, and the precondition §7.11's stride experiment needs, is live i
 tool's **bare default invocation** whenever a caller doesn't explicitly pin ring — not
 just a deliberately-constructed full-wildcard scenario.
 
-### 7.11 Sparse ring sampling for the rightmost wheel — 📊 MEASURED (not yet shipped)
+### 7.11 Sparse ring sampling for the rightmost wheel — ✅ SHIPPED (`--ring-stride`)
 
 The risky half of the same user idea: wheel 2 (rightmost) lacks wheel 0's unconditional
 exactness (§7.10), but its corruption under a ring+start shift is small and grows
@@ -2865,16 +2865,41 @@ not approximate. The one open, untested mitigation that could change this verdic
 recover most of K=5/6's miss rate at a small added cost, keeping more of the coarse-scan
 saving — a concrete, well-motivated next experiment, not yet built or measured.
 
-**Status: measured only, not implemented.** Unlike §7.10 (shipped in `build_key_space()`
-as an unconditional, always-on collapse), this section is a validated but unbuilt
-finding — implementing K=2 would need a real strided-candidate representation in
-`build_key_space()`/`search_worker()` (the current flat mixed-radix decode assumes
-contiguous ranges, so this needs either an explicit candidate list like the M4
-Greek-wheel's `offset_list`, or a post-hoc refinement pass bolted onto a stride-2 coarse
-search), plus a `crackquality`-style validation at the *rotor-key* tier before shipping
-(this section's harness isolates the ring dimension with plugboard/reflector/wheel-order
-given; a real feature needs the full search-with-plugboard-hidden picture measured too).
-Reproduce: `eval/ring_stride_probe.py` (not yet committed — currently a scratch harness).
+**Status: shipped as `--ring-stride K` (K=1..13, default 1 = off).** `build_key_space()`
+shrinks `rc[2]` to `⌈26/K⌉` buckets when `--ring-stride K>1` is given (both `-r`/`-g` must
+wildcard the rightmost wheel's position, enforced by validation — the same precondition
+the measurement above needs); `search_worker()`/`key_to_machine()` scale the decoded
+bucket index back up (`× K`) so the coarse pass actually tests ring2 ∈ {0, K, 2K, ...}.
+After the coarse pass, `bruteforce()` runs one small refinement search (reusing
+`search_worker` on a self-contained, mostly-pinned mini key-space) over the skipped
+ring2 neighbours around the best coarse hit, keeping the improvement only if it beats
+the coarse result.
+
+**One thing the measurement above got wrong, caught only by implementing and testing
+it: the refinement must re-open ring1/start1, not pin them to the coarse winner.** The
+original design (and this section's harness, which independently re-optimizes
+ring1/start1/start2 for *each* candidate ring2) assumed only ring2/start2 needed
+checking near the winner — "ring0/ring1/start0/start1 pinned to the coarse winner
+(unaffected by the approximation)". That is false for ring1/start1: the coarse winner's
+ring1/start1 are only optimal for *its own* (possibly off-by-one, corrupted) ring2 row,
+and a manually-constructed counterexample (a random 98-letter key, K=2) reproduced a
+real miss — the true ring2 fell inside the refinement window but pinning ring1/start1
+to the wrong coarse winner still missed the true key entirely, because a completely
+different (also-corrupted) ring1 had outscored the truth's row in the coarse pass. The
+fix re-opens ring1/start1 to the *original* search's bounds in the refinement (which
+collapses back to a pin automatically if the caller had explicitly pinned ring1, rather
+than wildcarding it) — this costs more than the "check `K` ring2 neighbours" estimate in
+the total-cost accounting above (closer to `K` *full* per-ring2 searches, i.e. the same
+per-candidate cost the coarse pass pays, not a cheap fixed-ring1 lookup), but is what
+actually recovers the true key. Re-verified after the fix: exact recovery on every
+spot-checked key across K=2/3/5/13, `-c`+`--polish` composes correctly (rotor-key
+refinement runs before the plugboard climb/polish), and ring0/start0 stay validly pinned
+(§7.10's collapse holds regardless of ring2, so that half of the original assumption was
+correct). `-F`/`--exhaust` are rejected together with `--ring-stride` (same `best.idx`
+simple-sweep-encoding fragility `--polish` already has). ASan/UBSan clean; 230/230 tests
+pass under g++ and clang++ (`tests/run_tests.sh` now includes a `--ring-stride`
+regression: K=2/3/5 exact recovery plus the four validation-error paths). Reproduce the
+original measurement: `eval/ring_stride_probe.py`.
 
 ---
 
