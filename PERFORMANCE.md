@@ -2336,6 +2336,26 @@ four until that passage-sourcing work is done.
 Reproduce: `./enigma -q -l polish ...` (or any of the five); `bash
 tests/run_tests.sh`.
 
+### 6.19 The wehrmacht tables weren't frequency-sorted (cosmetic, fixed) — ✅ FIXED
+
+**Not a scoring bug** — `ngrams_read()`/`load_counts()` parse `<GRAM> <count>` line by
+line into a table indexed by the gram itself, so row order has zero effect on loaded
+probabilities, scoring, or recovery. Every other bundled table happens to be sorted
+descending by frequency (an inherited property of the Practical Cryptography source
+files), and `eval/build_telegraphic_ngrams.py` broke that convention silently: it
+reweights each prose count (§6.4, §6.17) but wrote rows in `german_<suffix>.txt`'s
+original (pre-reweight) order, so up to **~44%** of `wehrmacht_quadgrams.txt`'s rows
+ended up out of order relative to their own (new) counts — and monograms were sorted
+*alphabetically*, not by frequency, from the start.
+
+**Fix.** `reweight()` now collects `(gram, count)` pairs and sorts by descending count
+before writing; the monogram writer sorts by descending `FIG17` percentage instead of
+alphabetically. Verified byte-for-byte identical *content* (`sort ngrams/wehrmacht_X.txt`
+diffs empty against the pre-fix file) — this is purely a reordering, confirmed 230/230
+tests still pass unchanged.
+
+Reproduce: `python3 eval/build_telegraphic_ngrams.py`.
+
 ---
 
 ## 7. Speed / throughput

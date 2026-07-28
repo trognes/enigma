@@ -77,13 +77,21 @@ def main():
     tele3t = sum(TELE3.values())
     r3 = {g: (c / tele3t) / (pt3[g] / pt3t) for g, c in TELE3.items() if pt3.get(g, 0) > 0}
 
-    # monograms: telegraphic verbatim
+    # monograms: telegraphic verbatim, sorted descending by frequency (matching the
+    # convention every other bundled table follows -- see reweight()'s note below)
     with open(os.path.join(OUT, "%s_monograms.txt" % LANG), "w") as o:
-        for L, pct in sorted(FIG17.items()):
+        for L, pct in sorted(FIG17.items(), key=lambda kv: -kv[1]):
             o.write("%s %d\n" % (L, int(round(pct * 100000))))
 
     def reweight(suffix, order):
+        # Reweighting reorders the counts (that is the whole point -- see the module
+        # docstring), so the output must be re-sorted descending by the NEW count
+        # rather than carrying over german_<suffix>.txt's original (prose-frequency)
+        # order: every other bundled ngrams/*.txt is frequency-sorted, and leaving a
+        # reweighted table in its pre-reweight order silently breaks that convention
+        # (~40% of quadgram rows ended up out of order before this fix).
         pin = os.path.join(PROSE, "german_%s.txt" % suffix)
+        rows = []
         with open(os.path.join(OUT, "%s_%s.txt" % (LANG, suffix)), "w") as o:
             for ln in open(pin):
                 p = ln.split()
@@ -98,7 +106,10 @@ def main():
                 if B and order == 4:
                     w *= r3.get(g[0:3], 1.0) ** B * r3.get(g[1:4], 1.0) ** B
                 w = min(w, W_MAX)   # clip denominator-noise outliers -- see W_MAX above
-                o.write("%s %d\n" % (g, max(1, int(round(c * w)))))
+                rows.append((g, max(1, int(round(c * w)))))
+            rows.sort(key=lambda gc: -gc[1])
+            for g, c in rows:
+                o.write("%s %d\n" % (g, c))
 
     reweight("bigrams", 2)
     reweight("trigrams", 3)
