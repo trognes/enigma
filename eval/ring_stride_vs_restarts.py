@@ -21,15 +21,24 @@ Keyspace: reflector+wheels given, ring "AA." and start "A.." wildcarded -> 26 ri
 generated to match, because wheel 0's ring x start collapses to a pure offset -- §7.10 --
 so leaving it open would only add a redundant 26x factor to both arms.)
 
-Cells are chosen to sit off both floor and ceiling, where the comparison is sensitive:
-L=100 with 5 plugs (~33% recovery) and L=150 with 10 plugs (~17%). L=60 floors at 0%
-with the plugboard hidden and is useless for discriminating.
+ALWAYS 10 PLUGS -- standard Wehrmacht, and the `make crackquality` default. Fewer plugs
+makes recovery easier and so makes a cell "measurable" sooner, but it is not the regime
+the tool is for, and a trade measured on an unrealistically weak plugboard need not hold
+at 10. When a cell floors at 0% the fix is more restarts or a longer message, never
+fewer plugs.
+
+Cell choice: with the plugboard hidden, L=60 floors at 0% for both arms and discriminates
+nothing; L=130 at -R 12 lands near 33%, off both floor and ceiling, which is where a
+paired comparison has power. Note the corpus caps this -- only 13 authentic blocks reach
+130 letters and 4 reach 190, so pushing length for signal would draw every excerpt from a
+tiny correlated pool. Raising -R is the better lever, though it saturates too: 12 -> 24
+restarts did not move recovery in a spot check.
 
 Paired: both arms see the identical key, plugboard and plaintext, so the difference is
 reported as win/loss counts as well as rates.
 
 Usage: python3 eval/ring_stride_vs_restarts.py
-Env: TRIALS (80), SEED (0), THREADS (4), RBASE (4), CELLS ("100:5 150:10")
+Env: TRIALS (100), SEED (0), THREADS (4), RBASE (12), CELLS ("130:10")
 """
 import os
 import random
@@ -42,12 +51,12 @@ ROOT = os.path.join(HERE, os.pardir)
 BIN = os.path.join(ROOT, "enigma")
 ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-TRIALS = int(os.environ.get("TRIALS", "80"))
+TRIALS = int(os.environ.get("TRIALS", "100"))
 SEED = int(os.environ.get("SEED", "0"))
 THREADS = os.environ.get("THREADS", "4")
-RBASE = int(os.environ.get("RBASE", "4"))
+RBASE = int(os.environ.get("RBASE", "12"))
 CELLS = [tuple(int(x) for x in c.split(":"))
-         for c in os.environ.get("CELLS", "100:5 150:10").split()]
+         for c in os.environ.get("CELLS", "130:10").split()]
 
 COST_RATIO = 1.71          # measured K=1 / K=2 wall-time ratio at equal R
 RSTRIDE = round(RBASE * COST_RATIO)
@@ -103,7 +112,7 @@ def main():
         rng = random.Random(SEED * 1000 + L * 100 + plugs)
         nb = ns = bonly = sonly = 0
         tb = ts = 0.0
-        for _ in range(TRIALS):
+        for i in range(TRIALS):
             res, secs = trial(L, plugs, rng)
             nb += res["base"]
             ns += res["stride"]
@@ -111,6 +120,12 @@ def main():
             sonly += (res["stride"] and not res["base"])
             tb += secs["base"]
             ts += secs["stride"]
+            # running tally to stderr: a cell takes ~an hour, so a status check
+            # mid-run should show something more useful than an empty table
+            if (i + 1) % 10 == 0:
+                print("    [L=%d p=%d] %d/%d  base %d  stride %d  (b-only %d, s-only %d)"
+                      " %.0fs/%.0fs" % (L, plugs, i + 1, TRIALS, nb, ns, bonly, sonly, tb, ts),
+                      file=__import__("sys").stderr, flush=True)
         print("%6d %6d %7d %8.1f%% %8.1f%% %8d %8d %9.1f %9.1f"
               % (L, plugs, TRIALS, 100 * nb / TRIALS, 100 * ns / TRIALS,
                  bonly, sonly, tb, ts))
