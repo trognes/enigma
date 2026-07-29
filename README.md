@@ -151,6 +151,25 @@ brute-forced.
 `start − ring` offset is recoverable, so a full M4 wildcard search
 enumerates the distinct offsets rather than every ring×start pair.
 
+**Reported ring positions may differ from the key you enciphered with.** The
+same identifiability limit applies to the stepping wheels, and the search
+exploits it to skip provably redundant keys:
+
+- **Leftmost wheel** — nothing downstream depends on its window position, so
+  only `start − ring` is recoverable. Its ring is always reported as `A`.
+- **Middle wheel** — shifting its ring and start together changes the decode
+  only if its notch is reached, and in a short message most start positions
+  never reach it. Those settings are indistinguishable from the ciphertext
+  alone, so the search tests one member of each equivalence class and may
+  report that one instead of yours.
+
+In both cases the **decrypted text is byte-identical** — the reported setting
+is simply one of several that produce it. The middle-wheel case is
+length-dependent and disappears for long messages (past roughly 676 letters
+every setting is distinguishable again), and it only arises when both `-r` and
+`-g` wildcard that wheel. If you need the literal key rather than an equivalent
+one, pin the positions you already know.
+
 ### Scoring (which plaintext "looks like a language")
 
 - **`-i`** — Index of coincidence — language-independent, needs no `-l`
@@ -232,6 +251,14 @@ the English tables.
 - **`--no-repair`** — Disable the always-on 2-plug re-pair barrier cross
   (needs `-c`) `[off]`. **Not recommended** — an ablation/measurement
   flag, not a quality lever
+- **`--ring-stride K`** — Test only every `K`th ring position of the
+  rightmost wheel, then refine around the best hit; needs both `-r` and `-g`
+  to wildcard that wheel, and rejects `-F`/`--exhaust` `[1 = off]`.
+  **Not recommended** — measured an accuracy *trade*, not a free saving:
+  on authentic telegraphic German `K=2` costs about 10 percentage points of
+  exact recovery and `K=3` about 17. The saving is smaller than it looks
+  too (≈1.7×, not `K`×), because the refinement grows as fast as the coarse
+  pass shrinks
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters,
   try every combination, keep the best climb (needs `-c`; parallel over
   the first forced pair, so `-T` helps) `[off]`. **Not recommended** — a

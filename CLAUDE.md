@@ -986,7 +986,14 @@ under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`, and clean unde
 ThreadSanitizer. Scaling is ~3× on 4 cores (`make bench SCALE=1`). **M4 (4-rotor
 naval) mode** is now implemented (`-4`; static Greek wheel folded into an
 effective reflector, so the hot path is untouched — see "M4 mode" above and
-`archived/CODE_REVIEW_HISTORY.md` §5). On **cracking quality for short messages** the
+`archived/CODE_REVIEW_HISTORY.md` §5). The **rotor keyspace** has since been cut on
+identifiability grounds — settings that provably decode identically are no longer
+enumerated: wheel 0's ring × start collapses totally and exactly (26×, `PERFORMANCE.md`
+§7.10) and wheel 1's partially and exactly (3–5× at short lengths, §7.12), both always-on
+when the relevant positions are wildcarded; wheel 2 admits no exact collapse and its
+approximate `--ring-stride` was measured down to not-recommended (§7.11). These are
+throughput reductions, not quality levers — the recovery frontier below is unchanged by
+them. On **cracking quality for short messages** the
 `make crackquality` harness shows every miss is a *search* failure (the plugboard
 hill-climb sticking in local optima); the search levers shipped so far are random
 restarts (`-R N`), the staged climb (`-S`), the **key pre-filter** (`-F N`, a
