@@ -221,10 +221,11 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
 > `--polish`, kept because it is the only gain cascade that works with
-> `-F`/`--exhaust`), `--crib-file` (measured-down), `--exhaust`, and `--ring-stride`
-> (measured-down: an accuracy/throughput trade costing ~10pp exact recovery at K=2 on
-> telegraphic German, ~17pp at K=3 — see its entry). Each is tagged
-> **not recommended** in its entry below and in `--help`.
+> `-F`/`--exhaust`), `--crib-file` (measured-down) and `--exhaust`. Each is tagged
+> **not recommended** in its entry below and in `--help`. `--ring-stride` was on this list
+> until its accuracy numbers turned out to be contaminated by a `--polish` guard bug — at
+> `K=2`/`K=3` it costs only ~0.5–2pp of exact recovery for 1.86×/2.61× fewer keys, so it
+> is now **recommended when throughput matters** (K≥5 still is not); see its entry.
 >
 > **Removed options** (dominated or subsumed; the measurements survive in `PERFORMANCE.md`):
 > `-I` (bare first-improvement — `-J` supersedes it; the internal climb path remains, set by
@@ -1083,8 +1084,10 @@ effective reflector, so the hot path is untouched — see "M4 mode" above and
 identifiability grounds — settings that provably decode identically are no longer
 enumerated: wheel 0's ring × start collapses totally and exactly (26×, `PERFORMANCE.md`
 §7.10) and wheel 1's partially and exactly (3–5× at short lengths, §7.12), both always-on
-when the relevant positions are wildcarded; wheel 2 admits no exact collapse and its
-approximate `--ring-stride` was measured down to not-recommended (§7.11). These are
+when the relevant positions are wildcarded; wheel 2 admits no exact collapse, but its
+approximate `--ring-stride` costs only ~0.5–2pp of exact recovery at `K=2`/`K=3` for
+1.86×/2.61× fewer keys, so it is opt-in-and-recommended rather than the trade it was long
+documented as (§7.11 — the earlier ~10–17pp figures were a measurement artefact). These are
 throughput reductions, not quality levers — the recovery frontier below is unchanged by
 them. On **cracking quality for short messages** the
 `make crackquality` harness shows every miss is a *search* failure (the plugboard

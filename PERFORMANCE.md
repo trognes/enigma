@@ -3109,6 +3109,12 @@ instruction there), so the margin could differ — the `Bench` workflow's arm64-
 matrix is the place to check if it ever matters. Given there is no measured upside on
 either x86 compiler, the simpler O(1) decode wins on both counts.
 
+> 🛑 **The two follow-up sections below are SUPERSEDED — both measured a bug, not the
+> stride.** Read "Follow-up: the accuracy cost was a `--polish` guard bug" at the end of
+> §7.11 first. Their tables are left in place because the conclusions drawn from them
+> (K≥3 not recommended; the widening comparison) are traceable to these numbers, but every
+> absolute accuracy figure in them is roughly an order of magnitude too pessimistic.
+
 #### Follow-up: end-to-end exact recovery on telegraphic German — ⚠️ the stride is NOT free
 
 Everything above measures a *proximity* property on English prose. The practical
@@ -3201,13 +3207,71 @@ coarse winner lands well outside `K/2` of the truth. The narrow window returns a
 partially-wrong plaintext; the full sweep matches the K=1 baseline exactly. Verified to
 fail against the pre-widening binary.
 
+#### Follow-up: the accuracy cost was a `--polish` guard bug — ✅ FIXED, tables corrected
+
+**Everything above that measures `--ring-stride`'s accuracy measured a bug.** The
+`--polish` plugboard finisher shares its enclosing `if` with the `--ring-stride`
+refinement — both reconstruct the winning board from `best.idx` once — but only the
+refinement was guarded. The finisher ran whenever *either* was requested, so every strided
+run also got a full plugboard hill-climb plus an **unconditional** gain cascade, **with no
+`-c` requested at all**. Since these measurements deliberately give the true plugboard via
+`-s` and omit `-c` (to isolate the rotor-key question), every strided arm was silently
+handed a finisher the `K=1` baseline never got — which added spurious plugs to the given
+board and corrupted the decrypt.
+
+Concrete reproducer (authentic Wehrmacht, L=60, true key `A145` ring `FFR` start `RTB`,
+10-plug board given): the winner keeps the **correct rotor key** but gains an 11th plug
+`FV`, scores −8.8416 against the true board's −8.8760, and returns a decrypt wrong in five
+places. Guarding the finisher with `opt_polish` (which already requires `-c`) fixes it.
+
+Re-measured on the same harness and seed, 200 paired trials per cell:
+
+| L | K=1 | K=2 | K=3 | K=5 |
+|---:|---:|---:|---:|---:|
+| 40 | 50.0% | 48.0% | **49.0%** | 42.0% |
+| 60 | 74.5% | 74.0% | **74.0%** | 72.5% |
+| keys analysed | 1.00× | 1.86× | **2.61×** | 3.73× |
+
+Stride-specific miss rate: 2% (K=2), 2–4% (K=3), 5–12% (K=5) — against 10–21% before.
+
+**The verdict inverts.** The documented costs were −10pp (K=2) and −17pp (K=3); the real
+ones are −0.5…−2pp and −0.5…−1pp. `--ring-stride` is not the accuracy/throughput trade it
+was marked as: **K=3 buys 2.61× for about 1pp** and is the best operating point, K=2 is a
+close second, and only K≥5 (−2…−8pp) genuinely fails to earn its saving. The "K≥3 is not
+recommended" conclusion, and the reasoning that K=2 was "the only value with any backing",
+were both artefacts.
+
+**Three methodological lessons, all of which cost time here.**
+
+1. **A shared `if` is a shared enable.** Two features were merged into one conditional
+   because they share an expensive prerequisite (`best.idx` reconstruction). Nothing
+   flagged that only one of them re-checked its own flag inside. Where two features share
+   a guard for cost reasons, each still needs its own.
+2. **The aggregate table was self-consistent and pointed the wrong way.** A miss breakdown
+   by key component said the pinned `offset0` was wrong in 54–75% of misses — a coherent
+   story implicating a pin whose justifying comment was genuinely questionable. It was the
+   finisher corrupting the board. What broke it open was dumping *individual failing
+   cases*: the first one had every identifiable key component correct yet a wrong
+   plaintext, which is impossible, and that impossibility was the thread to pull.
+3. **A baseline that skips the buggy path hides the bug and doubles as a control.** `K=1`
+   never enters the refinement block, so it never got the finisher — which is exactly why
+   the stride looked uniformly worse and why nothing else in the suite caught it. When an
+   option's measured cost is suspiciously large and uniform, check whether the option
+   turns on anything besides the thing being measured.
+
+The first regression test written for this **passed against the buggy binary**: on an easy
+board the finisher converges immediately, so a corrupted build is indistinguishable from a
+fixed one. The shipped test uses the reproducer above, pinned to 338 keys, and all three of
+its checks fail pre-fix.
+
 **What this measurement does NOT settle: the matched-compute question.** It compares at
 *fixed work per candidate* (a plain scan, `-s`, no restarts), so it answers "does the
 stride lose accuracy?" (yes) but not "is the saved compute better spent elsewhere?".
 Since restarts are the documented primary quality lever and short-message search is
 compute-bound (§6.15), `K=2 + more -R` versus `K=1 + fewer -R` at equal wall time is
-genuinely open and is the right next experiment. Until that is run, `--ring-stride`
-should be presented as a **throughput/accuracy trade**, not a free reduction.
+genuinely open and is the right next experiment. (Post-fix that question matters less:
+with the real accuracy cost at ~1pp the throughput is close to free either way, so the
+trade is no longer the deciding factor it looked like when this paragraph was written.)
 
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 

@@ -254,11 +254,12 @@ the English tables.
 - **`--ring-stride K`** — Test only every `K`th ring position of the
   rightmost wheel, then refine every skipped position around the best hit;
   needs both `-r` and `-g` to wildcard that wheel, and rejects
-  `-F`/`--exhaust` `[1 = off]`.
-  **Not recommended** — measured an accuracy *trade*, not a free saving: on
-  authentic telegraphic German `K=2` and `K=3` each cost about 10 percentage
-  points of exact recovery, for savings of 1.9× and 2.6× respectively.
-  `K` of 5 or more costs considerably more accuracy and is not recommended
+  `-F`/`--exhaust` `[1 = off]`. **Worth using at `K=2` or `K=3`** when
+  throughput matters: on authentic telegraphic German they analyse 1.9× and
+  2.6× fewer keys while costing only about half a percentage point to two
+  percentage points of exact recovery. `K=3` is the better of the two. `K` of
+  5 or more costs considerably more accuracy and is not recommended. The
+  search is still an *approximation*, so a run says so in its echoed settings
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters,
   try every combination, keep the best climb (needs `-c`; parallel over
   the first forced pair, so `-T` helps) `[off]`. **Not recommended** — a

@@ -4740,12 +4740,13 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "a few % of a low-R run (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--ring-stride K",
           "Sparse ring sampling for the rightmost wheel:");
-  fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine the");
-  fprintf(out, "  %-24s %s\n", "", "skipped neighbours around the best hit (needs -r");
-  fprintf(out, "  %-24s %s\n", "", "and -g to wildcard that wheel; no -F/--exhaust)");
-  fprintf(out, "  %-24s %s\n", "", "[1 = off]. NOT RECOMMENDED: measured an accuracy");
-  fprintf(out, "  %-24s %s\n", "", "trade, not a free saving -- on telegraphic German");
-  fprintf(out, "  %-24s %s\n", "", "K=2 costs ~10pp of exact recovery and K=3 ~17pp");
+  fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine every");
+  fprintf(out, "  %-24s %s\n", "", "skipped one around the best hit (needs -r and -g");
+  fprintf(out, "  %-24s %s\n", "", "to wildcard that wheel; no -F/--exhaust)");
+  fprintf(out, "  %-24s %s\n", "", "[1 = off]. K=2/K=3 analyse 1.9x/2.6x fewer keys");
+  fprintf(out, "  %-24s %s\n", "", "for ~0.5-2pp of exact recovery on telegraphic");
+  fprintf(out, "  %-24s %s\n", "", "German; K=3 is the better pick. K>=5 is not");
+  fprintf(out, "  %-24s %s\n", "", "recommended (2-8pp). Still an APPROXIMATION");
   fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11). K=2 is the only value with");
   fprintf(out, "  %-24s %s\n", "", "any backing; K>=3 is worse for little extra saving");
   fprintf(out, "  %-24s %s\n", "--crib-file F",

@@ -8,19 +8,36 @@ window to EVERY skipped ring2 moved K=3 by +4.5/+7.0pp but moved K=2 by nothing.
 coarse grid is never more than 1 away from the true ring2, so if its misses were window
 failures, widening would have fixed them. It did not -- so something else is being lost.
 
-FIRST RESULT, and it killed the obvious hypothesis. The guess was that the approximation
+FIRST RESULT: the obvious hypothesis is dead. The guess was that the approximation
 corrupts the coarse pass enough that the true WHEEL ORDER / REFLECTOR loses outright,
 which the refinement could never recover since it pins those to the coarse winner -- the
 case for 7.11's one untested mitigation, refining the top-M coarse candidates. Measured
 across 96 stride-specific misses (L=40/60, K=2/3, 200 trials each): the coarse winner had
 the correct reflector+wheel-order in 100% of them. There is nothing for a top-M refinement
-to find, and that idea is now dead rather than untested.
+to find, and that idea is dead rather than untested. (This holds either side of the bug
+below -- the wheels were never what the stride was losing.)
 
-So the loss is inside ring/start, and the script now localises it there instead. The four
-components are reported separately because the refinement treats them differently -- and
-that is the point of the breakdown: offset0 is PINNED to the coarse winner, offset1 is
-re-opened, ring2 is swept, start2 is left open. A component that is wrong while pinned
-implicates the pin; a component that is wrong while searched implicates the score.
+SECOND RESULT: what this probe actually found was a BUG, not a property of the stride.
+The component breakdown said the PINNED offset0 was wrong in 54-75% of misses, a coherent
+story implicating a pin whose justifying comment was independently questionable. It was
+wrong. --polish's plugboard finisher shared an `if` with the --ring-stride refinement
+without re-checking its own flag, so every strided run got a plugboard climb plus gain
+cascade with no -c requested, adding spurious plugs to the -s board (PERFORMANCE.md 7.11,
+"the accuracy cost was a --polish guard bug"). Those offset counts were mostly the
+finisher corrupting the board, not the pin. After the fix the stride-specific miss rate
+drops from 10-21% to 2-4%, so the population this script dissects is now a tenth the size.
+
+The lesson is in HOW it was caught, since the aggregate table was self-consistent and
+pointed the wrong way: dumping individual failing cases. The first one printed had every
+identifiable key component correct yet a wrong plaintext -- impossible under the model --
+and that impossibility was the thread to pull. Prefer examples over rates when a rate
+tells a story you are about to act on.
+
+The four components are still reported separately because the refinement treats them
+differently, which is what makes the breakdown diagnostic: offset0 is PINNED to the coarse
+winner, offset1 is re-opened, ring2 is swept, start2 is left open. A component that is
+wrong while pinned implicates the pin; a component that is wrong while searched implicates
+the score.
 
 Method mirrors eval/ring_stride_wehrmacht_probe.py exactly (same corpus, key generation,
 scoring model and -s plugboard-given setup) so the miss populations are comparable; the
