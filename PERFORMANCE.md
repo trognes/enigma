@@ -3102,7 +3102,7 @@ compute-bound (§6.15), `K=2 + more -R` versus `K=1 + fewer -R` at equal wall ti
 genuinely open and is the right next experiment. Until that is run, `--ring-stride`
 should be presented as a **throughput/accuracy trade**, not a free reduction.
 
-### 7.12 The middle wheel's ring × start is partially redundant — 📊 MEASURED (not shipped)
+### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 
 §7.10 collapses wheel 0's ring × start *totally* (26×, exact) and §7.11 attacks wheel 2's
 only *approximately*. The middle wheel sits between the two and has an **exact, partial**
@@ -3211,6 +3211,32 @@ member per group and covers every group**. Plus recovery parity with/without the
 across wheel orders and L (including L>676, where it must no-op), `-T` 1 vs 4
 determinism, ASan/UBSan, the two-notch (`126`,`168`) and double-step (`132`) cases that
 break the closed form, and composition with `--ring-stride` / `--polish` / `-F`.
+
+**Shipped result.** The load-bearing test passed **8/8** — every ciphertext class contains
+exactly one representative (min = max = 1) across `123`/`132`/`126`/`168`/`145`, both
+start2 values checked, and an L=700 case where it correctly degenerates to 26 reps, i.e.
+a no-op. End to end on an 11.9M-key scan (`-r ... -g ...`, wheels given): **3.28 s →
+1.04 s, 3.17×**, byte-identical output to the previous revision. 252/252 tests pass under
+g++ and clang; ASan/UBSan and clang-tidy clean.
+
+Bench A/B is **neutral, as intended**: `tests/bench.sh` pins the rings, so the collapse
+does not fire there and the only cost is one null-check per key — g++ read −1.4% `search`
+against a +0.4% control, and clang's readings (+2.7%, +1.0%, +0.1%) sat inside its *own*
+control spread of −2.2%…+0.4%. That neutrality is the point: no regression for searches
+that cannot benefit. It also re-calibrated the noise floor — the ±0.5% `search` figure in
+§7.11 is **g++-specific**; clang's is ~±2% on the same box.
+
+Two implementation details the scope did not anticipate. `filter_worker` (the `-F` tier-1
+ranker) is a **second enumerator**, so `key_to_machine()` now returns false for a
+collapsed key and both paths skip consistently (tier 2 gets a guard that cannot currently
+fire but stops a future shortlist change silently scoring a duplicate). And `--true-key`
+ranks a specific key against the whole tier-1 keyspace, where a collapsed key would simply
+be absent and never get a rank — so the collapse is **disabled** when that diagnostic is
+set, keeping its semantics exact rather than approximating them.
+
+The skip is also latched in a per-key flag rather than a bare `continue`: `cur_key` has
+already advanced at that point, so continuing directly would let the key's remaining
+restarts score against a stale machine.
 
 **Scope of the win.** It applies whenever ring1 *and* start1 are both wildcarded — so not
 under the default `-r AA.` (ring1 pinned), but yes under `-r A..` / `-r ...`. Unlike

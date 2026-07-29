@@ -81,7 +81,11 @@ refactor to confirm single-thread throughput hasn't regressed.
 > **Measure the noise floor before believing any A/B number.** Check the base revision
 > out into the working tree and run `make bench BASE=<that same ref>`; every non-zero
 > number is then pure measurement noise. The floors are **per-tier and differ by an
-> order of magnitude** — measured here as **`search` ±0.5%** but **`hillclimb` ±4.5%**.
+> order of magnitude** — measured here as **`search` ±0.5%** but **`hillclimb` ±4.5%**
+> — and they are also **per-compiler**: the ±0.5% `search` figure is g++, while clang's
+> own base-vs-base control swung −2.2%…+0.4% across three runs on the same box, so a
+> clang `search` move under ~2% says nothing. Run the control on the compiler you are
+> judging, not just on one of them.
 > That gap decides real cases: on one set of runs a `search` +5% was a genuine
 > regression (a hot-path struct grown from 48 to 156 bytes) while simultaneous
 > `hillclimb` scatter of +4.5%/−1.3%/+5.1% was nothing at all. Both readings you would
@@ -686,6 +690,50 @@ default to `A`, ring2 (rightmost) and every start default to wildcarded. So "rin
 start2 both wildcarded" is live in the tool's bare default invocation whenever a caller
 doesn't explicitly pin ring, which is exactly the precondition the `--ring-stride`
 sparse-sampling option needs — see `PERFORMANCE.md` §7.11.
+
+### Middle wheel's ring × start is partially redundant — always-on collapse
+
+The three stepping wheels each behave differently, and the tool now exploits all three:
+
+| wheel | ring × start collapse | factor |
+|---|---|---|
+| 0 (left) | total, unconditional, exact | 26× |
+| 1 (middle) | **partial, exact** — this section | **3–5× at short lengths** |
+| 2 (right) | none exact; only `--ring-stride`'s approximation | ~1.7×, lossy |
+
+Shifting `ring1` and `start1` together leaves `mod26(g1-r1)` — the middle wheel's entire
+contribution to the substitution — invariant, so two such pairs can differ *only* through
+`notch[w1][g1]`, the middle notch that gates the left wheel and the double step. The
+middle wheel steps only ~once per 26 characters, so in a short message it visits ~L/26
+positions: most `start1` values never reach the notch at all and every one of those
+decodes byte-identically. Measured **182 distinct of 676** at L=140, 130 at L=100.
+
+Exploited by **skipping** keys whose `start1` is not its class's canonical member — no
+reparameterisation, because for a representative `start1`, `ring1` ranging over all 26
+already yields every offset. `g_mid_rep_mask` holds a 26-bit mask per (middle rotor, right
+rotor, start2); it is indexed by the *rotor pair*, not the task, since the reflector, the
+left rotor and every ring setting are irrelevant to stepping. Built in `build_key_space()`
+via `mid_first_fire()`, gated on ring1 **and** start1 both being fully wildcarded (with
+ring1 pinned, each start1 carries a distinct offset, so dropping any would lose real keys)
+— hence it is inert under the default `-r AA.` and active under `-r A..` / `-r ...`.
+
+**Do not derive the class count from a formula.** `⌈L/26⌉+1` fits only the single-notch
+case: a two-notch *right* rotor (VI–VIII) steps the middle twice per revolution giving
+`⌈L/13⌉+1`, double-step extras add one for some wheel orders, and the count also varies
+with `start2`. The masks come from simulating the stepping and deduping on the
+first-firing index — exact for every combination. The failure mode of getting this wrong
+is **silent key loss**, which is why `tests/run_tests.sh` covers `126`/`168` (two-notch
+right) and `132` (double-step) specifically.
+
+**The reported ring1/start1 may be a class representative, not the true key.** Class
+members are indistinguishable from ciphertext alone, so `showconfig` can print a different
+ring1/start1 while the plaintext is byte-identical — the same contract already documented
+for wheel 0 ("reported ring position for wheel 0 is therefore always `A`") and the M4
+Greek wheel. It is length-dependent: past L≈676 every class is a singleton and the true
+key is reported exactly. `--true-key` disables the collapse, since that diagnostic ranks a
+specific key and a collapsed one would simply be absent.
+
+Full derivation, measurements and the shipped results: `PERFORMANCE.md` §7.12.
 
 ### Sparse ring sampling for the rightmost wheel — `--ring-stride`
 
