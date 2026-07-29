@@ -4273,6 +4273,17 @@ void bruteforce(char * result)
              the merge below still compares against best.score. */
           rbest.shown.store(best.shown.load(std::memory_order_relaxed),
                             std::memory_order_relaxed);
+          /* The header was already printed by the coarse pass; a fresh best_result would
+             otherwise re-emit it mid-run. */
+          rbest.header_shown = true;
+          /* Point the climb's accepted-move echo at rbest too. report_climb_progress()
+             reads the g_progress global, which still addresses the OUTER best -- so the
+             climb echo and this search's merge would gate on two independent `shown`
+             fields, and a single improvement would print TWICE (once from each, the
+             second dragging the header with it). One gate, one line. Safe to swap here:
+             no workers are running at this point, and it is restored below. */
+          best_result * save_progress = g_progress;
+          g_progress = &rbest;
           std::atomic<size_t> rnext_key{0};
           int rnthreads = opt_threads;
           if (rwork < static_cast<size_t>(rnthreads))
@@ -4285,6 +4296,14 @@ void bruteforce(char * result)
           run_parallel(rnthreads, [&](int t)
             { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
                             rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+
+          g_progress = save_progress;
+          /* Carry the refinement's display high-water mark back, so the merge echo below
+             does not reprint a line rbest already showed during the search. */
+          if (rbest.shown.load(std::memory_order_relaxed)
+              > best.shown.load(std::memory_order_relaxed))
+            best.shown.store(rbest.shown.load(std::memory_order_relaxed),
+                             std::memory_order_relaxed);
 
           if (rbest.found && (rbest.score > best.score))
             {

@@ -1017,6 +1017,18 @@ check "crack: Norway + --ring-stride 2 matches the unstrided search" \
   "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." --ring-stride 2 -T 1)" \
   "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." -T 1)"
 
+# The refinement runs its own search with a private best_result, which used to restart the
+# progress display: a second column header mid-run, and each improvement echoed TWICE --
+# once by the climb (report_climb_progress, gated on the OUTER best via g_progress) and
+# once by that search's merge (gated on rbest). One shared gate now, so: exactly one
+# header, and no progress line repeated verbatim.
+rs_disp=$(printf '%s' "$nw_ct" | "$ENIGMA" -n -c -f -l danish -u N -w 352 -r "L.." -g "O.." \
+          --ring-stride 2 -T 2 2>&1 >/dev/null)
+check "--ring-stride prints exactly one progress header" \
+  "$(printf '%s' "$rs_disp" | grep -c 'Score W')" "1"
+check "--ring-stride repeats no progress line" \
+  "$(printf '%s' "$rs_disp" | grep -E '^ *-?[0-9]+\.' | sort | uniq -d | wc -l | tr -d ' ')" "0"
+
 # --ring-stride makes the search APPROXIMATE, so a run must say so in the echoed settings:
 # without this, a saved log is indistinguishable from an exhaustive run. It must stay
 # silent when the option is off, so the default output is unchanged.
