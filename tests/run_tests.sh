@@ -1001,6 +1001,16 @@ check "--ring-stride needs ring2/start2 wildcarded" \
 rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -c --ring-stride 2 -F 100 2>&1 >/dev/null)
 check "--ring-stride rejects -F" "$(printf '%s' "$rs_err" | grep -c 'not supported with -F')" "1"
 
+# --ring-stride makes the search APPROXIMATE, so a run must say so in the echoed settings:
+# without this, a saved log is indistinguishable from an exhaustive run. It must stay
+# silent when the option is off, so the default output is unchanged.
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." --ring-stride 2 -T 1 2>&1 >/dev/null)
+check "--ring-stride is echoed in the settings" \
+  "$(printf '%s' "$rs_echo" | grep -c '^Stride: .*ring-stride')" "1"
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -T 1 2>&1 >/dev/null)
+check "no stride line when --ring-stride is off" \
+  "$(printf '%s' "$rs_echo" | grep -c '^Stride:')" "0"
+
 # Middle-wheel ring x start collapse (PERFORMANCE.md §7.12). Shifting ring1 and start1
 # together only changes the decode through the middle notch, which most start1 values
 # never reach in a short message -- so those start1 values are skipped as duplicates.

@@ -4730,6 +4730,16 @@ void show_settings()
   else if (opt_prefilter > 0)
     fprintf(stderr, "Pre-filter: top %d keys\n", opt_prefilter);
 
+  /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
+     ~10pp of exact recovery at K=2 on telegraphic German, PERFORMANCE.md §7.11), so a
+     run that used it must say so: otherwise a saved log is indistinguishable from an
+     exhaustive one. Every other search-affecting option is echoed here; this was the
+     only silent one. */
+  if (opt_ring_stride > 1)
+    fprintf(stderr, "Stride:     rightmost ring every %d, then refine around the best "
+            "hit (--ring-stride: APPROXIMATE, may miss the true key)\n",
+            opt_ring_stride);
+
   fprintf(stderr, "Threads:    %d\n", opt_threads);
 
   /* Split over two lines so it stays within 79 columns (M4 in particular is wide, and
