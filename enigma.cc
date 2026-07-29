@@ -4262,6 +4262,17 @@ void bruteforce(char * result)
           extra_keys_analysed = rrsize * rgsize;
 
           best_result rbest;
+          /* Carry the display high-water mark into the refinement. Its best_result is a
+             fresh one (so its mini-range-relative idx cannot leak into the outer best),
+             which would otherwise restart the progress ladder from score_min and echo a
+             full run of lines that do NOT beat what the coarse pass already found --
+             ending on a line WORSE than the answer actually being returned. Since the
+             last progress line is exactly what a reader takes for the result, that reads
+             as the tool regressing. Seeding from best.shown means the refinement speaks
+             only when it genuinely improves on what was already displayed. Display-only:
+             the merge below still compares against best.score. */
+          rbest.shown.store(best.shown.load(std::memory_order_relaxed),
+                            std::memory_order_relaxed);
           std::atomic<size_t> rnext_key{0};
           int rnthreads = opt_threads;
           if (rwork < static_cast<size_t>(rnthreads))
