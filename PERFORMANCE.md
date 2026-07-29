@@ -2956,12 +2956,8 @@ the winner's own values), so re-running it can only reproduce the same score. Dr
 it saves one candidate at every stride. (Deliberate caveat: under `-c` the per-restart
 RNG seeds differ between the two searches, so a retest *could* stumble on a better
 plugboard — but that is extra plugboard restarts smuggled into a rotor-key refinement,
-and `-R` is the documented lever for that, so the duplicate goes.) Note the exclusion
-can split the window into **three** contiguous segments (centre=1, half=2 → {25}, {0},
-{2,3}) where the wrap alone gave at most two; the construction is therefore
-collect-into-a-`bool[26]`-then-coalesce (the same idiom `build_key_space()` already uses
-for the M4 Greek wheel's `offset_list`), verified exhaustively over all 26 centres × every
-valid K. Distinct ring2 values actually tested:
+and `-R` is the documented lever for that, so the duplicate goes.) Distinct ring2 values
+actually tested:
 
 | K | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -2972,6 +2968,26 @@ valid K. Distinct ring2 values actually tested:
 The saving is far more modest than "test every Kth ring" suggests — the refinement
 window grows with K exactly as fast as the coarse pass shrinks, so the total bottoms out
 around ~10 (K=5/7) versus 26, i.e. **≈2.6× at absolute best**, and K=2 buys only 1.7×.
+
+**Representation: ring2 is an explicit value list, not an interval.** `search_range`
+carries `r2_vals[26]`/`r2_n`, filled by `set_ring2()` from a 26-bit mask, with `rc[2]`
+its length; the decode is `r3 = range.r2_vals[rr % rc[2]]`. ring2 is the only ring
+position that can be non-contiguous (the strided coarse set; the refinement's wrapped,
+centre-punctured window), so an interval genuinely cannot express it — the earlier
+implementation instead split the refinement into up to **three** contiguous sub-searches
+(the excluded centre can cut a wrapped window into three pieces: centre=1, half=2 →
+{25}, {0}, {2,3}). With a value list the coarse set, the wrap and the exclusion are
+merely different masks, the refinement collapses to **one** search, and — the real prize
+— the decode stops consulting a global, so the `save_stride`/`opt_ring_stride = 1`
+save/restore that had to bracket the nested refinement is **deleted**. Mutating that
+global around a nested search was the direct cause of the first corruption bug in this
+feature (the `AK\` out-of-range ring), so this removes the bug class rather than the
+instance. `opt_ring_stride` now appears only in `build_key_space()` (building the mask),
+the `> 1` guards and option parsing — never in a decode. The mask-then-expand idiom
+matches `build_key_space()`'s existing `seen[]`→`offset_list` handling of the M4 Greek
+wheel. Verified **byte-identical** to the previous implementation across 200 comparisons
+(40 random keys × K=1/2/3/5/13); K=1 reproduces the full contiguous list, i.e. the
+unstrided search exactly.
 
 #### Follow-up: end-to-end exact recovery on telegraphic German — ⚠️ the stride is NOT free
 

@@ -728,19 +728,33 @@ Full writeup: `PERFORMANCE.md` §7.11.
 **The refinement skips the coarse winner itself** — phase 1 already scored that exact
 ring2 over a *superset* of what phase 2 searches there (phase 2 additionally pins
 ring0/start0 to the winner's values), so retesting it can only reproduce the same score.
-Excluding it can split the window into **three** segments (centre=1, half=2 → {25}, {0},
-{2,3}) where the wrap alone gave at most two, so the segment construction is
-collect-into-a-`bool[26]`-then-coalesce — the same idiom `build_key_space()` already uses
-for the M4 Greek wheel's `offset_list` — rather than modular case analysis.
 
-> **Known cleanup, not yet done.** Carrying an explicit ring2 *value list* in
-> `search_range` (decode `r3 = r2_vals[idx]` instead of `r_min[2] + idx*opt_ring_stride`)
-> would express the coarse set, the wrap, and the excluded centre as one uniform
-> mechanism, collapse the ≤3 segment searches back to one, and — most importantly —
-> delete the `save_stride`/`opt_ring_stride = 1` save/restore around the refinement,
-> which exists only because the decode consults a global and was the direct cause of the
-> first corruption bug here. It is a hot-path touch, so it needs `make bench BASE=<ref>`
-> under **both** g++ and clang before shipping.
+**ring2 is carried as an explicit value list, not a range.** `search_range` holds
+`r2_vals[26]`/`r2_n` (filled by `set_ring2()` from a 26-bit mask, bit *v* = "test ring2
+*v*"), and `rc[2]` is just its length. It is the one ring position that can be a
+*non-contiguous* set — `--ring-stride`'s coarse pass samples `{0, K, 2K, …}` and its
+refinement tests a wrapped window minus the coarse winner — so a plain `[min,max]`
+interval cannot express it. `r_min[2]`/`r_max[2]` still describe the caller's requested
+*bounds* (`build_key_space()` derives the list from them by stepping `opt_ring_stride`);
+every decode site reads the list, never the bounds:
+
+```c
+r3 = range.r2_vals[rr % rc[2]];      // was: range.r_min[2] + (rr % rc[2]) * opt_ring_stride
+```
+
+This is what makes the sparse set uniform rather than special-cased. Three things fall
+out of it: the coarse set, the boundary wrap, and the excluded centre are all *just
+different masks*; the refinement is **one** search rather than up to three (the excluded
+centre can split the window into three contiguous pieces — centre=1, half=2 → {25}, {0},
+{2,3} — which a value list absorbs at no cost); and the decode no longer consults a
+global, so the `save_stride`/`opt_ring_stride = 1` save/restore around the nested
+refinement is **gone**. That save/restore was the direct cause of the first corruption
+bug here, so this removes the bug class, not just the instance. `opt_ring_stride` now
+survives only in `build_key_space()` (building the mask), the `> 1` guards, and option
+parsing — never in a decode. Verified byte-identical to the previous implementation
+across 200 comparisons (40 random keys × K=1/2/3/5/13). K=1 yields the full contiguous
+list, i.e. the unstrided search exactly. The mask-then-expand idiom mirrors
+`build_key_space()`'s existing `seen[]`→`offset_list` handling of the M4 Greek wheel.
 
 ### Performance notes
 
