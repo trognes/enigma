@@ -3157,21 +3157,73 @@ Verified against the binary: the partition predicted by first-firing index match
 actual distinct-ciphertext partition **exactly in 7/7 configurations**, including the
 two-notch (`126`, `168`) and double-step (`132`) cases where the closed form fails.
 
-**Why this is harder to ship than §7.11's value list.** Because C depends on start2, this
-is *not* an independent-dimension reduction: the surviving set is a ragged
-`(start2, start1)` **pair list** (~182 entries at L=140), not a per-dimension list, so the
-flat mixed-radix decode cannot express it as a product. The natural layout is CSR-style —
-concatenate each start2's representative start1 values and index the flat coordinate
-straight into that array, replacing both dimensions with one. It is per wheel-task (w1/w2
-select the notches), so ~56 tasks × ~182 pairs ≈ 20 KB. Per §7.11's own finding that
-growing `search_range` by 108 bytes cost a measured ~5% on the `search` benchmark, the
-list must be heap-allocated and reached by pointer (like `subst_array`), never embedded.
+**Implementation: skip non-representative keys — do NOT restructure the index space.**
+The first instinct here is wrong and worth recording, because it makes the change look
+far bigger than it is. Since C depends on start2, the surviving set *is* a ragged
+`(start2, start1)` pair list, which suggests fusing both dimensions into one CSR-indexed
+coordinate. **That is unnecessary.** The collapse is purely over `start1`: for a
+representative `start1`, letting `ring1` range over all 26 already produces all 26
+offsets. So no reparameterisation is needed — just skip keys whose `start1` is not its
+class's canonical member:
+
+```c
+if (! (mid_rep_mask[wo][g3] & (1u << g2))) continue;   /* g2 = start1, g3 = start2 */
+```
+
+`mid_rep_mask` is a 26-bit mask per (wheel-task, start2) — the same mask idiom §7.11 uses
+for ring2 — about **6 KB** for 56 tasks. Crucially this leaves the `best.idx` encoding
+**unchanged**, so `--polish`, the `--ring-stride` refinement and `-F` keep working; the
+CSR version would break all three. The loop still iterates 676 and bit-tests the 494 it
+skips, but against ~2L≈280 ops of real work per surviving key that is **~5% overhead, so
+~3.5× rather than the ideal 3.71×** — nearly all of the benefit for a fraction of the
+risk. Keep the mask heap-allocated and pointer-reached; per §7.11's measurement, adding
+108 bytes to `search_range` cost ~5% on the `search` benchmark.
+
+**Change inventory** (est. ~2 days including the bench A/B):
+
+| site | hot? | note |
+|---|---|---|
+| `init()` — first-fire table | cold | `(w1,w2,start1,start2)` → first firing index |
+| `build_key_space()` — partition by `min(t,L)`, lowest member canonical | cold | builds the masks |
+| `search_worker()` — one bit-test + `continue` | **HOT** | the only hot-path edit |
+| `key_to_machine()` — same guard | warm | consistency |
+| `total_keys` / progress accounting | cold | analysed count must reflect skips |
+| `--true-key` | cold | must map the given key to its representative, else it is never ranked |
+
+**Preconditions and semantics.** Fires only when `rc[1]==26 && gc[1]==26` (ring1 *and*
+start1 both fully wildcarded) — if ring1 is pinned, skipping start1 values would lose
+offsets. The **reported key becomes a class representative**: `showconfig` may print a
+ring1/start1 differing from the true key while the plaintext is byte-identical, because
+class members are indistinguishable from ciphertext alone. That is the same contract
+already documented for wheel 0 ("reported ring position for wheel 0 is therefore always
+A") and the M4 Greek wheel, and it is length-dependent — once L ≳ 676 every class is a
+singleton and the true key is reported exactly.
+
+**Risks.** (1) Hot-path regression: mandatory `make bench BASE=<ref>` under g++ *and*
+clang against a base-vs-base control, since the `search` tier resolves ~1%. (2) **Silent
+key loss** if the partition is wrong — the same failure class as §7.11's boundary-clamp
+bug, and the reason the load-bearing test below is exhaustive rather than sampled.
+(3) Uneven thread chunks from skipped keys; verify `-T`-determinism explicitly.
+
+**Test plan.** The load-bearing test: for a sample of wheel orders × start2, enumerate all
+676 (ring1,start1) pairs, group by ciphertext, and assert the mask selects **exactly one
+member per group and covers every group**. Plus recovery parity with/without the collapse
+across wheel orders and L (including L>676, where it must no-op), `-T` 1 vs 4
+determinism, ASan/UBSan, the two-notch (`126`,`168`) and double-step (`132`) cases that
+break the closed form, and composition with `--ring-stride` / `--polish` / `-F`.
 
 **Scope of the win.** It applies whenever ring1 *and* start1 are both wildcarded — so not
 under the default `-r AA.` (ring1 pinned), but yes under `-r A..` / `-r ...`. Unlike
 `--ring-stride` it is **lossless**, and it shrinks the *main* search, not just a
 refinement pass. It decays with length (no saving once L ≳ 676, where every start1 reaches
 the notch) — i.e. it is strongest exactly where the tool is weakest.
+
+One caveat on the payoff, in the spirit of §7.11's matched-compute result: a compute
+saving is not automatically an accuracy gain. Short-message recovery is compute-bound
+(§6.15), so 3.5× should convert into real recovery via more `-R` — but that conversion is
+**unmeasured**, and the one matched-compute cell run for `--ring-stride` (L=100, 80 paired
+trials) came back a dead tie, 48.8% vs 48.8%. Measure the conversion before claiming a
+recovery improvement.
 
 ---
 
