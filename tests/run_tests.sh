@@ -1001,6 +1001,47 @@ check "--ring-stride needs ring2/start2 wildcarded" \
 rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -c --ring-stride 2 -F 100 2>&1 >/dev/null)
 check "--ring-stride rejects -F" "$(printf '%s' "$rs_err" | grep -c 'not supported with -F')" "1"
 
+# Middle-wheel ring x start collapse (PERFORMANCE.md §7.12). Shifting ring1 and start1
+# together only changes the decode through the middle notch, which most start1 values
+# never reach in a short message -- so those start1 values are skipped as duplicates.
+# The risk being guarded is SILENT KEY LOSS: a wrong partition drops the true key from
+# the search with no error, so every case below must still recover exactly.
+#
+# The rotor choices are deliberate: 126/168 put a TWO-NOTCH rotor (VI, notches MZ) on the
+# right, doubling the middle's step rate, and 132 exercises the double-step extras --
+# both are cases where a closed-form class count is wrong, so they are exactly where a
+# formula-based implementation would silently lose keys.
+mw_pt="ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEINSZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAUMX"
+for mw in "123 AQL ADT" "132 AZC AKP" "126 AMM AJY" "168 ABX AWD" "145 AKK ARR"; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $mw
+  mw_ct=$(run "$mw_pt" -i -u B -w "$1" -r "$2" -g "$3")
+  # ring1 wildcarded (-r A..) -> the collapse is active here
+  check "crack: middle-wheel collapse recovers exactly (w$1, ring1 wildcarded)" \
+    "$(run "$mw_ct" -f -l wehrmacht -u B -w "$1" -r "A.." -g "A.." -T 1)" \
+    "$mw_pt"
+  # ring1 PINNED (to its true value) -> collapse must not fire; recovery unaffected
+  mw_r1=$(printf '%s' "$2" | cut -c2)
+  check "crack: middle-wheel collapse inert when ring1 pinned (w$1)" \
+    "$(run "$mw_ct" -f -l wehrmacht -u B -w "$1" -r "A$mw_r1." -g "A.." -T 1)" \
+    "$mw_pt"
+done
+
+# -T-independence with the collapse active: skipped keys make the per-thread chunks
+# uneven, so this guards the work split as much as the collapse itself.
+mw_ct=$(run "$mw_pt" -i -u B -w 123 -r AQL -g ADT)
+check "middle-wheel collapse is -T-independent" \
+  "$(run "$mw_ct" -f -l wehrmacht -u B -w 123 -r "A.." -g "A.." -T 1)" \
+  "$(run "$mw_ct" -f -l wehrmacht -u B -w 123 -r "A.." -g "A.." -T 4)"
+
+# The "Analysed N" line must count keys actually scored, not the index-space size --
+# it previously claimed credit for keys the collapse never touched. N must equal the
+# plugboards scored on a plain scan (one score per surviving key).
+mw_diag=$(printf '%s' "$mw_ct" | "$ENIGMA" -f -l wehrmacht -u B -w 123 -r "A.." -g "A.." -T 1 2>&1 >/dev/null \
+          | grep -oE 'Analysed [0-9]+ rotor combinations, scored [0-9]+ plugboards')
+check "middle-wheel collapse: analysed count matches keys scored" \
+  "$(printf '%s' "$mw_diag" | awk '{print ($2 == $6)}')" "1"
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
