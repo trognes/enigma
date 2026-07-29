@@ -4151,8 +4151,10 @@ void bruteforce(char * result)
       m.report = false;
 
       /* --ring-stride refinement (PERFORMANCE.md §7.11): the coarse search only tested
-         ring2 in {0, K, 2K, ...}; check the K-1 neighbours it skipped around the best
-         hit. ring0/start0 stay pinned to the coarse winner -- that pin is exact and
+         ring2 in {0, K, 2K, ...}; re-check the ring2 values it skipped around the best
+         hit -- ALL of them by default, since a refinement ring2 value is orders of
+         magnitude cheaper than a coarse one (see the window-width note below).
+         ring0/start0 stay pinned to the coarse winner -- that pin is exact and
          ring2-independent (§7.10's unconditional offset collapse holds regardless of
          what ring2 is). ring1/start1 must NOT be pinned to the coarse winner: the coarse
          winner's ring1/start1 were only optimal for ITS (possibly off-by-one, corrupted)
@@ -4178,7 +4180,39 @@ void bruteforce(char * result)
          best.idx, which nothing reads again after this point. */
       if (opt_ring_stride > 1)
         {
+          /* How WIDE a window? Not K/2. That was the original reading of the |K/2|
+             proximity metric, and it leaves the whole feature resting on the coarse
+             winner landing within K/2 of the truth -- exactly the assumption the
+             measured stride-specific miss rate (11-14% at K=2, a flat 21% at K=3;
+             PERFORMANCE.md §7.11) says fails. Refining ALL 26 ring2 values instead
+             drops the assumption entirely: whatever ring2 wins the coarse pass, every
+             ring2 is then tested exactly, under the winner's wheel order / reflector /
+             ring0 / start0.
+
+             That is nearly free, because a ring2 value costs the REFINEMENT far less
+             than the same value cost the coarse pass. The refinement runs ONE task with
+             ring0/start0 pinned, so per ring2 value it is tasks.size() * rc[0] * gc[0]
+             times cheaper -- 26x on a single-wheel-order key with start0 open, ~26000x
+             with the wheels wildcarded. (§7.11's original "15 values for K=2 vs 26, so
+             1.7x not Kx" accounting priced refinement values at coarse-pass cost and so
+             understated the saving badly.) At that true price, widening K=2 from a
+             1-value window to all 25 costs ~7% of the coarse pass on a single-task
+             keyspace, and vanishingly little on a wide one.
+
+             The one case where it is NOT free is a keyspace narrow enough that the
+             coarse pass is itself tiny -- a single task AND start0 pinned -- where 25
+             refinement values can outcost the entire coarse pass, turning a throughput
+             option into a slowdown. So the window GROWS as far as a budget allows,
+             floored at the historical K/2 (never narrower than before) and capped at
+             13, which already yields all 25 non-centre values. */
           int half = opt_ring_stride / 2;
+          {
+            size_t per_val = static_cast<size_t>(rc[1]) * gc[1] * asize;
+            size_t budget = scored_keys / 4;
+            while ((half < asize / 2)
+                   && (static_cast<size_t>(2 * (half + 1)) * per_val <= budget))
+              half++;
+          }
           int center2 = m.ringstellung[2];
 
           /* Snapshot everything each segment pins (ring0/start0/wheel order/
@@ -4784,8 +4818,8 @@ void show_settings()
      exhaustive one. Every other search-affecting option is echoed here; this was the
      only silent one. */
   if (opt_ring_stride > 1)
-    fprintf(stderr, "Stride:     rightmost ring every %d, then refine around the best "
-            "hit (--ring-stride: APPROXIMATE, may miss the true key)\n",
+    fprintf(stderr, "Stride:     rightmost ring every %d, then refine the skipped rings "
+            "around the best hit (--ring-stride: APPROXIMATE, may miss the true key)\n",
             opt_ring_stride);
 
   fprintf(stderr, "Threads:    %d\n", opt_threads);
