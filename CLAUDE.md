@@ -744,8 +744,21 @@ mismatch table). `--ring-stride K` (K=1..13, default 1 = off) exploits this: the
 search tests only ring2 ∈ {0, K, 2K, ...} (`build_key_space()` shrinks `rc[2]`;
 `search_worker()`/`key_to_machine()` scale the decoded index back up by `K`), then
 `bruteforce()` runs one small refinement pass — reusing `search_worker` on a
-self-contained mini key-space — over the ring2 values the coarse pass skipped around the
-best hit, keeping the improvement only if it beats the coarse result. Requires both `-r`
+self-contained mini key-space — over the ring2 values the coarse pass skipped, keeping
+the improvement only if it beats the coarse result.
+
+**The refinement covers *every* skipped ring2, not a `±⌊K/2⌋` window around the coarse
+winner.** It runs **once**, at the end of the whole search (next to `--polish`, before
+it), over a *single pinned* wheel order/reflector with ring0/start0 fixed — so a ring2
+value costs it `tasks.size() × rc[0] × gc[0]` times less than the same value cost the
+coarse pass: 26× on a single-wheel-order key with start0 open, ~26 000× with the wheels
+wildcarded. §7.11's original `26/K + K` accounting priced refinement values at
+coarse-pass cost and so concluded "≈2.5× at best"; at the true price the extra is a
+**constant** (25 values on one task, independent of `K`) and the saving approaches `K`×.
+The window is nonetheless grown under a budget (25% of the coarse pass) and floored at
+the historical `⌊K/2⌋`, because on a keyspace narrow enough that the coarse pass is
+itself tiny — a *single* task **and** start0 pinned — 25 refinement values can outcost
+the entire coarse pass and turn a throughput option into a slowdown. Requires both `-r`
 and `-g` to wildcard the rightmost wheel's position (else every ring2 value is distinct
 and necessary, same precondition as the leftmost wheel's exact collapse above); rejected
 together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / restarts_par,

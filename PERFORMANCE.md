@@ -2852,6 +2852,14 @@ recoverable radius) ≈ `K`. Total ≈ `26/K + K`, minimized at `K ≈ √26 ≈
 reading of "K=13 only tests 2 candidates" would suggest, because the refinement radius
 (and cost) scales with K right along with the coarse-scan saving.
 
+> ⚠️ **This accounting is wrong and was superseded — see "Follow-up: the refinement is
+> ~26× cheaper per ring2 value, so refine ALL of them" below.** It prices a *refinement*
+> ring2 value at the same cost as a *coarse* one. They are nothing alike: the refinement
+> is a single pass over ONE pinned wheel order/reflector with ring0/start0 fixed, so per
+> ring2 value it is `tasks.size() · rc[0] · gc[0]` times cheaper. The corrected total is
+> ≈ `26/K + 25/(tasks·rc[0]·gc[0])`, i.e. essentially `26/K` — the saving approaches
+> `K`×, and the refinement radius is no longer a reason to keep K small.
+
 > ⚠️ **The verdict in the next paragraph was later measured to be over-optimistic — see
 > "Follow-up: end-to-end exact recovery on telegraphic German" below.** "Recoverable"
 > here is a *proximity* property (does the winning candidate land within `⌊K/2⌋` of the
