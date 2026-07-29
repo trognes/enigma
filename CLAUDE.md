@@ -752,6 +752,17 @@ together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / rest
 ...)` reconstruction shares `--polish`'s dependency on the "simple sweep" `best.idx`
 encoding).
 
+> **`wheel_task` holds RAW wheel/reflector numbers — never rebuild one from a `machine`.**
+> `init_walzen()` *translates* on the way in: under `-n` it adds `norway_rotor_base` /
+> `norway_reflector_index`, so `m.walzenlage[]`/`m.ukw` are already-translated values.
+> Constructing a `wheel_task` from them hands `search_worker()` values it translates a
+> **second** time. That is exactly how the `--ring-stride` refinement came to search the
+> wrong rotors under `-n`, and once the §7.12 collapse landed (mask keyed on raw index)
+> the doubled values hit an unbuilt row and skipped every key, so the refinement silently
+> found nothing. Pass `tasks[cur_wo]` through verbatim instead. **It is invisible in
+> standard and M4 mode**, where raw == translated — so anything touching `wheel_task`
+> needs a Norway test, or the whole suite will pass over a broken feature (it did).
+
 **The refinement must re-open ring1/start1, not pin them to the coarse winner** — the one
 place the initial design (and the measurement harness, which independently
 re-optimizes ring1/start1 per candidate ring2) got it wrong. The coarse winner's
