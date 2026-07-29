@@ -115,18 +115,20 @@ def trial(L, rng):
 
 
 def sweep(Ls, Ks, n_trials, seed):
-    print("%6s %4s %8s %10s %14s %14s" % ("L", "K", "n", "exact%", "vs-K1-fail", "K1-floor-fail"))
+    print("%6s %4s %8s %10s %14s" % ("L", "K", "n", "exact%", "vs-K1-fail"))
     for L in Ls:
         rng = random.Random(seed * 1000 + L)   # same seed per L -> paired across K
         rows = [trial(L, rng) for _ in range(n_trials)]
-        k1_fail = sum(1 for row in rows if not row[1])
+        k1_exact = sum(1 for row in rows if row[1])
+        print("%6d %4d %8d %9.1f%% %14s"
+              % (L, 1, n_trials, 100 * k1_exact / n_trials, "n/a(base)"))
         for K in Ks:
             exact = sum(1 for row in rows if row[K])
             # ring-stride-specific miss: K failed but K=1 (no-stride) succeeded
             specific_fail = sum(1 for row in rows if (not row[K]) and row[1])
-            print("%6d %4d %8d %9.1f%% %13d%% %13d%%"
+            print("%6d %4d %8d %9.1f%% %13d%%"
                   % (L, K, n_trials, 100 * exact / n_trials,
-                     round(100 * specific_fail / n_trials), round(100 * k1_fail / n_trials)))
+                     round(100 * specific_fail / n_trials)))
 
 
 if __name__ == "__main__":
