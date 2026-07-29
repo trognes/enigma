@@ -3952,9 +3952,11 @@ void bruteforce(char * result)
          explicitly pinned ring1/start1 rather than wildcarding it), narrowing only ring2
          (to the skipped-neighbour window) and leaving start2 open, mirroring the
          measurement harness's per-candidate re-search (eval/ring_stride_probe.py). The
-         window wraps at the 0/25 ring2 boundary (see the nseg/seg_lo/seg_hi split
-         below) rather than clamping, since ring2 is circular and a clamp would silently
-         drop the wrapped-around neighbour. A small, self-contained search reusing
+         window wraps at the 0/25 ring2 boundary and excludes the coarse winner itself
+         (see the want2/nseg/seg_lo/seg_hi construction below): ring2 is circular, so a
+         clamp would silently drop the wrapped-around neighbour, and the winner's own
+         ring2 was already scored by the coarse pass over a SUPERSET of what phase 2
+         would search there. A small, self-contained search reusing
          search_worker (a single-task, mostly-pinned key_space) so the skipped
          neighbours get the exact same treatment -- restarts, staged climb, everything
          -- as the coarse pass got, once per window segment. Reuses the already-
@@ -3965,8 +3967,6 @@ void bruteforce(char * result)
         {
           int half = opt_ring_stride / 2;
           int center2 = m.ringstellung[2];
-          int raw_min2 = center2 - half;
-          int raw_max2 = center2 + half;
 
           /* Snapshot everything each segment pins (ring0/start0/wheel order/
              reflector/Greek wheel) BEFORE any segment's search_worker() call runs.
@@ -3991,41 +3991,58 @@ void bruteforce(char * result)
           int fixed_greek = m.greek;
           int fixed_greek_offset = m.greek_offset;
 
-          /* ring2 is circular (mod 26); the window must WRAP at the 0/25 boundary,
-             not clamp, or the opposite edge's neighbour is silently never checked --
-             e.g. a coarse winner at A(0) with the true ring2 at Z(25) is
-             "recoverable" per the |K/2| distance metric (PERFORMANCE.md §7.11), but
-             a clamped [0,1] window only ever tests {A,B}, never Z. Confirmed by a
-             concrete miss during testing. At most one edge can wrap: the window
-             width (2*half+1) is well under 26 for every valid K (<=13), so both
-             edges can't wrap at once. Two disjoint segments (rather than one
-             modular range) because search_range/rc[] -- like search_worker's and
-             key_to_machine's flat mixed-radix decode generally -- only represent a
-             single contiguous interval per wheel position. */
-          int seg_lo[2];
-          int seg_hi[2];
-          int nseg;
-          if ((raw_min2 >= 0) && (raw_max2 <= 25))
+          /* Build the set of ring2 values to refine: the +/-half window around the
+             coarse winner, taken mod 26 and EXCLUDING the winner itself.
+
+             Two properties drive this:
+             (a) ring2 is CIRCULAR, so the window must wrap at the 0/25 boundary
+                 rather than clamp -- a coarse winner at A(0) with the true ring2 at
+                 Z(25) is "recoverable" per the |K/2| distance metric
+                 (PERFORMANCE.md §7.11), but a clamped [0,1] window only ever tests
+                 {A,B}, never Z. Confirmed by a concrete miss during testing.
+             (b) The winner itself needs no retest. The coarse pass already scored
+                 that exact ring2, and phase 2 pins ring0/start0 to the winner's own
+                 values while opening ring1/start1/start2 to the same ranges the
+                 coarse pass used -- so for ring2 == centre, phase 2's space is a
+                 SUBSET of what phase 1 already searched there, and re-running it can
+                 only reproduce the same winning score. (Caveat, deliberate: under -c
+                 the per-restart RNG seeds differ between the two searches, so a
+                 retest could stumble on a better plugboard. That is extra plugboard
+                 restarts smuggled into a rotor-key refinement, not refinement work;
+                 -R is the documented lever for that, so the duplicate is dropped.)
+
+             The value set can therefore span the 0/25 boundary AND be split in two
+             by the excluded centre, so it is coalesced into contiguous [lo,hi]
+             segments -- search_range/rc[], like search_worker's and
+             key_to_machine's flat mixed-radix decode generally, can only express a
+             single contiguous interval per wheel position. Collect-then-coalesce
+             (rather than modular case analysis) keeps this obviously correct for
+             every centre/half; it runs once per search, so the 26-entry scan is
+             free. At most 3 segments arise (each arc contributes 1-2, and both arcs
+             can only wrap at once if half >= 13, impossible for K <= 13), but the
+             arrays are sized 26 so the bound needs no proof to be safe. */
+          bool want2[26] = { false };
+          for (int d = -half; d <= half; d++)
             {
-              nseg = 1;
-              seg_lo[0] = raw_min2;
-              seg_hi[0] = raw_max2;
+              if (d == 0)
+                continue;   /* the coarse winner -- already scored, identically */
+              want2[((center2 + d) % 26 + 26) % 26] = true;
             }
-          else if (raw_min2 < 0)
+          int seg_lo[26];
+          int seg_hi[26];
+          int nseg = 0;
+          for (int v = 0; v < 26; v++)
             {
-              nseg = 2;
-              seg_lo[0] = 0;
-              seg_hi[0] = raw_max2;
-              seg_lo[1] = 26 + raw_min2;
-              seg_hi[1] = 25;
-            }
-          else
-            {
-              nseg = 2;
-              seg_lo[0] = raw_min2;
-              seg_hi[0] = 25;
-              seg_lo[1] = 0;
-              seg_hi[1] = raw_max2 - 26;
+              if (! want2[v])
+                continue;
+              if ((nseg > 0) && (seg_hi[nseg - 1] == v - 1))
+                seg_hi[nseg - 1] = v;
+              else
+                {
+                  seg_lo[nseg] = v;
+                  seg_hi[nseg] = v;
+                  nseg++;
+                }
             }
 
           int save_stride = opt_ring_stride;
