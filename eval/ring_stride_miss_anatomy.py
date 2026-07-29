@@ -5,34 +5,34 @@ what.
 
 The motivating observation (PERFORMANCE.md 7.11): widening the refinement from a +/-K/2
 window to EVERY skipped ring2 moved K=3 by +4.5/+7.0pp but moved K=2 by nothing. K=2's
-coarse grid is never more than 1 away from the true ring2, so if its misses were
-window failures, widening would have fixed them. It did not. The hypothesis this script
-tests is that the approximation instead corrupts the coarse pass badly enough that the
-true WHEEL ORDER / REFLECTOR (or ring0/start0) loses outright -- and since the refinement
-pins those to the coarse winner, no amount of ring2 sweeping can recover them.
+coarse grid is never more than 1 away from the true ring2, so if its misses were window
+failures, widening would have fixed them. It did not -- so something else is being lost.
 
-That distinction is actionable, because the two classes have different fixes:
+FIRST RESULT, and it killed the obvious hypothesis. The guess was that the approximation
+corrupts the coarse pass enough that the true WHEEL ORDER / REFLECTOR loses outright,
+which the refinement could never recover since it pins those to the coarse winner -- the
+case for 7.11's one untested mitigation, refining the top-M coarse candidates. Measured
+across 96 stride-specific misses (L=40/60, K=2/3, 200 trials each): the coarse winner had
+the correct reflector+wheel-order in 100% of them. There is nothing for a top-M refinement
+to find, and that idea is now dead rather than untested.
 
-  wheels/reflector wrong -> refining only the BEST coarse candidate can never recover it.
-                            Fix: refine the top-M coarse candidates (7.11's one untested
-                            mitigation). Now affordable -- a refinement candidate costs
-                            1/(tasks * rc[0] * gc[0]) of a coarse one.
-  wheels right, ring/start wrong -> the refinement had the right row and still lost, so
-                            the fix is in the refinement itself (what it re-opens), not
-                            in how many candidates it takes.
+So the loss is inside ring/start, and the script now localises it there instead. The four
+components are reported separately because the refinement treats them differently -- and
+that is the point of the breakdown: offset0 is PINNED to the coarse winner, offset1 is
+re-opened, ring2 is swept, start2 is left open. A component that is wrong while pinned
+implicates the pin; a component that is wrong while searched implicates the score.
 
 Method mirrors eval/ring_stride_wehrmacht_probe.py exactly (same corpus, key generation,
 scoring model and -s plugboard-given setup) so the miss populations are comparable; the
 only addition is parsing the WINNING KEY out of the progress output and diffing it
 against the truth component by component.
 
-Two reporting caveats, both real and neither a bug:
-  - ring0 is reported as 'A' always and ring1/start1 may be a CLASS REPRESENTATIVE
-    (7.10, 7.12), so a ring/start string can differ from the true key while decoding
-    identically. Ring/start are therefore only compared when the plaintext is wrong, and
-    even then "ring/start differs" is reported as a residual class rather than a precise
-    diagnosis. The wheels+reflector comparison has no such caveat and is the load-bearing
-    number.
+Two things the comparison has to get right:
+  - ring0 is always reported as 'A' and ring1/start1 may be a CLASS REPRESENTATIVE (7.10,
+    7.12), so wheel 0's and wheel 1's ring/start must be compared as the OFFSET
+    (start - ring) mod 26 -- the only identifiable form. Comparing the letters directly
+    would flag a perfectly correct key as wrong. ring2 and start2 have no such caveat
+    (the right-hand notch makes them separately real) and are compared as letters.
   - Trials where K=1 also fails are the pre-existing scoring/search floor and are excluded
     outright; they are not stride misses.
 
@@ -98,29 +98,53 @@ def trial(L, corpus, rng, ks):
     for K in [1] + ks:
         args = base + (["--ring-stride", str(K)] if K > 1 else [])
         out[K] = run(args, ct)
-    return pt, (u + w), out
+    return pt, (u + w), r, g, out
+
+
+def off(a, b):
+    """The wheel-0/1 ring x start redundancy means only (start - ring) mod 26 is
+    identifiable (7.10 total and unconditional, 7.12 partial), so a reported ring/start
+    PAIR must be compared as that offset -- comparing the letters directly would flag a
+    correct key as wrong whenever the tool reported a class representative."""
+    return (ALPHA.index(a) - ALPHA.index(b)) % 26
+
+
+def parts(ring, start):
+    """The four independently identifiable components of a rotor key, in the form the
+    refinement actually treats differently: offset0 and offset1 (pinned / re-opened as
+    pairs), then ring2 and start2, which the right-hand notch makes separately real."""
+    return (off(start[0], ring[0]), off(start[1], ring[1]), ring[2], start[2])
 
 
 def main():
-    print("Classifies stride-SPECIFIC misses (K failed where K=1 succeeded).")
-    print("wheels-wrong = the coarse winner's reflector+wheel-order is not the true one,")
-    print("so refining only the best coarse candidate cannot recover it.\n")
-    print("%5s %4s %7s %9s %13s %13s"
-          % ("L", "K", "misses", "of-n", "wheels-wrong", "wheels-right"))
+    print("Anatomy of stride-SPECIFIC misses (K failed where K=1 succeeded).")
+    print("Each column is the share of misses in which THAT component of the winning key")
+    print("differs from the truth; a miss can differ in more than one, so rows need not")
+    print("sum to 100%. offset0/offset1 are (start-ring) mod 26 -- the only identifiable")
+    print("form (7.10, 7.12). What the refinement does with each is what matters:")
+    print("  offset0  PINNED to the coarse winner    offset1  re-opened")
+    print("  ring2    swept (every skipped value)    start2   left open\n")
+    print("%5s %4s %7s %8s %10s %10s %10s %10s"
+          % ("L", "K", "misses", "of-n", "wheels", "offset0", "offset1", "ring2/start2"))
     for L in LENGTHS:
         corpus = load_corpus(L)
         rng = random.Random(SEED * 1000 + L)     # same stream as the sibling probe
         rows = [trial(L, corpus, rng, KS) for _ in range(TRIALS)]
         for K in KS:
-            miss = [(true_uw, out) for pt, true_uw, out in rows
-                    if out[1][0] == pt and out[K][0] != pt]
-            bad_w = sum(1 for true_uw, out in miss
-                        if out[K][1] is None or out[K][1][0] != true_uw)
+            miss = [(t_uw, t_r, t_g, out) for pt, t_uw, t_r, t_g, out in rows
+                    if out[1][0] == pt and out[K][0] != pt and out[K][1] is not None]
             n = len(miss)
-            print("%5d %4d %7d %8.1f%% %12s %13s"
-                  % (L, K, n, 100.0 * n / TRIALS,
-                     "%d (%.0f%%)" % (bad_w, 100.0 * bad_w / n) if n else "-",
-                     "%d (%.0f%%)" % (n - bad_w, 100.0 * (n - bad_w) / n) if n else "-"))
+            c = [0, 0, 0, 0, 0]     # wheels, offset0, offset1, ring2, start2
+            for t_uw, t_r, t_g, out in miss:
+                w, r, g = out[K][1]
+                truth, got = parts(t_r, t_g), parts(r, g)
+                c[0] += (w != t_uw)
+                for j in range(4):
+                    c[j + 1] += (got[j] != truth[j])
+            pct = lambda v: ("%d (%.0f%%)" % (v, 100.0 * v / n)) if n else "-"
+            print("%5d %4d %7d %7.1f%% %10s %10s %10s %10s"
+                  % (L, K, n, 100.0 * n / TRIALS, pct(c[0]), pct(c[1]), pct(c[2]),
+                     "%s / %s" % (pct(c[3]), pct(c[4]))))
         sys.stdout.flush()
 
 
