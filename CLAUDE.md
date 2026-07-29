@@ -784,10 +784,17 @@ coarse pass: 26× on a single-wheel-order key with start0 open, ~26 000× with t
 wildcarded. §7.11's original `26/K + K` accounting priced refinement values at
 coarse-pass cost and so concluded "≈2.5× at best"; at the true price the extra is a
 **constant** (25 values on one task, independent of `K`) and the saving approaches `K`×.
-The window is nonetheless grown under a budget (25% of the coarse pass) and floored at
-the historical `⌊K/2⌋`, because on a keyspace narrow enough that the coarse pass is
-itself tiny — a *single* task **and** start0 pinned — 25 refinement values can outcost
-the entire coarse pass and turn a throughput option into a slowdown. Requires both `-r`
+**All 25, unconditionally — no window, no budget, no dependence on `K`.** The extra is
+always `25 × rc[1] × gc[1] × 26` keys, so the same command always does the same work. An
+earlier version grew the window under a "25% of the coarse pass" budget, on the theory
+that a keyspace narrow enough (single task **and** start0 pinned) would see the refinement
+outcost the coarse pass. That was a *ratio* masquerading as a cost: in the corner it
+guarded, the entire run is 988 keys against 676 unstrided — 58 ms. It was removed, because
+a budget makes the same command do different work depending on an unrelated part of the
+keyspace, silently and with no way to adjust it, and the thing it bought was never worth
+that. (It is not free everywhere: with ring1 wildcarded each refinement value costs 26×
+more, so the `K=2` saving there is ~1.53× rather than the ~1.7× a clipped window gave.
+Under the documented default `-r AA.` nothing changes — 1.86×.) Requires both `-r`
 and `-g` to wildcard the rightmost wheel's position (else every ring2 value is distinct
 and necessary, same precondition as the leftmost wheel's exact collapse above); rejected
 together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / restarts_par,

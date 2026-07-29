@@ -4238,39 +4238,24 @@ void bruteforce(char * result)
          best.idx, which nothing reads again after this point. */
       if (opt_ring_stride > 1)
         {
-          /* How WIDE a window? Not K/2. That was the original reading of the |K/2|
-             proximity metric, and it leaves the whole feature resting on the coarse
-             winner landing within K/2 of the truth -- exactly the assumption the
-             measured stride-specific miss rate (11-14% at K=2, a flat 21% at K=3;
-             PERFORMANCE.md §7.11) says fails. Refining ALL 26 ring2 values instead
-             drops the assumption entirely: whatever ring2 wins the coarse pass, every
-             ring2 is then tested exactly, under the winner's wheel order / reflector /
-             ring0 / start0.
+          /* The refinement tests EVERY ring2 the coarse pass skipped -- all 25 of
+             them, unconditionally. No window, no budget, no dependence on K.
 
-             That is nearly free, because a ring2 value costs the REFINEMENT far less
-             than the same value cost the coarse pass. The refinement runs ONE task with
-             ring0/start0 pinned, so per ring2 value it is tasks.size() * rc[0] * gc[0]
-             times cheaper -- 26x on a single-wheel-order key with start0 open, ~26000x
-             with the wheels wildcarded. (§7.11's original "15 values for K=2 vs 26, so
-             1.7x not Kx" accounting priced refinement values at coarse-pass cost and so
-             understated the saving badly.) At that true price, widening K=2 from a
-             1-value window to all 25 costs ~7% of the coarse pass on a single-task
-             keyspace, and vanishingly little on a wide one.
+             The earlier +/-K/2 window rested on the coarse winner landing within K/2 of
+             the truth, which is exactly the assumption the measured stride-specific miss
+             rate said fails. Refining every value drops the assumption: whatever ring2
+             wins the coarse pass, all 26 are then tested exactly, under the winner's
+             wheel order / reflector / ring0 / start0.
 
-             The one case where it is NOT free is a keyspace narrow enough that the
-             coarse pass is itself tiny -- a single task AND start0 pinned -- where 25
-             refinement values can outcost the entire coarse pass, turning a throughput
-             option into a slowdown. So the window GROWS as far as a budget allows,
-             floored at the historical K/2 (never narrower than before) and capped at
-             13, which already yields all 25 non-centre values. */
-          int half = opt_ring_stride / 2;
-          {
-            size_t per_val = static_cast<size_t>(rc[1]) * gc[1] * asize;
-            size_t budget = scored_keys / 4;
-            while ((half < asize / 2)
-                   && (static_cast<size_t>(2 * (half + 1)) * per_val <= budget))
-              half++;
-          }
+             This ran under a "25% of the coarse pass" budget for a while, on the theory
+             that a keyspace narrow enough (single task AND start0 pinned) would see the
+             refinement outcost the coarse pass. That was a ratio masquerading as a cost.
+             The refinement is ONE pass over ONE task for the whole invocation, bounded by
+             25 * rc[1] * gc[1] * 26 keys; in the corner it was guarding, the whole run is
+             988 keys against 676 unstrided -- microseconds. Trading predictable behaviour
+             for that is a bad deal: a budget makes the same command do different work
+             depending on an unrelated part of the keyspace, silently, with no way to
+             adjust it. Cost is bounded and small; keep it fixed and explainable. */
           int center2 = m.ringstellung[2];
 
           /* Snapshot everything each segment pins (ring0/start0/wheel order/
@@ -4291,37 +4276,24 @@ void bruteforce(char * result)
           int fixed_ring0 = m.ringstellung[0];
           int fixed_start0 = m.grundstellung[0];
 
-          /* Build the set of ring2 values to refine: the +/-half window around the
-             coarse winner, taken mod 26 and EXCLUDING the winner itself.
+          /* Every ring2 except the coarse winner. The winner needs no retest: the
+             coarse pass already scored that exact ring2, and phase 2 pins ring0/start0
+             to the winner's own values while opening ring1/start1/start2 to the same
+             ranges phase 1 used -- so for ring2 == centre, phase 2's space is a SUBSET
+             of what phase 1 already searched there, and re-running it can only reproduce
+             the same winning score. (Caveat, deliberate: under -c the per-restart RNG
+             seeds differ between the two searches, so a retest could stumble on a better
+             plugboard. That is extra plugboard restarts smuggled into a rotor-key
+             refinement, not refinement work; -R is the documented lever for that.)
 
-             Two properties drive this:
-             (a) ring2 is CIRCULAR, so the window must wrap at the 0/25 boundary
-                 rather than clamp -- a coarse winner at A(0) with the true ring2 at
-                 Z(25) is "recoverable" per the |K/2| distance metric
-                 (PERFORMANCE.md §7.11), but a clamped [0,1] window only ever tests
-                 {A,B}, never Z. Confirmed by a concrete miss during testing.
-             (b) The winner itself needs no retest. The coarse pass already scored
-                 that exact ring2, and phase 2 pins ring0/start0 to the winner's own
-                 values while opening ring1/start1/start2 to the same ranges the
-                 coarse pass used -- so for ring2 == centre, phase 2's space is a
-                 SUBSET of what phase 1 already searched there, and re-running it can
-                 only reproduce the same winning score. (Caveat, deliberate: under -c
-                 the per-restart RNG seeds differ between the two searches, so a
-                 retest could stumble on a better plugboard. That is extra plugboard
-                 restarts smuggled into a rotor-key refinement, not refinement work;
-                 -R is the documented lever for that, so the duplicate is dropped.)
-
-             The resulting set can span the 0/25 boundary and be split by the excluded
-             centre, but search_range carries ring2 as an explicit value list, so it
-             goes in as-is -- one mask, one search, no interval-splitting and no
-             stride arithmetic to save/restore around a nested search. */
-          unsigned int mask2 = 0;
-          for (int d = -half; d <= half; d++)
-            {
-              if (d == 0)
-                continue;   /* the coarse winner -- already scored, identically */
-              mask2 |= 1u << (((center2 + d) % asize + asize) % asize);
-            }
+             A full sweep also removes a whole class of subtlety this code used to carry.
+             When it was a window it had to WRAP at the 0/25 boundary rather than clamp
+             -- ring2 is circular, so a coarse winner at A(0) with the true ring2 at Z(25)
+             was a documented-recoverable case a clamped window silently never checked
+             (confirmed by a concrete miss during testing). With every value in the set
+             there is no edge to fall off. search_range carries ring2 as an explicit value
+             list, so the punctured set goes in as-is: one mask, one search. */
+          unsigned int mask2 = ((1u << asize) - 1u) & ~(1u << center2);
 
           /* Reuse the winning task VERBATIM rather than rebuilding one from the
              machine's fields. wheel_task carries RAW wheel/reflector numbers, which

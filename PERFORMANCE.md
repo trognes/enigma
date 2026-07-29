@@ -3187,20 +3187,31 @@ were genuinely window-limited. The practical result: **K=3 now delivers 2.61× a
 the accuracy K=2 gave at 1.99×**, so the "K=2 is the only value with any backing" verdict
 above extends to K=3. K=5 stays clearly worse on accuracy.
 
-**The window is budgeted, and the budget is measured to be free.** It grows only while the
-extra stays under 25% of the coarse pass (floored at the historical `⌊K/2⌋`, capped at 13
-= all 25 non-centre values), because on a keyspace narrow enough that the coarse pass is
-itself tiny — a *single* task **and** start0 pinned — 25 refinement values can outcost the
-entire coarse pass and turn a throughput option into a slowdown. On a fully wildcarded
-keyspace (`rc[1]=26`) the cap does bite, clipping the window to ~12 of 25. A/B against an
-unbudgeted build (L=60, K=3, n=150, plugboard given) shows that costs nothing:
+**The window was briefly budgeted; the budget was removed. ❌** It grew only while the
+extra stayed under 25% of the coarse pass, on the theory that a keyspace narrow enough —
+a *single* task **and** start0 pinned — would see 25 refinement values outcost the entire
+coarse pass and turn a throughput option into a slowdown.
 
-| | exact | mean keys analysed |
-|---|---:|---:|
-| 25% budget (shipped) | 66.0% | 815 932 |
-| all 25 values | 66.7% | 1 114 724 |
+That reasoning confuses a **ratio** with a **cost**. The refinement is one pass over one
+task for the whole invocation; in the very corner the budget guarded, the complete run is
+**988 keys against 676 unstrided — 58 ms**. Nothing there needed protecting. What the
+budget did buy was a real defect in usability: the same command did different amounts of
+work depending on an unrelated part of the keyspace, silently, with no way to adjust or
+even observe it. On a fully wildcarded keyspace (`rc[1]=26`) it clipped the sweep to ~12
+of 25 without saying so.
 
-+0.7pp is one trial in 150 — noise — for 37% more work. Keep the cap.
+So the refinement now tests all 25 unconditionally: `extra = 25 · rc[1] · gc[1] · 26`,
+constant in `K` and independent of everything else. Removing it also deleted the
+boundary-wrap arithmetic — with every value in the set there is no edge to fall off — so
+a documented subtlety (a coarse winner at A(0) with the true ring2 at Z(25)) stops being
+reachable rather than being handled.
+
+It is not free everywhere, and that is the honest trade: with ring1 wildcarded each
+refinement value costs 26× more, so `K=2` there saves ~1.53× rather than the ~1.7× a
+clipped window gave. Under the documented default `-r AA.` nothing changes (1.86×), and
+the accuracy the clipping cost was never measurable anyway — an A/B against an unbudgeted
+build (L=60, K=3, n=150) put it at 66.0% vs 66.7%, one trial in 150. Predictable beats
+0.7pp of noise.
 
 Regression test: an authentic-Wehrmacht key (`-u A -w 123 -r DLT -g ACG`, L=60) whose K=3
 coarse winner lands well outside `K/2` of the truth. The narrow window returns a
