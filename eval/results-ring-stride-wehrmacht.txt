@@ -1,0 +1,6 @@
+corpus: 49 clean authentic-message blocks, 5413 letters total
+     L    K        n     exact%     vs-K1-fail  K1-floor-fail
+    40    2      200      38.5%            14%            50%
+    40    3      200      33.5%            21%            50%
+    60    2      200      64.5%            11%            26%
+    60    3      200      56.5%            21%            26%

@@ -193,7 +193,9 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
 > `--polish`, kept because it is the only gain cascade that works with
-> `-F`/`--exhaust`), `--crib-file` (measured-down) and `--exhaust`. Each is tagged
+> `-F`/`--exhaust`), `--crib-file` (measured-down), `--exhaust`, and `--ring-stride`
+> (measured-down: an accuracy/throughput trade costing ~10pp exact recovery at K=2 on
+> telegraphic German, ~17pp at K=3 — see its entry). Each is tagged
 > **not recommended** in its entry below and in `--help`.
 >
 > **Removed options** (dominated or subsumed; the measurements survive in `PERFORMANCE.md`):
@@ -231,11 +233,19 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   fragility `--polish` has). The coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then a
   small refinement pass checks the skipped neighbours around the best coarse hit — see
   "Sparse ring sampling for the rightmost wheel" below and `PERFORMANCE.md` §7.11 for the
-  measurement and the implementation gotcha (the refinement must re-open ring1/start1,
-  not pin them to the coarse winner). **K=2 is the only value backed by solid
-  measurement** (100% recovery across 90 trials); K≥5 trades a real 10-17% single-pass
-  miss rate for only a modest extra saving over K=2, a bad trade for a tool whose whole
-  point is exact recovery — not recommended.
+  measurement and the implementation gotchas. **Not recommended by default — it is an
+  accuracy/throughput TRADE, not a free reduction.** Measured end-to-end on authentic
+  telegraphic German (200 paired trials/cell, `-f -l wehrmacht`, plugboard given): K=2
+  costs **~10pp of exact recovery** vs no stride (L40 50.0%→38.5%, L60 74.0%→64.5%) and
+  K=3 costs ~17pp, with a stride-specific miss rate of 11-14% (K=2) and a flat 21% (K=3).
+  So **K=2 is the only value with any backing** and K≥3 is not recommended. The earlier
+  "100% recoverable across 90 trials" result is *not* a contradiction — it measured a
+  weaker *proximity* property (does the winner land within `⌊K/2⌋` of the truth?) on
+  English prose, not exact recovery. Note the saving is modest anyway: total distinct
+  ring2 values tested is 15 for K=2 and 11 for K=3 vs 26 unstrided (the refinement window
+  grows with K as fast as the coarse pass shrinks), so ≈1.7×, not `K`×. Whether the saved
+  compute beats spending it on `-R` restarts at matched wall time is **untested** — the
+  right next experiment.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the climb/SA
   never remove or rewire them (their letters are marked in `plug_fixed[]`, set once from
   `opt_steckerbrett` before the threaded search, and skipped by every switch/remove/
@@ -714,6 +724,23 @@ re-reading the live machine between segments. Both confirmed with concrete faili
 before the fix and a 0/100 targeted sweep after (cross-checked against the K=1 baseline
 to rule out the separate, pre-existing scoring-floor cases, which neither fix touches).
 Full writeup: `PERFORMANCE.md` §7.11.
+
+**The refinement skips the coarse winner itself** — phase 1 already scored that exact
+ring2 over a *superset* of what phase 2 searches there (phase 2 additionally pins
+ring0/start0 to the winner's values), so retesting it can only reproduce the same score.
+Excluding it can split the window into **three** segments (centre=1, half=2 → {25}, {0},
+{2,3}) where the wrap alone gave at most two, so the segment construction is
+collect-into-a-`bool[26]`-then-coalesce — the same idiom `build_key_space()` already uses
+for the M4 Greek wheel's `offset_list` — rather than modular case analysis.
+
+> **Known cleanup, not yet done.** Carrying an explicit ring2 *value list* in
+> `search_range` (decode `r3 = r2_vals[idx]` instead of `r_min[2] + idx*opt_ring_stride`)
+> would express the coarse set, the wrap, and the excluded centre as one uniform
+> mechanism, collapse the ≤3 segment searches back to one, and — most importantly —
+> delete the `save_stride`/`opt_ring_stride = 1` save/restore around the refinement,
+> which exists only because the decode consults a global and was the direct cause of the
+> first corruption bug here. It is a hot-path touch, so it needs `make bench BASE=<ref>`
+> under **both** g++ and clang before shipping.
 
 ### Performance notes
 

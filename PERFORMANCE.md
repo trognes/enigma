@@ -2852,6 +2852,13 @@ recoverable radius) ≈ `K`. Total ≈ `26/K + K`, minimized at `K ≈ √26 ≈
 reading of "K=13 only tests 2 candidates" would suggest, because the refinement radius
 (and cost) scales with K right along with the coarse-scan saving.
 
+> ⚠️ **The verdict in the next paragraph was later measured to be over-optimistic — see
+> "Follow-up: end-to-end exact recovery on telegraphic German" below.** "Recoverable"
+> here is a *proximity* property (does the winning candidate land within `⌊K/2⌋` of the
+> truth?), not exact recovery, and it was measured on English prose. Measured
+> end-to-end through the shipped flag on authentic Wehrmacht traffic, even K=2 costs
+> ~10pp of exact recovery. Read both before trusting K=2 as "free".
+
 **Verdict: K=2 is the one clearly worth shipping.** 100% recoverable across all 90
 trials tested (L=60/90/150 combined, 0 misses — a rule-of-three 95% upper bound on the
 true miss rate of roughly 3%), mean distance 0.57 (refinement is checking one neighbor),
@@ -2941,6 +2948,71 @@ document uses elsewhere). ASan/UBSan clean; g++ and clang++ both pass the full s
 (`tests/run_tests.sh` now includes the two originally-failing keys as an explicit
 `--ring-stride` regression, plus K=2/3/5 exact recovery and the four validation-error
 paths). Reproduce the original measurement: `eval/ring_stride_probe.py`.
+
+**Refinement skips the coarse winner itself.** The window is `±⌊K/2⌋` around the coarse
+winner *excluding* that winner: phase 1 already scored that exact ring2, over a
+**superset** of what phase 2 searches there (phase 2 additionally pins ring0/start0 to
+the winner's own values), so re-running it can only reproduce the same score. Dropping
+it saves one candidate at every stride. (Deliberate caveat: under `-c` the per-restart
+RNG seeds differ between the two searches, so a retest *could* stumble on a better
+plugboard — but that is extra plugboard restarts smuggled into a rotor-key refinement,
+and `-R` is the documented lever for that, so the duplicate goes.) Note the exclusion
+can split the window into **three** contiguous segments (centre=1, half=2 → {25}, {0},
+{2,3}) where the wrap alone gave at most two; the construction is therefore
+collect-into-a-`bool[26]`-then-coalesce (the same idiom `build_key_space()` already uses
+for the M4 Greek wheel's `offset_list`), verified exhaustively over all 26 centres × every
+valid K. Distinct ring2 values actually tested:
+
+| K | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| phase 1 (coarse) | 26 | 13 | 9 | 7 | 6 | 5 | 4 | 4 | 3 | 3 | 3 | 3 | 2 |
+| phase 2 (refine) | 0 | 2 | 2 | 4 | 4 | 6 | 6 | 8 | 8 | 10 | 10 | 12 | 12 |
+| **total** | **26** | **15** | **11** | **11** | **10** | **11** | **10** | **12** | **11** | **13** | **13** | **15** | **14** |
+
+The saving is far more modest than "test every Kth ring" suggests — the refinement
+window grows with K exactly as fast as the coarse pass shrinks, so the total bottoms out
+around ~10 (K=5/7) versus 26, i.e. **≈2.6× at absolute best**, and K=2 buys only 1.7×.
+
+#### Follow-up: end-to-end exact recovery on telegraphic German — ⚠️ the stride is NOT free
+
+Everything above measures a *proximity* property on English prose. The practical
+question is different: driving the **shipped flag** end to end, how often does the true
+plaintext come back **exactly**? Measured on real excerpts from the authentic 1941
+message database (`eval/enigma-messages.txt`, `eval/enigma-army-messages-1941.txt`) with
+`-f -l wehrmacht`, true plugboard given via `-s` (isolating the rotor-key question, as
+the original harness does), random reflector/wheel-order/ring/start, 200 paired trials
+per cell — `eval/ring_stride_wehrmacht_probe.py`, results in
+`eval/results-ring-stride-wehrmacht.txt`:
+
+| L | K=1 (no stride) | K=2 | K=3 |
+|---:|---:|---:|---:|
+| 40 | **50.0%** | 38.5% (−11.5pp) | 33.5% (−16.5pp) |
+| 60 | **74.0%** | 64.5% (−9.5pp) | 56.5% (−17.5pp) |
+
+Stride-*specific* miss rate (the stride failed on a trial where K=1 succeeded, so it is
+not the pre-existing scoring floor): K=2 → 14% / 11%; K=3 → **21% at both lengths**.
+
+**Two conclusions.**
+
+1. **K=3 is not worth recommending.** Its stride-specific miss rate is roughly *double*
+   K=2's and is flat at 21% across both lengths, for a saving of only 11 vs 15
+   candidates. This extends §7.11's existing "K≥5 not recommended" verdict *downward*:
+   K=2 remains the only value with any real backing.
+2. **Even K=2 is not free on this register**, contrary to the "100% recoverable"
+   headline above — it costs ~10pp of exact recovery. The two measurements do not
+   contradict each other; they measure different things. Landing *near* the true ring2
+   (the proximity property) does not imply the refinement then *recovers* it, because
+   the refinement re-opens ring1/start1 and can be outscored there by a decoy — and
+   short telegraphic German is exactly the low-information register where decoys win
+   (§6.6, §3.11).
+
+**What this measurement does NOT settle: the matched-compute question.** It compares at
+*fixed work per candidate* (a plain scan, `-s`, no restarts), so it answers "does the
+stride lose accuracy?" (yes) but not "is the saved compute better spent elsewhere?".
+Since restarts are the documented primary quality lever and short-message search is
+compute-bound (§6.15), `K=2 + more -R` versus `K=1 + fewer -R` at equal wall time is
+genuinely open and is the right next experiment. Until that is run, `--ring-stride`
+should be presented as a **throughput/accuracy trade**, not a free reduction.
 
 ---
 

@@ -4428,10 +4428,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine the");
   fprintf(out, "  %-24s %s\n", "", "skipped neighbours around the best hit (needs -r");
   fprintf(out, "  %-24s %s\n", "", "and -g to wildcard that wheel; no -F/--exhaust)");
-  fprintf(out, "  %-24s %s\n", "", "[1 = off]. K=2 is the only value backed by solid");
-  fprintf(out, "  %-24s %s\n", "", "measurement (100% recovery, PERFORMANCE.md 7.11);");
-  fprintf(out, "  %-24s %s\n", "", "K>=5 is available but not recommended (a real");
-  fprintf(out, "  %-24s %s\n", "", "10-17% single-pass miss rate)");
+  fprintf(out, "  %-24s %s\n", "", "[1 = off]. NOT RECOMMENDED: measured an accuracy");
+  fprintf(out, "  %-24s %s\n", "", "trade, not a free saving -- on telegraphic German");
+  fprintf(out, "  %-24s %s\n", "", "K=2 costs ~10pp of exact recovery and K=3 ~17pp");
+  fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11). K=2 is the only value with");
+  fprintf(out, "  %-24s %s\n", "", "any backing; K>=3 is worse for little extra saving");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
