@@ -4419,43 +4419,55 @@ void bruteforce(char * result)
             }
         }
 
-      int save_gf = opt_cascade;
-      int save_gf3 = opt_cascade3;
-      double save_gate = opt_cascade_gate;
-      opt_cascade = 1;
-      opt_cascade3 = 1;   /* --polish also enables the 3-ply escalation */
-      opt_cascade_gate = score_min;   /* unconditional cascade on the one best board */
-      /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
-         every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
-         the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
-         raise the noisy short-message quad score while hurting the truth (the over-plugging
-         avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
-      int fin_cap = opt_stages[opt_nstages - 1].cap;
-      double s = hillclimb<false>(m, fin_cap);
-      opt_cascade = save_gf;
-      opt_cascade3 = save_gf3;
-      opt_cascade_gate = save_gate;
-      /* Monotonic by construction: replace the best board ONLY when the finish scores
-         strictly higher, so gainfix-best never returns a worse-scoring board than the
-         search already found (a truth-vs-score chase at the information floor is a
-         separate matter -- unfixable by a score-only rule; see PERFORMANCE.md 4.10). */
-      if (s > best.score)
+      /* Guarded by opt_polish. This block shares its enclosing `if` with the
+         --ring-stride refinement above (both need best.idx reconstructed once), and
+         used to run whenever EITHER was requested -- so a --ring-stride run got the
+         plugboard finisher too, including with no -c at all. That is not a cosmetic
+         leak: with no -c the tool must not touch the plugboard, and the finisher was
+         adding spurious plugs to a board supplied with -s, corrupting the decrypt and
+         lowering the score-vs-truth on exactly the runs 7.11 measured. It also charged
+         --ring-stride for a cost it never asked for. --polish already requires -c
+         (validated), so the flag is the whole guard needed. */
+      if (opt_polish)
         {
-          best.score = s;
-          decode(m);
-          memcpy(best.plaintext, m.plaintext, textlength + 1);
-          /* Echo the improved board: without this the finisher silently replaced the
-             winner, so the last progress line the user saw showed the PRE-finisher
-             score/wheels/plugboard while stdout held a different (better) decrypt.
-             The search threads are joined here and key_to_machine restored the true
-             start positions, so m holds the correct config to display. Guarded by
-             best.shown like every other echo, so a line already showing this score is
-             not repeated; display-only, so -T-determinism is untouched. */
-          if (s > best.shown.load(std::memory_order_relaxed))
-            {
-              best.shown.store(s, std::memory_order_relaxed);
-              progress_line(best, m, s);
-            }
+        int save_gf = opt_cascade;
+        int save_gf3 = opt_cascade3;
+        double save_gate = opt_cascade_gate;
+        opt_cascade = 1;
+        opt_cascade3 = 1;   /* --polish also enables the 3-ply escalation */
+        opt_cascade_gate = score_min;   /* unconditional cascade on the one best board */
+        /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
+           every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
+           the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
+           raise the noisy short-message quad score while hurting the truth (the over-plugging
+           avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
+        int fin_cap = opt_stages[opt_nstages - 1].cap;
+        double s = hillclimb<false>(m, fin_cap);
+        opt_cascade = save_gf;
+        opt_cascade3 = save_gf3;
+        opt_cascade_gate = save_gate;
+        /* Monotonic by construction: replace the best board ONLY when the finish scores
+           strictly higher, so gainfix-best never returns a worse-scoring board than the
+           search already found (a truth-vs-score chase at the information floor is a
+           separate matter -- unfixable by a score-only rule; see PERFORMANCE.md 4.10). */
+        if (s > best.score)
+          {
+            best.score = s;
+            decode(m);
+            memcpy(best.plaintext, m.plaintext, textlength + 1);
+            /* Echo the improved board: without this the finisher silently replaced the
+               winner, so the last progress line the user saw showed the PRE-finisher
+               score/wheels/plugboard while stdout held a different (better) decrypt.
+               The search threads are joined here and key_to_machine restored the true
+               start positions, so m holds the correct config to display. Guarded by
+               best.shown like every other echo, so a line already showing this score is
+               not repeated; display-only, so -T-determinism is untouched. */
+            if (s > best.shown.load(std::memory_order_relaxed))
+              {
+                best.shown.store(s, std::memory_order_relaxed);
+                progress_line(best, m, s);
+              }
+          }
         }
     }
 

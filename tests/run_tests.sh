@@ -1008,6 +1008,32 @@ check "crack: --ring-stride 3 refines beyond the K/2 window" \
         --ring-stride 3 -T 1)" \
   "$ws_pt"
 
+# --ring-stride must not touch the PLUGBOARD. The --polish finisher shares its enclosing
+# `if` with the refinement (both reconstruct the winner from best.idx once) and used to run
+# whenever EITHER was requested -- so a strided run got a full plugboard climb plus an
+# unconditional gain cascade even with no -c, adding spurious plugs to a board supplied via
+# -s and corrupting the decrypt. With no -c the board must come back exactly as given,
+# stride or no stride, so compare the two runs rather than hard-coding the normalised form.
+# This needs a case where the finisher actually FINDS an improving plug -- on an easy
+# board it converges immediately and a buggy build looks identical to a fixed one. This
+# authentic-Wehrmacht key is a measured one: the pre-fix binary adds an 11th plug (FV) and
+# returns a corrupted decrypt, the fixed one returns the board as given and recovers
+# exactly. ring1/start1 are pinned to the true key to keep it at 338 keys.
+rs_pb_pt=XBEFINDEMIQINXROSENOWROSENOWXSOFORTQUNKQNTWORTXWASCHBUSCHWIS
+rs_pb_board="SX JI AB HT RW QK UM ZG EN LY"
+rs_pb_ct=$(run "$rs_pb_pt" -i -u A -w 145 -r FFR -g RTB -s "$rs_pb_board")
+rs_pb_plain=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+              -s "$rs_pb_board" -T 1 2>&1 >/dev/null | last_plugboard)
+rs_pb_stride=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+               -s "$rs_pb_board" --ring-stride 2 -T 1 2>&1 >/dev/null | last_plugboard)
+check "--ring-stride leaves the plugboard alone without -c" "$rs_pb_stride" "$rs_pb_plain"
+check "--ring-stride without -c keeps exactly the 10 -s pairs" \
+  "$(printf '%s' "$rs_pb_stride" | wc -w | tr -d ' ')" "10"
+check "crack: --ring-stride 2 recovers with the given plugboard untouched" \
+  "$(run "$rs_pb_ct" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." -s "$rs_pb_board" \
+        --ring-stride 2 -T 1)" \
+  "$rs_pb_pt"
+
 # Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)
