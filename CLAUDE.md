@@ -994,6 +994,44 @@ range and is not viable.
   A/B vs the PR base, but **advisory only** (`continue-on-error`): shared runners
   are noisy/bimodal, so treat a flagged cell as "re-check on quiet hardware and
   compare disassembly", never as an automatic block (or a pass as proof).
+- **Every check in `tests/run_tests.sh` must be QUICK — size the keyspace to the
+  property under test, not to realism.** The sanitizer job runs the *whole* suite at
+  roughly a 10× slowdown, so a check that costs 2 s locally costs ~20 s there, and the
+  cost compounds across ~290 binary invocations. The suite had drifted to 15+ minutes
+  under ASan because four checks did a large search purely as a side effect of how they
+  were written: the worst wildcarded ring1/start1 (456 976 keys through a `-c` climb,
+  ~244 s each) merely to assert that a *settings-echo line* was absent, and another
+  wildcarded them for a test about *progress output*, which the refinement produces
+  identically over 338 keys. Trimming those four — with no loss of coverage; each was
+  re-verified to still catch its bug — cut the job to ~162 s (221 checks under
+  `TEST_QUICK`; the plain g++/clang jobs run the full 264-check matrix in ~291 s).
+  Rules of thumb when adding a check:
+  - **Ask what the assertion actually reads.** A settings/echo line is printed by
+    `show_settings()` *before* the search, so any legal keyspace works — use the
+    smallest one the option accepts. A `-T`-independence or display check needs the code
+    path, not a big search.
+  - **Wildcard only the positions the property needs.** A gate keyed on "ring1 and
+    start1 both wildcarded" still fires with ring2/start2 pinned (676 keys, not 457k).
+    Pin plugs with `-s` to shrink `--exhaust` (E=2 over 26 letters is 44 850 forced-pair
+    combinations; over 10 free letters it is 45 × 28 and still spreads work across
+    threads).
+  - **Beware the options that disable a reduction.** `--true-key` turns off the §7.12
+    middle-wheel collapse and `--ring-stride`/`-F` interact with the key space, so a
+    check using them pays full price where a neighbouring check does not.
+  - **Profile before guessing.** Run an instrumented copy of the harness (patch
+    `check()` to print the elapsed time since the previous `ok` line) against the
+    sanitizer build with `TEST_QUICK=1`. Costs are wildly skewed — 4 of 221 checks were
+    most of the runtime — and the most expensive one sat *last* in the file, so
+    profilers that were interrupted never showed it at all.
+  - **There is a floor you cannot trim.** Each invocation loads its n-gram tables
+    before doing any work: measured under ASan at 62 ms (`-i`), 249 ms (quad-family)
+    and 410 ms (`-f`, all four tables). Across the suite's ~290 invocations that is
+    ~52 s of the ~162 s total, so past this point only a faster loader (the parse is
+    `fgets`+`sscanf` over 457k lines; a hand-rolled parser measured 110 ms → 27 ms)
+    or a cached binary table would help — not more test trimming.
+  - `TEST_QUICK=1` (set by the sanitizer job) already shrinks the recovery wildcard and
+    the language matrix. It is not a licence to write a slow check: it does not touch
+    `-R`/`-A` budgets or any keyspace a check spells out itself.
 
 ## Status & remaining work
 
