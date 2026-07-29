@@ -555,10 +555,57 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
          is now capped and should never produce this again, but the loader clamps
          explicitly and audibly rather than depending on that, or on unspecified
          sscanf behaviour, to stay correct for any future/external table. */
+      /* Hand-rolled instead of sscanf("%15s %llu", ...). sscanf reinterprets the format
+         string and runs a general integer conversion for every one of the ~457k lines in
+         the english quadgram table; measured on that file it is 59 ms of the 71 ms this
+         loop costs, against 11 ms for the parse below (110 ms vs 27 ms under ASan). Since
+         every invocation of the tool pays this before doing any work, it was ~30% of a
+         short run and a third of the sanitizer CI job.
+
+         Equivalent to the sscanf form on the bundled tables (verified byte-identical
+         table hashes across every language x model), and deliberately STRICTER on
+         malformed input in three places, none of them reachable from a well-formed table:
+           - a token longer than 15 bytes is skipped here. sscanf would truncate it to 15
+             and then usually fail the number conversion; in the one case it does not
+             (chars 16+ happen to be digits) the record is still dropped below, because a
+             >15-byte token folds to at least 6 letters and every n is <= 4.
+           - a NEGATIVE count is skipped rather than wrapped. "%llu" accepts a sign and
+             wraps, which the UINT32_MAX clamp below would then silently turn into the
+             largest possible count -- the worst way to mishandle it.
+           - a count exceeding 64 bits saturates rather than being undefined behaviour,
+             which is what "%llu" overflow formally is (see the clamp comment above). */
       char gram[16];
-      unsigned long long count64;
-      if (sscanf(line, "%15s %llu", gram, & count64) != 2)
-        continue;
+      unsigned long long count64 = 0;
+      {
+        const char * p = line;
+        while ((*p == ' ') || (*p == '\t') || (*p == '\n') || (*p == '\v')
+               || (*p == '\f') || (*p == '\r'))
+          p++;
+        const char * gstart = p;
+        while ((*p != '\0') && (*p != ' ') && (*p != '\t') && (*p != '\n')
+               && (*p != '\v') && (*p != '\f') && (*p != '\r'))
+          p++;
+        size_t glen = static_cast<size_t>(p - gstart);
+        if ((glen == 0) || (glen >= sizeof(gram)))
+          continue;                       /* empty line, or an over-long token */
+        memcpy(gram, gstart, glen);
+        gram[glen] = '\0';
+        while ((*p == ' ') || (*p == '\t') || (*p == '\n') || (*p == '\v')
+               || (*p == '\f') || (*p == '\r'))
+          p++;
+        if (*p == '+')
+          p++;
+        if ((*p < '0') || (*p > '9'))
+          continue;                       /* no count (or a negative one) */
+        while ((*p >= '0') && (*p <= '9'))
+          {
+            unsigned d = static_cast<unsigned>(*p - '0');
+            if (count64 > (UINT64_MAX - d) / 10)
+              { count64 = UINT64_MAX; break; }   /* saturate, never wrap */
+            count64 = count64 * 10 + d;
+            p++;
+          }
+      }
       if (count64 > UINT32_MAX)
         {
           count64 = UINT32_MAX;
@@ -831,10 +878,21 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
     return log10(eff_count(idx, table[idx])) - log_total;
   };
 
+  /* Evaluate logval ONCE per entry into a scratch array, rather than in both the min/max
+     and the quantise loop below. The two loops used to call it 2 x size times (914k for
+     quad), and under -a/-f each call recomputes the whole four-order log-linear mixture:
+     measured 9.5 + 10.5 ms for -q but 77 + 77 ms for -f on the same table, i.e. the two
+     passes cost more than parsing the file. Storing doubles (not floats) keeps every
+     quantised byte identical -- the values feed a rounding boundary, so narrowing here
+     would be a silent table change. 3.7 MB transient for quad, freed on return. */
+  std::vector<double> vals(size);
+  for (int i = 0; i < size; i++)
+    vals[i] = logval(i);
+
   double vmin = 1e300, vmax = -1e300;
   for (int i = 0; i < size; i++)
     {
-      double v = logval(i);
+      double v = vals[i];
       if (v < vmin) vmin = v;
       if (v > vmax) vmax = v;
     }
@@ -851,7 +909,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
 
   for (int i = 0; i < size; i++)
     {
-      double q = (logval(i) - bias) * scale;
+      double q = (vals[i] - bias) * scale;
       if (q < 0.0)
         q = 0.0;
       else if (q > 255.0)
