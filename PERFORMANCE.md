@@ -2970,6 +2970,46 @@ document uses elsewhere). ASan/UBSan clean; g++ and clang++ both pass the full s
 `--ring-stride` regression, plus K=2/3/5 exact recovery and the four validation-error
 paths). Reproduce the original measurement: `eval/ring_stride_probe.py`.
 
+**A third bug, found only by a real message: the refinement searched the wrong rotors in
+Norway mode.** `wheel_task` carries **raw** wheel and reflector numbers, which
+`init_walzen()` translates on the way into a `machine` — under `-n` it adds
+`norway_rotor_base` / `norway_reflector_index`. The refinement rebuilt its task from the
+machine's `walzenlage[]`/`ukw`, which are *already translated*, so `search_worker()`
+translated them a **second** time and refined against entirely the wrong rotors. Once
+§7.12 landed this compounded: its mask is built and looked up by raw index, so the
+doubled values hit a row that was never built, **every key was skipped**, and the
+refinement returned empty-handed rather than merely wrong. Fixed by reusing
+`tasks[cur_wo]` verbatim instead of reconstructing a task from translated fields.
+
+Both faults are invisible outside Norway mode, where raw and translated indices coincide
+— which is why the entire `--ring-stride` and §7.12 test matrix, all of it on the
+standard machine, passed over a feature that was useless under `-n`. **The lesson is
+about coverage, not about this bug:** an index-translation fault can only appear in the
+mode that translates, so any feature touching `wheel_task` needs at least one Norway case.
+`tests/run_tests.sh` now has one, verified to fail against the pre-fix binary so it
+guards the defect rather than restating the fix. Found on a real 439-letter Norwegian
+message where K=5 and K=2 both returned a constant-shifted ring/start (`LYU/OSO` and
+`LYS/OSM` against a true `LYR/OSL`) while the true key scored −5.2817 against the −5.7364
+returned — i.e. the scoring model preferred the truth and the search never reached it.
+
+**Display: the refinement no longer echoes a misleading progress ladder.** Its fresh
+`best_result` (needed so a mini-range-relative `idx` cannot leak into the outer `best`)
+also reset the progress high-water mark to `score_min`, so it printed a full run of lines
+that never beat the coarse pass — ending on a line *worse* than the answer being
+returned. Since the last progress line is what a reader takes for the result, that reads
+as the tool regressing: on an M4 message the final line showed −5.8066 while the returned
+answer was −4.9527 and correct. `rbest.shown` is now seeded from `best.shown`, so the
+refinement speaks only when it genuinely improves. Display-only — the merge still
+compares `best.score`, so the winner stays `-T`-deterministic.
+
+**M4 is unaffected and verified.** `init_walzen()` translates only under `-n`; M4 passes
+wheel numbers and the thin reflector through unchanged. Checked end to end (`-4 -u b -w
+B317`): unstrided, K=2 and K=5 all return exact plaintext. That check also **confirmed
+§7.12's predicted period-13 equivalence empirically** — the run reported ring/start
+shifted by 13 on the rightmost wheel with a byte-identical decrypt, which is exactly the
+two-notch `{M,Z}` notch set mapping onto itself under +13 (wheel VII sat in the right
+position), alongside a middle-wheel class representative shifted by −18.
+
 **Refinement skips the coarse winner itself.** The window is `±⌊K/2⌋` around the coarse
 winner *excluding* that winner: phase 1 already scored that exact ring2, over a
 **superset** of what phase 2 searches there (phase 2 additionally pins ring0/start0 to

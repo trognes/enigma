@@ -3977,6 +3977,20 @@ void bruteforce(char * result)
   size_t total_keys = ks.total_keys;
   size_t scored_keys = ks.scored_keys;
 
+  /* Echo the middle-wheel collapse (§7.12) when it is actually applied. Keyed on the
+     mask itself rather than on a re-derived "ring1 and start1 wildcarded && !--true-key"
+     test, so the line cannot drift from the real gate and claim a reduction that did not
+     happen -- being truthful about what was searched is the whole point of printing it.
+     That is also why it lives here rather than in show_settings(), which runs before
+     build_key_space() has decided. Unlike --ring-stride this is LOSSLESS, so the wording
+     reports a fact rather than a warning -- but it does explain a reported ring/start
+     that differs from the key the message was enciphered with. */
+  if ((g_mid_rep_mask != nullptr) && (scored_keys < total_keys))
+    fprintf(stderr, "Collapse:   middle wheel ring x start: %zu of %zu keys are exact "
+            "duplicates, skipped (%.1fx); reported ring/start may be an equivalent\n",
+            total_keys - scored_keys, total_keys,
+            static_cast<double>(total_keys) / static_cast<double>(scored_keys));
+
   /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
      task; a full M4 wildcard is ~14.9 GiB, every other mode far smaller) */
   g_table_count = nwo;
@@ -4168,7 +4182,9 @@ void bruteforce(char * result)
           int center2 = m.ringstellung[2];
 
           /* Snapshot everything each segment pins (ring0/start0/wheel order/
-             reflector/Greek wheel) BEFORE any segment's search_worker() call runs.
+             ring0/start0) BEFORE search_worker() touches m. The wheel order and
+             reflector are NOT snapshotted here -- they come from tasks[cur_wo]
+             verbatim, since m holds them already translated (see rtasks below).
              The plain-scan path leaves m's ringstellung/grundstellung in a stale,
              stepped state after scanning (a documented "lazy restore" perf
              optimisation below in search_worker() -- only the hillclimb path
@@ -4179,15 +4195,9 @@ void bruteforce(char * result)
              wheel0 step between two searches, corrupting the second one's window
              even though the first found nothing better). The refinement is a single
              search now (the value list expresses the whole set at once), so only the
-             snapshot ordering matters: read these BEFORE search_worker() touches m. */
+             ordering matters. */
           int fixed_ring0 = m.ringstellung[0];
           int fixed_start0 = m.grundstellung[0];
-          int fixed_w0 = m.walzenlage[0];
-          int fixed_w1 = m.walzenlage[1];
-          int fixed_w2 = m.walzenlage[2];
-          int fixed_ukw = m.ukw;
-          int fixed_greek = m.greek;
-          int fixed_greek_offset = m.greek_offset;
 
           /* Build the set of ring2 values to refine: the +/-half window around the
              coarse winner, taken mod 26 and EXCLUDING the winner itself.
@@ -4221,9 +4231,17 @@ void bruteforce(char * result)
               mask2 |= 1u << (((center2 + d) % asize + asize) % asize);
             }
 
-          std::vector<wheel_task> rtasks(1, wheel_task{
-              fixed_ukw, { fixed_w0, fixed_w1, fixed_w2 },
-              fixed_greek, fixed_greek_offset });
+          /* Reuse the winning task VERBATIM rather than rebuilding one from the
+             machine's fields. wheel_task carries RAW wheel/reflector numbers, which
+             init_walzen() translates on the way into a machine -- in Norway mode it adds
+             norway_rotor_base / norway_reflector_index. Rebuilding from m.walzenlage[]
+             therefore hands search_worker already-translated values that it translates a
+             SECOND time, so the refinement searched the wrong rotors entirely; and the
+             §7.12 collapse mask, which is built and looked up by raw index, hit a
+             never-built all-zero row and skipped every key, leaving the refinement
+             empty-handed. Both were invisible outside Norway mode, where raw ==
+             translated. cur_wo was set by the key_to_machine() call above. */
+          std::vector<wheel_task> rtasks(1, tasks[cur_wo]);
           search_range rrange;
           rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
           rrange.r_min[1] = range.r_min[1];
@@ -4244,6 +4262,17 @@ void bruteforce(char * result)
           extra_keys_analysed = rrsize * rgsize;
 
           best_result rbest;
+          /* Carry the display high-water mark into the refinement. Its best_result is a
+             fresh one (so its mini-range-relative idx cannot leak into the outer best),
+             which would otherwise restart the progress ladder from score_min and echo a
+             full run of lines that do NOT beat what the coarse pass already found --
+             ending on a line WORSE than the answer actually being returned. Since the
+             last progress line is exactly what a reader takes for the result, that reads
+             as the tool regressing. Seeding from best.shown means the refinement speaks
+             only when it genuinely improves on what was already displayed. Display-only:
+             the merge below still compares against best.score. */
+          rbest.shown.store(best.shown.load(std::memory_order_relaxed),
+                            std::memory_order_relaxed);
           std::atomic<size_t> rnext_key{0};
           int rnthreads = opt_threads;
           if (rwork < static_cast<size_t>(rnthreads))
@@ -4729,6 +4758,16 @@ void show_settings()
     fprintf(stderr, "Pre-filter: top %g%% of keys\n", opt_prefilter_frac * 100.0);
   else if (opt_prefilter > 0)
     fprintf(stderr, "Pre-filter: top %d keys\n", opt_prefilter);
+
+  /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
+     ~10pp of exact recovery at K=2 on telegraphic German, PERFORMANCE.md §7.11), so a
+     run that used it must say so: otherwise a saved log is indistinguishable from an
+     exhaustive one. Every other search-affecting option is echoed here; this was the
+     only silent one. */
+  if (opt_ring_stride > 1)
+    fprintf(stderr, "Stride:     rightmost ring every %d, then refine around the best "
+            "hit (--ring-stride: APPROXIMATE, may miss the true key)\n",
+            opt_ring_stride);
 
   fprintf(stderr, "Threads:    %d\n", opt_threads);
 

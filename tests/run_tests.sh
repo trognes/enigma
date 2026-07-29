@@ -1001,6 +1001,32 @@ check "--ring-stride needs ring2/start2 wildcarded" \
 rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -c --ring-stride 2 -F 100 2>&1 >/dev/null)
 check "--ring-stride rejects -F" "$(printf '%s' "$rs_err" | grep -c 'not supported with -F')" "1"
 
+# NORWAY mode with --ring-stride. Regression for a bug that every other --ring-stride
+# test missed because they all used the standard machine: wheel_task carries RAW wheel
+# numbers, which init_walzen() translates (Norway adds norway_rotor_base). The refinement
+# used to rebuild its task from the machine's ALREADY-TRANSLATED walzenlage[], so
+# search_worker translated a second time and searched the wrong rotors -- and the §7.12
+# mask, keyed on raw indices, hit an unbuilt row and skipped every key, so the refinement
+# silently found nothing. Invisible outside Norway, where raw == translated.
+nw_pt="STRENGTHEMMELIGSTOPMULIGMILITAERAKTIVITETOBSERVERTIEKMANFJORDENSTOPEKSPERTISEREKVIRERESOMGAAENDESTOPDOKUMENTERFUNNETMEDREFERANSETILOBJEKTIOSLO"
+nw_ct=$(run "$nw_pt" -n -i -u N -w 352 -r LYR -g OSL)
+check "crack: Norway + --ring-stride 2 refines to the exact key" \
+  "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." --ring-stride 2 -T 1)" \
+  "$nw_pt"
+check "crack: Norway + --ring-stride 2 matches the unstrided search" \
+  "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." --ring-stride 2 -T 1)" \
+  "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." -T 1)"
+
+# --ring-stride makes the search APPROXIMATE, so a run must say so in the echoed settings:
+# without this, a saved log is indistinguishable from an exhaustive run. It must stay
+# silent when the option is off, so the default output is unchanged.
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." --ring-stride 2 -T 1 2>&1 >/dev/null)
+check "--ring-stride is echoed in the settings" \
+  "$(printf '%s' "$rs_echo" | grep -c '^Stride: .*ring-stride')" "1"
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -T 1 2>&1 >/dev/null)
+check "no stride line when --ring-stride is off" \
+  "$(printf '%s' "$rs_echo" | grep -c '^Stride:')" "0"
+
 # Middle-wheel ring x start collapse (PERFORMANCE.md §7.12). Shifting ring1 and start1
 # together only changes the decode through the middle notch, which most start1 values
 # never reach in a short message -- so those start1 values are skipped as duplicates.
@@ -1041,6 +1067,21 @@ mw_diag=$(printf '%s' "$mw_ct" | "$ENIGMA" -f -l wehrmacht -u B -w 123 -r "A.." 
           | grep -oE 'Analysed [0-9]+ rotor combinations, scored [0-9]+ plugboards')
 check "middle-wheel collapse: analysed count matches keys scored" \
   "$(printf '%s' "$mw_diag" | awk '{print ($2 == $6)}')" "1"
+
+# The collapse must announce itself when applied -- it explains a reported ring/start that
+# differs from the true key -- and stay silent otherwise. Its gate has three parts, so all
+# three are checked: ring1 wildcarded, start1 wildcarded, and no --true-key (that
+# diagnostic ranks a specific key, so the collapse is disabled for it).
+mw_line() { printf '%s' "$mw_ct" | "$ENIGMA" -f -l wehrmacht -u B -w 123 "$@" -T 1 2>&1 >/dev/null \
+            | grep -c '^Collapse: .*middle wheel'; }
+check "middle-wheel collapse is echoed when applied" \
+  "$(mw_line -r "A.." -g "A..")" "1"
+check "no collapse line when ring1 is pinned" \
+  "$(mw_line -r "AA." -g "A..")" "0"
+check "no collapse line when start1 is pinned" \
+  "$(mw_line -r "A.." -g "AA.")" "0"
+check "no collapse line under --true-key" \
+  "$(mw_line -r "A.." -g "A.." -c -F 5 --true-key B123AQLADT)" "0"
 
 echo
 echo "passed: $pass, failed: $fail"

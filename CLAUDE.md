@@ -752,6 +752,17 @@ together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / rest
 ...)` reconstruction shares `--polish`'s dependency on the "simple sweep" `best.idx`
 encoding).
 
+> **`wheel_task` holds RAW wheel/reflector numbers — never rebuild one from a `machine`.**
+> `init_walzen()` *translates* on the way in: under `-n` it adds `norway_rotor_base` /
+> `norway_reflector_index`, so `m.walzenlage[]`/`m.ukw` are already-translated values.
+> Constructing a `wheel_task` from them hands `search_worker()` values it translates a
+> **second** time. That is exactly how the `--ring-stride` refinement came to search the
+> wrong rotors under `-n`, and once the §7.12 collapse landed (mask keyed on raw index)
+> the doubled values hit an unbuilt row and skipped every key, so the refinement silently
+> found nothing. Pass `tasks[cur_wo]` through verbatim instead. **It is invisible in
+> standard and M4 mode**, where raw == translated — so anything touching `wheel_task`
+> needs a Norway test, or the whole suite will pass over a broken feature (it did).
+
 **The refinement must re-open ring1/start1, not pin them to the coarse winner** — the one
 place the initial design (and the measurement harness, which independently
 re-optimizes ring1/start1 per candidate ring2) got it wrong. The coarse winner's
@@ -986,7 +997,14 @@ under `-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`, and clean unde
 ThreadSanitizer. Scaling is ~3× on 4 cores (`make bench SCALE=1`). **M4 (4-rotor
 naval) mode** is now implemented (`-4`; static Greek wheel folded into an
 effective reflector, so the hot path is untouched — see "M4 mode" above and
-`archived/CODE_REVIEW_HISTORY.md` §5). On **cracking quality for short messages** the
+`archived/CODE_REVIEW_HISTORY.md` §5). The **rotor keyspace** has since been cut on
+identifiability grounds — settings that provably decode identically are no longer
+enumerated: wheel 0's ring × start collapses totally and exactly (26×, `PERFORMANCE.md`
+§7.10) and wheel 1's partially and exactly (3–5× at short lengths, §7.12), both always-on
+when the relevant positions are wildcarded; wheel 2 admits no exact collapse and its
+approximate `--ring-stride` was measured down to not-recommended (§7.11). These are
+throughput reductions, not quality levers — the recovery frontier below is unchanged by
+them. On **cracking quality for short messages** the
 `make crackquality` harness shows every miss is a *search* failure (the plugboard
 hill-climb sticking in local optima); the search levers shipped so far are random
 restarts (`-R N`), the staged climb (`-S`), the **key pre-filter** (`-F N`, a
