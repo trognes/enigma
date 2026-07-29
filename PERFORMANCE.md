@@ -3139,14 +3139,33 @@ and double-step extras add one more for some wheel orders (132 measures 8 where 
 formula says 7). C also varies with **start2**, since the right wheel's notch phase sets
 *when* the middle steps (7 at start2=A vs 8 at start2=Q, same wheels and length). Build
 the representative set by **simulating the stepping and deduping on the notch-firing
-signature** — exact for every rotor/notch/double-step combination, O(26·L) to compute.
+signature** — exact for every rotor/notch/double-step combination.
+
+**That simulation is a cheap one-time precompute, not a per-key cost.** Three facts make
+the table small. (1) No stepping decision reads a ring setting, `start0`, the reflector or
+the plugboard — the whole trajectory is a function of `(w1, w2, start1, start2)` alone.
+(2) The class is determined by a **single integer**: the index at which the middle notch
+*first* fires (or "never"), because the post-firing state is fixed by that index and
+start2. A *second* firing needs ~26 further middle steps, i.e. ~676 characters — measured
+max firings is 1 even at L=300. (3) Storing the true first-firing index (simulate to the
+first firing, bounded ~676 steps) makes the table **independent of message length**: at
+runtime the class is `t` if `t < L`, else "never". So it can be built once in `init()`,
+before the ciphertext is read. Size ≤ 8·7 wheel pairs × 26 × 26 `uint16` ≈ **76 KB**
+(~27 KB under the default `-x 5`), ~25 ms to build.
+
+Verified against the binary: the partition predicted by first-firing index matched the
+actual distinct-ciphertext partition **exactly in 7/7 configurations**, including the
+two-notch (`126`, `168`) and double-step (`132`) cases where the closed form fails.
 
 **Why this is harder to ship than §7.11's value list.** Because C depends on start2, this
-is *not* an independent-dimension reduction: the surviving set is a `(start1, start2)`
-**pair list** (~182 entries at L=140), not a per-dimension list, so the flat mixed-radix
-decode cannot express it as a product. And per §7.11's own finding that growing
-`search_range` by 108 bytes cost a measured ~5% on the `search` benchmark, such a list
-must be heap-allocated and reached by pointer (like `subst_array`), never embedded.
+is *not* an independent-dimension reduction: the surviving set is a ragged
+`(start2, start1)` **pair list** (~182 entries at L=140), not a per-dimension list, so the
+flat mixed-radix decode cannot express it as a product. The natural layout is CSR-style —
+concatenate each start2's representative start1 values and index the flat coordinate
+straight into that array, replacing both dimensions with one. It is per wheel-task (w1/w2
+select the notches), so ~56 tasks × ~182 pairs ≈ 20 KB. Per §7.11's own finding that
+growing `search_range` by 108 bytes cost a measured ~5% on the `search` benchmark, the
+list must be heap-allocated and reached by pointer (like `subst_array`), never embedded.
 
 **Scope of the win.** It applies whenever ring1 *and* start1 are both wildcarded — so not
 under the default `-r AA.` (ring1 pinned), but yes under `-r A..` / `-r ...`. Unlike
