@@ -3977,6 +3977,20 @@ void bruteforce(char * result)
   size_t total_keys = ks.total_keys;
   size_t scored_keys = ks.scored_keys;
 
+  /* Echo the middle-wheel collapse (§7.12) when it is actually applied. Keyed on the
+     mask itself rather than on a re-derived "ring1 and start1 wildcarded && !--true-key"
+     test, so the line cannot drift from the real gate and claim a reduction that did not
+     happen -- being truthful about what was searched is the whole point of printing it.
+     That is also why it lives here rather than in show_settings(), which runs before
+     build_key_space() has decided. Unlike --ring-stride this is LOSSLESS, so the wording
+     reports a fact rather than a warning -- but it does explain a reported ring/start
+     that differs from the key the message was enciphered with. */
+  if ((g_mid_rep_mask != nullptr) && (scored_keys < total_keys))
+    fprintf(stderr, "Collapse:   middle wheel ring x start: %zu of %zu keys are exact "
+            "duplicates, skipped (%.1fx); reported ring/start may be an equivalent\n",
+            total_keys - scored_keys, total_keys,
+            static_cast<double>(total_keys) / static_cast<double>(scored_keys));
+
   /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
      task; a full M4 wildcard is ~14.9 GiB, every other mode far smaller) */
   g_table_count = nwo;

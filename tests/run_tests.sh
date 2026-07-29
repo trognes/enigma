@@ -1052,6 +1052,21 @@ mw_diag=$(printf '%s' "$mw_ct" | "$ENIGMA" -f -l wehrmacht -u B -w 123 -r "A.." 
 check "middle-wheel collapse: analysed count matches keys scored" \
   "$(printf '%s' "$mw_diag" | awk '{print ($2 == $6)}')" "1"
 
+# The collapse must announce itself when applied -- it explains a reported ring/start that
+# differs from the true key -- and stay silent otherwise. Its gate has three parts, so all
+# three are checked: ring1 wildcarded, start1 wildcarded, and no --true-key (that
+# diagnostic ranks a specific key, so the collapse is disabled for it).
+mw_line() { printf '%s' "$mw_ct" | "$ENIGMA" -f -l wehrmacht -u B -w 123 "$@" -T 1 2>&1 >/dev/null \
+            | grep -c '^Collapse: .*middle wheel'; }
+check "middle-wheel collapse is echoed when applied" \
+  "$(mw_line -r "A.." -g "A..")" "1"
+check "no collapse line when ring1 is pinned" \
+  "$(mw_line -r "AA." -g "A..")" "0"
+check "no collapse line when start1 is pinned" \
+  "$(mw_line -r "A.." -g "AA.")" "0"
+check "no collapse line under --true-key" \
+  "$(mw_line -r "A.." -g "A.." -c -F 5 --true-key B123AQLADT)" "0"
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
