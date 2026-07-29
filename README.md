@@ -252,13 +252,13 @@ the English tables.
   (needs `-c`) `[off]`. **Not recommended** — an ablation/measurement
   flag, not a quality lever
 - **`--ring-stride K`** — Test only every `K`th ring position of the
-  rightmost wheel, then refine around the best hit; needs both `-r` and `-g`
-  to wildcard that wheel, and rejects `-F`/`--exhaust` `[1 = off]`.
-  **Not recommended** — measured an accuracy *trade*, not a free saving:
-  on authentic telegraphic German `K=2` costs about 10 percentage points of
-  exact recovery and `K=3` about 17. The saving is smaller than it looks
-  too (≈1.7×, not `K`×), because the refinement grows as fast as the coarse
-  pass shrinks
+  rightmost wheel, then refine every skipped position around the best hit;
+  needs both `-r` and `-g` to wildcard that wheel, and rejects
+  `-F`/`--exhaust` `[1 = off]`.
+  **Not recommended** — measured an accuracy *trade*, not a free saving: on
+  authentic telegraphic German `K=2` and `K=3` each cost about 10 percentage
+  points of exact recovery, for savings of 1.9× and 2.6× respectively.
+  `K` of 5 or more costs considerably more accuracy and is not recommended
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters,
   try every combination, keep the best climb (needs `-c`; parallel over
   the first forced pair, so `-T` helps) `[off]`. **Not recommended** — a

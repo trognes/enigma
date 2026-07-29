@@ -247,22 +247,31 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 - `--ring-stride K` sparse ring sampling for the rightmost wheel (K=1..13, default 1 =
   off; needs both `-r` and `-g` to wildcard the rightmost wheel's position, else there is
   nothing to thin out; incompatible with `-F`/`--exhaust`, the same `best.idx`-encoding
-  fragility `--polish` has). The coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then a
-  small refinement pass checks the skipped neighbours around the best coarse hit — see
+  fragility `--polish` has). The coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then one
+  refinement pass re-checks **every** skipped ring2 around the best coarse hit (see
   "Sparse ring sampling for the rightmost wheel" below and `PERFORMANCE.md` §7.11 for the
-  measurement and the implementation gotchas. **Not recommended by default — it is an
-  accuracy/throughput TRADE, not a free reduction.** Measured end-to-end on authentic
-  telegraphic German (200 paired trials/cell, `-f -l wehrmacht`, plugboard given): K=2
-  costs **~10pp of exact recovery** vs no stride (L40 50.0%→38.5%, L60 74.0%→64.5%) and
-  K=3 costs ~17pp, with a stride-specific miss rate of 11-14% (K=2) and a flat 21% (K=3).
-  So **K=2 is the only value with any backing** and K≥3 is not recommended. The earlier
-  "100% recoverable across 90 trials" result is *not* a contradiction — it measured a
-  weaker *proximity* property (does the winner land within `⌊K/2⌋` of the truth?) on
-  English prose, not exact recovery. Note the saving is modest anyway: total distinct
-  ring2 values tested is 15 for K=2 and 11 for K=3 vs 26 unstrided (the refinement window
-  grows with K as fast as the coarse pass shrinks), so ≈1.7×, not `K`×. Whether the saved
-  compute beats spending it on `-R` restarts at matched wall time is **untested** — the
-  right next experiment.
+  measurement and the implementation gotchas). **Still not recommended by default — it
+  remains an accuracy/throughput TRADE, not a free reduction** — but both axes moved when
+  the refinement was widened from a `±⌊K/2⌋` window to every skipped value (the extra is a
+  *constant*, one pinned task, so it is nearly free; §7.11). Measured end-to-end on
+  authentic telegraphic German (200 paired trials/cell, `-f -l wehrmacht`, plugboard
+  given), exact recovery:
+
+  | L | K=1 | K=2 | K=3 | K=5 |
+  |---:|---:|---:|---:|---:|
+  | 40 | 50.0% | 38.0% | 38.0% | 32.5% |
+  | 60 | 74.5% | 66.0% | 63.5% | 60.5% |
+
+  with a stride-specific miss rate (failed where K=1 succeeded) of 10-12% (K=2), 12-14%
+  (K=3) and 16-21% (K=5). Cost, as keys analysed on a single-wheel-order key with start0
+  open: **1.86× (K=2), 2.61× (K=3), 3.73× (K=5)**. Widening the window is what makes K=3
+  usable — it was 33.5%/56.5% with a flat 21% miss rate under the old window, and is now
+  level with K=2 at a ~40% larger saving; **K=2 and K=3 are the values with backing**, K≥5
+  is not. The earlier "100% recoverable across 90 trials" result is *not* a contradiction
+  — it measured a weaker *proximity* property (does the winner land within `⌊K/2⌋` of the
+  truth?) on English prose, not exact recovery. Whether the saved compute beats spending
+  it on `-R` restarts at matched wall time rests on a single cell (a dead tie at L=100)
+  and is still **effectively untested** — the right next experiment.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the climb/SA
   never remove or rewire them (their letters are marked in `plug_fixed[]`, set once from
   `opt_steckerbrett` before the threaded search, and skipped by every switch/remove/

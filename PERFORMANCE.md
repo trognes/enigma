@@ -3142,6 +3142,65 @@ not the pre-existing scoring floor): K=2 → 14% / 11%; K=3 → **21% at both le
    short telegraphic German is exactly the low-information register where decoys win
    (§6.6, §3.11).
 
+#### Follow-up: the refinement is ~26× cheaper per ring2 value, so refine ALL of them — ✅ SHIPPED
+
+Both the cost model above and the `±⌊K/2⌋` window rest on the same unexamined assumption:
+that a ring2 value costs the refinement what it cost the coarse pass. It does not. The
+refinement runs **once**, at the end of the whole search (next to `--polish`, before it),
+over a **single pinned** wheel order/reflector with ring0/start0 fixed — so per ring2
+value it is `tasks.size() · rc[0] · gc[0]` times cheaper: **26×** on a single-wheel-order
+key with start0 open, **~26 000×** with the wheels wildcarded.
+
+Two things follow. The corrected total is ≈ `26/K + 25/(tasks·rc[0]·gc[0])`, i.e.
+essentially `26/K` — the saving approaches `K`×, not the `26/K + K` model's ≈2.5× ceiling.
+And the narrow window was never buying anything: it left the whole feature resting on the
+coarse winner landing within `K/2` of the truth, which is exactly what the stride-specific
+miss rate above says fails. So the refinement now covers **every** ring2 except the coarse
+winner (the extra is a *constant*, independent of `K`).
+
+Cost, keys analysed on a single-wheel-order key with start0 open (`-r AA. -g ...`):
+
+| K | 1 | 2 | 3 | 5 |
+|---|---:|---:|---:|---:|
+| keys | 456 976 | 245 388 | 175 084 | 122 356 |
+| saving | 1.00× | 1.86× | 2.61× | 3.73× |
+
+Exact recovery, same harness and seed as the table above (200 paired trials/cell),
+narrow → wide window:
+
+| L | K=1 | K=2 | K=3 | K=5 |
+|---:|---:|---:|---:|---:|
+| 40 | 50.0% | 38.5 → 38.0% | 33.5 → **38.0%** | 32.5% |
+| 60 | 74.5% | 64.5 → 66.0% | 56.5 → **63.5%** | 60.5% |
+
+Stride-specific miss rate falls for K=3 from a flat 21% to 14%/12%; K=2 is unchanged
+within noise. **That asymmetry is the informative part.** K=2's coarse grid is never more
+than 1 from the truth, so widening cannot help it — its residual misses are the coarse
+pass picking a wrong wheel order or start0 *outright*, which no ring2 sweep repairs. K=3's
+were genuinely window-limited. The practical result: **K=3 now delivers 2.61× at roughly
+the accuracy K=2 gave at 1.99×**, so the "K=2 is the only value with any backing" verdict
+above extends to K=3. K=5 stays clearly worse on accuracy.
+
+**The window is budgeted, and the budget is measured to be free.** It grows only while the
+extra stays under 25% of the coarse pass (floored at the historical `⌊K/2⌋`, capped at 13
+= all 25 non-centre values), because on a keyspace narrow enough that the coarse pass is
+itself tiny — a *single* task **and** start0 pinned — 25 refinement values can outcost the
+entire coarse pass and turn a throughput option into a slowdown. On a fully wildcarded
+keyspace (`rc[1]=26`) the cap does bite, clipping the window to ~12 of 25. A/B against an
+unbudgeted build (L=60, K=3, n=150, plugboard given) shows that costs nothing:
+
+| | exact | mean keys analysed |
+|---|---:|---:|
+| 25% budget (shipped) | 66.0% | 815 932 |
+| all 25 values | 66.7% | 1 114 724 |
+
++0.7pp is one trial in 150 — noise — for 37% more work. Keep the cap.
+
+Regression test: an authentic-Wehrmacht key (`-u A -w 123 -r DLT -g ACG`, L=60) whose K=3
+coarse winner lands well outside `K/2` of the truth. The narrow window returns a
+partially-wrong plaintext; the full sweep matches the K=1 baseline exactly. Verified to
+fail against the pre-widening binary.
+
 **What this measurement does NOT settle: the matched-compute question.** It compares at
 *fixed work per candidate* (a plain scan, `-s`, no restarts), so it answers "does the
 stride lose accuracy?" (yes) but not "is the saved compute better spent elsewhere?".
