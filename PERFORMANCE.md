@@ -2726,6 +2726,531 @@ score-reuse to exploit?" for the diversity-search line of work, and the answer �
 ~7–13% and all intra-climb* — is the artifact. Needs `-c`; quad or any model; per-worker
 cache so no locking; the default path is byte-identical.
 
+### 7.10 Leftmost wheel's ring × start collapses to a pure offset — ✅ SHIPPED (rotor-keyspace, not plugboard)
+
+**A different axis from everything else in this section.** §7.1–7.9 are all about the
+per-character plugboard score loop; this is about the size of the *rotor-key* search
+space itself — `build_key_space()` — and it applies whenever ring **and** start are both
+wildcarded for a wheel, independent of scoring model or plugboard climb. Origin: a user
+observation that for most texts only the *offset* between a wheel's ring and start
+matters, and asked whether ring enumeration could be thinned out.
+
+**The mechanism, precisely (verified against `setup_mapping()`, not assumed).** The
+notch/stepping check for each wheel — `notch[w1][g1]` (wheel 1, checked every character)
+and `notch[w2][g2]` (wheel 2) — tests the **raw window position**, never the
+ring-adjusted offset; ring only enters at the final lookup,
+`sa[mod26(g0-r0)][mod26(g1-r1)][mod26(g2-r2)]`. So shifting a wheel's ring and start by
+the same δ (preserving the offset used for its own substitution) leaves that wheel's
+per-character substitution exactly correct throughout the message — *provided nothing
+downstream depends on that wheel's own absolute window value*. That proviso is met by
+**wheel 0 (leftmost) and only wheel 0**: it has no notch check of its own (there is no
+wheel further left for it to step), so nothing about its trajectory feeds forward into
+any stepping decision — its own advancement is driven entirely by wheel 1's notch, a pure
+additive step-count wholly untouched by ring0 or start0. Wheels 1 and 2's own window
+values, by contrast, gate further stepping (wheel 1's notch triggers wheel 0 *and* its own
+double-step; wheel 2's notch drives wheel 1), so shifting *their* ring+start together
+shifts *when* those downstream events fire — an approximation, not an equivalence.
+
+**Measured, to confirm the derivation rather than trust it.** Ring+start shifted together
+by δ = 1..25, single characters compared against the true decode (127-letter message,
+enough for wheel 0 to step several times over):
+
+| wheel shifted | δ=1 | δ=2 | δ=3 | δ=5 | δ=13 | δ=25 |
+|---|---:|---:|---:|---:|---:|---:|
+| **wheel 0 (leftmost)** | 0 mismatches | 0 | 0 | 0 | 0 | 0 (exact at every δ) |
+| wheel 1 (middle) | 26 | 51 | 77 | 27 | — | — |
+| wheel 2 (rightmost, 98-letter msg) | 2 | 6 | 10 | 18 | 49 | — |
+
+Wheel 0 is **exact at every tested δ, unconditionally** — not "usually," not "unless an
+unfortunate step occurs." Wheels 1/2 show real, generally-growing corruption even at
+small δ (wheel 1's is large and non-monotonic because its own notch feeds the double-step
+directly) — confirming they need the cautious, *empirically-validated-before-shipping*
+treatment, not this unconditional one. (A companion simulation swept realistic rotor/notch
+combinations for wheel 0's stepping alone, finding it never steps at all — an even
+stronger, simpler win *when true* — in 70–90% of cases at the 40–90-letter lengths this
+tool targets; but the shift-equivalence above makes that distinction moot for wheel 0: an
+exact win either way, whether it steps or not.)
+
+**Shipped: `build_key_space()`**, right after the per-wheel ring/start range setup — when
+`opt_ringstellung[0]=='.'` **and** `opt_grundstellung[0]=='.'` (both wildcarded; if only
+one is, every value of it is a distinct necessary offset and no redundancy exists),
+`ring0`'s range collapses from the full 0–25 to the single sentinel `0`, leaving `start0`
+to enumerate the 26 offsets directly — the exact same pattern already used for the M4
+Greek wheel's `(start − ring)` collapse (`offset_list` a few lines above), because the
+underlying reason is identical: nothing depends on that wheel's *absolute* value, only
+relative offset. No other code changes needed — `rc`/`gc`/`rsize` are already generic
+products over the per-wheel ranges, so pinning `rc[0]` to 1 propagates through
+`search_worker`'s mixed-radix decode and the parallel chunking automatically. Applies
+uniformly to standard, Norway, and M4 (M4's wheel 0 is the leftmost of its 3 *stepping*
+wheels — distinct from the already-collapsed static Greek wheel).
+
+**Measured reduction and verification.** `-r ..Z -g ..P` (wheel 0 both wildcarded, wheels
+1/2 fixed): 456,976 combinations → 17,576 (exactly ÷26, as predicted), 0.387s → 0.094s
+single-threaded on the same key. Correct plaintext recovered in every mode tested
+(standard, Norway, M4; single wheel-order and full reflector+wheel-order+ring0+start0
+wildcard together). Reported ring position for wheel 0 is always `A` — the direct
+analogue of the Greek wheel's already-documented unidentifiable ring. 230/230 tests pass;
+ASan+UBSan clean.
+
+**Scope — this is the "safe half" of the user's idea; the risky half is measured in
+§7.11, below.** Wheels 1 and 2 do **not** get this treatment (confirmed above: real,
+non-trivial corruption even at small δ) — extending sparse/approximate ring-sampling to
+them, betting that n-gram scoring tolerates the resulting handful of wrong letters, is a
+genuinely different, riskier lever.
+
+**Practical relevance: this is not a niche scenario.** When `-r` is not given at all, the
+non-M4 default is `opt_ringstellung = "AA."` (M4: `"AAA."`) — ring0/ring1 default to `A`,
+ring2 (the rightmost wheel) defaults to **wildcarded**, and the default `-g` is `"..."`
+(fully wildcarded). So the "ring2 and start2 both wildcarded" precondition this section's
+collapse needs, and the precondition §7.11's stride experiment needs, is live in the
+tool's **bare default invocation** whenever a caller doesn't explicitly pin ring — not
+just a deliberately-constructed full-wildcard scenario.
+
+### 7.11 Sparse ring sampling for the rightmost wheel — ✅ SHIPPED (`--ring-stride`)
+
+The risky half of the same user idea: wheel 2 (rightmost) lacks wheel 0's unconditional
+exactness (§7.10), but its corruption under a ring+start shift is small and grows
+smoothly (§7.10's table: 2/6/10/18 mismatches at δ=1/2/3/5, a 98-letter message) — small
+enough that scoring might still reliably identify the true region from a coarser,
+stride-K sample of ring values, with a cheap local refinement recovering the exact key
+afterward. Measured with the real binary (not a toy simulation): reflector + wheel order
+given, plugboard given via `-s` (isolating rotor-key discrimination from plugboard
+search), ring0/start0 auto-collapsed by §7.10, ring1/start1/start2 fully wildcarded;
+baseline is one full search, "stride-K" runs one search per candidate ring2 in
+`{0, K, 2K, ...}` and keeps the best. "Recoverable" = the winning candidate's ring2 lands
+within `⌊K/2⌋` of the true ring2 — i.e. checking its immediate neighbors would find the
+exact key. 30 paired trials per cell (same instances reused across K), English quadgram
+scoring, L=60/90/150:
+
+| L | K=2 | K=3 | K=4 |
+|---:|---:|---:|---:|
+| 60 | 100% (dist 0.57) | 90% (0.70) | 86.7% (1.23) |
+| 90 | 100% (0.60) | 83.3% (0.77) | 100% (0.80) |
+| 150 | 100% (0.47) | 100% (0.70) | 100% (0.87) |
+
+A follow-up swept K=5..13 at L=60 only (same setup, n=30):
+
+| K | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| recoverable | 83.3% | 93.3% | 86.7% | 93.3% | 90.0% | 100% | 96.7% | 100% | 96.7% |
+| mean dist | 1.50 | 1.57 | 1.77 | 2.10 | 2.33 | 2.23 | 2.57 | 2.70 | 3.13 |
+
+**The high recoverable% at large K is partly an artifact, not a free lunch — this is
+the load-bearing methodological finding.** The "recoverable" threshold `⌊K/2⌋` loosens
+in lockstep with K, so a flat ~90-100% across K=5..13 does not mean large K is cheap:
+at K=13 only 2 candidates are tested, and "recoverable" merely asks whether the winner is
+within 6 of the truth. The real signal is mean distance, which grows almost exactly
+linearly and matches the naive "distance to nearest grid point" prediction (`K/4`) at
+every K tested (e.g. K=8 predicts 2.0, measures 2.10; K=13 predicts 3.25, measures 3.13)
+— confirming the scoring reliably identifies the geometrically nearest candidate as
+best, not that large strides are free.
+
+**Total-cost accounting is what should drive the choice of K, not recoverable% alone.**
+Coarse-scan cost ≈ `26/K`; refinement cost (checking the candidates within the
+recoverable radius) ≈ `K`. Total ≈ `26/K + K`, minimized at `K ≈ √26 ≈ 5`, giving
+≈`26/5 + 5 ≈ 10` evaluations vs. 26 uncollapsed — **≈2.5× at best**, not the 13× a naive
+reading of "K=13 only tests 2 candidates" would suggest, because the refinement radius
+(and cost) scales with K right along with the coarse-scan saving.
+
+> ⚠️ **The verdict in the next paragraph was later measured to be over-optimistic — see
+> "Follow-up: end-to-end exact recovery on telegraphic German" below.** "Recoverable"
+> here is a *proximity* property (does the winning candidate land within `⌊K/2⌋` of the
+> truth?), not exact recovery, and it was measured on English prose. Measured
+> end-to-end through the shipped flag on authentic Wehrmacht traffic, even K=2 costs
+> ~10pp of exact recovery. Read both before trusting K=2 as "free".
+
+**Verdict: K=2 is the one clearly worth shipping.** 100% recoverable across all 90
+trials tested (L=60/90/150 combined, 0 misses — a rule-of-three 95% upper bound on the
+true miss rate of roughly 3%), mean distance 0.57 (refinement is checking one neighbor),
+directly matching the original "every other ring position" framing, and it stacks
+multiplicatively with §7.10's exact 26× — a genuine, low-risk, ready-to-build 2× on top.
+**K≥5 is not recommended as designed**: the ≈2.5× ceiling is a modest improvement over
+K=2's 2× for a real, non-trivial single-pass miss rate (10-17%, refining only the single
+best coarse candidate) — a bad trade for a tool whose whole point is *exact* recovery,
+not approximate. The one open, untested mitigation that could change this verdict:
+**refining the top-M coarse candidates instead of just the best one** (M=3, say) might
+recover most of K=5/6's miss rate at a small added cost, keeping more of the coarse-scan
+saving — a concrete, well-motivated next experiment, not yet built or measured.
+
+**Status: shipped as `--ring-stride K` (K=1..13, default 1 = off).** `build_key_space()`
+shrinks `rc[2]` to `⌈26/K⌉` buckets when `--ring-stride K>1` is given (both `-r`/`-g` must
+wildcard the rightmost wheel's position, enforced by validation — the same precondition
+the measurement above needs); `search_worker()`/`key_to_machine()` scale the decoded
+bucket index back up (`× K`) so the coarse pass actually tests ring2 ∈ {0, K, 2K, ...}.
+After the coarse pass, `bruteforce()` runs one small refinement search (reusing
+`search_worker` on a self-contained, mostly-pinned mini key-space) over the skipped
+ring2 neighbours around the best coarse hit, keeping the improvement only if it beats
+the coarse result.
+
+**One thing the measurement above got wrong, caught only by implementing and testing
+it: the refinement must re-open ring1/start1, not pin them to the coarse winner.** The
+original design (and this section's harness, which independently re-optimizes
+ring1/start1/start2 for *each* candidate ring2) assumed only ring2/start2 needed
+checking near the winner — "ring0/ring1/start0/start1 pinned to the coarse winner
+(unaffected by the approximation)". That is false for ring1/start1: the coarse winner's
+ring1/start1 are only optimal for *its own* (possibly off-by-one, corrupted) ring2 row,
+and a drifted pair can outscore the truth's row at the *corrupted* ring2 the coarse pass
+actually lands on.
+
+**Reproducible case** (K=2, 140-letter telegraphic German, 10 plugs given, `-f -l
+wehrmacht`, ring1 wildcarded):
+
+```
+true       : ring AQL  start ADT
+coarse win : ring ARK  start AES     <- ring1 R vs true Q, start1 E vs true D (both +1)
+refinement window: ring2 in {J, L}
+  ring2=L  PINNED (ring1=R,start1=E) -> -5.8179  ARL AET   wrong
+  ring2=L  REOPENED                  -> -5.7679  AQL ADT   EXACT
+```
+
+The truth scores **better** (−5.7679 vs −5.8179) at the true ring2 — it is findable and
+it wins — but pinning ring1/start1 to the coarse winner's drifted pair excludes it from
+the search space, so no amount of ring2 refinement reaches it. The drift is wheel 1's
+ring×start offset shift, which unlike wheel 0's is only *approximately* decode-equivalent.
+
+Two qualifications worth knowing, both from measuring rather than assuming. The drift is
+common but only sometimes fatal: over 20 keys, pinning recovered 18/20 against reopening's
+19/20, and on a separately checked key with a +12 drift *both* recovered because that
+particular shift happened to be decode-exact. And it only arises when the caller wildcards
+ring1 — with ring1 pinned (the default `-r AA.`) start1 never drifted alone in 8/8 checks,
+since it has nothing to shift with. The
+fix re-opens ring1/start1 to the *original* search's bounds in the refinement (which
+collapses back to a pin automatically if the caller had explicitly pinned ring1, rather
+than wildcarding it, so a deliberately narrow search is never silently widened) — this costs more than the "check `K` ring2 neighbours" estimate in
+the total-cost accounting above (closer to `K` *full* per-ring2 searches, i.e. the same
+per-candidate cost the coarse pass pays, not a cheap fixed-ring1 lookup), but is what
+actually recovers the true key. Re-verified after the fix: exact recovery on every
+spot-checked key across K=2/3/5/13, `-c`+`--polish` composes correctly (rotor-key
+refinement runs before the plugboard climb/polish), and ring0/start0 stay validly pinned
+(§7.10's collapse holds regardless of ring2, so that half of the original assumption was
+correct). `-F`/`--exhaust` are rejected together with `--ring-stride` (same `best.idx`
+simple-sweep-encoding fragility `--polish` already has).
+
+**Two more implementation-only bugs, both caught by a targeted random sweep (true ring2
+pinned to A or Z, the two values a K=2 coarse pass is most likely to land exactly on or
+adjacent to) rather than by the original spot checks, which happened not to trigger
+either:**
+
+1. **The refinement window clamped at the 0/25 ring2 boundary instead of wrapping.**
+   ring2 is circular, so the correct neighbourhood of a coarse winner at A(0) includes
+   Z(25) — but `if (rmin2 < 0) rmin2 = 0;` simply threw that neighbour away, silently
+   turning a documented-"recoverable" case (winner within `⌊K/2⌋` of the truth, mod 26)
+   into a guaranteed miss whenever the winner sat at the opposite edge from the truth.
+   Fixed by splitting the window into up to two disjoint contiguous segments (`nseg`/
+   `seg_lo`/`seg_hi`) when it would wrap — `search_range`/`rc[]`, like the rest of the
+   flat mixed-radix decode `search_worker()`/`key_to_machine()` share, can only express
+   one contiguous interval per wheel position, so a true modular range needs two
+   sub-searches merged by best-of, not a single call.
+2. **A live machine object was read for the next segment's pin *after* being used as
+   search_worker's own scratch state.** `m` (`machines[0]`) doubled as both "the coarse
+   winner's decoded state, which each segment's pin (ring0/start0/wheel order) is read
+   from" and one of `search_worker`'s per-thread scratch machines for the mini-search
+   itself. On the plain-scan path, `search_worker` deliberately leaves
+   `m.grundstellung`/`m.ringstellung` in whatever state the *last scanned key* stepped
+   them to (a documented "lazy restore" — only the hillclimb path restores per key,
+   since nothing on the scan path is supposed to need the true position back). Reading
+   `m.grundstellung[0]` again for a second segment's pin therefore picked up that stale,
+   stepped value instead of the coarse winner's actual start0 — confirmed by a
+   concrete case where start0 silently drifted from V to W between segments (98
+   characters of stepping is enough to carry a step into the leftmost wheel), pinning
+   the second segment's search 26 keys away from where the true key actually was, a
+   pure implementation defect rather than an approximation. Fixed by snapshotting
+   ring0/start0/wheel-order/reflector/Greek-wheel into local variables once, before any
+   segment's `search_worker` call, and reusing that snapshot for every segment instead
+   of re-reading `m`.
+
+Re-verified after both fixes: 0/100 mismatches on a targeted boundary sweep (ring2
+pinned to A or Z, random reflector/wheel-order/starts), cross-checked against the K=1
+(no-stride) baseline to separate genuine `--ring-stride` bugs from the pre-existing
+scoring-information floor (a handful of *baseline* misses exist too — a decoy
+outscoring the truth by a hair even under exhaustive search — and those are unaffected
+by either fix, exactly the "scoring failure, not search failure" distinction this
+document uses elsewhere). ASan/UBSan clean; g++ and clang++ both pass the full suite
+(`tests/run_tests.sh` now includes the two originally-failing keys as an explicit
+`--ring-stride` regression, plus K=2/3/5 exact recovery and the four validation-error
+paths). Reproduce the original measurement: `eval/ring_stride_probe.py`.
+
+**Refinement skips the coarse winner itself.** The window is `±⌊K/2⌋` around the coarse
+winner *excluding* that winner: phase 1 already scored that exact ring2, over a
+**superset** of what phase 2 searches there (phase 2 additionally pins ring0/start0 to
+the winner's own values), so re-running it can only reproduce the same score. Dropping
+it saves one candidate at every stride. (Deliberate caveat: under `-c` the per-restart
+RNG seeds differ between the two searches, so a retest *could* stumble on a better
+plugboard — but that is extra plugboard restarts smuggled into a rotor-key refinement,
+and `-R` is the documented lever for that, so the duplicate goes.) Distinct ring2 values
+actually tested:
+
+| K | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| phase 1 (coarse) | 26 | 13 | 9 | 7 | 6 | 5 | 4 | 4 | 3 | 3 | 3 | 3 | 2 |
+| phase 2 (refine) | 0 | 2 | 2 | 4 | 4 | 6 | 6 | 8 | 8 | 10 | 10 | 12 | 12 |
+| **total** | **26** | **15** | **11** | **11** | **10** | **11** | **10** | **12** | **11** | **13** | **13** | **15** | **14** |
+
+The saving is far more modest than "test every Kth ring" suggests — the refinement
+window grows with K exactly as fast as the coarse pass shrinks, so the total bottoms out
+around ~10 (K=5/7) versus 26, i.e. **≈2.6× at absolute best**, and K=2 buys only 1.7×.
+
+**Representation: ring2 is an explicit value list, not an interval.** `search_range`
+carries `r2_vals[26]`/`r2_n`, filled by `set_ring2()` from a 26-bit mask, with `rc[2]`
+its length; the decode is `r3 = range.r2_vals[rr % rc[2]]`. ring2 is the only ring
+position that can be non-contiguous (the strided coarse set; the refinement's wrapped,
+centre-punctured window), so an interval genuinely cannot express it — the earlier
+implementation instead split the refinement into up to **three** contiguous sub-searches
+(the excluded centre can cut a wrapped window into three pieces: centre=1, half=2 →
+{25}, {0}, {2,3}). With a value list the coarse set, the wrap and the exclusion are
+merely different masks, the refinement collapses to **one** search, and — the real prize
+— the decode stops consulting a global, so the `save_stride`/`opt_ring_stride = 1`
+save/restore that had to bracket the nested refinement is **deleted**. Mutating that
+global around a nested search was the direct cause of the first corruption bug in this
+feature (the `AK\` out-of-range ring), so this removes the bug class rather than the
+instance. `opt_ring_stride` now appears only in `build_key_space()` (building the mask),
+the `> 1` guards and option parsing — never in a decode. The mask-then-expand idiom
+matches `build_key_space()`'s existing `seen[]`→`offset_list` handling of the M4 Greek
+wheel. Verified **byte-identical** to the previous implementation across 200 comparisons
+(40 random keys × K=1/2/3/5/13); K=1 reproduces the full contiguous list, i.e. the
+unstrided search exactly.
+
+**The list must be `unsigned char`, not `int` — and establishing that required a
+noise-floor control.** `search_range` is read by `search_worker()`'s per-key decode, so
+its *size* matters: an `int[26]` list grew the struct from 48 to ~156 bytes and measured
+**+4.5% and +5.8% on the search benchmark** under g++ across two runs. Ring values are
+0–25, so a byte holds one exactly; `unsigned char` returns the struct to ~80 bytes and
+the regression vanishes (**−0.8%, +0.9%** on re-runs). Clang was useless for deciding
+this — it reported search **−16.1%** (i.e. *faster*) on the same regressed build.
+
+The reason this was decidable at all is a **base-vs-base control** (check the base
+revision out into the working tree, then run `make bench BASE=<same-ref>`; every
+non-zero number is pure noise). It gives **per-tier** noise floors, and they differ by
+an order of magnitude:
+
+| tier | base-vs-base | meaning |
+|---|---:|---|
+| `search` | **−0.5%** | tight — a ~5% move is real signal |
+| `hillclimb` | **−4.5%** | loose — ±5% scatter means nothing |
+
+So on the same set of runs, the search figure was a genuine regression while *all* of
+the hillclimb scatter (+4.5%, −1.3%, +5.1%) was noise. Without the control the two look
+identical, and the natural readings — "both moved ~5%, probably both noise" or "let's
+fix the hillclimb number" — are both wrong. **Run the base-vs-base control before
+interpreting any bench A/B on a shared box**; the 10% pass/fail threshold is far too
+coarse for the `search` tier, which can resolve ~1%.
+
+**Rejected: storing only the 26-bit mask instead of the expanded list.** Since struct
+size demonstrably mattered above, the obvious next step is to drop `r2_vals[26]`/`r2_n`
+(30 bytes) for the `unsigned int` mask itself (4 bytes) — `sizeof(search_range)` goes
+**156 (int list) → 80 (byte list) → 52 (mask only)**. The decode then has to *select*
+the i-th set bit, done portably (no BMI2 `PDEP`, which is x86-only) as `while (i--) m &=
+m - 1;` then `__builtin_ctz` — one instruction on x86, `RBIT`+`CLZ` on arm64. Verified
+output-identical across 150 comparisons, then measured against the shipped byte-list
+version with a **same-session list-vs-list control beside every number**:
+
+| | control (list-vs-list) | mask-only vs list |
+|---|---|---|
+| g++ `search` | +0.1%, −0.9% | **+2.7%, +0.6%** |
+| clang `search` | −0.8%, +0.1% | −0.3%, +0.4% |
+| `hillclimb` (both) | −0.9% … +3.3% | −2.5% … +2.4% |
+
+clang is indistinguishable from its own control; g++ leans ~1–2% **slower** on `search`,
+with the +2.7% outside the control band. So the further 28 bytes buy nothing and the
+per-key select loop costs a little — **keep the byte value list**. Note the asymmetry
+with the earlier step: 156→80 bytes was worth ~5%, 80→52 is worth nothing, i.e. the
+returns are not linear in struct size and there is no point shrinking further.
+Caveat: measured on x86-64 only. On Apple-silicon arm64 the two effects plausibly pull
+opposite ways (ARM is more sensitive to large struct offsets, but `ctz` costs an extra
+instruction there), so the margin could differ — the `Bench` workflow's arm64-Linux
+matrix is the place to check if it ever matters. Given there is no measured upside on
+either x86 compiler, the simpler O(1) decode wins on both counts.
+
+#### Follow-up: end-to-end exact recovery on telegraphic German — ⚠️ the stride is NOT free
+
+Everything above measures a *proximity* property on English prose. The practical
+question is different: driving the **shipped flag** end to end, how often does the true
+plaintext come back **exactly**? Measured on real excerpts from the authentic 1941
+message database (`eval/enigma-messages.txt`, `eval/enigma-army-messages-1941.txt`) with
+`-f -l wehrmacht`, true plugboard given via `-s` (isolating the rotor-key question, as
+the original harness does), random reflector/wheel-order/ring/start, 200 paired trials
+per cell — `eval/ring_stride_wehrmacht_probe.py`, results in
+`eval/results-ring-stride-wehrmacht.txt`:
+
+| L | K=1 (no stride) | K=2 | K=3 |
+|---:|---:|---:|---:|
+| 40 | **50.0%** | 38.5% (−11.5pp) | 33.5% (−16.5pp) |
+| 60 | **74.0%** | 64.5% (−9.5pp) | 56.5% (−17.5pp) |
+
+Stride-*specific* miss rate (the stride failed on a trial where K=1 succeeded, so it is
+not the pre-existing scoring floor): K=2 → 14% / 11%; K=3 → **21% at both lengths**.
+
+**Two conclusions.**
+
+1. **K=3 is not worth recommending.** Its stride-specific miss rate is roughly *double*
+   K=2's and is flat at 21% across both lengths, for a saving of only 11 vs 15
+   candidates. This extends §7.11's existing "K≥5 not recommended" verdict *downward*:
+   K=2 remains the only value with any real backing.
+2. **Even K=2 is not free on this register**, contrary to the "100% recoverable"
+   headline above — it costs ~10pp of exact recovery. The two measurements do not
+   contradict each other; they measure different things. Landing *near* the true ring2
+   (the proximity property) does not imply the refinement then *recovers* it, because
+   the refinement re-opens ring1/start1 and can be outscored there by a decoy — and
+   short telegraphic German is exactly the low-information register where decoys win
+   (§6.6, §3.11).
+
+**What this measurement does NOT settle: the matched-compute question.** It compares at
+*fixed work per candidate* (a plain scan, `-s`, no restarts), so it answers "does the
+stride lose accuracy?" (yes) but not "is the saved compute better spent elsewhere?".
+Since restarts are the documented primary quality lever and short-message search is
+compute-bound (§6.15), `K=2 + more -R` versus `K=1 + fewer -R` at equal wall time is
+genuinely open and is the right next experiment. Until that is run, `--ring-stride`
+should be presented as a **throughput/accuracy trade**, not a free reduction.
+
+### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
+
+§7.10 collapses wheel 0's ring × start *totally* (26×, exact) and §7.11 attacks wheel 2's
+only *approximately*. The middle wheel sits between the two and has an **exact, partial**
+collapse that the tool does not currently exploit.
+
+**Mechanism.** Shifting `ring1` and `start1` together leaves `mod26(g1-r1)` — the middle
+wheel's whole contribution to the substitution — invariant. The only other place `g1`
+is read is `notch[w1][g1]`, which gates the left wheel and the double step. So two
+(ring1, start1) pairs with the same offset decode **identically unless they differ in
+when the middle notch fires**. And the middle wheel steps only ~once per 26 characters,
+so in an L-character message it visits only ~L/26 positions: most start1 values never
+reach the notch at all, and every one of those is equivalent to every other.
+
+**Measured end-to-end** — enumerate all 676 (ring1, start1) pairs with everything else
+fixed, encrypt, count distinct ciphertexts:
+
+| wheels | L | ring2/start2 | distinct | of 676 | factor | classes per offset |
+|---|---:|---|---:|---:|---:|---:|
+| 123 | 140 | A/A | **182** | 676 | **3.71×** | 7.0 |
+| 123 | 140 | M/Q | 208 | 676 | 3.25× | 8.0 |
+| 123 | 100 | A/A | 130 | 676 | 5.20× | 5.0 |
+| 132 | 140 | A/A | 208 | 676 | 3.25× | 8.0 |
+
+`distinct / 26` is an exact integer in every case, confirming the factorisation is clean:
+26 offset values, each carrying an identical set of *C* start1 notch-classes. The classes
+are independent of ring1 — as the code requires, since `notch[w1][g1]` reads the window
+only — and no two offsets ever collide. **So at realistic lengths 3–5× of this sub-space
+is exact duplicate work.**
+
+**Do not use a closed form for C.** `⌈L/26⌉+1` fits the common case (single-notch right
+rotor) but fails twice over: a **two-notch right rotor** (VI–VIII, notches `MZ`) steps the
+middle twice per revolution, giving `⌈L/13⌉+1` (measured 9 and 12 at L=100/140, exact),
+and double-step extras add one more for some wheel orders (132 measures 8 where the
+formula says 7). C also varies with **start2**, since the right wheel's notch phase sets
+*when* the middle steps (7 at start2=A vs 8 at start2=Q, same wheels and length). Build
+the representative set by **simulating the stepping and deduping on the notch-firing
+signature** — exact for every rotor/notch/double-step combination.
+
+**That simulation is a cheap one-time precompute, not a per-key cost.** Three facts make
+the table small. (1) No stepping decision reads a ring setting, `start0`, the reflector or
+the plugboard — the whole trajectory is a function of `(w1, w2, start1, start2)` alone.
+(2) The class is determined by a **single integer**: the index at which the middle notch
+*first* fires (or "never"), because the post-firing state is fixed by that index and
+start2. A *second* firing needs ~26 further middle steps, i.e. ~676 characters — measured
+max firings is 1 even at L=300. (3) Storing the true first-firing index (simulate to the
+first firing, bounded ~676 steps) makes the table **independent of message length**: at
+runtime the class is `t` if `t < L`, else "never". So it can be built once in `init()`,
+before the ciphertext is read. Size ≤ 8·7 wheel pairs × 26 × 26 `uint16` ≈ **76 KB**
+(~27 KB under the default `-x 5`), ~25 ms to build.
+
+Verified against the binary: the partition predicted by first-firing index matched the
+actual distinct-ciphertext partition **exactly in 7/7 configurations**, including the
+two-notch (`126`, `168`) and double-step (`132`) cases where the closed form fails.
+
+**Implementation: skip non-representative keys — do NOT restructure the index space.**
+The first instinct here is wrong and worth recording, because it makes the change look
+far bigger than it is. Since C depends on start2, the surviving set *is* a ragged
+`(start2, start1)` pair list, which suggests fusing both dimensions into one CSR-indexed
+coordinate. **That is unnecessary.** The collapse is purely over `start1`: for a
+representative `start1`, letting `ring1` range over all 26 already produces all 26
+offsets. So no reparameterisation is needed — just skip keys whose `start1` is not its
+class's canonical member:
+
+```c
+if (! (mid_rep_mask[wo][g3] & (1u << g2))) continue;   /* g2 = start1, g3 = start2 */
+```
+
+`mid_rep_mask` is a 26-bit mask per (wheel-task, start2) — the same mask idiom §7.11 uses
+for ring2 — about **6 KB** for 56 tasks. Crucially this leaves the `best.idx` encoding
+**unchanged**, so `--polish`, the `--ring-stride` refinement and `-F` keep working; the
+CSR version would break all three. The loop still iterates 676 and bit-tests the 494 it
+skips, but against ~2L≈280 ops of real work per surviving key that is **~5% overhead, so
+~3.5× rather than the ideal 3.71×** — nearly all of the benefit for a fraction of the
+risk. Keep the mask heap-allocated and pointer-reached; per §7.11's measurement, adding
+108 bytes to `search_range` cost ~5% on the `search` benchmark.
+
+**Change inventory** (est. ~2 days including the bench A/B):
+
+| site | hot? | note |
+|---|---|---|
+| `init()` — first-fire table | cold | `(w1,w2,start1,start2)` → first firing index |
+| `build_key_space()` — partition by `min(t,L)`, lowest member canonical | cold | builds the masks |
+| `search_worker()` — one bit-test + `continue` | **HOT** | the only hot-path edit |
+| `key_to_machine()` — same guard | warm | consistency |
+| `total_keys` / progress accounting | cold | analysed count must reflect skips |
+| `--true-key` | cold | must map the given key to its representative, else it is never ranked |
+
+**Preconditions and semantics.** Fires only when `rc[1]==26 && gc[1]==26` (ring1 *and*
+start1 both fully wildcarded) — if ring1 is pinned, skipping start1 values would lose
+offsets. The **reported key becomes a class representative**: `showconfig` may print a
+ring1/start1 differing from the true key while the plaintext is byte-identical, because
+class members are indistinguishable from ciphertext alone. That is the same contract
+already documented for wheel 0 ("reported ring position for wheel 0 is therefore always
+A") and the M4 Greek wheel, and it is length-dependent — once L ≳ 676 every class is a
+singleton and the true key is reported exactly.
+
+**Risks.** (1) Hot-path regression: mandatory `make bench BASE=<ref>` under g++ *and*
+clang against a base-vs-base control, since the `search` tier resolves ~1%. (2) **Silent
+key loss** if the partition is wrong — the same failure class as §7.11's boundary-clamp
+bug, and the reason the load-bearing test below is exhaustive rather than sampled.
+(3) Uneven thread chunks from skipped keys; verify `-T`-determinism explicitly.
+
+**Test plan.** The load-bearing test: for a sample of wheel orders × start2, enumerate all
+676 (ring1,start1) pairs, group by ciphertext, and assert the mask selects **exactly one
+member per group and covers every group**. Plus recovery parity with/without the collapse
+across wheel orders and L (including L>676, where it must no-op), `-T` 1 vs 4
+determinism, ASan/UBSan, the two-notch (`126`,`168`) and double-step (`132`) cases that
+break the closed form, and composition with `--ring-stride` / `--polish` / `-F`.
+
+**Shipped result.** The load-bearing test passed **8/8** — every ciphertext class contains
+exactly one representative (min = max = 1) across `123`/`132`/`126`/`168`/`145`, both
+start2 values checked, and an L=700 case where it correctly degenerates to 26 reps, i.e.
+a no-op. End to end on an 11.9M-key scan (`-r ... -g ...`, wheels given): **3.28 s →
+1.04 s, 3.17×**, byte-identical output to the previous revision. 252/252 tests pass under
+g++ and clang; ASan/UBSan and clang-tidy clean.
+
+Bench A/B is **neutral, as intended**: `tests/bench.sh` pins the rings, so the collapse
+does not fire there and the only cost is one null-check per key — g++ read −1.4% `search`
+against a +0.4% control, and clang's readings (+2.7%, +1.0%, +0.1%) sat inside its *own*
+control spread of −2.2%…+0.4%. That neutrality is the point: no regression for searches
+that cannot benefit. It also re-calibrated the noise floor — the ±0.5% `search` figure in
+§7.11 is **g++-specific**; clang's is ~±2% on the same box.
+
+Two implementation details the scope did not anticipate. `filter_worker` (the `-F` tier-1
+ranker) is a **second enumerator**, so `key_to_machine()` now returns false for a
+collapsed key and both paths skip consistently (tier 2 gets a guard that cannot currently
+fire but stops a future shortlist change silently scoring a duplicate). And `--true-key`
+ranks a specific key against the whole tier-1 keyspace, where a collapsed key would simply
+be absent and never get a rank — so the collapse is **disabled** when that diagnostic is
+set, keeping its semantics exact rather than approximating them.
+
+The skip is also latched in a per-key flag rather than a bare `continue`: `cur_key` has
+already advanced at that point, so continuing directly would let the key's remaining
+restarts score against a stale machine.
+
+**Scope of the win.** It applies whenever ring1 *and* start1 are both wildcarded — so not
+under the default `-r AA.` (ring1 pinned), but yes under `-r A..` / `-r ...`. Unlike
+`--ring-stride` it is **lossless**, and it shrinks the *main* search, not just a
+refinement pass. It decays with length (no saving once L ≳ 676, where every start1 reaches
+the notch) — i.e. it is strongest exactly where the tool is weakest.
+
+One caveat on the payoff, in the spirit of §7.11's matched-compute result: a compute
+saving is not automatically an accuracy gain. Short-message recovery is compute-bound
+(§6.15), so 3.5× should convert into real recovery via more `-R` — but that conversion is
+**unmeasured**, and the one matched-compute cell run for `--ring-stride` (L=100, 80 paired
+trials) came back a dead tie, 48.8% vs 48.8%. Measure the conversion before claiming a
+recovery improvement.
+
 ---
 
 ## 8. Novel / higher-risk

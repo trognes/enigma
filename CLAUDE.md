@@ -78,6 +78,23 @@ git worktree and runs both, failing if any benchmark is >`THRESHOLD`% (default
 10) slower than BASE — run this around the planned global-state/threading
 refactor to confirm single-thread throughput hasn't regressed.
 
+> **Measure the noise floor before believing any A/B number.** Check the base revision
+> out into the working tree and run `make bench BASE=<that same ref>`; every non-zero
+> number is then pure measurement noise. The floors are **per-tier and differ by an
+> order of magnitude** — measured here as **`search` ±0.5%** but **`hillclimb` ±4.5%**
+> — and they are also **per-compiler**: the ±0.5% `search` figure is g++, while clang's
+> own base-vs-base control swung −2.2%…+0.4% across three runs on the same box, so a
+> clang `search` move under ~2% says nothing. Run the control on the compiler you are
+> judging, not just on one of them.
+> That gap decides real cases: on one set of runs a `search` +5% was a genuine
+> regression (a hot-path struct grown from 48 to 156 bytes) while simultaneous
+> `hillclimb` scatter of +4.5%/−1.3%/+5.1% was nothing at all. Both readings you would
+> reach without the control — "both ~5%, so both noise" and "fix the hillclimb number" —
+> are wrong. The default 10% `THRESHOLD` is a coarse backstop, not a resolution limit:
+> the `search` tier resolves ~1%, so a sub-threshold move there can still be real, and
+> a `hillclimb` move under ~5% never is. Also don't trust a single compiler — clang
+> reported `search` **−16.1%** (faster) on the very build g++ showed regressed.
+
 `make crackquality` (`tests/crack_quality.py`) measures something different again
 — **cracking quality on hard (short) messages**, not speed. For each ciphertext
 length it runs many random trials (random excerpt + rotor key + 10-pair
@@ -193,7 +210,9 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > tools, or only conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
 > `--polish`, kept because it is the only gain cascade that works with
-> `-F`/`--exhaust`), `--crib-file` (measured-down) and `--exhaust`. Each is tagged
+> `-F`/`--exhaust`), `--crib-file` (measured-down), `--exhaust`, and `--ring-stride`
+> (measured-down: an accuracy/throughput trade costing ~10pp exact recovery at K=2 on
+> telegraphic German, ~17pp at K=3 — see its entry). Each is tagged
 > **not recommended** in its entry below and in `--help`.
 >
 > **Removed options** (dominated or subsumed; the measurements survive in `PERFORMANCE.md`):
@@ -225,6 +244,25 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 - `-4` M4 (4-rotor) mode: `-u` selects thin reflector `b`/`c`; `-w`/`-r`/`-g` take
   **four** characters with the Greek wheel (`B`=Beta/`G`=Gamma) / ring / start first
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
+- `--ring-stride K` sparse ring sampling for the rightmost wheel (K=1..13, default 1 =
+  off; needs both `-r` and `-g` to wildcard the rightmost wheel's position, else there is
+  nothing to thin out; incompatible with `-F`/`--exhaust`, the same `best.idx`-encoding
+  fragility `--polish` has). The coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then a
+  small refinement pass checks the skipped neighbours around the best coarse hit — see
+  "Sparse ring sampling for the rightmost wheel" below and `PERFORMANCE.md` §7.11 for the
+  measurement and the implementation gotchas. **Not recommended by default — it is an
+  accuracy/throughput TRADE, not a free reduction.** Measured end-to-end on authentic
+  telegraphic German (200 paired trials/cell, `-f -l wehrmacht`, plugboard given): K=2
+  costs **~10pp of exact recovery** vs no stride (L40 50.0%→38.5%, L60 74.0%→64.5%) and
+  K=3 costs ~17pp, with a stride-specific miss rate of 11-14% (K=2) and a flat 21% (K=3).
+  So **K=2 is the only value with any backing** and K≥3 is not recommended. The earlier
+  "100% recoverable across 90 trials" result is *not* a contradiction — it measured a
+  weaker *proximity* property (does the winner land within `⌊K/2⌋` of the truth?) on
+  English prose, not exact recovery. Note the saving is modest anyway: total distinct
+  ring2 values tested is 15 for K=2 and 11 for K=3 vs 26 unstrided (the refinement window
+  grows with K as fast as the coarse pass shrinks), so ≈1.7×, not `K`×. Whether the saved
+  compute beats spending it on `-R` restarts at matched wall time is **untested** — the
+  right next experiment.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the climb/SA
   never remove or rewire them (their letters are marked in `plug_fixed[]`, set once from
   `opt_steckerbrett` before the threaded search, and skipped by every switch/remove/
@@ -623,6 +661,174 @@ stepping, scorers) is unchanged — the fold is paid only in `precompute()`.
 - Reflector indices 4–5 = UKW-b/c, rotor indices 13–14 = Beta/Gamma (already in
   the wiring tables). Only the `(start − ring)` offset of the Greek wheel is
   recoverable, so `showconfig` reports it as start = offset, ring = A.
+
+### Leftmost stepping wheel's ring is likewise unidentifiable — offset-only search
+
+The Greek wheel isn't the only place a ring × start pair collapses to a pure offset:
+`walzenlage[0]` (the leftmost of the 3 *stepping* wheels, in every mode — standard,
+Norway, and M4's 3-wheel core alike) has the same property, and for a stronger reason
+than "it happens not to step on this message." `setup_mapping()`'s notch checks —
+`notch[w1][g1]`, `notch[w2][g2]` — test each wheel's raw window position, never the
+ring-adjusted offset; wheel 0 has no notch check of its own (nothing sits further left
+for it to step), so nothing downstream ever depends on its *absolute* ring/start, only
+their difference. Shifting `ringstellung[0]` and `grundstellung[0]` by the same amount
+therefore reproduces the identical decode **unconditionally** — verified empirically
+across every shift 1–25 at 127 characters, not just "usually" the way wheels 1/2 are
+(their own window value gates further stepping, so shifting them is a real, measurable
+approximation — see `PERFORMANCE.md` §7.10 for the mismatch-vs-shift data). When both
+`-r`'s and `-g`'s first character are wildcarded together, `build_key_space()`
+collapses `ring0`'s range to the single sentinel `0` (leaving
+`start0` to enumerate the 26 offsets directly) — the same `offset_list` pattern as the
+Greek wheel above, a lossless 26× reduction. Reported ring position for wheel 0 is
+therefore always `A`. Only fires when *both* are wildcarded together — either alone
+enumerates genuinely distinct, necessary offsets. Full derivation, measurements, and the
+still-open (riskier, approximate) extension to wheels 1/2: `PERFORMANCE.md` §7.10.
+
+This is not a niche precondition to arrange deliberately: the non-M4 default (no `-r`
+given at all) is `opt_ringstellung = "AA."` and the default `-g` is `"..."` — ring0/ring1
+default to `A`, ring2 (rightmost) and every start default to wildcarded. So "ring2 +
+start2 both wildcarded" is live in the tool's bare default invocation whenever a caller
+doesn't explicitly pin ring, which is exactly the precondition the `--ring-stride`
+sparse-sampling option needs — see `PERFORMANCE.md` §7.11.
+
+### Middle wheel's ring × start is partially redundant — always-on collapse
+
+The three stepping wheels each behave differently, and the tool now exploits all three:
+
+| wheel | ring × start collapse | factor |
+|---|---|---|
+| 0 (left) | total, unconditional, exact | 26× |
+| 1 (middle) | **partial, exact** — this section | **3–5× at short lengths** |
+| 2 (right) | none exact; only `--ring-stride`'s approximation | ~1.7×, lossy |
+
+Shifting `ring1` and `start1` together leaves `mod26(g1-r1)` — the middle wheel's entire
+contribution to the substitution — invariant, so two such pairs can differ *only* through
+`notch[w1][g1]`, the middle notch that gates the left wheel and the double step. The
+middle wheel steps only ~once per 26 characters, so in a short message it visits ~L/26
+positions: most `start1` values never reach the notch at all and every one of those
+decodes byte-identically. Measured **182 distinct of 676** at L=140, 130 at L=100.
+
+Exploited by **skipping** keys whose `start1` is not its class's canonical member — no
+reparameterisation, because for a representative `start1`, `ring1` ranging over all 26
+already yields every offset. `g_mid_rep_mask` holds a 26-bit mask per (middle rotor, right
+rotor, start2); it is indexed by the *rotor pair*, not the task, since the reflector, the
+left rotor and every ring setting are irrelevant to stepping. Built in `build_key_space()`
+via `mid_first_fire()`, gated on ring1 **and** start1 both being fully wildcarded (with
+ring1 pinned, each start1 carries a distinct offset, so dropping any would lose real keys)
+— hence it is inert under the default `-r AA.` and active under `-r A..` / `-r ...`.
+
+**Do not derive the class count from a formula.** `⌈L/26⌉+1` fits only the single-notch
+case: a two-notch *right* rotor (VI–VIII) steps the middle twice per revolution giving
+`⌈L/13⌉+1`, double-step extras add one for some wheel orders, and the count also varies
+with `start2`. The masks come from simulating the stepping and deduping on the
+first-firing index — exact for every combination. The failure mode of getting this wrong
+is **silent key loss**, which is why `tests/run_tests.sh` covers `126`/`168` (two-notch
+right) and `132` (double-step) specifically.
+
+**The reported ring1/start1 may be a class representative, not the true key.** Class
+members are indistinguishable from ciphertext alone, so `showconfig` can print a different
+ring1/start1 while the plaintext is byte-identical — the same contract already documented
+for wheel 0 ("reported ring position for wheel 0 is therefore always `A`") and the M4
+Greek wheel. It is length-dependent: past L≈676 every class is a singleton and the true
+key is reported exactly. `--true-key` disables the collapse, since that diagnostic ranks a
+specific key and a collapsed one would simply be absent.
+
+Full derivation, measurements and the shipped results: `PERFORMANCE.md` §7.12.
+
+### Sparse ring sampling for the rightmost wheel — `--ring-stride`
+
+Unlike wheel 0, the rightmost wheel (`walzenlage[2]`) has a real notch that gates further
+stepping, so a ring+start shift there is only an *approximation* — small and smoothly
+growing with the shift, not an unconditional equivalence (`PERFORMANCE.md` §7.10's
+mismatch table). `--ring-stride K` (K=1..13, default 1 = off) exploits this: the coarse
+search tests only ring2 ∈ {0, K, 2K, ...} (`build_key_space()` shrinks `rc[2]`;
+`search_worker()`/`key_to_machine()` scale the decoded index back up by `K`), then
+`bruteforce()` runs one small refinement pass — reusing `search_worker` on a
+self-contained mini key-space — over the ring2 values the coarse pass skipped around the
+best hit, keeping the improvement only if it beats the coarse result. Requires both `-r`
+and `-g` to wildcard the rightmost wheel's position (else every ring2 value is distinct
+and necessary, same precondition as the leftmost wheel's exact collapse above); rejected
+together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / restarts_par,
+...)` reconstruction shares `--polish`'s dependency on the "simple sweep" `best.idx`
+encoding).
+
+**The refinement must re-open ring1/start1, not pin them to the coarse winner** — the one
+place the initial design (and the measurement harness, which independently
+re-optimizes ring1/start1 per candidate ring2) got it wrong. The coarse winner's
+ring1/start1 are only optimal for *its own* possibly-corrupted ring2 row; a nearby ring2
+— including the true one — can need a different ring1/start1 entirely. Confirmed by a
+concrete miss during implementation testing: a manually-constructed key whose true ring2
+fell inside the refinement window still failed to recover, because a completely
+different (also-approximated) ring1 had outscored the truth's row in the coarse pass.
+The refinement now re-opens ring1/start1 to the *original* search's bounds (`range.r_min/
+max[1]`, `range.g_min/max[1]` — this collapses back to a pin automatically if the caller
+had explicitly pinned ring1 rather than wildcarding it), matching the measurement
+harness's actual per-candidate re-search rather than the cheaper "just check `K`
+neighbours" reading of the total-cost accounting. Full measurement, the K=2..13 sweep,
+and this implementation gotcha: `PERFORMANCE.md` §7.11.
+
+**Two further implementation-only bugs, caught by a targeted boundary sweep (true ring2
+pinned to A or Z) rather than the original spot checks:** the refinement window must
+*wrap* at the 0/25 ring2 boundary, not clamp — ring2 is circular, so a coarse winner at
+A(0) with the true ring2 at Z(25) is a documented-"recoverable" case that a clamped
+window silently never checks; fixed by splitting into up to two contiguous segments
+when the window would wrap (`search_range` can only express one contiguous interval per
+wheel position, so a genuinely modular range needs two sub-searches). Separately, the
+refinement was reading `m.ringstellung[0]`/`m.grundstellung[0]` fresh from the live
+machine to pin each segment — but on the plain-scan path `search_worker()` deliberately
+leaves those fields in whatever state the *last scanned key* stepped them to (a
+documented "lazy restore" perf optimisation; only the hillclimb path restores per key),
+so a second segment picked up a stale, stepped pin instead of the coarse winner's actual
+value. Fixed by snapshotting everything each segment pins (ring0/start0/wheel
+order/reflector/Greek wheel) into locals once, before any segment runs, instead of
+re-reading the live machine between segments. Both confirmed with concrete failing keys
+before the fix and a 0/100 targeted sweep after (cross-checked against the K=1 baseline
+to rule out the separate, pre-existing scoring-floor cases, which neither fix touches).
+Full writeup: `PERFORMANCE.md` §7.11.
+
+**The refinement skips the coarse winner itself** — phase 1 already scored that exact
+ring2 over a *superset* of what phase 2 searches there (phase 2 additionally pins
+ring0/start0 to the winner's values), so retesting it can only reproduce the same score.
+
+**ring2 is carried as an explicit value list, not a range.** `search_range` holds
+`r2_vals[26]`/`r2_n` (filled by `set_ring2()` from a 26-bit mask, bit *v* = "test ring2
+*v*"), and `rc[2]` is just its length. It is the one ring position that can be a
+*non-contiguous* set — `--ring-stride`'s coarse pass samples `{0, K, 2K, …}` and its
+refinement tests a wrapped window minus the coarse winner — so a plain `[min,max]`
+interval cannot express it. `r_min[2]`/`r_max[2]` still describe the caller's requested
+*bounds* (`build_key_space()` derives the list from them by stepping `opt_ring_stride`);
+every decode site reads the list, never the bounds:
+
+```c
+r3 = range.r2_vals[rr % rc[2]];      // was: range.r_min[2] + (rr % rc[2]) * opt_ring_stride
+```
+
+This is what makes the sparse set uniform rather than special-cased. Three things fall
+out of it: the coarse set, the boundary wrap, and the excluded centre are all *just
+different masks*; the refinement is **one** search rather than up to three (the excluded
+centre can split the window into three contiguous pieces — centre=1, half=2 → {25}, {0},
+{2,3} — which a value list absorbs at no cost); and the decode no longer consults a
+global, so the `save_stride`/`opt_ring_stride = 1` save/restore around the nested
+refinement is **gone**.
+
+**`unsigned char`, not `int` — this is load-bearing.** `search_range` is read by
+`search_worker()`'s per-key decode, so its size matters: an `int[26]` list grew the
+struct 48 → ~156 bytes and cost a *measured* ~5% on the `search` benchmark under g++;
+bytes bring it back to ~80 and the regression disappears. See the noise-floor note under
+"Build & run" — that regression was only distinguishable from jitter because the
+`search` tier's floor is ±0.5% while `hillclimb`'s is ±4.5%.
+
+**Do not shrink it further to just the mask.** Storing the 26-bit mask alone (52 bytes,
+decoding via a `m &= m-1` select loop + `__builtin_ctz`) was built and measured against
+a same-session control: clang neutral, g++ ~1–2% *slower* on `search`. The returns are
+not linear in struct size — 156→80 was worth ~5%, 80→52 is worth nothing — so the O(1)
+indexed load stays. Full numbers and the arm64 caveat: `PERFORMANCE.md` §7.11. That save/restore was the direct cause of the first corruption
+bug here, so this removes the bug class, not just the instance. `opt_ring_stride` now
+survives only in `build_key_space()` (building the mask), the `> 1` guards, and option
+parsing — never in a decode. Verified byte-identical to the previous implementation
+across 200 comparisons (40 random keys × K=1/2/3/5/13). K=1 yields the full contiguous
+list, i.e. the unstrided search exactly. The mask-then-expand idiom mirrors
+`build_key_space()`'s existing `seen[]`→`offset_list` handling of the M4 Greek wheel.
 
 ### Performance notes
 

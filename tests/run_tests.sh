@@ -957,6 +957,91 @@ for lang in $crack_langs; do
   done
 done
 
+# --ring-stride: sparse ring sampling for the rightmost wheel (PERFORMANCE.md §7.11).
+# Needs both -r and -g to wildcard ring2/start2; ring0 auto-collapses (§7.10), and the
+# default ring "AA." pins ring0/ring1 to A -- exactly the tool's bare-default keyspace
+# (26 ring2 x 26^3 starts), kept small so this stays fast under the sanitizers too.
+rs_pt="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGANDTHENRANAWAYINTOTHEDARKFORESTNEARTHERIVERWHERETHEWATERWASCOLD"
+rs_ct=$(run "$rs_pt" -i -u B -w 123 -r AAZ -g XKP)
+for K in 2 3 5; do
+  check "crack: --ring-stride $K recovers exact key" \
+    "$(run "$rs_ct" -q -l english -u B -w 123 --ring-stride "$K" -T 1)" \
+    "$rs_pt"
+done
+
+# Regression: true ring2=Z with a K=2 coarse winner landing at the A(0) boundary needs
+# TWO things the initial implementation got wrong. (1) The refinement window must WRAP
+# at the 0/25 boundary rather than clamp -- a clamped [0,1] window only ever checks
+# {A,B}, never Z, even though ring2=Z is "recoverable" per the documented |K/2| distance
+# metric. (2) On the plain-scan path, search_worker() leaves the machine's
+# ringstellung/grundstellung in a stale, stepped state after scanning (a "lazy restore"
+# perf optimisation -- only the hillclimb path restores per key), so re-reading
+# ring0/start0 from the live machine between refinement segments picks up whatever key
+# the PRIOR segment's scan last touched rather than the coarse winner's actual pin.
+# These specific keys were found by a random sweep to trigger both bugs; -T 1 keeps it
+# deterministic and reproducible.
+for key in "B 451 AAZ VKZ" "B 351 AAZ NLV" "C 324 AAZ JEY"; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $key
+  wr_ct=$(run "$rs_pt" -i -u "$1" -w "$2" -r "$3" -g "$4")
+  check "crack: --ring-stride 2 wraps at ring2=Z boundary ($1 $2 $3 $4)" \
+    "$(run "$wr_ct" -q -l english -u "$1" -w "$2" --ring-stride 2 -T 1)" \
+    "$rs_pt"
+done
+
+# Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
+# with a clear error rather than silently misbehaving.
+rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)
+check "--ring-stride 0 rejected" "$(printf '%s' "$rs_err" | grep -c 'Illegal ring stride')" "1"
+rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 14 2>&1 >/dev/null)
+check "--ring-stride 14 rejected" "$(printf '%s' "$rs_err" | grep -c 'Illegal ring stride')" "1"
+rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r AAZ -g AAA --ring-stride 2 2>&1 >/dev/null)
+check "--ring-stride needs ring2/start2 wildcarded" \
+  "$(printf '%s' "$rs_err" | grep -c 'ring-stride needs')" "1"
+rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -c --ring-stride 2 -F 100 2>&1 >/dev/null)
+check "--ring-stride rejects -F" "$(printf '%s' "$rs_err" | grep -c 'not supported with -F')" "1"
+
+# Middle-wheel ring x start collapse (PERFORMANCE.md §7.12). Shifting ring1 and start1
+# together only changes the decode through the middle notch, which most start1 values
+# never reach in a short message -- so those start1 values are skipped as duplicates.
+# The risk being guarded is SILENT KEY LOSS: a wrong partition drops the true key from
+# the search with no error, so every case below must still recover exactly.
+#
+# The rotor choices are deliberate: 126/168 put a TWO-NOTCH rotor (VI, notches MZ) on the
+# right, doubling the middle's step rate, and 132 exercises the double-step extras --
+# both are cases where a closed-form class count is wrong, so they are exactly where a
+# formula-based implementation would silently lose keys.
+mw_pt="ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEINSZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAUMX"
+for mw in "123 AQL ADT" "132 AZC AKP" "126 AMM AJY" "168 ABX AWD" "145 AKK ARR"; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $mw
+  mw_ct=$(run "$mw_pt" -i -u B -w "$1" -r "$2" -g "$3")
+  # ring1 wildcarded (-r A..) -> the collapse is active here
+  check "crack: middle-wheel collapse recovers exactly (w$1, ring1 wildcarded)" \
+    "$(run "$mw_ct" -f -l wehrmacht -u B -w "$1" -r "A.." -g "A.." -T 1)" \
+    "$mw_pt"
+  # ring1 PINNED (to its true value) -> collapse must not fire; recovery unaffected
+  mw_r1=$(printf '%s' "$2" | cut -c2)
+  check "crack: middle-wheel collapse inert when ring1 pinned (w$1)" \
+    "$(run "$mw_ct" -f -l wehrmacht -u B -w "$1" -r "A$mw_r1." -g "A.." -T 1)" \
+    "$mw_pt"
+done
+
+# -T-independence with the collapse active: skipped keys make the per-thread chunks
+# uneven, so this guards the work split as much as the collapse itself.
+mw_ct=$(run "$mw_pt" -i -u B -w 123 -r AQL -g ADT)
+check "middle-wheel collapse is -T-independent" \
+  "$(run "$mw_ct" -f -l wehrmacht -u B -w 123 -r "A.." -g "A.." -T 1)" \
+  "$(run "$mw_ct" -f -l wehrmacht -u B -w 123 -r "A.." -g "A.." -T 4)"
+
+# The "Analysed N" line must count keys actually scored, not the index-space size --
+# it previously claimed credit for keys the collapse never touched. N must equal the
+# plugboards scored on a plain scan (one score per surviving key).
+mw_diag=$(printf '%s' "$mw_ct" | "$ENIGMA" -f -l wehrmacht -u B -w 123 -r "A.." -g "A.." -T 1 2>&1 >/dev/null \
+          | grep -oE 'Analysed [0-9]+ rotor combinations, scored [0-9]+ plugboards')
+check "middle-wheel collapse: analysed count matches keys scored" \
+  "$(printf '%s' "$mw_diag" | awk '{print ($2 == $6)}')" "1"
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]

@@ -232,6 +232,19 @@ static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force
                               every set of E disjoint pairs and keeping the best climb (0 = off).
                               Parallel over the first forced pair (exhaust_unit); exploration
                               tool, dominated by a high --restarts climb (see PERFORMANCE.md §3.6). */
+/* --ring-stride K (default 1 = off): sparse ring sampling for the rightmost stepping
+   wheel (walzenlage[2]). Unlike the leftmost wheel's unconditional exact collapse
+   (build_key_space(), PERFORMANCE.md §7.10), the rightmost wheel's own notch gates
+   further stepping, so a ring+start shift is only an APPROXIMATION -- measured small
+   and smoothly growing with the shift (PERFORMANCE.md §7.11). K>1 tests only every
+   Kth ring value (0, K, 2K, ...) in the main search, then runs one small refinement
+   pass over the skipped neighbours around the best coarse hit (bruteforce(), after
+   the main search) to recover the exact key. Requires both -r and -g to wildcard the
+   rightmost wheel's position (else every value is a distinct, necessary key, exactly
+   like the leftmost-wheel collapse's precondition). K=2 is the only value backed by
+   solid measurement (100% recovery across 90 trials); K>=5 is available but not
+   recommended (PERFORMANCE.md §7.11 measures a real 10-17% single-pass miss rate). */
+static int opt_ring_stride;
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
@@ -3041,7 +3054,37 @@ struct search_range
 {
   int r_min[wheels], r_max[wheels];
   int g_min[wheels], g_max[wheels];
+  /* Ring position 2 (the rightmost wheel) is the one dimension that can be a
+     NON-CONTIGUOUS set: --ring-stride's coarse pass samples {0, K, 2K, ...} and its
+     refinement tests a wrapped window around the coarse winner with that winner
+     removed. Both are expressed as an explicit ascending value list, so the decode is
+     a plain lookup (r2_vals[i]) instead of arithmetic that has to know about strides.
+     r_min[2]/r_max[2] still describe the caller's requested BOUNDS (build_key_space
+     derives the list from them); everything that decodes a key reads the list, never
+     the bounds. r2_n always equals rc[2]. Filled via set_ring2() below.
+
+     unsigned char, not int, and this is load-bearing: search_worker() reads this
+     struct in its per-key decode, so growing it pushes that decode across more cache
+     lines. An int[26] list measured a REAL ~5% search regression under g++ -- against
+     a base-vs-base noise floor of only 0.5% on that benchmark, so well outside the
+     noise (the hillclimb tier's own floor is ~4.5%, which is why its numbers looked
+     scattered and meant nothing). A byte holds 0..25 fine and keeps the struct near
+     its original footprint. See PERFORMANCE.md §7.11. */
+  unsigned char r2_vals[asize];
+  int r2_n;
 };
+
+/* Fill a search_range's ring-2 value list from a 26-bit mask (bit v = test ring2 v).
+   A mask is how callers naturally express the set -- a stride, a wrapped window, a
+   window minus its centre -- and expanding it once here keeps every decode site a
+   simple indexed load. Ascending order makes the enumeration deterministic. */
+static void set_ring2(search_range & r, unsigned int mask)
+{
+  r.r2_n = 0;
+  for (int v = 0; v < asize; v++)
+    if (mask & (1u << v))
+      r.r2_vals[r.r2_n++] = static_cast<unsigned char>(v);
+}
 
 /* Best result so far, shared across worker threads. It is updated (and the live
    progress line printed) under the mutex only when a worker beats the current
@@ -3072,6 +3115,51 @@ struct best_result
    above bruteforce() in the file and know nothing else about the search phase).
    Set by bruteforce() before the workers start; null outside a search. */
 static best_result * g_progress = nullptr;
+
+/* --- middle-wheel ring x start collapse (PERFORMANCE.md §7.12) -------------
+   Shifting ring1 and start1 together leaves mod26(g1-r1) -- the middle wheel's whole
+   contribution to the substitution -- invariant, so two such pairs can only differ
+   through notch[w1][g1], the middle notch that gates the left wheel and the double
+   step. The middle wheel steps only ~once per 26 characters, so in a short message it
+   visits ~L/26 positions and most start1 values never reach the notch at all: every one
+   of those decodes identically. Measured 182 distinct of 676 at L=140 (3.71x), 130 at
+   L=100 (5.20x), all exact duplicates.
+
+   Exploited by SKIPPING keys whose start1 is not its class's canonical member. No
+   reparameterisation is needed because the collapse is purely over start1: for a
+   representative start1, ring1 ranging over all 26 already yields all 26 offsets. That
+   also leaves the best.idx encoding untouched, so --polish / --ring-stride / -F keep
+   working (a fused index would break all three).
+
+   g_mid_rep_mask[(w1 * rotor_count + w2) * asize + start2] holds a 26-bit mask, bit s ==
+   "start1 s is the canonical representative of its class". Indexed by the MIDDLE and
+   RIGHT rotor plus start2 -- not by task -- because nothing else enters the stepping:
+   the reflector, the left rotor and every ring setting are irrelevant, so a full
+   wildcard's ~1000 tasks collapse onto at most 15x15 rotor pairs here. Null when the
+   collapse is inactive -- it needs ring1 AND start1 both fully wildcarded, since with
+   ring1 pinned each start1 carries a distinct offset and dropping any would lose keys.
+   Read-only during the search; a plain global rather than a struct member or parameter,
+   matching plug_fixed (see the aliasing note in the struct machine comments). */
+static std::vector<uint32_t> g_mid_rep_store;
+static const uint32_t * g_mid_rep_mask = nullptr;
+
+/* First middle-notch firing index for (w1, w2, start1, start2), or -1 for "never
+   within `limit` characters". Pure stepping: no ring setting, start0, reflector or
+   plugboard enters a stepping decision, so those do not index this. */
+static int mid_first_fire(int w1, int w2, int s1, int s2, int limit)
+{
+  int g1 = s1;
+  int g2 = s2;
+  for (int i = 0; i < limit; i++)
+    {
+      if (notch[w1][g1])
+        return i;                    /* the firing that steps the left wheel */
+      if (notch[w2][g2])
+        g1 = mod26(1 + g1);
+      g2 = mod26(1 + g2);
+    }
+  return -1;
+}
 
 /* Print one progress line under the best-result mutex, emitting the column
    header before the first line of the run. */
@@ -3200,6 +3288,8 @@ void search_worker(machine & m,
   size_t cur_wo = static_cast<size_t>(-1);
   size_t cur_key = static_cast<size_t>(-1);
   int r1 = 0, r2 = 0, r3 = 0, g1 = 0, g2 = 0, g3 = 0;   /* current key's ring/start */
+  const uint32_t * mid_row = nullptr;   /* §7.12 mask row for the current wheel order */
+  bool key_skipped = false;             /* current key collapsed away (§7.12) */
 
   size_t start;
   while ((start = next_key.fetch_add(chunk)) < total)
@@ -3229,29 +3319,52 @@ void search_worker(machine & m,
                   init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
                   m.greek = t.greek;            /* for showconfig of a new best (M4) */
                   m.greek_offset = t.greek_off;
+                  /* §7.12 row for this wheel order: the collapse depends only on the
+                     middle and right rotors, so this follows the wheel order, not the
+                     task */
+                  mid_row = g_mid_rep_mask
+                    ? g_mid_rep_mask
+                      + (static_cast<size_t>(t.w[1]) * rotor_count + t.w[2]) * asize
+                    : nullptr;
                 }
 
               r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
               int rr = static_cast<int>(rflat % rc12);
               r2 = range.r_min[1] + rr / rc[2];
-              r3 = range.r_min[2] + rr % rc[2];
+              /* ring2 can be a sparse set (--ring-stride); the range carries it as an
+                 explicit list, so the decode is a lookup and needs no stride knowledge */
+              r3 = range.r2_vals[rr % rc[2]];
               g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
               int gg = static_cast<int>(gflat % gc12);
               g2 = range.g_min[1] + gg / gc[2];
               g3 = range.g_min[2] + gg % gc[2];
 
-              init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-              /* hill-climb re-reads each row many times -> copy into contiguous
-                 mapping[]; the scan reads straight from the shared subst_array */
-              setup_mapping(m, opt_hillclimb != 0);
-              /* setup_mapping stepped grundstellung; on the climb path restore the
-                 start positions now, so an intermediate progress line (echoed from
-                 inside the climb, where r1..g3 are out of reach) shows the true
-                 config. The scan keeps the lazy restore below (no mid-key echoes,
-                 and no extra per-key writes on its init-dominated path). */
-              if (opt_hillclimb)
-                init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+              /* Middle-wheel collapse (§7.12): skip start1 values that are not their
+                 class's canonical member -- they decode byte-identically to one that is.
+                 Latched per key rather than `continue`d here, because cur_key has
+                 already advanced: a bare continue would let this key's remaining
+                 restarts fall through and score against a stale machine. */
+              key_skipped = (mid_row != nullptr)
+                            && (((mid_row[g3] >> g2) & 1u) == 0);
+
+              if (! key_skipped)
+                {
+                  init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+                  /* hill-climb re-reads each row many times -> copy into contiguous
+                     mapping[]; the scan reads straight from the shared subst_array */
+                  setup_mapping(m, opt_hillclimb != 0);
+                  /* setup_mapping stepped grundstellung; on the climb path restore the
+                     start positions now, so an intermediate progress line (echoed from
+                     inside the climb, where r1..g3 are out of reach) shows the true
+                     config. The scan keeps the lazy restore below (no mid-key echoes,
+                     and no extra per-key writes on its init-dominated path). */
+                  if (opt_hillclimb)
+                    init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+                }
             }
+
+          if (key_skipped)
+            continue;
 
           /* Run one work unit: a restart climb, an --exhaust first-pair unit, or one scan
              score. Both hillclimb_one and exhaust_unit draw only from their own
@@ -3319,7 +3432,12 @@ void search_worker(machine & m,
 /* Decode a flat key index and configure the machine for it: switch to the wheel
    order's table only when it changes from cur_wo, set ring/start, reset the
    plugboard and build mapping[]. Fills rg6 = {r1,r2,r3,g1,g2,g3} for showconfig. */
-static void key_to_machine(machine & m, size_t idx,
+/* Decode a flat key index into `m`. Returns false if the key is collapsed away by the
+   middle-wheel reduction (§7.12) -- it decodes byte-identically to a representative that
+   IS searched -- in which case `m` is left untouched and no setup_mapping is done. The
+   reconstruction callers (--polish, the --ring-stride refinement) always pass an index
+   that survived the search, so they never see false. */
+static bool key_to_machine(machine & m, size_t idx,
                            const std::vector<wheel_task> & tasks,
                            const search_range & range, const int * rc, const int * gc,
                            subst_table all, size_t rg, size_t gsize,
@@ -3343,11 +3461,21 @@ static void key_to_machine(machine & m, size_t idx,
   int r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
   int rr = static_cast<int>(rflat % rc12);
   int r2 = range.r_min[1] + rr / rc[2];
-  int r3 = range.r_min[2] + rr % rc[2];
+  /* see the matching comment in search_worker() */
+  int r3 = range.r2_vals[rr % rc[2]];   /* see the matching comment in search_worker() */
   int g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
   int gg = static_cast<int>(gflat % gc12);
   int g2 = range.g_min[1] + gg / gc[2];
   int g3 = range.g_min[2] + gg % gc[2];
+
+  if (g_mid_rep_mask != nullptr)
+    {
+      const wheel_task & t = tasks[cur_wo];
+      const uint32_t * row = g_mid_rep_mask
+        + (static_cast<size_t>(t.w[1]) * rotor_count + t.w[2]) * asize;
+      if (((row[g3] >> g2) & 1u) == 0)
+        return false;                 /* collapsed away (§7.12) */
+    }
 
   init_ring_grund(m, r1, r2, r3, g1, g2, g3);
   init_steckerbrett(m, opt_steckerbrett);
@@ -3356,6 +3484,7 @@ static void key_to_machine(machine & m, size_t idx,
      (finish_worker) echo the true config; rg6 carries them to the callers */
   init_ring_grund(m, r1, r2, r3, g1, g2, g3);
   rg6[0] = r1; rg6[1] = r2; rg6[2] = r3; rg6[3] = g1; rg6[4] = g2; rg6[5] = g3;
+  return true;
 }
 
 struct scored_key { double score; size_t idx; };
@@ -3410,8 +3539,10 @@ void filter_worker(machine & m,
 
       for (size_t idx = start; idx < end; idx++)
         {
-          key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
-                         rc12, gc12, cur_wo, rg6);
+          if (! key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
+                               rc12, gc12, cur_wo, rg6))
+            continue;                 /* collapsed away (§7.12): a duplicate of a key
+                                         this tier ranks anyway, so never shortlist it */
           double s = hillclimb<false>(m, cap);   /* single capped IC climb */
 
           if (opt_true_key)   /* --true-key: record every key's tier-1 score, and this
@@ -3487,8 +3618,11 @@ void finish_worker(machine & m,
   while ((k = next.fetch_add(1)) < shortlist.size())
     {
       size_t idx = shortlist[k];
-      key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
-                     rc12, gc12, cur_wo, rg6);
+      /* shortlist entries all survived tier 1, so this never fires -- kept so a future
+         change to the shortlist cannot silently score a collapsed key (§7.12) */
+      if (! key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
+                           rc12, gc12, cur_wo, rg6))
+        continue;
 
       double score = opt_exhaust ? exhaust_all_combos(m, idx)
                                   : hillclimb_restarts(m, idx);
@@ -3534,7 +3668,8 @@ struct key_space
   search_range range;
   int rc[wheels], gc[wheels];   /* per-position ring / start counts */
   size_t rsize, gsize;          /* ring-combo and start-combo counts */
-  size_t total_keys;            /* tasks.size() * rsize * gsize */
+  size_t total_keys;            /* tasks.size() * rsize * gsize -- the INDEX space */
+  size_t scored_keys;           /* keys actually scored (< total_keys under §7.12) */
 };
 
 static key_space build_key_space()
@@ -3603,11 +3738,55 @@ static key_space build_key_space()
         }
     }
 
+  /* The LEFTMOST of the 3 stepping wheels (index 0) is the one place besides the
+     M4 Greek wheel where a ring x start collapse is EXACT, not approximate, and
+     unconditional -- not just "when it happens not to step" (some settings ARE
+     merely unidentifiable per instance; this is a stronger, always-true fact).
+     Nothing in setup_mapping() ever reads ringstellung[0] or grundstellung[0]
+     except the final subst_array lookup mod26(g0-r0): wheel 0 has no notch
+     check of its own (there is no wheel to its left to step), and its own
+     stepping (driven entirely by wheel 1's notch) advances g0 by a pure
+     additive constant untouched by r0 -- so shifting ring0 and start0 by the
+     same delta leaves mod26(g0(i)-r0) identical at every character position i,
+     for the ENTIRE message, regardless of length or how many times wheel 0
+     steps (verified: -R/-g shifted together by 1..25 produced byte-identical
+     decodes at 127 characters, vs. the middle/right wheels which visibly
+     diverge after a handful of characters -- their own notch checks feed
+     forward into further stepping, so they lack this property). Collapsing
+     ring0's range to the single sentinel value 0 -- leaving grund0's 0..25
+     range to enumerate the offsets directly, exactly like the M4 Greek wheel's
+     offset_list above -- is therefore a lossless 26x reduction whenever BOTH
+     are wildcarded (if only one is wildcarded there is no redundancy: every
+     value of the wildcarded one is then a distinct, necessary offset). Reported
+     ring position is always 'A' in this case, the direct analogue of the Greek
+     wheel's unidentifiable ring. */
+  if ((opt_ringstellung[0] == '.') && (opt_grundstellung[0] == '.'))
+    ks.range.r_min[0] = ks.range.r_max[0] = 0;
+
   for (int i = 0; i < wheels; i++)
     {
       ks.rc[i] = ks.range.r_max[i] - ks.range.r_min[i] + 1;
       ks.gc[i] = ks.range.g_max[i] - ks.range.g_min[i] + 1;
     }
+
+  /* --ring-stride K (PERFORMANCE.md §7.11): the rightmost wheel lacks wheel 0's exact
+     collapse above (its own notch feeds forward into further stepping, so a ring+start
+     shift is only an approximation), but the corruption is small and grows smoothly, so
+     testing only every Kth ring value -- {0, K, 2K, ...} -- still reliably lands near
+     the truth; bruteforce()'s refinement pass afterward checks the skipped neighbours
+     around the best coarse hit to recover the exact key. The sampled values become the
+     range's explicit ring2 list, so rc[2] is just its length and the mixed-radix decode
+     and parallel chunking carry the sparse set unchanged -- no stride arithmetic at any
+     decode site. K=1 yields the full contiguous list, i.e. the unstrided search exactly.
+     Validated by option parsing to fire only when opt_ringstellung[2]=='.' &&
+     opt_grundstellung[2]=='.' (the same no-redundancy precondition as wheel 0's
+     collapse). */
+  unsigned int r2_mask = 0;
+  for (int v = ks.range.r_min[2]; v <= ks.range.r_max[2]; v += opt_ring_stride)
+    r2_mask |= 1u << v;
+  set_ring2(ks.range, r2_mask);
+  ks.rc[2] = ks.range.r2_n;
+
   ks.rsize = static_cast<size_t>(ks.rc[0]) * ks.rc[1] * ks.rc[2];
   ks.gsize = static_cast<size_t>(ks.gc[0]) * ks.gc[1] * ks.gc[2];
 
@@ -3664,7 +3843,82 @@ static key_space build_key_space()
     fatal("No machine configuration was searched "
           "(check the -u / -w / -x settings)");
 
+  /* Middle-wheel ring x start collapse (PERFORMANCE.md §7.12). Only fires when ring1 and
+     start1 are BOTH fully wildcarded: with ring1 pinned, each start1 carries a distinct
+     offset1 and dropping any would lose real keys. Built per (middle, right) rotor pair
+     -- the only things the stepping depends on besides the two start positions -- so a
+     full wildcard's ~1000 tasks share at most 15x15 rows. Deterministic: the LOWEST
+     start1 in each class is the representative, so the surviving key set (and hence the
+     winner on a tie) does not depend on iteration order or thread count. */
+  g_mid_rep_store.clear();
+  g_mid_rep_mask = nullptr;
+  /* --true-key ranks a specific key against the whole tier-1 keyspace; a collapsed key
+     would simply be absent and never get a rank, so the diagnostic keeps the full sweep. */
+  if ((ks.rc[1] == asize) && (ks.gc[1] == asize) && ! opt_true_key)
+    {
+      g_mid_rep_store.assign(static_cast<size_t>(rotor_count) * rotor_count * asize, 0);
+      bool pair_done[rotor_count][rotor_count] = { { false } };
+      for (const wheel_task & t : ks.tasks)
+        {
+          int w1 = t.w[1];
+          int w2 = t.w[2];
+          if (pair_done[w1][w2])
+            continue;
+          pair_done[w1][w2] = true;
+          for (int s2 = 0; s2 < asize; s2++)
+            {
+              /* Class key: the first middle-notch firing index, or -1 for "never fires
+                 in this message". A second firing needs ~26 further middle steps (~676
+                 characters), so that one integer is the whole signature at any realistic
+                 length -- verified against the binary in 7/7 configurations, including
+                 the two-notch and double-step cases where a closed form fails (§7.12).
+                 At most 26 classes, so a linear scan for "already seen" is both trivial
+                 and obviously correct; -1 needs no special case. */
+              int seen[asize];
+              int nseen = 0;
+              uint32_t mask = 0;
+              for (int s1 = 0; s1 < asize; s1++)
+                {
+                  int f = mid_first_fire(w1, w2, s1, s2, textlength);
+                  bool dup = false;
+                  for (int k = 0; k < nseen; k++)
+                    if (seen[k] == f)
+                      {
+                        dup = true;
+                        break;
+                      }
+                  if (! dup)
+                    {
+                      seen[nseen++] = f;
+                      mask |= 1u << s1;     /* lowest start1 of the class wins */
+                    }
+                }
+              g_mid_rep_store[(static_cast<size_t>(w1) * rotor_count + w2) * asize + s2]
+                = mask;
+            }
+        }
+      g_mid_rep_mask = g_mid_rep_store.data();
+    }
+
   ks.total_keys = ks.tasks.size() * ks.rsize * ks.gsize;
+
+  /* Keys actually scored. The flat index space stays total_keys (the collapse skips
+     during iteration rather than renumbering), so the diagnostic line would otherwise
+     claim to have analysed keys it never touched. */
+  ks.scored_keys = ks.total_keys;
+  if (g_mid_rep_mask != nullptr)
+    {
+      ks.scored_keys = 0;
+      for (const wheel_task & t : ks.tasks)
+        {
+          const uint32_t * row = g_mid_rep_mask
+            + (static_cast<size_t>(t.w[1]) * rotor_count + t.w[2]) * asize;
+          size_t reps = 0;
+          for (int s2 = ks.range.g_min[2]; s2 <= ks.range.g_max[2]; s2++)
+            reps += static_cast<size_t>(__builtin_popcount(row[s2]));
+          ks.scored_keys += ks.rsize * static_cast<size_t>(ks.gc[0]) * reps;
+        }
+    }
   return ks;
 }
 
@@ -3721,6 +3975,7 @@ void bruteforce(char * result)
   size_t gsize = ks.gsize;
   size_t nwo = tasks.size();
   size_t total_keys = ks.total_keys;
+  size_t scored_keys = ks.scored_keys;
 
   /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
      task; a full M4 wildcard is ~14.9 GiB, every other mode far smaller) */
@@ -3858,13 +4113,15 @@ void bruteforce(char * result)
                         rsize, gsize, next_key, schunk, restarts_par, best); });
     }
 
-  /* --polish: an alternative to the per-convergence --cascade. Instead of firing
-     the gated cascade at every near-solution convergence, run ONE unconditional gain
-     cascade + finishing climb on the single best board after all restarts. Reconstruct
-     that board's machine from its key (best.idx) and the recorded steckerbrett. Only
-     the simple sweep records best.idx as key*restarts+restart, so it is guarded to
-     that path (no -F, no --exhaust). */
-  if (opt_polish && best.found)
+  /* --polish and --ring-stride's refinement pass both need the winning board's full
+     machine state reconstructed once from best.idx. Only the simple sweep records
+     best.idx as key*restarts+restart, so both are guarded to that path (no -F, no
+     --exhaust; enforced in option validation). Reconstructed once here and threaded
+     through both steps in the right order -- rotor key first, then plugboard -- so
+     neither silently reverts the other's improvement by re-deriving from the stale
+     pre-refinement best.idx. */
+  size_t extra_keys_analysed = 0;   /* --ring-stride's refinement pass, added below */
+  if (best.found && (opt_polish || (opt_ring_stride > 1)))
     {
       machine & m = *machines[0];
       size_t rg = rsize * gsize;
@@ -3878,6 +4135,150 @@ void bruteforce(char * result)
         m.steckerbrett[i] = best.steckerbrett[i];
       m.scoring = opt_scoring;
       m.report = false;
+
+      /* --ring-stride refinement (PERFORMANCE.md §7.11): the coarse search only tested
+         ring2 in {0, K, 2K, ...}; check the K-1 neighbours it skipped around the best
+         hit. ring0/start0 stay pinned to the coarse winner -- that pin is exact and
+         ring2-independent (§7.10's unconditional offset collapse holds regardless of
+         what ring2 is). ring1/start1 must NOT be pinned to the coarse winner: the coarse
+         winner's ring1/start1 were only optimal for ITS (possibly off-by-one, corrupted)
+         ring2 row, and a different ring2 nearby can have a different best-fitting
+         ring1/start1 -- confirmed by manual testing, where pinning them missed the true
+         key even though its ring2 fell inside the refinement window. So the refinement
+         re-opens ring1/start1 to the ORIGINAL search's bounds (range.r_min/max[1],
+         range.g_min/max[1] -- collapses back to a pin automatically if the caller had
+         explicitly pinned ring1/start1 rather than wildcarding it), narrowing only ring2
+         (to the skipped-neighbour window) and leaving start2 open, mirroring the
+         measurement harness's per-candidate re-search (eval/ring_stride_probe.py). The
+         window wraps at the 0/25 ring2 boundary and excludes the coarse winner itself
+         (see the mask2 construction below): ring2 is circular, so a clamp would
+         silently drop the wrapped-around neighbour, and the winner's own ring2 was
+         already scored by the coarse pass over a SUPERSET of what phase 2 would search
+         there. Because search_range carries ring2 as an explicit value list, that
+         possibly-wrapped, centre-punctured set is one range and therefore ONE search --
+         a small, self-contained reuse of search_worker (single-task, mostly-pinned
+         key_space) so the skipped neighbours get the exact same treatment -- restarts,
+         staged climb, everything -- as the coarse pass got. Reuses the already-
+         precomputed subst_array (same wheel order, so no re-precompute); the local
+         best_result keeps its (mini-range-relative) idx from leaking into the outer
+         best.idx, which nothing reads again after this point. */
+      if (opt_ring_stride > 1)
+        {
+          int half = opt_ring_stride / 2;
+          int center2 = m.ringstellung[2];
+
+          /* Snapshot everything each segment pins (ring0/start0/wheel order/
+             reflector/Greek wheel) BEFORE any segment's search_worker() call runs.
+             The plain-scan path leaves m's ringstellung/grundstellung in a stale,
+             stepped state after scanning (a documented "lazy restore" perf
+             optimisation below in search_worker() -- only the hillclimb path
+             restores them per key), so re-reading m.ringstellung[0]/
+             m.grundstellung[0] fresh from m between segments picks up whatever key
+             the PRIOR segment's scan last touched, not the intended pin -- confirmed
+             by a concrete miss during testing (start0 silently drifted by one
+             wheel0 step between two searches, corrupting the second one's window
+             even though the first found nothing better). The refinement is a single
+             search now (the value list expresses the whole set at once), so only the
+             snapshot ordering matters: read these BEFORE search_worker() touches m. */
+          int fixed_ring0 = m.ringstellung[0];
+          int fixed_start0 = m.grundstellung[0];
+          int fixed_w0 = m.walzenlage[0];
+          int fixed_w1 = m.walzenlage[1];
+          int fixed_w2 = m.walzenlage[2];
+          int fixed_ukw = m.ukw;
+          int fixed_greek = m.greek;
+          int fixed_greek_offset = m.greek_offset;
+
+          /* Build the set of ring2 values to refine: the +/-half window around the
+             coarse winner, taken mod 26 and EXCLUDING the winner itself.
+
+             Two properties drive this:
+             (a) ring2 is CIRCULAR, so the window must wrap at the 0/25 boundary
+                 rather than clamp -- a coarse winner at A(0) with the true ring2 at
+                 Z(25) is "recoverable" per the |K/2| distance metric
+                 (PERFORMANCE.md §7.11), but a clamped [0,1] window only ever tests
+                 {A,B}, never Z. Confirmed by a concrete miss during testing.
+             (b) The winner itself needs no retest. The coarse pass already scored
+                 that exact ring2, and phase 2 pins ring0/start0 to the winner's own
+                 values while opening ring1/start1/start2 to the same ranges the
+                 coarse pass used -- so for ring2 == centre, phase 2's space is a
+                 SUBSET of what phase 1 already searched there, and re-running it can
+                 only reproduce the same winning score. (Caveat, deliberate: under -c
+                 the per-restart RNG seeds differ between the two searches, so a
+                 retest could stumble on a better plugboard. That is extra plugboard
+                 restarts smuggled into a rotor-key refinement, not refinement work;
+                 -R is the documented lever for that, so the duplicate is dropped.)
+
+             The resulting set can span the 0/25 boundary and be split by the excluded
+             centre, but search_range carries ring2 as an explicit value list, so it
+             goes in as-is -- one mask, one search, no interval-splitting and no
+             stride arithmetic to save/restore around a nested search. */
+          unsigned int mask2 = 0;
+          for (int d = -half; d <= half; d++)
+            {
+              if (d == 0)
+                continue;   /* the coarse winner -- already scored, identically */
+              mask2 |= 1u << (((center2 + d) % asize + asize) % asize);
+            }
+
+          std::vector<wheel_task> rtasks(1, wheel_task{
+              fixed_ukw, { fixed_w0, fixed_w1, fixed_w2 },
+              fixed_greek, fixed_greek_offset });
+          search_range rrange;
+          rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
+          rrange.r_min[1] = range.r_min[1];
+          rrange.r_max[1] = range.r_max[1];
+          rrange.r_min[2] = 0;                /* bounds unused: r2_vals below decodes */
+          rrange.r_max[2] = asize - 1;
+          set_ring2(rrange, mask2);
+          rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
+          rrange.g_min[1] = range.g_min[1];
+          rrange.g_max[1] = range.g_max[1];
+          rrange.g_min[2] = 0;
+          rrange.g_max[2] = 25;
+          int rrc[wheels] = { 1, range.r_max[1] - range.r_min[1] + 1, rrange.r2_n };
+          int rgc[wheels] = { 1, range.g_max[1] - range.g_min[1] + 1, 26 };
+          size_t rrsize = static_cast<size_t>(rrc[0]) * rrc[1] * rrc[2];
+          size_t rgsize = static_cast<size_t>(rgc[0]) * rgc[1] * rgc[2];
+          size_t rwork = rrsize * rgsize * restarts_par;
+          extra_keys_analysed = rrsize * rgsize;
+
+          best_result rbest;
+          std::atomic<size_t> rnext_key{0};
+          int rnthreads = opt_threads;
+          if (rwork < static_cast<size_t>(rnthreads))
+            rnthreads = static_cast<int>(rwork);
+          if (rnthreads < 1)
+            rnthreads = 1;
+          size_t rchunk = rwork / (static_cast<size_t>(rnthreads) * 16);
+          if (rchunk < 1)
+            rchunk = 1;
+          run_parallel(rnthreads, [&](int t)
+            { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
+                            rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+
+          if (rbest.found && (rbest.score > best.score))
+            {
+              size_t rrg = rrsize * rgsize;
+              size_t rrc12 = static_cast<size_t>(rrc[1]) * rrc[2];
+              size_t rgc12 = static_cast<size_t>(rgc[1]) * rgc[2];
+              size_t rcur_wo = static_cast<size_t>(-1);
+              int rrg6[6];
+              key_to_machine(m, rbest.idx / restarts_par, rtasks, rrange, rrc, rgc,
+                             m.subst_array, rrg, rgsize, rrc12, rgc12, rcur_wo, rrg6);
+              for (int i = 0; i < asize; i++)
+                m.steckerbrett[i] = rbest.steckerbrett[i];
+              best.score = rbest.score;
+              memcpy(best.plaintext, rbest.plaintext, textlength + 1);
+              memcpy(best.steckerbrett, rbest.steckerbrett, asize);
+              if (rbest.score > best.shown.load(std::memory_order_relaxed))
+                {
+                  best.shown.store(rbest.score, std::memory_order_relaxed);
+                  progress_line(best, m, rbest.score);
+                }
+            }
+        }
+
       int save_gf = opt_cascade;
       int save_gf3 = opt_cascade3;
       double save_gate = opt_cascade_gate;
@@ -3920,7 +4321,7 @@ void bruteforce(char * result)
 
   /* diagnostics: every rotor combination is analysed (brute force has no early
      exit), and each worker counted the plugboards it scored -- sum them up */
-  g_keys_analysed = total_keys;
+  g_keys_analysed = scored_keys + extra_keys_analysed;
   g_plugboards_scored = 0;
   for (int t = 0; t < nthreads; t++)
     g_plugboards_scored += machines[t]->plugboards_scored;
@@ -4185,6 +4586,16 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "finisher: it runs once after all restarts, so its");
   fprintf(out, "  %-24s %s\n", "", "cost is fixed and negligible at a high -R, but is");
   fprintf(out, "  %-24s %s\n", "", "a few % of a low-R run (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--ring-stride K",
+          "Sparse ring sampling for the rightmost wheel:");
+  fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine the");
+  fprintf(out, "  %-24s %s\n", "", "skipped neighbours around the best hit (needs -r");
+  fprintf(out, "  %-24s %s\n", "", "and -g to wildcard that wheel; no -F/--exhaust)");
+  fprintf(out, "  %-24s %s\n", "", "[1 = off]. NOT RECOMMENDED: measured an accuracy");
+  fprintf(out, "  %-24s %s\n", "", "trade, not a free saving -- on telegraphic German");
+  fprintf(out, "  %-24s %s\n", "", "K=2 costs ~10pp of exact recovery and K=3 ~17pp");
+  fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11). K=2 is the only value with");
+  fprintf(out, "  %-24s %s\n", "", "any backing; K>=3 is worse for little extra saving");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -4415,6 +4826,7 @@ int main(int argc, char * * argv)
   opt_seed = 0;
   opt_seed_set = false;
   opt_anneal = 0;
+  opt_ring_stride = 1;
 
   /* get arguments */
 
@@ -4422,7 +4834,7 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
-         OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL };
+         OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -4468,6 +4880,7 @@ int main(int argc, char * * argv)
       { "polish",         no_argument,       nullptr, OPT_POLISH },
       { "crib-file",      required_argument, nullptr, OPT_CRIB },
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
+      { "ring-stride",    required_argument, nullptr, OPT_RINGSTRIDE },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -4569,6 +4982,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_DUMPALL:
           opt_dump_all = true;
+          break;
+        case OPT_RINGSTRIDE:
+          opt_ring_stride = atoi(optarg);
           break;
         case OPT_CRIB:
           opt_crib_file = optarg;
@@ -4734,6 +5150,18 @@ int main(int argc, char * * argv)
       (strspn(opt_grundstellung, "ABCDEFGHIJKLMNOPQRSTUVWXYZ.") != wheels))
     fatal("Illegal grundstellung string (must be 3 letters (A-Z) or .)");
 
+  /* --ring-stride K: sparse ring sampling for the rightmost wheel (walzenlage[2]).
+     Only meaningful -- and only lossless-by-design in its refinement pass -- when
+     both -r and -g wildcard that wheel's position; otherwise every value tested is
+     a distinct, necessary key and there is nothing to thin out (same precondition
+     as the leftmost wheel's exact collapse in build_key_space()). */
+  if ((opt_ring_stride < 1) || (opt_ring_stride > 13))
+    fatal("Illegal ring stride (--ring-stride must be 1 to 13)");
+  if ((opt_ring_stride > 1) &&
+      ((opt_ringstellung[2] != '.') || (opt_grundstellung[2] != '.')))
+    fatal("--ring-stride needs both -r and -g to wildcard the rightmost "
+          "wheel's position (e.g. -r ..X -> -r ...)");
+
   if ((strlen(opt_steckerbrett) > asize) ||
       (strspn(opt_steckerbrett, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") <
        strlen(opt_steckerbrett)))
@@ -4832,6 +5260,12 @@ int main(int argc, char * * argv)
     fatal("--polish and --cascade are alternatives; pick one");
   if (opt_polish && ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
     fatal("--polish is not supported with -F or --exhaust");
+  /* the refinement pass reconstructs the winning key via key_to_machine(best.idx /
+     restarts_par, ...), which only decodes the "simple sweep" index encoding -- the
+     same fragility --polish has (see the guard above). */
+  if ((opt_ring_stride > 1) &&
+      ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
+    fatal("--ring-stride is not supported with -F or --exhaust");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */
