@@ -2989,6 +2989,31 @@ wheel. Verified **byte-identical** to the previous implementation across 200 com
 (40 random keys × K=1/2/3/5/13); K=1 reproduces the full contiguous list, i.e. the
 unstrided search exactly.
 
+**The list must be `unsigned char`, not `int` — and establishing that required a
+noise-floor control.** `search_range` is read by `search_worker()`'s per-key decode, so
+its *size* matters: an `int[26]` list grew the struct from 48 to ~156 bytes and measured
+**+4.5% and +5.8% on the search benchmark** under g++ across two runs. Ring values are
+0–25, so a byte holds one exactly; `unsigned char` returns the struct to ~80 bytes and
+the regression vanishes (**−0.8%, +0.9%** on re-runs). Clang was useless for deciding
+this — it reported search **−16.1%** (i.e. *faster*) on the same regressed build.
+
+The reason this was decidable at all is a **base-vs-base control** (check the base
+revision out into the working tree, then run `make bench BASE=<same-ref>`; every
+non-zero number is pure noise). It gives **per-tier** noise floors, and they differ by
+an order of magnitude:
+
+| tier | base-vs-base | meaning |
+|---|---:|---|
+| `search` | **−0.5%** | tight — a ~5% move is real signal |
+| `hillclimb` | **−4.5%** | loose — ±5% scatter means nothing |
+
+So on the same set of runs, the search figure was a genuine regression while *all* of
+the hillclimb scatter (+4.5%, −1.3%, +5.1%) was noise. Without the control the two look
+identical, and the natural readings — "both moved ~5%, probably both noise" or "let's
+fix the hillclimb number" — are both wrong. **Run the base-vs-base control before
+interpreting any bench A/B on a shared box**; the 10% pass/fail threshold is far too
+coarse for the `search` tier, which can resolve ~1%.
+
 #### Follow-up: end-to-end exact recovery on telegraphic German — ⚠️ the stride is NOT free
 
 Everything above measures a *proximity* property on English prose. The practical

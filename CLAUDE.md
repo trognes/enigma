@@ -78,6 +78,19 @@ git worktree and runs both, failing if any benchmark is >`THRESHOLD`% (default
 10) slower than BASE — run this around the planned global-state/threading
 refactor to confirm single-thread throughput hasn't regressed.
 
+> **Measure the noise floor before believing any A/B number.** Check the base revision
+> out into the working tree and run `make bench BASE=<that same ref>`; every non-zero
+> number is then pure measurement noise. The floors are **per-tier and differ by an
+> order of magnitude** — measured here as **`search` ±0.5%** but **`hillclimb` ±4.5%**.
+> That gap decides real cases: on one set of runs a `search` +5% was a genuine
+> regression (a hot-path struct grown from 48 to 156 bytes) while simultaneous
+> `hillclimb` scatter of +4.5%/−1.3%/+5.1% was nothing at all. Both readings you would
+> reach without the control — "both ~5%, so both noise" and "fix the hillclimb number" —
+> are wrong. The default 10% `THRESHOLD` is a coarse backstop, not a resolution limit:
+> the `search` tier resolves ~1%, so a sub-threshold move there can still be real, and
+> a `hillclimb` move under ~5% never is. Also don't trust a single compiler — clang
+> reported `search` **−16.1%** (faster) on the very build g++ showed regressed.
+
 `make crackquality` (`tests/crack_quality.py`) measures something different again
 — **cracking quality on hard (short) messages**, not speed. For each ciphertext
 length it runs many random trials (random excerpt + rotor key + 10-pair
@@ -748,7 +761,14 @@ different masks*; the refinement is **one** search rather than up to three (the 
 centre can split the window into three contiguous pieces — centre=1, half=2 → {25}, {0},
 {2,3} — which a value list absorbs at no cost); and the decode no longer consults a
 global, so the `save_stride`/`opt_ring_stride = 1` save/restore around the nested
-refinement is **gone**. That save/restore was the direct cause of the first corruption
+refinement is **gone**.
+
+**`unsigned char`, not `int` — this is load-bearing.** `search_range` is read by
+`search_worker()`'s per-key decode, so its size matters: an `int[26]` list grew the
+struct 48 → ~156 bytes and cost a *measured* ~5% on the `search` benchmark under g++;
+bytes bring it back to ~80 and the regression disappears. See the noise-floor note under
+"Build & run" — that regression was only distinguishable from jitter because the
+`search` tier's floor is ±0.5% while `hillclimb`'s is ±4.5%. That save/restore was the direct cause of the first corruption
 bug here, so this removes the bug class, not just the instance. `opt_ring_stride` now
 survives only in `build_key_space()` (building the mask), the `> 1` guards, and option
 parsing — never in a decode. Verified byte-identical to the previous implementation
