@@ -3102,6 +3102,58 @@ compute-bound (§6.15), `K=2 + more -R` versus `K=1 + fewer -R` at equal wall ti
 genuinely open and is the right next experiment. Until that is run, `--ring-stride`
 should be presented as a **throughput/accuracy trade**, not a free reduction.
 
+### 7.12 The middle wheel's ring × start is partially redundant — 📊 MEASURED (not shipped)
+
+§7.10 collapses wheel 0's ring × start *totally* (26×, exact) and §7.11 attacks wheel 2's
+only *approximately*. The middle wheel sits between the two and has an **exact, partial**
+collapse that the tool does not currently exploit.
+
+**Mechanism.** Shifting `ring1` and `start1` together leaves `mod26(g1-r1)` — the middle
+wheel's whole contribution to the substitution — invariant. The only other place `g1`
+is read is `notch[w1][g1]`, which gates the left wheel and the double step. So two
+(ring1, start1) pairs with the same offset decode **identically unless they differ in
+when the middle notch fires**. And the middle wheel steps only ~once per 26 characters,
+so in an L-character message it visits only ~L/26 positions: most start1 values never
+reach the notch at all, and every one of those is equivalent to every other.
+
+**Measured end-to-end** — enumerate all 676 (ring1, start1) pairs with everything else
+fixed, encrypt, count distinct ciphertexts:
+
+| wheels | L | ring2/start2 | distinct | of 676 | factor | classes per offset |
+|---|---:|---|---:|---:|---:|---:|
+| 123 | 140 | A/A | **182** | 676 | **3.71×** | 7.0 |
+| 123 | 140 | M/Q | 208 | 676 | 3.25× | 8.0 |
+| 123 | 100 | A/A | 130 | 676 | 5.20× | 5.0 |
+| 132 | 140 | A/A | 208 | 676 | 3.25× | 8.0 |
+
+`distinct / 26` is an exact integer in every case, confirming the factorisation is clean:
+26 offset values, each carrying an identical set of *C* start1 notch-classes. The classes
+are independent of ring1 — as the code requires, since `notch[w1][g1]` reads the window
+only — and no two offsets ever collide. **So at realistic lengths 3–5× of this sub-space
+is exact duplicate work.**
+
+**Do not use a closed form for C.** `⌈L/26⌉+1` fits the common case (single-notch right
+rotor) but fails twice over: a **two-notch right rotor** (VI–VIII, notches `MZ`) steps the
+middle twice per revolution, giving `⌈L/13⌉+1` (measured 9 and 12 at L=100/140, exact),
+and double-step extras add one more for some wheel orders (132 measures 8 where the
+formula says 7). C also varies with **start2**, since the right wheel's notch phase sets
+*when* the middle steps (7 at start2=A vs 8 at start2=Q, same wheels and length). Build
+the representative set by **simulating the stepping and deduping on the notch-firing
+signature** — exact for every rotor/notch/double-step combination, O(26·L) to compute.
+
+**Why this is harder to ship than §7.11's value list.** Because C depends on start2, this
+is *not* an independent-dimension reduction: the surviving set is a `(start1, start2)`
+**pair list** (~182 entries at L=140), not a per-dimension list, so the flat mixed-radix
+decode cannot express it as a product. And per §7.11's own finding that growing
+`search_range` by 108 bytes cost a measured ~5% on the `search` benchmark, such a list
+must be heap-allocated and reached by pointer (like `subst_array`), never embedded.
+
+**Scope of the win.** It applies whenever ring1 *and* start1 are both wildcarded — so not
+under the default `-r AA.` (ring1 pinned), but yes under `-r A..` / `-r ...`. Unlike
+`--ring-stride` it is **lossless**, and it shrinks the *main* search, not just a
+refinement pass. It decays with length (no saving once L ≳ 676, where every start1 reaches
+the notch) — i.e. it is strongest exactly where the tool is weakest.
+
 ---
 
 ## 8. Novel / higher-risk
