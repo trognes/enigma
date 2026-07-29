@@ -792,9 +792,14 @@ outcost the coarse pass. That was a *ratio* masquerading as a cost: in the corne
 guarded, the entire run is 988 keys against 676 unstrided — 58 ms. It was removed, because
 a budget makes the same command do different work depending on an unrelated part of the
 keyspace, silently and with no way to adjust it, and the thing it bought was never worth
-that. (It is not free everywhere: with ring1 wildcarded each refinement value costs 26×
-more, so the `K=2` saving there is ~1.53× rather than the ~1.7× a clipped window gave.
-Under the documented default `-r AA.` nothing changes — 1.86×.) Requires both `-r`
+that. It is not free everywhere, and there is one case where the flag is a **net loss**: the
+refinement is cheaper than a coarse ring2 value only by `tasks.size() × rc[0] × gc[0]`, so
+when that factor is 1 — a *single* wheel order **and** start0 pinned — the 25 values
+outweigh the `26/K` the coarse pass saved. `-r A.. -g A..` at `K=2` scores 162 032 keys
+against 110 864 unstrided, i.e. **1.46× worse**. A non-fatal warning fires exactly there
+(the tool says the refinement outweighs the coarse pass); the width stays fixed at all 25
+either way, so the same command always does the same work. With start0 open — the
+documented default `-r AA.` — the saving is the full 1.86×. Requires both `-r`
 and `-g` to wildcard the rightmost wheel's position (else every ring2 value is distinct
 and necessary, same precondition as the leftmost wheel's exact collapse above); rejected
 together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / restarts_par,

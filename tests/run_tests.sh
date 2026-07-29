@@ -1076,6 +1076,31 @@ for inv_c in "--polish" "--cascade" "-M" "-J" "-R 3" "-A 3000" "--exhaust 1" "-F
   check "-c $inv_c: every -s pair held fixed" "$inv_missing" ""
 done
 
+# The refinement re-searches all 25 skipped ring2 values over ring1 x start1 x start2, so
+# it is cheaper than a coarse ring2 value only by tasks.size() * rc[0] * gc[0]. When that
+# factor is 1 -- a single wheel order AND start0 pinned -- the stride costs MORE than it
+# saves, and the tool must say so rather than silently doing extra work. The two -g forms
+# below straddle it: with start0 pinned the stride is a net loss, with start0 open it is a
+# 1.9x win, and the warning tracks that exactly.
+rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." \
+       --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
+check "--ring-stride warns when the refinement outweighs the coarse pass" "$rs_w" "1"
+rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "..." \
+       --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
+check "--ring-stride stays silent when it is paying off" "$rs_w" "0"
+
+# The "Analysed N" line must count keys the refinement actually SCORED, not its index
+# space: the §7.12 collapse applies inside the refinement too, so counting the index space
+# claimed credit for skipped start1 values and overstated --ring-stride's cost by the
+# collapse factor (439400 enumerated against 106600 scored on a wildcarded keyspace).
+# ring1/start1 are both wildcarded here so the collapse is active; on a plain scan one
+# plugboard is scored per surviving key, so the two counts must agree exactly.
+rs_diag=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "A.." -g "A.." \
+          --ring-stride 2 -T 1 2>&1 >/dev/null \
+          | grep -oE 'Analysed [0-9]+ rotor combinations, scored [0-9]+ plugboards')
+check "--ring-stride: analysed count matches keys scored (collapse active)" \
+  "$(printf '%s' "$rs_diag" | awk '{print ($2 == $6)}')" "1"
+
 # Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)

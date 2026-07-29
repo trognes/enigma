@@ -4049,6 +4049,27 @@ void bruteforce(char * result)
             total_keys - scored_keys, total_keys,
             static_cast<double>(total_keys) / static_cast<double>(scored_keys));
 
+  /* Non-fatal warning: --ring-stride can cost MORE than it saves. The coarse pass shrinks
+     ring2 to ceil(26/K) but the refinement then re-searches all 25 skipped values over
+     ring1 x start1 x start2 with ring0/start0 pinned -- so the refinement is cheaper than
+     a coarse ring2 value by tasks.size() * rc[0] * gc[0], and when that factor is 1 (a
+     single wheel order AND start0 pinned) the 25 values outweigh the 26/K the coarse pass
+     saved. Concretely, `-r A.. -g A..` at K=2 analyses 162032 keys against 110864 with no
+     stride: 1.46x WORSE. This is a real invocation, not a pathological one, so say so
+     rather than silently doing more work than asked. Deliberately a warning and not an
+     adjustment: the refinement width stays fixed at all 25 so the same command always does
+     the same thing, and not an error, since the run is still correct -- just a bad trade.
+     Compared on index spaces, which the collapse scales alike on both sides. */
+  if (opt_ring_stride > 1)
+    {
+      size_t refine_keys = static_cast<size_t>(asize - 1) * rc[1] * gc[1] * asize;
+      if (refine_keys > total_keys)
+        fprintf(stderr, "Warning: --ring-stride %d is not paying for itself here -- the "
+                "refinement (%zu keys) outweighs the coarse pass (%zu); open -g's first "
+                "position or drop --ring-stride\n",
+                opt_ring_stride, refine_keys, total_keys);
+    }
+
   /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
      task; a full M4 wildcard is ~14.9 GiB, every other mode far smaller) */
   g_table_count = nwo;
@@ -4323,7 +4344,26 @@ void bruteforce(char * result)
           size_t rrsize = static_cast<size_t>(rrc[0]) * rrc[1] * rrc[2];
           size_t rgsize = static_cast<size_t>(rgc[0]) * rgc[1] * rgc[2];
           size_t rwork = rrsize * rgsize * restarts_par;
+          /* Keys the refinement actually SCORES, not its index space. The §7.12
+             middle-wheel collapse applies here exactly as it does to the coarse pass --
+             search_worker() consults the same g_mid_rep_mask -- so counting rrsize*rgsize
+             would claim credit for the start1 values it skips, and the "Analysed N" line
+             would exceed the plugboards scored. Measured on a fully wildcarded keyspace:
+             439400 enumerated against 106600 scored, a 4.1x gap that made --ring-stride
+             look ~20% more expensive than it is. Mirrors build_key_space()'s own
+             accounting; the row is indexed by the task's RAW wheel numbers, since that is
+             how the mask was built (see the wheel_task note in CLAUDE.md). */
           extra_keys_analysed = rrsize * rgsize;
+          if (g_mid_rep_mask != nullptr)
+            {
+              const uint32_t * mrow = g_mid_rep_mask
+                + (static_cast<size_t>(rtasks[0].w[1]) * rotor_count
+                   + rtasks[0].w[2]) * asize;
+              size_t reps = 0;
+              for (int s2 = 0; s2 < asize; s2++)
+                reps += static_cast<size_t>(__builtin_popcount(mrow[s2]));
+              extra_keys_analysed = rrsize * static_cast<size_t>(rgc[0]) * reps;
+            }
 
           best_result rbest;
           /* Carry the display high-water mark into the refinement. Its best_result is a

@@ -3206,12 +3206,22 @@ boundary-wrap arithmetic — with every value in the set there is no edge to fal
 a documented subtlety (a coarse winner at A(0) with the true ring2 at Z(25)) stops being
 reachable rather than being handled.
 
-It is not free everywhere, and that is the honest trade: with ring1 wildcarded each
-refinement value costs 26× more, so `K=2` there saves ~1.53× rather than the ~1.7× a
-clipped window gave. Under the documented default `-r AA.` nothing changes (1.86×), and
-the accuracy the clipping cost was never measurable anyway — an A/B against an unbudgeted
-build (L=60, K=3, n=150) put it at 66.0% vs 66.7%, one trial in 150. Predictable beats
-0.7pp of noise.
+It is not free everywhere. The refinement is cheaper than a coarse ring2 value only by
+`tasks.size() · rc[0] · gc[0]`; when that factor is 1 — a *single* wheel order **and**
+start0 pinned — the 25 values outweigh the `26/K` the coarse pass saved and the flag is a
+**net loss**: `-r A.. -g A..` at `K=2` scores 162 032 keys against 110 864 unstrided,
+1.46× worse. A non-fatal warning now fires exactly on that condition, which is the right
+shape of fix — the width stays fixed so behaviour is predictable, and the user is told
+when the trade is bad instead of the tool silently doing less. With start0 open (the
+documented default `-r AA.`) the saving is the full 1.86×.
+
+An earlier version of this paragraph put the wildcarded-ring1 saving at ~1.53×. That was
+computed from the pre-fix `extra_keys_analysed`, which counted the refinement's index
+space rather than the keys it scored, ignoring that §7.12's collapse applies inside the
+refinement too — 439 400 enumerated against 106 600 scored. Corrected, the saving there is
+1.86×, the same as with ring1 pinned. The accuracy the old clipping cost was never
+measurable either: an A/B against an unbudgeted build (L=60, K=3, n=150) put it at 66.0%
+vs 66.7%, one trial in 150.
 
 Regression test: an authentic-Wehrmacht key (`-u A -w 123 -r DLT -g ACG`, L=60) whose K=3
 coarse winner lands well outside `K/2` of the truth. The narrow window returns a
