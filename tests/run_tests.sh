@@ -1034,6 +1034,48 @@ check "crack: --ring-stride 2 recovers with the given plugboard untouched" \
         --ring-stride 2 -T 1)" \
   "$rs_pb_pt"
 
+# INVARIANT: with no -c, NOTHING may touch the plugboard. The check above pins one option
+# at one K; this is the general property, because the defect was a class rather than an
+# instance -- a feature running when it was not requested, because it shared an enclosing
+# `if` with one that was and never re-checked its own flag. That `if` exists to host work
+# needing best.idx reconstructed once, so it is likely to gain more members, and the next
+# one can make exactly the same mistake. Every option below is legal without -c and
+# reaches that block; the whole sweep is sensitive (all four K values report 11 plugs on
+# the pre-fix binary against the fixed one's 10), so it guards the defect rather than
+# restating the fix.
+inv_ref=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+          -s "$rs_pb_board" -T 1 2>&1 >/dev/null | last_plugboard)
+for inv_o in "--ring-stride 2" "--ring-stride 3" "--ring-stride 5" "--ring-stride 13"; do
+  # shellcheck disable=SC2086  # intentional word-splitting of the option under test
+  inv_got=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+            -s "$rs_pb_board" $inv_o -T 1 2>&1 >/dev/null | last_plugboard)
+  check "no -c: plugboard untouched ($inv_o)" "$inv_got" "$inv_ref"
+done
+
+# INVARIANT: -s pairs are HELD FIXED by every climb variant, not just the two that were
+# spot-checked (greedy and -A). Distinct from the invariant above -- that one says the
+# board must not change without -c, this one says the given pairs must survive when a
+# climb IS requested -- and unlike it, this passes on the pre-fix binary too: it fills a
+# coverage gap rather than guarding the finisher defect. Each variant routes through a
+# different move path (cascade, cap-as-target, first-improvement, restarts, exhaustion,
+# the -F tiers, the stride refinement), and every one of them must skip plug_fixed[].
+for inv_c in "--polish" "--cascade" "-M" "-J" "-R 3" "-A 3000" "--exhaust 1" "-F 5" \
+             "--ring-stride 2"; do
+  # shellcheck disable=SC2086  # intentional word-splitting of the option under test
+  inv_pb=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+           -s "$rs_pb_board" -c $inv_c -T 1 2>&1 >/dev/null | last_plugboard)
+  inv_missing=""
+  for inv_p in $rs_pb_board; do
+    # the display sorts each pair's letters, so compare against both orderings
+    inv_rev=$(printf '%s' "$inv_p" | cut -c2)$(printf '%s' "$inv_p" | cut -c1)
+    case " $inv_pb " in
+      *" $inv_p "*|*" $inv_rev "*) ;;
+      *) inv_missing="$inv_missing $inv_p" ;;
+    esac
+  done
+  check "-c $inv_c: every -s pair held fixed" "$inv_missing" ""
+done
+
 # Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)
