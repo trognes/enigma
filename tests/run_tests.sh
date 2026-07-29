@@ -1001,6 +1001,22 @@ check "--ring-stride needs ring2/start2 wildcarded" \
 rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -c --ring-stride 2 -F 100 2>&1 >/dev/null)
 check "--ring-stride rejects -F" "$(printf '%s' "$rs_err" | grep -c 'not supported with -F')" "1"
 
+# NORWAY mode with --ring-stride. Regression for a bug that every other --ring-stride
+# test missed because they all used the standard machine: wheel_task carries RAW wheel
+# numbers, which init_walzen() translates (Norway adds norway_rotor_base). The refinement
+# used to rebuild its task from the machine's ALREADY-TRANSLATED walzenlage[], so
+# search_worker translated a second time and searched the wrong rotors -- and the §7.12
+# mask, keyed on raw indices, hit an unbuilt row and skipped every key, so the refinement
+# silently found nothing. Invisible outside Norway, where raw == translated.
+nw_pt="STRENGTHEMMELIGSTOPMULIGMILITAERAKTIVITETOBSERVERTIEKMANFJORDENSTOPEKSPERTISEREKVIRERESOMGAAENDESTOPDOKUMENTERFUNNETMEDREFERANSETILOBJEKTIOSLO"
+nw_ct=$(run "$nw_pt" -n -i -u N -w 352 -r LYR -g OSL)
+check "crack: Norway + --ring-stride 2 refines to the exact key" \
+  "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." --ring-stride 2 -T 1)" \
+  "$nw_pt"
+check "crack: Norway + --ring-stride 2 matches the unstrided search" \
+  "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." --ring-stride 2 -T 1)" \
+  "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." -T 1)"
+
 # --ring-stride makes the search APPROXIMATE, so a run must say so in the echoed settings:
 # without this, a saved log is indistinguishable from an exhaustive run. It must stay
 # silent when the option is off, so the default output is unchanged.

@@ -4182,7 +4182,9 @@ void bruteforce(char * result)
           int center2 = m.ringstellung[2];
 
           /* Snapshot everything each segment pins (ring0/start0/wheel order/
-             reflector/Greek wheel) BEFORE any segment's search_worker() call runs.
+             ring0/start0) BEFORE search_worker() touches m. The wheel order and
+             reflector are NOT snapshotted here -- they come from tasks[cur_wo]
+             verbatim, since m holds them already translated (see rtasks below).
              The plain-scan path leaves m's ringstellung/grundstellung in a stale,
              stepped state after scanning (a documented "lazy restore" perf
              optimisation below in search_worker() -- only the hillclimb path
@@ -4193,15 +4195,9 @@ void bruteforce(char * result)
              wheel0 step between two searches, corrupting the second one's window
              even though the first found nothing better). The refinement is a single
              search now (the value list expresses the whole set at once), so only the
-             snapshot ordering matters: read these BEFORE search_worker() touches m. */
+             ordering matters. */
           int fixed_ring0 = m.ringstellung[0];
           int fixed_start0 = m.grundstellung[0];
-          int fixed_w0 = m.walzenlage[0];
-          int fixed_w1 = m.walzenlage[1];
-          int fixed_w2 = m.walzenlage[2];
-          int fixed_ukw = m.ukw;
-          int fixed_greek = m.greek;
-          int fixed_greek_offset = m.greek_offset;
 
           /* Build the set of ring2 values to refine: the +/-half window around the
              coarse winner, taken mod 26 and EXCLUDING the winner itself.
@@ -4235,9 +4231,17 @@ void bruteforce(char * result)
               mask2 |= 1u << (((center2 + d) % asize + asize) % asize);
             }
 
-          std::vector<wheel_task> rtasks(1, wheel_task{
-              fixed_ukw, { fixed_w0, fixed_w1, fixed_w2 },
-              fixed_greek, fixed_greek_offset });
+          /* Reuse the winning task VERBATIM rather than rebuilding one from the
+             machine's fields. wheel_task carries RAW wheel/reflector numbers, which
+             init_walzen() translates on the way into a machine -- in Norway mode it adds
+             norway_rotor_base / norway_reflector_index. Rebuilding from m.walzenlage[]
+             therefore hands search_worker already-translated values that it translates a
+             SECOND time, so the refinement searched the wrong rotors entirely; and the
+             §7.12 collapse mask, which is built and looked up by raw index, hit a
+             never-built all-zero row and skipped every key, leaving the refinement
+             empty-handed. Both were invisible outside Norway mode, where raw ==
+             translated. cur_wo was set by the key_to_machine() call above. */
+          std::vector<wheel_task> rtasks(1, tasks[cur_wo]);
           search_range rrange;
           rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
           rrange.r_min[1] = range.r_min[1];
