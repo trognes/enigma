@@ -989,6 +989,20 @@ for key in "B 451 AAZ VKZ" "B 351 AAZ NLV" "C 324 AAZ JEY"; do
     "$rs_pt"
 done
 
+# The refinement covers EVERY skipped ring2, not just the +/-K/2 neighbours of the coarse
+# winner (PERFORMANCE.md §7.11). The narrow window rested on the coarse winner landing
+# within K/2 of the truth; this authentic-Wehrmacht key is a measured counterexample --
+# the coarse pass at K=3 wins on a ring2 well outside K/2 of the true T, so the narrow
+# window never tested the truth and returned a partially-wrong plaintext, while the full
+# sweep recovers it. Verified to FAIL against the pre-widening binary.
+ws_pt=NNAHMEHOPOZSCHAAXOPOTSCHKAXUNVWIEDDRHERSTELLCNGXWELDKAJAXWEL
+ws_board="RG VJ KF AC BX SY OH NQ DP WZ"
+ws_ct=$(run "$ws_pt" -i -u A -w 123 -r DLT -g ACG -s "$ws_board")
+check "crack: --ring-stride 3 refines beyond the K/2 window" \
+  "$(run "$ws_ct" -f -l wehrmacht -u A -w 123 -r "..." -g "..." -s "$ws_board" \
+        --ring-stride 3 -T 1)" \
+  "$ws_pt"
+
 # Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)
