@@ -768,7 +768,13 @@ refinement is **gone**.
 struct 48 → ~156 bytes and cost a *measured* ~5% on the `search` benchmark under g++;
 bytes bring it back to ~80 and the regression disappears. See the noise-floor note under
 "Build & run" — that regression was only distinguishable from jitter because the
-`search` tier's floor is ±0.5% while `hillclimb`'s is ±4.5%. That save/restore was the direct cause of the first corruption
+`search` tier's floor is ±0.5% while `hillclimb`'s is ±4.5%.
+
+**Do not shrink it further to just the mask.** Storing the 26-bit mask alone (52 bytes,
+decoding via a `m &= m-1` select loop + `__builtin_ctz`) was built and measured against
+a same-session control: clang neutral, g++ ~1–2% *slower* on `search`. The returns are
+not linear in struct size — 156→80 was worth ~5%, 80→52 is worth nothing — so the O(1)
+indexed load stays. Full numbers and the arm64 caveat: `PERFORMANCE.md` §7.11. That save/restore was the direct cause of the first corruption
 bug here, so this removes the bug class, not just the instance. `opt_ring_stride` now
 survives only in `build_key_space()` (building the mask), the `> 1` guards, and option
 parsing — never in a decode. Verified byte-identical to the previous implementation

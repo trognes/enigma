@@ -3014,6 +3014,32 @@ fix the hillclimb number" — are both wrong. **Run the base-vs-base control bef
 interpreting any bench A/B on a shared box**; the 10% pass/fail threshold is far too
 coarse for the `search` tier, which can resolve ~1%.
 
+**Rejected: storing only the 26-bit mask instead of the expanded list.** Since struct
+size demonstrably mattered above, the obvious next step is to drop `r2_vals[26]`/`r2_n`
+(30 bytes) for the `unsigned int` mask itself (4 bytes) — `sizeof(search_range)` goes
+**156 (int list) → 80 (byte list) → 52 (mask only)**. The decode then has to *select*
+the i-th set bit, done portably (no BMI2 `PDEP`, which is x86-only) as `while (i--) m &=
+m - 1;` then `__builtin_ctz` — one instruction on x86, `RBIT`+`CLZ` on arm64. Verified
+output-identical across 150 comparisons, then measured against the shipped byte-list
+version with a **same-session list-vs-list control beside every number**:
+
+| | control (list-vs-list) | mask-only vs list |
+|---|---|---|
+| g++ `search` | +0.1%, −0.9% | **+2.7%, +0.6%** |
+| clang `search` | −0.8%, +0.1% | −0.3%, +0.4% |
+| `hillclimb` (both) | −0.9% … +3.3% | −2.5% … +2.4% |
+
+clang is indistinguishable from its own control; g++ leans ~1–2% **slower** on `search`,
+with the +2.7% outside the control band. So the further 28 bytes buy nothing and the
+per-key select loop costs a little — **keep the byte value list**. Note the asymmetry
+with the earlier step: 156→80 bytes was worth ~5%, 80→52 is worth nothing, i.e. the
+returns are not linear in struct size and there is no point shrinking further.
+Caveat: measured on x86-64 only. On Apple-silicon arm64 the two effects plausibly pull
+opposite ways (ARM is more sensitive to large struct offsets, but `ctz` costs an extra
+instruction there), so the margin could differ — the `Bench` workflow's arm64-Linux
+matrix is the place to check if it ever matters. Given there is no measured upside on
+either x86 compiler, the simpler O(1) decode wins on both counts.
+
 #### Follow-up: end-to-end exact recovery on telegraphic German — ⚠️ the stride is NOT free
 
 Everything above measures a *proximity* property on English prose. The practical
