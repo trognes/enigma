@@ -2889,13 +2889,34 @@ ring1/start1/start2 for *each* candidate ring2) assumed only ring2/start2 needed
 checking near the winner — "ring0/ring1/start0/start1 pinned to the coarse winner
 (unaffected by the approximation)". That is false for ring1/start1: the coarse winner's
 ring1/start1 are only optimal for *its own* (possibly off-by-one, corrupted) ring2 row,
-and a manually-constructed counterexample (a random 98-letter key, K=2) reproduced a
-real miss — the true ring2 fell inside the refinement window but pinning ring1/start1
-to the wrong coarse winner still missed the true key entirely, because a completely
-different (also-corrupted) ring1 had outscored the truth's row in the coarse pass. The
+and a drifted pair can outscore the truth's row at the *corrupted* ring2 the coarse pass
+actually lands on.
+
+**Reproducible case** (K=2, 140-letter telegraphic German, 10 plugs given, `-f -l
+wehrmacht`, ring1 wildcarded):
+
+```
+true       : ring AQL  start ADT
+coarse win : ring ARK  start AES     <- ring1 R vs true Q, start1 E vs true D (both +1)
+refinement window: ring2 in {J, L}
+  ring2=L  PINNED (ring1=R,start1=E) -> -5.8179  ARL AET   wrong
+  ring2=L  REOPENED                  -> -5.7679  AQL ADT   EXACT
+```
+
+The truth scores **better** (−5.7679 vs −5.8179) at the true ring2 — it is findable and
+it wins — but pinning ring1/start1 to the coarse winner's drifted pair excludes it from
+the search space, so no amount of ring2 refinement reaches it. The drift is wheel 1's
+ring×start offset shift, which unlike wheel 0's is only *approximately* decode-equivalent.
+
+Two qualifications worth knowing, both from measuring rather than assuming. The drift is
+common but only sometimes fatal: over 20 keys, pinning recovered 18/20 against reopening's
+19/20, and on a separately checked key with a +12 drift *both* recovered because that
+particular shift happened to be decode-exact. And it only arises when the caller wildcards
+ring1 — with ring1 pinned (the default `-r AA.`) start1 never drifted alone in 8/8 checks,
+since it has nothing to shift with. The
 fix re-opens ring1/start1 to the *original* search's bounds in the refinement (which
 collapses back to a pin automatically if the caller had explicitly pinned ring1, rather
-than wildcarding it) — this costs more than the "check `K` ring2 neighbours" estimate in
+than wildcarding it, so a deliberately narrow search is never silently widened) — this costs more than the "check `K` ring2 neighbours" estimate in
 the total-cost accounting above (closer to `K` *full* per-ring2 searches, i.e. the same
 per-candidate cost the coarse pass pays, not a cheap fixed-ring1 lookup), but is what
 actually recovers the true key. Re-verified after the fix: exact recovery on every
