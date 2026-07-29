@@ -513,9 +513,14 @@ check "exhaustion --exhaust 1 is -T-independent (T1==T8)" \
 check "exhaustion --exhaust 1 --random 2 --restarts 3 is -T-independent (T1==T8)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 1 -e 5)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 8 -e 5)"
+# E=2 is pinned down to 10 free letters with -s. Unpinned it is 44850 forced-pair
+# combinations x a climb each, twice -- minutes per check, and ~2.7 min of the sanitizer
+# job on its own. With 8 pairs fixed there are 45 first-forced-pairs (still spread across
+# threads, so the parallel work-unit split this guards is still exercised) x 28 second
+# pairs, which runs in ~0.25 s and gives the identical T1==T4 verdict.
 check "exhaustion --exhaust 2 is -T-independent (T1==T4)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 4)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB CD EF GH IJ KL MN OP" -c --exhaust 2 --score i4q10 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB CD EF GH IJ KL MN OP" -c --exhaust 2 --score i4q10 -T 4)"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A 6000 --exhaust 1 -T 1 >/dev/null 2>&1
 check "exhaustion --exhaust rejects -A simulated annealing (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA --exhaust 1 -T 1 >/dev/null 2>&1
@@ -1036,7 +1041,13 @@ check "crack: Norway + --ring-stride 2 matches the unstrided search" \
 # once by the climb (report_climb_progress, gated on the OUTER best via g_progress) and
 # once by that search's merge (gated on rbest). One shared gate now, so: exactly one
 # header, and no progress line repeated verbatim.
-rs_disp=$(printf '%s' "$nw_ct" | "$ENIGMA" -n -c -f -l danish -u N -w 352 -r "L.." -g "O.." \
+# ring1/start1 are PINNED here (-r LY. -g OS.), unlike the recovery checks above: this
+# check is about the progress DISPLAY, and the refinement echoes the same way whether it
+# searches 338 keys or 228k. Wildcarding them costs ~60 s per run (~6.5 min of the
+# sanitizer job on its own -- every key gets a hill-climb) for no extra display coverage.
+# Verified against the pre-fix binary: this keyspace still reports 2 headers and 1
+# repeated line, so the regression is still caught.
+rs_disp=$(printf '%s' "$nw_ct" | "$ENIGMA" -n -c -f -l danish -u N -w 352 -r "LY." -g "OS." \
           --ring-stride 2 -T 2 2>&1 >/dev/null)
 check "--ring-stride prints exactly one progress header" \
   "$(printf '%s' "$rs_disp" | grep -c 'Score W')" "1"
@@ -1046,10 +1057,13 @@ check "--ring-stride repeats no progress line" \
 # --ring-stride makes the search APPROXIMATE, so a run must say so in the echoed settings:
 # without this, a saved log is indistinguishable from an exhaustive run. It must stay
 # silent when the option is off, so the default output is unchanged.
-rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." --ring-stride 2 -T 1 2>&1 >/dev/null)
+# show_settings() emits this BEFORE the search runs, so the keyspace is irrelevant to
+# what is being checked: -r AA. -g AA. is the smallest one --ring-stride accepts (it
+# requires ring2/start2 wildcarded) and is ~20x cheaper than the full sweep these used.
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." --ring-stride 2 -T 1 2>&1 >/dev/null)
 check "--ring-stride is echoed in the settings" \
   "$(printf '%s' "$rs_echo" | grep -c '^Stride: .*ring-stride')" "1"
-rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -T 1 2>&1 >/dev/null)
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." -T 1 2>&1 >/dev/null)
 check "no stride line when --ring-stride is off" \
   "$(printf '%s' "$rs_echo" | grep -c '^Stride:')" "0"
 
@@ -1106,8 +1120,16 @@ check "no collapse line when ring1 is pinned" \
   "$(mw_line -r "AA." -g "A..")" "0"
 check "no collapse line when start1 is pinned" \
   "$(mw_line -r "A.." -g "AA.")" "0"
+# ring2/start2 are pinned to the true key here (-r A.L -g A.T). --true-key disables the
+# collapse, so this run gets no key reduction at all: over the full A.. / A.. space that
+# is 456976 keys through a -c climb -- ~100 s plain and minutes under the sanitizers, the
+# single most expensive check in the suite. The gate only cares that ring1 and start1 are
+# BOTH wildcarded, which -r A.L -g A.T still satisfies (676 keys). The positive control on
+# the same keyspace keeps the negative from passing vacuously.
+check "collapse applies on the pinned-ring2 keyspace (control)" \
+  "$(mw_line -r "A.L" -g "A.T")" "1"
 check "no collapse line under --true-key" \
-  "$(mw_line -r "A.." -g "A.." -c -F 5 --true-key B123AQLADT)" "0"
+  "$(mw_line -r "A.L" -g "A.T" -c -F 5 --true-key B123AQLADT)" "0"
 
 echo
 echo "passed: $pass, failed: $fail"
