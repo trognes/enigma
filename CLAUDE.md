@@ -1023,8 +1023,10 @@ range and is not viable.
   ~244 s each) merely to assert that a *settings-echo line* was absent, and another
   wildcarded them for a test about *progress output*, which the refinement produces
   identically over 338 keys. Trimming those four — with no loss of coverage; each was
-  re-verified to still catch its bug — cut the job to ~162 s (221 checks under
-  `TEST_QUICK`; the plain g++/clang jobs run the full 264-check matrix in ~291 s).
+  re-verified to still catch its bug — cut the job to ~162 s, and halving the n-gram load
+  (`PERFORMANCE.md` §7.13) took it to **~139 s** (221 checks under `TEST_QUICK`; the plain
+  g++/clang jobs run the full 264-check matrix in **~247 s**). Treat those two as the
+  baselines to watch for drift.
   Rules of thumb when adding a check:
   - **Ask what the assertion actually reads.** A settings/echo line is printed by
     `show_settings()` *before* the search, so any legal keyspace works — use the
@@ -1047,9 +1049,9 @@ range and is not viable.
     before doing any work, so the suite's ~290 invocations pay it ~290 times. That
     load was **halved** (`PERFORMANCE.md` §7.13 — hand-rolled parse instead of
     `sscanf`, and `logval` evaluated once instead of twice per entry): under ASan
-    `-q` went 223 → 155 ms and `-f` 370 → 241 ms, taking the floor from ~48 s to
-    ~36 s. What remains is genuine work; below that only a cached binary table would
-    help, not more test trimming.
+    `-q` went 223 → 155 ms and `-f` 370 → 241 ms, worth a measured **23 s** off the
+    sanitizer job and **44 s** off the plain one. What remains is genuine work; below
+    that only a cached binary table would help, not more test trimming.
   - `TEST_QUICK=1` (set by the sanitizer job) already shrinks the recovery wildcard and
     the language matrix. It is not a licence to write a slow check: it does not touch
     `-R`/`-A` budgets or any keyspace a check spells out itself.

@@ -3400,6 +3400,12 @@ Result, min of 5, whole-invocation on a trivial input:
 | `-f -l english` | 247 → **118 ms** | 370 → **241 ms** |
 | `-i` (loads nothing) | 21 → 22 ms | 63 → 66 ms |
 
+End to end on the test suite, which is where the per-process constant is multiplied out:
+the sanitizer run (221 checks, `TEST_QUICK`) went **162 → 139 s** and the full 264-check
+plain run **291 → 247 s**. Note both savings are larger than a naive
+`invocations × per-invocation delta` estimate predicts (~12 s), because the suite's runs
+are not all trivial-input — take the measured suite numbers, not the model.
+
 **Byte-identical, verified rather than argued.** An FNV-1a hash of the quantised `itable`,
 plus the loader's `Note:`/`Warning:` diagnostics, match the previous build across all
 **10 languages × 6 models** (60 combinations). This mattered because the hand-rolled parse
