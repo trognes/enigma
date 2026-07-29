@@ -261,28 +261,36 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   fragility `--polish` has). The coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then one
   refinement pass re-checks **every** skipped ring2 around the best coarse hit (see
   "Sparse ring sampling for the rightmost wheel" below and `PERFORMANCE.md` §7.11 for the
-  measurement and the implementation gotchas). **Still not recommended by default — it
-  remains an accuracy/throughput TRADE, not a free reduction** — but both axes moved when
-  the refinement was widened from a `±⌊K/2⌋` window to every skipped value (the extra is a
-  *constant*, one pinned task, so it is nearly free; §7.11). Measured end-to-end on
-  authentic telegraphic German (200 paired trials/cell, `-f -l wehrmacht`, plugboard
-  given), exact recovery:
+  measurement and the implementation gotchas). **`K=2`/`K=3` are recommended when
+  throughput matters; K≥5 is not.** Measured end-to-end on authentic telegraphic German
+  (200 paired trials/cell, `-f -l wehrmacht`, plugboard given via `-s`, no `-c` — this
+  isolates the rotor-key question the flag is about), exact recovery:
 
   | L | K=1 | K=2 | K=3 | K=5 |
   |---:|---:|---:|---:|---:|
-  | 40 | 50.0% | 38.0% | 38.0% | 32.5% |
-  | 60 | 74.5% | 66.0% | 63.5% | 60.5% |
+  | 40 | 50.0% | 48.0% | 49.0% | 42.0% |
+  | 60 | 74.5% | 74.0% | 74.0% | 72.5% |
+  | keys analysed | 1.00× | 1.86× | **2.61×** | 3.73× |
 
-  with a stride-specific miss rate (failed where K=1 succeeded) of 10-12% (K=2), 12-14%
-  (K=3) and 16-21% (K=5). Cost, as keys analysed on a single-wheel-order key with start0
-  open: **1.86× (K=2), 2.61× (K=3), 3.73× (K=5)**. Widening the window is what makes K=3
-  usable — it was 33.5%/56.5% with a flat 21% miss rate under the old window, and is now
-  level with K=2 at a ~40% larger saving; **K=2 and K=3 are the values with backing**, K≥5
-  is not. The earlier "100% recoverable across 90 trials" result is *not* a contradiction
-  — it measured a weaker *proximity* property (does the winner land within `⌊K/2⌋` of the
+  with a stride-specific miss rate (failed where K=1 succeeded) of 2% (K=2), 2-4% (K=3)
+  and 5-12% (K=5). So **K=3 is the best operating point** — 2.61× for ~1pp — and K=5's
+  2-8pp is not worth its 3.73×.
+
+  > ⚠️ **Every `--ring-stride` accuracy number predating the `--polish` guard fix was
+  > contaminated and is roughly an order of magnitude too pessimistic.** The finisher
+  > shared its enclosing `if` with the refinement and was not guarded by `opt_polish`, so
+  > every strided run silently got a plugboard hill-climb plus an unconditional gain
+  > cascade that the K=1 baseline never got — *with no `-c` requested*, adding spurious
+  > plugs to a board supplied via `-s`. The old tables read K=2 at −10pp and K=3 at −17pp;
+  > the real costs are −0.5…−2pp and −0.5…−1pp. The "accuracy/throughput TRADE, not a free
+  > reduction" verdict was an artefact of that bug. `PERFORMANCE.md` §7.11.
+
+  The earlier "100% recoverable across 90 trials" result is *not* a contradiction — it
+  measured a weaker *proximity* property (does the winner land within `⌊K/2⌋` of the
   truth?) on English prose, not exact recovery. Whether the saved compute beats spending
   it on `-R` restarts at matched wall time rests on a single cell (a dead tie at L=100)
-  and is still **effectively untested** — the right next experiment.
+  and is still **effectively untested** — though with the real accuracy cost now near
+  zero, the throughput is close to free and the question matters less than it did.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the climb/SA
   never remove or rewire them (their letters are marked in `plug_fixed[]`, set once from
   `opt_steckerbrett` before the threaded search, and skipped by every switch/remove/

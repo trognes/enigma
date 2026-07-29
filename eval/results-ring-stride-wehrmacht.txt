@@ -1,27 +1,53 @@
-Widened refinement (every skipped ring2, not the +/-K/2 window) -- PERFORMANCE.md 7.11.
-eval/ring_stride_wehrmacht_probe.py, TRIALS=200 SEED=0, authentic Wehrmacht excerpts,
--f -l wehrmacht, true plugboard given via -s. "vs-K1-fail" is the stride-SPECIFIC miss
-rate: the stride failed on a trial where K=1 succeeded, so it excludes the pre-existing
-scoring/search floor neither K fixes.
+--ring-stride exact recovery on authentic telegraphic German.
+eval/ring_stride_wehrmacht_probe.py, TRIALS=200 SEED=0, -f -l wehrmacht, true plugboard
+given via -s (no -c: this isolates the ROTOR-KEY question the flag is about).
+"vs-K1-fail" is the stride-SPECIFIC miss rate -- the stride failed where K=1 succeeded --
+so it excludes the pre-existing scoring/search floor that neither K fixes.
+
+=== CURRENT (after the --polish finisher guard fix) ===
 
 corpus: 49 clean authentic-message blocks, 5413 letters total
      L    K        n     exact%     vs-K1-fail
     40    1      200      50.0%      n/a(base)
-    40    2      200      38.0%            12%
-    40    3      200      38.0%            14%
-    40    5      200      32.5%            21%
+    40    2      200      48.0%             2%
+    40    3      200      49.0%             4%
     60    1      200      74.5%      n/a(base)
-    60    2      200      66.0%            10%
-    60    3      200      63.5%            12%
-    60    5      200      60.5%            16%
+    60    2      200      74.0%             2%
+    60    3      200      74.0%             2%
+    40    5      200      42.0%            12%
+    60    5      200      72.5%             5%
 
-For comparison, the same trials under the previous +/-K/2 refinement window:
+Cost, keys analysed on a single-wheel-order key with start0 open (-r AA. -g ...):
+K=1 456976, K=2 245388 (1.86x), K=3 175084 (2.61x), K=5 122356 (3.73x). The refinement's
+extra is a constant 16900 keys (25 ring2 values x 676) regardless of K.
+
+Verdict: K=2 and K=3 both cost ~0.5-2pp of exact recovery, and K=3 is the better of the
+two (2.61x for ~1pp against 1.86x for ~2pp). K=5 costs 2-8pp and is not worth its 3.73x.
+
+=== SUPERSEDED, and why -- do not quote these numbers ===
+
+Every earlier measurement of this flag was contaminated. The --polish plugboard finisher
+shared its enclosing `if` with the --ring-stride refinement and was not guarded by
+opt_polish, so every strided run silently got a full plugboard hill-climb plus an
+unconditional gain cascade that the K=1 baseline never got -- with no -c requested at all.
+On a board supplied via -s it added spurious plugs and corrupted the decrypt. That is
+where most of the apparent "cost of the stride" came from:
+
+                        contaminated   ->   actual
+    L=40 K=2   exact       38.0%              48.0%
+    L=40 K=3   exact       38.0%              49.0%
+    L=60 K=2   exact       66.0%              74.0%
+    L=60 K=3   exact       63.5%              74.0%
+    L=40 K=5   exact       32.5%              42.0%
+    L=60 K=5   exact       60.5%              72.5%
+
+and earlier still, under the +/-K/2 refinement window (also contaminated):
 
     40    2      200      38.5%            14%
     40    3      200      33.5%            21%
     60    2      200      64.5%            11%
     60    3      200      56.5%            21%
 
-Keys analysed (single wheel order, start0 open, -r AA. -g ...): K=1 456976, K=2 245388
-(1.86x), K=3 175084 (2.61x), K=5 122356 (3.73x). The refinement's extra is a constant
-16900 keys (25 ring2 values x 676) regardless of K.
+The widening comparison drawn from those two contaminated rounds is not necessarily void
+-- both arms carried the same bug -- but the absolute costs against K=1 were wrong by
+roughly an order of magnitude, and the "K>=3 is not recommended" verdict rested on them.
