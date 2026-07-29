@@ -3061,8 +3061,16 @@ struct search_range
      a plain lookup (r2_vals[i]) instead of arithmetic that has to know about strides.
      r_min[2]/r_max[2] still describe the caller's requested BOUNDS (build_key_space
      derives the list from them); everything that decodes a key reads the list, never
-     the bounds. r2_n always equals rc[2]. Filled via set_ring2() below. */
-  int r2_vals[asize];
+     the bounds. r2_n always equals rc[2]. Filled via set_ring2() below.
+
+     unsigned char, not int, and this is load-bearing: search_worker() reads this
+     struct in its per-key decode, so growing it pushes that decode across more cache
+     lines. An int[26] list measured a REAL ~5% search regression under g++ -- against
+     a base-vs-base noise floor of only 0.5% on that benchmark, so well outside the
+     noise (the hillclimb tier's own floor is ~4.5%, which is why its numbers looked
+     scattered and meant nothing). A byte holds 0..25 fine and keeps the struct near
+     its original footprint. See PERFORMANCE.md §7.11. */
+  unsigned char r2_vals[asize];
   int r2_n;
 };
 
@@ -3075,7 +3083,7 @@ static void set_ring2(search_range & r, unsigned int mask)
   r.r2_n = 0;
   for (int v = 0; v < asize; v++)
     if (mask & (1u << v))
-      r.r2_vals[r.r2_n++] = v;
+      r.r2_vals[r.r2_n++] = static_cast<unsigned char>(v);
 }
 
 /* Best result so far, shared across worker threads. It is updated (and the live
