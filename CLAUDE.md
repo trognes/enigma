@@ -94,6 +94,17 @@ refactor to confirm single-thread throughput hasn't regressed.
 > the `search` tier resolves ~1%, so a sub-threshold move there can still be real, and
 > a `hillclimb` move under ~5% never is. Also don't trust a single compiler — clang
 > reported `search` **−16.1%** (faster) on the very build g++ showed regressed.
+>
+> **`min_time` wraps the WHOLE invocation, so process startup is inside every benchmark
+> — a change to startup shows up as a fake throughput move.** The n-gram load halving
+> (`PERFORMANCE.md` §7.13) A/B'd as `search` **−3.4%** and `hillclimb` **−10.1%** without
+> touching a line of the hot path. The tell is that both deltas were the *same ~60 ms
+> absolute* (2.14→2.07 s and 0.52→0.47 s): a constant saving inflates the **cheaper tier
+> far more**, which is the opposite shape to a real per-iteration win, and it is not
+> something the noise-floor control catches (base-vs-base has identical startup). Before
+> believing a cross-commit bench number, check whether the tiers moved by the same
+> *seconds* or the same *percent*, and whether the commit touched anything that runs once
+> per process.
 
 `make crackquality` (`tests/crack_quality.py`) measures something different again
 — **cracking quality on hard (short) messages**, not speed. For each ciphertext
@@ -1033,11 +1044,12 @@ range and is not viable.
     most of the runtime — and the most expensive one sat *last* in the file, so
     profilers that were interrupted never showed it at all.
   - **There is a floor you cannot trim.** Each invocation loads its n-gram tables
-    before doing any work: measured under ASan at 62 ms (`-i`), 249 ms (quad-family)
-    and 410 ms (`-f`, all four tables). Across the suite's ~290 invocations that is
-    ~52 s of the ~162 s total, so past this point only a faster loader (the parse is
-    `fgets`+`sscanf` over 457k lines; a hand-rolled parser measured 110 ms → 27 ms)
-    or a cached binary table would help — not more test trimming.
+    before doing any work, so the suite's ~290 invocations pay it ~290 times. That
+    load was **halved** (`PERFORMANCE.md` §7.13 — hand-rolled parse instead of
+    `sscanf`, and `logval` evaluated once instead of twice per entry): under ASan
+    `-q` went 223 → 155 ms and `-f` 370 → 241 ms, taking the floor from ~48 s to
+    ~36 s. What remains is genuine work; below that only a cached binary table would
+    help, not more test trimming.
   - `TEST_QUICK=1` (set by the sanitizer job) already shrinks the recovery wildcard and
     the language matrix. It is not a licence to write a slow check: it does not touch
     `-R`/`-A` budgets or any keyspace a check spells out itself.

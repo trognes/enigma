@@ -3358,6 +3358,69 @@ saving is not automatically an accuracy gain. Short-message recovery is compute-
 trials) came back a dead tie, 48.8% vs 48.8%. Measure the conversion before claiming a
 recovery improvement.
 
+### 7.13 N-gram load time — ✅ SHIPPED (halved; startup, not the hot path)
+
+Everything else in §7 is about the search. This is about the **fixed cost every invocation
+pays before the search starts**: loading and quantising the n-gram tables. It matters
+because the tool is invoked as a *process* thousands of times — `tests/run_tests.sh` alone
+spawns 287 of them, `tests/crack_quality.py` and the `eval/` harnesses one or more per
+trial — so a per-process constant is multiplied by the trial count, not amortised away.
+
+Decomposed with a temporary timer around each phase of `ngrams_read` (english quadgrams,
+456 976 entries, `-O3`):
+
+| model | parse | min/max pass | quantise pass | total |
+|---|---:|---:|---:|---:|
+| `-q` | 71 ms | 9.5 ms | 10.5 ms | 91 ms |
+| `-f` | 76 ms | **77 ms** | **77 ms** | 234 ms |
+
+Two independent costs, and the second one is not what it looks like.
+
+**The parse was 59 of its 71 ms inside `sscanf`.** `sscanf(line, "%15s %llu", ...)`
+reinterprets the format string and runs a general integer conversion once per line, 457k
+times. Measured standalone on the same file: `sscanf` 59 ms, `fgets` + hand-rolled scan
+11 ms, slurp-whole-file + hand-rolled 6.6 ms (110 / 27 / 25 ms under ASan). `fgets` was
+kept over slurping — the gain over slurping is small, it avoids an ~8 MB transient
+allocation, and it preserves the existing behaviour on lines longer than the 256-byte
+buffer (they split, and the remainder is parsed as its own record).
+
+**The two remaining passes are cheap for `-q` and dominant for `-f`, on the same table.**
+`logval(i)` was evaluated **twice per entry** — once to find `vmin`/`vmax`, once to
+quantise — i.e. 914k calls. Under `-q` each is one `log10`; under `-a`/`-f` each
+recomputes the entire four-order log-linear mixture, which is the whole of the 9.5 → 77 ms
+jump. Evaluating once into a scratch `std::vector<double>` fixes it. **Doubles, not
+floats**: the values feed a rounding boundary (`q = (v - bias) * scale`, rounded to a
+byte), so narrowing the scratch array would silently change table contents.
+
+Result, min of 5, whole-invocation on a trivial input:
+
+| | plain before → after | ASan before → after |
+|---|---|---|
+| `-q -l english` | 116 → **53 ms** | 223 → **155 ms** |
+| `-f -l english` | 247 → **118 ms** | 370 → **241 ms** |
+| `-i` (loads nothing) | 21 → 22 ms | 63 → 66 ms |
+
+**Byte-identical, verified rather than argued.** An FNV-1a hash of the quantised `itable`,
+plus the loader's `Note:`/`Warning:` diagnostics, match the previous build across all
+**10 languages × 6 models** (60 combinations). This mattered because the hand-rolled parse
+is deliberately *stricter* than `sscanf` on malformed input in three ways — an over-long
+token is skipped, a negative count is skipped rather than sign-wrapped into the
+`UINT32_MAX` clamp, and a 64-bit overflow saturates instead of being undefined behaviour.
+None is reachable from a well-formed table, and the hash check is what establishes that
+for the bundled ones. (The loader has form here: the truncation bug that silently cut the
+german quadgram table to 4.9% of its mass — §6.9 — was also invisible without an explicit
+table-level check.)
+
+> ⚠️ **This change makes `make bench` report a fake speed-up.** `bench.sh`'s `min_time`
+> wraps the **whole invocation**, so process startup is inside every measurement. A/B
+> against the pre-change commit reported `search` **−3.4%** and `hillclimb` **−10.1%**,
+> and neither is a throughput change: both deltas are the *same ~60 ms absolute*
+> (2.14→2.07 s and 0.52→0.47 s). Because the saving is a constant rather than a
+> proportion, it inflates the **cheaper tier three times as much** — which is exactly the
+> shape a real hot-path win does *not* have. When A/B-ing across this commit, or any
+> future change to startup, check whether the two tiers moved by the same *seconds*
+> rather than the same *percent* before believing either number.
+
 ---
 
 ## 8. Novel / higher-risk
