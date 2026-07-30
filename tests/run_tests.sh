@@ -1084,10 +1084,21 @@ done
 # 1.9x win, and the warning tracks that exactly.
 rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." \
        --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
-check "--ring-stride warns when the refinement outweighs the coarse pass" "$rs_w" "1"
+check "--ring-stride warns when the strided run costs more than not striding" "$rs_w" "1"
 rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "..." \
        --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
 check "--ring-stride stays silent when it is paying off" "$rs_w" "0"
+# The warning must compare the WHOLE strided run against not striding, not the refinement
+# against the coarse pass. The coarse pass shrinks as K grows, so at a large K a
+# refinement bigger than it is normal rather than a problem: reported from the field with
+# -r A.. -g A.. --ring-stride 13, which analyses 29028 keys against 110864 unstrided -- a
+# 3.8x win that the old refinement-vs-coarse test flagged as a loss. Both K values below
+# are wins on this keyspace and must stay silent; verified to warn before the fix.
+for rs_k in 5 13; do
+  rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "A.." -g "A.." \
+         --ring-stride "$rs_k" -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
+  check "--ring-stride $rs_k stays silent on a large-K win" "$rs_w" "0"
+done
 
 # The "Analysed N" line must count keys the refinement actually SCORED, not its index
 # space: the §7.12 collapse applies inside the refinement too, so counting the index space

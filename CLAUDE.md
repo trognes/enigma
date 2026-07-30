@@ -912,13 +912,17 @@ offsets.
 This is what makes the flag pay off where it used to lose. On `-r A.. -g A..` at
 `K=2`: 110 864 keys unstrided, 162 032 with the old full enumeration (a net
 **loss**), 75 932 with the band — a **1.46× win**. On `-r A.. -g ...` the saving
-goes 1.86× → **1.97×**. A non-fatal warning still fires in the one case the band
-cannot rescue: `ring1` pinned by the caller, so there is no band to apply.
-Requires both `-r` and `-g` to wildcard the rightmost wheel's position (else
-every ring2 value is distinct and necessary, same precondition as the leftmost
-wheel's exact collapse above); rejected together with `-F`/`--exhaust` (the
-refinement's `key_to_machine(best.idx / restarts_par, ...)` reconstruction
-shares `--polish`'s dependency on the "simple sweep" `best.idx` encoding).
+goes 1.86× → **1.97×**. A non-fatal warning fires in the one case the band
+cannot rescue — `ring1` pinned by the caller, so there is no band to apply — and
+it compares the **whole strided run against not striding**, not the refinement
+against the coarse pass. Those are different questions: the coarse pass shrinks
+as `K` grows, so at a large `K` a refinement bigger than it is the normal case,
+not a problem. Requires both `-r` and `-g` to wildcard the rightmost wheel's
+position (else every ring2 value is distinct and necessary, same precondition as
+the leftmost wheel's exact collapse above); rejected together with
+`-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / restarts_par,
+...)` reconstruction shares `--polish`'s dependency on the "simple sweep"
+`best.idx` encoding).
 
 > **`wheel_task` holds RAW wheel/reflector numbers — never rebuild one from a
 > `machine`.** `init_walzen()` *translates* on the way in: under `-n` it adds
