@@ -3370,11 +3370,31 @@ board via `-s`, random key, paired trials shared across every cell), sweeping
 | 3 | 67% | 67% | 70% | **70%** | 70% | 70% | 70% | 70% | 70% |
 | 5 | 67% | 33% | 63% | **70%** | 70% | 70% | 70% | 70% | 70% |
 
-**`w = 3` is sufficient — and the width beyond it is what is doing nothing, not the
-width itself.** No trial in any cell changes between `w=3` and the full sweep. Below it
-the picture is exactly the one §7.11 documents twice: `w=1` costs 1 trial at K=2, 2 at
-K=3 and **11 at K=5** (33% vs 70%) — the `±⌊K/2⌋` window failing hardest where its own
-assumption is weakest.
+**At these strides `w = 3` is sufficient** — no trial in any cell changes between `w=3`
+and the full sweep — while below it the picture is the one §7.11 documents twice: `w=1`
+costs 1 trial at K=2, 2 at K=3 and **11 at K=5** (33% vs 70%), the `±⌊K/2⌋` window
+failing hardest where its own assumption is weakest. Repeated at L=150 (same 30 paired
+trials, `K=1` base 93%): K=2 needs nothing beyond `w=1` (93% throughout), K=3 closes at
+`w=2` (83% → 93%), K=5 at `w=4` (73/87/90/**93**%). So the sufficient width is not a
+constant 3 — it is `≈⌈K/2⌉+1`, and the next section is what happens when K keeps going.
+
+**The width that suffices scales with K, and by K≈12 it is "all of them".** Sweeping
+every stride the flag accepts (`ring_stride_geometry_probe.py`, L=150, 300 trials,
+right-wheel geometry only) gives the minimum radius reaching each recovery level:
+
+| K | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| coarse winner is the true ring | 49% | 33% | 28% | 24% | 17% | 15% | 16% | 13% | 13% | 12% | 12% | 10% |
+| min radius for ≥99% | 1 | 2 | 3 | 4 | 4 | 5 | 5 | 7 | 7 | 9 | 10 | 10 |
+| min radius for 100% | 3 | 5 | 3 | 4 | 5 | 6 | 6 | 7 | 8 | 9 | 11 | **12** |
+
+`⌈K/2⌉+1` tracks the measured requirement to about K=8 and then **under**-predicts it.
+The reason is visible in the top row: as the grid coarsens the coarse pass stops
+reliably picking the anchor nearest the truth (49% → 10% exact), and once it picks a
+*different* anchor the distance is a whole grid step, not a shoulder. At K=13 there are
+only two anchors 13 apart, so losing the argmax puts the truth ~13 away — which is why
+the requirement there is 12, i.e. the full sweep, and why capping the width would
+silently break exactly the large strides the ceiling was raised to 26 to allow.
 
 **Why 3, from the geometry.** `eval/ring_stride_geometry_probe.py` scores the full 26×26
 (ring2, start2) grid directly (rest of the key at truth, so right-wheel only): the score
@@ -3395,20 +3415,30 @@ refinement ring2 value, and the full 25 as a share of the whole run:
 | `-r AA. -g ...` (ring1 pinned) | 676 | 16 900 | 9.7% | 7.3% |
 | `-r A.. -g A..` (single task, start0 pinned) | 1005 | 25 125 | 34.8% | 26.5% |
 
-**Verdict: keep the full sweep.** The measurable saving is 1.5–7% in the shapes where
-the flag is recommended, and the one shape where a cap would matter (34.8%) is the
-single-task corner where `--ring-stride` is *already* a net loss and already warns — so
-a width cap would be optimising the case the tool tells you not to use. Against that,
-capping reintroduces the assumption "the coarse winner lands near the truth", whose
-failure is the subject of two separate follow-ups above, plus the wrap subtlety the full
-set removed. A fixed, explainable 25 at ~2% of a normal run is the better trade. The
-override stays in the source as the way to re-check this without a rebuild.
+**Verdict: keep the full sweep.** Two independent reasons, either sufficient.
 
-**Scope.** `w=3` is sufficient *on this measurement* — n=30 per cell, L=60/150, `-s`
-board, no `-c`. It is enough to say the tail beyond 3 is inert and that `w=1` is not,
-which is what the width decision turns on; it is not enough to certify a cap as safe on
-keyspaces or message styles not measured here. That asymmetry is the reason the verdict
-is "keep the sweep" rather than "cap at 3".
+*It is not a fixed width.* "±3 is always enough" holds only over K≤5 — the strides worth
+using. The flag accepts K to 26, and the required width climbs to the whole set by K≈12.
+A cap would therefore have to be **K-dependent** to be correct, which is a formula
+derived from one measurement standing where a constant now stands, re-importing the
+assumption ("the coarse winner lands near the truth") whose failure is the subject of two
+separate follow-ups above — for a saving computed below at ~2%.
+
+*And the saving is not worth having.* The measurable gain from capping is 1.5–7% of a run
+in the shapes where the flag is recommended. The one shape where it would matter (34.8%)
+is the single-task corner where `--ring-stride` is *already* a net loss and already warns
+— so a cap would be optimising the case the tool tells you not to use. Capping also
+brings back the 0/25 wrap subtlety the full set removed. A fixed, explainable 25 at ~2%
+of a normal run is the better trade; the override stays in the source as the way to
+re-check this without a rebuild.
+
+**Scope.** The end-to-end cells are n=30, L=60/150, `-s` board, no `-c` — enough to show
+that the tail beyond `⌈K/2⌉+1` is inert at small K and that `w=1` is not, which is what
+the width decision turns on. The K-sweep that settles the large strides is the geometry
+probe, which pins ring1/start1 at the truth: it therefore *understates* the required
+width (a coarse winner displaced by middle-wheel drift is a distance it cannot see), so
+it is a safe instrument for concluding "wider than a constant", and not one for
+certifying any particular cap as sufficient.
 
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 

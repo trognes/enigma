@@ -1,0 +1,2 @@
+# trials=30 seed=0 threads=4  (window 13 == the shipped full sweep)
+len	K	n	K=1 base	w=1	w=2	w=3	w=4	w=5	w=6	w=7	w=8	w=10	w=13	lost@w1
