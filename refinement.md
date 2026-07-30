@@ -107,9 +107,35 @@ any absolute position.
 
 **General rule.** `o1_coarse − o1_true = −(S_coarse − S_true)`: the number of
 turnovers the `ring2` shift moved into or out of the message. It fires when the
-right wheel's notch lies within δ of `start2` (~δ/26 of keys) and reaches ±2
-when two crossings are possible — a two-notch right wheel (VI–VIII) or a
-straddled double step. That bound is where `mid_ring_window = 2` comes from.
+right wheel's notch lies within δ of `start2`, roughly δ/26 of keys.
+
+**The magnitude is bounded by 1, not merely small.** The middle wheel's
+turnovers form an arithmetic progression of spacing 26; the candidate's is the
+same lattice shifted by δ. Two interleaved lattices of equal spacing alternate —
+between consecutive points of one lies exactly one point of the other — so for
+every prefix
+
+```
+|S_coarse(i) − S_true(i)| ≤ 1        single-notch right wheel, no double step
+```
+
+whatever δ and whatever the message length. All 15 measured misses show exactly
+`|Δ| = 1`, as they must. Two mechanisms lift it to 2, and only to 2:
+
+- **Two-notch right wheels (VI–VIII).** The turnover set is a union of two such
+  lattices, each able to gain or lose a point. Note the probe draws wheels from
+  I–V, so its uniform ±1 is partly a property of the trial design; this
+  mechanism is reachable at `-x 6` and above.
+- **A straddled double step.** The middle wheel's own notch firing inside the
+  message for one candidate and not the other adds a step outside the carry
+  lattice. Rare at short lengths — the middle wheel reaches its own notch about
+  once per 676 characters.
+
+§7.11's enumeration (every rotor pair × 26 start1 × 26 start2 × every shift, at
+L=600) found the divergence never exceeds 2, which is where `mid_ring_window =
+2` comes from. The derivation below does not depend on the bound — it computes Δ
+— so this matters only if a fixed band is preferred: ±1 suffices for I–V, ±2 is
+the honest general choice.
 
 ## 4. The derivation
 
