@@ -4404,6 +4404,28 @@ void bruteforce(char * result)
              list, so the punctured set goes in as-is: one mask, one search. */
           unsigned int mask2 = ((1u << asize) - 1u) & ~(1u << center2);
 
+          /* MEASUREMENT-ONLY override (ENIGMA_REFINE_WINDOW=k, unset/0/>=13 = off):
+             restrict the refinement to the ring2 values within circular distance k of
+             the coarse winner, so the width the full sweep replaced can be re-measured
+             without rebuilding. This is what eval/ring_stride_window_probe.py sweeps;
+             the shipped default is the full punctured set above, and with the variable
+             unset this loop does not run. Circular by construction (the mask is a set,
+             not an interval), so the wrap subtlety a clamped window used to have cannot
+             come back through it. */
+          if (const char * wp = getenv("ENIGMA_REFINE_WINDOW"))
+            {
+              int wk = atoi(wp);
+              if ((wk > 0) && (wk < asize / 2))
+                for (int v = 0; v < asize; v++)
+                  {
+                    int d = abs(v - center2);
+                    if (d > asize - d)
+                      d = asize - d;
+                    if (d > wk)
+                      mask2 &= ~(1u << v);
+                  }
+            }
+
           /* Reuse the winning task VERBATIM rather than rebuilding one from the
              machine's fields. wheel_task carries RAW wheel/reflector numbers, which
              init_walzen() translates on the way into a machine -- in Norway mode it adds

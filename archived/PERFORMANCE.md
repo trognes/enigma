@@ -3348,6 +3348,68 @@ genuinely open and is the right next experiment. (Post-fix that question matters
 with the real accuracy cost at ~1pp the throughput is close to free either way, so the
 trade is no longer the deciding factor it looked like when this paragraph was written.)
 
+#### Follow-up: how wide does the refinement actually have to be? — ✅ MEASURED (full sweep kept)
+
+The width question the two follow-ups above left implicit: the refinement went from
+`±⌊K/2⌋` to **all 25** on a cost argument (a refinement ring2 value is ~26× cheaper than
+a coarse one), never on a measurement of what width is *sufficient*. So sweep it.
+
+**Instrument.** A measurement-only override, `ENIGMA_REFINE_WINDOW=w`, restricts the
+refinement to the ring2 values within circular distance `w` of the coarse winner; unset
+(or `≥13`) is the shipped full punctured set, so the default path is unchanged. It edits
+the mask that already expresses the set, so the window is circular by construction and
+the wrap bug a clamped interval used to have cannot return through it.
+`eval/ring_stride_window_probe.py` drives it end to end on the same footing as the
+harness the widening decision was made on (`-f -l wehrmacht`, authentic excerpts, true
+board via `-s`, random key, paired trials shared across every cell), sweeping
+`w = 1…13` against the `K=1` baseline. 30 paired trials, L=60:
+
+| K | K=1 base | w=1 | w=2 | w=3 | w=4 | w=5 | w=6 | w=8 | w=13 (shipped) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2 | 67% | 60% | 60% | **63%** | 63% | 63% | 63% | 63% | 63% |
+| 3 | 67% | 67% | 70% | **70%** | 70% | 70% | 70% | 70% | 70% |
+| 5 | 67% | 33% | 63% | **70%** | 70% | 70% | 70% | 70% | 70% |
+
+**`w = 3` is sufficient — and the width beyond it is what is doing nothing, not the
+width itself.** No trial in any cell changes between `w=3` and the full sweep. Below it
+the picture is exactly the one §7.11 documents twice: `w=1` costs 1 trial at K=2, 2 at
+K=3 and **11 at K=5** (33% vs 70%) — the `±⌊K/2⌋` window failing hardest where its own
+assumption is weakest.
+
+**Why 3, from the geometry.** `eval/ring_stride_geometry_probe.py` scores the full 26×26
+(ring2, start2) grid directly (rest of the key at truth, so right-wheel only): the score
+along the offset-preserving diagonal is a smooth tent peaking at δ=0, and the coarse
+argmax is the *nearest* grid point only 81–90% of the time at K=3/K=5 — noise on the
+tent's shoulder moves it one grid step, which is precisely the `⌈K/2⌉+1` the end-to-end
+sweep lands on. That probe also shows the refinement never needs to re-scan start2:
+holding the coarse winner's offset was bit-identical to re-scanning all 26 starts across
+24 measured rows. It is a floor, not the answer — it pins ring1/start1 at the truth,
+which the shipped refinement deliberately does not do.
+
+**Cost of the width, measured (`Analysed` keys, `-f -l wehrmacht`, K=3, L=150).** Per
+refinement ring2 value, and the full 25 as a share of the whole run:
+
+| keyspace shape | per ring2 value | full 25 | share of run | `w=3` would save |
+|---|---:|---:|---:|---:|
+| `-r ... -g ...` (ring1+start1 open) | 1005 | 25 125 | 2.0% | 1.5% |
+| `-r AA. -g ...` (ring1 pinned) | 676 | 16 900 | 9.7% | 7.3% |
+| `-r A.. -g A..` (single task, start0 pinned) | 1005 | 25 125 | 34.8% | 26.5% |
+
+**Verdict: keep the full sweep.** The measurable saving is 1.5–7% in the shapes where
+the flag is recommended, and the one shape where a cap would matter (34.8%) is the
+single-task corner where `--ring-stride` is *already* a net loss and already warns — so
+a width cap would be optimising the case the tool tells you not to use. Against that,
+capping reintroduces the assumption "the coarse winner lands near the truth", whose
+failure is the subject of two separate follow-ups above, plus the wrap subtlety the full
+set removed. A fixed, explainable 25 at ~2% of a normal run is the better trade. The
+override stays in the source as the way to re-check this without a rebuild.
+
+**Scope.** `w=3` is sufficient *on this measurement* — n=30 per cell, L=60/150, `-s`
+board, no `-c`. It is enough to say the tail beyond 3 is inert and that `w=1` is not,
+which is what the width decision turns on; it is not enough to certify a cap as safe on
+keyspaces or message styles not measured here. That asymmetry is the reason the verdict
+is "keep the sweep" rather than "cap at 3".
+
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 
 §7.10 collapses wheel 0's ring × start *totally* (26×, exact) and §7.11 attacks wheel 2's
