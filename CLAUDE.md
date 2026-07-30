@@ -324,10 +324,24 @@ are read from a **data directory** (filenames built as
   The earlier "100% recoverable across 90 trials" result is *not* a
   contradiction — it measured a weaker *proximity* property (does the winner
   land within `⌊K/2⌋` of the truth?) on English prose, not exact recovery.
-  Whether the saved compute beats spending it on `-R` restarts at matched wall
-  time rests on a single cell (a dead tie at L=100) and is still **effectively
-  untested** — though with the real accuracy cost now near zero, the throughput
-  is close to free and the question matters less than it did.
+
+  **Whether the saved compute beats spending it on `-R` restarts is now
+  measured: it is a wash.** At matched wall time on authentic telegraphic
+  German (L=100, 10-pair board hidden, 40 paired trials/cell,
+  `eval/results-ring-stride-vs-restarts.txt`), `--ring-stride K` plus the extra
+  restarts its saving buys is indistinguishable from an exhaustive ring2 sweep:
+  K=3 lands at **+0.2pp** mean %-correct (`-R 8`→`15`) and K=2 at **−4.2pp**,
+  95% CI [−13.3, +4.9]. Read the interval before concluding more: ±9pp at n=40
+  rules out a *large* effect either way and nothing smaller.
+
+  **The trade only exists when `ring1` is wildcarded.** The refinement costs
+  `25 × rc[1] × gc[1] × 26` keys — times `-R`, like everything else — and that
+  fixed cost has to be beaten by the coarse saving. Under the tool's own
+  default ring `-r AA.` it is not: measured at L=100, K=2, `-r AA. -g A..` grows
+  17 576 keys to 25 688, and `-r A.. -g AK.` does the same, while
+  `-r A.. -g A..` falls 102 076 → 69 913. So `--ring-stride` is a lever for
+  *fully wildcarded ring* searches only; anywhere else the binary's "not paying
+  for itself" warning fires and it should simply be dropped.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,
