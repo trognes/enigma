@@ -58,7 +58,7 @@ from ring_stride_geometry_probe import (          # noqa: E402
     subst_array, positions, crypt, score_table, score, corpus_texts, num, selftest)
 
 MID_RING_WINDOW = 2         # enigma.cc's mid_ring_window
-SHAPES = ["shipped", "lock-start2", "lock-off1", "lock-both", "lock-all"]
+SHAPES = ["shipped", "lock-start2", "lock-off1", "shift2", "lock-both", "lock-all"]
 
 
 def decode_set(S, c, cand, ring0, start0):
@@ -92,9 +92,17 @@ def candidates(shape, coarse, skipped):
     off2 = (cg2 - cr2) % 26
     # how far the middle OFFSET may sit from the coarse winner's, and whether
     # absolute start1 is searched or pinned to the winner's value
-    band = [0] if shape in ("lock-off1", "lock-all") else \
+    band = [0] if shape in ("lock-off1", "lock-all", "shift2") else \
         list(range(-MID_RING_WINDOW, MID_RING_WINDOW + 1))
-    g1s = [cg1] if shape in ("lock-both", "lock-all") else list(range(26))
+    if shape == "shift2":
+        # the offset is held and the ABSOLUTE position shifts: ring1 and start1
+        # move together, +-MID_RING_WINDOW
+        g1s = [(cg1 + k) % 26
+               for k in range(-MID_RING_WINDOW, MID_RING_WINDOW + 1)]
+    elif shape in ("lock-both", "lock-all"):
+        g1s = [cg1]
+    else:
+        g1s = list(range(26))
     out = []
     for r2 in skipped:
         if shape == "shipped":
@@ -115,13 +123,18 @@ def main():
     ap.add_argument("--lengths", default="60,150")
     ap.add_argument("--lang", default="wehrmacht")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--dump", default="",
+                    help="comma-separated shapes: print every trial the shipped set "
+                         "recovers and the named set does not, with the true key, the "
+                         "coarse winner, and what the shipped set found")
     ap.add_argument("--hist", action="store_true",
                     help="instead of the recovery comparison, report how far the "
                          "middle wheel's OFFSET has to move from the coarse winner's "
                          "for a candidate at the true ring2 to decode the truth")
     args = ap.parse_args()
 
-    global TAB, WHEELS
+    global TAB, WHEELS, DUMP
+    DUMP = set(x for x in args.dump.split(",") if x)
     selftest()
     TAB = score_table("all", args.lang)
     lengths = [int(x) for x in args.lengths.split(",")]
@@ -210,6 +223,34 @@ def main():
             for shape in SHAPES[1:]:
                 if res["shipped"] and not res[shape]:
                     lost[shape] += 1
+                    if shape in DUMP:
+                        wkey, _ = best_pt("shipped")
+                        skey, _ = best_pt(shape)
+                        A = lambda v: chr(65 + int(v) % 26)
+                        def fmt(k):
+                            r1, g1, r2, g2 = k
+                            return ("ring1 %s start1 %s (off %2d) | ring2 %s start2 %s "
+                                    "(off %2d)" % (A(r1), A(g1), (g1 - r1) % 26,
+                                                   A(r2), A(g2), (g2 - r2) % 26))
+                        def sgn(d):
+                            d %= 26
+                            return d - 26 if d > 13 else d
+                        print("  MISS %-11s L=%d K=%d wheels=%s" %
+                              (shape, L, K, "".join(str(w + 1) for w in WHEELS)))
+                        print("    true     " + fmt((ring[1], start[1],
+                                                     ring[2], start[2])))
+                        print("    coarse   " + fmt(coarse)
+                              + "   dring2=%+d dstart1=%+d doff1=%+d"
+                              % (sgn(coarse[2] - ring[2]),
+                                 sgn(coarse[1] - start[1]),
+                                 sgn((coarse[1] - coarse[0]) - (start[1] - ring[1]))))
+                        print("    shipped  " + fmt(wkey)
+                              + "   dstart1=%+d doff1=%+d (vs coarse)"
+                              % (sgn(wkey[1] - coarse[1]),
+                                 sgn((wkey[1] - wkey[0])
+                                     - (coarse[1] - coarse[0]))))
+                        print("    %-8s " % shape + fmt(skey) + "   [best it could reach]")
+                        sys.stdout.flush()
         n = args.trials
         if args.hist:
             miss = sum(1 for h in HIST if h is None)
