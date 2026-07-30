@@ -40,7 +40,7 @@
 # the tail (roughly the top 1.5% of quadgram weights) while leaving the well-evidenced
 # bulk untouched (median weight ~1.1, p90 ~7) and keeps every possible output count
 # below ~4.7e8 -- under 11% of UINT32_MAX, comfortable headroom against the largest
-# prose count (~3.7e6) at the cap. See PERFORMANCE.md 6.17.
+# prose count (~3.7e6) at the cap. See archived/PERFORMANCE.md 6.17.
 import os
 
 W_MAX = float(os.environ.get("W_MAX", "1000"))

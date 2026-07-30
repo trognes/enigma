@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Tangle-vs-solve separability (PERFORMANCE.md section 6.14).
+# Tangle-vs-solve separability (archived/PERFORMANCE.md section 6.14).
 #
 # Is a CHEAP tangle detector even theoretically possible? For each message, run
 # R restarts with --dump-all, take the best-of-R board, and classify it via

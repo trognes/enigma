@@ -4,7 +4,7 @@ English and German, matched-problem (same m4q10 tsv baselines reused, only
 --gainfix-best re-run on the identical problems -> low-variance Delta, not a
 cross-sample diff of the fresh-sample .gfbest corpus rows). Scoring failures
 removed (a non-exact trial whose recovered_score >= true_score -- the
-information floor no search can cross; PERFORMANCE.md 1). Cap-fixed build.
+information floor no search can cross; archived/PERFORMANCE.md 1). Cap-fixed build.
 
 2x2: columns = language, rows = {mean %-correct, exact recovery}, each panel
 base vs --gainfix-best.

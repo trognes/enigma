@@ -962,7 +962,7 @@ for lang in $crack_langs; do
   done
 done
 
-# --ring-stride: sparse ring sampling for the rightmost wheel (PERFORMANCE.md §7.11).
+# --ring-stride: sparse ring sampling for the rightmost wheel (archived/PERFORMANCE.md §7.11).
 # Needs both -r and -g to wildcard ring2/start2; ring0 auto-collapses (§7.10), and the
 # default ring "AA." pins ring0/ring1 to A -- exactly the tool's bare-default keyspace
 # (26 ring2 x 26^3 starts), kept small so this stays fast under the sanitizers too.
@@ -995,7 +995,7 @@ for key in "B 451 AAZ VKZ" "B 351 AAZ NLV" "C 324 AAZ JEY"; do
 done
 
 # The refinement covers EVERY skipped ring2, not just the +/-K/2 neighbours of the coarse
-# winner (PERFORMANCE.md §7.11). The narrow window rested on the coarse winner landing
+# winner (archived/PERFORMANCE.md §7.11). The narrow window rested on the coarse winner landing
 # within K/2 of the truth; this authentic-Wehrmacht key is a measured counterexample --
 # the coarse pass at K=3 wins on a ring2 well outside K/2 of the true T, so the narrow
 # window never tested the truth and returned a partially-wrong plaintext, while the full
@@ -1178,7 +1178,7 @@ rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g
 check "no stride line when --ring-stride is off" \
   "$(printf '%s' "$rs_echo" | grep -c '^Stride:')" "0"
 
-# Middle-wheel ring x start collapse (PERFORMANCE.md §7.12). Shifting ring1 and start1
+# Middle-wheel ring x start collapse (archived/PERFORMANCE.md §7.12). Shifting ring1 and start1
 # together only changes the decode through the middle notch, which most start1 values
 # never reach in a short message -- so those start1 values are skipped as duplicates.
 # The risk being guarded is SILENT KEY LOSS: a wrong partition drops the true key from

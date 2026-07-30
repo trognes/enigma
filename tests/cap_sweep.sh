@@ -1,7 +1,7 @@
 #!/bin/sh
 # Sweep the staged plugboard pre-pass plug-pair cap (-L) across pre-pass models and
 # ciphertext lengths, emitting a tidy CSV (model,cap,length,mean,exact) on stdout.
-# Reproduces the data in CODE_REVIEW.md Section 9 (and tests/cap_sweep.csv).
+# Reproduces the data in archived/CODE_REVIEW.md Section 9 (and tests/cap_sweep.csv).
 #
 #   sh tests/cap_sweep.sh > tests/cap_sweep.csv
 #

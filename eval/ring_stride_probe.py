@@ -2,9 +2,9 @@
 # Measures whether skip-K ring sampling on the RIGHTMOST wheel (wheel 2) still finds
 # a candidate close enough to the true ring/start for cheap local refinement to
 # recover the exact key -- using the real binary, not a toy simulation. Companion to
-# the leftmost-wheel exact offset collapse (PERFORMANCE.md 7.10, shipped); this
+# the leftmost-wheel exact offset collapse (archived/PERFORMANCE.md 7.10, shipped); this
 # measures the riskier, approximate half of the same user idea for the wheel that
-# lacks that collapse's unconditional exactness (PERFORMANCE.md 7.11).
+# lacks that collapse's unconditional exactness (archived/PERFORMANCE.md 7.11).
 #
 # Method per trial:
 #   - Random true key (reflector, wheel order, ring0/1/2, start0/1/2), a fixed

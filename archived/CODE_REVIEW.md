@@ -4,7 +4,7 @@ This is the **live** issue list: only what is still open. The original audit —
 fixed correctness/memory-safety bugs, the C-style modernization, the `struct
 machine` / threading refactor, M4 mode, the design rationale of every shipped
 feature, and the experiments that were measured and **rejected** (so they are not
-re-attempted) — is archived in **`archived/CODE_REVIEW_HISTORY.md`**. Section references of
+re-attempted) — is archived in **`CODE_REVIEW_HISTORY.md`**. Section references of
 the form "§9 item N" elsewhere in the codebase point into that archive.
 
 Status in one line: the tool is correct, warning-free under
@@ -193,7 +193,7 @@ benchmark — do not expect them to move it.
   the exact mono/IC delta remnant was briefly shipped as `-D` then removed — a
   long-message-only speedup, net-negative for this short-message tool and a maintenance
   tax on the hottest loop; `PERFORMANCE.md` §7.1), incremental **quad** delta-scoring (~2× slower;
-  `archived/SIMULATED_ANNEALING.md` §6.2), χ² as the scoring/`-F` model (gameable by the
+  `SIMULATED_ANNEALING.md` §6.2), χ² as the scoring/`-F` model (gameable by the
   plugboard), 3-opt / 3-plug re-pair (cost > gain), rotor-stepping reuse across
   starts (history §6 "optimisation B"), `-march=native` / SIMD gathers and GPU (the
   scorer is gather-latency-bound, not throughput-bound), and 5-grams / 4-bit scores

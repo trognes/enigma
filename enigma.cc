@@ -85,7 +85,7 @@ static const int wheels = 3;
 
 /* How far the --ring-stride refinement's middle-wheel OFFSET can sit from the coarse
    winner's. Not a tuning knob: 2 is the exhaustively established bound on how far a
-   ring2/start2 shift can move the middle wheel's step schedule (PERFORMANCE.md §7.11) --
+   ring2/start2 shift can move the middle wheel's step schedule (archived/PERFORMANCE.md §7.11) --
    1 from the ordinary time shift, plus 1 when double stepping straddles the middle
    wheel's own notch. Raising it only wastes work; lowering it loses keys. */
 static const int mid_ring_window = 2;
@@ -172,7 +172,7 @@ static int opt_no_repair;
    plugboard contacts, self-encryption pruned), ranks them by the full re-decode
    score, applies the best pair even when the first plug is downhill (which un-masks
    the second), and keeps it only if the pair nets an improvement. Off by default
-   (baseline byte-identical); needs -c; quad-only. See gain_cascade(); PERFORMANCE.md 4.10. */
+   (baseline byte-identical); needs -c; quad-only. See gain_cascade(); archived/PERFORMANCE.md 4.10. */
 static int opt_cascade;
 /* --cascade near-solution gate: the cascade only fires on a converged board whose
    per-symbol quad score clears this threshold, so it skips the ~76% junk boards and
@@ -238,19 +238,19 @@ static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force
                               pairs among the free letters (on top of any -s pairs), trying
                               every set of E disjoint pairs and keeping the best climb (0 = off).
                               Parallel over the first forced pair (exhaust_unit); exploration
-                              tool, dominated by a high --restarts climb (see PERFORMANCE.md §3.6). */
+                              tool, dominated by a high --restarts climb (see archived/PERFORMANCE.md §3.6). */
 /* --ring-stride K (default 1 = off): sparse ring sampling for the rightmost stepping
    wheel (walzenlage[2]). Unlike the leftmost wheel's unconditional exact collapse
-   (build_key_space(), PERFORMANCE.md §7.10), the rightmost wheel's own notch gates
+   (build_key_space(), archived/PERFORMANCE.md §7.10), the rightmost wheel's own notch gates
    further stepping, so a ring+start shift is only an APPROXIMATION -- measured small
-   and smoothly growing with the shift (PERFORMANCE.md §7.11). K>1 tests only every
+   and smoothly growing with the shift (archived/PERFORMANCE.md §7.11). K>1 tests only every
    Kth ring value (0, K, 2K, ...) in the main search, then runs one small refinement
    pass over the skipped neighbours around the best coarse hit (bruteforce(), after
    the main search) to recover the exact key. Requires both -r and -g to wildcard the
    rightmost wheel's position (else every value is a distinct, necessary key, exactly
    like the leftmost-wheel collapse's precondition). K=2 is the only value backed by
    solid measurement (100% recovery across 90 trials); K>=5 is available but not
-   recommended (PERFORMANCE.md §7.11 measures a real 10-17% single-pass miss rate). */
+   recommended (archived/PERFORMANCE.md §7.11 measures a real 10-17% single-pass miss rate). */
 static int opt_ring_stride;
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
@@ -289,7 +289,7 @@ static uint64_t opt_seed;
 static bool opt_seed_set;
 
 /* --true-key <reflector><3 wheels><3 ring><3 start> (standard Enigma, 10 chars,
-   e.g. B241AAAQEW): a diagnostic for -F recall testing (CRACKQUALITY_TESTS.md §2).
+   e.g. B241AAAQEW): a diagnostic for -F recall testing (archived/CRACKQUALITY_TESTS.md §2).
    With -F set, after tier-1 ranks every key the search prints "true-key tier1 rank
    R of N" to stderr -- R = 1 + the number of keys whose tier-1 IC score is strictly
    higher, N = total keys -- so a harness can measure how often the pre-filter keeps
@@ -558,7 +558,7 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
          once emitted values up to ~8.3e20 from an unclamped reweighting ratio, and
          parsing that straight into `unsigned` via "%u" is undefined behaviour on
          overflow (glibc happened to saturate to UINT32_MAX, silently tying 843
-         distinct quadgrams at one value -- see PERFORMANCE.md 6.17). The generator
+         distinct quadgrams at one value -- see archived/PERFORMANCE.md 6.17). The generator
          is now capped and should never produce this again, but the loader clamps
          explicitly and audibly rather than depending on that, or on unspecified
          sscanf behaviour, to stay correct for any future/external table. */
@@ -1537,7 +1537,7 @@ void showconfig(machine & m, double score)
   fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, text);
 }
 
-/* ENIGMA_IC_BLEND probe (PERFORMANCE.md 6.4): fuse the index of coincidence into the
+/* ENIGMA_IC_BLEND probe (archived/PERFORMANCE.md 6.4): fuse the index of coincidence into the
    target score as `per-symbol ngram + lambda*IC` instead of STAGING IC then quad. The
    premise is that the quad/weighted surface is nearly flat with only a plug or two set,
    while IC still has gradient there -- and IC is permutation-INVARIANT, so unlike a
@@ -1548,7 +1548,7 @@ void showconfig(machine & m, double score)
    the optimum is a broad plateau (lambda 20/30/40 measured +3.6/+4.4/+3.8pp and
    statistically indistinguishable from each other), so there is nothing for a user
    to tune. ENIGMA_IC_BLEND overrides it for experiments, exactly as ENIGMA_LOGLIN
-   overrides -a's weights. See PERFORMANCE.md 6.4. */
+   overrides -a's weights. See archived/PERFORMANCE.md 6.4. */
 static const double fused_lambda_default = 30.0;
 static double g_fused_lambda = fused_lambda_default;
 
@@ -1857,7 +1857,7 @@ static int gainfix_candidates(machine & m, unsigned char * ca, unsigned char * c
   return out;
 }
 
-/* --cascade: the 2-ply gain cascade barrier cross (PERFORMANCE.md 4.10). Quad-only,
+/* --cascade: the 2-ply gain cascade barrier cross (archived/PERFORMANCE.md 4.10). Quad-only,
    run at convergence once the cheap climb / re-pairs have stalled. Ranks the shortlist
    by the full re-decode score; then for each of the top-N1 plug1 candidates, applies it
    (even if it does not improve — that un-masks a masked second plug) and scores every
@@ -1945,7 +1945,7 @@ template<bool EX> static double hillclimb(machine & m, int max_pairs);   /* fwd:
    completing plug(s) AND shed spurious ones -- keeping the best-scoring result. No explicit
    plug3 search: the completing plug is the top improving move after the sacrifice, so the
    reclimb finds it (measured), which is both simpler and recovers MORE than committing one
-   fixed completing plug (a full climb per sacrifice beats a single triple; PERFORMANCE.md
+   fixed completing plug (a full climb per sacrifice beats a single triple; archived/PERFORMANCE.md
    4.11). The reclimb runs with gainfix off -> no recursion, capped at the same max_pairs.
    template<bool EX>/plug_fixed like the rest; -T-deterministic. */
 template<bool EX>
@@ -2621,7 +2621,7 @@ static double run_stages(machine & m)
 
 
 /* --exhaust E partial plugboard exhaustion (PROTOTYPE, exploration tool only -- dominated by
-   a high --restarts greedy climb at equal compute; see PERFORMANCE.md §3.6). E is the number
+   a high --restarts greedy climb at equal compute; see archived/PERFORMANCE.md §3.6). E is the number
    of EXTRA plug pairs forced among the free letters, on top of any -s pairs. Instead of one
    climb from the seed, try every set of E disjoint pairs among the free letters -- pin them
    (as -s pins plugs) and run the staged climb from that seed -- and keep the best board. E=1
@@ -2889,7 +2889,7 @@ static inline void apply_toggle(machine & m, int a, int b, int cap)
 /* ENIGMA_SA_STAGES probe: let -A run the leading --score stages as its pre-pass
    instead of the built-in IC one. Read once (the getenv is not on any hot path, but
    the answer is constant for a run and the SA path is per-restart). Off by default,
-   so the shipped SA trajectory stays byte-identical. See PERFORMANCE.md 3.11. */
+   so the shipped SA trajectory stays byte-identical. See archived/PERFORMANCE.md 3.11. */
 static bool sa_staged_prepass()
 {
   static const bool on = (getenv("ENIGMA_SA_STAGES") != nullptr);
@@ -2915,7 +2915,7 @@ static double anneal_once(machine & m, uint64_t * rng)
   int target_model = m.scoring;
   if (sa_staged_prepass() && (opt_nstages > 1))
     {
-      /* ENIGMA_SA_STAGES probe (PERFORMANCE.md 3.11): honour the WHOLE --score
+      /* ENIGMA_SA_STAGES probe (archived/PERFORMANCE.md 3.11): honour the WHOLE --score
          schedule, not just its last stage's cap. By default SA ignores the leading
          stages and always seeds with IC, so `-A --score m4a10` is byte-identical to
          `-A --score a10` -- SA cannot use the mono pre-pass that is worth ~3-4pp over
@@ -3134,7 +3134,7 @@ struct search_range
      a base-vs-base noise floor of only 0.5% on that benchmark, so well outside the
      noise (the hillclimb tier's own floor is ~4.5%, which is why its numbers looked
      scattered and meant nothing). A byte holds 0..25 fine and keeps the struct near
-     its original footprint. See PERFORMANCE.md §7.11. */
+     its original footprint. See archived/PERFORMANCE.md §7.11. */
   unsigned char r2_vals[asize];
   int r2_n;
 };
@@ -3181,7 +3181,7 @@ struct best_result
    Set by bruteforce() before the workers start; null outside a search. */
 static best_result * g_progress = nullptr;
 
-/* --- middle-wheel ring x start collapse (PERFORMANCE.md §7.12) -------------
+/* --- middle-wheel ring x start collapse (archived/PERFORMANCE.md §7.12) -------------
    Shifting ring1 and start1 together leaves mod26(g1-r1) -- the middle wheel's whole
    contribution to the substitution -- invariant, so two such pairs can only differ
    through notch[w1][g1], the middle notch that gates the left wheel and the double
@@ -3834,7 +3834,7 @@ static key_space build_key_space()
       ks.gc[i] = ks.range.g_max[i] - ks.range.g_min[i] + 1;
     }
 
-  /* --ring-stride K (PERFORMANCE.md §7.11): the rightmost wheel lacks wheel 0's exact
+  /* --ring-stride K (archived/PERFORMANCE.md §7.11): the rightmost wheel lacks wheel 0's exact
      collapse above (its own notch feeds forward into further stepping, so a ring+start
      shift is only an approximation), but the corruption is small and grows smoothly, so
      testing only every Kth ring value -- {0, K, 2K, ...} -- still reliably lands near
@@ -3908,7 +3908,7 @@ static key_space build_key_space()
     fatal("No machine configuration was searched "
           "(check the -u / -w / -x settings)");
 
-  /* Middle-wheel ring x start collapse (PERFORMANCE.md §7.12). Only fires when ring1 and
+  /* Middle-wheel ring x start collapse (archived/PERFORMANCE.md §7.12). Only fires when ring1 and
      start1 are BOTH fully wildcarded: with ring1 pinned, each start1 carries a distinct
      offset1 and dropping any would lose real keys. Built per (middle, right) rotor pair
      -- the only things the stepping depends on besides the two start positions -- so a
@@ -4241,7 +4241,7 @@ void bruteforce(char * result)
       m.scoring = opt_scoring;
       m.report = false;
 
-      /* --ring-stride refinement (PERFORMANCE.md §7.11): the coarse search only tested
+      /* --ring-stride refinement (archived/PERFORMANCE.md §7.11): the coarse search only tested
          ring2 in {0, K, 2K, ...}; re-check the ring2 values it skipped around the best
          hit -- ALL of them by default, since a refinement ring2 value is orders of
          magnitude cheaper than a coarse one (see the window-width note below).
@@ -4545,7 +4545,7 @@ void bruteforce(char * result)
            every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
            the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
            raise the noisy short-message quad score while hurting the truth (the over-plugging
-           avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
+           avenue of the saturation exact-loss, archived/PERFORMANCE.md 4.10). */
         int fin_cap = opt_stages[opt_nstages - 1].cap;
         double s = hillclimb<false>(m, fin_cap);
         opt_cascade = save_gf;
@@ -4554,7 +4554,7 @@ void bruteforce(char * result)
         /* Monotonic by construction: replace the best board ONLY when the finish scores
            strictly higher, so gainfix-best never returns a worse-scoring board than the
            search already found (a truth-vs-score chase at the information floor is a
-           separate matter -- unfixable by a score-only rule; see PERFORMANCE.md 4.10). */
+           separate matter -- unfixable by a score-only rule; see archived/PERFORMANCE.md 4.10). */
         if (s > best.score)
           {
             best.score = s;
@@ -4852,7 +4852,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "for ~0.5-2pp of exact recovery on telegraphic");
   fprintf(out, "  %-24s %s\n", "", "German; K=3 is the better pick. K>=5 is not");
   fprintf(out, "  %-24s %s\n", "", "recommended (2-8pp). Still an APPROXIMATION");
-  fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11)");
+  fprintf(out, "  %-24s %s\n", "", "(archived/PERFORMANCE.md 7.11)");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -4988,7 +4988,7 @@ void show_settings()
     fprintf(stderr, "Pre-filter: top %d keys\n", opt_prefilter);
 
   /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
-     ~10pp of exact recovery at K=2 on telegraphic German, PERFORMANCE.md §7.11), so a
+     ~10pp of exact recovery at K=2 on telegraphic German, archived/PERFORMANCE.md §7.11), so a
      run that used it must say so: otherwise a saved log is indistinguishable from an
      exhaustive one. Every other search-affecting option is echoed here; this was the
      only silent one. */

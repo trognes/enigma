@@ -3,7 +3,7 @@
 key the coarse pass got wrong -- which decides whether the miss is fixable at all, and by
 what.
 
-The motivating observation (PERFORMANCE.md 7.11): widening the refinement from a +/-K/2
+The motivating observation (archived/PERFORMANCE.md 7.11): widening the refinement from a +/-K/2
 window to EVERY skipped ring2 moved K=3 by +4.5/+7.0pp but moved K=2 by nothing. K=2's
 coarse grid is never more than 1 away from the true ring2, so if its misses were window
 failures, widening would have fixed them. It did not -- so something else is being lost.
@@ -22,7 +22,7 @@ The component breakdown said the PINNED offset0 was wrong in 54-75% of misses, a
 story implicating a pin whose justifying comment was independently questionable. It was
 wrong. --polish's plugboard finisher shared an `if` with the --ring-stride refinement
 without re-checking its own flag, so every strided run got a plugboard climb plus gain
-cascade with no -c requested, adding spurious plugs to the -s board (PERFORMANCE.md 7.11,
+cascade with no -c requested, adding spurious plugs to the -s board (archived/PERFORMANCE.md 7.11,
 "the accuracy cost was a --polish guard bug"). Those offset counts were mostly the
 finisher corrupting the board, not the pin. After the fix the stride-specific miss rate
 drops from 10-21% to 2-4%, so the population this script dissects is now a tenth the size.

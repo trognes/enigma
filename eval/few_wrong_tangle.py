@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# What ARE the residual "few wrong plugs" failures? (PERFORMANCE.md section 6.14)
+# What ARE the residual "few wrong plugs" failures? (archived/PERFORMANCE.md section 6.14)
 #
 # Takes every converged plugboard-recovery board that lands 1..3 plugs WRONG (the
 # near-solution residual), with the TRUE rotor key fixed and only the plugboard

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Pre-pass model sweep for the HIGH-restart regime (PERFORMANCE.md section 6.10).
+# Pre-pass model sweep for the HIGH-restart regime (archived/PERFORMANCE.md section 6.10).
 #
 # Runs tests/eval.py over {configs} x {lengths} x {languages} x {seeds} at a fixed
 # -R, and merges the per-cell rows into one timestamped shard eval/results-<ts>.tsv
