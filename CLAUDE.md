@@ -573,7 +573,6 @@ are read from a **data directory** (filenames built as
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
   <lang>`.
 - `-p file` compare the recovered plaintext against a known plaintext file
-- `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a
   long-message throughput tool, unreliable on the short/hard end and
   proxy-measured; needs `-c`; `0` = off): a two-tier search — tier 1 ranks
