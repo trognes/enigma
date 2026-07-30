@@ -3480,6 +3480,46 @@ hundreds of thousands, the refinement is a **constant** ~17k–25k that does not
 K at all — so its width is a fixed toll on a shrinking bill, which is exactly why it
 looks negligible at K=2 (1.07%) and merely small at K=13 (2.37%).
 
+**Can the two 26s be dropped? Half of one can — and it is the big half.** Only offsets
+enter each wheel's substitution, which suggests both 26s in `25 · 130 · 26` are redundant
+and the refinement could be `25 · 5 = 125`. It cannot, because an absolute position is
+not redundant where a **notch** reads it, and the two 26s differ on exactly that:
+
+- **start2 (the trailing 26) is redundant.** Only `(start2 − ring2) mod 26` enters the
+  right wheel, and the coarse winner's *offset2* is the one thing the coarse pass gets
+  right even when its ring2 is wrong (a wrong offset garbles the whole message; a wrong
+  ring2 only shifts the turnover). Locking `start2 = ring2 + offset2` costs nothing.
+- **start1 (the 26 inside `130 = 26 · 5`) is not.** Absolute start1 gates the middle
+  wheel's *own* notch, hence the double step, and under §7.12 the reported start1 is only
+  a **class representative** — the reproducible case earlier in this section is exactly
+  this shape (true ring1/start1 `Q`/`D`, coarse winner `R`/`E`: the *same offset*, both
+  absolutes +1), and pinning it is what lost the key.
+
+Measured as an equivalence test in the style of the band verification above
+(`eval/ring_stride_refine_shape_probe.py`, 100 trials per cell, K=2/3/5, L=60/150,
+weighted model, ring0/start0 pinned at truth, results in
+`eval/results-ring-stride-refine-shape.txt`) — "lost" counts trials the shipped set
+recovers and the cheaper set does not:
+
+| set | size | lost, K=2 | K=3 | K=5 | total |
+|---|--:|--:|--:|--:|--:|
+| shipped `25 · 130 · 26` | 84 500 | — | — | — | — |
+| lock-start2 `25 · 130 · 1` | **3 250** | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 600** |
+| lock-both `25 · 5 · 1` | 125 | 1 / 0 | 2 / 2 | 3 / 4 | 12 / 600 |
+
+`lock-start2` is **equivalence-clean over 600 trials** for a **26× cut**; `lock-both`
+loses ~2%, and the loss grows with K, exactly as the class-representative argument
+predicts. (`lock-both` is not uniformly worse — a smaller candidate set also dodges a few
+decoys, so its net rate is sometimes higher. That is luck, not a gain: the standard here
+is recovering everything the full set recovers, the same standard §7.11's band was held
+to.)
+
+**This retires the width question rather than settling it.** At `25 · 130 · 1` the
+refinement is ~0.08% of a run instead of ~2%, so no window cap — constant or K-dependent
+— has anything left to save. Not yet shipped: measured on the offline model (`-a`, no
+plugboard climb, ring0/start0 pinned), so it needs the end-to-end A/B through the binary
+that the width columns above got before it changes the search.
+
 **The K-dependent rule, measured as a column rather than inferred.** `⌈K/2⌉+N` is the
 shape the minima follow, so it was run as its own paired column against the full sweep
 (`WINDOWS="f1 f2 f3 13"`, 60 paired trials per cell, L=60, `K=1` base 73%):

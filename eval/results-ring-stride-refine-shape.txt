@@ -1,0 +1,12 @@
+# K=2 trials=100 lang=wehrmacht  (shipped 25x130x26, lock-start2 25x130x1, lock-both 25x5x1)
+len	n	coarse ok	shipped	lock-start2	lock-both	lost by lock-start2	lost by lock-both
+60	100	42%	75%	75%	74%	0	1
+150	100	49%	89%	89%	91%	0	0
+# K=3 trials=100 lang=wehrmacht  (shipped 25x130x26, lock-start2 25x130x1, lock-both 25x5x1)
+len	n	coarse ok	shipped	lock-start2	lock-both	lost by lock-start2	lost by lock-both
+60	100	37%	75%	75%	73%	0	2
+150	100	29%	89%	89%	91%	0	2
+# K=5 trials=100 lang=wehrmacht  (shipped 25x130x26, lock-start2 25x130x1, lock-both 25x5x1)
+len	n	coarse ok	shipped	lock-start2	lock-both	lost by lock-start2	lost by lock-both
+60	100	27%	75%	75%	72%	0	3
+150	100	24%	89%	89%	88%	0	4
