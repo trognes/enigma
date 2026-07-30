@@ -270,9 +270,15 @@ rate while losing real keys (observed: `lock-both` and `lock-off1` both did).
   only, so the 25 pairs cannot be one range; they become 25 pinned sub-searches,
   each with its own `start2`. This is the same shape as the existing band, which
   already runs one sub-search per pinned `(ring1, start1)` pair.
-- **Each sub-search is now a single key.** 650 one-key `search_worker` calls
-  would be mostly call overhead; a direct decode-and-score path is likely the
-  right implementation, with `search_worker` reserved for the plugboard case.
+- **Each sub-search is now a single key**, so there are 650 of them instead of
+  today's 130. Keep `search_worker` anyway rather than adding a direct
+  decode-and-score path: under `-c` the refinement passes `restarts_par`, so
+  each candidate carries a full plugboard climb, and re-implementing that
+  outside `search_worker` would change behaviour as well as duplicate it. Per
+  call the parallelism is thinner (one key × restarts instead of 650 keys ×
+  restarts), but under `-c` the restarts still spread across threads, and
+  without `-c` the whole refinement is 650 decodes — parallelism is moot at
+  that size.
 - **Reuse `tasks[cur_wo]` verbatim** for the wheel order and reflector; never
   rebuild a `wheel_task` from a `machine`'s already-translated fields.
 - **Snapshot every pinned value before the first sub-search.** The plain-scan
@@ -283,3 +289,50 @@ rate while losing real keys (observed: `lock-both` and `lock-off1` both did).
   the derivation needs the step *counts*, so it can be lifted from a single pass
   over the message per `(start1, start2)` pair — 26 pairs per candidate `ring2`,
   computed once and reused.
+
+## 10. Open decisions and gaps — read before coding
+
+Three things the design does **not** settle, in the order they will bite:
+
+1. **Caller-pinned `ring1` / `start1`.** The derivation replaces the offset
+   band, and the band has an `else` branch for exactly this case ("caller pinned
+   ring1 and/or start1: no band, search what they asked for"). With `ring1`
+   pinned there is nothing to derive — `o1` is fixed by the caller — and with
+   `start1` pinned the 26-value sweep collapses to one. The derived path needs
+   the same fallback, or a deliberately narrow search will be silently widened
+   or silently mis-derived. Not yet written into §5.
+2. **How `Δ` is selected.** §4 offers `mode` and then says the mode can be
+   replaced by trying each distinct value. **Prefer the latter and drop the
+   statistic**: emit one candidate per distinct value `Δ` takes over the
+   message, at most 3 by the divergence bound and typically 1. A mode is a
+   guess that can be wrong on short messages where the schedules alternate
+   evenly; enumerating the (few) values cannot be. This makes stage 4
+   unnecessary as a separate stage.
+3. **Whether a ±1 band survives on top of the derived value.** Failure mode 2
+   in §7 — the coarse winner's own `o1` being wrong for scoring reasons rather
+   than schedule reasons — is not corrected by the derivation. A ±1 band would
+   cover it at 3× the candidate count (still ~2 000, still trivial). Whether it
+   is needed is a measurement nobody has run.
+
+Two accounting details that are easy to get wrong and hard to notice:
+
+- **`extra_keys_analysed` must mirror the §7.12 collapse the same way it does
+  today** — count what is scored, not what is enumerated, and consult the mask
+  with the **candidate's** `start2`, not the coarse winner's. `search_worker`
+  gets this right automatically once `start2` is pinned per sub-search; the
+  accounting beside it is hand-written and will not.
+- **Progress plumbing and determinism are unchanged only if `search_worker` is
+  kept.** The `g_progress` swap, the `rbest.shown` high-water mark, the header
+  suppression and the lowest-work-index tie-break all already exist; a new
+  scoring path would have to reproduce every one of them.
+
+Finally, the scope of what has actually been measured, which is narrower than
+the design's claims:
+
+- `lock-start2`'s 0-losses-in-600 covers **K=2/3/5, L=60/150, wheels I–V, no
+  `-c`, offline model** (`-a`, ring0/start0 pinned at the truth). It does not
+  cover K≥8, two-notch right wheels, long messages where the left wheel steps,
+  or a hidden plugboard.
+- The derived design itself has **never been run**. Its 650-candidate figure is
+  arithmetic; its equivalence with the shipped set is a prediction from the
+  algebra, not a result.
