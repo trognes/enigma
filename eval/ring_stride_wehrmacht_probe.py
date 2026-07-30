@@ -10,7 +10,7 @@ was implemented, on synthetic English prose. This script instead drives the actu
 shipped `--ring-stride K` flag end to end, on real excerpts from the authentic 1941
 message database (eval/enigma-messages.txt, eval/enigma-army-messages-1941.txt), to
 answer the practical question: does `--ring-stride 3`'s cost saving over K=2 (12 vs 16
-total ring2 candidates, PERFORMANCE.md 7.11) come at a real exact-recovery cost on the
+total ring2 candidates, archived/PERFORMANCE.md 7.11) come at a real exact-recovery cost on the
 short, information-poor messages the wehrmacht tables exist for?
 
 Like the original 7.11 measurement (and for the same reason), the true plugboard is
@@ -33,7 +33,7 @@ Method per trial:
     question this harness targets -- see above).
   - "exact" = recovered plaintext byte-identical to the true excerpt.
   - K=1 is the no-stride baseline: any trial that ALSO fails at K=1 is a pre-existing
-    scoring/search-floor case unrelated to ring-stride (PERFORMANCE.md's
+    scoring/search-floor case unrelated to ring-stride (archived/PERFORMANCE.md's
     scoring-failure-vs-search-failure distinction) and is reported separately so a
     ring-stride-specific miss rate isn't inflated by floor noise neither K fixes.
 

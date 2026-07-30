@@ -134,7 +134,7 @@ the others) and are the only remaining non-orthogonality.
   German quad table loaded only its 29 most frequent entries (4.9%). This
   produced a spurious "German wants bigram" reading — a truncation artifact
   (lower order = less truncated), **now retracted**. The parser was fixed to fold
-  accented grams to their A–Z base and accumulate counts (`PERFORMANCE.md` §6.9);
+  accented grams to their A–Z base and accumulate counts (`archived/PERFORMANCE.md` §6.9);
   **model order is not meaningfully language-dependent — use `-q`.**
 - **After the fix every language cracks comparably** (quad greedy), all reaching
   100% exact by ~L200. At short lengths the non-English languages are actually

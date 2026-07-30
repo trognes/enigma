@@ -4,7 +4,7 @@
 (A) mean %-correct gain over baseline; (B) exact-recovery gain before vs after the
 finish-cap fix (the fix removes the high-R exact-loss). Scoring failures removed
 (a non-exact trial whose recovered_score >= true_score -- the information floor no
-search can cross; see PERFORMANCE.md 1). The comparison is MATCHED-PROBLEM: the same
+search can cross; see archived/PERFORMANCE.md 1). The comparison is MATCHED-PROBLEM: the same
 tsv m4q10 baselines were reused and only --gainfix-best re-run on the identical
 problems, so the per-trial Delta is low-variance (unlike a cross-sample diff of the
 committed fresh-sample .gfbest rows vs the baselines).

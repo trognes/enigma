@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Climb-surface-smoothness probe (PERFORMANCE.md section 6.15).
+# Climb-surface-smoothness probe (archived/PERFORMANCE.md section 6.15).
 #
 # Varies ONLY the -a target weighting's smoothness (via ENIGMA_LOGLIN, symmetric),
 # holding the recommended recipe fixed (-c -R 10 -S m4q10 -J --polish, mono

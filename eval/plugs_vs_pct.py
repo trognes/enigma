@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Correct-plugs -> text-recovery relationship (PERFORMANCE.md section 6.11).
+# Correct-plugs -> text-recovery relationship (archived/PERFORMANCE.md section 6.11).
 #
 # Aggregates every plugboard-recovery row across all eval/results*.tsv shards and
 # plots mean % letters correct as a function of the number of correctly recovered

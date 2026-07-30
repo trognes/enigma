@@ -47,7 +47,7 @@ option also gained a long name.
 > now `-J`, `--gainfix-best3` is now `--polish`, and `--gainfix` is now
 > `--cascade`; `--infl-order`, `--repair3`, `--restart-tt`, `--score-tt` and
 > `--dump-restarts` were removed as measured-dominated or subsumed (see
-> `PERFORMANCE.md`).
+> `archived/PERFORMANCE.md`).
 
 ### Added
 

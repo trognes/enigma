@@ -98,7 +98,7 @@ refactor to confirm single-thread throughput hasn't regressed.
 >
 > **`min_time` wraps the WHOLE invocation, so process startup is inside every benchmark
 > — a change to startup shows up as a fake throughput move.** The n-gram load halving
-> (`PERFORMANCE.md` §7.13) A/B'd as `search` **−3.4%** and `hillclimb` **−10.1%** without
+> (`archived/PERFORMANCE.md` §7.13) A/B'd as `search` **−3.4%** and `hillclimb` **−10.1%** without
 > touching a line of the hot path. The tell is that both deltas were the *same ~60 ms
 > absolute* (2.14→2.07 s and 0.52→0.47 s): a constant saving inflates the **cheaper tier
 > far more**, which is the opposite shape to a real per-iteration win, and it is not
@@ -153,13 +153,13 @@ v1.1.0 baseline every miss is a *search* failure.)
 > `score_iter`-equivalents, uncounted). So on gain-cascade changes `score_iter`
 > **undercounts real cost by several×**, and the two axes can *disagree*: e.g.
 > `--polish` at a large `K` can tie a plain 2-ply cascade+more-`-R` on `score_iter`
-> while being **Pareto-dominated** on wall time (`PERFORMANCE.md` §4.11 — K=169 at 131 ms
+> while being **Pareto-dominated** on wall time (`archived/PERFORMANCE.md` §4.11 — K=169 at 131 ms
 > lost to R200 at 114 ms despite fewer counted iters). Take wall time as the min of a few
 > reps (per problem) to damp noise, and treat `score_iter` as the *cheap deterministic
 > proxy* it is — good for `-T`-independent A/Bs of moves that live **inside** the score
 > loop (restarts, climb order, caps), misleading for anything that adds work outside it.
 
-`crack_quality.py` also carries three opt-in test modes from `CRACKQUALITY_TESTS.md`
+`crack_quality.py` also carries three opt-in test modes from `archived/CRACKQUALITY_TESTS.md`
 (all off by default, the normal flow unchanged): `WILDCARD` wildcards the rotor key
 for the **scoring-failure gate** (§1); `FILTERRECALL=1` reports the true key's `-F`
 tier-1 **recall@N** (§2, via the binary's `--true-key` diagnostic flag); and
@@ -173,12 +173,12 @@ can be inspected key-by-key (not just a fixed key); it reuses `showconfig`'s
 is `-T`-invariant; only line order is thread-timing dependent), and needs `-c`.
 
 Two further diagnostics were **removed** once their questions were settled (the findings
-survive in `PERFORMANCE.md` / `archived/`): `--restart-tt`, a Zobrist transposition table over
+survive in `archived/PERFORMANCE.md` / `archived/`): `--restart-tt`, a Zobrist transposition table over
 converged restart boards, measured near-total basin diversity at the standard `--random 10`
 kick — which is what took a tabu visited-set and GA population dedup off the table; and
 `--score-tt`, a plugboard→score cache, measured **rejected as a speedup** (only ~7–13% of
 scores cacheable, flat in restarts and table size, a net wall-time loss —
-`PERFORMANCE.md` §7.9). `--dump-restarts` was removed as strictly subsumed by `--dump-all`.
+`archived/PERFORMANCE.md` §7.9). `--dump-restarts` was removed as strictly subsumed by `--dump-all`.
 
 The program reads **ciphertext from stdin** and writes the best-scoring
 **plaintext to stdout**; progress/diagnostics go to stderr. Only A–Z letters
@@ -228,7 +228,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
 > `K=2`/`K=3` it costs only ~0.5–2pp of exact recovery for 1.86×/2.61× fewer keys, so it
 > is now **recommended when throughput matters** (K≥5 still is not); see its entry.
 >
-> **Removed options** (dominated or subsumed; the measurements survive in `PERFORMANCE.md`):
+> **Removed options** (dominated or subsumed; the measurements survive in `archived/PERFORMANCE.md`):
 > `-I` (bare first-improvement — `-J` supersedes it; the internal climb path remains, set by
 > `-J`), `--infl-order`, `--repair3`, `--gainfix-best` (superseded by the finisher),
 > `--dump-restarts` (subsumed by `--dump-all`), `--restart-tt` and `--score-tt`.
@@ -262,7 +262,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   nothing to thin out; incompatible with `-F`/`--exhaust`, the same `best.idx`-encoding
   fragility `--polish` has). The coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then one
   refinement pass re-checks **every** skipped ring2 around the best coarse hit (see
-  "Sparse ring sampling for the rightmost wheel" below and `PERFORMANCE.md` §7.11 for the
+  "Sparse ring sampling for the rightmost wheel" below and `archived/PERFORMANCE.md` §7.11 for the
   measurement and the implementation gotchas). **`K=2`/`K=3` are recommended when
   throughput matters; K≥5 is not.** Measured end-to-end on authentic telegraphic German
   (200 paired trials/cell, `-f -l wehrmacht`, plugboard given via `-s`, no `-c` — this
@@ -285,7 +285,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   > cascade that the K=1 baseline never got — *with no `-c` requested*, adding spurious
   > plugs to a board supplied via `-s`. The old tables read K=2 at −10pp and K=3 at −17pp;
   > the real costs are −0.5…−2pp and −0.5…−1pp. The "accuracy/throughput TRADE, not a free
-  > reduction" verdict was an artefact of that bug. `PERFORMANCE.md` §7.11.
+  > reduction" verdict was an artefact of that bug. `archived/PERFORMANCE.md` §7.11.
 
   The earlier "100% recoverable across 90 trials" result is *not* a contradiction — it
   measured a weaker *proximity* property (does the winner land within `⌊K/2⌋` of the
@@ -317,7 +317,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   case. The 6-plug loss is over-plugging: capping at the true count (`-J -S iKqK`, the same
   known-plug-count prior as `-A -S qK`) turns it into a **+~30pp win vs uncapped** at matched
   compute — so the recipe is count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
-  Static frequency-ordering was measured and **rejected** (`PERFORMANCE.md` §7.2).
+  Static frequency-ordering was measured and **rejected** (`archived/PERFORMANCE.md` §7.2).
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what the plug
   cap means during the climb: by default the cap is only a *growth ceiling* (at/over the
   cap, a brand-new **add** is blocked but count-preserving reshuffles are allowed), so an
@@ -337,7 +337,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   `--score` target cap**; near-inert (harmless) with no cap set. `-T`-deterministic. (The reason
   the IC-pre-pass cap in `--score i4q…` is a *flat plateau* by default is that without `-M` the
   cap can't pull an over-cap board down; `-M` is what makes a tight cap bite — see
-  `PERFORMANCE.md` §7.3.)
+  `archived/PERFORMANCE.md` §7.3.)
 - `--no-repair` **disable the default 2-plug `try_repair` barrier cross** (**not recommended** — ablation/measurement flag; needs `-c`; off by
   default). An ablation/measurement flag: the 2-plug re-pair is normally always-on (it earns
   its keep at long lengths — `archived/CODE_REVIEW_HISTORY.md` §9 item 7), and this turns it
@@ -356,7 +356,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   language) so it fires only on promising boards and skips the ~76% junk — which is what makes it a
   small **matched-compute win** (+0.2–0.3pp mean / +0.5–0.6pp exact on short English, ~zero added
   `score_iter`); *ungated it is dominated*. Default off (baseline byte-identical); `-T`-deterministic;
-  `template<bool EX>`/`plug_fixed` like `try_repair`. See `PERFORMANCE.md` §4.10.
+  `template<bool EX>`/`plug_fixed` like `try_repair`. See `archived/PERFORMANCE.md` §4.10.
 - `--polish` **best-board finisher with a deeper 3-plug-tangle escalation** (**recommended** —
   the finisher, a fixed-cost pass so it is negligible at a high `-R`; needs `-c`; mutually
   exclusive with `--cascade`;
@@ -376,7 +376,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   ≥80%-base boards vs the 2-ply cascade's 41%**, and beats 2-ply by **+~1.3pp mean / +2…5pp exact** at
   matched compute (english+german L40), for ~+2–3 ms wall (<1% for `-R`≥640). Simple sweep only.
   `-T`-deterministic (internal reclimb reuses `hillclimb` with the cascade off — no recursion). See
-  `PERFORMANCE.md` §4.11.
+  `archived/PERFORMANCE.md` §4.11.
 - `-A N` recover the plugboard by **simulated annealing** instead of the greedy climb
   (needs `-c`; `0` = off, use the greedy climb). `N` is the move budget — SA's
   cost/quality knob, the analogue of `-R`. One geometric cool-down per key: an IC
@@ -393,7 +393,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   not a strict win — see `archived/CODE_REVIEW_HISTORY.md` §9 item 5 and
   `archived/SIMULATED_ANNEALING.md` §15. **That parity depends on the writing style: on
   telegraphic traffic (`-l wehrmacht`) greedy wins outright** — every length in L50–90,
-  −10.4pp mean over 3000 paired trials, no crossover (`PERFORMANCE.md` §3.11). Part of
+  −10.4pp mean over 3000 paired trials, no crossover (`archived/PERFORMANCE.md` §3.11). Part of
   that is structural: SA reads only the *last* `--score` stage's cap and seeds itself
   with a built-in IC pre-pass, so it cannot use the mono pre-pass greedy benefits from.
   **SA honours
@@ -417,7 +417,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   (0–13; default **10**, near the typical plug count). `--random 0` is a legal control
   (no perturbation — N restarts then repeat the seed climb). Needs `-c` (errors otherwise,
   since a kick does nothing in a bare rotor scan). Replaces the old `-S rN` token.
-- `--exhaust E` (long-only) **partial plugboard exhaustion** (**not recommended** — measured, dominated; §3.6 in `PERFORMANCE.md`):
+- `--exhaust E` (long-only) **partial plugboard exhaustion** (**not recommended** — measured, dominated; §3.6 in `archived/PERFORMANCE.md`):
   force `E` **extra** plug pairs among the free letters (on top of any `-s` pairs) — `E`
   counts *forced* pairs, not total. It tries *every* set of `E` disjoint pairs (pinned like
   `-s`), runs the staged climb from that seed, and keeps the best. It **composes** with the
@@ -450,7 +450,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   better than bigram, extra stages after IC add little. **The recommended target is now `a`
   (weighted), staged as `--score m4a10`** (mono pre-pass then weighted, both capped) — the `a`
   stage reads the log-linear `all8` table, so `-S m4a10` is byte-identical to the winning tuning
-  recipe. **The mono-vs-IC pre-pass choice depends mildly on the writing style** (`PERFORMANCE.md` §6.10
+  recipe. **The mono-vs-IC pre-pass choice depends mildly on the writing style** (`archived/PERFORMANCE.md` §6.10
   follow-up; paired A/B, matched compute, n=1800 per corpus): mono wins on telegraphic traffic
   (−2.2pp for IC), ties on English prose (−1.4pp, CI spans 0), and **loses on German prose**
   (+2.2pp for IC). `m4a10` stays the general recommendation — the gap is ~2pp either way — but
@@ -489,7 +489,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   all four languages (2000-trial German confirms +1.3pp avg, all lengths positive), neutral by L≥190
   where quad already saturates. The linear (Jelinek-Mercer) form was tried and **lost** (the
   conditional reframing it forces is the cost); log-linear wins because it is *conjunctive* — a
-  candidate must look plausible at every order at once. See `PERFORMANCE.md` / PR #106. Because `-a`
+  candidate must look plausible at every order at once. See `archived/PERFORMANCE.md` / PR #106. Because `-a`
   is the sharpest single-family model, the recipe built on it is
   `-c -S m4a10 -J --polish -a -l <lang>` -- but see `-f` below, which supersedes it.
 - `-f` **fused: weighted all-order + index of coincidence** (**recommended** when the
@@ -503,7 +503,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   german AND wehrmacht (n=1800 each), the first scoring change in this codebase that is
   **not dependent on the writing style** -- expected, since IC is language-independent. Wall-time
   neutral (the histogram is cheap beside the gather-bound decode). **It is a better
-  CLIMB, not better discrimination**: a decomposition (`PERFORMANCE.md` 6.4) puts the
+  CLIMB, not better discrimination**: a decomposition (`archived/PERFORMANCE.md` 6.4) puts the
   whole gain in surface reshaping (+3.4pp) with selection contributing -0.0pp, so it
   does *not* move the scoring-failure floor. Recommended recipe:
   `-c -S m4f10 -J --polish -f -l <lang>`.
@@ -525,7 +525,7 @@ pass `-d`/`$ENIGMA_DATA` to run from any other working directory.
   - **`N%` scales with the keyspace** (recall tracks the *fraction* kept, not the
     absolute count); absolute `N` bounds tier-2 cost. Both forms are supported.
   - **Recall is strongly length-dependent** (measured via `--true-key` /
-    `FILTERRECALL=1`; `CRACKQUALITY_TESTS.md` §2): on a 6-order proxy at 10 plugs the
+    `FILTERRECALL=1`; `archived/CRACKQUALITY_TESTS.md` §2): on a 6-order proxy at 10 plugs the
     true key's median tier-1 rank is ~12k/105k at L120 (effectively unrecoverable),
     ~27 at L200 (bimodal), and 1 at L300. So `-F` is sound for realistic-length
     traffic (~L300) and unreliable on the short/hard end — and the real 60-order
@@ -560,7 +560,7 @@ directory, machine settings, plugboard, ciphertext length) to stderr.
 > on only its 29 most frequent quadgrams (4.9% of the table). Fixed by folding each
 > accented gram to its A-Z base and accumulating counts (`ä→A`, `ø→O`, `ç→C`, …;
 > `load_counts`, and the ciphertext/plaintext readers fold input the same way and
-> warn on non-mappable characters — see `PERFORMANCE.md` §6.9). With the full table
+> warn on non-mappable characters — see `archived/PERFORMANCE.md` §6.9). With the full table
 > German quad is search-bound and fully solvable like English (German L90 mean
 > %-correct 24.7 → **91.1** before → after the fix); on an orthogonal four-language
 > grid german/danish/french all crack comparably to English. Model order is *not*
@@ -705,21 +705,21 @@ their difference. Shifting `ringstellung[0]` and `grundstellung[0]` by the same 
 therefore reproduces the identical decode **unconditionally** — verified empirically
 across every shift 1–25 at 127 characters, not just "usually" the way wheels 1/2 are
 (their own window value gates further stepping, so shifting them is a real, measurable
-approximation — see `PERFORMANCE.md` §7.10 for the mismatch-vs-shift data). When both
+approximation — see `archived/PERFORMANCE.md` §7.10 for the mismatch-vs-shift data). When both
 `-r`'s and `-g`'s first character are wildcarded together, `build_key_space()`
 collapses `ring0`'s range to the single sentinel `0` (leaving
 `start0` to enumerate the 26 offsets directly) — the same `offset_list` pattern as the
 Greek wheel above, a lossless 26× reduction. Reported ring position for wheel 0 is
 therefore always `A`. Only fires when *both* are wildcarded together — either alone
 enumerates genuinely distinct, necessary offsets. Full derivation, measurements, and the
-still-open (riskier, approximate) extension to wheels 1/2: `PERFORMANCE.md` §7.10.
+still-open (riskier, approximate) extension to wheels 1/2: `archived/PERFORMANCE.md` §7.10.
 
 This is not a niche precondition to arrange deliberately: the non-M4 default (no `-r`
 given at all) is `opt_ringstellung = "AA."` and the default `-g` is `"..."` — ring0/ring1
 default to `A`, ring2 (rightmost) and every start default to wildcarded. So "ring2 +
 start2 both wildcarded" is live in the tool's bare default invocation whenever a caller
 doesn't explicitly pin ring, which is exactly the precondition the `--ring-stride`
-sparse-sampling option needs — see `PERFORMANCE.md` §7.11.
+sparse-sampling option needs — see `archived/PERFORMANCE.md` §7.11.
 
 ### Middle wheel's ring × start is partially redundant — always-on collapse
 
@@ -763,13 +763,13 @@ Greek wheel. It is length-dependent: past L≈676 every class is a singleton and
 key is reported exactly. `--true-key` disables the collapse, since that diagnostic ranks a
 specific key and a collapsed one would simply be absent.
 
-Full derivation, measurements and the shipped results: `PERFORMANCE.md` §7.12.
+Full derivation, measurements and the shipped results: `archived/PERFORMANCE.md` §7.12.
 
 ### Sparse ring sampling for the rightmost wheel — `--ring-stride`
 
 Unlike wheel 0, the rightmost wheel (`walzenlage[2]`) has a real notch that gates further
 stepping, so a ring+start shift there is only an *approximation* — small and smoothly
-growing with the shift, not an unconditional equivalence (`PERFORMANCE.md` §7.10's
+growing with the shift, not an unconditional equivalence (`archived/PERFORMANCE.md` §7.10's
 mismatch table). `--ring-stride K` (K=1..13, default 1 = off) exploits this: the coarse
 search tests only ring2 ∈ {0, K, 2K, ...} (`build_key_space()` shrinks `rc[2]`;
 `search_worker()`/`key_to_machine()` scale the decoded index back up by `K`), then
@@ -846,7 +846,7 @@ max[1]`, `range.g_min/max[1]` — this collapses back to a pin automatically if 
 had explicitly pinned ring1 rather than wildcarding it), matching the measurement
 harness's actual per-candidate re-search rather than the cheaper "just check `K`
 neighbours" reading of the total-cost accounting. Full measurement, the K=2..13 sweep,
-and this implementation gotcha: `PERFORMANCE.md` §7.11.
+and this implementation gotcha: `archived/PERFORMANCE.md` §7.11.
 
 **Two further implementation-only bugs, caught by a targeted boundary sweep (true ring2
 pinned to A or Z) rather than the original spot checks:** the refinement window must
@@ -865,7 +865,7 @@ order/reflector/Greek wheel) into locals once, before any segment runs, instead 
 re-reading the live machine between segments. Both confirmed with concrete failing keys
 before the fix and a 0/100 targeted sweep after (cross-checked against the K=1 baseline
 to rule out the separate, pre-existing scoring-floor cases, which neither fix touches).
-Full writeup: `PERFORMANCE.md` §7.11.
+Full writeup: `archived/PERFORMANCE.md` §7.11.
 
 **The refinement skips the coarse winner itself** — phase 1 already scored that exact
 ring2 over a *superset* of what phase 2 searches there (phase 2 additionally pins
@@ -903,7 +903,7 @@ bytes bring it back to ~80 and the regression disappears. See the noise-floor no
 decoding via a `m &= m-1` select loop + `__builtin_ctz`) was built and measured against
 a same-session control: clang neutral, g++ ~1–2% *slower* on `search`. The returns are
 not linear in struct size — 156→80 was worth ~5%, 80→52 is worth nothing — so the O(1)
-indexed load stays. Full numbers and the arm64 caveat: `PERFORMANCE.md` §7.11. That save/restore was the direct cause of the first corruption
+indexed load stays. Full numbers and the arm64 caveat: `archived/PERFORMANCE.md` §7.11. That save/restore was the direct cause of the first corruption
 bug here, so this removes the bug class, not just the instance. `opt_ring_stride` now
 survives only in `build_key_space()` (building the mask), the `> 1` guards, and option
 parsing — never in a decode. Verified byte-identical to the previous implementation
@@ -1022,7 +1022,7 @@ range and is not viable.
   **This is forward-looking; the existing files are not being reflowed.** Today
   only `README.md` and `CHANGELOG.md` hold to 80. The engineering documents grew
   up at roughly 90–100: measured in display columns over prose lines,
-  `PERFORMANCE.md` is 67% over, `CLAUDE.md` 63%, `CODE_REVIEW.md` 54%,
+  `archived/PERFORMANCE.md` is 67% over, `CLAUDE.md` 63%, `archived/CODE_REVIEW.md` 54%,
   `eval/MODERN_BREAKING_NOTES.md` 78%. Reflowing them would touch thousands of
   lines and make every later diff noisier for no reader benefit, so apply the
   rule to new and edited text and leave the rest. A file staying mixed for a
@@ -1089,7 +1089,7 @@ range and is not viable.
   wildcarded them for a test about *progress output*, which the refinement produces
   identically over 338 keys. Trimming those four — with no loss of coverage; each was
   re-verified to still catch its bug — cut the job to ~162 s, and halving the n-gram load
-  (`PERFORMANCE.md` §7.13) took it to **~139 s** (221 checks under `TEST_QUICK`; the plain
+  (`archived/PERFORMANCE.md` §7.13) took it to **~139 s** (221 checks under `TEST_QUICK`; the plain
   g++/clang jobs run the full 264-check matrix in **~247 s**). Treat those two as the
   baselines to watch for drift.
   Rules of thumb when adding a check:
@@ -1112,7 +1112,7 @@ range and is not viable.
     profilers that were interrupted never showed it at all.
   - **There is a floor you cannot trim.** Each invocation loads its n-gram tables
     before doing any work, so the suite's ~290 invocations pay it ~290 times. That
-    load was **halved** (`PERFORMANCE.md` §7.13 — hand-rolled parse instead of
+    load was **halved** (`archived/PERFORMANCE.md` §7.13 — hand-rolled parse instead of
     `sscanf`, and `logval` evaluated once instead of twice per entry): under ASan
     `-q` went 223 → 155 ms and `-f` 370 → 241 ms, worth a measured **23 s** off the
     sanitizer job and **44 s** off the plain one. What remains is genuine work; below
@@ -1123,9 +1123,12 @@ range and is not viable.
 
 ## Status & remaining work
 
-The still-open issues and roadmap live in `CODE_REVIEW.md`; the historical audit
-(original findings, now fixed, plus the design rationale and rejected experiments)
-is archived in `archived/CODE_REVIEW_HISTORY.md`. Most findings have been fixed —
+The still-open issues, the measurement discipline and the pitfalls list live in
+`IMPROVEMENTS.md`. Everything behind them is history and sits in `archived/`:
+`archived/PERFORMANCE.md` (every measurement), `archived/CODE_REVIEW.md` (the
+previous issue list), `archived/CRACKQUALITY_TESTS.md` (harness design) and
+`archived/CODE_REVIEW_HISTORY.md` (the original audit, plus the design rationale
+and rejected experiments). Read the archive to check a number, not to find work. Most findings have been fixed —
 the stack buffer overflow, the index-of-coincidence formula, the `-l`/filename
 overflow, the `fscanf`/read-handling bugs, dead code, the C-style
 modernization, the `textlength` global/parameter shadowing, the encapsulation of
@@ -1138,7 +1141,7 @@ naval) mode** is now implemented (`-4`; static Greek wheel folded into an
 effective reflector, so the hot path is untouched — see "M4 mode" above and
 `archived/CODE_REVIEW_HISTORY.md` §5). The **rotor keyspace** has since been cut on
 identifiability grounds — settings that provably decode identically are no longer
-enumerated: wheel 0's ring × start collapses totally and exactly (26×, `PERFORMANCE.md`
+enumerated: wheel 0's ring × start collapses totally and exactly (26×, `archived/PERFORMANCE.md`
 §7.10) and wheel 1's partially and exactly (3–5× at short lengths, §7.12), both always-on
 when the relevant positions are wildcarded; wheel 2 admits no exact collapse, but its
 approximate `--ring-stride` costs only ~0.5–2pp of exact recovery at `K=2`/`K=3` for
@@ -1153,16 +1156,16 @@ cheap-IC-climb tier that shortlists keys so the full climb runs only on the top
 `N` — ~8–20× throughput, see `archived/CODE_REVIEW_HISTORY.md` §9 item 2), and **simulated annealing**
 (`-A N`, tuned `χ0 = 0.12`; a peer of the greedy restart climb at equal compute **on
 prose** — `archived/SIMULATED_ANNEALING.md` §15 — but *beaten outright* on telegraphic
-traffic, `PERFORMANCE.md` §3.11). The heavier metaheuristics once listed as open —
+traffic, `archived/PERFORMANCE.md` §3.11). The heavier metaheuristics once listed as open —
 tabu and **GA** — have since been **measured down**: `--restart-tt` (PR #100) found restarts
 already almost never revisit a basin (near-total exact-board diversity at `--random 10`), so a
 tabu visited-set has nothing to forbid; and an oracle probe of the GA precondition
-(`PERFORMANCE.md` §3.10) found the crossover *material* exists (correct plugs union to ~8/10
+(`archived/PERFORMANCE.md` §3.10) found the crossover *material* exists (correct plugs union to ~8/10
 across restarts) but is **unselectable** — board-fitness picks only ~2.5/10 and per-plug consensus
 is worse (~1.1/10, amplifying the climb's decoy attractors). So the search frontier was no
 longer a heavier search metaheuristic; it was **a sharper scoring model** and **restart
 diversity**. Both have since been resolved, and the result closes the short-message frontier
-to *smarter* methods (`PERFORMANCE.md` §6.15):
+to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
 
 - **Scoring — resolved, a win: the weighted all-order model `-a`** (PR #106). A log-linear
   (geometric / Product-of-Experts) mixture of all four n-gram orders, folded once into a
@@ -1186,6 +1189,7 @@ to *smarter* methods (`PERFORMANCE.md` §6.15):
   population, so the **only reliable lever is raw compute** — more restarts via `-T`, which scales
   predictably.
 
-Read `CODE_REVIEW.md` (and, for the detailed design rationale, rejected experiments, and the
-frontier measurements, `PERFORMANCE.md` and `archived/CODE_REVIEW_HISTORY.md`) before changing
-the search or scoring code.
+Read `IMPROVEMENTS.md` before changing the search or scoring code — in
+particular its "Measured down" table, which lists what has already been built
+and lost. The supporting measurements are in `archived/PERFORMANCE.md` and
+`archived/CODE_REVIEW_HISTORY.md`.

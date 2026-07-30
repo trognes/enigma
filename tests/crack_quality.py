@@ -59,7 +59,7 @@
 # default english), TRIALS, LENGTHS, PAIRS, SEED, BASE, SPLIT, CRACKOPTS (extra
 # options appended to the climb invocation, e.g. "-R 10").
 #
-# --- Full-crack / scoring-gate tier (WILDCARD, see CRACKQUALITY_TESTS.md §1) --
+# --- Full-crack / scoring-gate tier (WILDCARD, see archived/CRACKQUALITY_TESTS.md §1) --
 #
 # By default the climb is handed the TRUE rotor key and only the plugboard is
 # recovered. WILDCARD wildcards named rotor-key dimensions instead, so the search
@@ -75,7 +75,7 @@
 #             only when left unset.
 # When WILDCARD is set, trials are generated with true ring AAA (so fixed-ring
 # recovery is identifiable), and a key% column reports rotor-key recovery on the
-# identifiable columns (reflector+wheels and start). See CRACKQUALITY_TESTS.md §1.
+# identifiable columns (reflector+wheels and start). See archived/CRACKQUALITY_TESTS.md §1.
 #
 # --- -F prefilter validation (§2) and restart diversity (§3) -----------------
 #
@@ -131,7 +131,7 @@ SPLIT = env("SPLIT", "0") == "1"
 BASE = env("BASE", "")
 CRACKOPTS = shlex.split(env("CRACKOPTS", ""))
 
-# Full-crack / scoring-gate knobs (see the header note and CRACKQUALITY_TESTS.md §1).
+# Full-crack / scoring-gate knobs (see the header note and archived/CRACKQUALITY_TESTS.md §1).
 WILDCARD = env("WILDCARD", "")
 XMAX = env("XMAX", "3")
 FILTER = env("FILTER", "")
@@ -146,7 +146,7 @@ if env("FULLCRACK", "0") == "1":
 WILD = bool(WILDCARD)
 
 # §2 -F prefilter validation and §3 restart-diversity diagnostics (own report modes;
-# each off by default so the normal flow is unchanged). See CRACKQUALITY_TESTS.md §2/§3.
+# each off by default so the normal flow is unchanged). See archived/CRACKQUALITY_TESTS.md §2/§3.
 FILTERRECALL = env("FILTERRECALL", "0") == "1"   # §2 Test A: true-key tier-1 recall@N
 SCOREITER = env("SCOREITER", "0") == "1"         # §2 Test B: add a score_iter column
 DIVERSITY = env("DIVERSITY", "0") == "1"         # §3: restart basin-collapse diagnostics
@@ -322,7 +322,7 @@ def gen_trials(length, corpus):
         r = "".join(rng.choice(string.ascii_uppercase) for _ in range(3))
         g = "".join(rng.choice(string.ascii_uppercase) for _ in range(3))
         # With a wildcarded key but ring not itself wildcarded, pin the true ring
-        # to AAA so fixed-ring recovery is identifiable (CRACKQUALITY_TESTS.md §1);
+        # to AAA so fixed-ring recovery is identifiable (archived/CRACKQUALITY_TESTS.md §1);
         # r was still drawn above, so the RNG stream is unchanged.
         if WILD and "r" not in WILDCARD:
             r = "AAA"

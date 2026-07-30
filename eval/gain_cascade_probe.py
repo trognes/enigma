@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Directed plug repair via quadgram "gain" -- component probe (PERFORMANCE.md 4.10).
+# Directed plug repair via quadgram "gain" -- component probe (archived/PERFORMANCE.md 4.10).
 #
 # Self-contained prototype of the gain-cascade near-solution finisher, measured on
 # REAL tool-converged boards from eval/results*.tsv. It reconstructs each instance

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Pre-pass PORTFOLIO probe (PERFORMANCE.md section 6.10).
+# Pre-pass PORTFOLIO probe (archived/PERFORMANCE.md section 6.10).
 #
 # Tests whether *mixing* IC-pre-pass and mono-pre-pass restarts (a 50/50 algorithm
 # portfolio) beats either pure pre-pass at matched compute. For each random problem

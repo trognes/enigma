@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# 2-plug try_repair value at SHORT lengths, matched compute (PERFORMANCE.md section 4.9).
+# 2-plug try_repair value at SHORT lengths, matched compute (archived/PERFORMANCE.md section 4.9).
 #
 # try_repair (the gated 2-plug re-pair barrier cross) was originally validated
 # only at long lengths (L140-250), where its convergence scan is negligible. At

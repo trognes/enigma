@@ -382,7 +382,7 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   > fine-tuning note, not a reason to change your default. The reason is
   > that mono scores letter *identities* against one language's
   > frequencies, while IC only measures how uneven the distribution is and
-  > is therefore language-blind. See `PERFORMANCE.md` §6.10.
+  > is therefore language-blind. See `archived/PERFORMANCE.md` §6.10.
 
 - **`-F N` (or `-F N%`) — key pre-filter.** With `-c` the full `-R`/`-S`
   climb is paid on *every* candidate key, which dominates runtime when you
@@ -519,7 +519,7 @@ on prose neither dominates. Scale `-R` up together for harder messages
 > structural rather than algorithmic — `-A` uses only the *last* `--score`
 > stage's plug cap and seeds itself with a built-in IC pre-pass, so it
 > cannot use greedy's mono pre-pass, which is worth ~3–4 pp over IC. See
-> `eval/eval_sa_vs_greedy.py` and `PERFORMANCE.md` §3.11.
+> `eval/eval_sa_vs_greedy.py` and `archived/PERFORMANCE.md` §3.11.
 
 ## Input, output and diagnostics
 

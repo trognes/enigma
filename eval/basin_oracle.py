@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Restart basin structure at the oracle level (PERFORMANCE.md section 6.16).
+# Restart basin structure at the oracle level (archived/PERFORMANCE.md section 6.16).
 #
 # Dumps the R converged plugboard boards per problem (--dump-all, true rotor
 # key fixed, recommended -a recipe) and, against the KNOWN true plugboard, measures

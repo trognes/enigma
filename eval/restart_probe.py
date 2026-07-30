@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Restart coverage curve (PERFORMANCE.md section 6.16).
+# Restart coverage curve (archived/PERFORMANCE.md section 6.16).
 #
 # Exact-recovery % vs the restart count R (16/64/256) at hard lengths, recommended
 # -a recipe, true rotor key fixed. Answers whether the short-message residual is a

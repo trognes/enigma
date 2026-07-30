@@ -53,7 +53,7 @@ PAIRS = int(os.environ.get("PAIRS", "10"))
 JOBS = int(os.environ.get("JOBS", str(os.cpu_count() or 4)))
 SEEDFAM = int(os.environ.get("SEEDFAM", "1"))
 TSV = os.environ.get("TSV", "")
-# SA pre-pass probe (PERFORMANCE.md 3.11): by default -A ignores the leading
+# SA pre-pass probe (archived/PERFORMANCE.md 3.11): by default -A ignores the leading
 # --score stages and always seeds with IC. SA_SCHED/SA_STAGES let stage 2 A/B the
 # ENIGMA_SA_STAGES build flag that makes -A honour the whole schedule.
 SA_SCHED = os.environ.get("SA_SCHED", "a10")

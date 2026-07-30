@@ -6,9 +6,9 @@
 > harness and `make crackquality` is the recovery harness, and most ideas below are
 > measured by the latter. Read this as the forward-looking roadmap that **extends
 > `CODE_REVIEW.md` §1–§2** (the live "cracking quality — search / scoring" items)
-> and the archived **`archived/CODE_REVIEW_HISTORY.md` §9** (the shipped-feature rationale and
+> and the archived **`CODE_REVIEW_HISTORY.md` §9** (the shipped-feature rationale and
 > the measured-and-rejected list). The simulated-annealing design and its tuning
-> evidence live in **`archived/SIMULATED_ANNEALING.md`**; where an idea here touches SA it
+> evidence live in **`SIMULATED_ANNEALING.md`**; where an idea here touches SA it
 > cites that file. Nothing here is a decision to build — it is the option space with
 > honest priors, so the maintainer can pick the next experiment. **No code changes
 > accompany this document.**
@@ -489,7 +489,7 @@ the keyspace: adaptive vs uniform `-R`.
 ### 3.11 Greedy vs SA on **telegraphic** traffic — ✅ MEASURED: greedy wins outright, no crossover (`eval/eval_sa_vs_greedy.py`)
 
 **The prose "peers" result does not transfer to `-l wehrmacht`.** §3.2 and
-`archived/SIMULATED_ANNEALING.md` §15 establish SA as a *peer* of the greedy restart
+`SIMULATED_ANNEALING.md` §15 establish SA as a *peer* of the greedy restart
 climb at equal compute, with the README adding a length-dependent crossover ("SA tends
 to win the very shortest/hardest lengths"). Both were measured on **English prose**.
 Re-measured on **authentic telegraphic plaintext**, greedy wins at every length tested.
@@ -1001,7 +1001,7 @@ compute it costs. Not shipped.
 
 ### 4.9 2-plug re-pair (`try_repair`) still pays at short lengths, matched compute — ✅ MEASURED (`eval/`)
 
-The always-on 2-plug `try_repair` barrier cross (§9 item 7 in `archived/CODE_REVIEW_HISTORY.md`)
+The always-on 2-plug `try_repair` barrier cross (§9 item 7 in `CODE_REVIEW_HISTORY.md`)
 was originally validated only at **long** lengths (L140–250), where its gated convergence scan
 is negligible ("~zero cost"). At **short** lengths a climb converges fast, so that fixed scan is
 a *larger* fraction of the work — measured **~15% of `score_iter`** at L40–70 (e.g. 2321 vs 2001
@@ -3605,7 +3605,7 @@ table-level check.)
 - **Score-guided adaptive neighborhood.** Bias `(a,b)` proposals (SA and greedy
   ordering) toward letters sitting in the lowest-scoring quadgram windows of the current
   decode — spend moves where the plaintext looks least language-like
-  (`archived/SIMULATED_ANNEALING.md` §14). *Honest payoff:* low — speeds convergence (more useful
+  (`SIMULATED_ANNEALING.md` §14). *Honest payoff:* low — speeds convergence (more useful
   moves/budget) rather than changing the reachable optimum; helps mainly the tight-budget
   corner and risks self-reinforcing bias. **Hot-path hazard:** per-letter blame
   attribution must come from the fused scorer *without* a second pass / `num_plaintext`
@@ -3829,8 +3829,8 @@ should be confirmed before being quoted as fact.**
 - bytereef.org M4 project (known M4 messages, telegraphic-German validation).
 
 Repo-internal references: `CODE_REVIEW.md` §1, §2 (live search/scoring roadmap);
-`archived/CODE_REVIEW_HISTORY.md` §9 and the archived §6/§7 (shipped-feature rationale, rejected
-experiments); `archived/SIMULATED_ANNEALING.md` §6.2, §12, §14, §15, §16 (SA design and tuning
+`CODE_REVIEW_HISTORY.md` §9 and the archived §6/§7 (shipped-feature rationale, rejected
+experiments); `SIMULATED_ANNEALING.md` §6.2, §12, §14, §15, §16 (SA design and tuning
 evidence). Code anchors cited inline by `enigma.cc` line number (verified against the
 current source: `ngrams_read` :307, `setup_mapping` :572, `quadgram_score_decode` :656,
 `hillclimb` :975, `perturb_steckerbrett` :1166, `anneal_once` :1378, `hillclimb_restarts`
