@@ -81,12 +81,21 @@ Nothing above 🟢. Ordered by expected payoff within each group.
 
 ### Throughput saved but not yet converted
 
-- 🟢 **Does `--ring-stride`'s saving convert into recovery?** Every accuracy
-  number for the flag is taken at *fixed work per candidate*. The question the
-  flag exists for — stride plus more `-R` versus no stride at equal wall time —
-  rests on a single cell (L=100, a dead tie), measured when the flag was
-  believed to cost ~10pp. It actually costs ~1pp at K=3 for 2.6× fewer keys, so
-  the trade is worth re-asking at K=3.
+- ✅ **Does `--ring-stride`'s saving convert into recovery? Measured: no, and
+  no loss either.** At matched wall time on authentic telegraphic German
+  (L=100, 10-pair board hidden, `-f -l wehrmacht`, 40 paired trials/cell) the
+  stride plus the extra `-R` its saving buys is indistinguishable from an
+  exhaustive ring2 sweep: K=3 `+0.2pp` mean %-correct, K=2 `−4.2pp` with a 95%
+  CI of [−13.3, +4.9]. Full writeup:
+  `eval/results-ring-stride-vs-restarts.txt`.
+
+  Two things worth carrying forward. **The trade only exists on a
+  wildcarded-ring keyspace** — the refinement's fixed cost (`25 × 130 × 26` =
+  84 500 index keys once the offset band applies, ~19 000 actually scored at
+  L=100) exceeds the coarse saving under the default `-r AA.`, where the stride
+  costs *more* than it saves. And **n=40 resolves only ±9pp here**; a ~2pp
+  effect would need ~20× the trials at ~75 s per arm per trial, which is not
+  worth spending on a flag that is not recommended by default.
 - 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
   the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
   but whether spending it on `-R` raises recovery is untested.

@@ -1,0 +1,74 @@
+--ring-stride vs more -R restarts, at MATCHED WALL TIME
+=======================================================
+
+Harness : eval/ring_stride_vs_restarts.py
+Command : TRIALS=40 THREADS=4 \
+          CELLS="100:10:8:1.40:mid:2 100:10:8:1.86:mid:3" \
+          python3 eval/ring_stride_vs_restarts.py
+
+Setup
+-----
+Authentic telegraphic German excerpts (eval/enigma-messages.txt,
+eval/enigma-army-messages-1941.txt), L=100 letters, a random 10-pair
+plugboard HIDDEN from the search, reflector and wheel order given.
+
+  search : -c -J --polish -f -l wehrmacht -u B -w 123 -r A.. -g A.. -T 4
+  base   : -R 8
+  stride : -R round(8 * ratio) --ring-stride K
+
+ring1 AND start1 wildcarded (102076 keys). This shape is REQUIRED: the
+refinement's cost is FIXED (independent of K) and the coarse saving has
+to beat it, which with ring1 pinned -- the tool's own default -r "AA." --
+it cannot, so --ring-stride costs MORE than it saves.
+
+Do not price the refinement from its 25 * rc[1] * gc[1] * 26 worst case.
+That bound describes ring1 and start1 both wildcarded, which is exactly
+the case where the offset band applies: the 26 x 26 (ring1, start1) pairs
+become 26 start1 x 5 offsets = 130. Realistic cost is 25 * 130 * 26 =
+84500 index keys, and the middle-wheel collapse cuts what is actually
+scored to ~19000 at L=100. Measured here: 18875 scored keys at BOTH K=2
+and K=3 (102076 -> 69913 and -> 54209 against coarse passes of 51038 and
+35334), confirming the K-independence directly.
+
+Measured at L=100, -R 20, K=2:
+
+    -r AA. -g A..     17576 keys unstrided ->  25688 strided   loses
+    -r A.. -g AK.     17576 keys unstrided ->  25688 strided   loses
+    -r A.. -g A..    102076 keys unstrided ->  69913 strided   1.46x
+
+Ratios are the measured equal-R wall-time ratios on that shape, 1.40
+(K=2) and 1.86 (K=3), against key-count ratios of 1.46 and 1.88. Both
+the coarse pass and the refinement scale with -R, so the ratio does not
+depend on R.
+
+Results (40 paired trials per cell, ENIGMA_SEED=0)
+--------------------------------------------------
+    K   R_base  R_str   base_pc  str_pc   base_ex  str_ex   b-only  s-only
+    2   8       11      29.8%    25.6%    4        4        3       3
+    3   8       15      29.8%    30.0%    4        5        3       4
+
+    K=2 paired stride-base  -4.2 pp, 95% CI [-13.3, +4.9]
+                            -> no detectable difference
+    K=3 paired stride-base  +0.2 pp
+                            -> no detectable difference
+
+Wall seconds per arm: 3036/2867 (K=2), 3028/2994 (K=3) -- matched to
+within 6% and 1%, with the stride arm if anything slightly under-served.
+
+Conclusion
+----------
+NO DETECTABLE DIFFERENCE at either K. Spending the stride's saving on
+more -R restarts neither beats nor loses to an exhaustive ring2 sweep.
+
+Read the CI before drawing a stronger conclusion: +-9pp at n=40 rules out
+a LARGE effect in either direction and nothing smaller. Judged on the
+means alone the K=2 cell looks like a 4.2pp loss; its exact recovery is
+tied 4/4 and its paired wins split 3-3, and the interval spans zero.
+Resolving a ~2pp effect here would need roughly 20x the trials, which at
+~75 s per arm per trial is not worth spending on a flag that is not
+recommended by default.
+
+The base arm is identical in both cells (29.8%, 4 exact) because the
+trial RNG does not depend on K and ENIGMA_SEED is pinned -- the two cells
+posed the same 40 problems. That is a determinism check, not a
+coincidence.
