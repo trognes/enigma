@@ -4051,9 +4051,9 @@ void bruteforce(char * result)
      reports a fact rather than a warning -- but it does explain a reported ring/start
      that differs from the key the message was enciphered with. */
   if ((g_mid_rep_mask != nullptr) && (scored_keys < total_keys))
-    fprintf(stderr, "Collapse:   middle wheel ring x start: %zu of %zu keys are exact "
-            "duplicates, skipped (%.1fx); reported ring/start may be an equivalent\n",
-            total_keys - scored_keys, total_keys,
+    fprintf(stderr, "Collapse:   middle ring x start: %zu duplicate keys skipped "
+            "(%.1fx);\n            reported ring/start may be an equivalent\n",
+            total_keys - scored_keys,
             static_cast<double>(total_keys) / static_cast<double>(scored_keys));
 
   /* Non-fatal warning: --ring-stride can cost MORE than it saves. The coarse pass shrinks
@@ -4952,7 +4952,9 @@ void show_settings()
   if (opt_scoring == 0)
     fprintf(stderr, " (language-independent)\n");
   else
-    fprintf(stderr, " (language: %s; n-gram files in %s)\n",
+    /* The data directory is an arbitrary path, so it gets its own continuation
+       line rather than a trailing clause that would push the line past 80. */
+    fprintf(stderr, " (language: %s)\n            n-gram files in %s\n",
             opt_language, opt_datadir);
 
   /* One clause per continuation line so the line stays within 79 columns even when
@@ -5002,8 +5004,8 @@ void show_settings()
      exhaustive one. Every other search-affecting option is echoed here; this was the
      only silent one. */
   if (opt_ring_stride > 1)
-    fprintf(stderr, "Stride:     rightmost ring every %d, then refine the skipped rings "
-            "around the best hit (--ring-stride: APPROXIMATE, may miss the true key)\n",
+    fprintf(stderr, "Stride:     rightmost ring every %d (--ring-stride), then refine "
+            "skipped\n            rings; approximate, may miss the true key\n",
             opt_ring_stride);
 
   fprintf(stderr, "Threads:    %d\n", opt_threads);

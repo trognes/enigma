@@ -1235,7 +1235,7 @@ check "middle-wheel collapse: analysed count matches keys scored" \
 # three are checked: ring1 wildcarded, start1 wildcarded, and no --true-key (that
 # diagnostic ranks a specific key, so the collapse is disabled for it).
 mw_line() { printf '%s' "$mw_ct" | "$ENIGMA" -f -l wehrmacht -u B -w 123 "$@" -T 1 2>&1 >/dev/null \
-            | grep -c '^Collapse: .*middle wheel'; }
+            | grep -c '^Collapse: .*middle ring'; }
 check "middle-wheel collapse is echoed when applied" \
   "$(mw_line -r "A.." -g "A..")" "1"
 check "no collapse line when ring1 is pinned" \
