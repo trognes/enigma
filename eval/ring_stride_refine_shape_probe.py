@@ -115,6 +115,10 @@ def main():
     ap.add_argument("--lengths", default="60,150")
     ap.add_argument("--lang", default="wehrmacht")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--hist", action="store_true",
+                    help="instead of the recovery comparison, report how far the "
+                         "middle wheel's OFFSET has to move from the coarse winner's "
+                         "for a candidate at the true ring2 to decode the truth")
     args = ap.parse_args()
 
     global TAB, WHEELS
@@ -133,6 +137,8 @@ def main():
 
     for L in lengths:
         pool = [t for t in texts if len(t) >= L]
+        global HIST
+        HIST = []
         got = {s: 0 for s in SHAPES}
         coarse_ok = 0
         lost = {s: 0 for s in SHAPES[1:]}
@@ -175,6 +181,25 @@ def main():
                 o2 = (p[:, 2] - r2) % 26
                 return "".join(chr(int(x) + 65) for x in S[o0, o1, o2, c])
 
+            if args.hist:
+                # At the TRUE ring2 (start2 offset-locked to the coarse winner's),
+                # sweep every (start1, middle offset) and record the SMALLEST offset
+                # move from the coarse winner's that decodes the truth. 0 means
+                # pinning offset1 would have worked; >2 means the shipped band misses.
+                off1c = (coarse[1] - coarse[0]) % 26
+                off2c = (coarse[3] - coarse[2]) % 26
+                g2 = (ring[2] + off2c) % 26
+                cs = [(((g1 - (off1c + d)) % 26), g1, ring[2], g2)
+                      for g1 in range(26) for d in range(-13, 13)]
+                hit = [abs(d) for (g1, d) in
+                       [(k[1], ((k[1] - k[0]) % 26 - off1c + 13) % 26 - 13)
+                        for k in cs]]
+                best = None
+                for k, dd in zip(cs, hit):
+                    if plaintext(k) == truth_pt and (best is None or dd < best):
+                        best = dd
+                HIST.append(best)
+                continue
             if plaintext(coarse) == truth_pt:
                 coarse_ok += 1
             res = {}
@@ -186,6 +211,16 @@ def main():
                 if res["shipped"] and not res[shape]:
                     lost[shape] += 1
         n = args.trials
+        if args.hist:
+            miss = sum(1 for h in HIST if h is None)
+            hs = [h for h in HIST if h is not None]
+            cnt = {d: sum(1 for h in hs if h == d) for d in sorted(set(hs))}
+            print("L=%d n=%d  no candidate decodes the truth: %d" % (L, n, miss))
+            print("  smallest offset1 move needed: "
+                  + ", ".join("|d|=%d: %d (%d%%)" % (d, c, round(100 * c / len(hs)))
+                              for d, c in sorted(cnt.items())))
+            sys.stdout.flush()
+            continue
         print("\t".join([str(L), str(n)]
                         + ["%d%%" % round(100 * coarse_ok / n)]
                         + ["%d%%" % round(100 * got[s] / n) for s in SHAPES]
