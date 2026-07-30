@@ -22,6 +22,13 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 - **License:** GNU GPL v3 (see `LICENSE`)
 - **Language/era:** C++ written in a predominantly C style (C stdio, raw arrays,
   global state).
+- **Development branch: `dev`.** All work happens on `dev`: branch from it, and
+  open every pull request against it. `master` is the release branch and only
+  ever receives `dev` by merge — never branch from `master` or target it. A
+  branch cut from `master` will be missing whatever `dev` has gained since the
+  last release, which is usually a lot (feature work lands on `dev` for several
+  PRs before a release merge), so a stale base shows up as work re-deriving
+  something already shipped or as conflicts against files the branch never saw.
 
 ## Repository layout
 
