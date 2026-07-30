@@ -6,11 +6,10 @@ every claim here lives in `archived/` — chiefly `archived/PERFORMANCE.md`
 `archived/CRACKQUALITY_TESTS.md` (harness design). Those are history: read them
 to check a number, not to find work.
 
-Status in one line: the tool is correct, warning-free under
-`-std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast` on
-g++ and clang, clean under ASan/UBSan/TSan/valgrind/cppcheck/clang-tidy,
-multi-threaded, and supports standard / Norway / M4 machines. Nothing below is
-a known bug.
+Status in one line: the tool is correct, warning-free under `-std=c++17 -Wall
+-Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast` on g++ and clang,
+clean under ASan/UBSan/TSan/valgrind/cppcheck/clang-tidy, multi-threaded, and
+supports standard / Norway / M4 machines. Nothing below is a known bug.
 
 Severity: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low.
 
@@ -18,19 +17,19 @@ Severity: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low.
 
 ## 1. Where the remaining headroom appears to be
 
-Two measurements shape everything below, and both point the same way: **there
-is little apparent room left** — though neither is a proof, and one of them has
+Two measurements shape everything below, and both point the same way: **there is
+little apparent room left** — though neither is a proof, and one of them has
 already been wrong once.
 
-**Search looks compute-bound.** On the plugboard-recovery tier essentially
-every miss is a *search* failure rather than a scoring one, and the
-exact-recovery curve is still climbing at `-R 256` (~+15–25pp per 4× R). The
-truth is a rare *deep* basin: 64 restarts give ~60 distinct exact boards but
-only ~15 distinct correct-plug states, per-restart depth ~0.7/10, with the truth
-assembled only in the *union* (~9/10). Every clever lever needs a truth-free way
-to pick that union out of the noise, and none is known — per-plug consensus is
-~1.1/10. So raw `-R`, bought with `-T`, remains the dependable lever. That is an
-absence of evidence for a shortcut, not evidence that none exists.
+**Search looks compute-bound.** On the plugboard-recovery tier essentially every
+miss is a *search* failure rather than a scoring one, and the exact-recovery
+curve is still climbing at `-R 256` (~+15–25pp per 4× R). The truth is a rare
+*deep* basin: 64 restarts give ~60 distinct exact boards but only ~15 distinct
+correct-plug states, per-restart depth ~0.7/10, with the truth assembled only in
+the *union* (~9/10). Every clever lever needs a truth-free way to pick that
+union out of the noise, and none is known — per-plug consensus is ~1.1/10. So
+raw `-R`, bought with `-T`, remains the dependable lever. That is an absence of
+evidence for a shortcut, not evidence that none exists.
 
 **Scoring looks near its ceiling.** The discrimination floor is ~1% at L40–60
 and ~0 beyond, and an 8× sweep of the model's order weights moves the
@@ -97,8 +96,8 @@ Nothing above 🟢. Ordered by expected payoff within each group.
 - 🟢 **`-Wconversion` (~52) deliberately deferred.** 43 are `int → unsigned
   char` narrowings in the hottest loops. That many casts clutter the hot path
   for a low-value nit on deliberately C-style code. A future ratchet, not a bug.
-- 🟢 **No `install` target**, and the n-gram files are not declared as
-  build/run dependencies. Fine for development; add if the tool is packaged.
+- 🟢 **No `install` target**, and the n-gram files are not declared as build/run
+  dependencies. Fine for development; add if the tool is packaged.
 - 🟢 **Single-file distribution.** Embedding the tables was declined once, but
   the shipped uint8 tables are ~4× smaller than the float tables that analysis
   assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
@@ -109,8 +108,8 @@ Nothing above 🟢. Ordered by expected payoff within each group.
 
 ## 3. How to measure
 
-Getting a trustworthy number here is harder than it looks — most of the traps
-in §5 are measurement traps.
+Getting a trustworthy number here is harder than it looks — most of the traps in
+§5 are measurement traps.
 
 - **Normalise on compute, never on `-R`.** For anything whose point is to buy
   more restarts, the honest baseline is *a higher `-R` at equal compute*. `-R`

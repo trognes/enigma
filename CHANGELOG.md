@@ -7,11 +7,10 @@ existing command lines can behave differently or stop working.
 ## 2.0.0
 
 The first release since 1.1.0, and a large one: 418 commits. It adds the
-four-rotor naval **M4** machine, a sharper **weighted all-order scoring
-model**, a domain-matched **`wehrmacht`** scoring language for real
-telegraphic traffic, and a family of plugboard-recovery search options
-(restarts, staged schedules, simulated annealing, a key pre-filter). Every
-option also gained a long name.
+four-rotor naval **M4** machine, a sharper **weighted all-order scoring model**,
+a domain-matched **`wehrmacht`** scoring language for real telegraphic traffic,
+and a family of plugboard-recovery search options (restarts, staged schedules,
+simulated annealing, a key pre-filter). Every option also gained a long name.
 
 ### Breaking changes
 
@@ -28,14 +27,14 @@ option also gained a long name.
   ./enigma -a -l english < cipher.txt     # recommended in 2.0.0 (see below)
   ```
 
-  The reason for the change: an n-gram default requires a language, and `-l`
-  has no default, so the old default could not run without extra options. The
-  index of coincidence needs no language, so the tool now works out of the box.
+  The reason for the change: an n-gram default requires a language, and `-l` has
+  no default, so the old default could not run without extra options. The index
+  of coincidence needs no language, so the tool now works out of the box.
 
 - **Conflicting scoring-model selectors are now a fatal error.** In 1.1.0 the
   last selector on the command line silently won; `-m -q` now exits with an
-  error, because the intent is genuinely ambiguous. Agreement is still fine
-  (`-q -q`, or `-q --score i4q10`). Pass exactly one model.
+  error, because the intent is genuinely ambiguous. Agreement is still fine (`-q
+  -q`, or `-q --score i4q10`). Pass exactly one model.
 
 - No short option was removed or renamed. Every 1.1.0 flag (`-u -w -r -g -s -p
   -l -x -T -d -i -m -b -t -q -c -v -h -n`) still exists and still means the same
@@ -68,13 +67,13 @@ option also gained a long name.
 - **`-l wehrmacht`**, a scoring language built from published statistics of
   ~20,000 letters of 1941 Enigma decrypts, for authentic telegraphic traffic
   (`X` as word separator, `Q` for *ch*, spelled-out numbers). Measured +20.9
-  percentage points on a held-out set of 69 real messages. It is a *writing style*,
-  not a separate language: on ordinary prose German it is a domain mismatch (−10.2 pp),
-  so keep using `-l german` for prose.
-- **Accented letters are folded to their A–Z base** (`é→E`, `ü→U`, `ø→O`,
-  `ß→S`) in both the n-gram tables and the input text, instead of being
-  discarded. This materially improved non-English scoring, which had been
-  reading only a fraction of its tables.
+  percentage points on a held-out set of 69 real messages. It is a *writing
+  style*, not a separate language: on ordinary prose German it is a domain
+  mismatch (−10.2 pp), so keep using `-l german` for prose.
+- **Accented letters are folded to their A–Z base** (`é→E`, `ü→U`, `ø→O`, `ß→S`)
+  in both the n-gram tables and the input text, instead of being discarded. This
+  materially improved non-English scoring, which had been reading only a
+  fraction of its tables.
 
 **Plugboard recovery**
 
@@ -123,9 +122,9 @@ option also gained a long name.
 - **Non-English n-gram tables were silently truncated at the first accented
   entry**, so German quadgram scoring ran on roughly 5% of its table. Combined
   with the accent folding above, German, Danish and French now crack comparably
-  to English — German recovery on a 90-letter benchmark went from 24.7% to
-  91.1% mean letters correct. An earlier recommendation to prefer lower-order
-  models for German was an artifact of this bug and has been withdrawn.
+  to English — German recovery on a 90-letter benchmark went from 24.7% to 91.1%
+  mean letters correct. An earlier recommendation to prefer lower-order models
+  for German was an artifact of this bug and has been withdrawn.
 
 ## 1.1.0 and earlier
 

@@ -1133,15 +1133,18 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
 
   **Documentation is now compliant; code is not, and is not being reflowed.**
   `CLAUDE.md`, `IMPROVEMENTS.md`, `README.md` and `CHANGELOG.md` all hold to 80
-  (bar a handful of unwrappable lines inside fenced blocks). `enigma.cc` is
-  ~21% over and `tests/run_tests.sh` ~36%; reflowing those would touch thousands
-  of lines and make every later diff noisier for no reader benefit, so apply the
+  (bar a handful of unwrappable lines inside fenced blocks). `enigma.cc` is ~21%
+  over and `tests/run_tests.sh` ~36%; reflowing those would touch thousands of
+  lines and make every later diff noisier for no reader benefit, so apply the
   rule to new and edited code and leave the rest. A source file staying mixed
   for a long time is expected, not a defect to tidy up in bulk. The files under
   `archived/` are frozen history and exempt outright.
 
-  Reflowing prose safely is harder than it looks, so if you do it, do it with a
-  script that checks itself. Two traps hit in practice: a naive paragraph
+  `tests/reflow_md.py` does both jobs: `--check FILE...` reports violations and
+  exits non-zero, `--write FILE...` rewraps in place. One of the two is
+  required, so it cannot edit a file by accident. Reflowing prose safely is
+  harder than it looks, and that tool exists because both of the traps below bit
+  during this repo's own reflow. Two traps hit in practice: a naive paragraph
   reflow **merges consecutive list items** into one run-on block, and wrapping
   can place a token like `>` or `-` at the **start** of a line, where Markdown
   silently reads it as a blockquote or list marker rather than as prose. Guard
