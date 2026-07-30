@@ -999,6 +999,34 @@ range and is not viable.
   (e.g. wrapped parameter lists or `if` conditions) are aligned under the
   opening `(`. The only tabs in the repo are the recipe lines in the `Makefile`,
   which `make` requires.
+- **Line width: 80 columns.** From now on every file written by hand here —
+  source, scripts, and documentation including Markdown — wraps at **80
+  columns**, so it reads in an 80-column terminal without wrapping or
+  horizontal scrolling. Measure **display width, not bytes**: multi-byte
+  characters are fine when they occupy one column (`—`, `×`, `≈`, `§` are three
+  bytes each but one column wide), and these files use them constantly.
+  **`awk 'length'` silently counts BYTES when the locale is not UTF-8**, and
+  `LANG` is unset in this environment, so bare `awk` over-reports by a few
+  percent and `wc -c` is worse. Either set the locale or count in Python:
+
+      python3 -c "import sys
+      for i, l in enumerate(open(sys.argv[1], encoding='utf-8'), 1):
+          if len(l.rstrip(chr(10))) > 80: print(i, len(l))" FILE
+
+  Exempt, because breaking them would do more harm than the overflow:
+  - long URLs, file paths, and other unbreakable tokens;
+  - Markdown tables and fenced code blocks whose content cannot wrap;
+  - literal data — n-gram lines, sample ciphertext, captured tool output;
+  - imported and generated files, which are left exactly as they arrive.
+
+  **This is forward-looking; the existing files are not being reflowed.** Today
+  only `README.md` and `CHANGELOG.md` hold to 80. The engineering documents grew
+  up at roughly 90–100: measured in display columns over prose lines,
+  `PERFORMANCE.md` is 67% over, `CLAUDE.md` 63%, `CODE_REVIEW.md` 54%,
+  `eval/MODERN_BREAKING_NOTES.md` 78%. Reflowing them would touch thousands of
+  lines and make every later diff noisier for no reader benefit, so apply the
+  rule to new and edited text and leave the rest. A file staying mixed for a
+  long time is expected, not a defect to tidy up in bulk.
 - **Single translation unit; per-search state in `struct machine`.** The
   mutable per-search state — machine settings (`walzenlage`, `grundstellung`,
   `ringstellung`, `ukw`, `steckerbrett`) and the working buffers (`subst_array`,
