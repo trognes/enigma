@@ -43,8 +43,8 @@ where `o_w = start_w − ring_w`. Two facts follow, and they are the whole desig
 
 ## 3. Why the offset moves — the mechanism, with a worked case
 
-The shift is not a small perturbation of the turnover time. `start2` moving by
-δ moves the turnover by δ **modulo 26**, so it can carry a turnover across the
+The shift is not a small perturbation of the turnover time. `start2` moving by δ
+moves the turnover by δ **modulo 26**, so it can carry a turnover across the
 start of the message, changing the step count for the whole message rather than
 for a δ-length window.
 
@@ -139,51 +139,78 @@ the honest general choice.
 
 ## 4. The derivation
 
-Both schedules are computable from keys alone — no knowledge of the truth. For
-a candidate `(ring2 = v, start2 = v + o2, start1 = g1)`:
+Both schedules are computable from keys alone — no knowledge of the truth. For a
+candidate `(ring2 = v, start2 = v + o2, start1 = g1)`:
 
 ```
 S_c    = step schedule of the coarse winner, from (start1_c, start2_c)
 S_cand = step schedule of the candidate,     from (g1, v + o2)
-Δ(g1, v) = S_c(i) − S_cand(i)                     evaluated over i = 1..L
-o1     = o1_c + mode_i Δ(g1, v)
+Δ(i)   = S_c(i) − S_cand(i)                       for i = 1..L
+V      = { distinct values Δ takes over the message }
+o1     = o1_c + δ        for each δ ∈ V
 ring1  = g1 − o1                                  (mod 26)
 ```
 
-`Δ` takes at most 3 distinct values over a message (the enumerated divergence
-bound is 2), so the `mode` can be replaced by *trying each distinct value*,
-which removes the statistic and makes the step exact rather than typical. The
-same derivation applies to the left wheel with `D` in place of `S`; `D ≡ 0`
+**Emit one candidate per element of `V`; do not reduce `Δ` to a mode.** A mode
+is a guess that can be wrong on a short message where the schedules alternate
+evenly, and the thing it guesses at is cheap to enumerate: `|Δ(i)| ≤ 2` bounds
+`V` to at most 5 values, and in practice it is 1 or 2. Enumerating cannot be
+wrong; a statistic can.
+
+**The resulting set is a subset of a set already measured to lose nothing.**
+`lock-start2` is `25 × (26 start1 × 5 offsets) × 1` = 3 250 and lost 0 of 600.
+The derived set uses the same 26 `start1` values and the offsets `o1_c + δ` for
+`δ ∈ V ⊆ [−2, +2]` — so it is exactly `lock-start2` **pruned to the offsets `Δ`
+actually takes**, and its worst case (`|V| = 5`) *is* `lock-start2`. That makes
+the verification question precise: not "is the derived set safe?" but "does
+pruning the 5 offsets down to `V` lose anything?" — and by the algebra it
+cannot, except in failure mode 2 of §7, where the coarse winner's own `o1` is
+wrong for reasons the schedule does not explain.
+
+The same derivation applies to the left wheel with `D` in place of `S`; `D ≡ 0`
 whenever the left wheel never steps (messages under ~676 characters, absent a
 double step), which is why pinning `ring0`/`start0` works today.
 
 ## 5. The staged refinement
 
 ```
-input: coarse winner (reflector, wheel order, r0 g0, r1 g1, r2 g2), skipped set V
+input: coarse winner (reflector, wheel order, r0 g0, r1 g1, r2 g2)
+       R2 = the 25 skipped ring2 values
+       G1 = the caller's start1 range   (0..25 wildcarded, else the pinned value)
 
-stage 1 — right wheel (derived, no search)
-    for v in V:  start2(v) = (v + o2_c) mod 26
+stage 1 — right wheel: derived, never searched
+    for v in R2:  start2(v) = (v + o2_c) mod 26
 
-stage 2 — middle wheel, coarse absolute (25 candidates)
-    for v in V:  g1 = g1_c;  Δ = mode Δ(g1, v);  ring1 = g1 − (o1_c + Δ)
+stage 2 — middle wheel, coarse absolute first
+    for v in R2:  emit(v, g1_c)
 
-stage 3 — middle wheel, absolute sweep (+625 candidates)
-    for v in V, for g1 in 0..25 \ {g1_c}:  as stage 2
+stage 3 — middle wheel, the rest of the sweep
+    for v in R2, for g1 in G1 \ {g1_c}:  emit(v, g1)
 
-stage 4 — ambiguous Δ (only where Δ took more than one value)
-    retry those candidates with each remaining distinct value of Δ
+stage 4 — left wheel (only when D ≢ 0, i.e. the left wheel steps)
+    derive the same way with D in place of S and correct o0
 
-stage 5 — left wheel (only when D ≢ 0, i.e. the left wheel steps)
-    derive Δ0 from D the same way and correct o0
+emit(v, g1):
+    if the caller pinned ring1:  ring1 = that value            # no derivation
+    else:                        for δ in V(g1, v): ring1 = g1 − (o1_c + δ)
 
 keep the best-scoring candidate; adopt it only if it beats the coarse score
 ```
 
-Stages 2 and 3 are ordered by prior likelihood, not by necessity: stage 2 covers
+**`ring1` is derived only when the caller left it wildcarded.** With `ring1`
+pinned — which includes the tool's own default `-r AA.` — the offset is not
+free: each `start1` in the sweep already carries a determined offset `start1 −
+ring1`, the sweep covers every one of them, and deriving would override a
+constraint the caller stated. With `start1` pinned instead, `G1` is a single
+value and the derivation still applies to `ring1`. This mirrors the `else`
+branch the enumerated band already has, and it is why the sweep is written over
+the caller's range rather than over `0..25`.
+
+Stages 2 and 3 are ordered by prior likelihood, not necessity: stage 2 covers
 the common case (the coarse absolute is still a valid class representative),
 stage 3 the case where it is not — measured absolute moves of ±1 up to **±11**,
-so the sweep must be all 26, not a window. Stage 5 is inert for short messages.
+so the sweep must be the whole range, not a window. Stage 4 is inert for short
+messages.
 
 An early exit after stage 2 on "score beats the coarse result" is tempting and
 is **not** justified by anything measured — a later stage can still be better.
@@ -198,8 +225,8 @@ Per invocation, the derived set is one axis wide on everything but two:
 | `ring2` | 25 | the skipped values, all of them |
 | `start2` | 1 | derived, `ring2 + o2_c` |
 | `start1` | 26 | swept — the winner's is a class representative |
-| `ring1` | 1 | derived, `start1 − (o1_c + Δ)` |
-| | **650** | |
+| `ring1` | `|V|` | derived, `start1 − (o1_c + δ)`, one per `δ ∈ V` |
+| | **650 × `|V|`** | `|V|` = 1 or 2 in practice, ≤ 5 |
 
 | scheme | enumerated | scored |
 |---|--:|--:|
@@ -215,9 +242,11 @@ so ~25 × 4 to ~25 × 7 keys are actually scored. **The derived figures in that
 column are arithmetic from the class-count formula, not measured**; the 650 and
 the shipped ~25 100 are.
 
-Worst case runs higher: where `Δ` is ambiguous, stage 4 retries with each
-distinct value it took, at most 3 by the divergence bound, and only for the
-affected candidates — so ≤ 1 950 enumerated.
+**The worst case is exactly `lock-start2`.** `|V| ≤ 5`, so the derived set never
+exceeds `25 × 26 × 5` = 3 250 — the same count as the band-with-derived-start2
+that measured 0 losses in 600. The design cannot cost more than the fallback it
+prunes, which is a useful property to hold on to when reviewing it: the only way
+it goes wrong is by pruning too much, never by costing too much.
 
 Against a full run: the shipped refinement is ~2% of the keys analysed with
 `ring1`/`start1` open and ~35% in the single-task corner where the flag is
@@ -228,8 +257,8 @@ measurements this replaces).
 
 ## 7. Where it can still fail
 
-1. **The coarse winner is not a near-solution.** Out of scope by design (§1);
-   no refinement shape recovers it, and the shipped one only sometimes does by
+1. **The coarse winner is not a near-solution.** Out of scope by design (§1); no
+   refinement shape recovers it, and the shipped one only sometimes does by
    accident of breadth.
 2. **The coarse winner's own `o1` is wrong for reasons other than the schedule**
    — the argmax on a partly-garbled decode need not be exactly the truth's
@@ -260,9 +289,9 @@ rate while losing real keys (observed: `lock-both` and `lock-off1` both did).
 4. **A Norway (`-n`) case.** `wheel_task` carries raw wheel numbers while a
    `machine` carries translated ones; every past bug in this area was invisible
    outside `-n` (`archived/PERFORMANCE.md` §7.11).
-5. `make bench` is not expected to move — the refinement is outside the hot
-   loop — but the run-level key count should drop as §6 predicts, which is a
-   cheap sanity check that the derivation is actually being used.
+5. `make bench` is not expected to move — the refinement is outside the hot loop
+   — but the run-level key count should drop as §6 predicts, which is a cheap
+   sanity check that the derivation is actually being used.
 
 ## 9. Implementation notes
 
@@ -277,8 +306,8 @@ rate while losing real keys (observed: `lock-both` and `lock-off1` both did).
   outside `search_worker` would change behaviour as well as duplicate it. Per
   call the parallelism is thinner (one key × restarts instead of 650 keys ×
   restarts), but under `-c` the restarts still spread across threads, and
-  without `-c` the whole refinement is 650 decodes — parallelism is moot at
-  that size.
+  without `-c` the whole refinement is 650 decodes — parallelism is moot at that
+  size.
 - **Reuse `tasks[cur_wo]` verbatim** for the wheel order and reflector; never
   rebuild a `wheel_task` from a `machine`'s already-translated fields.
 - **Snapshot every pinned value before the first sub-search.** The plain-scan
@@ -292,27 +321,25 @@ rate while losing real keys (observed: `lock-both` and `lock-off1` both did).
 
 ## 10. Open decisions and gaps — read before coding
 
-Three things the design does **not** settle, in the order they will bite:
+Decisions 1 and 2 below were open and are now **settled** — recorded here with
+the reasoning, since both are the kind of choice that looks arbitrary later.
+Decision 3 remains open and needs a measurement.
 
-1. **Caller-pinned `ring1` / `start1`.** The derivation replaces the offset
-   band, and the band has an `else` branch for exactly this case ("caller pinned
-   ring1 and/or start1: no band, search what they asked for"). With `ring1`
-   pinned there is nothing to derive — `o1` is fixed by the caller — and with
-   `start1` pinned the 26-value sweep collapses to one. The derived path needs
-   the same fallback, or a deliberately narrow search will be silently widened
-   or silently mis-derived. Not yet written into §5.
-2. **How `Δ` is selected.** §4 offers `mode` and then says the mode can be
-   replaced by trying each distinct value. **Prefer the latter and drop the
-   statistic**: emit one candidate per distinct value `Δ` takes over the
-   message, at most 3 by the divergence bound and typically 1. A mode is a
-   guess that can be wrong on short messages where the schedules alternate
-   evenly; enumerating the (few) values cannot be. This makes stage 4
-   unnecessary as a separate stage.
-3. **Whether a ±1 band survives on top of the derived value.** Failure mode 2
-   in §7 — the coarse winner's own `o1` being wrong for scoring reasons rather
-   than schedule reasons — is not corrected by the derivation. A ±1 band would
-   cover it at 3× the candidate count (still ~2 000, still trivial). Whether it
-   is needed is a measurement nobody has run.
+1. **Caller-pinned `ring1` / `start1` — SETTLED.** Derive `ring1` only when the
+   caller left it wildcarded; when it is pinned (including under the tool's own
+   default `-r AA.`), use the caller's value and sweep `start1` over its range,
+   which already covers every offset that pin permits. When `start1` is pinned
+   instead, the sweep is one value and the derivation still applies. See §5.
+2. **How `Δ` is selected — SETTLED.** Enumerate `V`, the distinct values `Δ`
+   takes over the message, and emit one candidate per element. No mode, no
+   statistic, and no separate "ambiguous" stage. `|V| ≤ 5` and is 1 or 2 in
+   practice, so the cost is bounded by `lock-start2`, which the derived set is a
+   pruning of. See §4.
+3. **Whether a ±1 band survives on top of the derived value — OPEN.** Failure
+   mode 2 in §7 — the coarse winner's own `o1` being wrong for scoring reasons
+   rather than schedule reasons — is not corrected by the derivation, and is the
+   *only* way the pruning in decision 2 can lose a key. A ±1 band would cover it
+   at 3× the candidate count (still ~2 000, still trivial). Nobody has run it.
 
 Two accounting details that are easy to get wrong and hard to notice:
 
