@@ -4070,16 +4070,25 @@ void bruteforce(char * result)
   if (opt_ring_stride > 1)
     {
       /* The refinement's ring1 is banded to the derived offset window (mid_ring_window),
-         not the full 26, so price it that way -- the pre-band formula over-warned by 26/5
-         and would now fire on keyspaces where the stride comfortably pays off. */
+         not the full 26, so price it that way -- the pre-band formula over-warned by 26/5.
+
+         Compare the WHOLE strided run against not striding at all, not the refinement
+         against the coarse pass. Those are different questions and only the first one
+         matters: the coarse pass shrinks as K grows (ceil(26/K) ring2 values), so at a
+         large K a refinement bigger than it is the normal, healthy case rather than a
+         problem. Reported by a user with -r A.. -g A.. --ring-stride 13, where the old
+         test fired on a run costing 119652 keys against 456976 unstrided -- a 3.8x win
+         warned about as a loss. */
       size_t band = (rc[1] == asize)
         ? static_cast<size_t>(2 * mid_ring_window + 1) : static_cast<size_t>(rc[1]);
       size_t refine_keys = static_cast<size_t>(asize - 1) * band * gc[1] * asize;
-      if (refine_keys > total_keys)
+      size_t strided = total_keys + refine_keys;
+      size_t unstrided = total_keys / static_cast<size_t>(rc[2]) * asize;
+      if (strided > unstrided)
         fprintf(stderr, "Warning: --ring-stride %d is not paying for itself here -- the "
-                "refinement (%zu keys) outweighs the coarse pass (%zu); open -g's first "
-                "position or drop --ring-stride\n",
-                opt_ring_stride, refine_keys, total_keys);
+                "strided search (%zu keys) costs more than not striding (%zu); open -g's "
+                "first position or drop --ring-stride\n",
+                opt_ring_stride, strided, unstrided);
     }
 
   /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
