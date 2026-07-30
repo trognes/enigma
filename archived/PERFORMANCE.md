@@ -3396,6 +3396,28 @@ only two anchors 13 apart, so losing the argmax puts the truth ~13 away — whic
 the requirement there is 12, i.e. the full sweep, and why capping the width would
 silently break exactly the large strides the ceiling was raised to 26 to allow.
 
+**Confirmed end-to-end on the real flag** (same harness as the L=60 table above, 30
+paired trials per cell, `K=1` base 67%). Exact recovery by window, and the narrowest
+window that matches the full sweep:
+
+| K | w=1 | w=2 | w=3 | w=4 | w=5 | w=6 | w=7 | w=8 | w=10 | w=13 | min w |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 50% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 2 |
+| 6 | 43% | 53% | 67% | 67% | 70% | 70% | 70% | 70% | 70% | 70% | 5 |
+| 7 | 47% | 50% | 67% | 67% | 70% | 70% | 70% | 70% | 70% | 70% | 5 |
+| 8 | 30% | 50% | 57% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 4 |
+| 9 | 33% | 30% | 57% | 63% | 70% | 70% | 70% | 70% | 70% | 70% | 5 |
+| 10 | 13% | 37% | 47% | 50% | 60% | 63% | 67% | 67% | 67% | 67% | 7 |
+| 11 | 23% | 27% | 33% | 50% | 50% | 63% | 67% | 67% | 67% | 67% | 7 |
+| 12 | 17% | 27% | 37% | 43% | 57% | 67% | 67% | 70% | 70% | 70% | 8 |
+| 13 | 17% | 27% | 30% | 47% | 57% | 67% | 70% | 70% | 70% | 70% | 7 |
+
+The real binary is **harsher than the geometry probe**, as expected from what the probe
+cannot see (a coarse winner displaced by middle-wheel drift): a `w=3` cap costs 20pp at
+K=10 and **40pp at K=13** (30% against the full sweep's 70%) — turning the largest
+strides, the ones with the most throughput to offer, into the least reliable settings.
+The `min w` column is n=30-noisy in the ones digit; its shape is not.
+
 **Why 3, from the geometry.** `eval/ring_stride_geometry_probe.py` scores the full 26×26
 (ring2, start2) grid directly (rest of the key at truth, so right-wheel only): the score
 along the offset-preserving diagonal is a smooth tent peaking at δ=0, and the coarse
@@ -3418,11 +3440,12 @@ refinement ring2 value, and the full 25 as a share of the whole run:
 **Verdict: keep the full sweep.** Two independent reasons, either sufficient.
 
 *It is not a fixed width.* "±3 is always enough" holds only over K≤5 — the strides worth
-using. The flag accepts K to 26, and the required width climbs to the whole set by K≈12.
-A cap would therefore have to be **K-dependent** to be correct, which is a formula
-derived from one measurement standing where a constant now stands, re-importing the
-assumption ("the coarse winner lands near the truth") whose failure is the subject of two
-separate follow-ups above — for a saving computed below at ~2%.
+using. The flag accepts K to 26, and measured on the real flag a `w=3` cap costs 20pp of
+exact recovery at K=10 and 40pp at K=13. A cap would therefore have to be **K-dependent**
+to be correct, which is a formula derived from one measurement standing where a constant
+now stands, re-importing the assumption ("the coarse winner lands near the truth") whose
+failure is the subject of two separate follow-ups above — for a saving computed below at
+~2%.
 
 *And the saving is not worth having.* The measurable gain from capping is 1.5–7% of a run
 in the shapes where the flag is recommended. The one shape where it would matter (34.8%)
@@ -3432,13 +3455,13 @@ brings back the 0/25 wrap subtlety the full set removed. A fixed, explainable 25
 of a normal run is the better trade; the override stays in the source as the way to
 re-check this without a rebuild.
 
-**Scope.** The end-to-end cells are n=30, L=60/150, `-s` board, no `-c` — enough to show
-that the tail beyond `⌈K/2⌉+1` is inert at small K and that `w=1` is not, which is what
-the width decision turns on. The K-sweep that settles the large strides is the geometry
-probe, which pins ring1/start1 at the truth: it therefore *understates* the required
-width (a coarse winner displaced by middle-wheel drift is a distance it cannot see), so
-it is a safe instrument for concluding "wider than a constant", and not one for
-certifying any particular cap as sufficient.
+**Scope.** All cells are n=30, L=60/150, `-s` board, no `-c` — enough to show that the
+tail beyond `⌈K/2⌉+1` is inert at small K, that `w=1` never is, and that the requirement
+grows with K on both instruments; not enough to pin `min w` to the ones digit. The
+geometry probe pins ring1/start1 at the truth and so *understates* the required width (a
+coarse winner displaced by middle-wheel drift is a distance it cannot see) — which the
+end-to-end table then confirms by being uniformly harsher. Both are safe instruments for
+concluding "wider than a constant"; neither certifies a particular cap as sufficient.
 
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 
