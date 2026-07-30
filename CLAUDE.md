@@ -334,14 +334,22 @@ are read from a **data directory** (filenames built as
   95% CI [−13.3, +4.9]. Read the interval before concluding more: ±9pp at n=40
   rules out a *large* effect either way and nothing smaller.
 
-  **The trade only exists when `ring1` is wildcarded.** The refinement costs
-  `25 × rc[1] × gc[1] × 26` keys — times `-R`, like everything else — and that
-  fixed cost has to be beaten by the coarse saving. Under the tool's own
-  default ring `-r AA.` it is not: measured at L=100, K=2, `-r AA. -g A..` grows
-  17 576 keys to 25 688, and `-r A.. -g AK.` does the same, while
-  `-r A.. -g A..` falls 102 076 → 69 913. So `--ring-stride` is a lever for
-  *fully wildcarded ring* searches only; anywhere else the binary's "not paying
-  for itself" warning fires and it should simply be dropped.
+  **The trade only exists when `ring1` is wildcarded.** The refinement's cost is
+  fixed — independent of `K` — and the coarse saving has to beat it. Its worst
+  case is `25 × rc[1] × gc[1] × 26` keys, but **that bound is not the number to
+  reason with**: the case it describes (ring1 *and* start1 both wildcarded) is
+  exactly the case where the offset band applies, replacing the 26 × 26
+  (ring1, start1) pairs with 26 start1 × 5 offsets = 130. So the realistic
+  figure is `25 × 130 × 26` = **84 500** index keys, and the middle-wheel
+  collapse then cuts what is actually *scored* to **~19 000** at L=100 —
+  measured as 18 875 at both K=2 and K=3, confirming the K-independence.
+
+  Under the tool's own default ring `-r AA.` the saving cannot beat even that:
+  measured at L=100, K=2, `-r AA. -g A..` grows 17 576 keys to 25 688, and
+  `-r A.. -g AK.` does the same, while `-r A.. -g A..` falls 102 076 → 69 913.
+  So `--ring-stride` is a lever for *fully wildcarded ring* searches only;
+  anywhere else the binary's "not paying for itself" warning fires and it should
+  simply be dropped.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,

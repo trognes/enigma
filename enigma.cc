@@ -4303,8 +4303,15 @@ void bruteforce(char * result)
              This ran under a "25% of the coarse pass" budget for a while, on the theory
              that a keyspace narrow enough (single task AND start0 pinned) would see the
              refinement outcost the coarse pass. That was a ratio masquerading as a cost.
-             The refinement is ONE pass over ONE task for the whole invocation, bounded by
-             25 * rc[1] * gc[1] * 26 keys; in the corner it was guarding, the whole run is
+             The refinement is ONE pass over ONE task for the whole invocation. Its worst
+             case is 25 * rc[1] * gc[1] * 26 keys, but do not price it from that bound:
+             the case it describes -- ring1 and start1 BOTH wildcarded -- is the one where
+             the offset band below applies, replacing the 26 x 26 (ring1, start1) pairs
+             with 26 start1 x (2*mid_ring_window + 1) offsets = 130. So the realistic cost
+             is 25 * 130 * 26 = 84500 index keys, and the middle-wheel collapse (7.12)
+             then cuts what is actually scored to ~19000 at L=100. Measured on
+             -r A.. -g A..: 18875 scored keys at BOTH K=2 and K=3, the refinement being
+             K-independent. In the corner the budget was guarding, the whole run is
              988 keys against 676 unstrided -- microseconds. Trading predictable behaviour
              for that is a bad deal: a budget makes the same command do different work
              depending on an unrelated part of the keyspace, silently, with no way to

@@ -90,8 +90,9 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   `eval/results-ring-stride-vs-restarts.txt`.
 
   Two things worth carrying forward. **The trade only exists on a
-  wildcarded-ring keyspace** — the refinement's fixed `25 × rc[1] × gc[1] × 26`
-  keys exceed the coarse saving under the default `-r AA.`, where the stride
+  wildcarded-ring keyspace** — the refinement's fixed cost (`25 × 130 × 26` =
+  84 500 index keys once the offset band applies, ~19 000 actually scored at
+  L=100) exceeds the coarse saving under the default `-r AA.`, where the stride
   costs *more* than it saves. And **n=40 resolves only ±9pp here**; a ~2pp
   effect would need ~20× the trials at ~75 s per arm per trial, which is not
   worth spending on a flag that is not recommended by default.

@@ -11,11 +11,15 @@ only setting where -R does anything:
     A (baseline) : no stride,        -R N
     B (stride)   : --ring-stride K,  -R round(N * ratio)
 
-THE KEYSPACE MUST HAVE ring1 WILDCARDED OR THE QUESTION IS MOOT. The refinement pass
-costs 25 * rc[1] * gc[1] * 26 keys (times -R, like everything else), a FIXED cost the
-coarse saving has to beat. With ring1 pinned -- which is the tool's own default, -r
-"AA." -- there is not enough coarse pass left to beat it, and --ring-stride costs MORE
-than it saves. Measured here at L=100, -R 20, K=2:
+THE KEYSPACE MUST HAVE ring1 WILDCARDED OR THE QUESTION IS MOOT. The refinement pass is
+a FIXED cost, independent of K, that the coarse saving has to beat -- and with ring1
+pinned (the tool's own default, -r "AA.") there is not enough coarse pass left to beat
+it, so --ring-stride costs MORE than it saves. Price that cost from the banded figure,
+not from the 25 * rc[1] * gc[1] * 26 worst case: the bound describes ring1 and start1
+both wildcarded, which is the very case where the offset band replaces the 26 x 26
+(ring1, start1) pairs with 26 start1 x 5 offsets = 130. Realistic is 25 * 130 * 26 =
+84500 index keys, ~19000 of them actually scored at L=100 after the middle-wheel
+collapse (measured: 18875 at both K=2 and K=3). Measured here at L=100, -R 20, K=2:
 
     -r AA. -g A..     17 576 keys unstrided ->  25 688 strided    stride LOSES
     -r A.. -g AK.     17 576 keys unstrided ->  25 688 strided    stride LOSES

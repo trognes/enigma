@@ -17,10 +17,20 @@ plugboard HIDDEN from the search, reflector and wheel order given.
   stride : -R round(8 * ratio) --ring-stride K
 
 ring1 AND start1 wildcarded (102076 keys). This shape is REQUIRED: the
-refinement costs 25 * rc[1] * gc[1] * 26 keys, times -R like everything
-else, and with ring1 pinned -- the tool's own default -r "AA." -- that
-fixed cost exceeds the coarse saving and --ring-stride costs MORE than it
-saves. Measured at L=100, -R 20, K=2:
+refinement's cost is FIXED (independent of K) and the coarse saving has
+to beat it, which with ring1 pinned -- the tool's own default -r "AA." --
+it cannot, so --ring-stride costs MORE than it saves.
+
+Do not price the refinement from its 25 * rc[1] * gc[1] * 26 worst case.
+That bound describes ring1 and start1 both wildcarded, which is exactly
+the case where the offset band applies: the 26 x 26 (ring1, start1) pairs
+become 26 start1 x 5 offsets = 130. Realistic cost is 25 * 130 * 26 =
+84500 index keys, and the middle-wheel collapse cuts what is actually
+scored to ~19000 at L=100. Measured here: 18875 scored keys at BOTH K=2
+and K=3 (102076 -> 69913 and -> 54209 against coarse passes of 51038 and
+35334), confirming the K-independence directly.
+
+Measured at L=100, -R 20, K=2:
 
     -r AA. -g A..     17576 keys unstrided ->  25688 strided   loses
     -r A.. -g AK.     17576 keys unstrided ->  25688 strided   loses
