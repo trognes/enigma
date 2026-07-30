@@ -3437,6 +3437,49 @@ refinement ring2 value, and the full 25 as a share of the whole run:
 | `-r AA. -g ...` (ring1 pinned) | 676 | 16 900 | 9.7% | 7.3% |
 | `-r A.. -g A..` (single task, start0 pinned) | 1005 | 25 125 | 34.8% | 26.5% |
 
+**The two key counts, exactly.** This section's cost accounting has been wrong twice
+(once pricing a refinement value like a coarse one, once counting the refinement's index
+space as if it were scored), so here are both formulas as the code computes them,
+verified against `Analysed` below.
+
+*Coarse pass* — `build_key_space()`, index space `total_keys = |tasks| · rsize · gsize`:
+
+```
+  |tasks| = reflectors × wheel orders            (× Greek wheel × Greek offsets in M4)
+  rsize   = rc0 · rc1 · rc2      gsize = gc0 · gc1 · gc2
+  rc2     = floor((r_max2 - r_min2) / K) + 1     = ceil(26/K) when ring2 is wildcarded
+  rc0     = 1                                    when ring0 AND start0 are wildcarded
+                                                 (§7.10's exact collapse), else its range
+```
+
+*Refinement pass* — `bruteforce()`, once per invocation, over one pinned task with
+ring0/start0 fixed:
+
+```
+  refine  = |ring2 set| · npairs · 26            (26 = start2, always fully open)
+  |ring2 set| = 25                               (every value but the coarse winner)
+  npairs  = 26 · (2 · mid_ring_window + 1) = 130 when ring1 AND start1 are wildcarded
+                                                 (§7.12's offset band, mid_ring_window=2)
+          = rc1 · gc1                            when the caller pinned either
+```
+
+Both are *index* spaces; when §7.12 is active (ring1 and start1 both wildcarded) the
+`gc1` / `npairs` factor is thinned to the class representatives — measured ~3.36× on
+both passes alike, which is why `Analysed` reports scored keys, not these products.
+
+Checked on `-r AA. -g ...` (ring1 pinned, so §7.12 is inactive and scored = index):
+coarse `= ceil(26/K) · 26³`, refine `= 25 · 26 · 26 = 16 900`, constant in K.
+
+| K | 1 | 2 | 3 | 5 | 13 |
+|---|--:|--:|--:|--:|--:|
+| predicted | 456 976 | 245 388 | 175 084 | 122 356 | 52 052 |
+| measured `Analysed` | 456 976 | 245 388 | 175 084 | 122 356 | 52 052 |
+
+That is the whole trade in two lines: the coarse pass falls as `1/K` off a base of
+hundreds of thousands, the refinement is a **constant** ~17k–25k that does not depend on
+K at all — so its width is a fixed toll on a shrinking bill, which is exactly why it
+looks negligible at K=2 (1.07%) and merely small at K=13 (2.37%).
+
 **The K-dependent rule, measured as a column rather than inferred.** `⌈K/2⌉+N` is the
 shape the minima follow, so it was run as its own paired column against the full sweep
 (`WINDOWS="f1 f2 f3 13"`, 60 paired trials per cell, L=60, `K=1` base 73%):
