@@ -246,8 +246,8 @@ English tables.
   `-c`) `[off]`. **Not recommended** — an ablation/measurement flag, not a
   quality lever
 - **`--ring-stride K`** — Test only every `K`th ring position of the rightmost
-  wheel, then refine every skipped position around the best hit; needs both `-r`
-  and `-g` to wildcard that wheel, and rejects `-F`/`--exhaust` `[1 = off]`.
+  wheel, then refine every skipped position; needs both `-r` and `-g` to
+  wildcard that wheel, and rejects `-F`/`--exhaust` `[1 = off]`.
   **Worth using at `K=2` or `K=3`** when throughput matters: on authentic
   telegraphic German they analyse 1.9× and 2.6× fewer keys while costing only
   about half a percentage point to two percentage points of exact recovery.
