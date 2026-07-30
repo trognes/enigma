@@ -23,6 +23,10 @@ K=1 (no stride) is run once per trial as the baseline: a trial that also fails a
 K=1 is a pre-existing scoring-floor case, not a window effect, and is excluded from
 the window-limited miss rate.
 
+A WINDOWS entry is a fixed radius, or "fN" for the K-dependent rule ceil(K/2)+N,
+so a proposed formula is measured as its own column against the full sweep on the
+same trials instead of being inferred from the per-K minima.
+
 Usage: python3 eval/ring_stride_window_probe.py
 Env: LENGTHS ("150"), KS ("2 3 5"), WINDOWS ("1 2 3 4 5 6 8 10 13"), TRIALS (40),
      SEED (0), THREADS (4)
@@ -41,10 +45,20 @@ from ring_stride_wehrmacht_probe import excerpt, random_key, encrypt   # noqa: E
 
 LENGTHS = [int(x) for x in os.environ.get("LENGTHS", "150").split()]
 KS = [int(x) for x in os.environ.get("KS", "2 3 5").split()]
-WINDOWS = [int(x) for x in os.environ.get("WINDOWS", "1 2 3 4 5 6 8 10 13").split()]
+# A window entry is a fixed radius, or "fN" for the K-dependent rule ceil(K/2)+N --
+# the shape the measured minima follow, so a proposed formula is tested as one column
+# against the full sweep on the same trials rather than inferred from per-K minima.
+WINDOWS = os.environ.get("WINDOWS", "1 2 3 4 5 6 8 10 13").split()
 TRIALS = int(os.environ.get("TRIALS", "40"))
 SEED = int(os.environ.get("SEED", "0"))
 THREADS = os.environ.get("THREADS", "4")
+
+
+def radius(spec, K):
+    """Resolve a WINDOWS entry against a stride: "3" -> 3, "f2" -> ceil(K/2)+2."""
+    if spec.startswith("f"):
+        return (K + 1) // 2 + int(spec[1:])
+    return int(spec)
 
 
 def recover(ct, u, w, board, K, window=None):
@@ -68,7 +82,7 @@ def trial(L, rng):
     out = {(1, None): recover(ct, u, w, board, 1) == pt}
     for K in KS:
         for win in WINDOWS:
-            out[(K, win)] = recover(ct, u, w, board, K, win) == pt
+            out[(K, win)] = recover(ct, u, w, board, K, radius(win, K)) == pt
     return out
 
 
@@ -76,8 +90,8 @@ def sweep():
     print("# trials=%d seed=%d threads=%s  (window 13 == the shipped full sweep)"
           % (TRIALS, SEED, THREADS))
     print("\t".join(["len", "K", "n", "K=1 base"]
-                    + ["w=%d" % w for w in WINDOWS]
-                    + ["lost@w1"]))
+                    + ["w=%s" % w for w in WINDOWS]
+                    + ["lost@" + WINDOWS[0]]))
     for L in LENGTHS:
         rng = random.Random(SEED * 1000 + L)      # paired: same trials for every cell
         rows = [trial(L, rng) for _ in range(TRIALS)]
