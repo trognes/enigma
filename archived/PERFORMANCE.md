@@ -3506,6 +3506,7 @@ recovers and the cheaper set does not:
 | shipped `25 · 130 · 26` | — | 84 500 | — | — | — | — |
 | lock-start2 `25 · 130 · 1` | offset2 | **3 250** | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 600** |
 | lock-off1 `25 · 26 · 1` | + offset1 | 650 | 4 / 0 | 2 / 1 | 4 / 4 | 15 / 600 |
+| shift2 `25 · 5 · 1` | offset1, abs ±2 | 125 | 4 / 0 | 2 / 1 | 4 / 4 | 15 / 600 |
 | lock-both `25 · 5 · 1` | + start1 | 125 | 1 / 0 | 2 / 2 | 3 / 4 | 12 / 600 |
 | lock-all `25 · 1 · 1` | + both | 25 | 5 / 0 | 4 / 2 | 7 / 6 | 24 / 600 |
 
@@ -3522,6 +3523,48 @@ standard the band itself was held to.)
 **So "the offsets must equal the coarse solution's" is true of the right wheel and false
 of the middle one** — which is exactly the asymmetry the shipped code already encodes,
 one pinned offset and one banded.
+
+**The middle wheel needs BOTH of its axes, and the misses say why**
+(`--dump`, `eval/results-ring-stride-refine-misses.txt`). The middle setting can move two
+ways: the **offset** `(start1 − ring1)`, and the **absolute** position (ring1 and start1
+shifted together, offset held — decode-neutral under §7.12 until the shift moves the
+middle wheel's own notch into the span it visits). The shipped `130 = 26 · 5` is the
+product of the two; each reduction drops one, and each loses a distinct set of keys:
+
+- **`shift2`** (offset held, absolute ±2) loses 15/600, and **all 15 have the coarse
+  offset off by exactly 1**. The recovery moves the offset by ±1, with the absolute
+  *unchanged* in 12 of the 15 — a correction no offset-preserving shift can express at
+  any width:
+
+  ```
+  true     ring1 R start1 Y (off  7) | ring2 H start2 J (off 2)
+  coarse   ring1 S start1 A (off  8) | ring2 I start2 K (off 2)   dring2=+1 doff1=+1
+  shipped  ring1 T start1 A (off  7) | ring2 H start2 J (off 2)   dstart1=+0 doff1=-1
+  ```
+
+- **`lock-both`** (absolute pinned, offset ±2) loses a *different* 12/600, and in 9 of
+  them the recovery keeps the offset and moves the **absolute** — by ±1, and by **+7, +8,
+  +11**:
+
+  ```
+  true     ring1 N start1 I (off 21) | ring2 R start2 K (off 19)
+  coarse   ring1 Y start1 T (off 21) | ring2 P start2 I (off 19)   dring2=-2 dstart1=+11
+  shipped  ring1 F start1 A (off 21) | ring2 R start2 K (off 19)   dstart1=+7  doff1=+0
+  ```
+
+Measured ranges: the **offset** needs ±1 (every observed miss), the **absolute** needs up
+to ±11. So ±2 is right for the offset and far too tight for the absolute, which is why
+the shipped set searches all 26 there. Every one of these misses has `dring2` of ±1, ±2,
++4 or +7 — near-solutions with a mistimed turnover, i.e. squarely inside the regime the
+stride is a heuristic *for*, not wrong-basin cases that would be out of scope.
+
+**Why an offset shift does not simply garble the text** (the natural objection, since
+`o1` enters every position): `b_i = o1 + S(i)`, and the compensating change is in `S`.
+Two middle settings at *different absolute* positions reach the middle wheel's own notch
+at different points, so within a short message one machine takes a step the other never
+takes. That divergence is persistent, not a δ-length transient — the transient argument
+holds only when the two settings share an absolute position, which the coarse winner and
+the truth generally do not, since the winner is a §7.12 class representative.
 
 **This retires the width question rather than settling it.** At `25 · 130 · 1` the
 refinement is ~0.08% of a run instead of ~2%, so no window cap — constant or K-dependent
