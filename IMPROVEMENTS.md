@@ -96,6 +96,18 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   costs *more* than it saves. And **n=40 resolves only ±9pp here**; a ~2pp
   effect would need ~20× the trials at ~75 s per arm per trial, which is not
   worth spending on a flag that is not recommended by default.
+- 🟡 **Build the derived refinement (`refinement.md`).** The refinement's
+  `25 × 130 × 26` = 84 500 candidates can be `25 × 26` = **650**, because two of
+  the three axes are computable rather than searchable: `start2` follows from
+  the coarse winner's offset2 (0 losses in 600 paired trials), and `ring1`
+  follows from the *step-count difference* between the coarse and candidate
+  schedules, which both keys determine without knowing the truth. The ±2 offset
+  band is a fixed guess at a quantity that can be derived exactly. Design,
+  algebra, staging, failure modes and the verification plan are in
+  `refinement.md`; it is unbuilt and unmeasured end to end. Blocks nothing —
+  `--ring-stride` works today — but it retires the refinement-width question
+  outright, and the width is the only part of the flag's cost that is still
+  argued about.
 - 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
   the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
   but whether spending it on `-R` raises recovery is untested.

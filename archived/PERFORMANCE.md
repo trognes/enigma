@@ -3524,6 +3524,23 @@ standard the band itself was held to.)
 of the middle one** — which is exactly the asymmetry the shipped code already encodes,
 one pinned offset and one banded.
 
+**Why the middle offset moves at all, and what it implies — see `refinement.md`.**
+Dumping the misses settled the mechanism: the coarse winner is not "the truth with a
+wrong ring2", it is the truth with a wrong ring2 *and a compensating middle offset*. A
+`start2` shift moves the turnover **modulo 26**, so it can carry a turnover across the
+start of the message and change the step count for the whole message; the offset then
+absorbs that difference and the near-solution stays readable. Worked case (L=60, K=2,
+V-II-IV): middle-wheel step positions `[1, 27, 53]` against `[26, 52]`, counts differing
+by 1 on 58 of 60 positions, key offsets 7 against 8 cancelling exactly — the coarse
+candidate decodes 58 of 60 characters, which is why it won. The magnitude is **bounded
+by 1** for a single-notch right wheel (the two turnover lattices have equal spacing, so
+their prefix counts interleave and can differ by at most one), reaching 2 only via a
+two-notch right wheel or a straddled double step. Since both schedules follow from the
+two keys alone, the correction is **derivable** — which replaces the ±2 band with an
+exact value and the whole set with `25 × 26` = 650 candidates. `refinement.md` carries
+the design, staging and verification plan; the individual misses are in
+`eval/results-ring-stride-refine-misses.txt`.
+
 **The middle wheel needs BOTH of its axes, and the misses say why**
 (`--dump`, `eval/results-ring-stride-refine-misses.txt`). The middle setting can move two
 ways: the **offset** `(start1 − ring1)`, and the **absolute** position (ring1 and start1

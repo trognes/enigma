@@ -191,11 +191,33 @@ Treat it as a separate experiment, not part of the design.
 
 ## 6. Cost
 
-| scheme | candidates | note |
+Per invocation, the derived set is one axis wide on everything but two:
+
+| axis | values | how |
 |---|--:|---|
-| shipped | `25 · 130 · 26` = 84 500 | enumerated band × full start2 |
-| lock-start2 (measured, 0 loss) | `25 · 130 · 1` = 3 250 | derived start2 |
-| **this design** | `25 · 26 · 1` = **650** | + a few for ambiguous Δ |
+| `ring2` | 25 | the skipped values, all of them |
+| `start2` | 1 | derived, `ring2 + o2_c` |
+| `start1` | 26 | swept — the winner's is a class representative |
+| `ring1` | 1 | derived, `start1 − (o1_c + Δ)` |
+| | **650** | |
+
+| scheme | enumerated | scored |
+|---|--:|--:|
+| shipped | `25 · 130 · 26` = 84 500 | ~25 100 (measured) |
+| lock-start2 (measured, 0 loss) | `25 · 130 · 1` = 3 250 | ~970 |
+| **this design** | `25 · 26 · 1` = **650** | **~100–175** |
+
+The scored column is smaller because §7.12's middle-wheel collapse applies
+inside the refinement exactly as it does to the coarse pass (`search_worker`
+consults the same `g_mid_rep_mask`): most of the 26 `start1` values are
+decode-equivalent, leaving `⌈L/26⌉+1` representatives — 4 at L=60, 7 at L=150 —
+so ~25 × 4 to ~25 × 7 keys are actually scored. **The derived figures in that
+column are arithmetic from the class-count formula, not measured**; the 650 and
+the shipped ~25 100 are.
+
+Worst case runs higher: where `Δ` is ambiguous, stage 4 retries with each
+distinct value it took, at most 3 by the divergence bound, and only for the
+affected candidates — so ≤ 1 950 enumerated.
 
 Against a full run: the shipped refinement is ~2% of the keys analysed with
 `ring1`/`start1` open and ~35% in the single-task corner where the flag is

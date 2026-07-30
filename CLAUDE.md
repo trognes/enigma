@@ -923,6 +923,18 @@ that was a *ratio* masquerading as a cost and it made the same command do
 different work depending on an unrelated part of the keyspace, so it was
 removed.
 
+> **The width was re-measured, and then the question was superseded — see
+> `refinement.md`.** A `w=3` cap matches the full sweep at K≤5 but costs 20pp of
+> exact recovery at K=10 and 40pp at K=13, so any cap would have to be
+> `K`-dependent (`⌈K/2⌉+3` is the narrowest measured-clean rule; `⌈K/2⌉+2` is
+> 2pp light at K=10–11). It is not worth building, because the whole width is
+> only 1–2.4% of a run — and because the refinement's *shape* has far more slack
+> than its width: the coarse winner's `start2` offset can be pinned (0 losses
+> in 600 trials) and its `ring1` **derived** rather than banded, taking the set
+> from 84 500 candidates to 650. `refinement.md` has the algebra, the design
+> and the verification plan; the measurement-only `ENIGMA_REFINE_WINDOW` env
+> override (default off, byte-identical) reproduces the width columns.
+
 **The MIDDLE wheel is banded, and the band is derived rather than enumerated.**
 Shifting ring2 and start2 together leaves the right wheel's substitution
 untouched (only `(start2 − ring2) mod 26` enters it) and moves nothing but the
