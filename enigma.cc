@@ -4852,8 +4852,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "for ~0.5-2pp of exact recovery on telegraphic");
   fprintf(out, "  %-24s %s\n", "", "German; K=3 is the better pick. K>=5 is not");
   fprintf(out, "  %-24s %s\n", "", "recommended (2-8pp). Still an APPROXIMATION");
-  fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11). K=2 is the only value with");
-  fprintf(out, "  %-24s %s\n", "", "any backing; K>=3 is worse for little extra saving");
+  fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11)");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
