@@ -67,11 +67,39 @@ is a revolution later. Then
 b_i(coarse) = 8 + S*(i) − 1 = 7 + S*(i) = b_i(truth)   on 58 of 60 positions
 ```
 
+Side by side, the two machines are in lockstep — the coarse wheel's ring sits
+one letter further along **and** the wheel is one step behind, all the way
+through:
+
+```
+ i | truth: window ring  b_i | coarse: window ring  b_i |
+26 |          Z     R      8 |           B     S      9 | DIFFERS
+27 |          A     R      9 |           B     S      9 | same
+51 |          A     R      9 |           B     S      9 | same
+52 |          A     R      9 |           C     S     10 | DIFFERS
+53 |          B     R     10 |           C     S     10 | same
+```
+
+A ring setting does not move during a message; a wheel does. So `(start1,
+ring1)` is only a coordinate — what the cipher uses is the running alignment
+`b_i`, and the same `b_i` can be written in more than one coordinate system when
+the wheel arrives on a different schedule. The two machines part company only at
+the characters where one has stepped and the other has not yet caught up (i=26,
+52), resynchronising immediately after. Two clocks, one set a minute fast and
+started a minute late: they agree all day bar the minute one has ticked and the
+other has not.
+
 The `+1` on the offset exactly cancels the `−1` on the step count, `o2` is
 identical, and no double step fires so `a_i` matches — the coarse candidate
 decodes **58 of 60 characters correctly**. That is why it won the coarse pass.
 The offset shift is not damage; it is the compensation that made the
 near-solution readable.
+
+Note also that the truth's key offset is 7 while `b_1` is already 8: stepping
+precedes the first character, and the truth's `start2` **is** the right wheel's
+notch, so the middle wheel steps immediately. The key offset is an alignment the
+machine never actually uses — which is why a key offset of 8 is not "wrong"
+operationally. Both keys put the wheel at alignment 8 for character 1.
 
 At the true `ring2` the schedule is the true one again, so the correct offset
 there is 7. No candidate that preserves the coarse offset of 8 can reach it, at
