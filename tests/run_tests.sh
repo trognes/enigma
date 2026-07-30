@@ -1101,6 +1101,24 @@ rs_diag=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "A.." -g
 check "--ring-stride: analysed count matches keys scored (collapse active)" \
   "$(printf '%s' "$rs_diag" | awk '{print ($2 == $6)}')" "1"
 
+# The refinement bands the middle wheel by OFFSET (start1 - ring1), not by raw ring1.
+# Under §7.12 the reported ring1/start1 are class representatives, so raw ring1 wanders
+# while the offset barely moves -- a first attempt banded raw ring1 and lost keys because
+# of it. These two authentic-Wehrmacht keys are the measured counterexamples: their winning
+# ring1 sits 5 and 6 away from the coarse pass's while the offset is 0 and 1 away, so a
+# raw-ring1 band of any plausible width drops them and an offset band keeps them. Both
+# verified to FAIL against a raw-ring1-banded build and pass here, so they guard the axis
+# choice rather than restate it.
+for key in "B 134 ASR AQD" "B 542 AGD ARA"; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $key
+  ob_ct=$(run "$rs_pb_pt" -i -u "$1" -w "$2" -r "$3" -g "$4" -s "$rs_pb_board")
+  check "crack: --ring-stride 2 keeps an off-centre middle ring ($1 $2 $3 $4)" \
+    "$(run "$ob_ct" -f -l wehrmacht -u "$1" -w "$2" -r "A.." -g "A.." \
+          -s "$rs_pb_board" --ring-stride 2 -T 1)" \
+    "$rs_pb_pt"
+done
+
 # Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)

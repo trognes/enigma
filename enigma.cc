@@ -82,6 +82,13 @@ static const char * notch_string[] =
 static const int maxlen = 1024;   /* maximum ciphertext length (letters) */
 static const int asize = 26;
 static const int wheels = 3;
+
+/* How far the --ring-stride refinement's middle-wheel OFFSET can sit from the coarse
+   winner's. Not a tuning knob: 2 is the exhaustively established bound on how far a
+   ring2/start2 shift can move the middle wheel's step schedule (PERFORMANCE.md §7.11) --
+   1 from the ordinary time shift, plus 1 when double stepping straddles the middle
+   wheel's own notch. Raising it only wastes work; lowering it loses keys. */
+static const int mid_ring_window = 2;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 
@@ -4297,6 +4304,55 @@ void bruteforce(char * result)
           int fixed_ring0 = m.ringstellung[0];
           int fixed_start0 = m.grundstellung[0];
 
+          /* MIDDLE-WHEEL CANDIDATES, derived from the stepping instead of enumerated.
+             Shifting ring2 and start2 together leaves the right wheel's substitution
+             untouched -- only (start2 - ring2) mod 26 enters it -- and moves nothing but
+             the notch TIMING, so the middle wheel's schedule is time-shifted rather than
+             lengthened and its position can run only a bounded distance from the coarse
+             winner's. That bound is 2, by ENUMERATION not sampling: simulating the real
+             schedule (double step included) over every rotor pair x 26 start1 x 26 start2
+             x every shift 1..13 at L=600 gives max divergence 2, never 3. One step is the
+             ordinary time shift; the second is double stepping, when the two schedules
+             straddle the middle wheel's own notch. Two-notch right rotors change how OFTEN
+             that happens, not how far it reaches (worst case is rotor II, single-notch).
+
+             The band is on the OFFSET (start1 - ring1) mod 26, which is the identifiable
+             quantity -- NOT on ring1. Under §7.12 the reported ring1/start1 are class
+             representatives, so raw ring1 wanders freely while the offset barely moves: in
+             two measured misses the winning ring1 sat 5 and 6 away from the coarse one
+             while the offset was 0 and 1 away. Banding raw ring1 therefore clips the wrong
+             axis and silently loses keys (measured: 2 in 120), which is exactly what a
+             first attempt here did. Because ring1 = start1 - offset, the band is a DIAGONAL
+             in (ring1, start1) space, so it is enumerated as explicit pinned pairs rather
+             than expressed as a range -- search_range holds rectangles only. */
+          int coarse_off1 = ((m.grundstellung[1] - m.ringstellung[1]) % asize + asize)
+                            % asize;
+          static const int max_pairs = asize * asize;
+          int pair_r1[max_pairs], pair_g1[max_pairs];
+          int npairs = 0;
+          if ((rc[1] == asize) && (gc[1] == asize))
+            {
+              for (int s1 = 0; s1 < asize; s1++)
+                for (int d = -mid_ring_window; d <= mid_ring_window; d++)
+                  {
+                    int o = ((coarse_off1 + d) % asize + asize) % asize;
+                    pair_g1[npairs] = s1;
+                    pair_r1[npairs] = ((s1 - o) % asize + asize) % asize;
+                    npairs++;
+                  }
+            }
+          else
+            {
+              /* caller pinned ring1 and/or start1: no band, search what they asked for */
+              for (int v = range.r_min[1]; v <= range.r_max[1]; v++)
+                for (int s1 = range.g_min[1]; s1 <= range.g_max[1]; s1++)
+                  {
+                    pair_r1[npairs] = v;
+                    pair_g1[npairs] = s1;
+                    npairs++;
+                  }
+            }
+
           /* Every ring2 except the coarse winner. The winner needs no retest: the
              coarse pass already scored that exact ring2, and phase 2 pins ring0/start0
              to the winner's own values while opening ring1/start1/start2 to the same
@@ -4329,18 +4385,16 @@ void bruteforce(char * result)
           std::vector<wheel_task> rtasks(1, tasks[cur_wo]);
           search_range rrange;
           rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
-          rrange.r_min[1] = range.r_min[1];
-          rrange.r_max[1] = range.r_max[1];
+          rrange.r_min[1] = rrange.r_max[1] = pair_r1[0];  /* re-pinned per sub-search */
           rrange.r_min[2] = 0;                /* bounds unused: r2_vals below decodes */
           rrange.r_max[2] = asize - 1;
           set_ring2(rrange, mask2);
           rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
-          rrange.g_min[1] = range.g_min[1];
-          rrange.g_max[1] = range.g_max[1];
+          rrange.g_min[1] = rrange.g_max[1] = pair_g1[0];  /* re-pinned per sub-search */
           rrange.g_min[2] = 0;
           rrange.g_max[2] = 25;
-          int rrc[wheels] = { 1, range.r_max[1] - range.r_min[1] + 1, rrange.r2_n };
-          int rgc[wheels] = { 1, range.g_max[1] - range.g_min[1] + 1, 26 };
+          int rrc[wheels] = { 1, 1, rrange.r2_n };   /* ring1/start1 pinned per pair */
+          int rgc[wheels] = { 1, 1, 26 };
           size_t rrsize = static_cast<size_t>(rrc[0]) * rrc[1] * rrc[2];
           size_t rgsize = static_cast<size_t>(rgc[0]) * rgc[1] * rgc[2];
           size_t rwork = rrsize * rgsize * restarts_par;
@@ -4353,17 +4407,24 @@ void bruteforce(char * result)
              look ~20% more expensive than it is. Mirrors build_key_space()'s own
              accounting; the row is indexed by the task's RAW wheel numbers, since that is
              how the mask was built (see the wheel_task note in CLAUDE.md). */
-          extra_keys_analysed = rrsize * rgsize;
+          /* Keys the refinement actually SCORES, summed over the pinned pairs. The §7.12
+             collapse applies inside the refinement too (search_worker consults the same
+             g_mid_rep_mask), and with start1 pinned per sub-search a pair contributes only
+             the start2 values for which THAT start1 is the class representative -- so test
+             the mask bit for this start1 rather than taking the row's popcount. */
+          extra_keys_analysed = 0;
           if (g_mid_rep_mask != nullptr)
             {
               const uint32_t * mrow = g_mid_rep_mask
                 + (static_cast<size_t>(rtasks[0].w[1]) * rotor_count
                    + rtasks[0].w[2]) * asize;
-              size_t reps = 0;
-              for (int s2 = 0; s2 < asize; s2++)
-                reps += static_cast<size_t>(__builtin_popcount(mrow[s2]));
-              extra_keys_analysed = rrsize * static_cast<size_t>(rgc[0]) * reps;
+              for (int i = 0; i < npairs; i++)
+                for (int s2 = 0; s2 < asize; s2++)
+                  if ((mrow[s2] >> pair_g1[i]) & 1u)
+                    extra_keys_analysed += static_cast<size_t>(rrc[2]);
             }
+          else
+            extra_keys_analysed = rrsize * rgsize * static_cast<size_t>(npairs);
 
           best_result rbest;
           /* Carry the display high-water mark into the refinement. Its best_result is a
@@ -4388,7 +4449,6 @@ void bruteforce(char * result)
              no workers are running at this point, and it is restored below. */
           best_result * save_progress = g_progress;
           g_progress = &rbest;
-          std::atomic<size_t> rnext_key{0};
           int rnthreads = opt_threads;
           if (rwork < static_cast<size_t>(rnthreads))
             rnthreads = static_cast<int>(rwork);
@@ -4397,9 +4457,37 @@ void bruteforce(char * result)
           size_t rchunk = rwork / (static_cast<size_t>(rnthreads) * 16);
           if (rchunk < 1)
             rchunk = 1;
-          run_parallel(rnthreads, [&](int t)
-            { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
-                            rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+          /* One sub-search per (ring1, start1) pair in the offset band, sharing a single
+             rbest. Everything each pins comes from the snapshots above, never re-read from
+             m: on the plain-scan path search_worker leaves m's ring/start in a stale
+             stepped state (the documented lazy restore), which is how an earlier
+             multi-search version here silently corrupted its own second pass. */
+          int won_r1 = pair_r1[0], won_g1 = pair_g1[0];
+          double prev_score = rbest.score;
+          for (int i = 0; i < npairs; i++)
+            {
+              rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
+              rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
+              rrange.r_min[1] = rrange.r_max[1] = pair_r1[i];
+              rrange.g_min[1] = rrange.g_max[1] = pair_g1[i];
+              std::atomic<size_t> rnext_key{0};
+              run_parallel(rnthreads, [&](int t)
+                { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
+                                rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+              /* rbest.idx is relative to whichever sub-search produced it, so remember the
+                 pair pinned when the score last improved; the reconstruction below re-pins
+                 rrange to it. */
+              if (rbest.found && (rbest.score > prev_score))
+                {
+                  prev_score = rbest.score;
+                  won_r1 = pair_r1[i];
+                  won_g1 = pair_g1[i];
+                }
+            }
+          rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
+          rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
+          rrange.r_min[1] = rrange.r_max[1] = won_r1;
+          rrange.g_min[1] = rrange.g_max[1] = won_g1;
 
           g_progress = save_progress;
           /* Carry the refinement's display high-water mark back, so the merge echo below
