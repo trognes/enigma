@@ -498,7 +498,7 @@ Re-measured on **authentic telegraphic plaintext**, greedy wins at every length 
 recovered), 10-plug boards, matched at 200k `score_iter`, both arms at their shipped
 recipes *and* both given `--polish` (it is not blocked with `-A`). Plaintext is pooled
 from the 69 authentic decrypts in `eval/` (~6,470 letters) and excerpted at random —
-`make crackquality` samples *prose*, which is the wrong substrate for a register.
+`make crackquality` samples *prose*, which is the wrong kind of text for these tables.
 300 paired trials per length per seed family, two independent families, **3000 paired
 trials**; per-trial values retained so the paired difference carries a CI.
 
@@ -557,7 +557,7 @@ L50 −5.7→−3.6, L60 −8.5→−6.6, L70 −8.4→−7.8, L80 −14.2→−
 was the missing pre-pass; the remaining ~8pp is the search itself. Greedy still wins
 every length in L50–90.
 
-**Prose control — ❌ DO NOT PROMOTE TO DEFAULT. The lever is register-dependent.**
+**Prose control — ❌ DO NOT PROMOTE TO DEFAULT. The lever depends on the writing style.**
 The wehrmacht win alone was not enough to ship it: the IC pre-pass it replaces was
 tuned on prose, so prose is where a regression would appear. Re-run on the corpora
 `tests/crack_quality.py` samples (L50/70/90, 300 paired trials × 2 families each):
@@ -588,7 +588,7 @@ excerpts, so the paired comparison holds, but the prose CIs are optimistic relat
 the wehrmacht ones. English prose at L90 is also near ceiling (93.1%), which compresses
 any effect there.
 
-**Tuning was a no-op — both shipped defaults are already right for this register.**
+**Tuning was a no-op — both shipped defaults are already right for this writing style.**
 A per-arm sweep (stage 1) found greedy's `m4a10`/kick-10 in the top group and SA's
 best split reproducing the shipped `-A 12000 -R 12` (`A=11439 R=12`). Two negative
 results worth recording: greedy's top three configs **reorder between seed families**
@@ -1554,7 +1554,7 @@ because the plugboard *is* a letter permutation: any identity-sensitive unigram
 objective can be driven by choosing the permutation rather than by finding the truth,
 which is exactly how χ²-monogram collapsed to 12.5% tier-1 recall against IC's 68.8%
 (archived §9 item 2). IC is the one unigram signal the board cannot manufacture. It is
-also language-independent, which is why the result does not inherit a register bias.
+also language-independent, which is why the result is not biased toward one writing style.
 
 **Measured — the largest short-message scoring gain in this codebase.** Paired within
 instance, 300 trials per length per family, two seed families, both arms calibrated to
@@ -1566,7 +1566,7 @@ instance, 300 trials per length per family, two seed families, both arms calibra
 | english prose | **+3.0 pp** [+1.7, +4.4] | 1800 |
 | german prose | **+3.1 pp** [+1.9, +4.3] | 1800 |
 
-**The first scoring change here that is not register-dependent** — contrast the mono
+**The first scoring change here that does not depend on the writing style** — contrast the mono
 pre-pass (+2.2pp telegraphic / −2.2pp German prose, §6.10) and the SA staged pre-pass
 (+2.3pp / −2.6pp, §3.11). For scale, `-a` itself was +1–2pp.
 
@@ -1670,7 +1670,7 @@ Appendix-C source tables live in `eval/` beside the generator.
 (`eval/eval_telegraphic.py`; rotor key fixed, plugboard hidden and
 hill-climbed): **+20.9 pp mean %-correct** on real 1941 Wehrmacht traffic
 (wins 36 / loses 12 of 69), biggest in the 70–119-letter band. The mirror
-control (`eval/eval_prose_inverse.py`) confirms it is a *register*, not a
+control (`eval/eval_prose_inverse.py`) confirms it is a *writing style*, not a
 general-German upgrade: the same tables lose **−10.2 pp** on ordinary prose
 German, so `-l german` remains correct for prose and for the `make
 crackquality` benchmark — `wehrmacht` is for real Wehrmacht/telegraphic traffic
@@ -1907,7 +1907,7 @@ within noise (SE ~3–5pp), so the *trend* (crossover, q10→~100%) is the robus
 any single cell. The shipped low-R default is unchanged.
 
 **Follow-up — the same question under the SHIPPED regime (weighted target, R≈85): the
-answer is register-dependent, and `m4a10` is not universally right — ✅ MEASURED.**
+answer depends on the writing style, and `m4a10` is not universally right — ✅ MEASURED.**
 Everything above used a **quad** target at **R=2560**. The shipped recommendation is
 `--score m4a10`: a **weighted** target at R≈40–90. Re-run as a paired greedy-vs-greedy
 A/B in exactly that regime (`STAGE=3` in `eval/eval_sa_vs_greedy.py`; L50/70/90, 300
@@ -1921,7 +1921,7 @@ paired trials × 2 seed families per corpus, both arms calibrated to the same 20
 | wehrmacht | **−2.2 pp [−3.9, −0.5]** | 1800 | **mono better** |
 
 So the shipped `m4a10` is **right for telegraphic traffic, neutral on English prose, and
-measurably worse than `i4a10` on German prose** — the same register-dependence seen in the
+measurably worse than `i4a10` on German prose** — the same dependence on writing style seen in the
 SA pre-pass probe (§3.11) and in the scoring tables themselves (§6.6: +20.9pp real traffic
 / −10.2pp prose). It is *not* a universal recommendation, and the README presents it as
 one.
@@ -2269,7 +2269,7 @@ only, not a hot-path change). The value of the fix is **correctness and future
 robustness**, not a measured recovery win: the table is now a well-formed distribution
 (no single quadgrams silently tied at an arbitrary ceiling, no reliance on
 undefined/implementation-defined parsing behaviour), which matters for any future
-retuning of `A`/`B`/`W_MAX` or a similarly-constructed table for another register.
+retuning of `A`/`B`/`W_MAX` or a similarly-constructed table for another writing style.
 
 Reproduce: `python3 eval/build_telegraphic_ngrams.py` (regenerates
 `ngrams/wehrmacht_*.txt`); `R=100 T=4 python3 eval/eval_telegraphic.py` for the
@@ -3140,12 +3140,12 @@ not the pre-existing scoring floor): K=2 → 14% / 11%; K=3 → **21% at both le
    K=2's and is flat at 21% across both lengths, for a saving of only 11 vs 15
    candidates. This extends §7.11's existing "K≥5 not recommended" verdict *downward*:
    K=2 remains the only value with any real backing.
-2. **Even K=2 is not free on this register**, contrary to the "100% recoverable"
+2. **Even K=2 is not free on this kind of text**, contrary to the "100% recoverable"
    headline above — it costs ~10pp of exact recovery. The two measurements do not
    contradict each other; they measure different things. Landing *near* the true ring2
    (the proximity property) does not imply the refinement then *recovers* it, because
    the refinement re-opens ring1/start1 and can be outscored there by a decoy — and
-   short telegraphic German is exactly the low-information register where decoys win
+   short telegraphic German is exactly the low-information writing style where decoys win
    (§6.6, §3.11).
 
 #### Follow-up: the refinement is ~26× cheaper per ring2 value, so refine ALL of them — ✅ SHIPPED
@@ -3756,7 +3756,7 @@ at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in;
 cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
 Rejected (with reason): **mono pre-pass for `-A`** (`ENIGMA_SA_STAGES`, §3.11 — built
 and measured on both substrates: +2.3pp on telegraphic but **−2.6pp on English prose**,
-register-dependent, and it improves the *losing* arm without making SA beat greedy at
+dependent on the writing style, and it improves the *losing* arm without making SA beat greedy at
 any length; kept as an off-by-default probe, no CLI flag);
 **static (fixed-across-restarts) informed move order** (greedy
 *and* diversity-collapsing — §7.2); **ciphertext/plaintext-influence move ordering**

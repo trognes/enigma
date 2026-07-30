@@ -10,11 +10,11 @@
 #            interval on the paired difference.
 #
 # Why a separate harness from tests/crack_quality.py: that one samples PROSE
-# corpora, and `-l wehrmacht` is a register, not a language -- it only makes
+# corpora, and `-l wehrmacht` is a writing style, not a separate language -- it only makes
 # sense on telegraphic plaintext. Here the plaintext is pooled from the 69
 # authentic decrypts in eval/, excerpted at random. The ciphertext is
 # re-enciphered under a random 10-plug board (the authentic ciphertext is
-# given up deliberately: the register lives in the plaintext, and only 25
+# given up deliberately: the writing style lives in the plaintext, and only 25
 # authentic messages are shorter than 70 letters -- far too few to resolve a
 # few-point difference).
 #

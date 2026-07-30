@@ -892,7 +892,7 @@ done
 
 # The 'wehrmacht' scoring language (telegraphic military German -- ngrams/wehrmacht_*.txt,
 # generated from the published Appendix-C statistics). Check its four tables load and that
-# it recovers a plugboard on telegraphic text, the register it is built for.
+# it recovers a plugboard on telegraphic text, the writing style it is built for.
 pt_wehrmacht="ANROEMEINSBERTAXWIRTSQAFTLIQEUNTERSTELLUNGUNTERROEMXZEHNXARMKORPSDAUERTNURXZWOXTAGEXSTUERZBEQERX"
 w_ct=$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
 # Capped at the true 2 pairs: uncapped, the climb adds a spurious third plug on this text
