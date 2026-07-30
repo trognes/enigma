@@ -3285,6 +3285,60 @@ board the finisher converges immediately, so a corrupted build is indistinguisha
 fixed one. The shipped test uses the reproducer above, pinned to 338 keys, and all three of
 its checks fail pre-fix.
 
+#### Follow-up: the middle wheel's candidates are derivable — ✅ SHIPPED
+
+The refinement re-searches ring1 × start1 × start2 per candidate ring2, and with ring1
+wildcarded that 26× is the dominant term. It is avoidable, because the stepping is
+deterministic and can be *computed* rather than searched.
+
+Shifting ring2 and start2 together leaves the right wheel's substitution identical — only
+`(start2 − ring2) mod 26` enters it — and moves nothing but the notch **timing**. The middle
+wheel's step schedule is therefore *time-shifted*, not lengthened, so its position can run
+only a bounded distance from the coarse winner's. **That bound is 2**, by enumeration rather
+than sampling: simulating the real schedule (double step included) over every rotor pair ×
+26 start1 × 26 start2 × every shift 1–13 at L=600 — 105 456 combinations per shift — the
+divergence is never 0 and never 3, always at most 2. One step is the ordinary time shift;
+the second comes from **double stepping**, when the two schedules straddle the middle wheel's
+own notch. Two-notch right rotors (VI–VIII) change how *often* the transient occurs, not how
+far it reaches: the worst case is rotor **II**, a single-notch wheel.
+
+Counting the distinct trajectory differences per shift (exhaustive, L=150, 105 456
+combinations) shows how few candidates that leaves:
+
+| shift | 2 candidates | 3 candidates | mean | vs 26 |
+|---:|---:|---:|---:|---:|
+| 1 | 98.2% | 1.8% | 2.02 | 12.9× |
+| 2 | 66.3% | 33.7% | 2.34 | 11.1× |
+
+**The band must be on the OFFSET, not on raw ring1 — this is the load-bearing detail.**
+Under §7.12 the reported ring1/start1 are class representatives, so raw ring1 moves freely
+while the offset `(start1 − ring1) mod 26` barely does. A first implementation banded raw
+ring1 and **lost 2 keys in 120**; inspecting the two failures showed the winning ring1 sat
+5 and 6 away from the coarse one while the offset was 0 and 1 away — i.e. both were *inside*
+the intended window all along, and the clipping was on an axis that carries no meaning.
+Widening ±2 → ±4 changed nothing, which looked like "the idea is unsound" and was actually
+"you are clipping the wrong axis". Because `ring1 = start1 − offset`, the band is a
+**diagonal** in (ring1, start1) space, so it ships as explicit pinned pairs rather than a
+range — `search_range` holds rectangles only, and growing it is measurably bad for the hot
+path (§7.11's `int[26]` cost ~5% on `search`).
+
+**Verified by equivalence, not by recovery rate**, which is the right standard for a claim of
+exactness — a middle setting outside the band cannot reproduce any decode the candidate ring2
+can produce, so the two builds must agree on every input including the ones where both fail:
+
+| L | K | seed | identical | recovery (band vs all-26) |
+|---:|---:|---:|---:|---:|
+| 80 | 2 | 0 | 120/120 | 94 vs 94 |
+| 60 | 2 | 1 | 90/90 | 65 vs 65 |
+| 80 | 3 | 7 | 90/90 | 76 vs 76 |
+| 110 | 5 | 11 | 90/90 | 85 vs 85 |
+
+**It converts the flag's remaining net-loss case into a win.** Keys analysed on
+`-r A.. -g A..` at `K=2`: 110 864 unstrided, 162 032 with the full enumeration (a **loss**),
+**75 932** with the band — 1.46× better than not striding. On `-r A.. -g ...` the saving goes
+1.86× → **1.97×**. The non-fatal warning remains for the one case the band cannot rescue:
+`ring1` pinned by the caller, where there is no band to apply.
+
 **What this measurement does NOT settle: the matched-compute question.** It compares at
 *fixed work per candidate* (a plain scan, `-s`, no restarts), so it answers "does the
 stride lose accuracy?" (yes) but not "is the saved compute better spent elsewhere?".

@@ -784,22 +784,37 @@ coarse pass: 26× on a single-wheel-order key with start0 open, ~26 000× with t
 wildcarded. §7.11's original `26/K + K` accounting priced refinement values at
 coarse-pass cost and so concluded "≈2.5× at best"; at the true price the extra is a
 **constant** (25 values on one task, independent of `K`) and the saving approaches `K`×.
-**All 25, unconditionally — no window, no budget, no dependence on `K`.** The extra is
-always `25 × rc[1] × gc[1] × 26` keys, so the same command always does the same work. An
-earlier version grew the window under a "25% of the coarse pass" budget, on the theory
-that a keyspace narrow enough (single task **and** start0 pinned) would see the refinement
-outcost the coarse pass. That was a *ratio* masquerading as a cost: in the corner it
-guarded, the entire run is 988 keys against 676 unstrided — 58 ms. It was removed, because
-a budget makes the same command do different work depending on an unrelated part of the
-keyspace, silently and with no way to adjust it, and the thing it bought was never worth
-that. It is not free everywhere, and there is one case where the flag is a **net loss**: the
-refinement is cheaper than a coarse ring2 value only by `tasks.size() × rc[0] × gc[0]`, so
-when that factor is 1 — a *single* wheel order **and** start0 pinned — the 25 values
-outweigh the `26/K` the coarse pass saved. `-r A.. -g A..` at `K=2` scores 162 032 keys
-against 110 864 unstrided, i.e. **1.46× worse**. A non-fatal warning fires exactly there
-(the tool says the refinement outweighs the coarse pass); the width stays fixed at all 25
-either way, so the same command always does the same work. With start0 open — the
-documented default `-r AA.` — the saving is the full 1.86×. Requires both `-r`
+**All 25 ring2 values, unconditionally — no window, no budget, no dependence on `K`.** An
+earlier version grew the ring2 window under a "25% of the coarse pass" budget; that was a
+*ratio* masquerading as a cost and it made the same command do different work depending on
+an unrelated part of the keyspace, so it was removed.
+
+**The MIDDLE wheel is banded, and the band is derived rather than enumerated.** Shifting
+ring2 and start2 together leaves the right wheel's substitution untouched (only
+`(start2 − ring2) mod 26` enters it) and moves nothing but the notch *timing*, so the middle
+wheel's step schedule is time-shifted rather than lengthened. Its position can therefore run
+at most **2** steps from the coarse winner's — established by *enumeration*, not sampling:
+simulating the real schedule (double step included) over every rotor pair × 26 start1 × 26
+start2 × every shift 1–13 at L=600 gives max divergence 2, never 3. One step is the ordinary
+time shift; the second is **double stepping**, when the two schedules straddle the middle
+wheel's own notch. Two-notch right rotors (VI–VIII) change how *often* that happens, not how
+far it reaches — the worst case is rotor II, single-notch.
+
+The band is on the **offset** `(start1 − ring1) mod 26`, **not on raw `ring1`** — under
+§7.12 the reported ring1/start1 are class representatives, so raw ring1 wanders freely while
+the offset barely moves (measured: two misses where the winning ring1 sat 5 and 6 away from
+the coarse one while the offset was 0 and 1 away). Banding raw ring1 clips a meaningless axis
+and silently loses keys; a first attempt did exactly that, losing 2 in 120. Since
+`ring1 = start1 − offset` the band is a **diagonal** in (ring1, start1) space, so it is
+enumerated as explicit pinned pairs — `search_range` holds rectangles only, and growing it is
+measurably bad for the hot path. Verified by **equivalence**: 390 paired trials over
+L=60/80/110, K=2/3/5, four seeds, byte-identical to searching all 26 offsets.
+
+This is what makes the flag pay off where it used to lose. On `-r A.. -g A..` at `K=2`:
+110 864 keys unstrided, 162 032 with the old full enumeration (a net **loss**), 75 932 with
+the band — a **1.46× win**. On `-r A.. -g ...` the saving goes 1.86× → **1.97×**. A non-fatal
+warning still fires in the one case the band cannot rescue: `ring1` pinned by the caller, so
+there is no band to apply. Requires both `-r`
 and `-g` to wildcard the rightmost wheel's position (else every ring2 value is distinct
 and necessary, same precondition as the leftmost wheel's exact collapse above); rejected
 together with `-F`/`--exhaust` (the refinement's `key_to_machine(best.idx / restarts_par,

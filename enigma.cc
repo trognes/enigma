@@ -4069,7 +4069,12 @@ void bruteforce(char * result)
      Compared on index spaces, which the collapse scales alike on both sides. */
   if (opt_ring_stride > 1)
     {
-      size_t refine_keys = static_cast<size_t>(asize - 1) * rc[1] * gc[1] * asize;
+      /* The refinement's ring1 is banded to the derived offset window (mid_ring_window),
+         not the full 26, so price it that way -- the pre-band formula over-warned by 26/5
+         and would now fire on keyspaces where the stride comfortably pays off. */
+      size_t band = (rc[1] == asize)
+        ? static_cast<size_t>(2 * mid_ring_window + 1) : static_cast<size_t>(rc[1]);
+      size_t refine_keys = static_cast<size_t>(asize - 1) * band * gc[1] * asize;
       if (refine_keys > total_keys)
         fprintf(stderr, "Warning: --ring-stride %d is not paying for itself here -- the "
                 "refinement (%zu keys) outweighs the coarse pass (%zu); open -g's first "
