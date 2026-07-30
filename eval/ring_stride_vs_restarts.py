@@ -176,12 +176,14 @@ def main():
         rng = random.Random(SEED * 1000 + L * 100 + plugs)
         nb = ns = bonly = sonly = 0
         pb = ps = tb = ts = 0.0
+        diffs = []
         for i in range(TRIALS):
             res, pct, secs = trial(L, plugs, rbase, rstride, keyspace, K, rng)
             nb += res["base"]
             ns += res["stride"]
             pb += pct["base"]
             ps += pct["stride"]
+            diffs.append(pct["stride"] - pct["base"])
             bonly += (res["base"] and not res["stride"])
             sonly += (res["stride"] and not res["base"])
             tb += secs["base"]
@@ -197,6 +199,16 @@ def main():
               % (L, K, keyspace, rbase, rstride, TRIALS,
                  100 * pb / TRIALS, 100 * ps / TRIALS, nb, ns,
                  bonly, sonly, tb, ts))
+        # Paired mean difference with a 95% CI. Without this a reader cannot tell a
+        # real effect from scatter: per-trial %-correct is bimodal (junk ~5%, solved
+        # ~100%), so its spread is enormous and a several-pp gap in the means can
+        # easily be nothing. Report the interval and let it say so.
+        d = 100 * sum(diffs) / TRIALS
+        var = sum((100 * x - d) ** 2 for x in diffs) / (TRIALS - 1)
+        se = (var / TRIALS) ** 0.5
+        print("      paired stride-base %+.1f pp, 95%% CI [%+.1f, %+.1f]  %s"
+              % (d, d - 1.96 * se, d + 1.96 * se,
+                 "no detectable difference" if abs(d) < 1.96 * se else "REAL"))
     print("\nbase_s/str_s are TOTAL wall seconds per arm -- they must be close for the")
     print("cell to be matched-compute; a large gap invalidates that cell.")
     print("JUDGE ON base_pc/str_pc (mean %-of-letters-correct). At these lengths the exact")
