@@ -3437,15 +3437,45 @@ refinement ring2 value, and the full 25 as a share of the whole run:
 | `-r AA. -g ...` (ring1 pinned) | 676 | 16 900 | 9.7% | 7.3% |
 | `-r A.. -g A..` (single task, start0 pinned) | 1005 | 25 125 | 34.8% | 26.5% |
 
+**The K-dependent rule, measured as a column rather than inferred.** `⌈K/2⌉+N` is the
+shape the minima follow, so it was run as its own paired column against the full sweep
+(`WINDOWS="f1 f2 f3 13"`, 60 paired trials per cell, L=60, `K=1` base 73%):
+
+| K | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| `f1` = ⌈K/2⌉+1 | 68% | 75% | 75% | 73% | 73% | 75% | 68% | 72% | 68% | 68% | 72% | 73% |
+| `f2` = ⌈K/2⌉+2 | 72% | 75% | 73% | 73% | 75% | 75% | 72% | 73% | **70%** | **68%** | 73% | 73% |
+| `f3` = ⌈K/2⌉+3 | 72% | 75% | 73% | 73% | 75% | 75% | 72% | 73% | 72% | 70% | 73% | 73% |
+| full sweep | 72% | 75% | 73% | 73% | 75% | 75% | 72% | 73% | 72% | 70% | 73% | 73% |
+
+`f1` loses in half the cells. **`f2` matches the full sweep in 10 of 12 strides and loses
+one trial each at K=10 and K=11** — 2 misses in 720, which alone is n=60 noise, except
+that it lands on exactly the two strides where the independent 300-trial geometry sweep
+puts `f2` at 99% and 98%. Two instruments agreeing on *which* cells are short is worth
+more than either cell's own significance. `f3` is indistinguishable from the full sweep
+in every cell on both instruments.
+
+The saving does not reward the extra care. Measured `Analysed` keys, `-r ... -g ...`:
+
+| K | 2 | 3 | 5 | 8 | 10 | 13 |
+|---|--:|--:|--:|--:|--:|--:|
+| `f2` saves | 1.07% | 1.37% | 1.79% | 2.30% | 2.55% | 2.37% |
+| `f3` saves | 0.95% | 1.21% | 1.55% | 1.94% | 2.09% | 1.69% |
+
+So the whole choice is worth ~1–2.5% of a run, and buying back `f2`'s two short cells
+with `f3` costs a fifth of that. **If a formula is ever wanted, `⌈K/2⌉+3` is the one the
+evidence supports** — `f2` is 2pp light at K=10–11, precisely where its saving peaks.
+
 **Verdict: keep the full sweep.** Two independent reasons, either sufficient.
 
 *It is not a fixed width.* "±3 is always enough" holds only over K≤5 — the strides worth
 using. The flag accepts K to 26, and measured on the real flag a `w=3` cap costs 20pp of
-exact recovery at K=10 and 40pp at K=13. A cap would therefore have to be **K-dependent**
-to be correct, which is a formula derived from one measurement standing where a constant
-now stands, re-importing the assumption ("the coarse winner lands near the truth") whose
-failure is the subject of two separate follow-ups above — for a saving computed below at
-~2%.
+exact recovery at K=10 and 40pp at K=13. A cap must therefore be **K-dependent**, and the
+best such rule measured (`⌈K/2⌉+3`) is a formula standing where a constant now stands,
+re-importing the assumption ("the coarse winner lands near the truth") whose failure is
+the subject of two separate follow-ups above, and bringing the 0/25 wrap arithmetic back
+with it — for the ~1–2% below. The margin for getting the constant wrong is thin: one
+step tighter (`⌈K/2⌉+2`) is already measurably short at K=10–11.
 
 *And the saving is not worth having.* The measurable gain from capping is 1.5–7% of a run
 in the shapes where the flag is recommended. The one shape where it would matter (34.8%)
