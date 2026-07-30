@@ -148,21 +148,21 @@ materially different regime, and read the evidence in `archived/` first.
 |---|---|
 | Tabu / visited sets | restarts already almost never revisit a basin |
 | Genetic algorithms | crossover material exists (~9/10) but is unselectable |
-| Cross-restart consensus / plug fixation | loses to a higher `-R`; no-op at high `-R` |
-| `max(greedy, SA)` portfolio | genuinely complementary, but the budget split cancels it |
+| Cross-restart consensus / plug fixation | beaten by simply raising `-R` |
+| `max(greedy, SA)` portfolio | complementary, but the split cancels it |
 | Truth-targeted kick, basin-repelling | need the same absent selection signal |
 | 3-opt / 3-plug re-pair | cost exceeds gain |
-| Don't-look bits | exact only for separable objectives; neutral to a small loss |
-| Static (fixed) informed move ordering | collapses restart diversity; per-restart `-J` avoids it |
+| Don't-look bits | exact only for separable objectives; here a wash |
+| Static (fixed) informed move ordering | collapses restart diversity |
 | Surrogate-ranked ascent | ~1.5× slower at ~50 chars; only wins at ≥150 |
 | Incremental quad delta-scoring | ~2× slower |
 | χ² as the scoring or `-F` model | gameable by the plugboard permutation |
-| Linear (Jelinek-Mercer) interpolation | loses; the log-linear form shipped as `-a` |
+| Linear (Jelinek-Mercer) interpolation | loses; log-linear shipped |
 | Back-off / graded-floor smoothing | neutral to harmful |
 | `-march=native`, SIMD gathers, GPU | the scorer is gather-latency-bound |
 | 5-grams, 4-bit scores | too sparse / too coarse |
 | Rotor-stepping reuse across starts | measured down |
-| Top-M coarse refinement (`--ring-stride`) | the coarse pass already picks the right wheels, 96/96 |
+| Top-M coarse refinement (`--ring-stride`) | wheels already right 96/96 |
 | Plugboard→score cache (`--score-tt`) | only ~7–13% cacheable; net loss |
 
 ## 5. Pitfalls
