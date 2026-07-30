@@ -968,11 +968,28 @@ done
 # (26 ring2 x 26^3 starts), kept small so this stays fast under the sanitizers too.
 rs_pt="THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGANDTHENRANAWAYINTOTHEDARKFORESTNEARTHERIVERWHERETHEWATERWASCOLD"
 rs_ct=$(run "$rs_pt" -i -u B -w 123 -r AAZ -g XKP)
-for K in 2 3 5; do
+# K=26 is the ceiling and the degenerate case: the coarse pass tests a SINGLE ring2
+# value and the refinement carries all 25 others, so it exercises the refinement path
+# with the least possible help from the coarse search. K=14 is the first stride past
+# the old ceiling of 13. Both are cheaper than the smaller strides, not dearer.
+for K in 2 3 5 14 26; do
   check "crack: --ring-stride $K recovers exact key" \
     "$(run "$rs_ct" -q -l english -u B -w 123 --ring-stride "$K" -T 1)" \
     "$rs_pt"
 done
+
+# The coarse set is {v < 26 : v = 0 mod K}, so it holds two values for every K in
+# 13..25 and the key count is FLAT across them -- K=14 is not cheaper than K=13, and
+# neither is dearer than K=5. A regression that made a large K enumerate more than it
+# should would show up here as a rising count.
+rs_keys() { printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "A.." -g "A.." \
+            --ring-stride "$1" -T 1 2>&1 >/dev/null \
+            | grep -oE 'Analysed [0-9]+' | awk '{print $2}'; }
+check "--ring-stride key count is flat over K=13..25" \
+  "$(test "$(rs_keys 13)" = "$(rs_keys 25)" && echo same)" "same"
+check "--ring-stride key count falls monotonically to the ceiling" \
+  "$(awk -v a="$(rs_keys 5)" -v b="$(rs_keys 13)" -v c="$(rs_keys 26)" \
+     'BEGIN{print (a > b && b > c) ? "yes" : "no"}')" "yes"
 
 # Regression: true ring2=Z with a K=2 coarse winner landing at the A(0) boundary needs
 # TWO things the initial implementation got wrong. (1) The refinement window must WRAP
@@ -1134,8 +1151,8 @@ done
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)
 check "--ring-stride 0 rejected" "$(printf '%s' "$rs_err" | grep -c 'Illegal ring stride')" "1"
-rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 14 2>&1 >/dev/null)
-check "--ring-stride 14 rejected" "$(printf '%s' "$rs_err" | grep -c 'Illegal ring stride')" "1"
+rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 27 2>&1 >/dev/null)
+check "--ring-stride 27 rejected" "$(printf '%s' "$rs_err" | grep -c 'Illegal ring stride')" "1"
 rs_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -u B -w 123 -r AAZ -g AAA --ring-stride 2 2>&1 >/dev/null)
 check "--ring-stride needs ring2/start2 wildcarded" \
   "$(printf '%s' "$rs_err" | grep -c 'ring-stride needs')" "1"

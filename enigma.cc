@@ -87,7 +87,10 @@ static const int wheels = 3;
    winner's. Not a tuning knob: 2 is the exhaustively established bound on how far a
    ring2/start2 shift can move the middle wheel's step schedule (archived/PERFORMANCE.md §7.11) --
    1 from the ordinary time shift, plus 1 when double stepping straddles the middle
-   wheel's own notch. Raising it only wastes work; lowering it loses keys. */
+   wheel's own notch. Raising it only wastes work; lowering it loses keys. §7.11's
+   enumeration covered shifts 1..13, the old --ring-stride ceiling; re-run over every
+   rotor pair x 26 start1 x 26 start2 x shifts 1..25 at L=600 when the ceiling rose to
+   26, the bound is still 2 (first hit at rotor I over I, shift 1). */
 static const int mid_ring_window = 2;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
@@ -244,13 +247,21 @@ static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force
    (build_key_space(), archived/PERFORMANCE.md §7.10), the rightmost wheel's own notch gates
    further stepping, so a ring+start shift is only an APPROXIMATION -- measured small
    and smoothly growing with the shift (archived/PERFORMANCE.md §7.11). K>1 tests only every
-   Kth ring value (0, K, 2K, ...) in the main search, then runs one small refinement
-   pass over the skipped neighbours around the best coarse hit (bruteforce(), after
-   the main search) to recover the exact key. Requires both -r and -g to wildcard the
-   rightmost wheel's position (else every value is a distinct, necessary key, exactly
-   like the leftmost-wheel collapse's precondition). K=2 is the only value backed by
-   solid measurement (100% recovery across 90 trials); K>=5 is available but not
-   recommended (archived/PERFORMANCE.md §7.11 measures a real 10-17% single-pass miss rate). */
+   Kth ring value (0, K, 2K, ...) in the main search, then runs one refinement pass over
+   EVERY skipped value (bruteforce(), after the main search) to recover the exact key.
+   Requires both -r and -g to wildcard the rightmost wheel's position (else every value
+   is a distinct, necessary key, exactly like the leftmost-wheel collapse's precondition).
+
+   Legal range is 1..26, but the cost curve FLATTENS AT 13 and the useful range is much
+   smaller. The coarse set is {v : v < 26, v = 0 mod K}, so it holds 2 values for every
+   K in 13..25 -- K=14 samples {0,14} and costs exactly what K=13's {0,13} costs, with
+   no compensating gain -- and 1 value only at K=26. Measured on the tool's bare-default
+   keyspace: 79092 keys at K=1, 42003 at K=3, 20709 flat across K=13..25, 17667 at K=26.
+   Accuracy tracks that: on authentic telegraphic German (L=60, 120 paired trials) K=3
+   and K=13 both match the unstrided baseline, while K=26's single coarse anchor loses
+   ~10pp of exact recovery. K=2/K=3 stay the recommendation; K=13 is the largest stride
+   that is still a uniform sampling; past it only K=26 changes anything, and it changes
+   accuracy more than cost. */
 static int opt_ring_stride;
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
@@ -4855,13 +4866,15 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--ring-stride K",
           "Sparse ring sampling for the rightmost wheel:");
   fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine every");
-  fprintf(out, "  %-24s %s\n", "", "skipped one around the best hit (needs -r and -g");
-  fprintf(out, "  %-24s %s\n", "", "to wildcard that wheel; no -F/--exhaust)");
-  fprintf(out, "  %-24s %s\n", "", "[1 = off]. K=2/K=3 analyse 1.9x/2.6x fewer keys");
-  fprintf(out, "  %-24s %s\n", "", "for ~0.5-2pp of exact recovery on telegraphic");
-  fprintf(out, "  %-24s %s\n", "", "German; K=3 is the better pick. K>=5 is not");
-  fprintf(out, "  %-24s %s\n", "", "recommended (2-8pp). Still an APPROXIMATION");
-  fprintf(out, "  %-24s %s\n", "", "(archived/PERFORMANCE.md 7.11)");
+  fprintf(out, "  %-24s %s\n", "", "skipped one (needs -r and -g to wildcard that");
+  fprintf(out, "  %-24s %s\n", "", "wheel; no -F/--exhaust) [1..26, 1 = off].");
+  fprintf(out, "  %-24s %s\n", "", "K=2/K=3 analyse 1.9x/2.6x fewer keys for ~0.5-2pp");
+  fprintf(out, "  %-24s %s\n", "", "of exact recovery on telegraphic German; K=3 is");
+  fprintf(out, "  %-24s %s\n", "", "the better pick. K>=5 is not recommended (2-8pp).");
+  fprintf(out, "  %-24s %s\n", "", "Cost is flat over K=13..25 (2 coarse values each),");
+  fprintf(out, "  %-24s %s\n", "", "so nothing above 13 pays until K=26, which is 15%");
+  fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
+  fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -5433,8 +5446,8 @@ int main(int argc, char * * argv)
      both -r and -g wildcard that wheel's position; otherwise every value tested is
      a distinct, necessary key and there is nothing to thin out (same precondition
      as the leftmost wheel's exact collapse in build_key_space()). */
-  if ((opt_ring_stride < 1) || (opt_ring_stride > 13))
-    fatal("Illegal ring stride (--ring-stride must be 1 to 13)");
+  if ((opt_ring_stride < 1) || (opt_ring_stride > asize))
+    fatal("Illegal ring stride (--ring-stride must be 1 to 26)");
   if ((opt_ring_stride > 1) &&
       ((opt_ringstellung[2] != '.') || (opt_grundstellung[2] != '.')))
     fatal("--ring-stride needs both -r and -g to wildcard the rightmost "
