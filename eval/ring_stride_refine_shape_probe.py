@@ -22,11 +22,14 @@ the NOTCH reads:
     ring1/start1 Q/D, coarse winner R/E -- the SAME offset, both absolutes +1),
     and pinning lost it.
 
-So this probe scores three candidate sets against the same coarse winner:
+So this probe scores five candidate sets against the same coarse winner, from the
+shipped one down to pinning every offset to the coarse solution:
 
     shipped      25 x 130 x 26 = 84 500
     lock-start2  25 x 130 x  1 =  3 250    (start2 co-varies with ring2)
     lock-both    25 x   5 x  1 =    125    (also pins absolute start1)
+    lock-off1    25 x  26 x  1 =    650    (middle OFFSET pinned, start1 open)
+    lock-all     25 x   1 x  1 =     25    (every offset pinned to the coarse one)
 
 "recovered" = the set's best-scoring candidate decodes to the true plaintext (or
 the coarse winner already did). Equivalence against the shipped set is the
@@ -55,6 +58,7 @@ from ring_stride_geometry_probe import (          # noqa: E402
     subst_array, positions, crypt, score_table, score, corpus_texts, num, selftest)
 
 MID_RING_WINDOW = 2         # enigma.cc's mid_ring_window
+SHAPES = ["shipped", "lock-start2", "lock-off1", "lock-both", "lock-all"]
 
 
 def decode_set(S, c, cand, ring0, start0):
@@ -81,24 +85,23 @@ def decode_set(S, c, cand, ring0, start0):
 
 
 def candidates(shape, coarse, skipped):
-    """Build one of the three candidate sets from the coarse winner
+    """Build one of the candidate sets from the coarse winner
     (ring1, start1, ring2, start2)."""
     cr1, cg1, cr2, cg2 = coarse
     off1 = (cg1 - cr1) % 26
     off2 = (cg2 - cr2) % 26
+    # how far the middle OFFSET may sit from the coarse winner's, and whether
+    # absolute start1 is searched or pinned to the winner's value
+    band = [0] if shape in ("lock-off1", "lock-all") else \
+        list(range(-MID_RING_WINDOW, MID_RING_WINDOW + 1))
+    g1s = [cg1] if shape in ("lock-both", "lock-all") else list(range(26))
     out = []
     for r2 in skipped:
         if shape == "shipped":
             g2s = range(26)
         else:
             g2s = [(r2 + off2) % 26]           # keep the coarse winner's offset2
-        if shape == "lock-both":
-            pairs = [((cg1 - (off1 + d)) % 26, cg1)
-                     for d in range(-MID_RING_WINDOW, MID_RING_WINDOW + 1)]
-        else:
-            pairs = [((g1 - (off1 + d)) % 26, g1)
-                     for g1 in range(26)
-                     for d in range(-MID_RING_WINDOW, MID_RING_WINDOW + 1)]
+        pairs = [((g1 - (off1 + d)) % 26, g1) for g1 in g1s for d in band]
         for g2 in g2s:
             for (r1, g1) in pairs:
                 out.append((r1, g1, r2, g2))
@@ -123,15 +126,16 @@ def main():
     K = args.k
 
     print("# K=%d trials=%d lang=%s  (shipped 25x130x26, lock-start2 25x130x1, "
-          "lock-both 25x5x1)" % (K, args.trials, args.lang))
-    print("\t".join(["len", "n", "coarse ok", "shipped", "lock-start2", "lock-both",
-                     "lost by lock-start2", "lost by lock-both"]))
+          "lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)"
+          % (K, args.trials, args.lang))
+    print("\t".join(["len", "n", "coarse ok"] + SHAPES
+                    + ["lost:" + s for s in SHAPES[1:]]))
 
     for L in lengths:
         pool = [t for t in texts if len(t) >= L]
-        got = {"shipped": 0, "lock-start2": 0, "lock-both": 0}
+        got = {s: 0 for s in SHAPES}
         coarse_ok = 0
-        lost = {"lock-start2": 0, "lock-both": 0}
+        lost = {s: 0 for s in SHAPES[1:]}
         for tr in range(args.trials):
             pt = pool[tr % len(pool)]
             off = rng.randrange(0, max(1, len(pt) - L + 1))
@@ -174,19 +178,18 @@ def main():
             if plaintext(coarse) == truth_pt:
                 coarse_ok += 1
             res = {}
-            for shape in ("shipped", "lock-start2", "lock-both"):
+            for shape in SHAPES:
                 key, _ = best_pt(shape)
                 res[shape] = plaintext(key) == truth_pt
                 got[shape] += res[shape]
-            for shape in ("lock-start2", "lock-both"):
+            for shape in SHAPES[1:]:
                 if res["shipped"] and not res[shape]:
                     lost[shape] += 1
         n = args.trials
         print("\t".join([str(L), str(n)]
                         + ["%d%%" % round(100 * coarse_ok / n)]
-                        + ["%d%%" % round(100 * got[s] / n)
-                           for s in ("shipped", "lock-start2", "lock-both")]
-                        + [str(lost["lock-start2"]), str(lost["lock-both"])]))
+                        + ["%d%%" % round(100 * got[s] / n) for s in SHAPES]
+                        + ["%d" % lost[s] for s in SHAPES[1:]]))
         sys.stdout.flush()
 
 

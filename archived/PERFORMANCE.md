@@ -3501,18 +3501,27 @@ weighted model, ring0/start0 pinned at truth, results in
 `eval/results-ring-stride-refine-shape.txt`) — "lost" counts trials the shipped set
 recovers and the cheaper set does not:
 
-| set | size | lost, K=2 | K=3 | K=5 | total |
-|---|--:|--:|--:|--:|--:|
-| shipped `25 · 130 · 26` | 84 500 | — | — | — | — |
-| lock-start2 `25 · 130 · 1` | **3 250** | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 600** |
-| lock-both `25 · 5 · 1` | 125 | 1 / 0 | 2 / 2 | 3 / 4 | 12 / 600 |
+| set | what it pins | size | lost, K=2 | K=3 | K=5 | total |
+|---|---|--:|--:|--:|--:|--:|
+| shipped `25 · 130 · 26` | — | 84 500 | — | — | — | — |
+| lock-start2 `25 · 130 · 1` | offset2 | **3 250** | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 600** |
+| lock-off1 `25 · 26 · 1` | + offset1 | 650 | 4 / 0 | 2 / 1 | 4 / 4 | 15 / 600 |
+| lock-both `25 · 5 · 1` | + start1 | 125 | 1 / 0 | 2 / 2 | 3 / 4 | 12 / 600 |
+| lock-all `25 · 1 · 1` | + both | 25 | 5 / 0 | 4 / 2 | 7 / 6 | 24 / 600 |
 
-`lock-start2` is **equivalence-clean over 600 trials** for a **26× cut**; `lock-both`
-loses ~2%, and the loss grows with K, exactly as the class-representative argument
-predicts. (`lock-both` is not uniformly worse — a smaller candidate set also dodges a few
-decoys, so its net rate is sometimes higher. That is luck, not a gain: the standard here
-is recovering everything the full set recovers, the same standard §7.11's band was held
-to.)
+`lock-start2` is **equivalence-clean over 600 trials** for a **26× cut**. Every set that
+touches the middle wheel loses 2–4%: pinning its **offset** to the coarse winner's costs
+15/600, which is the sharper finding — §7.11's enumeration established that a ±2 band is
+*sufficient*, and this says it is also **necessary**, so `mid_ring_window` is not padding.
+Pinning absolute start1 costs its own 12/600, and pinning both 24/600. (None of these is
+uniformly worse — a smaller candidate set also dodges a few decoys, so a pinned set's net
+rate is sometimes higher, and the losses are not monotone in set size. That is luck, not
+a gain: the standard here is recovering everything the full set recovers, the same
+standard the band itself was held to.)
+
+**So "the offsets must equal the coarse solution's" is true of the right wheel and false
+of the middle one** — which is exactly the asymmetry the shipped code already encodes,
+one pinned offset and one banded.
 
 **This retires the width question rather than settling it.** At `25 · 130 · 1` the
 refinement is ~0.08% of a run instead of ~2%, so no window cap — constant or K-dependent
