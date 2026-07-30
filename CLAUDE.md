@@ -276,12 +276,12 @@ are read from a **data directory** (filenames built as
   take **four** characters with the Greek wheel (`B`=Beta/`G`=Gamma) / ring /
   start first
 - `-r XYZ` / `-g XYZ` ring / start positions (letters or `.`)
-- `--ring-stride K` sparse ring sampling for the rightmost wheel (K=1..13,
+- `--ring-stride K` sparse ring sampling for the rightmost wheel (K=1..26,
   default 1 = off; needs both `-r` and `-g` to wildcard the rightmost wheel's
   position, else there is nothing to thin out; incompatible with
   `-F`/`--exhaust`, the same `best.idx`-encoding fragility `--polish` has). The
   coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then one refinement pass
-  re-checks **every** skipped ring2 around the best coarse hit (see "Sparse ring
+  re-checks **every** skipped ring2 (see "Sparse ring
   sampling for the rightmost wheel" below and `archived/PERFORMANCE.md` §7.11
   for the measurement and the implementation gotchas). **`K=2`/`K=3` are
   recommended when throughput matters; K≥5 is not.** Measured end-to-end on
@@ -298,6 +298,17 @@ are read from a **data directory** (filenames built as
   with a stride-specific miss rate (failed where K=1 succeeded) of 2% (K=2),
   2-4% (K=3) and 5-12% (K=5). So **K=3 is the best operating point** — 2.61× for
   ~1pp — and K=5's 2-8pp is not worth its 3.73×.
+
+  **Above 13 the cost curve is flat, so raising `K` there buys nothing.** The
+  coarse set is `{v < 26 : v ≡ 0 mod K}`, which holds **two** values for every
+  `K` in 13..25 (K=14 samples {0,14} and costs exactly what K=13's {0,13}
+  costs) and **one** only at K=26. Measured on the bare-default keyspace:
+  79 092 keys at K=1, 42 003 at K=3, **20 709 flat across K=13..25**, 17 667 at
+  K=26. Accuracy follows: at L=60 on authentic telegraphic German (120 paired
+  trials) K=3 and K=13 both match the unstrided baseline (70.0% / 71.7% vs
+  70.0%), while **K=26 drops to 60.0%** — its single coarse anchor is a much
+  worse starting point for the refinement. K≤13 is the whole useful range; 26 is
+  legal but pays 15% of cost for ~10pp of recovery.
 
   > ⚠️ **Every `--ring-stride` accuracy number predating the `--polish` guard
   > fix was contaminated and is roughly an order of magnitude too pessimistic.**
@@ -860,7 +871,7 @@ Full derivation, measurements and the shipped results: `archived/PERFORMANCE.md`
 Unlike wheel 0, the rightmost wheel (`walzenlage[2]`) has a real notch that
 gates further stepping, so a ring+start shift there is only an *approximation* —
 small and smoothly growing with the shift, not an unconditional equivalence
-(`archived/PERFORMANCE.md` §7.10's mismatch table). `--ring-stride K` (K=1..13,
+(`archived/PERFORMANCE.md` §7.10's mismatch table). `--ring-stride K` (K=1..26,
 default 1 = off) exploits this: the coarse search tests only ring2 ∈ {0, K, 2K,
 ...} (`build_key_space()` shrinks `rc[2]`; `search_worker()`/`key_to_machine()`
 scale the decoded index back up by `K`), then `bruteforce()` runs one small
@@ -890,7 +901,9 @@ notch *timing*, so the middle wheel's step schedule is time-shifted rather than
 lengthened. Its position can therefore run at most **2** steps from the coarse
 winner's — established by *enumeration*, not sampling: simulating the real
 schedule (double step included) over every rotor pair × 26 start1 × 26 start2 ×
-every shift 1–13 at L=600 gives max divergence 2, never 3. One step is the
+every shift 1–25 at L=600 gives max divergence 2, never 3 (the original run
+covered 1–13, the old `K` ceiling; it was re-run over the full range when the
+ceiling rose to 26 and the bound is unchanged). One step is the
 ordinary time shift; the second is **double stepping**, when the two schedules
 straddle the middle wheel's own notch. Two-notch right rotors (VI–VIII) change
 how *often* that happens, not how far it reaches — the worst case is rotor II,

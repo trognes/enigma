@@ -247,13 +247,16 @@ English tables.
   quality lever
 - **`--ring-stride K`** — Test only every `K`th ring position of the rightmost
   wheel, then refine every skipped position; needs both `-r` and `-g` to
-  wildcard that wheel, and rejects `-F`/`--exhaust` `[1 = off]`.
+  wildcard that wheel, and rejects `-F`/`--exhaust` `[1..26, 1 = off]`.
   **Worth using at `K=2` or `K=3`** when throughput matters: on authentic
   telegraphic German they analyse 1.9× and 2.6× fewer keys while costing only
   about half a percentage point to two percentage points of exact recovery.
   `K=3` is the better of the two. `K` of 5 or more costs considerably more
-  accuracy and is not recommended. The search is still an *approximation*, so a
-  run says so in its echoed settings
+  accuracy and is not recommended. Above 13 the cost stops falling — every `K`
+  from 13 to 25 samples two ring positions and analyses the same number of
+  keys — so only `K=26` changes anything, and it buys a further 15% for about
+  ten percentage points of exact recovery. The search is still an
+  *approximation*, so a run says so in its echoed settings
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters, try
   every combination, keep the best climb (needs `-c`; parallel over the first
   forced pair, so `-T` helps) `[off]`. **Not recommended** — a
