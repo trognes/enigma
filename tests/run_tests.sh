@@ -513,9 +513,14 @@ check "exhaustion --exhaust 1 is -T-independent (T1==T8)" \
 check "exhaustion --exhaust 1 --random 2 --restarts 3 is -T-independent (T1==T8)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 1 -e 5)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 1 --random 2 --restarts 3 --score i4q10 -T 8 -e 5)"
+# E=2 is pinned down to 10 free letters with -s. Unpinned it is 44850 forced-pair
+# combinations x a climb each, twice -- minutes per check, and ~2.7 min of the sanitizer
+# job on its own. With 8 pairs fixed there are 45 first-forced-pairs (still spread across
+# threads, so the parallel work-unit split this guards is still exercised) x 28 second
+# pairs, which runs in ~0.25 s and gives the identical T1==T4 verdict.
 check "exhaustion --exhaust 2 is -T-independent (T1==T4)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -c --exhaust 2 --score i4q10 -T 4)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB CD EF GH IJ KL MN OP" -c --exhaust 2 --score i4q10 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g AAA -s "AB CD EF GH IJ KL MN OP" -c --exhaust 2 --score i4q10 -T 4)"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA -c -A 6000 --exhaust 1 -T 1 >/dev/null 2>&1
 check "exhaustion --exhaust rejects -A simulated annealing (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA --exhaust 1 -T 1 >/dev/null 2>&1
@@ -887,7 +892,7 @@ done
 
 # The 'wehrmacht' scoring language (telegraphic military German -- ngrams/wehrmacht_*.txt,
 # generated from the published Appendix-C statistics). Check its four tables load and that
-# it recovers a plugboard on telegraphic text, the register it is built for.
+# it recovers a plugboard on telegraphic text, the writing style it is built for.
 pt_wehrmacht="ANROEMEINSBERTAXWIRTSQAFTLIQEUNTERSTELLUNGUNTERROEMXZEHNXARMKORPSDAUERTNURXZWOXTAGEXSTUERZBEQERX"
 w_ct=$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
 # Capped at the true 2 pairs: uncapped, the climb adds a spurious third plug on this text
@@ -989,6 +994,131 @@ for key in "B 451 AAZ VKZ" "B 351 AAZ NLV" "C 324 AAZ JEY"; do
     "$rs_pt"
 done
 
+# The refinement covers EVERY skipped ring2, not just the +/-K/2 neighbours of the coarse
+# winner (PERFORMANCE.md §7.11). The narrow window rested on the coarse winner landing
+# within K/2 of the truth; this authentic-Wehrmacht key is a measured counterexample --
+# the coarse pass at K=3 wins on a ring2 well outside K/2 of the true T, so the narrow
+# window never tested the truth and returned a partially-wrong plaintext, while the full
+# sweep recovers it. Verified to FAIL against the pre-widening binary.
+ws_pt=NNAHMEHOPOZSCHAAXOPOTSCHKAXUNVWIEDDRHERSTELLCNGXWELDKAJAXWEL
+ws_board="RG VJ KF AC BX SY OH NQ DP WZ"
+ws_ct=$(run "$ws_pt" -i -u A -w 123 -r DLT -g ACG -s "$ws_board")
+check "crack: --ring-stride 3 refines beyond the K/2 window" \
+  "$(run "$ws_ct" -f -l wehrmacht -u A -w 123 -r "..." -g "..." -s "$ws_board" \
+        --ring-stride 3 -T 1)" \
+  "$ws_pt"
+
+# --ring-stride must not touch the PLUGBOARD. The --polish finisher shares its enclosing
+# `if` with the refinement (both reconstruct the winner from best.idx once) and used to run
+# whenever EITHER was requested -- so a strided run got a full plugboard climb plus an
+# unconditional gain cascade even with no -c, adding spurious plugs to a board supplied via
+# -s and corrupting the decrypt. With no -c the board must come back exactly as given,
+# stride or no stride, so compare the two runs rather than hard-coding the normalised form.
+# This needs a case where the finisher actually FINDS an improving plug -- on an easy
+# board it converges immediately and a buggy build looks identical to a fixed one. This
+# authentic-Wehrmacht key is a measured one: the pre-fix binary adds an 11th plug (FV) and
+# returns a corrupted decrypt, the fixed one returns the board as given and recovers
+# exactly. ring1/start1 are pinned to the true key to keep it at 338 keys.
+rs_pb_pt=XBEFINDEMIQINXROSENOWROSENOWXSOFORTQUNKQNTWORTXWASCHBUSCHWIS
+rs_pb_board="SX JI AB HT RW QK UM ZG EN LY"
+rs_pb_ct=$(run "$rs_pb_pt" -i -u A -w 145 -r FFR -g RTB -s "$rs_pb_board")
+rs_pb_plain=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+              -s "$rs_pb_board" -T 1 2>&1 >/dev/null | last_plugboard)
+rs_pb_stride=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+               -s "$rs_pb_board" --ring-stride 2 -T 1 2>&1 >/dev/null | last_plugboard)
+check "--ring-stride leaves the plugboard alone without -c" "$rs_pb_stride" "$rs_pb_plain"
+check "--ring-stride without -c keeps exactly the 10 -s pairs" \
+  "$(printf '%s' "$rs_pb_stride" | wc -w | tr -d ' ')" "10"
+check "crack: --ring-stride 2 recovers with the given plugboard untouched" \
+  "$(run "$rs_pb_ct" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." -s "$rs_pb_board" \
+        --ring-stride 2 -T 1)" \
+  "$rs_pb_pt"
+
+# INVARIANT: with no -c, NOTHING may touch the plugboard. The check above pins one option
+# at one K; this is the general property, because the defect was a class rather than an
+# instance -- a feature running when it was not requested, because it shared an enclosing
+# `if` with one that was and never re-checked its own flag. That `if` exists to host work
+# needing best.idx reconstructed once, so it is likely to gain more members, and the next
+# one can make exactly the same mistake. Every option below is legal without -c and
+# reaches that block; the whole sweep is sensitive (all four K values report 11 plugs on
+# the pre-fix binary against the fixed one's 10), so it guards the defect rather than
+# restating the fix.
+inv_ref=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+          -s "$rs_pb_board" -T 1 2>&1 >/dev/null | last_plugboard)
+for inv_o in "--ring-stride 2" "--ring-stride 3" "--ring-stride 5" "--ring-stride 13"; do
+  # shellcheck disable=SC2086  # intentional word-splitting of the option under test
+  inv_got=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+            -s "$rs_pb_board" $inv_o -T 1 2>&1 >/dev/null | last_plugboard)
+  check "no -c: plugboard untouched ($inv_o)" "$inv_got" "$inv_ref"
+done
+
+# INVARIANT: -s pairs are HELD FIXED by every climb variant, not just the two that were
+# spot-checked (greedy and -A). Distinct from the invariant above -- that one says the
+# board must not change without -c, this one says the given pairs must survive when a
+# climb IS requested -- and unlike it, this passes on the pre-fix binary too: it fills a
+# coverage gap rather than guarding the finisher defect. Each variant routes through a
+# different move path (cascade, cap-as-target, first-improvement, restarts, exhaustion,
+# the -F tiers, the stride refinement), and every one of them must skip plug_fixed[].
+for inv_c in "--polish" "--cascade" "-M" "-J" "-R 3" "-A 3000" "--exhaust 1" "-F 5" \
+             "--ring-stride 2"; do
+  # shellcheck disable=SC2086  # intentional word-splitting of the option under test
+  inv_pb=$(printf '%s' "$rs_pb_ct" | "$ENIGMA" -f -l wehrmacht -u A -w 145 -r "FF." -g "RT." \
+           -s "$rs_pb_board" -c $inv_c -T 1 2>&1 >/dev/null | last_plugboard)
+  inv_missing=""
+  for inv_p in $rs_pb_board; do
+    # the display sorts each pair's letters, so compare against both orderings
+    inv_rev=$(printf '%s' "$inv_p" | cut -c2)$(printf '%s' "$inv_p" | cut -c1)
+    case " $inv_pb " in
+      *" $inv_p "*|*" $inv_rev "*) ;;
+      *) inv_missing="$inv_missing $inv_p" ;;
+    esac
+  done
+  check "-c $inv_c: every -s pair held fixed" "$inv_missing" ""
+done
+
+# The refinement re-searches all 25 skipped ring2 values over ring1 x start1 x start2, so
+# it is cheaper than a coarse ring2 value only by tasks.size() * rc[0] * gc[0]. When that
+# factor is 1 -- a single wheel order AND start0 pinned -- the stride costs MORE than it
+# saves, and the tool must say so rather than silently doing extra work. The two -g forms
+# below straddle it: with start0 pinned the stride is a net loss, with start0 open it is a
+# 1.9x win, and the warning tracks that exactly.
+rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." \
+       --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
+check "--ring-stride warns when the refinement outweighs the coarse pass" "$rs_w" "1"
+rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "..." \
+       --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
+check "--ring-stride stays silent when it is paying off" "$rs_w" "0"
+
+# The "Analysed N" line must count keys the refinement actually SCORED, not its index
+# space: the §7.12 collapse applies inside the refinement too, so counting the index space
+# claimed credit for skipped start1 values and overstated --ring-stride's cost by the
+# collapse factor (439400 enumerated against 106600 scored on a wildcarded keyspace).
+# ring1/start1 are both wildcarded here so the collapse is active; on a plain scan one
+# plugboard is scored per surviving key, so the two counts must agree exactly.
+rs_diag=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "A.." -g "A.." \
+          --ring-stride 2 -T 1 2>&1 >/dev/null \
+          | grep -oE 'Analysed [0-9]+ rotor combinations, scored [0-9]+ plugboards')
+check "--ring-stride: analysed count matches keys scored (collapse active)" \
+  "$(printf '%s' "$rs_diag" | awk '{print ($2 == $6)}')" "1"
+
+# The refinement bands the middle wheel by OFFSET (start1 - ring1), not by raw ring1.
+# Under §7.12 the reported ring1/start1 are class representatives, so raw ring1 wanders
+# while the offset barely moves -- a first attempt banded raw ring1 and lost keys because
+# of it. These two authentic-Wehrmacht keys are the measured counterexamples: their winning
+# ring1 sits 5 and 6 away from the coarse pass's while the offset is 0 and 1 away, so a
+# raw-ring1 band of any plausible width drops them and an offset band keeps them. Both
+# verified to FAIL against a raw-ring1-banded build and pass here, so they guard the axis
+# choice rather than restate it.
+for key in "B 134 ASR AQD" "B 542 AGD ARA"; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $key
+  ob_ct=$(run "$rs_pb_pt" -i -u "$1" -w "$2" -r "$3" -g "$4" -s "$rs_pb_board")
+  check "crack: --ring-stride 2 keeps an off-centre middle ring ($1 $2 $3 $4)" \
+    "$(run "$ob_ct" -f -l wehrmacht -u "$1" -w "$2" -r "A.." -g "A.." \
+          -s "$rs_pb_board" --ring-stride 2 -T 1)" \
+    "$rs_pb_pt"
+done
+
 # Validation: illegal K, a non-wildcarded ring2/start2, and -F/--exhaust all fail fast
 # with a clear error rather than silently misbehaving.
 rs_err=$(printf 'AAAA' | "$ENIGMA" --ring-stride 0 2>&1 >/dev/null)
@@ -1017,13 +1147,34 @@ check "crack: Norway + --ring-stride 2 matches the unstrided search" \
   "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." --ring-stride 2 -T 1)" \
   "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." -T 1)"
 
+# The refinement runs its own search with a private best_result, which used to restart the
+# progress display: a second column header mid-run, and each improvement echoed TWICE --
+# once by the climb (report_climb_progress, gated on the OUTER best via g_progress) and
+# once by that search's merge (gated on rbest). One shared gate now, so: exactly one
+# header, and no progress line repeated verbatim.
+# ring1/start1 are PINNED here (-r LY. -g OS.), unlike the recovery checks above: this
+# check is about the progress DISPLAY, and the refinement echoes the same way whether it
+# searches 338 keys or 228k. Wildcarding them costs ~60 s per run (~6.5 min of the
+# sanitizer job on its own -- every key gets a hill-climb) for no extra display coverage.
+# Verified against the pre-fix binary: this keyspace still reports 2 headers and 1
+# repeated line, so the regression is still caught.
+rs_disp=$(printf '%s' "$nw_ct" | "$ENIGMA" -n -c -f -l danish -u N -w 352 -r "LY." -g "OS." \
+          --ring-stride 2 -T 2 2>&1 >/dev/null)
+check "--ring-stride prints exactly one progress header" \
+  "$(printf '%s' "$rs_disp" | grep -c 'Score W')" "1"
+check "--ring-stride repeats no progress line" \
+  "$(printf '%s' "$rs_disp" | grep -E '^ *-?[0-9]+\.' | sort | uniq -d | wc -l | tr -d ' ')" "0"
+
 # --ring-stride makes the search APPROXIMATE, so a run must say so in the echoed settings:
 # without this, a saved log is indistinguishable from an exhaustive run. It must stay
 # silent when the option is off, so the default output is unchanged.
-rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." --ring-stride 2 -T 1 2>&1 >/dev/null)
+# show_settings() emits this BEFORE the search runs, so the keyspace is irrelevant to
+# what is being checked: -r AA. -g AA. is the smallest one --ring-stride accepts (it
+# requires ring2/start2 wildcarded) and is ~20x cheaper than the full sweep these used.
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." --ring-stride 2 -T 1 2>&1 >/dev/null)
 check "--ring-stride is echoed in the settings" \
   "$(printf '%s' "$rs_echo" | grep -c '^Stride: .*ring-stride')" "1"
-rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "..." -g "..." -T 1 2>&1 >/dev/null)
+rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." -T 1 2>&1 >/dev/null)
 check "no stride line when --ring-stride is off" \
   "$(printf '%s' "$rs_echo" | grep -c '^Stride:')" "0"
 
@@ -1080,8 +1231,16 @@ check "no collapse line when ring1 is pinned" \
   "$(mw_line -r "AA." -g "A..")" "0"
 check "no collapse line when start1 is pinned" \
   "$(mw_line -r "A.." -g "AA.")" "0"
+# ring2/start2 are pinned to the true key here (-r A.L -g A.T). --true-key disables the
+# collapse, so this run gets no key reduction at all: over the full A.. / A.. space that
+# is 456976 keys through a -c climb -- ~100 s plain and minutes under the sanitizers, the
+# single most expensive check in the suite. The gate only cares that ring1 and start1 are
+# BOTH wildcarded, which -r A.L -g A.T still satisfies (676 keys). The positive control on
+# the same keyspace keeps the negative from passing vacuously.
+check "collapse applies on the pinned-ring2 keyspace (control)" \
+  "$(mw_line -r "A.L" -g "A.T")" "1"
 check "no collapse line under --true-key" \
-  "$(mw_line -r "A.." -g "A.." -c -F 5 --true-key B123AQLADT)" "0"
+  "$(mw_line -r "A.L" -g "A.T" -c -F 5 --true-key B123AQLADT)" "0"
 
 echo
 echo "passed: $pass, failed: $fail"

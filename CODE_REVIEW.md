@@ -126,7 +126,7 @@ benchmark — do not expect them to move it.
   language, not a `-d` directory override). Measured **+20.9pp mean %-correct** on
   real 1941 Wehrmacht traffic vs the prose tables (69-message held-out set), and, as
   expected, a **−10.2pp** domain mismatch on ordinary prose German — so it's a
-  *register*, not a general-German upgrade, and `-l german` stays correct for prose
+  *writing style*, not a general-German upgrade, and `-l german` stays correct for prose
   and for the `make crackquality` benchmark. Details: `eval/MODERN_BREAKING_NOTES.md`
   §6, `PERFORMANCE.md` §6.6.
 - ✅/❌ **Multi-order & smoothing — RESOLVED.** Log-linear interpolation shipped as `-a`

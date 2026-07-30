@@ -498,7 +498,7 @@ Re-measured on **authentic telegraphic plaintext**, greedy wins at every length 
 recovered), 10-plug boards, matched at 200k `score_iter`, both arms at their shipped
 recipes *and* both given `--polish` (it is not blocked with `-A`). Plaintext is pooled
 from the 69 authentic decrypts in `eval/` (~6,470 letters) and excerpted at random —
-`make crackquality` samples *prose*, which is the wrong substrate for a register.
+`make crackquality` samples *prose*, which is the wrong kind of text for these tables.
 300 paired trials per length per seed family, two independent families, **3000 paired
 trials**; per-trial values retained so the paired difference carries a CI.
 
@@ -557,7 +557,7 @@ L50 −5.7→−3.6, L60 −8.5→−6.6, L70 −8.4→−7.8, L80 −14.2→−
 was the missing pre-pass; the remaining ~8pp is the search itself. Greedy still wins
 every length in L50–90.
 
-**Prose control — ❌ DO NOT PROMOTE TO DEFAULT. The lever is register-dependent.**
+**Prose control — ❌ DO NOT PROMOTE TO DEFAULT. The lever depends on the writing style.**
 The wehrmacht win alone was not enough to ship it: the IC pre-pass it replaces was
 tuned on prose, so prose is where a regression would appear. Re-run on the corpora
 `tests/crack_quality.py` samples (L50/70/90, 300 paired trials × 2 families each):
@@ -588,7 +588,7 @@ excerpts, so the paired comparison holds, but the prose CIs are optimistic relat
 the wehrmacht ones. English prose at L90 is also near ceiling (93.1%), which compresses
 any effect there.
 
-**Tuning was a no-op — both shipped defaults are already right for this register.**
+**Tuning was a no-op — both shipped defaults are already right for this writing style.**
 A per-arm sweep (stage 1) found greedy's `m4a10`/kick-10 in the top group and SA's
 best split reproducing the shipped `-A 12000 -R 12` (`A=11439 R=12`). Two negative
 results worth recording: greedy's top three configs **reorder between seed families**
@@ -1554,7 +1554,7 @@ because the plugboard *is* a letter permutation: any identity-sensitive unigram
 objective can be driven by choosing the permutation rather than by finding the truth,
 which is exactly how χ²-monogram collapsed to 12.5% tier-1 recall against IC's 68.8%
 (archived §9 item 2). IC is the one unigram signal the board cannot manufacture. It is
-also language-independent, which is why the result does not inherit a register bias.
+also language-independent, which is why the result is not biased toward one writing style.
 
 **Measured — the largest short-message scoring gain in this codebase.** Paired within
 instance, 300 trials per length per family, two seed families, both arms calibrated to
@@ -1566,7 +1566,7 @@ instance, 300 trials per length per family, two seed families, both arms calibra
 | english prose | **+3.0 pp** [+1.7, +4.4] | 1800 |
 | german prose | **+3.1 pp** [+1.9, +4.3] | 1800 |
 
-**The first scoring change here that is not register-dependent** — contrast the mono
+**The first scoring change here that does not depend on the writing style** — contrast the mono
 pre-pass (+2.2pp telegraphic / −2.2pp German prose, §6.10) and the SA staged pre-pass
 (+2.3pp / −2.6pp, §3.11). For scale, `-a` itself was +1–2pp.
 
@@ -1670,7 +1670,7 @@ Appendix-C source tables live in `eval/` beside the generator.
 (`eval/eval_telegraphic.py`; rotor key fixed, plugboard hidden and
 hill-climbed): **+20.9 pp mean %-correct** on real 1941 Wehrmacht traffic
 (wins 36 / loses 12 of 69), biggest in the 70–119-letter band. The mirror
-control (`eval/eval_prose_inverse.py`) confirms it is a *register*, not a
+control (`eval/eval_prose_inverse.py`) confirms it is a *writing style*, not a
 general-German upgrade: the same tables lose **−10.2 pp** on ordinary prose
 German, so `-l german` remains correct for prose and for the `make
 crackquality` benchmark — `wehrmacht` is for real Wehrmacht/telegraphic traffic
@@ -1907,7 +1907,7 @@ within noise (SE ~3–5pp), so the *trend* (crossover, q10→~100%) is the robus
 any single cell. The shipped low-R default is unchanged.
 
 **Follow-up — the same question under the SHIPPED regime (weighted target, R≈85): the
-answer is register-dependent, and `m4a10` is not universally right — ✅ MEASURED.**
+answer depends on the writing style, and `m4a10` is not universally right — ✅ MEASURED.**
 Everything above used a **quad** target at **R=2560**. The shipped recommendation is
 `--score m4a10`: a **weighted** target at R≈40–90. Re-run as a paired greedy-vs-greedy
 A/B in exactly that regime (`STAGE=3` in `eval/eval_sa_vs_greedy.py`; L50/70/90, 300
@@ -1921,7 +1921,7 @@ paired trials × 2 seed families per corpus, both arms calibrated to the same 20
 | wehrmacht | **−2.2 pp [−3.9, −0.5]** | 1800 | **mono better** |
 
 So the shipped `m4a10` is **right for telegraphic traffic, neutral on English prose, and
-measurably worse than `i4a10` on German prose** — the same register-dependence seen in the
+measurably worse than `i4a10` on German prose** — the same dependence on writing style seen in the
 SA pre-pass probe (§3.11) and in the scoring tables themselves (§6.6: +20.9pp real traffic
 / −10.2pp prose). It is *not* a universal recommendation, and the README presents it as
 one.
@@ -2269,7 +2269,7 @@ only, not a hot-path change). The value of the fix is **correctness and future
 robustness**, not a measured recovery win: the table is now a well-formed distribution
 (no single quadgrams silently tied at an arbitrary ceiling, no reliance on
 undefined/implementation-defined parsing behaviour), which matters for any future
-retuning of `A`/`B`/`W_MAX` or a similarly-constructed table for another register.
+retuning of `A`/`B`/`W_MAX` or a similarly-constructed table for another writing style.
 
 Reproduce: `python3 eval/build_telegraphic_ngrams.py` (regenerates
 `ngrams/wehrmacht_*.txt`); `R=100 T=4 python3 eval/eval_telegraphic.py` for the
@@ -2852,6 +2852,14 @@ recoverable radius) ≈ `K`. Total ≈ `26/K + K`, minimized at `K ≈ √26 ≈
 reading of "K=13 only tests 2 candidates" would suggest, because the refinement radius
 (and cost) scales with K right along with the coarse-scan saving.
 
+> ⚠️ **This accounting is wrong and was superseded — see "Follow-up: the refinement is
+> ~26× cheaper per ring2 value, so refine ALL of them" below.** It prices a *refinement*
+> ring2 value at the same cost as a *coarse* one. They are nothing alike: the refinement
+> is a single pass over ONE pinned wheel order/reflector with ring0/start0 fixed, so per
+> ring2 value it is `tasks.size() · rc[0] · gc[0]` times cheaper. The corrected total is
+> ≈ `26/K + 25/(tasks·rc[0]·gc[0])`, i.e. essentially `26/K` — the saving approaches
+> `K`×, and the refinement radius is no longer a reason to keep K small.
+
 > ⚠️ **The verdict in the next paragraph was later measured to be over-optimistic — see
 > "Follow-up: end-to-end exact recovery on telegraphic German" below.** "Recoverable"
 > here is a *proximity* property (does the winning candidate land within `⌊K/2⌋` of the
@@ -3101,6 +3109,12 @@ instruction there), so the margin could differ — the `Bench` workflow's arm64-
 matrix is the place to check if it ever matters. Given there is no measured upside on
 either x86 compiler, the simpler O(1) decode wins on both counts.
 
+> 🛑 **The two follow-up sections below are SUPERSEDED — both measured a bug, not the
+> stride.** Read "Follow-up: the accuracy cost was a `--polish` guard bug" at the end of
+> §7.11 first. Their tables are left in place because the conclusions drawn from them
+> (K≥3 not recommended; the widening comparison) are traceable to these numbers, but every
+> absolute accuracy figure in them is roughly an order of magnitude too pessimistic.
+
 #### Follow-up: end-to-end exact recovery on telegraphic German — ⚠️ the stride is NOT free
 
 Everything above measures a *proximity* property on English prose. The practical
@@ -3126,21 +3140,213 @@ not the pre-existing scoring floor): K=2 → 14% / 11%; K=3 → **21% at both le
    K=2's and is flat at 21% across both lengths, for a saving of only 11 vs 15
    candidates. This extends §7.11's existing "K≥5 not recommended" verdict *downward*:
    K=2 remains the only value with any real backing.
-2. **Even K=2 is not free on this register**, contrary to the "100% recoverable"
+2. **Even K=2 is not free on this kind of text**, contrary to the "100% recoverable"
    headline above — it costs ~10pp of exact recovery. The two measurements do not
    contradict each other; they measure different things. Landing *near* the true ring2
    (the proximity property) does not imply the refinement then *recovers* it, because
    the refinement re-opens ring1/start1 and can be outscored there by a decoy — and
-   short telegraphic German is exactly the low-information register where decoys win
+   short telegraphic German is exactly the low-information writing style where decoys win
    (§6.6, §3.11).
+
+#### Follow-up: the refinement is ~26× cheaper per ring2 value, so refine ALL of them — ✅ SHIPPED
+
+Both the cost model above and the `±⌊K/2⌋` window rest on the same unexamined assumption:
+that a ring2 value costs the refinement what it cost the coarse pass. It does not. The
+refinement runs **once**, at the end of the whole search (next to `--polish`, before it),
+over a **single pinned** wheel order/reflector with ring0/start0 fixed — so per ring2
+value it is `tasks.size() · rc[0] · gc[0]` times cheaper: **26×** on a single-wheel-order
+key with start0 open, **~26 000×** with the wheels wildcarded.
+
+Two things follow. The corrected total is ≈ `26/K + 25/(tasks·rc[0]·gc[0])`, i.e.
+essentially `26/K` — the saving approaches `K`×, not the `26/K + K` model's ≈2.5× ceiling.
+And the narrow window was never buying anything: it left the whole feature resting on the
+coarse winner landing within `K/2` of the truth, which is exactly what the stride-specific
+miss rate above says fails. So the refinement now covers **every** ring2 except the coarse
+winner (the extra is a *constant*, independent of `K`).
+
+Cost, keys analysed on a single-wheel-order key with start0 open (`-r AA. -g ...`):
+
+| K | 1 | 2 | 3 | 5 |
+|---|---:|---:|---:|---:|
+| keys | 456 976 | 245 388 | 175 084 | 122 356 |
+| saving | 1.00× | 1.86× | 2.61× | 3.73× |
+
+Exact recovery, same harness and seed as the table above (200 paired trials/cell),
+narrow → wide window:
+
+| L | K=1 | K=2 | K=3 | K=5 |
+|---:|---:|---:|---:|---:|
+| 40 | 50.0% | 38.5 → 38.0% | 33.5 → **38.0%** | 32.5% |
+| 60 | 74.5% | 64.5 → 66.0% | 56.5 → **63.5%** | 60.5% |
+
+Stride-specific miss rate falls for K=3 from a flat 21% to 14%/12%; K=2 is unchanged
+within noise. **That asymmetry is the informative part.** K=2's coarse grid is never more
+than 1 from the truth, so widening cannot help it — its residual misses are the coarse
+pass picking a wrong wheel order or start0 *outright*, which no ring2 sweep repairs. K=3's
+were genuinely window-limited. The practical result: **K=3 now delivers 2.61× at roughly
+the accuracy K=2 gave at 1.99×**, so the "K=2 is the only value with any backing" verdict
+above extends to K=3. K=5 stays clearly worse on accuracy.
+
+**The window was briefly budgeted; the budget was removed. ❌** It grew only while the
+extra stayed under 25% of the coarse pass, on the theory that a keyspace narrow enough —
+a *single* task **and** start0 pinned — would see 25 refinement values outcost the entire
+coarse pass and turn a throughput option into a slowdown.
+
+That reasoning confuses a **ratio** with a **cost**. The refinement is one pass over one
+task for the whole invocation; in the very corner the budget guarded, the complete run is
+**988 keys against 676 unstrided — 58 ms**. Nothing there needed protecting. What the
+budget did buy was a real defect in usability: the same command did different amounts of
+work depending on an unrelated part of the keyspace, silently, with no way to adjust or
+even observe it. On a fully wildcarded keyspace (`rc[1]=26`) it clipped the sweep to ~12
+of 25 without saying so.
+
+So the refinement now tests all 25 unconditionally: `extra = 25 · rc[1] · gc[1] · 26`,
+constant in `K` and independent of everything else. Removing it also deleted the
+boundary-wrap arithmetic — with every value in the set there is no edge to fall off — so
+a documented subtlety (a coarse winner at A(0) with the true ring2 at Z(25)) stops being
+reachable rather than being handled.
+
+It is not free everywhere. The refinement is cheaper than a coarse ring2 value only by
+`tasks.size() · rc[0] · gc[0]`; when that factor is 1 — a *single* wheel order **and**
+start0 pinned — the 25 values outweigh the `26/K` the coarse pass saved and the flag is a
+**net loss**: `-r A.. -g A..` at `K=2` scores 162 032 keys against 110 864 unstrided,
+1.46× worse. A non-fatal warning now fires exactly on that condition, which is the right
+shape of fix — the width stays fixed so behaviour is predictable, and the user is told
+when the trade is bad instead of the tool silently doing less. With start0 open (the
+documented default `-r AA.`) the saving is the full 1.86×.
+
+An earlier version of this paragraph put the wildcarded-ring1 saving at ~1.53×. That was
+computed from the pre-fix `extra_keys_analysed`, which counted the refinement's index
+space rather than the keys it scored, ignoring that §7.12's collapse applies inside the
+refinement too — 439 400 enumerated against 106 600 scored. Corrected, the saving there is
+1.86×, the same as with ring1 pinned. The accuracy the old clipping cost was never
+measurable either: an A/B against an unbudgeted build (L=60, K=3, n=150) put it at 66.0%
+vs 66.7%, one trial in 150.
+
+Regression test: an authentic-Wehrmacht key (`-u A -w 123 -r DLT -g ACG`, L=60) whose K=3
+coarse winner lands well outside `K/2` of the truth. The narrow window returns a
+partially-wrong plaintext; the full sweep matches the K=1 baseline exactly. Verified to
+fail against the pre-widening binary.
+
+#### Follow-up: the accuracy cost was a `--polish` guard bug — ✅ FIXED, tables corrected
+
+**Everything above that measures `--ring-stride`'s accuracy measured a bug.** The
+`--polish` plugboard finisher shares its enclosing `if` with the `--ring-stride`
+refinement — both reconstruct the winning board from `best.idx` once — but only the
+refinement was guarded. The finisher ran whenever *either* was requested, so every strided
+run also got a full plugboard hill-climb plus an **unconditional** gain cascade, **with no
+`-c` requested at all**. Since these measurements deliberately give the true plugboard via
+`-s` and omit `-c` (to isolate the rotor-key question), every strided arm was silently
+handed a finisher the `K=1` baseline never got — which added spurious plugs to the given
+board and corrupted the decrypt.
+
+Concrete reproducer (authentic Wehrmacht, L=60, true key `A145` ring `FFR` start `RTB`,
+10-plug board given): the winner keeps the **correct rotor key** but gains an 11th plug
+`FV`, scores −8.8416 against the true board's −8.8760, and returns a decrypt wrong in five
+places. Guarding the finisher with `opt_polish` (which already requires `-c`) fixes it.
+
+Re-measured on the same harness and seed, 200 paired trials per cell:
+
+| L | K=1 | K=2 | K=3 | K=5 |
+|---:|---:|---:|---:|---:|
+| 40 | 50.0% | 48.0% | **49.0%** | 42.0% |
+| 60 | 74.5% | 74.0% | **74.0%** | 72.5% |
+| keys analysed | 1.00× | 1.86× | **2.61×** | 3.73× |
+
+Stride-specific miss rate: 2% (K=2), 2–4% (K=3), 5–12% (K=5) — against 10–21% before.
+
+**The verdict inverts.** The documented costs were −10pp (K=2) and −17pp (K=3); the real
+ones are −0.5…−2pp and −0.5…−1pp. `--ring-stride` is not the accuracy/throughput trade it
+was marked as: **K=3 buys 2.61× for about 1pp** and is the best operating point, K=2 is a
+close second, and only K≥5 (−2…−8pp) genuinely fails to earn its saving. The "K≥3 is not
+recommended" conclusion, and the reasoning that K=2 was "the only value with any backing",
+were both artefacts.
+
+**Three methodological lessons, all of which cost time here.**
+
+1. **A shared `if` is a shared enable.** Two features were merged into one conditional
+   because they share an expensive prerequisite (`best.idx` reconstruction). Nothing
+   flagged that only one of them re-checked its own flag inside. Where two features share
+   a guard for cost reasons, each still needs its own.
+2. **The aggregate table was self-consistent and pointed the wrong way.** A miss breakdown
+   by key component said the pinned `offset0` was wrong in 54–75% of misses — a coherent
+   story implicating a pin whose justifying comment was genuinely questionable. It was the
+   finisher corrupting the board. What broke it open was dumping *individual failing
+   cases*: the first one had every identifiable key component correct yet a wrong
+   plaintext, which is impossible, and that impossibility was the thread to pull.
+3. **A baseline that skips the buggy path hides the bug and doubles as a control.** `K=1`
+   never enters the refinement block, so it never got the finisher — which is exactly why
+   the stride looked uniformly worse and why nothing else in the suite caught it. When an
+   option's measured cost is suspiciously large and uniform, check whether the option
+   turns on anything besides the thing being measured.
+
+The first regression test written for this **passed against the buggy binary**: on an easy
+board the finisher converges immediately, so a corrupted build is indistinguishable from a
+fixed one. The shipped test uses the reproducer above, pinned to 338 keys, and all three of
+its checks fail pre-fix.
+
+#### Follow-up: the middle wheel's candidates are derivable — ✅ SHIPPED
+
+The refinement re-searches ring1 × start1 × start2 per candidate ring2, and with ring1
+wildcarded that 26× is the dominant term. It is avoidable, because the stepping is
+deterministic and can be *computed* rather than searched.
+
+Shifting ring2 and start2 together leaves the right wheel's substitution identical — only
+`(start2 − ring2) mod 26` enters it — and moves nothing but the notch **timing**. The middle
+wheel's step schedule is therefore *time-shifted*, not lengthened, so its position can run
+only a bounded distance from the coarse winner's. **That bound is 2**, by enumeration rather
+than sampling: simulating the real schedule (double step included) over every rotor pair ×
+26 start1 × 26 start2 × every shift 1–13 at L=600 — 105 456 combinations per shift — the
+divergence is never 0 and never 3, always at most 2. One step is the ordinary time shift;
+the second comes from **double stepping**, when the two schedules straddle the middle wheel's
+own notch. Two-notch right rotors (VI–VIII) change how *often* the transient occurs, not how
+far it reaches: the worst case is rotor **II**, a single-notch wheel.
+
+Counting the distinct trajectory differences per shift (exhaustive, L=150, 105 456
+combinations) shows how few candidates that leaves:
+
+| shift | 2 candidates | 3 candidates | mean | vs 26 |
+|---:|---:|---:|---:|---:|
+| 1 | 98.2% | 1.8% | 2.02 | 12.9× |
+| 2 | 66.3% | 33.7% | 2.34 | 11.1× |
+
+**The band must be on the OFFSET, not on raw ring1 — this is the load-bearing detail.**
+Under §7.12 the reported ring1/start1 are class representatives, so raw ring1 moves freely
+while the offset `(start1 − ring1) mod 26` barely does. A first implementation banded raw
+ring1 and **lost 2 keys in 120**; inspecting the two failures showed the winning ring1 sat
+5 and 6 away from the coarse one while the offset was 0 and 1 away — i.e. both were *inside*
+the intended window all along, and the clipping was on an axis that carries no meaning.
+Widening ±2 → ±4 changed nothing, which looked like "the idea is unsound" and was actually
+"you are clipping the wrong axis". Because `ring1 = start1 − offset`, the band is a
+**diagonal** in (ring1, start1) space, so it ships as explicit pinned pairs rather than a
+range — `search_range` holds rectangles only, and growing it is measurably bad for the hot
+path (§7.11's `int[26]` cost ~5% on `search`).
+
+**Verified by equivalence, not by recovery rate**, which is the right standard for a claim of
+exactness — a middle setting outside the band cannot reproduce any decode the candidate ring2
+can produce, so the two builds must agree on every input including the ones where both fail:
+
+| L | K | seed | identical | recovery (band vs all-26) |
+|---:|---:|---:|---:|---:|
+| 80 | 2 | 0 | 120/120 | 94 vs 94 |
+| 60 | 2 | 1 | 90/90 | 65 vs 65 |
+| 80 | 3 | 7 | 90/90 | 76 vs 76 |
+| 110 | 5 | 11 | 90/90 | 85 vs 85 |
+
+**It converts the flag's remaining net-loss case into a win.** Keys analysed on
+`-r A.. -g A..` at `K=2`: 110 864 unstrided, 162 032 with the full enumeration (a **loss**),
+**75 932** with the band — 1.46× better than not striding. On `-r A.. -g ...` the saving goes
+1.86× → **1.97×**. The non-fatal warning remains for the one case the band cannot rescue:
+`ring1` pinned by the caller, where there is no band to apply.
 
 **What this measurement does NOT settle: the matched-compute question.** It compares at
 *fixed work per candidate* (a plain scan, `-s`, no restarts), so it answers "does the
 stride lose accuracy?" (yes) but not "is the saved compute better spent elsewhere?".
 Since restarts are the documented primary quality lever and short-message search is
 compute-bound (§6.15), `K=2 + more -R` versus `K=1 + fewer -R` at equal wall time is
-genuinely open and is the right next experiment. Until that is run, `--ring-stride`
-should be presented as a **throughput/accuracy trade**, not a free reduction.
+genuinely open and is the right next experiment. (Post-fix that question matters less:
+with the real accuracy cost at ~1pp the throughput is close to free either way, so the
+trade is no longer the deciding factor it looked like when this paragraph was written.)
 
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 
@@ -3290,6 +3496,75 @@ saving is not automatically an accuracy gain. Short-message recovery is compute-
 **unmeasured**, and the one matched-compute cell run for `--ring-stride` (L=100, 80 paired
 trials) came back a dead tie, 48.8% vs 48.8%. Measure the conversion before claiming a
 recovery improvement.
+
+### 7.13 N-gram load time — ✅ SHIPPED (halved; startup, not the hot path)
+
+Everything else in §7 is about the search. This is about the **fixed cost every invocation
+pays before the search starts**: loading and quantising the n-gram tables. It matters
+because the tool is invoked as a *process* thousands of times — `tests/run_tests.sh` alone
+spawns 287 of them, `tests/crack_quality.py` and the `eval/` harnesses one or more per
+trial — so a per-process constant is multiplied by the trial count, not amortised away.
+
+Decomposed with a temporary timer around each phase of `ngrams_read` (english quadgrams,
+456 976 entries, `-O3`):
+
+| model | parse | min/max pass | quantise pass | total |
+|---|---:|---:|---:|---:|
+| `-q` | 71 ms | 9.5 ms | 10.5 ms | 91 ms |
+| `-f` | 76 ms | **77 ms** | **77 ms** | 234 ms |
+
+Two independent costs, and the second one is not what it looks like.
+
+**The parse was 59 of its 71 ms inside `sscanf`.** `sscanf(line, "%15s %llu", ...)`
+reinterprets the format string and runs a general integer conversion once per line, 457k
+times. Measured standalone on the same file: `sscanf` 59 ms, `fgets` + hand-rolled scan
+11 ms, slurp-whole-file + hand-rolled 6.6 ms (110 / 27 / 25 ms under ASan). `fgets` was
+kept over slurping — the gain over slurping is small, it avoids an ~8 MB transient
+allocation, and it preserves the existing behaviour on lines longer than the 256-byte
+buffer (they split, and the remainder is parsed as its own record).
+
+**The two remaining passes are cheap for `-q` and dominant for `-f`, on the same table.**
+`logval(i)` was evaluated **twice per entry** — once to find `vmin`/`vmax`, once to
+quantise — i.e. 914k calls. Under `-q` each is one `log10`; under `-a`/`-f` each
+recomputes the entire four-order log-linear mixture, which is the whole of the 9.5 → 77 ms
+jump. Evaluating once into a scratch `std::vector<double>` fixes it. **Doubles, not
+floats**: the values feed a rounding boundary (`q = (v - bias) * scale`, rounded to a
+byte), so narrowing the scratch array would silently change table contents.
+
+Result, min of 5, whole-invocation on a trivial input:
+
+| | plain before → after | ASan before → after |
+|---|---|---|
+| `-q -l english` | 116 → **53 ms** | 223 → **155 ms** |
+| `-f -l english` | 247 → **118 ms** | 370 → **241 ms** |
+| `-i` (loads nothing) | 21 → 22 ms | 63 → 66 ms |
+
+End to end on the test suite, which is where the per-process constant is multiplied out:
+the sanitizer run (221 checks, `TEST_QUICK`) went **162 → 139 s** and the full 264-check
+plain run **291 → 247 s**. Note both savings are larger than a naive
+`invocations × per-invocation delta` estimate predicts (~12 s), because the suite's runs
+are not all trivial-input — take the measured suite numbers, not the model.
+
+**Byte-identical, verified rather than argued.** An FNV-1a hash of the quantised `itable`,
+plus the loader's `Note:`/`Warning:` diagnostics, match the previous build across all
+**10 languages × 6 models** (60 combinations). This mattered because the hand-rolled parse
+is deliberately *stricter* than `sscanf` on malformed input in three ways — an over-long
+token is skipped, a negative count is skipped rather than sign-wrapped into the
+`UINT32_MAX` clamp, and a 64-bit overflow saturates instead of being undefined behaviour.
+None is reachable from a well-formed table, and the hash check is what establishes that
+for the bundled ones. (The loader has form here: the truncation bug that silently cut the
+german quadgram table to 4.9% of its mass — §6.9 — was also invisible without an explicit
+table-level check.)
+
+> ⚠️ **This change makes `make bench` report a fake speed-up.** `bench.sh`'s `min_time`
+> wraps the **whole invocation**, so process startup is inside every measurement. A/B
+> against the pre-change commit reported `search` **−3.4%** and `hillclimb` **−10.1%**,
+> and neither is a throughput change: both deltas are the *same ~60 ms absolute*
+> (2.14→2.07 s and 0.52→0.47 s). Because the saving is a constant rather than a
+> proportion, it inflates the **cheaper tier three times as much** — which is exactly the
+> shape a real hot-path win does *not* have. When A/B-ing across this commit, or any
+> future change to startup, check whether the two tiers moved by the same *seconds*
+> rather than the same *percent* before believing either number.
 
 ---
 
@@ -3481,7 +3756,7 @@ at matched compute; regime-dependent — §7.2), **`-M` cap-as-target** (opt-in;
 cap — neutral-to-+2.6pp at 10 plugs, +3–20pp known-few-plug; cheaper per climb — §7.8).
 Rejected (with reason): **mono pre-pass for `-A`** (`ENIGMA_SA_STAGES`, §3.11 — built
 and measured on both substrates: +2.3pp on telegraphic but **−2.6pp on English prose**,
-register-dependent, and it improves the *losing* arm without making SA beat greedy at
+dependent on the writing style, and it improves the *losing* arm without making SA beat greedy at
 any length; kept as an off-by-default probe, no CLI flag);
 **static (fixed-across-restarts) informed move order** (greedy
 *and* diversity-collapsing — §7.2); **ciphertext/plaintext-influence move ordering**

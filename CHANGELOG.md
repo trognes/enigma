@@ -68,8 +68,8 @@ option also gained a long name.
 - **`-l wehrmacht`**, a scoring language built from published statistics of
   ~20,000 letters of 1941 Enigma decrypts, for authentic telegraphic traffic
   (`X` as word separator, `Q` for *ch*, spelled-out numbers). Measured +20.9
-  percentage points on a held-out set of 69 real messages. It is a *register*,
-  not a language: on ordinary prose German it is a domain mismatch (−10.2 pp),
+  percentage points on a held-out set of 69 real messages. It is a *writing style*,
+  not a separate language: on ordinary prose German it is a domain mismatch (−10.2 pp),
   so keep using `-l german` for prose.
 - **Accented letters are folded to their A–Z base** (`é→E`, `ü→U`, `ø→O`,
   `ß→S`) in both the n-gram tables and the input text, instead of being

@@ -11,7 +11,7 @@ shipped `--ring-stride K` flag end to end, on real excerpts from the authentic 1
 message database (eval/enigma-messages.txt, eval/enigma-army-messages-1941.txt), to
 answer the practical question: does `--ring-stride 3`'s cost saving over K=2 (12 vs 16
 total ring2 candidates, PERFORMANCE.md 7.11) come at a real exact-recovery cost on the
-short, information-poor messages the wehrmacht register exists for?
+short, information-poor messages the wehrmacht tables exist for?
 
 Like the original 7.11 measurement (and for the same reason), the true plugboard is
 given via -s rather than hill-climbed: --ring-stride is a ROTOR-KEY search lever, and

@@ -82,6 +82,13 @@ static const char * notch_string[] =
 static const int maxlen = 1024;   /* maximum ciphertext length (letters) */
 static const int asize = 26;
 static const int wheels = 3;
+
+/* How far the --ring-stride refinement's middle-wheel OFFSET can sit from the coarse
+   winner's. Not a tuning knob: 2 is the exhaustively established bound on how far a
+   ring2/start2 shift can move the middle wheel's step schedule (PERFORMANCE.md §7.11) --
+   1 from the ordinary time shift, plus 1 when double stepping straddles the middle
+   wheel's own notch. Raising it only wastes work; lowering it loses keys. */
+static const int mid_ring_window = 2;
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 
@@ -555,10 +562,57 @@ static uint64_t load_counts(int n, std::vector<uint32_t> & table, const char * s
          is now capped and should never produce this again, but the loader clamps
          explicitly and audibly rather than depending on that, or on unspecified
          sscanf behaviour, to stay correct for any future/external table. */
+      /* Hand-rolled instead of sscanf("%15s %llu", ...). sscanf reinterprets the format
+         string and runs a general integer conversion for every one of the ~457k lines in
+         the english quadgram table; measured on that file it is 59 ms of the 71 ms this
+         loop costs, against 11 ms for the parse below (110 ms vs 27 ms under ASan). Since
+         every invocation of the tool pays this before doing any work, it was ~30% of a
+         short run and a third of the sanitizer CI job.
+
+         Equivalent to the sscanf form on the bundled tables (verified byte-identical
+         table hashes across every language x model), and deliberately STRICTER on
+         malformed input in three places, none of them reachable from a well-formed table:
+           - a token longer than 15 bytes is skipped here. sscanf would truncate it to 15
+             and then usually fail the number conversion; in the one case it does not
+             (chars 16+ happen to be digits) the record is still dropped below, because a
+             >15-byte token folds to at least 6 letters and every n is <= 4.
+           - a NEGATIVE count is skipped rather than wrapped. "%llu" accepts a sign and
+             wraps, which the UINT32_MAX clamp below would then silently turn into the
+             largest possible count -- the worst way to mishandle it.
+           - a count exceeding 64 bits saturates rather than being undefined behaviour,
+             which is what "%llu" overflow formally is (see the clamp comment above). */
       char gram[16];
-      unsigned long long count64;
-      if (sscanf(line, "%15s %llu", gram, & count64) != 2)
-        continue;
+      unsigned long long count64 = 0;
+      {
+        const char * p = line;
+        while ((*p == ' ') || (*p == '\t') || (*p == '\n') || (*p == '\v')
+               || (*p == '\f') || (*p == '\r'))
+          p++;
+        const char * gstart = p;
+        while ((*p != '\0') && (*p != ' ') && (*p != '\t') && (*p != '\n')
+               && (*p != '\v') && (*p != '\f') && (*p != '\r'))
+          p++;
+        size_t glen = static_cast<size_t>(p - gstart);
+        if ((glen == 0) || (glen >= sizeof(gram)))
+          continue;                       /* empty line, or an over-long token */
+        memcpy(gram, gstart, glen);
+        gram[glen] = '\0';
+        while ((*p == ' ') || (*p == '\t') || (*p == '\n') || (*p == '\v')
+               || (*p == '\f') || (*p == '\r'))
+          p++;
+        if (*p == '+')
+          p++;
+        if ((*p < '0') || (*p > '9'))
+          continue;                       /* no count (or a negative one) */
+        while ((*p >= '0') && (*p <= '9'))
+          {
+            unsigned d = static_cast<unsigned>(*p - '0');
+            if (count64 > (UINT64_MAX - d) / 10)
+              { count64 = UINT64_MAX; break; }   /* saturate, never wrap */
+            count64 = count64 * 10 + d;
+            p++;
+          }
+      }
       if (count64 > UINT32_MAX)
         {
           count64 = UINT32_MAX;
@@ -831,10 +885,21 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
     return log10(eff_count(idx, table[idx])) - log_total;
   };
 
+  /* Evaluate logval ONCE per entry into a scratch array, rather than in both the min/max
+     and the quantise loop below. The two loops used to call it 2 x size times (914k for
+     quad), and under -a/-f each call recomputes the whole four-order log-linear mixture:
+     measured 9.5 + 10.5 ms for -q but 77 + 77 ms for -f on the same table, i.e. the two
+     passes cost more than parsing the file. Storing doubles (not floats) keeps every
+     quantised byte identical -- the values feed a rounding boundary, so narrowing here
+     would be a silent table change. 3.7 MB transient for quad, freed on return. */
+  std::vector<double> vals(size);
+  for (int i = 0; i < size; i++)
+    vals[i] = logval(i);
+
   double vmin = 1e300, vmax = -1e300;
   for (int i = 0; i < size; i++)
     {
-      double v = logval(i);
+      double v = vals[i];
       if (v < vmin) vmin = v;
       if (v > vmax) vmax = v;
     }
@@ -851,7 +916,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
 
   for (int i = 0; i < size; i++)
     {
-      double q = (logval(i) - bias) * scale;
+      double q = (vals[i] - bias) * scale;
       if (q < 0.0)
         q = 0.0;
       else if (q > 255.0)
@@ -3991,6 +4056,32 @@ void bruteforce(char * result)
             total_keys - scored_keys, total_keys,
             static_cast<double>(total_keys) / static_cast<double>(scored_keys));
 
+  /* Non-fatal warning: --ring-stride can cost MORE than it saves. The coarse pass shrinks
+     ring2 to ceil(26/K) but the refinement then re-searches all 25 skipped values over
+     ring1 x start1 x start2 with ring0/start0 pinned -- so the refinement is cheaper than
+     a coarse ring2 value by tasks.size() * rc[0] * gc[0], and when that factor is 1 (a
+     single wheel order AND start0 pinned) the 25 values outweigh the 26/K the coarse pass
+     saved. Concretely, `-r A.. -g A..` at K=2 analyses 162032 keys against 110864 with no
+     stride: 1.46x WORSE. This is a real invocation, not a pathological one, so say so
+     rather than silently doing more work than asked. Deliberately a warning and not an
+     adjustment: the refinement width stays fixed at all 25 so the same command always does
+     the same thing, and not an error, since the run is still correct -- just a bad trade.
+     Compared on index spaces, which the collapse scales alike on both sides. */
+  if (opt_ring_stride > 1)
+    {
+      /* The refinement's ring1 is banded to the derived offset window (mid_ring_window),
+         not the full 26, so price it that way -- the pre-band formula over-warned by 26/5
+         and would now fire on keyspaces where the stride comfortably pays off. */
+      size_t band = (rc[1] == asize)
+        ? static_cast<size_t>(2 * mid_ring_window + 1) : static_cast<size_t>(rc[1]);
+      size_t refine_keys = static_cast<size_t>(asize - 1) * band * gc[1] * asize;
+      if (refine_keys > total_keys)
+        fprintf(stderr, "Warning: --ring-stride %d is not paying for itself here -- the "
+                "refinement (%zu keys) outweighs the coarse pass (%zu); open -g's first "
+                "position or drop --ring-stride\n",
+                opt_ring_stride, refine_keys, total_keys);
+    }
+
   /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
      task; a full M4 wildcard is ~14.9 GiB, every other mode far smaller) */
   g_table_count = nwo;
@@ -4151,8 +4242,10 @@ void bruteforce(char * result)
       m.report = false;
 
       /* --ring-stride refinement (PERFORMANCE.md §7.11): the coarse search only tested
-         ring2 in {0, K, 2K, ...}; check the K-1 neighbours it skipped around the best
-         hit. ring0/start0 stay pinned to the coarse winner -- that pin is exact and
+         ring2 in {0, K, 2K, ...}; re-check the ring2 values it skipped around the best
+         hit -- ALL of them by default, since a refinement ring2 value is orders of
+         magnitude cheaper than a coarse one (see the window-width note below).
+         ring0/start0 stay pinned to the coarse winner -- that pin is exact and
          ring2-independent (§7.10's unconditional offset collapse holds regardless of
          what ring2 is). ring1/start1 must NOT be pinned to the coarse winner: the coarse
          winner's ring1/start1 were only optimal for ITS (possibly off-by-one, corrupted)
@@ -4178,7 +4271,24 @@ void bruteforce(char * result)
          best.idx, which nothing reads again after this point. */
       if (opt_ring_stride > 1)
         {
-          int half = opt_ring_stride / 2;
+          /* The refinement tests EVERY ring2 the coarse pass skipped -- all 25 of
+             them, unconditionally. No window, no budget, no dependence on K.
+
+             The earlier +/-K/2 window rested on the coarse winner landing within K/2 of
+             the truth, which is exactly the assumption the measured stride-specific miss
+             rate said fails. Refining every value drops the assumption: whatever ring2
+             wins the coarse pass, all 26 are then tested exactly, under the winner's
+             wheel order / reflector / ring0 / start0.
+
+             This ran under a "25% of the coarse pass" budget for a while, on the theory
+             that a keyspace narrow enough (single task AND start0 pinned) would see the
+             refinement outcost the coarse pass. That was a ratio masquerading as a cost.
+             The refinement is ONE pass over ONE task for the whole invocation, bounded by
+             25 * rc[1] * gc[1] * 26 keys; in the corner it was guarding, the whole run is
+             988 keys against 676 unstrided -- microseconds. Trading predictable behaviour
+             for that is a bad deal: a budget makes the same command do different work
+             depending on an unrelated part of the keyspace, silently, with no way to
+             adjust it. Cost is bounded and small; keep it fixed and explainable. */
           int center2 = m.ringstellung[2];
 
           /* Snapshot everything each segment pins (ring0/start0/wheel order/
@@ -4199,37 +4309,73 @@ void bruteforce(char * result)
           int fixed_ring0 = m.ringstellung[0];
           int fixed_start0 = m.grundstellung[0];
 
-          /* Build the set of ring2 values to refine: the +/-half window around the
-             coarse winner, taken mod 26 and EXCLUDING the winner itself.
+          /* MIDDLE-WHEEL CANDIDATES, derived from the stepping instead of enumerated.
+             Shifting ring2 and start2 together leaves the right wheel's substitution
+             untouched -- only (start2 - ring2) mod 26 enters it -- and moves nothing but
+             the notch TIMING, so the middle wheel's schedule is time-shifted rather than
+             lengthened and its position can run only a bounded distance from the coarse
+             winner's. That bound is 2, by ENUMERATION not sampling: simulating the real
+             schedule (double step included) over every rotor pair x 26 start1 x 26 start2
+             x every shift 1..13 at L=600 gives max divergence 2, never 3. One step is the
+             ordinary time shift; the second is double stepping, when the two schedules
+             straddle the middle wheel's own notch. Two-notch right rotors change how OFTEN
+             that happens, not how far it reaches (worst case is rotor II, single-notch).
 
-             Two properties drive this:
-             (a) ring2 is CIRCULAR, so the window must wrap at the 0/25 boundary
-                 rather than clamp -- a coarse winner at A(0) with the true ring2 at
-                 Z(25) is "recoverable" per the |K/2| distance metric
-                 (PERFORMANCE.md §7.11), but a clamped [0,1] window only ever tests
-                 {A,B}, never Z. Confirmed by a concrete miss during testing.
-             (b) The winner itself needs no retest. The coarse pass already scored
-                 that exact ring2, and phase 2 pins ring0/start0 to the winner's own
-                 values while opening ring1/start1/start2 to the same ranges the
-                 coarse pass used -- so for ring2 == centre, phase 2's space is a
-                 SUBSET of what phase 1 already searched there, and re-running it can
-                 only reproduce the same winning score. (Caveat, deliberate: under -c
-                 the per-restart RNG seeds differ between the two searches, so a
-                 retest could stumble on a better plugboard. That is extra plugboard
-                 restarts smuggled into a rotor-key refinement, not refinement work;
-                 -R is the documented lever for that, so the duplicate is dropped.)
-
-             The resulting set can span the 0/25 boundary and be split by the excluded
-             centre, but search_range carries ring2 as an explicit value list, so it
-             goes in as-is -- one mask, one search, no interval-splitting and no
-             stride arithmetic to save/restore around a nested search. */
-          unsigned int mask2 = 0;
-          for (int d = -half; d <= half; d++)
+             The band is on the OFFSET (start1 - ring1) mod 26, which is the identifiable
+             quantity -- NOT on ring1. Under §7.12 the reported ring1/start1 are class
+             representatives, so raw ring1 wanders freely while the offset barely moves: in
+             two measured misses the winning ring1 sat 5 and 6 away from the coarse one
+             while the offset was 0 and 1 away. Banding raw ring1 therefore clips the wrong
+             axis and silently loses keys (measured: 2 in 120), which is exactly what a
+             first attempt here did. Because ring1 = start1 - offset, the band is a DIAGONAL
+             in (ring1, start1) space, so it is enumerated as explicit pinned pairs rather
+             than expressed as a range -- search_range holds rectangles only. */
+          int coarse_off1 = ((m.grundstellung[1] - m.ringstellung[1]) % asize + asize)
+                            % asize;
+          static const int max_pairs = asize * asize;
+          int pair_r1[max_pairs], pair_g1[max_pairs];
+          int npairs = 0;
+          if ((rc[1] == asize) && (gc[1] == asize))
             {
-              if (d == 0)
-                continue;   /* the coarse winner -- already scored, identically */
-              mask2 |= 1u << (((center2 + d) % asize + asize) % asize);
+              for (int s1 = 0; s1 < asize; s1++)
+                for (int d = -mid_ring_window; d <= mid_ring_window; d++)
+                  {
+                    int o = ((coarse_off1 + d) % asize + asize) % asize;
+                    pair_g1[npairs] = s1;
+                    pair_r1[npairs] = ((s1 - o) % asize + asize) % asize;
+                    npairs++;
+                  }
             }
+          else
+            {
+              /* caller pinned ring1 and/or start1: no band, search what they asked for */
+              for (int v = range.r_min[1]; v <= range.r_max[1]; v++)
+                for (int s1 = range.g_min[1]; s1 <= range.g_max[1]; s1++)
+                  {
+                    pair_r1[npairs] = v;
+                    pair_g1[npairs] = s1;
+                    npairs++;
+                  }
+            }
+
+          /* Every ring2 except the coarse winner. The winner needs no retest: the
+             coarse pass already scored that exact ring2, and phase 2 pins ring0/start0
+             to the winner's own values while opening ring1/start1/start2 to the same
+             ranges phase 1 used -- so for ring2 == centre, phase 2's space is a SUBSET
+             of what phase 1 already searched there, and re-running it can only reproduce
+             the same winning score. (Caveat, deliberate: under -c the per-restart RNG
+             seeds differ between the two searches, so a retest could stumble on a better
+             plugboard. That is extra plugboard restarts smuggled into a rotor-key
+             refinement, not refinement work; -R is the documented lever for that.)
+
+             A full sweep also removes a whole class of subtlety this code used to carry.
+             When it was a window it had to WRAP at the 0/25 boundary rather than clamp
+             -- ring2 is circular, so a coarse winner at A(0) with the true ring2 at Z(25)
+             was a documented-recoverable case a clamped window silently never checked
+             (confirmed by a concrete miss during testing). With every value in the set
+             there is no edge to fall off. search_range carries ring2 as an explicit value
+             list, so the punctured set goes in as-is: one mask, one search. */
+          unsigned int mask2 = ((1u << asize) - 1u) & ~(1u << center2);
 
           /* Reuse the winning task VERBATIM rather than rebuilding one from the
              machine's fields. wheel_task carries RAW wheel/reflector numbers, which
@@ -4244,22 +4390,46 @@ void bruteforce(char * result)
           std::vector<wheel_task> rtasks(1, tasks[cur_wo]);
           search_range rrange;
           rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
-          rrange.r_min[1] = range.r_min[1];
-          rrange.r_max[1] = range.r_max[1];
+          rrange.r_min[1] = rrange.r_max[1] = pair_r1[0];  /* re-pinned per sub-search */
           rrange.r_min[2] = 0;                /* bounds unused: r2_vals below decodes */
           rrange.r_max[2] = asize - 1;
           set_ring2(rrange, mask2);
           rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
-          rrange.g_min[1] = range.g_min[1];
-          rrange.g_max[1] = range.g_max[1];
+          rrange.g_min[1] = rrange.g_max[1] = pair_g1[0];  /* re-pinned per sub-search */
           rrange.g_min[2] = 0;
           rrange.g_max[2] = 25;
-          int rrc[wheels] = { 1, range.r_max[1] - range.r_min[1] + 1, rrange.r2_n };
-          int rgc[wheels] = { 1, range.g_max[1] - range.g_min[1] + 1, 26 };
+          int rrc[wheels] = { 1, 1, rrange.r2_n };   /* ring1/start1 pinned per pair */
+          int rgc[wheels] = { 1, 1, 26 };
           size_t rrsize = static_cast<size_t>(rrc[0]) * rrc[1] * rrc[2];
           size_t rgsize = static_cast<size_t>(rgc[0]) * rgc[1] * rgc[2];
           size_t rwork = rrsize * rgsize * restarts_par;
-          extra_keys_analysed = rrsize * rgsize;
+          /* Keys the refinement actually SCORES, not its index space. The §7.12
+             middle-wheel collapse applies here exactly as it does to the coarse pass --
+             search_worker() consults the same g_mid_rep_mask -- so counting rrsize*rgsize
+             would claim credit for the start1 values it skips, and the "Analysed N" line
+             would exceed the plugboards scored. Measured on a fully wildcarded keyspace:
+             439400 enumerated against 106600 scored, a 4.1x gap that made --ring-stride
+             look ~20% more expensive than it is. Mirrors build_key_space()'s own
+             accounting; the row is indexed by the task's RAW wheel numbers, since that is
+             how the mask was built (see the wheel_task note in CLAUDE.md). */
+          /* Keys the refinement actually SCORES, summed over the pinned pairs. The §7.12
+             collapse applies inside the refinement too (search_worker consults the same
+             g_mid_rep_mask), and with start1 pinned per sub-search a pair contributes only
+             the start2 values for which THAT start1 is the class representative -- so test
+             the mask bit for this start1 rather than taking the row's popcount. */
+          extra_keys_analysed = 0;
+          if (g_mid_rep_mask != nullptr)
+            {
+              const uint32_t * mrow = g_mid_rep_mask
+                + (static_cast<size_t>(rtasks[0].w[1]) * rotor_count
+                   + rtasks[0].w[2]) * asize;
+              for (int i = 0; i < npairs; i++)
+                for (int s2 = 0; s2 < asize; s2++)
+                  if ((mrow[s2] >> pair_g1[i]) & 1u)
+                    extra_keys_analysed += static_cast<size_t>(rrc[2]);
+            }
+          else
+            extra_keys_analysed = rrsize * rgsize * static_cast<size_t>(npairs);
 
           best_result rbest;
           /* Carry the display high-water mark into the refinement. Its best_result is a
@@ -4273,7 +4443,17 @@ void bruteforce(char * result)
              the merge below still compares against best.score. */
           rbest.shown.store(best.shown.load(std::memory_order_relaxed),
                             std::memory_order_relaxed);
-          std::atomic<size_t> rnext_key{0};
+          /* The header was already printed by the coarse pass; a fresh best_result would
+             otherwise re-emit it mid-run. */
+          rbest.header_shown = true;
+          /* Point the climb's accepted-move echo at rbest too. report_climb_progress()
+             reads the g_progress global, which still addresses the OUTER best -- so the
+             climb echo and this search's merge would gate on two independent `shown`
+             fields, and a single improvement would print TWICE (once from each, the
+             second dragging the header with it). One gate, one line. Safe to swap here:
+             no workers are running at this point, and it is restored below. */
+          best_result * save_progress = g_progress;
+          g_progress = &rbest;
           int rnthreads = opt_threads;
           if (rwork < static_cast<size_t>(rnthreads))
             rnthreads = static_cast<int>(rwork);
@@ -4282,9 +4462,45 @@ void bruteforce(char * result)
           size_t rchunk = rwork / (static_cast<size_t>(rnthreads) * 16);
           if (rchunk < 1)
             rchunk = 1;
-          run_parallel(rnthreads, [&](int t)
-            { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
-                            rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+          /* One sub-search per (ring1, start1) pair in the offset band, sharing a single
+             rbest. Everything each pins comes from the snapshots above, never re-read from
+             m: on the plain-scan path search_worker leaves m's ring/start in a stale
+             stepped state (the documented lazy restore), which is how an earlier
+             multi-search version here silently corrupted its own second pass. */
+          int won_r1 = pair_r1[0], won_g1 = pair_g1[0];
+          double prev_score = rbest.score;
+          for (int i = 0; i < npairs; i++)
+            {
+              rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
+              rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
+              rrange.r_min[1] = rrange.r_max[1] = pair_r1[i];
+              rrange.g_min[1] = rrange.g_max[1] = pair_g1[i];
+              std::atomic<size_t> rnext_key{0};
+              run_parallel(rnthreads, [&](int t)
+                { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
+                                rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+              /* rbest.idx is relative to whichever sub-search produced it, so remember the
+                 pair pinned when the score last improved; the reconstruction below re-pins
+                 rrange to it. */
+              if (rbest.found && (rbest.score > prev_score))
+                {
+                  prev_score = rbest.score;
+                  won_r1 = pair_r1[i];
+                  won_g1 = pair_g1[i];
+                }
+            }
+          rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
+          rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
+          rrange.r_min[1] = rrange.r_max[1] = won_r1;
+          rrange.g_min[1] = rrange.g_max[1] = won_g1;
+
+          g_progress = save_progress;
+          /* Carry the refinement's display high-water mark back, so the merge echo below
+             does not reprint a line rbest already showed during the search. */
+          if (rbest.shown.load(std::memory_order_relaxed)
+              > best.shown.load(std::memory_order_relaxed))
+            best.shown.store(rbest.shown.load(std::memory_order_relaxed),
+                             std::memory_order_relaxed);
 
           if (rbest.found && (rbest.score > best.score))
             {
@@ -4308,43 +4524,55 @@ void bruteforce(char * result)
             }
         }
 
-      int save_gf = opt_cascade;
-      int save_gf3 = opt_cascade3;
-      double save_gate = opt_cascade_gate;
-      opt_cascade = 1;
-      opt_cascade3 = 1;   /* --polish also enables the 3-ply escalation */
-      opt_cascade_gate = score_min;   /* unconditional cascade on the one best board */
-      /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
-         every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
-         the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
-         raise the noisy short-message quad score while hurting the truth (the over-plugging
-         avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
-      int fin_cap = opt_stages[opt_nstages - 1].cap;
-      double s = hillclimb<false>(m, fin_cap);
-      opt_cascade = save_gf;
-      opt_cascade3 = save_gf3;
-      opt_cascade_gate = save_gate;
-      /* Monotonic by construction: replace the best board ONLY when the finish scores
-         strictly higher, so gainfix-best never returns a worse-scoring board than the
-         search already found (a truth-vs-score chase at the information floor is a
-         separate matter -- unfixable by a score-only rule; see PERFORMANCE.md 4.10). */
-      if (s > best.score)
+      /* Guarded by opt_polish. This block shares its enclosing `if` with the
+         --ring-stride refinement above (both need best.idx reconstructed once), and
+         used to run whenever EITHER was requested -- so a --ring-stride run got the
+         plugboard finisher too, including with no -c at all. That is not a cosmetic
+         leak: with no -c the tool must not touch the plugboard, and the finisher was
+         adding spurious plugs to a board supplied with -s, corrupting the decrypt and
+         lowering the score-vs-truth on exactly the runs 7.11 measured. It also charged
+         --ring-stride for a cost it never asked for. --polish already requires -c
+         (validated), so the flag is the whole guard needed. */
+      if (opt_polish)
         {
-          best.score = s;
-          decode(m);
-          memcpy(best.plaintext, m.plaintext, textlength + 1);
-          /* Echo the improved board: without this the finisher silently replaced the
-             winner, so the last progress line the user saw showed the PRE-finisher
-             score/wheels/plugboard while stdout held a different (better) decrypt.
-             The search threads are joined here and key_to_machine restored the true
-             start positions, so m holds the correct config to display. Guarded by
-             best.shown like every other echo, so a line already showing this score is
-             not repeated; display-only, so -T-determinism is untouched. */
-          if (s > best.shown.load(std::memory_order_relaxed))
-            {
-              best.shown.store(s, std::memory_order_relaxed);
-              progress_line(best, m, s);
-            }
+        int save_gf = opt_cascade;
+        int save_gf3 = opt_cascade3;
+        double save_gate = opt_cascade_gate;
+        opt_cascade = 1;
+        opt_cascade3 = 1;   /* --polish also enables the 3-ply escalation */
+        opt_cascade_gate = score_min;   /* unconditional cascade on the one best board */
+        /* Cap the finishing climb at the TARGET-STAGE cap, not asize/2 (uncapped) -- like
+           every other finisher/quench in the tool (the staged tail at opt_stages[last].cap,
+           the -A quench). An uncapped finish let gainfix-best add spurious plugs 11..cap that
+           raise the noisy short-message quad score while hurting the truth (the over-plugging
+           avenue of the saturation exact-loss, PERFORMANCE.md 4.10). */
+        int fin_cap = opt_stages[opt_nstages - 1].cap;
+        double s = hillclimb<false>(m, fin_cap);
+        opt_cascade = save_gf;
+        opt_cascade3 = save_gf3;
+        opt_cascade_gate = save_gate;
+        /* Monotonic by construction: replace the best board ONLY when the finish scores
+           strictly higher, so gainfix-best never returns a worse-scoring board than the
+           search already found (a truth-vs-score chase at the information floor is a
+           separate matter -- unfixable by a score-only rule; see PERFORMANCE.md 4.10). */
+        if (s > best.score)
+          {
+            best.score = s;
+            decode(m);
+            memcpy(best.plaintext, m.plaintext, textlength + 1);
+            /* Echo the improved board: without this the finisher silently replaced the
+               winner, so the last progress line the user saw showed the PRE-finisher
+               score/wheels/plugboard while stdout held a different (better) decrypt.
+               The search threads are joined here and key_to_machine restored the true
+               start positions, so m holds the correct config to display. Guarded by
+               best.shown like every other echo, so a line already showing this score is
+               not repeated; display-only, so -T-determinism is untouched. */
+            if (s > best.shown.load(std::memory_order_relaxed))
+              {
+                best.shown.store(s, std::memory_order_relaxed);
+                progress_line(best, m, s);
+              }
+          }
         }
     }
 
@@ -4617,14 +4845,14 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "a few % of a low-R run (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--ring-stride K",
           "Sparse ring sampling for the rightmost wheel:");
-  fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine the");
-  fprintf(out, "  %-24s %s\n", "", "skipped neighbours around the best hit (needs -r");
-  fprintf(out, "  %-24s %s\n", "", "and -g to wildcard that wheel; no -F/--exhaust)");
-  fprintf(out, "  %-24s %s\n", "", "[1 = off]. NOT RECOMMENDED: measured an accuracy");
-  fprintf(out, "  %-24s %s\n", "", "trade, not a free saving -- on telegraphic German");
-  fprintf(out, "  %-24s %s\n", "", "K=2 costs ~10pp of exact recovery and K=3 ~17pp");
-  fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11). K=2 is the only value with");
-  fprintf(out, "  %-24s %s\n", "", "any backing; K>=3 is worse for little extra saving");
+  fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine every");
+  fprintf(out, "  %-24s %s\n", "", "skipped one around the best hit (needs -r and -g");
+  fprintf(out, "  %-24s %s\n", "", "to wildcard that wheel; no -F/--exhaust)");
+  fprintf(out, "  %-24s %s\n", "", "[1 = off]. K=2/K=3 analyse 1.9x/2.6x fewer keys");
+  fprintf(out, "  %-24s %s\n", "", "for ~0.5-2pp of exact recovery on telegraphic");
+  fprintf(out, "  %-24s %s\n", "", "German; K=3 is the better pick. K>=5 is not");
+  fprintf(out, "  %-24s %s\n", "", "recommended (2-8pp). Still an APPROXIMATION");
+  fprintf(out, "  %-24s %s\n", "", "(PERFORMANCE.md 7.11)");
   fprintf(out, "  %-24s %s\n", "--crib-file F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -4765,8 +4993,8 @@ void show_settings()
      exhaustive one. Every other search-affecting option is echoed here; this was the
      only silent one. */
   if (opt_ring_stride > 1)
-    fprintf(stderr, "Stride:     rightmost ring every %d, then refine around the best "
-            "hit (--ring-stride: APPROXIMATE, may miss the true key)\n",
+    fprintf(stderr, "Stride:     rightmost ring every %d, then refine the skipped rings "
+            "around the best hit (--ring-stride: APPROXIMATE, may miss the true key)\n",
             opt_ring_stride);
 
   fprintf(stderr, "Threads:    %d\n", opt_threads);

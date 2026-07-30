@@ -1142,7 +1142,7 @@ If domain-matched German is ever pursued, the findings from looking into it:
   `crack_quality` harness, which encrypts space-stripped prose and is
   self-consistent; testing the `X` effect would need the harness to encrypt
   `X`-substituted text.)
-- **Pragmatic path — synthesise the register.** Rather than find a scarce corpus,
+- **Pragmatic path — synthesise the writing style.** Rather than find a scarce corpus,
   take a large general German corpus (Leipzig, Wikipedia dump, Gutenberg) and apply
   the cipher's own preprocessing: uppercase, A–Z only, **substitute `X` for
   spaces/punctuation, spell out digits**. That yields quadgram-scale data with the

@@ -145,8 +145,8 @@ unicity, but short enough that prose can't rank the telegraphic truth). This is 
 result §1 anticipated and §3 could not settle on the bimodal 13: a domain-matched corpus is
 the second real lever for short real-message breaking, alongside the `-a` scoring model.
 
-Scope: `wehrmacht` encodes telegraphic orthography by construction — it is a *register*,
-not a language — so it is for **real Wehrmacht traffic only**; on prose German (and the
+Scope: `wehrmacht` encodes telegraphic orthography by construction — it is a *writing style*,
+not a separate language — so it is for **real Wehrmacht traffic only**; on prose German (and the
 `make crackquality` benchmark) `-l german` remains correct. This is **measured, not asserted**
 (`eval/eval_prose_inverse.py`, the mirror control — random prose-German excerpts recovered
 under prose vs telegraphic):

@@ -252,13 +252,14 @@ the English tables.
   (needs `-c`) `[off]`. **Not recommended** — an ablation/measurement
   flag, not a quality lever
 - **`--ring-stride K`** — Test only every `K`th ring position of the
-  rightmost wheel, then refine around the best hit; needs both `-r` and `-g`
-  to wildcard that wheel, and rejects `-F`/`--exhaust` `[1 = off]`.
-  **Not recommended** — measured an accuracy *trade*, not a free saving:
-  on authentic telegraphic German `K=2` costs about 10 percentage points of
-  exact recovery and `K=3` about 17. The saving is smaller than it looks
-  too (≈1.7×, not `K`×), because the refinement grows as fast as the coarse
-  pass shrinks
+  rightmost wheel, then refine every skipped position around the best hit;
+  needs both `-r` and `-g` to wildcard that wheel, and rejects
+  `-F`/`--exhaust` `[1 = off]`. **Worth using at `K=2` or `K=3`** when
+  throughput matters: on authentic telegraphic German they analyse 1.9× and
+  2.6× fewer keys while costing only about half a percentage point to two
+  percentage points of exact recovery. `K=3` is the better of the two. `K` of
+  5 or more costs considerably more accuracy and is not recommended. The
+  search is still an *approximation*, so a run says so in its echoed settings
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters,
   try every combination, keep the best climb (needs `-c`; parallel over
   the first forced pair, so `-T` helps) `[off]`. **Not recommended** — a
@@ -314,8 +315,8 @@ separators, `Q` for *ch*, spelled-out numbers) the prose German tables
 mis-score the plaintext. Use **`-l wehrmacht`**, a domain-matched scoring
 language built from the published statistics of ~20 000 letters of 1941
 Enigma decrypts: it recovers **+20.9 pp** more (mean %-letters-correct)
-over a 69-message held-out set of real 1941 messages. It is a *register*,
-not a language — on prose German it is a domain **mis**match and measured
+over a 69-message held-out set of real 1941 messages. It is a *writing style*,
+not a separate language — on prose German it is a domain **mis**match and measured
 **−10.2 pp**, so ordinary German text (and `make crackquality`) should
 stay on `-l german`. Regenerate the tables with
 `python3 eval/build_telegraphic_ngrams.py`; see
@@ -368,7 +369,7 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   instead (`--score i4q10`). (The kick and the exhaustion are their own
   options, `--random` / `--exhaust`, not schedule tokens.)
 
-  > **Which pre-pass is best is mildly register-dependent.** `m4a10` is the
+  > **Which pre-pass is best depends mildly on the writing style.** `m4a10` is the
   > general recommendation and is what the recipes below use, but a paired
   > A/B against the IC pre-pass `i4a10` (same weighted target, matched
   > compute, 1800 trials each) put mono ahead on telegraphic traffic
