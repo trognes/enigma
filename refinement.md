@@ -319,7 +319,8 @@ offsets to `V` lose anything the full band finds?
 `eval/ring_stride_window_probe.py` — the offline model pins `ring0`/`start0` at
 the truth and omits `-c`, so it cannot see either of those interactions.
 
-**C. The case matrix.** Every entry is a `tests/run_tests.sh` check. Size each
+**C. The case matrix.** Every entry is a `tests/run_tests.sh` check; §12 says
+why the design covers the machine variants among them by construction. Size each
 to the property under test — pin the reflector and wheel order, wildcard only
 what the case needs — because the sanitizer job runs the whole suite at ~10×
 (CLAUDE.md's rules for adding checks). ✅ marks what exists today and must keep
@@ -501,13 +502,13 @@ CLAUDE.md flags as the layout-sensitive one:
 
 Eight deltas across two independent runs, all within ±1.0%. The repeat is not
 redundant: run-to-run spread on the *same* comparison is a noise-floor estimate,
-and at ~±1% every delta sits inside it. That is worth more than it looks:
-the concern was never the scoring loop (nothing was added to it) but the ~70
-lines added to a translation unit with a documented history of ±20–60% layout
-swings under clang on Apple silicon. Two earlier attempts to measure this on a
-shared Linux container were worthless — its base-vs-base control, identical
-source on both sides, reported **+20.8%** on `search` — so quiet hardware was
-the only way to get an answer.
+and at ~±1% every delta sits inside it. That is worth more than it looks: the
+concern was never the scoring loop (nothing was added to it) but the ~70 lines
+added to a translation unit with a documented history of ±20–60% layout swings
+under clang on Apple silicon. Two earlier attempts to measure this on a shared
+Linux container were worthless — its base-vs-base control, identical source on
+both sides, reported **+20.8%** on `search` — so quiet hardware was the only way
+to get an answer.
 
 **Two implementation traps, both caught by tooling rather than by reading.**
 
@@ -529,3 +530,53 @@ A.. -g A..` at K=2) is now a 1.98× win, and the warning is provably unreachable
 — it needs `50 > tasks · rc0 · rc1 · gc0 · gc2 · (26 − rc2)`, while validation
 forces `gc2 = 26` and `rc2 ≤ 13`, so the right-hand side is at least 338.
 `tests/run_tests.sh` now guards the inversion instead of the warning.
+
+## 12. Machine variants and stepping — why the design covers them
+
+The test matrix in §8 lists M4, two-notch wheels and the stepping phenomena as
+cases to check. This is why each is covered by construction rather than by luck,
+which is the first thing a reviewer will want to know.
+
+**M4**, three ways. The Greek wheel is *static*: it folds into the effective
+reflector at precompute and never steps, so it contributes nothing to `S` or `D`
+and the engine remains the 3-stepping-rotor machine the derivation addresses.
+The refinement reuses `tasks[cur_wo]` **verbatim**, so the Greek wheel and its
+offset ride along untouched — the same reuse that fixes the Norway
+double-translation trap. And pinning the Greek offset to the coarse winner's is
+sound for exactly the reason pinning `o2` is: it enters the substitution at
+*every* position through the effective reflector, so a wrong one garbles
+everything and the winner could not have been a near-solution.
+
+**Two-notch right wheels (VI–VIII)** need no special case, because nothing in
+the derivation assumes one notch. `step_counts()` reads `notch[w][g]`, a boolean
+table with **both** M and Z set for those wheels, and `step_deltas()` collects
+whatever distinct differences occur with no bound baked in. This is *stronger*
+than what it replaced: the ±2 band's bound came from an enumeration that had to
+argue two-notch wheels could not exceed it, while the derivation measures. The
+candidate count tracks the wheel — 743 for `-w 123`, 837 for `-w 126`, 1298 for
+`-w 168` on the same message — so the delta sets really do differ, and all three
+recover exactly.
+
+**The stepping phenomena** are covered because `step_counts()` mirrors
+`setup_mapping()`'s stepping line for line, double-step branch included: the
+middle wheel sitting on its own notch advances both itself and the left wheel.
+That branch is *why* `D` exists and why the left-wheel offset is derived
+ungated. A turnover at character 1 works because stepping precedes the first
+character in both functions.
+
+**Norway** is covered by the same `tasks[cur_wo]` reuse, plus `step_counts()`
+taking TRANSLATED rotor indices (`machine::walzenlage`) because `notch[]` is
+indexed that way, while the §7.12 mask beside it takes RAW ones. Mixing those up
+is the trap that made the refinement search the wrong rotors under `-n`.
+
+**What the refinement deliberately does NOT re-open:** the wheel order, the
+reflector, and M4's Greek wheel. Same argument for all three — each garbles the
+whole message when wrong, so a coarse winner carrying one of them wrong is not a
+near-solution at all, and §1 puts that outside the refinement's job.
+
+**Designed-for is not measured-at-scale.** Each of the above is a *recovery*
+check in the suite; the 309-trial statistical equivalence run (§11) is wheels
+I–V on the standard machine. Nothing suggests a problem — the candidate counts
+show the derivation responding correctly to two-notch stepping — but matching
+that confidence would mean widening the shape probe's wheel pool to I–VIII and
+adding an M4 arm.
