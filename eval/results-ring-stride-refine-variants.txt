@@ -1,0 +1,83 @@
+Refinement shape equivalence across MACHINE VARIANTS
+====================================================
+
+eval/ring_stride_refine_shape_probe.py --trials 100 --lengths 60,110 --seed 11
+  --k {2,3,5}, once without --m4 and once with.  Default --wheels 8, so the
+  three-wheel draw comes from I-VIII.
+
+WHY THIS RUN EXISTS.  The equivalence measurement behind the derived refinement
+(refinement.md 11) was wheels I-V on the standard machine.  The two machine
+features the derivation has to survive were argued from the design, not
+measured: two-notch right wheels (VI-VIII), which step the middle wheel twice
+per revolution and so change how often a shifted schedule straddles the middle
+wheel's own notch; and M4, whose static Greek wheel changes the substitution but
+not the stepping.  This closes that gap.
+
+It also measures the shape that actually SHIPPED.  Until now the probe scored
+only the shapes that led to the derivation, and the equivalence claim rested on
+the derived set being a subset of the measured-clean "lock-start2".  That bounds
+it the wrong way -- a subset can lose where its superset does not -- so
+"derived" is now scored directly: ring1 computed from the step-count drift
+between the coarse winner's schedule and the candidate's, exactly as enigma.cc
+does it.
+
+REALIZED TWO-NOTCH COVERAGE (replayed from the seeded stream, not an
+expectation).  Per arm, over the 200 trials each K value shares:
+
+  standard   any two-notch wheel 162/200   two-notch RIGHT wheel 73/200
+  M4         any two-notch wheel 165/200   two-notch RIGHT wheel 87/200
+
+Across the three K values that is 1200 trials in all, 480 of them with a
+two-notch wheel in the position that drives the middle wheel.
+
+COLUMNS.  "coarse ok" = the coarse pass alone already decoded the truth.  The
+shape columns = that shape's best-scoring candidate decodes the truth (or the
+coarse winner already did).  "lost:X" = trials the enumeration ("shipped")
+recovers and shape X does not -- the equivalence metric.
+
+# K=2 trials=100 lang=wehrmacht machine=standard wheels=I-VIII  (shipped 25x130x26, derived 25x26x~1, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	derived	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:derived	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+60	100	60%	75%	75%	75%	75%	76%	76%	76%	0	0	0	0	0	0
+110	100	62%	85%	85%	85%	84%	85%	85%	84%	0	0	1	1	1	2
+
+# K=3 trials=100 lang=wehrmacht machine=standard wheels=I-VIII  (shipped 25x130x26, derived 25x26x~1, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	derived	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:derived	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+60	100	47%	75%	75%	75%	72%	75%	76%	73%	0	0	3	3	2	5
+110	100	35%	85%	85%	85%	84%	86%	86%	85%	0	0	1	1	1	2
+
+# K=5 trials=100 lang=wehrmacht machine=standard wheels=I-VIII  (shipped 25x130x26, derived 25x26x~1, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	derived	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:derived	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+60	100	29%	75%	75%	75%	72%	74%	74%	73%	0	0	4	4	3	5
+110	100	30%	85%	85%	85%	81%	83%	85%	81%	0	0	4	4	3	6
+
+# K=2 trials=100 lang=wehrmacht machine=M4 wheels=I-VIII  (shipped 25x130x26, derived 25x26x~1, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	derived	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:derived	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+60	100	57%	72%	72%	72%	70%	70%	69%	68%	0	0	2	2	3	4
+110	100	68%	91%	91%	91%	91%	92%	91%	91%	0	0	0	0	1	1
+
+# K=3 trials=100 lang=wehrmacht machine=M4 wheels=I-VIII  (shipped 25x130x26, derived 25x26x~1, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	derived	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:derived	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+60	100	45%	72%	72%	72%	68%	68%	71%	68%	0	0	4	4	2	5
+110	100	51%	91%	91%	91%	88%	89%	89%	89%	0	0	3	3	3	3
+
+# K=5 trials=100 lang=wehrmacht machine=M4 wheels=I-VIII  (shipped 25x130x26, derived 25x26x~1, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	derived	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:derived	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+60	100	27%	72%	72%	72%	66%	66%	70%	65%	0	0	7	7	3	9
+110	100	36%	91%	91%	91%	87%	90%	91%	89%	0	0	4	5	4	6
+
+RESULT.  lost:derived = 0 in all twelve cells, and "derived" matches "shipped"
+recovery percentage for percentage everywhere -- on the standard machine and on
+M4, at K=2/3/5, at both lengths.  1200 paired trials.
+
+The run has the resolution to have detected a loss: the cheaper shapes below
+"derived" lose 1-9 trials per cell (49 in total across lock-off1, shift2,
+lock-both and lock-all), so a zero here is a measurement, not an absence of
+signal.  "lock-start2" also loses nothing, as it did on wheels I-V -- expected,
+since it is a superset of "derived"; the point of scoring "derived" separately
+is that this fact was never evidence for it.
+
+The two arms differ in difficulty as their construction predicts and not
+otherwise: M4's coarse pass is a little better at L=110 (68/51/36% vs
+62/35/30%) and its refined recovery a little higher (91% vs 85%), which is the
+substitution being different, not the stepping.  The stepping-sensitive
+quantity -- whether the derivation finds the right ring1 -- is identical.
