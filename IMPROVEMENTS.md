@@ -107,6 +107,19 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   is provably unreachable), and the apparent 1.4% the derived set "lost" against
   the enumerated one turned out to be keys the *exhaustive* search also fails —
   the old refinement won them by never reaching the better-scoring decoy.
+- ✅ **The derivation across machine variants — MEASURED** (`refinement.md` §12,
+  `archived/PERFORMANCE.md` §7.11). The runs above are wheels I–V on the
+  standard machine; two-notch right wheels and M4 were covered by the design
+  argument and by recovery checks, not statistically. Now `lost:derived` = 0 in
+  all twelve cells over **1200 paired trials** (standard I–VIII and M4, `K` =
+  2/3/5, L = 60/110), 480 of them with a two-notch wheel in the *right*
+  position. The zero is readable because the cheaper shapes lose 1–9 trials per
+  cell in the same run. It is also the first run to score the shape that
+  **ships**: the earlier tables scored only the shapes that led to the
+  derivation, leaving the claim resting on the derived set being a subset of a
+  measured-clean superset — which bounds it the wrong way, since a subset can
+  lose exactly where its superset does not. Still uncovered: K≥8, a hidden
+  plugboard, and messages long enough for the left wheel to step.
 - 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
   the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
   but whether spending it on `-R` raises recovery is untested.

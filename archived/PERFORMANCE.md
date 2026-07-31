@@ -3651,6 +3651,67 @@ coarse winner displaced by middle-wheel drift is a distance it cannot see) — w
 end-to-end table then confirms by being uniformly harsher. Both are safe instruments for
 concluding "wider than a constant"; neither certifies a particular cap as sufficient.
 
+**Machine variants: the derived refinement measured on wheels I–VIII and M4** —
+✅ **equivalence-clean, 1200 paired trials.** The runs above (and the 309-trial
+stride-specific-miss table in `refinement.md` §11) are wheels **I–V on the standard
+machine**. The two machine features the derivation has to survive were covered by the
+design argument in `refinement.md` §12 and by *recovery* checks in `tests/run_tests.sh`,
+not by a statistical run. They are different questions, which is why both are needed:
+
+- **Two-notch right wheels (VI–VIII)** step the middle wheel twice per revolution, so a
+  shifted schedule straddles the middle wheel's own notch more often. This is the part of
+  the derivation that is **not** indifferent to the machine.
+- **M4** folds a static Greek wheel into the effective reflector: the substitution
+  changes, the stepping does not. This is the part that **is**.
+
+`eval/ring_stride_refine_shape_probe.py` now draws from I–VIII (`--wheels`, default 8) and
+has an M4 arm (`--m4`: thin reflector `b`/`c` plus Beta/Gamma at a random offset); the
+shared machine model in `eval/ring_stride_geometry_probe.py` grew the VI–VIII wirings with
+their `MZ` notches, Beta/Gamma, the thin reflectors, and an `effective_reflector()`
+mirroring `set_effective_reflector()`. 100 trials per cell, L=60/110, K=2/3/5, seed 11,
+results in `eval/results-ring-stride-refine-variants.txt`:
+
+| arm | K | L=60 shipped / **derived** | L=110 shipped / **derived** | lost:derived |
+|---|--:|--:|--:|--:|
+| standard I–VIII | 2 | 75% / **75%** | 85% / **85%** | **0** |
+| standard I–VIII | 3 | 75% / **75%** | 85% / **85%** | **0** |
+| standard I–VIII | 5 | 75% / **75%** | 85% / **85%** | **0** |
+| M4 | 2 | 72% / **72%** | 91% / **91%** | **0** |
+| M4 | 3 | 72% / **72%** | 91% / **91%** | **0** |
+| M4 | 5 | 72% / **72%** | 91% / **91%** | **0** |
+
+480 of the 1200 trials drew a two-notch wheel into the **right** position — the one that
+drives the middle wheel — replayed from the seeded stream rather than taken as an
+expectation (standard 73/200 per K, M4 87/200).
+
+**The run has the resolution to have detected a loss.** In the same cells the cheaper
+shapes below `derived` lose 1–9 trials each, 49 in total across `lock-off1`, `shift2`,
+`lock-both` and `lock-all`. A zero from an instrument that is showing losses elsewhere in
+the same run is a measurement; a zero from one that never shows any is not.
+
+**It is also the first run to score the shape that actually ships.** The shape table
+earlier in this section scored only the shapes that *led to* the derivation, so the
+equivalence claim rested on the derived set being a subset of the equivalence-clean
+`lock-start2` — which **bounds it the wrong way**: a subset can lose exactly where its
+superset does not. `derived` is now a shape in its own right, computing `ring1` from the
+step-count drift between the coarse winner's schedule and the candidate's the way
+`enigma.cc` does.
+
+**The two arms differ where their construction predicts and nowhere else.** M4's coarse
+pass is better at L=110 (68/51/36% against 62/35/30% for K=2/3/5) and its refined recovery
+higher (91% against 85%) — that is the substitution being different, not the stepping. The
+stepping-sensitive quantity, whether the derivation lands on the right `ring1`, is
+identical across the two arms.
+
+**`selftest()` now anchors each variant against the binary separately** — wheels I–V, a
+two-notch case (`-w 168`), an M4 case (`-4 -u b -w G317`) — plus the documented
+`b`+Beta@A ≡ B and `c`+Gamma@A ≡ C folds. A model that quietly disagreed with `./enigma`
+on the new wirings or the `MZ` notches would have produced a confident and meaningless
+zero, which is the specific way this kind of probe fails.
+
+**Still not covered** (unchanged by this run): K≥8, a hidden plugboard, and messages long
+enough for the left wheel to step.
+
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 
 §7.10 collapses wheel 0's ring × start *totally* (26×, exact) and §7.11 attacks wheel 2's

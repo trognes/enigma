@@ -259,8 +259,10 @@ English tables.
   rather than searched — the skipped positions' ring/start settings follow from
   the coarse winner's stepping schedule — so it costs a few hundred keys rather
   than tens of thousands, and there is no keyspace where the stride costs more
-  than it saves. The search is still an *approximation*, so a run says so in
-  its echoed settings
+  than it saves. That derivation is verified to recover everything the old
+  exhaustive refinement did, on the standard machine and on M4, with one- and
+  two-notch wheels alike. The search is still an *approximation*, so a run says
+  so in its echoed settings
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters, try
   every combination, keep the best climb (needs `-c`; parallel over the first
   forced pair, so `-T` helps) `[off]`. **Not recommended** — a

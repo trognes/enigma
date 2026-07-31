@@ -931,6 +931,18 @@ removed.
 > trials). The "not paying for itself" warning is **removed**: the keyspace it
 > warned about is now a 1.98× win and the warning is provably unreachable. The
 > width numbers below are the history that led there.
+>
+> **The derivation is equivalence-clean across machine variants too** — 1200
+> paired trials, `lost:derived` = 0 in all twelve cells (standard wheels I–VIII
+> and M4, `K` = 2/3/5, L = 60/110), 480 of them with a two-notch wheel in the
+> *right* position. Two features had to be separated to test this: two-notch
+> right wheels change the **stepping** (the part the derivation is sensitive
+> to), while M4's folded Greek wheel changes the **substitution** and not the
+> stepping (the part it is indifferent to). The run also scores the shape that
+> actually ships for the first time — the earlier tables scored only the shapes
+> that *led to* the derivation, so the claim rested on the derived set being a
+> subset of a measured-clean superset, which bounds it the wrong way.
+> `archived/PERFORMANCE.md` §7.11 and `refinement.md` §12.
 
 > **The width was re-measured, and then the question was superseded — see
 > `refinement.md`.** A `w=3` cap matches the full sweep at K≤5 but costs 20pp of
