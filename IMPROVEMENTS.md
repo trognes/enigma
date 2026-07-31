@@ -88,13 +88,18 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   ring2 sweep: K=3 `+0.2pp` mean %-correct, K=2 `−4.2pp` with a 95% CI of
   [−13.3, +4.9]. Full writeup: `eval/results-ring-stride-vs-restarts.txt`.
 
-  Two things worth carrying forward. **The trade only exists on a
-  wildcarded-ring keyspace** — the refinement's fixed cost (`25 × 130 × 26` = 84
-  500 index keys once the offset band applies, ~19 000 actually scored at L=100)
-  exceeds the coarse saving under the default `-r AA.`, where the stride costs
-  *more* than it saves. And **n=40 resolves only ±9pp here**; a ~2pp effect
+  One thing worth carrying forward: **n=40 resolves only ±9pp here**, so the
+  result rules out a large effect either way and nothing smaller. A ~2pp effect
   would need ~20× the trials at ~75 s per arm per trial, which is not worth
   spending on a flag that is not recommended by default.
+
+  This measurement predates the derived refinement, and the keyspace caveat it
+  carried is now obsolete: it read that the refinement's fixed cost (84 500
+  index keys) exceeded the coarse saving under the default `-r AA.`, so the
+  stride cost more than it saved there. The derivation cut that cost to 650–1
+  300 and inverted the case — see the entry below. The recovery numbers above
+  stand, since a cheaper refinement cannot lose keys the enumerated one found
+  (measured: 0 stride-specific misses for both).
 - ✅ **The derived refinement — SHIPPED** (`refinement.md`). The refinement's
   `25 × 130 × 26` = 84 500 candidates are now `25 ×` the start1 range (650–1
   300), because two of the three axes are computable rather than searchable:
@@ -132,10 +137,10 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   **suggestive, not established**, and only at a stride already outside the
   recommended K≤3. Settling it needs ~200 trials (~3–4 h) and buys nothing
   operational. The *fully* hidden cell is **vacuous and must not be read as a
-  pass** — its K=1 base is 10%, one eligible trial in ten.- 🟢 **Does the
-  middle-wheel collapse's saving convert?** The same question for the §7.12
-  keyspace reduction (3–5× at short lengths): the compute is saved, but whether
-  spending it on `-R` raises recovery is untested.
+  pass** — its K=1 base is 10%, one eligible trial in ten.
+- 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
+  the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
+  but whether spending it on `-R` raises recovery is untested.
 
 ### Maintainability and packaging
 

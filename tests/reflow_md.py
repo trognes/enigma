@@ -35,7 +35,29 @@ SAFETY CHECKS (run on every --write)
        rewrapping a quoted paragraph legitimately changes how many there are.
     2. Blockquote blocks — the number of quoted regions must be unchanged, so
        quoting cannot be silently dropped by check 1's exclusion.
-    Either failing aborts without writing.
+    3. No merged list item in the INPUT (see below) — reflowing one launders it
+       into a tidy-looking paragraph, so it must be fixed before rewrapping.
+    Any failing aborts without writing.
+
+MERGED LIST ITEMS (checked by BOTH --check and --write)
+    Checks 1-2 protect against this tool corrupting a file. They cannot see a
+    list that arrived malformed, and one did: an edit dropped a newline, gluing
+    a bullet onto the end of the previous item —
+
+        ...one eligible trial in ten.- **Does the collapse's saving convert?**
+
+    A later --write then reflowed the run-on into a well-formed-looking
+    paragraph, which is what made it survive review. --check used to pass it,
+    because it validated line WIDTH only and said nothing about structure.
+
+    The detector wants a hyphen glued to the end of a word or of punctuation and
+    followed by list-item-shaped content — bold, code, a capital, or a symbol.
+    That shape is what distinguishes a merged bullet from the two legitimate
+    mid-line hyphens this repo's prose is full of: SUSPENDED hyphens ("Mono- /
+    bi- / tri-gram", "a length- and model-robust claim"), where the next word is
+    lowercase or a slash, and the "--" used as an em dash, excluded by requiring
+    the preceding character not to be a hyphen. Zero false positives over every
+    Markdown file in the repo, `archived/` included.
 
 Width is DISPLAY COLUMNS, not bytes: the docs use `—`, `×`, `≈` and `§`
 constantly, three bytes and one column each, so a byte-based check over-reports.
@@ -48,6 +70,11 @@ WIDTH = 80
 QUOTE = re.compile(r'^(\s*(?:>\s?)+)')
 ITEM = re.compile(r'^(\s*)([-*]\s+|\d+\.\s+)')
 DANGER = re.compile(r'^(?:>|#|\||```|~~~)|^[-*+]$|^\d+[.)]$')
+# A list marker glued onto the end of the previous line: a hyphen preceded by a
+# word character or punctuation (but NOT another hyphen, which is this repo's em
+# dash) and followed by list-item-shaped content. See the docstring for why the
+# following-content test is what separates it from a suspended hyphen.
+MERGED = re.compile(r'[^\s-]-\s+(?:\*\*|`|[A-Z]|[^\x00-\x7f])')
 
 
 def cols(text):
@@ -160,6 +187,19 @@ def unavoidable(line):
     return indent + max(cols(w) for w in words) > WIDTH
 
 
+def merged_items(lines):
+    """(line number, text) for every line holding a list marker glued to the end
+    of preceding prose. Fenced blocks are exempt, as everywhere else."""
+    bad, fence = [], False
+    for n, line in enumerate(lines, 1):
+        if line.lstrip().startswith('```'):
+            fence = not fence
+            continue
+        if not fence and MERGED.search(line):
+            bad.append((n, line.strip()))
+    return bad
+
+
 def violations(lines):
     """(line number, width) for every line over the limit. Fenced blocks and
     lines held over by an unbreakable token are exempt."""
@@ -185,14 +225,30 @@ def main(argv):
         src = open(path, encoding='utf-8').read().split('\n')
         if mode == '--check':
             bad = violations(src)
+            merged = merged_items(src)
             if bad:
                 failed = True
                 print('%s: %d line(s) over %d columns' %
                       (path, len(bad), WIDTH))
                 for n, w in bad[:20]:
                     print('    line %-5d %3d columns' % (n, w))
-            else:
+            if merged:
+                failed = True
+                print('%s: %d merged list item(s) -- a bullet is glued to the '
+                      'end of the previous line' % (path, len(merged)))
+                for n, text in merged[:20]:
+                    print('    line %-5d %s' % (n, text[:64]))
+            if not bad and not merged:
                 print('%s: ok' % path)
+            continue
+
+        merged = merged_items(src)
+        if merged:
+            print('%s: ABORTED, %d merged list item(s) in the input; reflowing '
+                  'would hide them' % (path, len(merged)))
+            for n, text in merged[:20]:
+                print('    line %-5d %s' % (n, text[:64]))
+            failed = True
             continue
 
         dst = reflow(src)
