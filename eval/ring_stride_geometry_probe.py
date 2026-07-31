@@ -60,18 +60,30 @@ ROOT = os.path.dirname(HERE)
 NGRAMS = os.path.join(ROOT, "ngrams")
 BINARY = os.path.join(ROOT, "enigma")
 
+# Rotor indices mirror enigma.cc's, minus the Norway block: 0-7 = I-VIII,
+# 8/9 = Beta/Gamma (M4's static Greek wheel, which never steps -- hence the
+# empty notch strings).
 ROTOR = [
     "EKMFLGDQVZNTOWYHXUSPAIBRCJ",  # I
     "AJDKSIRUXBLHWTMCQGZNPYFVOE",  # II
     "BDFHJLCPRTXVZNYEIWGAKMUSQO",  # III
     "ESOVPZJAYQUIRHXLNFTGKDCMWB",  # IV
     "VZBRGITYUPSDNHLXAWMJQOFECK",  # V
+    "JPGVOUMFYQBENHZRDKASXLICTW",  # VI
+    "NZJHGRCXMYSWBOUFAIVLPEKQDT",  # VII
+    "FKQHTLXOCBJSPDZRAMEWNIUYGV",  # VIII
+    "LEYJVCNIXWPBQMDRTAKZGFUHOS",  # Beta
+    "FSOKANUERHMBTIYCWLQPZXVGJD",  # Gamma
 ]
-NOTCH = ["Q", "E", "V", "J", "Z"]
+# VI-VIII carry TWO notches, so they turn the middle wheel twice per revolution.
+NOTCH = ["Q", "E", "V", "J", "Z", "MZ", "MZ", "MZ", "", ""]
+BETA, GAMMA = 8, 9
 REFLECTOR = {
     "A": "EJMZALYXVBWFCRQUONTSPIKHGD",
     "B": "YRUHQSLDPXNGOKMIEBFZCWVJAT",
     "C": "FVPJIAOYEDRZXWGCTKUQSBNMHL",
+    "b": "ENKQAUYWJICOPBLMDXZVFTHRGS",   # M4 thin
+    "c": "RDOBJNTKVEHMLFCWZAXGYIPSUQ",   # M4 thin
 }
 
 A = ord("A")
@@ -98,11 +110,24 @@ def rotor_tables(w):
     return fwd, rev
 
 
-def subst_array(wheels, refl):
+def effective_reflector(refl, greek=None, greek_offset=0):
+    """The reflector the rotor stack sees. For M4 the Greek wheel is STATIC, so
+    it folds into the reflector as greek . thin . greek^-1 at its fixed offset
+    (start - ring) mod 26 -- mirrors enigma.cc's set_effective_reflector(),
+    which is why the engine stays a 3-stepping-rotor machine in M4 mode."""
+    u = num(REFLECTOR[refl])
+    if greek is None:
+        return u
+    gf, gr = rotor_tables(greek)
+    o = greek_offset % 26
+    return gr[o][u[gf[o][np.arange(26)]]]
+
+
+def subst_array(wheels, refl, greek=None, greek_offset=0):
     """S[o0][o1][o2][x] -- the rotor-stack + reflector substitution, as in
     enigma.cc's precompute()."""
     f = [rotor_tables(w) for w in wheels]
-    u = num(REFLECTOR[refl])
+    u = effective_reflector(refl, greek, greek_offset)
     x = np.arange(26)
     # core[o0][o1][x] = rev1(rev0(U(fwd0(fwd1(x))))) -- the left+middle stack
     core = np.empty((26, 26, 26), dtype=np.int64)
@@ -149,8 +174,9 @@ def plugboard(rng, npairs):
     return p
 
 
-def crypt(text, wheels, refl, ring, start, plug=None):
-    S = subst_array(wheels, refl)
+def crypt(text, wheels, refl, ring, start, plug=None, greek=None,
+          greek_offset=0):
+    S = subst_array(wheels, refl, greek, greek_offset)
     p = positions(start, wheels, len(text))
     o = (p - np.asarray(ring)[None, :]) % 26
     c = num(text)
@@ -361,24 +387,56 @@ def main():
             sys.stdout.flush()
 
 
+PLAIN = ("ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEIN"
+         "SZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAU")
+
+
+def run_binary(argv, ct):
+    r = subprocess.run([BINARY] + argv, input=ct, capture_output=True,
+                       text=True,
+                       env=dict(os.environ, ENIGMA_DATA=NGRAMS))
+    return re.sub("[^A-Z]", "", r.stdout.upper())
+
+
 def selftest():
-    """Check the model against the ./enigma binary on an authentic message."""
+    """Check the model against the ./enigma binary -- once per machine variant
+    the probes can now generate, since each exercises a different part of the
+    model: wheels I-V, a two-notch right wheel (VI-VIII step the middle wheel
+    twice a revolution), and M4's folded Greek wheel."""
     if not os.path.exists(BINARY):
         sys.exit("build ./enigma first (make)")
-    pt = ("ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEIN"
-          "SZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAU")
-    wheels = [3, 1, 2]          # IV II III  (-w 423)
-    ring = [int(x) - A for x in map(ord, "GTO")]
-    start = [int(x) - A for x in map(ord, "SDV")]
-    ct = crypt(pt, wheels, "B", ring, start)
-    r = subprocess.run([BINARY, "-u", "B", "-w", "423", "-r", "GTO", "-g", "SDV"],
-                       input=ct, capture_output=True, text=True,
-                       env=dict(os.environ, ENIGMA_DATA=NGRAMS))
-    got = re.sub("[^A-Z]", "", r.stdout.upper())
-    if got != pt:
-        sys.exit("selftest FAILED\n  want %s\n  got  %s" % (pt, got))
-    # and the documented cipher/plain pair from the corpus itself
-    sys.stderr.write("selftest ok (model agrees with ./enigma)\n")
+    cases = [
+        # label, wheels, refl, ring, start, greek, greek ring/start, argv
+        ("I-V", [3, 1, 2], "B", "GTO", "SDV", None, None,
+         ["-u", "B", "-w", "423", "-r", "GTO", "-g", "SDV"]),
+        # VIII on the right: two notches (M and Z), so the middle wheel turns
+        # over twice per revolution -- the case the derivation must not assume
+        # away. VI in the middle adds a second two-notch wheel and its own
+        # double step.
+        ("two-notch", [0, 5, 7], "C", "KQZ", "BMX", None, None,
+         ["-u", "C", "-w", "168", "-r", "KQZ", "-g", "BMX"]),
+        # M4: thin reflector b + Gamma at a non-trivial offset, folded into the
+        # effective reflector. Only (start - ring) of the Greek wheel is
+        # identifiable, so the binary is given ring A and start = the offset.
+        ("m4", [2, 0, 6], "b", "AXF", "RTU", GAMMA, 9,
+         ["-4", "-u", "b", "-w", "G317", "-r", "AAXF", "-g", "JRTU"]),
+    ]
+    for label, wheels, refl, ring, start, greek, goff, argv in cases:
+        ct = crypt(PLAIN, wheels, refl,
+                   [ord(x) - A for x in ring], [ord(x) - A for x in start],
+                   greek=greek, greek_offset=(goff or 0))
+        got = run_binary(argv, ct)
+        if got != PLAIN:
+            sys.exit("selftest FAILED (%s)\n  want %s\n  got  %s"
+                     % (label, PLAIN, got))
+    # M4's documented backward compatibility: thin b + Beta at ring/pos A is the
+    # standard reflector B, so the fold must reproduce it exactly.
+    if txt(effective_reflector("b", BETA, 0)) != REFLECTOR["B"]:
+        sys.exit("selftest FAILED: b + Beta@A is not reflector B")
+    if txt(effective_reflector("c", GAMMA, 0)) != REFLECTOR["C"]:
+        sys.exit("selftest FAILED: c + Gamma@A is not reflector C")
+    sys.stderr.write("selftest ok (model agrees with ./enigma: %s)\n"
+                     % ", ".join(c[0] for c in cases))
 
 
 if __name__ == "__main__":
