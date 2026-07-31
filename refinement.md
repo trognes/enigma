@@ -457,6 +457,13 @@ the design's claims:
   arithmetic; its equivalence with the shipped set is a prediction from the
   algebra, not a result.
 
+> **Both bullets are superseded — this section is the pre-implementation state,
+> kept for the reasoning that led to the design.** The derived set has since
+> shipped and been measured end-to-end (§11) and across machine variants (§12):
+> two-notch right wheels, M4 and the derived shape itself are all covered now.
+> What is still *not* covered is the rest of that list — K≥8, a hidden
+> plugboard, and messages long enough for the left wheel to step.
+
 ## 11. What shipping it turned up
 
 **The equivalence question had the wrong baseline, and that mattered.** Compared
@@ -574,9 +581,35 @@ reflector, and M4's Greek wheel. Same argument for all three — each garbles th
 whole message when wrong, so a coarse winner carrying one of them wrong is not a
 near-solution at all, and §1 puts that outside the refinement's job.
 
-**Designed-for is not measured-at-scale.** Each of the above is a *recovery*
-check in the suite; the 309-trial statistical equivalence run (§11) is wheels
-I–V on the standard machine. Nothing suggests a problem — the candidate counts
-show the derivation responding correctly to two-notch stepping — but matching
-that confidence would mean widening the shape probe's wheel pool to I–VIII and
-adding an M4 arm.
+**Designed-for is now also measured-at-scale.** The 309-trial equivalence run
+(§11) was wheels I–V on the standard machine, so the two claims above were
+carried by the design argument and by *recovery* checks in the suite. The shape
+probe's wheel pool now runs to I–VIII (`--wheels`, default 8) and it has an M4
+arm (`--m4`, thin reflector plus a Greek wheel at a random offset), which closes
+that: **1200 paired trials, `lost:derived` = 0 in all twelve cells** — standard
+and M4, `K` = 2/3/5, L = 60/110, 100 trials each — with the derived set matching
+the enumeration's recovery percentage for percentage everywhere. 480 of those
+trials drew a two-notch wheel into the *right* position, the one that drives the
+middle wheel. Full output: `eval/results-ring-stride-refine-variants.txt`.
+
+Two things make that zero worth reading. First, the run has resolution: the
+cheaper shapes below `derived` lose 1–9 trials per cell (49 in total), so the
+probe does detect losses when they exist. Second, the run scores the shape that
+actually **ships**. It previously scored only the shapes that *led to* the
+derivation, and the equivalence claim leaned on the derived set being a subset
+of the measured-clean `lock-start2` — which bounds it the wrong way, since a
+subset can lose exactly where its superset does not. `derived` is now a shape in
+its own right, computing `ring1` from the step-count drift the way `enigma.cc`
+does.
+
+The two arms differ in difficulty the way their construction predicts and not
+otherwise. M4's coarse pass is better at L=110 (68/51/36% vs 62/35/30% for
+`K`=2/3/5) and its refined recovery higher (91% vs 85%) — that is the
+substitution being different. The stepping-sensitive quantity, whether the
+derivation lands on the right `ring1`, is identical across the two.
+
+The probes' shared machine model grew to match, and `selftest()` now anchors
+**each** variant against `./enigma` separately — wheels I–V, a two-notch case,
+an M4 case — plus the documented `b`+Beta@A ≡ B and `c`+Gamma@A ≡ C
+equivalences. A model that quietly disagreed with the binary on the new wirings
+or the `MZ` notches would otherwise produce a confident and meaningless zero.

@@ -22,10 +22,11 @@ the NOTCH reads:
     ring1/start1 Q/D, coarse winner R/E -- the SAME offset, both absolutes +1),
     and pinning lost it.
 
-So this probe scores five candidate sets against the same coarse winner, from the
-shipped one down to pinning every offset to the coarse solution:
+So this probe scores the candidate sets below against the same coarse winner,
+from the enumeration down to pinning every offset to the coarse solution:
 
-    shipped      25 x 130 x 26 = 84 500
+    shipped      25 x 130 x 26 = 84 500    (what the enumeration used to cost)
+    derived      25 x  26 x ~1 =    650    (WHAT SHIPPED: ring1 derived)
     lock-start2  25 x 130 x  1 =  3 250    (start2 co-varies with ring2)
     lock-both    25 x   5 x  1 =    125    (also pins absolute start1)
     lock-off1    25 x  26 x  1 =    650    (middle OFFSET pinned, start1 open)
@@ -41,8 +42,18 @@ ring2-independent, so this costs nothing) and the reflector/wheel order are
 given, which makes the coarse pass small enough to run exactly. Scoring is the
 weighted all-order model (-a), matching eval/ring_stride_geometry_probe.py.
 
+MACHINE VARIANTS. --wheels sets the highest wheel number drawn (default 8, so
+VI-VIII with their TWO notches are in the pool: they turn the middle wheel twice
+per revolution, which changes how often a shifted schedule straddles the middle
+wheel's own notch). --m4 draws a thin reflector b/c and a Greek wheel Beta/Gamma
+at a random offset instead of reflector B. The Greek wheel is static, so it
+folds into the effective reflector and the machine stays a 3-stepping-rotor
+engine -- meaning M4 tests that the derivation is indifferent to WHICH
+substitution the stack applies, while the two-notch pool tests the part it is
+not indifferent to, the stepping schedule.
+
 Usage: python3 eval/ring_stride_refine_shape_probe.py [--trials N] [--k 3]
-       [--lengths 60,150] [--seed S]
+       [--lengths 60,150] [--seed S] [--wheels 8] [--m4]
 """
 
 import argparse
@@ -55,10 +66,24 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from ring_stride_geometry_probe import (          # noqa: E402
-    subst_array, positions, crypt, score_table, score, corpus_texts, num, selftest)
+    subst_array, positions, crypt, score_table, score, corpus_texts, num,
+    selftest, BETA, GAMMA)
 
-MID_RING_WINDOW = 2         # enigma.cc's mid_ring_window
-SHAPES = ["shipped", "lock-start2", "lock-off1", "shift2", "lock-both", "lock-all"]
+MID_RING_WINDOW = 2         # the band the shipped refinement USED to enumerate
+SHAPES = ["shipped", "derived", "lock-start2", "lock-off1", "shift2",
+          "lock-both", "lock-all"]
+
+
+def step_counts(g1, g2, start0, n):
+    """Cumulative step counts of the middle and left wheels over n characters,
+    read off the same positions() the decode uses (each wheel advances by 0 or 1
+    per character, so a change in its absolute position IS a step). This is
+    enigma.cc's step_counts(); it is what the shipped refinement derives ring1
+    from -- refinement.md section 4."""
+    p = positions([start0, g1, g2], WHEELS, n)
+    mid = np.diff(np.concatenate(([g1], p[:, 1]))) != 0
+    left = np.diff(np.concatenate(([start0], p[:, 0]))) != 0
+    return np.cumsum(mid), np.cumsum(left)
 
 
 def decode_set(S, c, cand, ring0, start0):
@@ -84,12 +109,27 @@ def decode_set(S, c, cand, ring0, start0):
     return out
 
 
-def candidates(shape, coarse, skipped):
+def candidates(shape, coarse, skipped, start0=0, n=0):
     """Build one of the candidate sets from the coarse winner
     (ring1, start1, ring2, start2)."""
     cr1, cg1, cr2, cg2 = coarse
     off1 = (cg1 - cr1) % 26
     off2 = (cg2 - cr2) % 26
+    if shape == "derived":
+        # What SHIPPED: start2 follows the coarse winner's offset2, and ring1 is
+        # DERIVED from how far the candidate's middle-wheel schedule has
+        # drifted from the winner's -- one candidate per distinct value of the
+        # drift, so no band and no guess at a mode. ring0/start0 are pinned by
+        # this probe, so the shipped derivation's left-wheel term is inert here.
+        cmid, _ = step_counts(cg1, cg2, start0, n)
+        out = []
+        for r2 in skipped:
+            g2 = (r2 + off2) % 26
+            for g1 in range(26):
+                kmid, _ = step_counts(g1, g2, start0, n)
+                for d in sorted(set((cmid - kmid).tolist())):
+                    out.append(((g1 - (off1 + d)) % 26, g1, r2, g2))
+        return out
     # how far the middle OFFSET may sit from the coarse winner's, and whether
     # absolute start1 is searched or pinned to the winner's value
     band = [0] if shape in ("lock-off1", "lock-all", "shift2") else \
@@ -123,6 +163,12 @@ def main():
     ap.add_argument("--lengths", default="60,150")
     ap.add_argument("--lang", default="wehrmacht")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--wheels", type=int, default=8,
+                    help="highest wheel number drawn (5 = I-V, 8 = I-VIII, "
+                         "which puts the two-notch VI-VIII in the pool)")
+    ap.add_argument("--m4", action="store_true",
+                    help="draw a thin reflector b/c plus a Greek wheel "
+                         "Beta/Gamma at a random offset instead of reflector B")
     ap.add_argument("--dump", default="",
                     help="comma-separated shapes: print every trial the shipped set "
                          "recovers and the named set does not, with the true key, the "
@@ -142,9 +188,12 @@ def main():
     rng = random.Random(args.seed)
     K = args.k
 
-    print("# K=%d trials=%d lang=%s  (shipped 25x130x26, lock-start2 25x130x1, "
-          "lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)"
-          % (K, args.trials, args.lang))
+    print("# K=%d trials=%d lang=%s machine=%s wheels=I-%s  (shipped "
+          "25x130x26, "
+          "derived 25x26x~1, lock-start2 25x130x1, lock-off1 25x26x1, "
+          "lock-both 25x5x1, lock-all 25x1x1)"
+          % (K, args.trials, args.lang, "M4" if args.m4 else "standard",
+             "VIII" if args.wheels == 8 else "V"))
     print("\t".join(["len", "n", "coarse ok"] + SHAPES
                     + ["lost:" + s for s in SHAPES[1:]]))
 
@@ -159,12 +208,18 @@ def main():
             pt = pool[tr % len(pool)]
             off = rng.randrange(0, max(1, len(pt) - L + 1))
             pt = pt[off:off + L]
-            WHEELS = rng.sample(range(5), 3)
-            refl = "B"
+            WHEELS = rng.sample(range(args.wheels), 3)
+            if args.m4:
+                refl = rng.choice("bc")
+                greek = rng.choice([BETA, GAMMA])
+                goff = rng.randrange(26)
+            else:
+                refl, greek, goff = "B", None, 0
             ring = [rng.randrange(26) for _ in range(3)]
             start = [rng.randrange(26) for _ in range(3)]
-            ct = crypt(pt, WHEELS, refl, ring, start)
-            S = subst_array(WHEELS, refl)
+            ct = crypt(pt, WHEELS, refl, ring, start,
+                       greek=greek, greek_offset=goff)
+            S = subst_array(WHEELS, refl, greek, goff)
             c = num(ct)
 
             # coarse pass: ring2 on the stride grid, ring1/start1/start2 open
@@ -179,7 +234,7 @@ def main():
 
             def best_pt(shape):
                 skipped = [v for v in range(26) if v != coarse[2]]
-                cs = candidates(shape, coarse, skipped)
+                cs = candidates(shape, coarse, skipped, start[0], len(c))
                 s = decode_set(S, c, cs, ring[0], start[0])
                 j = int(np.argmax(s))
                 if s[j] <= coarse_score:          # refinement kept only if it improves
