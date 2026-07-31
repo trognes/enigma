@@ -1,11 +1,11 @@
 # refinement.md — a derived, staged refinement for `--ring-stride`
 
-**Status: design, not shipped.** The algebra and the failure analysis below are
-established (measurements in `archived/PERFORMANCE.md` §7.11 and the probe
-results in `eval/results-ring-stride-refine-*.txt`). The *design* has not been
-built or A/B'd. Nothing in `enigma.cc` implements it yet.
+**Status: SHIPPED.** `enigma.cc` derives the refinement's offsets; the
+enumerated `±mid_ring_window` band and the constant it used are gone. Measured
+equivalent to the enumerated refinement and ~130× cheaper — see §11 for what the
+build actually does and what measuring it turned up.
 
-The goal: replace the refinement's `25 × 130 × 26 = 84 500` enumerated
+The goal was to replace the refinement's `25 × 130 × 26 = 84 500` enumerated
 candidates with `25 × 26 = 650` **derived** ones, at equal recovery.
 
 ---
@@ -245,23 +245,22 @@ Per invocation, the derived set is one axis wide on everything but two:
 
 | scheme | enumerated | scored |
 |---|--:|--:|
-| shipped | `25 · 130 · 26` = 84 500 | ~25 100 (measured) |
-| lock-start2 (measured, 0 loss) | `25 · 130 · 1` = 3 250 | ~970 |
-| **this design** | `25 · 26 · 1` = **650** | **~100–175** |
+| enumerated (was) | `25 · 130 · 26` = 84 500 | ~25 100 |
+| **derived (is)** | `25 · 26 · \|V\|` | **650–1 300** |
 
-The scored column is smaller because §7.12's middle-wheel collapse applies
-inside the refinement exactly as it does to the coarse pass (`search_worker`
-consults the same `g_mid_rep_mask`): most of the 26 `start1` values are
-decode-equivalent, leaving `⌈L/26⌉+1` representatives — 4 at L=60, 7 at L=150 —
-so ~25 × 4 to ~25 × 7 keys are actually scored. **The derived figures in that
-column are arithmetic from the class-count formula, not measured**; the 650 and
-the shipped ~25 100 are.
+Measured `Analysed N` on a 99-character message, `-u B -w 123`, before and
+after:
 
-**The worst case is exactly `lock-start2`.** `|V| ≤ 5`, so the derived set never
-exceeds `25 × 26 × 5` = 3 250 — the same count as the band-with-derived-start2
-that measured 0 losses in 600. The design cannot cost more than the fallback it
-prunes, which is a useful property to hold on to when reviewing it: the only way
-it goes wrong is by pruning too much, never by costing too much.
+| keyspace | K | no stride | enumerated | derived |
+|---|--:|--:|--:|--:|
+| `-r AA. -g ...` | 2 | 456 976 | 245 388 | **229 231** |
+| `-r AA. -g ...` | 3 | 456 976 | 175 084 | **158 927** |
+| `-r A.. -g ...` | 3 | 2 618 824 | 925 141 | **907 170** |
+| `-r AA. -g AA.` | 2 | 676 | 988 | **363** |
+| `-r A.. -g A..` | 2 | 100 724 | 68 987 | **50 787** |
+
+The refinement itself went from a flat 16 900 to 650–1 300 — still constant in
+`K`, still independent of the coarse pass, but two orders of magnitude smaller.
 
 Against a full run: the shipped refinement is ~2% of the keys analysed with
 `ring1`/`start1` open and ~35% in the single-task corner where the flag is
@@ -328,10 +327,10 @@ passing; the rest are new.
 
 1. ✅ **Standard, K=2/3/5/14/26.** `-u B -w 123 -r AAZ -g XKP`. The ordinary
    path, plus K=26's single coarse anchor.
-2. ✅ **Norway `-n`.** The 439-letter Norwegian message, `-n -w 352 -r "L.."
-   -g "O.."`. `wheel_task` carries **raw** wheel numbers while a `machine`
-   carries translated ones; a double translation is invisible in every other
-   mode, and the entire stride matrix once passed over a broken `-n` path.
+2. ✅ **Norway `-n`.** The 439-letter Norwegian message, `-n -w 352 -r "L.." -g
+   "O.."`. `wheel_task` carries **raw** wheel numbers while a `machine` carries
+   translated ones; a double translation is invisible in every other mode, and
+   the entire stride matrix once passed over a broken `-n` path.
 3. **M4 `-4`.** `-4 -u b -w B123 -r AAA. -g A...`. The refinement reuses
    `tasks[cur_wo]`, which carries the Greek wheel and its offset; a
    reconstruction that drops them is invisible outside `-4`.
@@ -346,9 +345,9 @@ passing; the rest are new.
 6. **Turnover at character 1.** `start2` = the right wheel's notch letter (the
    §3 worked case). The whole-message step-count difference — the mechanism the
    design exists for, and where a `Δ`-selection bug shows first.
-7. ✅ **ring2 wrap at A/Z.** The measured keys `B 451 AAZ VKZ`, `B 351 AAZ
-   NLV`, `C 324 AAZ JEY`. ring2 is circular; the value list must carry the
-   wrapped set.
+7. ✅ **ring2 wrap at A/Z.** The measured keys `B 451 AAZ VKZ`, `B 351 AAZ NLV`,
+   `C 324 AAZ JEY`. ring2 is circular; the value list must carry the wrapped
+   set.
 8. ✅ **Coarse winner outside `⌊K/2⌋`.** `-u A -w 123 -r DLT -g ACG` at K=3.
    Every skipped ring2 must be covered, not a window.
 9. ✅ **Plugboard untouched without `-c`.** `-u A -w 145 -r FFR -g RTB` with a
@@ -371,13 +370,12 @@ passing; the rest are new.
 15. **Key count drops.** `Analysed N` for the derived build against the shipped
     one, confirming the derivation is used rather than silently bypassed.
 
-**Cases 3, 4, 5 and 6 do not exist in any form today** — no M4
-`--ring-stride` case, no two-notch right wheel anywhere in the stride tests, and
-nothing that deliberately makes the left wheel step. Cases 5 and 6 also want an
-assertion on the *derivation* rather than only on recovery: that `V0 ≠ {0}`
-fires at least once (case 5) and that `V ≠ {0}` fires (case 6). Recovery alone
-can pass with the derivation disabled, because the coarse winner is often
-already right.
+**Cases 3, 4, 5 and 6 do not exist in any form today** — no M4 `--ring-stride`
+case, no two-notch right wheel anywhere in the stride tests, and nothing that
+deliberately makes the left wheel step. Cases 5 and 6 also want an assertion on
+the *derivation* rather than only on recovery: that `V0 ≠ {0}` fires at least
+once (case 5) and that `V ≠ {0}` fires (case 6). Recovery alone can pass with
+the derivation disabled, because the coarse winner is often already right.
 
 **Each new regression must fail against the pre-change binary.** The suite has
 been bitten twice by tests that passed on the buggy build — the first `--polish`
@@ -429,11 +427,11 @@ Decision 3 remains open and needs a measurement.
    statistic, and no separate "ambiguous" stage. `|V| ≤ 5` and is 1 or 2 in
    practice, so the cost is bounded by `lock-start2`, which the derived set is a
    pruning of. See §4.
-3. **Whether a ±1 band survives on top of the derived value — OPEN.** Failure
-   mode 2 in §7 — the coarse winner's own `o1` being wrong for scoring reasons
-   rather than schedule reasons — is not corrected by the derivation, and is the
-   *only* way the pruning in decision 2 can lose a key. A ±1 band would cover it
-   at 3× the candidate count (still ~2 000, still trivial). Nobody has run it.
+3. **Whether a ±1 band survives on top of the derived value — SETTLED, no.**
+   Built as `widen_deltas()` behind `ENIGMA_REFINE_BAND` and measured over 360
+   paired end-to-end trials: it changed **not one recovery**. The reason is §11
+   — the keys it was meant to rescue turned out not to be search failures at
+   all. Shipped at 0; the knob remains for measurement.
 
 Two accounting details that are easy to get wrong and hard to notice:
 
@@ -457,3 +455,50 @@ the design's claims:
 - The derived design itself has **never been run**. Its 650-candidate figure is
   arithmetic; its equivalence with the shipped set is a prediction from the
   algebra, not a result.
+
+## 11. What shipping it turned up
+
+**The equivalence question had the wrong baseline, and that mattered.** Compared
+directly against the enumerated refinement, the derived one looked like it lost
+~1.4% of keys — 5 in 360 paired end-to-end trials. Dumping them showed every one
+was a key where the **exhaustive `K=1` search also fails**: the truth is not the
+top-scoring rotor key, and the enumerated refinement "won" only by never
+reaching the higher-scoring decoy that a complete search finds. The derived
+refinement agrees with the exhaustive search on those keys, which is the correct
+behaviour, not a regression.
+
+So the metric to hold a refinement to is the **stride-specific miss** — the
+exhaustive search recovers it and the strided run does not — and on that metric
+both refinements are clean:
+
+| L | K | trials `K=1` recovers | enumerated misses | derived misses |
+|---:|---:|---:|---:|---:|
+| 60 | 2 | 48 | 0 | 0 |
+| 60 | 3 | 48 | 0 | 0 |
+| 60 | 5 | 48 | 0 | 0 |
+| 150 | 2 | 55 | 0 | 0 |
+
+This also settles §10's decision 3 in the negative: the ±1 band was built for a
+failure the derivation cannot correct, and there were no such failures to
+correct — every apparent one was a scoring failure. Shipped at 0.
+
+**Two implementation traps, both caught by tooling rather than by reading.**
+
+- **`mod26()` adds a single alphabet**, so it is correct only for `x ≥ −26`. The
+  derived offset subtracts a step-count difference from a position, and a
+  candidate `start1` far from the coarse winner's can differ by more than one
+  step, so the result went below −26 and the modulo returned a negative index.
+  UBSan caught it as an out-of-bounds `subst_array` index; ASan then took the
+  segfault. `mod26_full()` exists for this. **The delta is not bounded by 2
+  here** — that bound applies to a ring2/start2 *shift*, and the sweep compares
+  schedules from arbitrary `start1` values.
+- **`mid_ring_window` became unused** and only clang's `-Werror` said so. The
+  suite and g++ were both silent.
+
+**A user-visible behaviour change fell out of it.** The "`--ring-stride` is not
+paying for itself" warning is **removed**, because the case it warned about no
+longer exists: the keyspace that used to cost 1.46× more than not striding (`-r
+A.. -g A..` at K=2) is now a 1.98× win, and the warning is provably unreachable
+— it needs `50 > tasks · rc0 · rc1 · gc0 · gc2 · (26 − rc2)`, while validation
+forces `gc2 = 26` and `rc2 ≤ 13`, so the right-hand side is at least 338.
+`tests/run_tests.sh` now guards the inversion instead of the warning.

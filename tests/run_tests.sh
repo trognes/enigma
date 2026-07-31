@@ -1093,29 +1093,32 @@ for inv_c in "--polish" "--cascade" "-M" "-J" "-R 3" "-A 3000" "--exhaust 1" "-F
   check "-c $inv_c: every -s pair held fixed" "$inv_missing" ""
 done
 
-# The refinement re-searches all 25 skipped ring2 values over ring1 x start1 x start2, so
-# it is cheaper than a coarse ring2 value only by tasks.size() * rc[0] * gc[0]. When that
-# factor is 1 -- a single wheel order AND start0 pinned -- the stride costs MORE than it
-# saves, and the tool must say so rather than silently doing extra work. The two -g forms
-# below straddle it: with start0 pinned the stride is a net loss, with start0 open it is a
-# 1.9x win, and the warning tracks that exactly.
+# The stride used to be a NET LOSS on a keyspace with a single wheel order and start0
+# pinned: the refinement re-searched all 25 skipped ring2 values over ring1 x start1 x
+# start2, which outweighed the 26/K the coarse pass saved, and the tool warned about it.
+# Deriving the refinement's offsets instead of enumerating them (refinement.md) shrank it
+# from 25 x 130 x 26 to 25 x the start1 range, which inverts every one of those cases into
+# a win -- so the warning was removed and these check the inversion instead. Verified
+# against the pre-derivation binary, where the first of these cost MORE than not striding.
+rs_cost() { printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "$1" -g "$2" \
+            ${3:+--ring-stride "$3"} -T 1 2>&1 >/dev/null \
+            | grep -oE 'Analysed [0-9]+' | awk '{print $2}'; }
+for rs_case in "AA. AA." "A.. A.." "AA. ..."; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $rs_case
+  rs_base=$(rs_cost "$1" "$2")
+  for rs_k in 2 5 13; do
+    rs_str=$(rs_cost "$1" "$2" "$rs_k")
+    check "--ring-stride $rs_k is a net win on -r $1 -g $2" \
+      "$(awk -v a="$rs_str" -v b="$rs_base" 'BEGIN{print (a < b) ? "win" : "loss"}')" "win"
+  done
+done
+# The removed warning must be gone for good, not merely quiet: a later change that
+# reinstates a cost model priced on the old enumerated refinement would start firing on
+# runs that are now wins.
 rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "AA." \
        --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
-check "--ring-stride warns when the strided run costs more than not striding" "$rs_w" "1"
-rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "..." \
-       --ring-stride 2 -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
-check "--ring-stride stays silent when it is paying off" "$rs_w" "0"
-# The warning must compare the WHOLE strided run against not striding, not the refinement
-# against the coarse pass. The coarse pass shrinks as K grows, so at a large K a
-# refinement bigger than it is normal rather than a problem: reported from the field with
-# -r A.. -g A.. --ring-stride 13, which analyses 29028 keys against 110864 unstrided -- a
-# 3.8x win that the old refinement-vs-coarse test flagged as a loss. Both K values below
-# are wins on this keyspace and must stay silent; verified to warn before the fix.
-for rs_k in 5 13; do
-  rs_w=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "A.." -g "A.." \
-         --ring-stride "$rs_k" -T 1 2>&1 >/dev/null | grep -c 'not paying for itself')
-  check "--ring-stride $rs_k stays silent on a large-K win" "$rs_w" "0"
-done
+check "--ring-stride does not warn on a keyspace it now wins" "$rs_w" "0"
 
 # The "Analysed N" line must count keys the refinement actually SCORED, not its index
 # space: the §7.12 collapse applies inside the refinement too, so counting the index space
@@ -1174,6 +1177,69 @@ check "crack: Norway + --ring-stride 2 refines to the exact key" \
 check "crack: Norway + --ring-stride 2 matches the unstrided search" \
   "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." --ring-stride 2 -T 1)" \
   "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." -T 1)"
+
+# The refinement DERIVES ring1/start2/ring0 from the coarse winner's step schedules rather
+# than banding them (refinement.md), so the cases that exercise the STEPPING are the ones
+# that exercise the derivation. None of the four below existed before it.
+
+# M4. The refinement reuses tasks[cur_wo] verbatim, and that task carries the Greek wheel
+# and its offset; a version that rebuilt the task from the machine's fields would drop
+# them. Exactly like the Norway index-translation bug above, that is invisible in standard
+# mode, so the whole matrix would pass over a broken -4 path.
+m4_ct=$(run "$rs_pt" -4 -i -u b -w B123 -r AAAZ -g AXKP)
+check "crack: M4 + --ring-stride 2 recovers exact key" \
+  "$(run "$m4_ct" -4 -q -l english -u b -w B123 -r "AAA." -g "A..." --ring-stride 2 -T 1)" \
+  "$rs_pt"
+
+# Two-notch right wheel (VI, notches M and Z). The middle wheel then steps twice per
+# revolution, so its turnover set is a union of TWO lattices: the step-count delta the
+# derivation computes can reach 2 where a single-notch wheel bounds it at 1, and §7.12's
+# class count changes from ceil(L/26)+1 to ceil(L/13)+1. Nothing else in the suite covers
+# a two-notch wheel under --ring-stride, and neither do the measurements behind
+# refinement.md, which draw wheels from I-V only.
+tn_ct=$(run "$rs_pt" -i -u B -w 126 -r AAZ -g XKP)
+for rs_k in 2 3 13; do
+  check "crack: --ring-stride $rs_k with a two-notch right wheel" \
+    "$(run "$tn_ct" -q -l english -u B -w 126 --ring-stride "$rs_k" -T 1)" "$rs_pt"
+done
+
+# A turnover at character 1 AND a double step -- the two stepping phenomena the derivation
+# exists for. Wheels 123: middle II (own notch E), right III (notch V). start2 = V puts the
+# right wheel ON its notch, so the middle wheel steps at character 1: this is the case where
+# a ring2 shift carries a turnover across the START of the message and changes the step
+# count for the WHOLE message rather than for a delta-length window (refinement.md §3).
+# start1 = C reaches E after two middle steps, so the middle wheel lands on its own notch
+# and the LEFT wheel steps too, exercising the left-wheel derivation that is otherwise
+# never reached. Verified: this key steps wheel 0 once, the XKP key above not at all.
+ds_ct=$(run "$rs_pt" -i -u B -w 123 -r AAZ -g ACV)
+for rs_k in 2 3 5; do
+  check "crack: --ring-stride $rs_k with a double step and a turnover at char 1" \
+    "$(run "$ds_ct" -q -l english -u B -w 123 --ring-stride "$rs_k" -T 1)" "$rs_pt"
+done
+
+# The derivation must actually respond to the schedule, not emit a fixed candidate set.
+# Where the left wheel steps, the left-wheel delta is non-trivial and each candidate splits,
+# so the refinement is strictly larger than where it does not -- same keyspace, same K, same
+# message length, differing only in the true start position. A build that banded or pinned
+# instead of deriving would produce identical counts.
+rs_refine() { printf '%s' "$1" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g "..." \
+              --ring-stride 2 -T 1 2>&1 >/dev/null \
+              | grep -oE 'Analysed [0-9]+' | awk '{print $2}'; }
+check "--ring-stride derivation responds to the stepping schedule" \
+  "$(awk -v a="$(rs_refine "$ds_ct")" -v b="$(rs_refine "$rs_ct")" \
+     'BEGIN{print (a > b) ? "bigger" : "same-or-smaller"}')" "bigger"
+
+# ring1 is DERIVED only where the caller left it wildcarded; with it pinned, every start1
+# in the sweep already carries a determined offset and the sweep covers them all. -r AA. is
+# the tool's own default, so getting this backwards breaks the common case rather than an
+# exotic one. All four combinations of (ring1, start1) pinned/wildcarded must recover.
+for rs_pin in "AA. ..." "A.. ..." "AA. .C." "A.. .C."; do
+  # shellcheck disable=SC2086  # intentional word-splitting into positional params
+  set -- $rs_pin
+  check "crack: --ring-stride 2 with -r $1 -g $2" \
+    "$(run "$ds_ct" -q -l english -u B -w 123 -r "$1" -g "$2" --ring-stride 2 -T 1)" \
+    "$rs_pt"
+done
 
 # The refinement runs its own search with a private best_result, which used to restart the
 # progress display: a second column header mid-run, and each improvement echoed TWICE --
