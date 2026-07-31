@@ -494,12 +494,14 @@ correct — every apparent one was a scoring failure. Shipped at 0.
 LONG=1 BASE=origin/dev` on an idle Apple M1 with clang — the configuration
 CLAUDE.md flags as the layout-sensitive one:
 
-| tier | search | hillclimb |
-|---|--:|--:|
-| quick | −0.1% | +0.2% |
-| long | −0.1% | −0.7% |
+| run | search quick | hillclimb quick | search long | hillclimb long |
+|---|--:|--:|--:|--:|
+| 1 | −0.1% | +0.2% | −0.1% | −0.7% |
+| 2 | −0.6% | +1.0% | −0.5% | −0.2% |
 
-Four deltas within ±0.7% across both tiers. That is worth more than it looks:
+Eight deltas across two independent runs, all within ±1.0%. The repeat is not
+redundant: run-to-run spread on the *same* comparison is a noise-floor estimate,
+and at ~±1% every delta sits inside it. That is worth more than it looks:
 the concern was never the scoring loop (nothing was added to it) but the ~70
 lines added to a translation unit with a documented history of ±20–60% layout
 swings under clang on Apple silicon. Two earlier attempts to measure this on a
