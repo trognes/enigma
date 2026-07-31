@@ -477,6 +477,7 @@ both refinements are clean:
 | 60 | 3 | 48 | 0 | 0 |
 | 60 | 5 | 48 | 0 | 0 |
 | 150 | 2 | 55 | 0 | 0 |
+| 150 | 3 | 55 | 0 | 0 |
 
 This also settles §10's decision 3 in the negative: the ±1 band was built for a
 failure the derivation cannot correct, and there were no such failures to
