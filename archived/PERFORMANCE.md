@@ -3348,6 +3348,309 @@ genuinely open and is the right next experiment. (Post-fix that question matters
 with the real accuracy cost at ~1pp the throughput is close to free either way, so the
 trade is no longer the deciding factor it looked like when this paragraph was written.)
 
+#### Follow-up: how wide does the refinement actually have to be? — ✅ MEASURED (full sweep kept)
+
+The width question the two follow-ups above left implicit: the refinement went from
+`±⌊K/2⌋` to **all 25** on a cost argument (a refinement ring2 value is ~26× cheaper than
+a coarse one), never on a measurement of what width is *sufficient*. So sweep it.
+
+**Instrument.** A measurement-only override, `ENIGMA_REFINE_WINDOW=w`, restricts the
+refinement to the ring2 values within circular distance `w` of the coarse winner; unset
+(or `≥13`) is the shipped full punctured set, so the default path is unchanged. It edits
+the mask that already expresses the set, so the window is circular by construction and
+the wrap bug a clamped interval used to have cannot return through it.
+`eval/ring_stride_window_probe.py` drives it end to end on the same footing as the
+harness the widening decision was made on (`-f -l wehrmacht`, authentic excerpts, true
+board via `-s`, random key, paired trials shared across every cell), sweeping
+`w = 1…13` against the `K=1` baseline. 30 paired trials, L=60:
+
+| K | K=1 base | w=1 | w=2 | w=3 | w=4 | w=5 | w=6 | w=8 | w=13 (shipped) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2 | 67% | 60% | 60% | **63%** | 63% | 63% | 63% | 63% | 63% |
+| 3 | 67% | 67% | 70% | **70%** | 70% | 70% | 70% | 70% | 70% |
+| 5 | 67% | 33% | 63% | **70%** | 70% | 70% | 70% | 70% | 70% |
+
+**At these strides `w = 3` is sufficient** — no trial in any cell changes between `w=3`
+and the full sweep — while below it the picture is the one §7.11 documents twice: `w=1`
+costs 1 trial at K=2, 2 at K=3 and **11 at K=5** (33% vs 70%), the `±⌊K/2⌋` window
+failing hardest where its own assumption is weakest. Repeated at L=150 (same 30 paired
+trials, `K=1` base 93%): K=2 needs nothing beyond `w=1` (93% throughout), K=3 closes at
+`w=2` (83% → 93%), K=5 at `w=4` (73/87/90/**93**%). So the sufficient width is not a
+constant 3 — it is `≈⌈K/2⌉+1`, and the next section is what happens when K keeps going.
+
+**The width that suffices scales with K, and by K≈12 it is "all of them".** Sweeping
+every stride the flag accepts (`ring_stride_geometry_probe.py`, L=150, 300 trials,
+right-wheel geometry only) gives the minimum radius reaching each recovery level:
+
+| K | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| coarse winner is the true ring | 49% | 33% | 28% | 24% | 17% | 15% | 16% | 13% | 13% | 12% | 12% | 10% |
+| min radius for ≥99% | 1 | 2 | 3 | 4 | 4 | 5 | 5 | 7 | 7 | 9 | 10 | 10 |
+| min radius for 100% | 3 | 5 | 3 | 4 | 5 | 6 | 6 | 7 | 8 | 9 | 11 | **12** |
+
+`⌈K/2⌉+1` tracks the measured requirement to about K=8 and then **under**-predicts it.
+The reason is visible in the top row: as the grid coarsens the coarse pass stops
+reliably picking the anchor nearest the truth (49% → 10% exact), and once it picks a
+*different* anchor the distance is a whole grid step, not a shoulder. At K=13 there are
+only two anchors 13 apart, so losing the argmax puts the truth ~13 away — which is why
+the requirement there is 12, i.e. the full sweep, and why capping the width would
+silently break exactly the large strides the ceiling was raised to 26 to allow.
+
+**Confirmed end-to-end on the real flag** (same harness as the L=60 table above, 30
+paired trials per cell, `K=1` base 67%). Exact recovery by window, and the narrowest
+window that matches the full sweep:
+
+| K | w=1 | w=2 | w=3 | w=4 | w=5 | w=6 | w=7 | w=8 | w=10 | w=13 | min w |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 50% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 2 |
+| 6 | 43% | 53% | 67% | 67% | 70% | 70% | 70% | 70% | 70% | 70% | 5 |
+| 7 | 47% | 50% | 67% | 67% | 70% | 70% | 70% | 70% | 70% | 70% | 5 |
+| 8 | 30% | 50% | 57% | 67% | 67% | 67% | 67% | 67% | 67% | 67% | 4 |
+| 9 | 33% | 30% | 57% | 63% | 70% | 70% | 70% | 70% | 70% | 70% | 5 |
+| 10 | 13% | 37% | 47% | 50% | 60% | 63% | 67% | 67% | 67% | 67% | 7 |
+| 11 | 23% | 27% | 33% | 50% | 50% | 63% | 67% | 67% | 67% | 67% | 7 |
+| 12 | 17% | 27% | 37% | 43% | 57% | 67% | 67% | 70% | 70% | 70% | 8 |
+| 13 | 17% | 27% | 30% | 47% | 57% | 67% | 70% | 70% | 70% | 70% | 7 |
+
+The real binary is **harsher than the geometry probe**, as expected from what the probe
+cannot see (a coarse winner displaced by middle-wheel drift): a `w=3` cap costs 20pp at
+K=10 and **40pp at K=13** (30% against the full sweep's 70%) — turning the largest
+strides, the ones with the most throughput to offer, into the least reliable settings.
+The `min w` column is n=30-noisy in the ones digit; its shape is not.
+
+**Why 3, from the geometry.** `eval/ring_stride_geometry_probe.py` scores the full 26×26
+(ring2, start2) grid directly (rest of the key at truth, so right-wheel only): the score
+along the offset-preserving diagonal is a smooth tent peaking at δ=0, and the coarse
+argmax is the *nearest* grid point only 81–90% of the time at K=3/K=5 — noise on the
+tent's shoulder moves it one grid step, which is precisely the `⌈K/2⌉+1` the end-to-end
+sweep lands on. That probe also shows the refinement never needs to re-scan start2:
+holding the coarse winner's offset was bit-identical to re-scanning all 26 starts across
+24 measured rows. It is a floor, not the answer — it pins ring1/start1 at the truth,
+which the shipped refinement deliberately does not do.
+
+**Cost of the width, measured (`Analysed` keys, `-f -l wehrmacht`, K=3, L=150).** Per
+refinement ring2 value, and the full 25 as a share of the whole run:
+
+| keyspace shape | per ring2 value | full 25 | share of run | `w=3` would save |
+|---|---:|---:|---:|---:|
+| `-r ... -g ...` (ring1+start1 open) | 1005 | 25 125 | 2.0% | 1.5% |
+| `-r AA. -g ...` (ring1 pinned) | 676 | 16 900 | 9.7% | 7.3% |
+| `-r A.. -g A..` (single task, start0 pinned) | 1005 | 25 125 | 34.8% | 26.5% |
+
+**The two key counts, exactly.** This section's cost accounting has been wrong twice
+(once pricing a refinement value like a coarse one, once counting the refinement's index
+space as if it were scored), so here are both formulas as the code computes them,
+verified against `Analysed` below.
+
+*Coarse pass* — `build_key_space()`, index space `total_keys = |tasks| · rsize · gsize`:
+
+```
+  |tasks| = reflectors × wheel orders            (× Greek wheel × Greek offsets in M4)
+  rsize   = rc0 · rc1 · rc2      gsize = gc0 · gc1 · gc2
+  rc2     = floor((r_max2 - r_min2) / K) + 1     = ceil(26/K) when ring2 is wildcarded
+  rc0     = 1                                    when ring0 AND start0 are wildcarded
+                                                 (§7.10's exact collapse), else its range
+```
+
+*Refinement pass* — `bruteforce()`, once per invocation, over one pinned task with
+ring0/start0 fixed:
+
+```
+  refine  = |ring2 set| · npairs · 26            (26 = start2, always fully open)
+  |ring2 set| = 25                               (every value but the coarse winner)
+  npairs  = 26 · (2 · mid_ring_window + 1) = 130 when ring1 AND start1 are wildcarded
+                                                 (§7.12's offset band, mid_ring_window=2)
+          = rc1 · gc1                            when the caller pinned either
+```
+
+Both are *index* spaces; when §7.12 is active (ring1 and start1 both wildcarded) the
+`gc1` / `npairs` factor is thinned to the class representatives — measured ~3.36× on
+both passes alike, which is why `Analysed` reports scored keys, not these products.
+
+Checked on `-r AA. -g ...` (ring1 pinned, so §7.12 is inactive and scored = index):
+coarse `= ceil(26/K) · 26³`, refine `= 25 · 26 · 26 = 16 900`, constant in K.
+
+| K | 1 | 2 | 3 | 5 | 13 |
+|---|--:|--:|--:|--:|--:|
+| predicted | 456 976 | 245 388 | 175 084 | 122 356 | 52 052 |
+| measured `Analysed` | 456 976 | 245 388 | 175 084 | 122 356 | 52 052 |
+
+That is the whole trade in two lines: the coarse pass falls as `1/K` off a base of
+hundreds of thousands, the refinement is a **constant** ~17k–25k that does not depend on
+K at all — so its width is a fixed toll on a shrinking bill, which is exactly why it
+looks negligible at K=2 (1.07%) and merely small at K=13 (2.37%).
+
+**Can the two 26s be dropped? Half of one can — and it is the big half.** Only offsets
+enter each wheel's substitution, which suggests both 26s in `25 · 130 · 26` are redundant
+and the refinement could be `25 · 5 = 125`. It cannot, because an absolute position is
+not redundant where a **notch** reads it, and the two 26s differ on exactly that:
+
+- **start2 (the trailing 26) is redundant.** Only `(start2 − ring2) mod 26` enters the
+  right wheel, and the coarse winner's *offset2* is the one thing the coarse pass gets
+  right even when its ring2 is wrong (a wrong offset garbles the whole message; a wrong
+  ring2 only shifts the turnover). Locking `start2 = ring2 + offset2` costs nothing.
+- **start1 (the 26 inside `130 = 26 · 5`) is not.** Absolute start1 gates the middle
+  wheel's *own* notch, hence the double step, and under §7.12 the reported start1 is only
+  a **class representative** — the reproducible case earlier in this section is exactly
+  this shape (true ring1/start1 `Q`/`D`, coarse winner `R`/`E`: the *same offset*, both
+  absolutes +1), and pinning it is what lost the key.
+
+Measured as an equivalence test in the style of the band verification above
+(`eval/ring_stride_refine_shape_probe.py`, 100 trials per cell, K=2/3/5, L=60/150,
+weighted model, ring0/start0 pinned at truth, results in
+`eval/results-ring-stride-refine-shape.txt`) — "lost" counts trials the shipped set
+recovers and the cheaper set does not:
+
+| set | what it pins | size | lost, K=2 | K=3 | K=5 | total |
+|---|---|--:|--:|--:|--:|--:|
+| shipped `25 · 130 · 26` | — | 84 500 | — | — | — | — |
+| lock-start2 `25 · 130 · 1` | offset2 | **3 250** | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 600** |
+| lock-off1 `25 · 26 · 1` | + offset1 | 650 | 4 / 0 | 2 / 1 | 4 / 4 | 15 / 600 |
+| shift2 `25 · 5 · 1` | offset1, abs ±2 | 125 | 4 / 0 | 2 / 1 | 4 / 4 | 15 / 600 |
+| lock-both `25 · 5 · 1` | + start1 | 125 | 1 / 0 | 2 / 2 | 3 / 4 | 12 / 600 |
+| lock-all `25 · 1 · 1` | + both | 25 | 5 / 0 | 4 / 2 | 7 / 6 | 24 / 600 |
+
+`lock-start2` is **equivalence-clean over 600 trials** for a **26× cut**. Every set that
+touches the middle wheel loses 2–4%: pinning its **offset** to the coarse winner's costs
+15/600, which is the sharper finding — §7.11's enumeration established that a ±2 band is
+*sufficient*, and this says it is also **necessary**, so `mid_ring_window` is not padding.
+Pinning absolute start1 costs its own 12/600, and pinning both 24/600. (None of these is
+uniformly worse — a smaller candidate set also dodges a few decoys, so a pinned set's net
+rate is sometimes higher, and the losses are not monotone in set size. That is luck, not
+a gain: the standard here is recovering everything the full set recovers, the same
+standard the band itself was held to.)
+
+**So "the offsets must equal the coarse solution's" is true of the right wheel and false
+of the middle one** — which is exactly the asymmetry the shipped code already encodes,
+one pinned offset and one banded.
+
+> ✅ **SHIPPED, and the enumerated refinement below is history.** The offsets are
+> now derived rather than banded: `25 × 130 × 26` = 84 500 candidates became
+> `25 ×` the start1 range, measured equivalent on the stride-specific miss rate
+> (0 for both, 360 paired trials). `mid_ring_window` and the "not paying for
+> itself" warning are both gone. `refinement.md` carries the shipped design.
+
+**Why the middle offset moves at all, and what it implies — see `refinement.md`.**
+Dumping the misses settled the mechanism: the coarse winner is not "the truth with a
+wrong ring2", it is the truth with a wrong ring2 *and a compensating middle offset*. A
+`start2` shift moves the turnover **modulo 26**, so it can carry a turnover across the
+start of the message and change the step count for the whole message; the offset then
+absorbs that difference and the near-solution stays readable. Worked case (L=60, K=2,
+V-II-IV): middle-wheel step positions `[1, 27, 53]` against `[26, 52]`, counts differing
+by 1 on 58 of 60 positions, key offsets 7 against 8 cancelling exactly — the coarse
+candidate decodes 58 of 60 characters, which is why it won. The magnitude is **bounded
+by 1** for a single-notch right wheel (the two turnover lattices have equal spacing, so
+their prefix counts interleave and can differ by at most one), reaching 2 only via a
+two-notch right wheel or a straddled double step. Since both schedules follow from the
+two keys alone, the correction is **derivable** — which replaces the ±2 band with an
+exact value and the whole set with `25 × 26` = 650 candidates. `refinement.md` carries
+the design, staging and verification plan; the individual misses are in
+`eval/results-ring-stride-refine-misses.txt`.
+
+**The middle wheel needs BOTH of its axes, and the misses say why**
+(`--dump`, `eval/results-ring-stride-refine-misses.txt`). The middle setting can move two
+ways: the **offset** `(start1 − ring1)`, and the **absolute** position (ring1 and start1
+shifted together, offset held — decode-neutral under §7.12 until the shift moves the
+middle wheel's own notch into the span it visits). The shipped `130 = 26 · 5` is the
+product of the two; each reduction drops one, and each loses a distinct set of keys:
+
+- **`shift2`** (offset held, absolute ±2) loses 15/600, and **all 15 have the coarse
+  offset off by exactly 1**. The recovery moves the offset by ±1, with the absolute
+  *unchanged* in 12 of the 15 — a correction no offset-preserving shift can express at
+  any width:
+
+  ```
+  true     ring1 R start1 Y (off  7) | ring2 H start2 J (off 2)
+  coarse   ring1 S start1 A (off  8) | ring2 I start2 K (off 2)   dring2=+1 doff1=+1
+  shipped  ring1 T start1 A (off  7) | ring2 H start2 J (off 2)   dstart1=+0 doff1=-1
+  ```
+
+- **`lock-both`** (absolute pinned, offset ±2) loses a *different* 12/600, and in 9 of
+  them the recovery keeps the offset and moves the **absolute** — by ±1, and by **+7, +8,
+  +11**:
+
+  ```
+  true     ring1 N start1 I (off 21) | ring2 R start2 K (off 19)
+  coarse   ring1 Y start1 T (off 21) | ring2 P start2 I (off 19)   dring2=-2 dstart1=+11
+  shipped  ring1 F start1 A (off 21) | ring2 R start2 K (off 19)   dstart1=+7  doff1=+0
+  ```
+
+Measured ranges: the **offset** needs ±1 (every observed miss), the **absolute** needs up
+to ±11. So ±2 is right for the offset and far too tight for the absolute, which is why
+the shipped set searches all 26 there. Every one of these misses has `dring2` of ±1, ±2,
++4 or +7 — near-solutions with a mistimed turnover, i.e. squarely inside the regime the
+stride is a heuristic *for*, not wrong-basin cases that would be out of scope.
+
+**Why an offset shift does not simply garble the text** (the natural objection, since
+`o1` enters every position): `b_i = o1 + S(i)`, and the compensating change is in `S`.
+Two middle settings at *different absolute* positions reach the middle wheel's own notch
+at different points, so within a short message one machine takes a step the other never
+takes. That divergence is persistent, not a δ-length transient — the transient argument
+holds only when the two settings share an absolute position, which the coarse winner and
+the truth generally do not, since the winner is a §7.12 class representative.
+
+**This retires the width question rather than settling it.** At `25 · 130 · 1` the
+refinement is ~0.08% of a run instead of ~2%, so no window cap — constant or K-dependent
+— has anything left to save. Not yet shipped: measured on the offline model (`-a`, no
+plugboard climb, ring0/start0 pinned), so it needs the end-to-end A/B through the binary
+that the width columns above got before it changes the search.
+
+**The K-dependent rule, measured as a column rather than inferred.** `⌈K/2⌉+N` is the
+shape the minima follow, so it was run as its own paired column against the full sweep
+(`WINDOWS="f1 f2 f3 13"`, 60 paired trials per cell, L=60, `K=1` base 73%):
+
+| K | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| `f1` = ⌈K/2⌉+1 | 68% | 75% | 75% | 73% | 73% | 75% | 68% | 72% | 68% | 68% | 72% | 73% |
+| `f2` = ⌈K/2⌉+2 | 72% | 75% | 73% | 73% | 75% | 75% | 72% | 73% | **70%** | **68%** | 73% | 73% |
+| `f3` = ⌈K/2⌉+3 | 72% | 75% | 73% | 73% | 75% | 75% | 72% | 73% | 72% | 70% | 73% | 73% |
+| full sweep | 72% | 75% | 73% | 73% | 75% | 75% | 72% | 73% | 72% | 70% | 73% | 73% |
+
+`f1` loses in half the cells. **`f2` matches the full sweep in 10 of 12 strides and loses
+one trial each at K=10 and K=11** — 2 misses in 720, which alone is n=60 noise, except
+that it lands on exactly the two strides where the independent 300-trial geometry sweep
+puts `f2` at 99% and 98%. Two instruments agreeing on *which* cells are short is worth
+more than either cell's own significance. `f3` is indistinguishable from the full sweep
+in every cell on both instruments.
+
+The saving does not reward the extra care. Measured `Analysed` keys, `-r ... -g ...`:
+
+| K | 2 | 3 | 5 | 8 | 10 | 13 |
+|---|--:|--:|--:|--:|--:|--:|
+| `f2` saves | 1.07% | 1.37% | 1.79% | 2.30% | 2.55% | 2.37% |
+| `f3` saves | 0.95% | 1.21% | 1.55% | 1.94% | 2.09% | 1.69% |
+
+So the whole choice is worth ~1–2.5% of a run, and buying back `f2`'s two short cells
+with `f3` costs a fifth of that. **If a formula is ever wanted, `⌈K/2⌉+3` is the one the
+evidence supports** — `f2` is 2pp light at K=10–11, precisely where its saving peaks.
+
+**Verdict: keep the full sweep.** Two independent reasons, either sufficient.
+
+*It is not a fixed width.* "±3 is always enough" holds only over K≤5 — the strides worth
+using. The flag accepts K to 26, and measured on the real flag a `w=3` cap costs 20pp of
+exact recovery at K=10 and 40pp at K=13. A cap must therefore be **K-dependent**, and the
+best such rule measured (`⌈K/2⌉+3`) is a formula standing where a constant now stands,
+re-importing the assumption ("the coarse winner lands near the truth") whose failure is
+the subject of two separate follow-ups above, and bringing the 0/25 wrap arithmetic back
+with it — for the ~1–2% below. The margin for getting the constant wrong is thin: one
+step tighter (`⌈K/2⌉+2`) is already measurably short at K=10–11.
+
+*And the saving is not worth having.* The measurable gain from capping is 1.5–7% of a run
+in the shapes where the flag is recommended. The one shape where it would matter (34.8%)
+is the single-task corner where `--ring-stride` is *already* a net loss and already warns
+— so a cap would be optimising the case the tool tells you not to use. Capping also
+brings back the 0/25 wrap subtlety the full set removed. A fixed, explainable 25 at ~2%
+of a normal run is the better trade; the override stays in the source as the way to
+re-check this without a rebuild.
+
+**Scope.** All cells are n=30, L=60/150, `-s` board, no `-c` — enough to show that the
+tail beyond `⌈K/2⌉+1` is inert at small K, that `w=1` never is, and that the requirement
+grows with K on both instruments; not enough to pin `min w` to the ones digit. The
+geometry probe pins ring1/start1 at the truth and so *understates* the required width (a
+coarse winner displaced by middle-wheel drift is a distance it cannot see) — which the
+end-to-end table then confirms by being uniformly harsher. Both are safe instruments for
+concluding "wider than a constant"; neither certifies a particular cap as sufficient.
+
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 
 §7.10 collapses wheel 0's ring × start *totally* (26×, exact) and §7.11 attacks wheel 2's

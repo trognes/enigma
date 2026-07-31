@@ -255,8 +255,12 @@ English tables.
   accuracy and is not recommended. Above 13 the cost stops falling — every `K`
   from 13 to 25 samples two ring positions and analyses the same number of
   keys — so only `K=26` changes anything, and it buys a further 15% for about
-  ten percentage points of exact recovery. The search is still an
-  *approximation*, so a run says so in its echoed settings
+  ten percentage points of exact recovery. The refinement pass is *derived*
+  rather than searched — the skipped positions' ring/start settings follow from
+  the coarse winner's stepping schedule — so it costs a few hundred keys rather
+  than tens of thousands, and there is no keyspace where the stride costs more
+  than it saves. The search is still an *approximation*, so a run says so in
+  its echoed settings
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters, try
   every combination, keep the best climb (needs `-c`; parallel over the first
   forced pair, so `-T` helps) `[off]`. **Not recommended** — a

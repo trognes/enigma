@@ -83,15 +83,16 @@ static const int maxlen = 1024;   /* maximum ciphertext length (letters) */
 static const int asize = 26;
 static const int wheels = 3;
 
-/* How far the --ring-stride refinement's middle-wheel OFFSET can sit from the coarse
-   winner's. Not a tuning knob: 2 is the exhaustively established bound on how far a
-   ring2/start2 shift can move the middle wheel's step schedule (archived/PERFORMANCE.md §7.11) --
-   1 from the ordinary time shift, plus 1 when double stepping straddles the middle
-   wheel's own notch. Raising it only wastes work; lowering it loses keys. §7.11's
-   enumeration covered shifts 1..13, the old --ring-stride ceiling; re-run over every
-   rotor pair x 26 start1 x 26 start2 x shifts 1..25 at L=600 when the ceiling rose to
-   26, the bound is still 2 (first hit at rotor I over I, shift 1). */
-static const int mid_ring_window = 2;
+/* The --ring-stride refinement's middle-wheel offset window (mid_ring_window = 2) USED to
+   live here. It is gone because the refinement now DERIVES that offset from the coarse
+   winner's and the candidate's step schedules instead of banding it (refinement.md): the
+   quantity the band was guessing at is computable from the two keys, with no knowledge of
+   the truth. The bound the band rested on still holds -- a ring2/start2 shift moves the
+   middle wheel's schedule by at most 2, 1 from the ordinary time shift plus 1 when double
+   stepping straddles the wheel's own notch, established by enumerating every rotor pair x
+   26 start1 x 26 start2 x every shift at L=600 -- but nothing depends on it any more, which
+   is what makes the refinement correct for two-notch right wheels and straddled double
+   steps rather than merely usually right. */
 static const int reflector_count = sizeof(reflector_string) / sizeof(char *);
 static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 
@@ -1060,6 +1061,17 @@ inline int mod26(int x)
   return (x+asize)%asize;
 }
 
+/* mod26() adds a SINGLE alphabet, so it is only correct for x >= -26 -- fine everywhere it
+   is used on a position plus a step. The --ring-stride refinement derives offsets from a
+   step-count difference that is not bounded that way (a candidate start1 far from the
+   coarse winner's can differ by several steps, and the difference is subtracted from a
+   position), so it uses this full-range form. Caught by UBSan as a negative subst_array
+   index, which then read out of bounds. */
+inline int mod26_full(int x)
+{
+  return ((x % asize) + asize) % asize;
+}
+
 inline int subst_rotors(machine & m, int x)
 {
   for (int r = wheels - 1; r >= 0; r--)
@@ -1179,6 +1191,86 @@ void setup_mapping(machine & m, bool copy_rows)
   m.grundstellung[0] = static_cast<unsigned char>(g0);
   m.grundstellung[1] = static_cast<unsigned char>(g1);
   m.grundstellung[2] = static_cast<unsigned char>(g2);
+}
+
+/* Cumulative step counts of the middle and left wheels, per character position,
+   for a key starting at (g1, g2). Mirrors setup_mapping()'s stepping exactly --
+   including the double step, where the middle wheel sitting on its OWN notch
+   advances both itself and the left wheel -- but records only the counts, since
+   that is all the --ring-stride refinement's derivation needs.
+
+   The refinement uses these to compute how far a candidate's schedule has
+   drifted from the coarse winner's (refinement.md §4). The substitution consumes
+   a_i = o0 + left(i), b_i = o1 + mid(i) and c_i = o2 + i, so a candidate whose
+   step counts differ from the winner's by a constant reproduces the winner's
+   alignment exactly when its ring offsets absorb that constant. w1/w2 are
+   TRANSLATED rotor indices (as held in machine::walzenlage), since notch[] is
+   indexed that way. */
+static void step_counts(int w1, int w2, int g1, int g2,
+                        unsigned short * mid, unsigned short * left)
+{
+  int nmid = 0, nleft = 0;
+  for (int i = 0; i < textlength; i++)
+    {
+      if (notch[w1][g1])
+        {
+          nleft++;
+          nmid++;
+          g1 = mod26(1 + g1);
+        }
+      else if (notch[w2][g2])
+        {
+          nmid++;
+          g1 = mod26(1 + g1);
+        }
+      g2 = mod26(1 + g2);
+      mid[i] = static_cast<unsigned short>(nmid);
+      left[i] = static_cast<unsigned short>(nleft);
+    }
+}
+
+/* The distinct values of (a[i] - b[i]) over the message, ascending. At most
+   `cap` are stored; the return value is how many. The refinement emits one
+   candidate per distinct value rather than reducing them to a mode -- a mode is
+   a guess that can be wrong on a short message where the two schedules alternate
+   evenly, while enumerating a handful of values cannot be (refinement.md §4). */
+static int step_deltas(const unsigned short * a, const unsigned short * b,
+                       int * out, int cap)
+{
+  int n = 0;
+  for (int i = 0; i < textlength; i++)
+    {
+      int d = static_cast<int>(a[i]) - static_cast<int>(b[i]);
+      int j = 0;
+      while ((j < n) && (out[j] != d))
+        j++;
+      if ((j == n) && (n < cap))
+        out[n++] = d;
+    }
+  return n;
+}
+
+/* Add every value within `band` of one already in `out[0..n)`, deduplicated, and return
+   the new count. The derivation is exact for the step-count term, but the coarse winner's
+   own offset can be off for reasons no schedule explains (refinement.md §7.2), and a small
+   band around each derived value covers that at a few times the candidate count -- which
+   is still two orders of magnitude below the enumeration it replaced. */
+static int widen_deltas(int * out, int n, int band, int cap)
+{
+  int base = n;
+  for (int i = 0; i < base; i++)
+    for (int d = -band; d <= band; d++)
+      {
+        if (d == 0)
+          continue;
+        int v = out[i] + d;
+        int j = 0;
+        while ((j < n) && (out[j] != v))
+          j++;
+        if ((j == n) && (n < cap))
+          out[n++] = v;
+      }
+  return n;
 }
 
 /* Decode one ciphertext position: plugboard -> per-position rotor-stack row ->
@@ -4067,40 +4159,22 @@ void bruteforce(char * result)
             total_keys - scored_keys,
             static_cast<double>(total_keys) / static_cast<double>(scored_keys));
 
-  /* Non-fatal warning: --ring-stride can cost MORE than it saves. The coarse pass shrinks
-     ring2 to ceil(26/K) but the refinement then re-searches all 25 skipped values over
-     ring1 x start1 x start2 with ring0/start0 pinned -- so the refinement is cheaper than
-     a coarse ring2 value by tasks.size() * rc[0] * gc[0], and when that factor is 1 (a
-     single wheel order AND start0 pinned) the 25 values outweigh the 26/K the coarse pass
-     saved. Concretely, `-r A.. -g A..` at K=2 analyses 162032 keys against 110864 with no
-     stride: 1.46x WORSE. This is a real invocation, not a pathological one, so say so
-     rather than silently doing more work than asked. Deliberately a warning and not an
-     adjustment: the refinement width stays fixed at all 25 so the same command always does
-     the same thing, and not an error, since the run is still correct -- just a bad trade.
-     Compared on index spaces, which the collapse scales alike on both sides. */
-  if (opt_ring_stride > 1)
-    {
-      /* The refinement's ring1 is banded to the derived offset window (mid_ring_window),
-         not the full 26, so price it that way -- the pre-band formula over-warned by 26/5.
+  /* The "--ring-stride is not paying for itself" warning that used to live here is GONE,
+     because the case it warned about no longer exists. It fired when the refinement's
+     25 skipped ring2 values, re-searched over ring1 x start1 x start2, outweighed the
+     26/K the coarse pass saved -- a real invocation (`-r A.. -g A..` at K=2 cost 1.46x
+     MORE than not striding). Deriving the refinement's offsets instead of enumerating
+     them shrank it from 25 x 130 x 26 to 25 x (start1 range), and that is now provably
+     too small to lose:
 
-         Compare the WHOLE strided run against not striding at all, not the refinement
-         against the coarse pass. Those are different questions and only the first one
-         matters: the coarse pass shrinks as K grows (ceil(26/K) ring2 values), so at a
-         large K a refinement bigger than it is the normal, healthy case rather than a
-         problem. Reported by a user with -r A.. -g A.. --ring-stride 13, where the old
-         test fired on a run costing 119652 keys against 456976 unstrided -- a 3.8x win
-         warned about as a loss. */
-      size_t band = (rc[1] == asize)
-        ? static_cast<size_t>(2 * mid_ring_window + 1) : static_cast<size_t>(rc[1]);
-      size_t refine_keys = static_cast<size_t>(asize - 1) * band * gc[1] * asize;
-      size_t strided = total_keys + refine_keys;
-      size_t unstrided = total_keys / static_cast<size_t>(rc[2]) * asize;
-      if (strided > unstrided)
-        fprintf(stderr, "Warning: --ring-stride %d is not paying for itself here -- the "
-                "strided search (%zu keys) costs more than not striding (%zu); open -g's "
-                "first position or drop --ring-stride\n",
-                opt_ring_stride, strided, unstrided);
-    }
+       warn iff  total + refine > total/rc2 * 26,  refine = 25 * gc1 * (a small factor)
+       total = T * rc2 with T = tasks*rc0*rc1*gc0*gc1*gc2, so gc1 cancels:
+       warn iff  50 > tasks * rc0 * rc1 * gc0 * gc2 * (26 - rc2)
+
+     Validation forces start2 wildcarded, so gc2 = 26, and rc2 <= 13 for any K >= 2 --
+     the right-hand side is at least 26 * 13 = 338. The same keyspace that used to warn
+     now analyses 363 keys against 676 unstrided, a 1.86x win. tests/run_tests.sh guards
+     that inversion rather than the removed warning. */
 
   /* memory accounting for the final diagnostic (one [asize]^4 (457 KB) table per
      task; a full M4 wildcard is ~14.9 GiB, every other mode far smaller) */
@@ -4336,54 +4410,83 @@ void bruteforce(char * result)
           int fixed_ring0 = m.ringstellung[0];
           int fixed_start0 = m.grundstellung[0];
 
-          /* MIDDLE-WHEEL CANDIDATES, derived from the stepping instead of enumerated.
-             Shifting ring2 and start2 together leaves the right wheel's substitution
-             untouched -- only (start2 - ring2) mod 26 enters it -- and moves nothing but
-             the notch TIMING, so the middle wheel's schedule is time-shifted rather than
-             lengthened and its position can run only a bounded distance from the coarse
-             winner's. That bound is 2, by ENUMERATION not sampling: simulating the real
-             schedule (double step included) over every rotor pair x 26 start1 x 26 start2
-             x every shift 1..13 at L=600 gives max divergence 2, never 3. One step is the
-             ordinary time shift; the second is double stepping, when the two schedules
-             straddle the middle wheel's own notch. Two-notch right rotors change how OFTEN
-             that happens, not how far it reaches (worst case is rotor II, single-notch).
+          /* THE OFFSETS ARE DERIVED, NOT SEARCHED (refinement.md).
 
-             The band is on the OFFSET (start1 - ring1) mod 26, which is the identifiable
-             quantity -- NOT on ring1. Under §7.12 the reported ring1/start1 are class
-             representatives, so raw ring1 wanders freely while the offset barely moves: in
-             two measured misses the winning ring1 sat 5 and 6 away from the coarse one
-             while the offset was 0 and 1 away. Banding raw ring1 therefore clips the wrong
-             axis and silently loses keys (measured: 2 in 120), which is exactly what a
-             first attempt here did. Because ring1 = start1 - offset, the band is a DIAGONAL
-             in (ring1, start1) space, so it is enumerated as explicit pinned pairs rather
-             than expressed as a range -- search_range holds rectangles only. */
-          int coarse_off1 = ((m.grundstellung[1] - m.ringstellung[1]) % asize + asize)
-                            % asize;
-          static const int max_pairs = asize * asize;
-          int pair_r1[max_pairs], pair_g1[max_pairs];
-          int npairs = 0;
-          if ((rc[1] == asize) && (gc[1] == asize))
-            {
-              for (int s1 = 0; s1 < asize; s1++)
-                for (int d = -mid_ring_window; d <= mid_ring_window; d++)
-                  {
-                    int o = ((coarse_off1 + d) % asize + asize) % asize;
-                    pair_g1[npairs] = s1;
-                    pair_r1[npairs] = ((s1 - o) % asize + asize) % asize;
-                    npairs++;
-                  }
-            }
-          else
-            {
-              /* caller pinned ring1 and/or start1: no band, search what they asked for */
-              for (int v = range.r_min[1]; v <= range.r_max[1]; v++)
-                for (int s1 = range.g_min[1]; s1 <= range.g_max[1]; s1++)
-                  {
-                    pair_r1[npairs] = v;
-                    pair_g1[npairs] = s1;
-                    npairs++;
-                  }
-            }
+             The substitution consumes a_i = o0 + left(i), b_i = o1 + mid(i) and
+             c_i = o2 + i, where o_w = start_w - ring_w and left/mid are the wheels'
+             cumulative step counts. Two things follow.
+
+             c_i has no schedule term, so the right wheel's whole contribution is a
+             function of o2 alone: every candidate carries the coarse winner's o2 exactly,
+             start2 = ring2 + o2. Measured 0 losses in 600 paired trials.
+
+             b_i and a_i DO have one, and it is not a small perturbation. Moving start2 by
+             delta moves the turnover by delta MODULO 26, so it can carry a turnover across
+             the START of the message and change the step count for the whole message
+             rather than for a delta-length window. The offset then absorbs that difference
+             -- which is why the coarse winner is not "the truth with a wrong ring2" but the
+             truth with a wrong ring2 AND a compensating middle offset, and why it still
+             decodes most of the message. Measured case: step positions [1,27,53] against
+             [26,52], counts differing by 1 on 58 of 60 positions, offsets 7 against 8
+             cancelling exactly, 58 of 60 characters correct.
+
+             Both schedules follow from the two keys alone, with no knowledge of the truth,
+             so the correction is COMPUTED: o1 = o1_coarse + (mid_coarse - mid_cand). That
+             replaces the old +-mid_ring_window band -- a fixed guess at a quantity that can
+             be derived -- and takes the candidate set from 25 x 130 x 26 = 84500 to
+             25 x 26. The band's bound of 2 still holds (it is where mid_ring_window came
+             from) but nothing here depends on it: the delta is measured, not assumed, which
+             is what makes this correct for two-notch right wheels and straddled double
+             steps rather than merely usually right.
+
+             The LEFT wheel gets the same treatment, ungated: left() counts double steps, a
+             ring2 shift moves those too, and one near either end of the message can be
+             carried in or out of it. Its delta set is computed from the same schedule walk
+             and is {0} whenever the schedules agree, so the derivation self-gates and an
+             explicit "does the left wheel step?" condition would be one more thing to get
+             wrong for no saving. (The old code pinned ring0/start0 outright, citing §7.10 --
+             but §7.10 is the DEGENERACY, that shifting ring0 and start0 together is
+             decode-identical, which is not the same claim as pinning o0 across a ring2
+             change.) */
+          int coarse_off1 = mod26(m.grundstellung[1] - m.ringstellung[1]);
+          int coarse_off2 = mod26(m.grundstellung[2] - m.ringstellung[2]);
+          int coarse_g1 = m.grundstellung[1];
+          int coarse_g2 = m.grundstellung[2];
+          /* TRANSLATED rotor indices: notch[] is indexed that way, unlike the §7.12 mask
+             below, which is built and read by RAW index. */
+          int mid_wheel = m.walzenlage[1], right_wheel = m.walzenlage[2];
+
+          /* Derive an offset only where the caller left the freedom to. With ring1 pinned
+             -- which includes the tool's own default -r AA. -- each start1 in the sweep
+             already carries a determined offset start1 - ring1, the sweep covers every one
+             of them, and deriving would override a constraint the caller stated. Wheel 0
+             is the same rule: shift start0 when it is free (the usual case, since §7.10
+             collapses ring0 to a sentinel and lets start0 enumerate the offsets), else
+             shift ring0, else leave o0 alone. */
+          bool derive_ring1 = (rc[1] == asize);
+          /* Width of the band placed around each derived offset (see widen_deltas).
+             MEASURED TO BUY NOTHING, so the shipped value is 0 -- the pure derivation.
+             The band was built for refinement.md §7.2, the one failure the derivation
+             cannot correct: a coarse winner whose own o1 is wrong for scoring rather than
+             schedule reasons. Over 360 paired end-to-end trials it changed not a single
+             recovery, because every key the derived set "lost" against the old enumerated
+             band turned out to be one the EXHAUSTIVE K=1 search also fails -- a scoring
+             failure, where the truth is not the top-scoring key and no search shape can
+             help. ENIGMA_REFINE_BAND keeps it measurable without a rebuild. */
+          int refine_band = 0;
+          if (const char * bp = getenv("ENIGMA_REFINE_BAND"))
+            refine_band = atoi(bp);
+          if (refine_band < 0)
+            refine_band = 0;
+          bool shift_start0 = (gc[0] == asize);
+          bool shift_ring0 = (! shift_start0) && (rc[0] == asize);
+
+          std::vector<unsigned short> sched_c_mid(static_cast<size_t>(textlength));
+          std::vector<unsigned short> sched_c_left(static_cast<size_t>(textlength));
+          std::vector<unsigned short> sched_k_mid(static_cast<size_t>(textlength));
+          std::vector<unsigned short> sched_k_left(static_cast<size_t>(textlength));
+          step_counts(mid_wheel, right_wheel, coarse_g1, coarse_g2,
+                      sched_c_mid.data(), sched_c_left.data());
 
           /* Every ring2 except the coarse winner. The winner needs no retest: the
              coarse pass already scored that exact ring2, and phase 2 pins ring0/start0
@@ -4404,6 +4507,28 @@ void bruteforce(char * result)
              list, so the punctured set goes in as-is: one mask, one search. */
           unsigned int mask2 = ((1u << asize) - 1u) & ~(1u << center2);
 
+          /* MEASUREMENT-ONLY override (ENIGMA_REFINE_WINDOW=k, unset/0/>=13 = off):
+             restrict the refinement to the ring2 values within circular distance k of
+             the coarse winner, so the width the full sweep replaced can be re-measured
+             without rebuilding. This is what eval/ring_stride_window_probe.py sweeps;
+             the shipped default is the full punctured set above, and with the variable
+             unset this loop does not run. Circular by construction (the mask is a set,
+             not an interval), so the wrap subtlety a clamped window used to have cannot
+             come back through it. */
+          if (const char * wp = getenv("ENIGMA_REFINE_WINDOW"))
+            {
+              int wk = atoi(wp);
+              if ((wk > 0) && (wk < asize / 2))
+                for (int v = 0; v < asize; v++)
+                  {
+                    int d = abs(v - center2);
+                    if (d > asize - d)
+                      d = asize - d;
+                    if (d > wk)
+                      mask2 &= ~(1u << v);
+                  }
+            }
+
           /* Reuse the winning task VERBATIM rather than rebuilding one from the
              machine's fields. wheel_task carries RAW wheel/reflector numbers, which
              init_walzen() translates on the way into a machine -- in Norway mode it adds
@@ -4416,47 +4541,80 @@ void bruteforce(char * result)
              translated. cur_wo was set by the key_to_machine() call above. */
           std::vector<wheel_task> rtasks(1, tasks[cur_wo]);
           search_range rrange;
-          rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
-          rrange.r_min[1] = rrange.r_max[1] = pair_r1[0];  /* re-pinned per sub-search */
+          /* Every candidate pins all six positions, so each sub-search is a single key:
+             the derived (ring2, start2) and (ring1, start1) are DIAGONALS, and
+             search_range holds rectangles only. */
           rrange.r_min[2] = 0;                /* bounds unused: r2_vals below decodes */
           rrange.r_max[2] = asize - 1;
-          set_ring2(rrange, mask2);
-          rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
-          rrange.g_min[1] = rrange.g_max[1] = pair_g1[0];  /* re-pinned per sub-search */
-          rrange.g_min[2] = 0;
-          rrange.g_max[2] = 25;
-          int rrc[wheels] = { 1, 1, rrange.r2_n };   /* ring1/start1 pinned per pair */
-          int rgc[wheels] = { 1, 1, 26 };
-          size_t rrsize = static_cast<size_t>(rrc[0]) * rrc[1] * rrc[2];
-          size_t rgsize = static_cast<size_t>(rgc[0]) * rgc[1] * rgc[2];
-          size_t rwork = rrsize * rgsize * restarts_par;
-          /* Keys the refinement actually SCORES, not its index space. The §7.12
-             middle-wheel collapse applies here exactly as it does to the coarse pass --
-             search_worker() consults the same g_mid_rep_mask -- so counting rrsize*rgsize
-             would claim credit for the start1 values it skips, and the "Analysed N" line
-             would exceed the plugboards scored. Measured on a fully wildcarded keyspace:
-             439400 enumerated against 106600 scored, a 4.1x gap that made --ring-stride
-             look ~20% more expensive than it is. Mirrors build_key_space()'s own
-             accounting; the row is indexed by the task's RAW wheel numbers, since that is
-             how the mask was built (see the wheel_task note in CLAUDE.md). */
-          /* Keys the refinement actually SCORES, summed over the pinned pairs. The §7.12
-             collapse applies inside the refinement too (search_worker consults the same
-             g_mid_rep_mask), and with start1 pinned per sub-search a pair contributes only
-             the start2 values for which THAT start1 is the class representative -- so test
-             the mask bit for this start1 rather than taking the row's popcount. */
-          extra_keys_analysed = 0;
+          int rrc[wheels] = { 1, 1, 1 };
+          int rgc[wheels] = { 1, 1, 1 };
+          size_t rrsize = 1;
+          size_t rgsize = 1;
+          size_t rwork = restarts_par;
+
+          /* BUILD THE DERIVED CANDIDATES. One per (skipped ring2) x (start1 in the
+             caller's range) x (delta the middle schedule actually drifted) x (ditto the
+             left wheel's). start1 values the §7.12 collapse would skip are dropped here
+             rather than handed to search_worker to reject, so the count below is what is
+             actually scored -- and a class member and its representative share a schedule,
+             hence the same derived offset, so dropping them loses nothing. */
+          struct refine_cand { unsigned char r0, g0, r1, g1, r2, g2; };
+          std::vector<refine_cand> cands;
+          const uint32_t * mrow = nullptr;
           if (g_mid_rep_mask != nullptr)
+            mrow = g_mid_rep_mask + (static_cast<size_t>(rtasks[0].w[1]) * rotor_count
+                                     + rtasks[0].w[2]) * asize;
+          for (int v = 0; v < asize; v++)
             {
-              const uint32_t * mrow = g_mid_rep_mask
-                + (static_cast<size_t>(rtasks[0].w[1]) * rotor_count
-                   + rtasks[0].w[2]) * asize;
-              for (int i = 0; i < npairs; i++)
-                for (int s2 = 0; s2 < asize; s2++)
-                  if ((mrow[s2] >> pair_g1[i]) & 1u)
-                    extra_keys_analysed += static_cast<size_t>(rrc[2]);
+              if (! ((mask2 >> v) & 1u))
+                continue;
+              int g2 = mod26(v + coarse_off2);
+              for (int g1 = range.g_min[1]; g1 <= range.g_max[1]; g1++)
+                {
+                  if ((mrow != nullptr) && ! ((mrow[g2] >> g1) & 1u))
+                    continue;
+                  step_counts(mid_wheel, right_wheel, g1, g2,
+                              sched_k_mid.data(), sched_k_left.data());
+                  int dmid[asize], dleft[asize];
+                  int nmid = derive_ring1
+                    ? step_deltas(sched_c_mid.data(), sched_k_mid.data(), dmid, asize)
+                    : 1;                      /* ring1 pinned: nothing to derive */
+                  /* Widen each derived delta by +-refine_band. The derivation corrects the
+                     SCHEDULE term exactly, but the coarse winner's own o1 can also be off
+                     for scoring reasons -- the argmax on a partly-garbled decode need not
+                     be the truth's middle setting -- and no schedule computation can see
+                     that. Off by default: measured to change no recovery at all (see
+                     refine_band above). */
+                  if (derive_ring1 && (refine_band > 0))
+                    nmid = widen_deltas(dmid, nmid, refine_band, asize);
+                  int nleft = (shift_start0 || shift_ring0)
+                    ? step_deltas(sched_c_left.data(), sched_k_left.data(), dleft, asize)
+                    : 1;                      /* o0 fixed by the caller */
+                  for (int a = 0; a < nmid; a++)
+                    for (int b = 0; b < nleft; b++)
+                      {
+                        refine_cand c;
+                        c.r1 = static_cast<unsigned char>
+                          (derive_ring1 ? mod26_full(g1 - (coarse_off1 + dmid[a]))
+                                        : range.r_min[1]);
+                        c.g1 = static_cast<unsigned char>(g1);
+                        c.r2 = static_cast<unsigned char>(v);
+                        c.g2 = static_cast<unsigned char>(g2);
+                        int d0 = (nleft > 1 || (shift_start0 || shift_ring0)) ? dleft[b] : 0;
+                        c.r0 = static_cast<unsigned char>
+                          (shift_ring0 ? mod26_full(fixed_ring0 - d0) : fixed_ring0);
+                        c.g0 = static_cast<unsigned char>
+                          (shift_start0 ? mod26_full(fixed_start0 + d0) : fixed_start0);
+                        cands.push_back(c);
+                      }
+                }
             }
-          else
-            extra_keys_analysed = rrsize * rgsize * static_cast<size_t>(npairs);
+          /* Keys the refinement actually SCORES -- now simply the candidate count, since
+             every candidate is one fully-pinned key and the §7.12 collapse was applied
+             while building the list rather than left for search_worker to reject. The
+             enumerated-vs-scored gap the old accounting had to correct for (439400 against
+             106600 on a fully wildcarded keyspace) is gone with the enumeration. */
+          extra_keys_analysed = cands.size();
 
           best_result rbest;
           /* Carry the display high-water mark into the refinement. Its best_result is a
@@ -4489,37 +4647,42 @@ void bruteforce(char * result)
           size_t rchunk = rwork / (static_cast<size_t>(rnthreads) * 16);
           if (rchunk < 1)
             rchunk = 1;
-          /* One sub-search per (ring1, start1) pair in the offset band, sharing a single
-             rbest. Everything each pins comes from the snapshots above, never re-read from
-             m: on the plain-scan path search_worker leaves m's ring/start in a stale
-             stepped state (the documented lazy restore), which is how an earlier
-             multi-search version here silently corrupted its own second pass. */
-          int won_r1 = pair_r1[0], won_g1 = pair_g1[0];
+          /* One sub-search per derived candidate, sharing a single rbest. Everything each
+             pins comes from the candidate list, never re-read from m: on the plain-scan
+             path search_worker leaves m's ring/start in a stale stepped state (the
+             documented lazy restore), which is how an earlier multi-search version here
+             silently corrupted its own second pass. Ascending candidate order and a
+             strictly-greater test keep the winner deterministic. */
+          refine_cand won = cands.empty() ? refine_cand{0, 0, 0, 0, 0, 0} : cands[0];
           double prev_score = rbest.score;
-          for (int i = 0; i < npairs; i++)
+          for (size_t i = 0; i < cands.size(); i++)
             {
-              rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
-              rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
-              rrange.r_min[1] = rrange.r_max[1] = pair_r1[i];
-              rrange.g_min[1] = rrange.g_max[1] = pair_g1[i];
+              const refine_cand & c = cands[i];
+              rrange.r_min[0] = rrange.r_max[0] = c.r0;
+              rrange.g_min[0] = rrange.g_max[0] = c.g0;
+              rrange.r_min[1] = rrange.r_max[1] = c.r1;
+              rrange.g_min[1] = rrange.g_max[1] = c.g1;
+              rrange.g_min[2] = rrange.g_max[2] = c.g2;
+              set_ring2(rrange, 1u << c.r2);
               std::atomic<size_t> rnext_key{0};
               run_parallel(rnthreads, [&](int t)
                 { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
                                 rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
               /* rbest.idx is relative to whichever sub-search produced it, so remember the
-                 pair pinned when the score last improved; the reconstruction below re-pins
-                 rrange to it. */
+                 candidate pinned when the score last improved; the reconstruction below
+                 re-pins rrange to it. */
               if (rbest.found && (rbest.score > prev_score))
                 {
                   prev_score = rbest.score;
-                  won_r1 = pair_r1[i];
-                  won_g1 = pair_g1[i];
+                  won = c;
                 }
             }
-          rrange.r_min[0] = rrange.r_max[0] = fixed_ring0;
-          rrange.g_min[0] = rrange.g_max[0] = fixed_start0;
-          rrange.r_min[1] = rrange.r_max[1] = won_r1;
-          rrange.g_min[1] = rrange.g_max[1] = won_g1;
+          rrange.r_min[0] = rrange.r_max[0] = won.r0;
+          rrange.g_min[0] = rrange.g_max[0] = won.g0;
+          rrange.r_min[1] = rrange.r_max[1] = won.r1;
+          rrange.g_min[1] = rrange.g_max[1] = won.g1;
+          rrange.g_min[2] = rrange.g_max[2] = won.g2;
+          set_ring2(rrange, 1u << won.r2);
 
           g_progress = save_progress;
           /* Carry the refinement's display high-water mark back, so the merge echo below

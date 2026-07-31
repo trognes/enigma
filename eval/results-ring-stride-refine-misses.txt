@@ -1,0 +1,150 @@
+### K=2
+# K=2 trials=100 lang=wehrmacht  (shipped 25x130x26, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+  MISS lock-both   L=60 K=2 wheels=134
+    true     ring1 V start1 R (off 22) | ring2 D start2 G (off  3)
+    coarse   ring1 W start1 S (off 22) | ring2 E start2 H (off  3)   dring2=+1 dstart1=+1 doff1=+0
+    shipped  ring1 E start1 A (off 22) | ring2 D start2 G (off  3)   dstart1=+8 doff1=+0 (vs coarse)
+    lock-both ring1 W start1 S (off 22) | ring2 E start2 H (off  3)   [best it could reach]
+  MISS shift2      L=60 K=2 wheels=524
+    true     ring1 R start1 Y (off  7) | ring2 H start2 J (off  2)
+    coarse   ring1 S start1 A (off  8) | ring2 I start2 K (off  2)   dring2=+1 dstart1=+2 doff1=+1
+    shipped  ring1 T start1 A (off  7) | ring2 H start2 J (off  2)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 S start1 A (off  8) | ring2 I start2 K (off  2)   [best it could reach]
+  MISS shift2      L=60 K=2 wheels=245
+    true     ring1 K start1 Q (off  6) | ring2 D start2 A (off 23)
+    coarse   ring1 V start1 A (off  5) | ring2 C start2 Z (off 23)   dring2=-1 dstart1=+10 doff1=-1
+    shipped  ring1 U start1 A (off  6) | ring2 D start2 A (off 23)   dstart1=+0 doff1=+1 (vs coarse)
+    shift2   ring1 T start1 Y (off  5) | ring2 B start2 Y (off 23)   [best it could reach]
+  MISS shift2      L=60 K=2 wheels=451
+    true     ring1 Z start1 J (off 10) | ring2 V start2 O (off 19)
+    coarse   ring1 P start1 A (off 11) | ring2 Y start2 R (off 19)   dring2=+3 dstart1=-9 doff1=+1
+    shipped  ring1 Q start1 A (off 10) | ring2 V start2 O (off 19)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 P start1 A (off 11) | ring2 Y start2 R (off 19)   [best it could reach]
+  MISS shift2      L=60 K=2 wheels=524
+    true     ring1 K start1 T (off  9) | ring2 V start2 J (off 14)
+    coarse   ring1 Q start1 A (off 10) | ring2 W start2 K (off 14)   dring2=+1 dstart1=+7 doff1=+1
+    shipped  ring1 R start1 A (off  9) | ring2 V start2 J (off 14)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 Q start1 A (off 10) | ring2 W start2 K (off 14)   [best it could reach]
+60	100	42%	75%	75%	72%	72%	74%	71%	0	4	4	1	5
+150	100	49%	89%	89%	90%	92%	91%	92%	0	0	0	0	0
+### K=3
+# K=3 trials=100 lang=wehrmacht  (shipped 25x130x26, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+  MISS shift2      L=60 K=3 wheels=423
+    true     ring1 N start1 M (off 25) | ring2 O start2 V (off  7)
+    coarse   ring1 A start1 A (off  0) | ring2 P start2 W (off  7)   dring2=+1 dstart1=-12 doff1=+1
+    shipped  ring1 B start1 A (off 25) | ring2 O start2 V (off  7)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 Y start1 Y (off  0) | ring2 Q start2 X (off  7)   [best it could reach]
+  MISS lock-both   L=60 K=3 wheels=124
+    true     ring1 O start1 T (off  5) | ring2 E start2 F (off  1)
+    coarse   ring1 W start1 B (off  5) | ring2 D start2 E (off  1)   dring2=-1 dstart1=+8 doff1=+0
+    shipped  ring1 V start1 A (off  5) | ring2 E start2 F (off  1)   dstart1=-1 doff1=+0 (vs coarse)
+    lock-both ring1 W start1 B (off  5) | ring2 E start2 F (off  1)   [best it could reach]
+  MISS lock-both   L=60 K=3 wheels=315
+    true     ring1 B start1 Q (off 15) | ring2 C start2 T (off 17)
+    coarse   ring1 A start1 P (off 15) | ring2 Y start2 P (off 17)   dring2=-4 dstart1=-1 doff1=+0
+    shipped  ring1 B start1 Q (off 15) | ring2 C start2 T (off 17)   dstart1=+1 doff1=+0 (vs coarse)
+    lock-both ring1 A start1 P (off 15) | ring2 Y start2 P (off 17)   [best it could reach]
+  MISS shift2      L=60 K=3 wheels=325
+    true     ring1 O start1 U (off  6) | ring2 E start2 Z (off 21)
+    coarse   ring1 T start1 A (off  7) | ring2 G start2 B (off 21)   dring2=+2 dstart1=+6 doff1=+1
+    shipped  ring1 U start1 A (off  6) | ring2 E start2 Z (off 21)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 R start1 Y (off  7) | ring2 F start2 A (off 21)   [best it could reach]
+60	100	37%	75%	75%	74%	74%	73%	72%	0	2	2	2	4
+  MISS shift2      L=150 K=3 wheels=531
+    true     ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)
+    coarse   ring1 N start1 Q (off  3) | ring2 J start2 R (off  8)   dring2=+1 dstart1=+1 doff1=+1
+    shipped  ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)   dstart1=-1 doff1=-1 (vs coarse)
+    shift2   ring1 N start1 Q (off  3) | ring2 L start2 T (off  8)   [best it could reach]
+  MISS lock-both   L=150 K=3 wheels=531
+    true     ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)
+    coarse   ring1 N start1 Q (off  3) | ring2 J start2 R (off  8)   dring2=+1 dstart1=+1 doff1=+1
+    shipped  ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)   dstart1=-1 doff1=-1 (vs coarse)
+    lock-both ring1 N start1 Q (off  3) | ring2 L start2 T (off  8)   [best it could reach]
+  MISS lock-both   L=150 K=3 wheels=253
+    true     ring1 N start1 I (off 21) | ring2 R start2 K (off 19)
+    coarse   ring1 Y start1 T (off 21) | ring2 P start2 I (off 19)   dring2=-2 dstart1=+11 doff1=+0
+    shipped  ring1 F start1 A (off 21) | ring2 R start2 K (off 19)   dstart1=+7 doff1=+0 (vs coarse)
+    lock-both ring1 Y start1 T (off 21) | ring2 R start2 K (off 19)   [best it could reach]
+150	100	29%	89%	89%	89%	93%	91%	92%	0	1	1	2	2
+### K=5
+# K=5 trials=100 lang=wehrmacht  (shipped 25x130x26, lock-start2 25x130x1, lock-off1 25x26x1, lock-both 25x5x1, lock-all 25x1x1)
+len	n	coarse ok	shipped	lock-start2	lock-off1	shift2	lock-both	lock-all	lost:lock-start2	lost:lock-off1	lost:shift2	lost:lock-both	lost:lock-all
+  MISS lock-both   L=60 K=5 wheels=425
+    true     ring1 D start1 A (off 23) | ring2 S start2 X (off  5)
+    coarse   ring1 E start1 B (off 23) | ring2 P start2 U (off  5)   dring2=-3 dstart1=+1 doff1=+0
+    shipped  ring1 D start1 A (off 23) | ring2 S start2 X (off  5)   dstart1=-1 doff1=+0 (vs coarse)
+    lock-both ring1 E start1 B (off 23) | ring2 P start2 U (off  5)   [best it could reach]
+  MISS shift2      L=60 K=5 wheels=423
+    true     ring1 N start1 M (off 25) | ring2 O start2 V (off  7)
+    coarse   ring1 A start1 A (off  0) | ring2 P start2 W (off  7)   dring2=+1 dstart1=-12 doff1=+1
+    shipped  ring1 B start1 A (off 25) | ring2 O start2 V (off  7)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 Y start1 Y (off  0) | ring2 Q start2 X (off  7)   [best it could reach]
+  MISS lock-both   L=60 K=5 wheels=124
+    true     ring1 O start1 T (off  5) | ring2 E start2 F (off  1)
+    coarse   ring1 W start1 B (off  5) | ring2 F start2 G (off  1)   dring2=+1 dstart1=+8 doff1=+0
+    shipped  ring1 V start1 A (off  5) | ring2 E start2 F (off  1)   dstart1=-1 doff1=+0 (vs coarse)
+    lock-both ring1 W start1 B (off  5) | ring2 E start2 F (off  1)   [best it could reach]
+  MISS shift2      L=60 K=5 wheels=123
+    true     ring1 E start1 V (off 17) | ring2 S start2 Q (off 24)
+    coarse   ring1 I start1 A (off 18) | ring2 Z start2 X (off 24)   dring2=+7 dstart1=+5 doff1=+1
+    shipped  ring1 J start1 A (off 17) | ring2 S start2 Q (off 24)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 I start1 A (off 18) | ring2 Z start2 X (off 24)   [best it could reach]
+  MISS lock-both   L=60 K=5 wheels=315
+    true     ring1 B start1 Q (off 15) | ring2 C start2 T (off 17)
+    coarse   ring1 A start1 P (off 15) | ring2 U start2 L (off 17)   dring2=-8 dstart1=-1 doff1=+0
+    shipped  ring1 B start1 Q (off 15) | ring2 C start2 T (off 17)   dstart1=+1 doff1=+0 (vs coarse)
+    lock-both ring1 A start1 P (off 15) | ring2 Y start2 P (off 17)   [best it could reach]
+  MISS shift2      L=60 K=5 wheels=325
+    true     ring1 O start1 U (off  6) | ring2 E start2 Z (off 21)
+    coarse   ring1 T start1 A (off  7) | ring2 F start2 A (off 21)   dring2=+1 dstart1=+6 doff1=+1
+    shipped  ring1 U start1 A (off  6) | ring2 E start2 Z (off 21)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 T start1 A (off  7) | ring2 F start2 A (off 21)   [best it could reach]
+  MISS shift2      L=60 K=5 wheels=524
+    true     ring1 K start1 T (off  9) | ring2 V start2 J (off 14)
+    coarse   ring1 Q start1 A (off 10) | ring2 Z start2 N (off 14)   dring2=+4 dstart1=+7 doff1=+1
+    shipped  ring1 R start1 A (off  9) | ring2 V start2 J (off 14)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 O start1 Y (off 10) | ring2 W start2 K (off 14)   [best it could reach]
+60	100	27%	75%	75%	72%	72%	72%	69%	0	4	4	3	7
+  MISS lock-both   L=150 K=5 wheels=431
+    true     ring1 R start1 D (off 12) | ring2 S start2 L (off 19)
+    coarse   ring1 D start1 P (off 12) | ring2 U start2 N (off 19)   dring2=+2 dstart1=+12 doff1=+0
+    shipped  ring1 O start1 A (off 12) | ring2 S start2 L (off 19)   dstart1=+11 doff1=+0 (vs coarse)
+    lock-both ring1 D start1 P (off 12) | ring2 S start2 L (off 19)   [best it could reach]
+  MISS shift2      L=150 K=5 wheels=521
+    true     ring1 M start1 A (off 14) | ring2 L start2 R (off  6)
+    coarse   ring1 M start1 Z (off 13) | ring2 K start2 Q (off  6)   dring2=-1 dstart1=-1 doff1=-1
+    shipped  ring1 M start1 A (off 14) | ring2 L start2 R (off  6)   dstart1=+1 doff1=+1 (vs coarse)
+    shift2   ring1 M start1 Z (off 13) | ring2 K start2 Q (off  6)   [best it could reach]
+  MISS lock-both   L=150 K=5 wheels=521
+    true     ring1 M start1 A (off 14) | ring2 L start2 R (off  6)
+    coarse   ring1 M start1 Z (off 13) | ring2 K start2 Q (off  6)   dring2=-1 dstart1=-1 doff1=-1
+    shipped  ring1 M start1 A (off 14) | ring2 L start2 R (off  6)   dstart1=+1 doff1=+1 (vs coarse)
+    lock-both ring1 M start1 Z (off 13) | ring2 K start2 Q (off  6)   [best it could reach]
+  MISS shift2      L=150 K=5 wheels=241
+    true     ring1 L start1 N (off  2) | ring2 C start2 O (off 12)
+    coarse   ring1 X start1 A (off  3) | ring2 F start2 R (off 12)   dring2=+3 dstart1=+13 doff1=+1
+    shipped  ring1 Y start1 A (off  2) | ring2 C start2 O (off 12)   dstart1=+0 doff1=-1 (vs coarse)
+    shift2   ring1 X start1 A (off  3) | ring2 F start2 R (off 12)   [best it could reach]
+  MISS shift2      L=150 K=5 wheels=531
+    true     ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)
+    coarse   ring1 N start1 Q (off  3) | ring2 K start2 S (off  8)   dring2=+2 dstart1=+1 doff1=+1
+    shipped  ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)   dstart1=-1 doff1=-1 (vs coarse)
+    shift2   ring1 N start1 Q (off  3) | ring2 L start2 T (off  8)   [best it could reach]
+  MISS lock-both   L=150 K=5 wheels=531
+    true     ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)
+    coarse   ring1 N start1 Q (off  3) | ring2 K start2 S (off  8)   dring2=+2 dstart1=+1 doff1=+1
+    shipped  ring1 N start1 P (off  2) | ring2 I start2 Q (off  8)   dstart1=-1 doff1=-1 (vs coarse)
+    lock-both ring1 N start1 Q (off  3) | ring2 L start2 T (off  8)   [best it could reach]
+  MISS lock-both   L=150 K=5 wheels=253
+    true     ring1 N start1 I (off 21) | ring2 R start2 K (off 19)
+    coarse   ring1 Y start1 T (off 21) | ring2 P start2 I (off 19)   dring2=-2 dstart1=+11 doff1=+0
+    shipped  ring1 F start1 A (off 21) | ring2 R start2 K (off 19)   dstart1=+7 doff1=+0 (vs coarse)
+    lock-both ring1 Y start1 T (off 21) | ring2 R start2 K (off 19)   [best it could reach]
+  MISS shift2      L=150 K=5 wheels=524
+    true     ring1 D start1 N (off 10) | ring2 W start2 L (off 15)
+    coarse   ring1 W start1 F (off  9) | ring2 U start2 J (off 15)   dring2=-2 dstart1=-8 doff1=-1
+    shipped  ring1 V start1 F (off 10) | ring2 W start2 L (off 15)   dstart1=+0 doff1=+1 (vs coarse)
+    shift2   ring1 W start1 F (off  9) | ring2 U start2 J (off 15)   [best it could reach]
+150	100	24%	89%	89%	86%	89%	88%	87%	0	4	4	4	6
