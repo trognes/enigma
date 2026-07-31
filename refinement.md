@@ -39,7 +39,10 @@ where `o_w = start_w − ring_w`. Two facts follow, and they are the whole desig
   `start2 = ring2 + o2`. Measured: 0 losses in 600 trials (`lock-start2`).
 - **`b_i` and `a_i` do.** `S` and `D` are driven by the *absolute* positions
   (the notches read `g1` and `g2`, never an offset), so changing `ring2` changes
-  `S`, and the offset must move with it to keep `b_i` fixed.
+  `S`, and the offset must move with it to keep `b_i` fixed. This applies to the
+  **left** wheel as well as the middle one: `D` counts double steps, a `ring2`
+  shift moves those too, and `o0` then has to move with `D` exactly as `o1`
+  moves with `S`. The difference is only one of frequency — see §5 and §7.3.
 
 ## 3. Why the offset moves — the mechanism, with a worked case
 
@@ -187,12 +190,10 @@ stage 2 — middle wheel, coarse absolute first
 stage 3 — middle wheel, the rest of the sweep
     for v in R2, for g1 in G1 \ {g1_c}:  emit(v, g1)
 
-stage 4 — left wheel (only when D ≢ 0, i.e. the left wheel steps)
-    derive the same way with D in place of S and correct o0
-
 emit(v, g1):
     if the caller pinned ring1:  ring1 = that value            # no derivation
     else:                        for δ in V(g1, v): ring1 = g1 − (o1_c + δ)
+    for δ0 in V0(g1, v):         ring0 = g0_c − (o0_c + δ0)    # left wheel, same rule
 
 keep the best-scoring candidate; adopt it only if it beats the coarse score
 ```
@@ -209,8 +210,22 @@ the caller's range rather than over `0..25`.
 Stages 2 and 3 are ordered by prior likelihood, not necessity: stage 2 covers
 the common case (the coarse absolute is still a valid class representative),
 stage 3 the case where it is not — measured absolute moves of ±1 up to **±11**,
-so the sweep must be the whole range, not a window. Stage 4 is inert for short
-messages.
+so the sweep must be the whole range, not a window.
+
+**The left wheel gets the same derivation, ungated.** `a_i = o0 + D(i)`, and `D`
+counts double steps — the left wheel advances exactly when the middle wheel sits
+on its own notch. A `ring2` shift moves the middle schedule, so it moves the
+double steps too, and one that sits near either end of the message can be
+carried in or out of it, changing `D` for the whole message and therefore `o0`.
+`V0` is computed from the same schedule walk that produces `V` (both `S` and `D`
+fall out of one pass over `(start1, start2)`), so this costs nothing extra and
+**must not be gated on "the left wheel steps"**: the derivation self-gates,
+returning `V0 = {0}` whenever the two schedules agree, which is the common case.
+An explicit gate is one more condition to get wrong for no saving.
+
+Note the left wheel needs no absolute sweep, only the offset correction: nothing
+steps it but the middle notch and it has no notch of its own, so `D` depends
+only on `(start1, start2)` — the same inputs as `S`.
 
 An early exit after stage 2 on "score beats the coarse result" is tempting and
 is **not** justified by anything measured — a later stage can still be better.
@@ -265,8 +280,24 @@ measurements this replaces).
    middle setting. The derivation corrects the schedule term, not this. A ±1
    band on top of the derived value would cover it at 3× the cost; whether it is
    needed is an open measurement.
-3. **`Δ` ambiguity.** If `Δ` takes several values over the message with no
-   dominant one, the mode is arbitrary. Stage 4 handles it by trying each.
+3. **The left-wheel pin, in the code as it stands today.** `enigma.cc` pins
+   `ring0`/`start0` and justifies it as "exact and ring2-independent (§7.10's
+   unconditional offset collapse holds regardless of what ring2 is)". §7.10 is
+   about the *degeneracy* — shifting `ring0` and `start0` together is decode-
+   identical — which is not the same claim as *pinning `o0` across a `ring2`
+   change*. That is exact only while `D_coarse ≡ D_candidate`, and a straddled
+   double step breaks it exactly as it breaks the middle wheel. The chance of a
+   double step occurring at all is roughly `L/676` — ~9% at L=60, ~22% at L=150,
+   ~44% at L=300 — and only a fraction of those are straddled, so this is rare
+   rather than negligible, and it grows with message length.
+
+   **The measurements cannot see it.** Every arm in the shape comparison pins
+   `ring0`/`start0`, including the `shipped` baseline, so a key lost this way is
+   lost by *all* of them; the "lost" metric only counts keys the shipped set
+   recovered. Detecting it needs an oracle arm that sweeps `o0` over 26, or a
+   check of the truth's `o0` against the coarse winner's in the shipped-failure
+   cases. The derived design fixes it as a side effect (`V0` above); the shipped
+   code does not.
 4. **Two-notch right wheels (VI–VIII).** More crossings per revolution, so `Δ`
    is more often non-zero. The derivation handles this automatically — it is
    computed, not assumed — which is an advantage over the fixed ±2 band.
