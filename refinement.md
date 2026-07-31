@@ -309,20 +309,83 @@ rate**. A cheaper set is acceptable only if it recovers everything the full one
 recovers; a smaller candidate set can also dodge decoys and post a *higher* net
 rate while losing real keys (observed: `lock-both` and `lock-off1` both did).
 
-1. Paired equivalence vs the shipped set: K=2/3/5/13, L=60/150, ≥600 trials,
-   authentic Wehrmacht excerpts, plugboard given via `-s` — the harness in
-   `eval/ring_stride_refine_shape_probe.py` already does this; add the derived
-   shape as another column.
-2. End-to-end through the binary, not only the offline model, matching
-   `eval/ring_stride_window_probe.py`'s methodology.
-3. The existing `--ring-stride` regressions in `tests/run_tests.sh`, including
-   the K/2-window key and the boundary keys.
-4. **A Norway (`-n`) case.** `wheel_task` carries raw wheel numbers while a
-   `machine` carries translated ones; every past bug in this area was invisible
-   outside `-n` (`archived/PERFORMANCE.md` §7.11).
-5. `make bench` is not expected to move — the refinement is outside the hot loop
-   — but the run-level key count should drop as §6 predicts, which is a cheap
-   sanity check that the derivation is actually being used.
+Two statistical runs, then a case matrix.
+
+**A. Paired equivalence, offline.** Add the derived shape as another column in
+`eval/ring_stride_refine_shape_probe.py`: K=2/3/5/13, L=60/150, ≥600 trials,
+authentic Wehrmacht excerpts. The question is narrow (§4): does pruning the five
+offsets to `V` lose anything the full band finds?
+
+**B. End-to-end through the binary**, matching the methodology of
+`eval/ring_stride_window_probe.py` — the offline model pins `ring0`/`start0` at
+the truth and omits `-c`, so it cannot see either of those interactions.
+
+**C. The case matrix.** Every entry is a `tests/run_tests.sh` check. Size each
+to the property under test — pin the reflector and wheel order, wildcard only
+what the case needs — because the sanitizer job runs the whole suite at ~10×
+(CLAUDE.md's rules for adding checks). ✅ marks what exists today and must keep
+passing; the rest are new.
+
+1. ✅ **Standard, K=2/3/5/14/26.** `-u B -w 123 -r AAZ -g XKP`. The ordinary
+   path, plus K=26's single coarse anchor.
+2. ✅ **Norway `-n`.** The 439-letter Norwegian message, `-n -w 352 -r "L.."
+   -g "O.."`. `wheel_task` carries **raw** wheel numbers while a `machine`
+   carries translated ones; a double translation is invisible in every other
+   mode, and the entire stride matrix once passed over a broken `-n` path.
+3. **M4 `-4`.** `-4 -u b -w B123 -r AAA. -g A...`. The refinement reuses
+   `tasks[cur_wo]`, which carries the Greek wheel and its offset; a
+   reconstruction that drops them is invisible outside `-4`.
+4. **Two-notch right wheel.** `-x 8` with VI/VII/VIII rightmost (notches M and
+   Z), e.g. `-w 126`. The turnover set becomes **two** lattices, so `|Δ|` can
+   reach 2 and §7.12's class count changes from `⌈L/26⌉+1` to `⌈L/13⌉+1`. The
+   probe draws I–V only, so nothing measured so far exercises this at all.
+5. **Double step / left wheel steps.** Middle wheel II (notch E) with `start1`
+   two steps short of E, and `start2` on the right wheel's notch so the first
+   turnover lands at character 1. Makes `D ≢ 0`, exercising `V0`; without it the
+   left-wheel derivation is dead code the suite never runs.
+6. **Turnover at character 1.** `start2` = the right wheel's notch letter (the
+   §3 worked case). The whole-message step-count difference — the mechanism the
+   design exists for, and where a `Δ`-selection bug shows first.
+7. ✅ **ring2 wrap at A/Z.** The measured keys `B 451 AAZ VKZ`, `B 351 AAZ
+   NLV`, `C 324 AAZ JEY`. ring2 is circular; the value list must carry the
+   wrapped set.
+8. ✅ **Coarse winner outside `⌊K/2⌋`.** `-u A -w 123 -r DLT -g ACG` at K=3.
+   Every skipped ring2 must be covered, not a window.
+9. ✅ **Plugboard untouched without `-c`.** `-u A -w 145 -r FFR -g RTB` with a
+   10-pair `-s` board. The `--polish` guard; the derived path must not re-open
+   it.
+10. **Caller-pin matrix.** All four combinations of `-r AA.` / `-r A..` against
+    `start1` pinned / wildcarded. Decision 1 of §10 — derive `ring1` only when
+    it is wildcarded. `-r AA.` is the tool's own default, so getting this wrong
+    breaks the common case.
+11. **`|V| > 1`.** Any key where `Δ` takes two values, which is the normal case
+    at short L. Checks that the implementation emits one candidate per element
+    instead of collapsing to a mode.
+12. **Derived == shipped.** Same ciphertext through both builds, byte-comparing
+    the plaintext across the cases above — the equivalence claim per case rather
+    than in aggregate.
+13. ✅ **`-T` independence.** `-T 1` against `-T 4` on cases 1–9. The refinement
+    merges under one `best_result`; determinism must survive the restructuring.
+14. ✅ **Key counts.** `Analysed N` flat over K=13..25 and falling at K=26 — the
+    coarse set is still `{v : v ≡ 0 mod K}`.
+15. **Key count drops.** `Analysed N` for the derived build against the shipped
+    one, confirming the derivation is used rather than silently bypassed.
+
+**Cases 3, 4, 5 and 6 do not exist in any form today** — no M4
+`--ring-stride` case, no two-notch right wheel anywhere in the stride tests, and
+nothing that deliberately makes the left wheel step. Cases 5 and 6 also want an
+assertion on the *derivation* rather than only on recovery: that `V0 ≠ {0}`
+fires at least once (case 5) and that `V ≠ {0}` fires (case 6). Recovery alone
+can pass with the derivation disabled, because the coarse winner is often
+already right.
+
+**Each new regression must fail against the pre-change binary.** The suite has
+been bitten twice by tests that passed on the buggy build — the first `--polish`
+guard test converged immediately on an easy board, and the whole stride matrix
+passed over a Norway path that was broken. Verify the failure before committing
+the check.
+
+`make bench` is not expected to move; the refinement is outside the hot loop.
 
 ## 9. Implementation notes
 
