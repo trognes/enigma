@@ -81,32 +81,31 @@ Nothing above 🟢. Ordered by expected payoff within each group.
 
 ### Throughput saved but not yet converted
 
-- ✅ **Does `--ring-stride`'s saving convert into recovery? Measured: no, and
-  no loss either.** At matched wall time on authentic telegraphic German
-  (L=100, 10-pair board hidden, `-f -l wehrmacht`, 40 paired trials/cell) the
-  stride plus the extra `-R` its saving buys is indistinguishable from an
-  exhaustive ring2 sweep: K=3 `+0.2pp` mean %-correct, K=2 `−4.2pp` with a 95%
-  CI of [−13.3, +4.9]. Full writeup:
-  `eval/results-ring-stride-vs-restarts.txt`.
+- ✅ **Does `--ring-stride`'s saving convert into recovery? Measured: no, and no
+  loss either.** At matched wall time on authentic telegraphic German (L=100,
+  10-pair board hidden, `-f -l wehrmacht`, 40 paired trials/cell) the stride
+  plus the extra `-R` its saving buys is indistinguishable from an exhaustive
+  ring2 sweep: K=3 `+0.2pp` mean %-correct, K=2 `−4.2pp` with a 95% CI of
+  [−13.3, +4.9]. Full writeup: `eval/results-ring-stride-vs-restarts.txt`.
 
   Two things worth carrying forward. **The trade only exists on a
-  wildcarded-ring keyspace** — the refinement's fixed cost (`25 × 130 × 26` =
-  84 500 index keys once the offset band applies, ~19 000 actually scored at
-  L=100) exceeds the coarse saving under the default `-r AA.`, where the stride
-  costs *more* than it saves. And **n=40 resolves only ±9pp here**; a ~2pp
-  effect would need ~20× the trials at ~75 s per arm per trial, which is not
-  worth spending on a flag that is not recommended by default.
+  wildcarded-ring keyspace** — the refinement's fixed cost (`25 × 130 × 26` = 84
+  500 index keys once the offset band applies, ~19 000 actually scored at L=100)
+  exceeds the coarse saving under the default `-r AA.`, where the stride costs
+  *more* than it saves. And **n=40 resolves only ±9pp here**; a ~2pp effect
+  would need ~20× the trials at ~75 s per arm per trial, which is not worth
+  spending on a flag that is not recommended by default.
 - ✅ **The derived refinement — SHIPPED** (`refinement.md`). The refinement's
-  `25 × 130 × 26` = 84 500 candidates are now `25 ×` the start1 range
-  (650–1 300), because two of the three axes are computable rather than
-  searchable: `start2` from the coarse winner's offset2, and `ring1`/`ring0`
-  from the step-count difference between the two schedules. Measured equivalent
-  on the stride-specific miss rate (0 for both the enumerated and derived
-  refinements, 360 paired end-to-end trials). Two things fell out: the
-  "not paying for itself" warning is **removed** (its case is now a win and it
-  is provably unreachable), and the apparent 1.4% the derived set "lost" against
-  the enumerated one turned out to be keys the *exhaustive* search also fails —
-  the old refinement won them by never reaching the better-scoring decoy.
+  `25 × 130 × 26` = 84 500 candidates are now `25 ×` the start1 range (650–1
+  300), because two of the three axes are computable rather than searchable:
+  `start2` from the coarse winner's offset2, and `ring1`/`ring0` from the
+  step-count difference between the two schedules. Measured equivalent on the
+  stride-specific miss rate (0 for both the enumerated and derived refinements,
+  360 paired end-to-end trials). Two things fell out: the "not paying for
+  itself" warning is **removed** (its case is now a win and it is provably
+  unreachable), and the apparent 1.4% the derived set "lost" against the
+  enumerated one turned out to be keys the *exhaustive* search also fails — the
+  old refinement won them by never reaching the better-scoring decoy.
 - ✅ **The derivation across machine variants — MEASURED** (`refinement.md` §12,
   `archived/PERFORMANCE.md` §7.11). The runs above are wheels I–V on the
   standard machine; two-notch right wheels and M4 were covered by the design
@@ -118,11 +117,25 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   **ships**: the earlier tables scored only the shapes that led to the
   derivation, leaving the claim resting on the derived set being a subset of a
   measured-clean superset — which bounds it the wrong way, since a subset can
-  lose exactly where its superset does not. Still uncovered: K≥8, a hidden
-  plugboard, and messages long enough for the left wheel to step.
-- 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
-  the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
-  but whether spending it on `-R` raises recovery is untested.
+  lose exactly where its superset does not.
+- ✅ **K≥8, a hidden plugboard, and left-wheel stepping — MEASURED**
+  (`archived/PERFORMANCE.md` §7.11, `eval/ring_stride_scope_probe.py`). The
+  three conditions the entry above left open. **K≥8**: K=8/10/13 cost the same
+  ~1% stride-specific miss as the documented K=2/3 — which closes a gap in an
+  existing claim, since the cost curve going flat above K=13 was measured on
+  *keys analysed* and accuracy above K=5 never was. **Left-wheel stepping**:
+  0.0% at every stride through K=26 on random keys at L=600, with the wheel
+  verified to have stepped in 54 of 60 trials; the losses in the short targeted
+  variant track message length, not the left wheel. **Hidden plugboard**: the
+  one place anything moved — K=13 loses 4/69 against 0/72 for a paired
+  given-board control, direction consistent across two seeds but p ≈ 0.13, so
+  **suggestive, not established**, and only at a stride already outside the
+  recommended K≤3. Settling it needs ~200 trials (~3–4 h) and buys nothing
+  operational. The *fully* hidden cell is **vacuous and must not be read as a
+  pass** — its K=1 base is 10%, one eligible trial in ten.- 🟢 **Does the
+  middle-wheel collapse's saving convert?** The same question for the §7.12
+  keyspace reduction (3–5× at short lengths): the compute is saved, but whether
+  spending it on `-R` raises recovery is untested.
 
 ### Maintainability and packaging
 
