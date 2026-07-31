@@ -3709,8 +3709,91 @@ two-notch case (`-w 168`), an M4 case (`-4 -u b -w G317`) — plus the documente
 on the new wirings or the `MZ` notches would have produced a confident and meaningless
 zero, which is the specific way this kind of probe fails.
 
-**Still not covered** (unchanged by this run): K≥8, a hidden plugboard, and messages long
-enough for the left wheel to step.
+**Still not covered by that run**: K≥8, a hidden plugboard, and messages long enough for
+the left wheel to step. All three are measured below.
+
+**The three open conditions — ✅ MEASURED** (`eval/ring_stride_scope_probe.py`,
+`eval/results-ring-stride-scope.txt`). Every cell keeps this section's stride-specific-miss
+metric: each trial runs at K=1 as well as at each stride, on the same ciphertext and key,
+and a trial failing at K=1 is a scoring-floor case no ring2 policy can reach and is
+excluded. The exhaustive sweep is therefore the reference and no second binary is needed.
+
+*K≥8 needed no new harness* — `ring_stride_wehrmacht_probe.py` takes `KS="8 10 13 26"`.
+150 paired trials per cell:
+
+| K | 8 | 10 | 13 | 26 |
+|---|--:|--:|--:|--:|
+| L=60 | 1% | 1% | 1% | **13%** |
+| L=110 | 0% | 0% | 0% | 2% |
+
+K=8/10/13 sit at the same ~1% as the documented K=2/3. **This closes a gap in a claim
+already in the docs**: the cost curve going flat from K=13 to 25 was measured on *keys
+analysed*, and accuracy above K=5 never was. Nothing is being paid for anywhere in that
+range. K=26 stays the lone outlier, consistent with its single coarse anchor being a poor
+starting point.
+
+*The left wheel* is the only condition that exercises the refinement's left-wheel
+derivation at all, and it is measured two ways because a placed `start1` and a random one
+are different claims. `notch` puts `start1` a couple of steps short of the middle wheel's
+own notch so the left wheel steps inside a *short* message; `leftwheel` uses random keys on
+600-character text (concatenated authentic blocks — the corpus stops at 214, and real
+traffic was capped near 250 precisely to limit depth, so read the long cell as a
+correctness condition and not an operational one). Both count the left wheel's actual steps
+per trial rather than assuming a long message implies one:
+
+| condition | left stepped | K=3 | K=8 | K=13 | K=26 |
+|---|--:|--:|--:|--:|--:|
+| `notch`, L=110, n=60 | 60/60 | 0.0% | 0.0% | 3.6% | 5.4% |
+| `leftwheel`, L=600, n=60 | 54/60 | **0.0%** | **0.0%** | **0.0%** | **0.0%** |
+
+**The `notch` losses at K=13/26 are not a left-wheel effect.** The long run has the left
+wheel stepping in 54 trials and loses nothing at either stride, while the K≥8 table above
+loses ~1% at K=13 with no left wheel involved. The common factor is message length, not the
+left wheel. Note the L=600 zeros come with a 100% K=1 base — at that length the coarse pass
+lands on the truth regardless, so this shows the derivation does not *break* under left
+stepping rather than that left stepping stresses it.
+
+*A hidden plugboard* is the one place anything moved. The left wheel is pinned at its TRUE
+ring0/start0 (the isolation `ring_stride_refine_shape_probe.py` uses) while
+ring1/start1/ring2/start2 stay open so the middle-wheel derivation is live; `HIDE` of the
+10 pairs are withheld from `-s` and recovered by `-c`. **`HIDE=0` is a paired control on the
+same seed, hence the same keys and texts** — without it the cell is uninterpretable, since
+it differs from every clean cell in three ways at once (length, keyspace, and running a
+climb):
+
+| L=200, K=13 | seed 0 | seed 1 | combined |
+|---|--:|--:|--:|
+| HIDE=5 | 3/24 = 12.5% | 1/45 = 2.2% | **4/69 = 5.8%** |
+| HIDE=0 control | 0/24 | 0/45 | **0/72** |
+
+K=3 and K=8 are clean under both seeds (0/69). **Suggestive, not established**: exact
+McNemar on the 4 discordant pairs, all one direction, gives **p ≈ 0.13**, and the per-seed
+rates scatter widely. Getting from 4 events to a dozen needs ~200 trials at ~70 s each,
+~3–4 hours, which is not worth buying — the effect appears only at K=13, already well
+outside the recommended K≤3, so leaving it unsettled costs nothing operationally.
+
+The mechanism it would have, if real, is the one the design predicts: unrecovered plugs
+make the coarse pass's score noisier, so the coarse winner drifts further from the truth,
+and the refinement pins `offset2` and derives `ring1` *relative to that winner*. A sparse
+coarse grid is already a weak anchor — K=13 keeps two ring2 values — and a noisy score is
+what would tip it over.
+
+> ⚠️ **The FULLY hidden cell (`HIDE=10`) is vacuous — do not read its zero as a pass.**
+> Its K=1 base is **10%**: one eligible trial in ten, so "0 lost" is 0 out of 1. The tool
+> cannot recover a fully hidden 10-pair board over a ~108 000-key ring/start space with one
+> climb per key at L=200. That is a statement about the tool's reach, not about the stride.
+> Making it measurable needs `-R` restarts (multiplying an already 255 s/trial cell) or much
+> longer messages; `HIDE=5` already puts genuine plugboard noise into the coarse score,
+> which is the mechanism in question.
+
+**A setup trap that cost three feasibility runs, recorded because it is invisible.** All
+three read as 0% recovery, and the cause was that the true key was **absent from the search
+space**, not hard to find. `-r A.. -g A..` does not pin the left wheel to a harmless
+constant: pinning `ring0` is free only under §7.10's collapse, which works *by* leaving
+`start0` wildcarded to enumerate the offset — pin both and the offset is nailed to 0 while
+the truth is random. `-r AA.` additionally pins `ring1`, only *partially* redundant under
+§7.12, excluding the truth again. The failure mode looks exactly like a difficulty result,
+which is why it is in the harness docstring and not only here.
 
 ### 7.12 The middle wheel's ring × start is partially redundant — ✅ SHIPPED
 

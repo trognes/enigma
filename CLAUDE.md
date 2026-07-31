@@ -930,19 +930,30 @@ removed.
 > enumerated refinement on the stride-specific miss rate (0 in both, 360 paired
 > trials). The "not paying for itself" warning is **removed**: the keyspace it
 > warned about is now a 1.98× win and the warning is provably unreachable. The
-> width numbers below are the history that led there.
->
-> **The derivation is equivalence-clean across machine variants too** — 1200
-> paired trials, `lost:derived` = 0 in all twelve cells (standard wheels I–VIII
-> and M4, `K` = 2/3/5, L = 60/110), 480 of them with a two-notch wheel in the
-> *right* position. Two features had to be separated to test this: two-notch
-> right wheels change the **stepping** (the part the derivation is sensitive
-> to), while M4's folded Greek wheel changes the **substitution** and not the
+> width numbers below are the history that led there. **The derivation is
+> equivalence-clean across machine variants too** — 1200 paired trials,
+> `lost:derived` = 0 in all twelve cells (standard wheels I–VIII and M4, `K` =
+> 2/3/5, L = 60/110), 480 of them with a two-notch wheel in the *right*
+> position. Two features had to be separated to test this: two-notch right
+> wheels change the **stepping** (the part the derivation is sensitive to),
+> while M4's folded Greek wheel changes the **substitution** and not the
 > stepping (the part it is indifferent to). The run also scores the shape that
 > actually ships for the first time — the earlier tables scored only the shapes
 > that *led to* the derivation, so the claim rested on the derived set being a
 > subset of a measured-clean superset, which bounds it the wrong way.
-> `archived/PERFORMANCE.md` §7.11 and `refinement.md` §12.
+> `archived/PERFORMANCE.md` §7.11 and `refinement.md` §12. **The three
+> conditions those runs did not cover are now measured too** — K≥8, a hidden
+> plugboard, and messages long enough for the left wheel to step
+> (`archived/PERFORMANCE.md` §7.11, `eval/ring_stride_scope_probe.py`).
+> K=8/10/13 cost the same ~1% stride-specific miss as the documented K=2/3,
+> which closes a gap in the flat-cost-curve claim below: the flatness above K=13
+> was measured on *keys analysed*, never on accuracy. Left-wheel stepping is
+> clean — 0.0% at every stride through K=26 on random keys at L=600, with the
+> wheel verified to have stepped in 54 of 60 trials. The one place anything
+> moved is a **hidden plugboard at K=13**: 4 losses in 69 trials against 0 in 72
+> for a paired given-board control, consistent in direction across two seeds but
+> **p ≈ 0.13 — suggestive, not established**, and only at a stride already
+> outside the recommended K≤3.
 
 > **The width was re-measured, and then the question was superseded — see
 > `refinement.md`.** A `w=3` cap matches the full sweep at K≤5 but costs 20pp of

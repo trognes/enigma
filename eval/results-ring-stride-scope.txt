@@ -1,0 +1,104 @@
+# --ring-stride under the three conditions 7.11 left open.
+# Metric: stride-specific miss -- trials the exhaustive K=1 sweep recovers
+# and the strided run does not. Trials failing at K=1 are scoring-floor
+# cases and are excluded (that is the 'K=1 base' column).
+# Harness: eval/ring_stride_scope_probe.py (hidden/leftwheel/notch) and
+# eval/ring_stride_wehrmacht_probe.py with KS="8 10 13 26" (high K).
+
+############ AXIS 1: K >= 8, known board via -s, no -c ############
+corpus: 49 clean authentic-message blocks, 5413 letters total
+     L    K        n     exact%     vs-K1-fail
+    60    1      150      76.0%      n/a(base)
+    60    8      150      75.3%             1%
+    60   10      150      75.3%             1%
+    60   13      150      74.7%             1%
+    60   26      150      63.3%            13%
+   110    1      150      84.7%      n/a(base)
+   110    8      150      84.7%             0%
+   110   10      150      84.7%             0%
+   110   13      150      84.7%             0%
+   110   26      150      82.7%             2%
+
+############ AXIS 3a: left wheel steps, start1 PLACED, L=110 ############
+# mode=notch trials=60 seed=0 hide=0 threads=2
+# lost = the exhaustive K=1 search recovers it and the stride does not
+len	K	n	K=1 base	strided	lost	lost%	n left-step	lost there
+110	3	60	93%	93%	0	0.0%	56	0
+110	8	60	93%	93%	0	0.0%	56	0
+110	13	60	93%	90%	2	3.6%	56	2
+110	26	60	93%	88%	3	5.4%	56	3
+# L=110: left wheel stepped in 60/60 trials, 60 steps total, 4s/trial
+
+############ AXIS 3b: left wheel steps, random keys, L=600 ############
+# Concatenated authentic blocks: the corpus tops out at 214 characters.
+# mode=leftwheel trials=60 seed=0 hide=0 threads=2
+# lost = the exhaustive K=1 search recovers it and the stride does not
+len	K	n	K=1 base	strided	lost	lost%	n left-step	lost there
+600	3	60	100%	100%	0	0.0%	54	0
+600	8	60	100%	100%	0	0.0%	54	0
+600	13	60	100%	100%	0	0.0%	54	0
+600	26	60	100%	100%	0	0.0%	54	0
+# L=600: left wheel stepped in 54/60 trials, 96 steps total, 41s/trial
+
+############ AXIS 2: hidden plugboard, L=200 ############
+# Left wheel pinned at its TRUE ring0/start0; ring1/start1/ring2/start2
+# open so the middle-wheel derivation is live. HIDE pairs withheld from
+# -s and recovered by -c. HIDE=0 is the paired control -- same seed, so
+# the same keys and texts.
+
+--- seed 0, n=24 ---
+# mode=hidden trials=24 seed=0 hide=0 threads=2
+# lost = the exhaustive K=1 search recovers it and the stride does not
+len	K	n	K=1 base	strided	lost	lost%
+200	3	24	100%	100%	0	0.0%
+200	8	24	100%	100%	0	0.0%
+200	13	24	100%	100%	0	0.0%
+# L=200: 5s/trial
+
+# mode=hidden trials=24 seed=0 hide=5 threads=2
+# lost = the exhaustive K=1 search recovers it and the stride does not
+len	K	n	K=1 base	strided	lost	lost%
+200	3	24	100%	100%	0	0.0%
+200	8	24	100%	100%	0	0.0%
+200	13	24	100%	88%	3	12.5%
+# L=200: 73s/trial
+
+--- seed 1, n=48 ---
+# mode=hidden trials=48 seed=1 hide=0 threads=2
+# lost = the exhaustive K=1 search recovers it and the stride does not
+len	K	n	K=1 base	strided	lost	lost%
+200	3	48	94%	94%	0	0.0%
+200	8	48	94%	94%	0	0.0%
+200	13	48	94%	94%	0	0.0%
+# L=200: 5s/trial
+
+# mode=hidden trials=48 seed=1 hide=5 threads=2
+# lost = the exhaustive K=1 search recovers it and the stride does not
+len	K	n	K=1 base	strided	lost	lost%
+200	3	48	94%	94%	0	0.0%
+200	8	48	94%	94%	0	0.0%
+200	13	48	94%	92%	1	2.2%
+# L=200: 69s/trial
+
+--- HIDE=10, fully hidden, seed 0, n=10: VACUOUS, do not read as a pass ---
+# K=1 base is 10% -- ONE eligible trial. The tool cannot recover a fully
+# hidden 10-pair board over ~108k keys with one climb per key at L=200.
+# 'lost 0' here is 0 out of 1, a statement about the tool's reach and not
+# about the stride.
+# mode=hidden trials=10 seed=0 hide=10 threads=2
+# lost = the exhaustive K=1 search recovers it and the stride does not
+len	K	n	K=1 base	strided	lost	lost%
+200	3	10	10%	10%	0	0.0%
+200	13	10	10%	10%	0	0.0%
+# L=200: 255s/trial
+
+############ SUMMARY ############
+# K>=8 known board:      ~1% at K=8/10/13 (L=60), 0% at L=110; K=26 is the
+#                        only outlier at 13%/2%.
+# Left wheel, L=110:     60/60 trials stepped; 0% at K=3 and K=8.
+# Left wheel, L=600:     54/60 stepped; 0% at EVERY stride through K=26.
+# Hidden board:          K=3 and K=8 clean (0/69). K=13 loses 4/69 = 5.8%
+#                        against 0/72 for the paired given-board control.
+#                        Two independent seeds agree in direction (12.5%,
+#                        2.2%) but exact McNemar on the 4 discordant pairs
+#                        gives p ~ 0.13. SUGGESTIVE, NOT ESTABLISHED.
