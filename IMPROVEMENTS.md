@@ -96,18 +96,17 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   costs *more* than it saves. And **n=40 resolves only ±9pp here**; a ~2pp
   effect would need ~20× the trials at ~75 s per arm per trial, which is not
   worth spending on a flag that is not recommended by default.
-- 🟡 **Build the derived refinement (`refinement.md`).** The refinement's
-  `25 × 130 × 26` = 84 500 candidates can be `25 × 26` = **650**, because two of
-  the three axes are computable rather than searchable: `start2` follows from
-  the coarse winner's offset2 (0 losses in 600 paired trials), and `ring1`
-  follows from the *step-count difference* between the coarse and candidate
-  schedules, which both keys determine without knowing the truth. The ±2 offset
-  band is a fixed guess at a quantity that can be derived exactly. Design,
-  algebra, staging, failure modes and the verification plan are in
-  `refinement.md`; it is unbuilt and unmeasured end to end. Blocks nothing —
-  `--ring-stride` works today — but it retires the refinement-width question
-  outright, and the width is the only part of the flag's cost that is still
-  argued about.
+- ✅ **The derived refinement — SHIPPED** (`refinement.md`). The refinement's
+  `25 × 130 × 26` = 84 500 candidates are now `25 ×` the start1 range
+  (650–1 300), because two of the three axes are computable rather than
+  searchable: `start2` from the coarse winner's offset2, and `ring1`/`ring0`
+  from the step-count difference between the two schedules. Measured equivalent
+  on the stride-specific miss rate (0 for both the enumerated and derived
+  refinements, 360 paired end-to-end trials). Two things fell out: the
+  "not paying for itself" warning is **removed** (its case is now a win and it
+  is provably unreachable), and the apparent 1.4% the derived set "lost" against
+  the enumerated one turned out to be keys the *exhaustive* search also fails —
+  the old refinement won them by never reaching the better-scoring decoy.
 - 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
   the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
   but whether spending it on `-R` raises recovery is untested.

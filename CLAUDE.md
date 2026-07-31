@@ -288,13 +288,12 @@ are read from a **data directory** (filenames built as
   position, else there is nothing to thin out; incompatible with
   `-F`/`--exhaust`, the same `best.idx`-encoding fragility `--polish` has). The
   coarse pass tests only ring2 ∈ {0, K, 2K, ...}, then one refinement pass
-  re-checks **every** skipped ring2 (see "Sparse ring
-  sampling for the rightmost wheel" below and `archived/PERFORMANCE.md` §7.11
-  for the measurement and the implementation gotchas). **`K=2`/`K=3` are
-  recommended when throughput matters; K≥5 is not.** Measured end-to-end on
-  authentic telegraphic German (200 paired trials/cell, `-f -l wehrmacht`,
-  plugboard given via `-s`, no `-c` — this isolates the rotor-key question the
-  flag is about), exact recovery:
+  re-checks **every** skipped ring2 (see "Sparse ring sampling for the rightmost
+  wheel" below and `archived/PERFORMANCE.md` §7.11 for the measurement and the
+  implementation gotchas). **`K=2`/`K=3` are recommended when throughput
+  matters; K≥5 is not.** Measured end-to-end on authentic telegraphic German
+  (200 paired trials/cell, `-f -l wehrmacht`, plugboard given via `-s`, no `-c`
+  — this isolates the rotor-key question the flag is about), exact recovery:
 
   | L | K=1 | K=2 | K=3 | K=5 |
   |---:|---:|---:|---:|---:|
@@ -308,14 +307,14 @@ are read from a **data directory** (filenames built as
 
   **Above 13 the cost curve is flat, so raising `K` there buys nothing.** The
   coarse set is `{v < 26 : v ≡ 0 mod K}`, which holds **two** values for every
-  `K` in 13..25 (K=14 samples {0,14} and costs exactly what K=13's {0,13}
-  costs) and **one** only at K=26. Measured on the bare-default keyspace:
-  79 092 keys at K=1, 42 003 at K=3, **20 709 flat across K=13..25**, 17 667 at
-  K=26. Accuracy follows: at L=60 on authentic telegraphic German (120 paired
-  trials) K=3 and K=13 both match the unstrided baseline (70.0% / 71.7% vs
-  70.0%), while **K=26 drops to 60.0%** — its single coarse anchor is a much
-  worse starting point for the refinement. K≤13 is the whole useful range; 26 is
-  legal but pays 15% of cost for ~10pp of recovery.
+  `K` in 13..25 (K=14 samples {0,14} and costs exactly what K=13's {0,13} costs)
+  and **one** only at K=26. Measured on the bare-default keyspace: 79 092 keys
+  at K=1, 42 003 at K=3, **20 709 flat across K=13..25**, 17 667 at K=26.
+  Accuracy follows: at L=60 on authentic telegraphic German (120 paired trials)
+  K=3 and K=13 both match the unstrided baseline (70.0% / 71.7% vs 70.0%), while
+  **K=26 drops to 60.0%** — its single coarse anchor is a much worse starting
+  point for the refinement. K≤13 is the whole useful range; 26 is legal but pays
+  15% of cost for ~10pp of recovery.
 
   > ⚠️ **Every `--ring-stride` accuracy number predating the `--polish` guard
   > fix was contaminated and is roughly an order of magnitude too pessimistic.**
@@ -333,8 +332,8 @@ are read from a **data directory** (filenames built as
   land within `⌊K/2⌋` of the truth?) on English prose, not exact recovery.
 
   **Whether the saved compute beats spending it on `-R` restarts is now
-  measured: it is a wash.** At matched wall time on authentic telegraphic
-  German (L=100, 10-pair board hidden, 40 paired trials/cell,
+  measured: it is a wash.** At matched wall time on authentic telegraphic German
+  (L=100, 10-pair board hidden, 40 paired trials/cell,
   `eval/results-ring-stride-vs-restarts.txt`), `--ring-stride K` plus the extra
   restarts its saving buys is indistinguishable from an exhaustive ring2 sweep:
   K=3 lands at **+0.2pp** mean %-correct (`-R 8`→`15`) and K=2 at **−4.2pp**,
@@ -345,18 +344,17 @@ are read from a **data directory** (filenames built as
   fixed — independent of `K` — and the coarse saving has to beat it. Its worst
   case is `25 × rc[1] × gc[1] × 26` keys, but **that bound is not the number to
   reason with**: the case it describes (ring1 *and* start1 both wildcarded) is
-  exactly the case where the offset band applies, replacing the 26 × 26
-  (ring1, start1) pairs with 26 start1 × 5 offsets = 130. So the realistic
-  figure is `25 × 130 × 26` = **84 500** index keys, and the middle-wheel
-  collapse then cuts what is actually *scored* to **~19 000** at L=100 —
-  measured as 18 875 at both K=2 and K=3, confirming the K-independence.
+  exactly the case where the offset band applies, replacing the 26 × 26 (ring1,
+  start1) pairs with 26 start1 × 5 offsets = 130. So the realistic figure is `25
+  × 130 × 26` = **84 500** index keys, and the middle-wheel collapse then cuts
+  what is actually *scored* to **~19 000** at L=100 — measured as 18 875 at both
+  K=2 and K=3, confirming the K-independence.
 
-  Under the tool's own default ring `-r AA.` the saving cannot beat even that:
-  measured at L=100, K=2, `-r AA. -g A..` grows 17 576 keys to 25 688, and
-  `-r A.. -g AK.` does the same, while `-r A.. -g A..` falls 102 076 → 69 913.
-  So `--ring-stride` is a lever for *fully wildcarded ring* searches only;
-  anywhere else the binary's "not paying for itself" warning fires and it should
-  simply be dropped.
+  Those figures were the *enumerated* refinement's. With the derivation they
+  invert: `-r AA. -g AA.` at K=2 now costs 363 keys against 676 unstrided (was
+  988), and `-r A.. -g A..` 50 787 against 100 724 (was 68 987). There is no
+  longer a keyspace where the stride costs more than it saves, which is why the
+  warning was removed.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,
@@ -923,16 +921,27 @@ that was a *ratio* masquerading as a cost and it made the same command do
 different work depending on an unrelated part of the keyspace, so it was
 removed.
 
+> **SUPERSEDED: the refinement is now DERIVED, not enumerated — see
+> `refinement.md`.** `start2` follows from the coarse winner's offset2, and
+> `ring1`/`ring0` from the step-count difference between the winner's schedule
+> and the candidate's — computable from the two keys, so the `±2` band and its
+> `mid_ring_window` constant are gone. The set went from `25 × 130 × 26` = 84
+> 500 to `25 ×` the start1 range (650–1 300), measured equivalent to the
+> enumerated refinement on the stride-specific miss rate (0 in both, 360 paired
+> trials). The "not paying for itself" warning is **removed**: the keyspace it
+> warned about is now a 1.98× win and the warning is provably unreachable. The
+> width numbers below are the history that led there.
+
 > **The width was re-measured, and then the question was superseded — see
 > `refinement.md`.** A `w=3` cap matches the full sweep at K≤5 but costs 20pp of
 > exact recovery at K=10 and 40pp at K=13, so any cap would have to be
 > `K`-dependent (`⌈K/2⌉+3` is the narrowest measured-clean rule; `⌈K/2⌉+2` is
 > 2pp light at K=10–11). It is not worth building, because the whole width is
 > only 1–2.4% of a run — and because the refinement's *shape* has far more slack
-> than its width: the coarse winner's `start2` offset can be pinned (0 losses
-> in 600 trials) and its `ring1` **derived** rather than banded, taking the set
-> from 84 500 candidates to 650. `refinement.md` has the algebra, the design
-> and the verification plan; the measurement-only `ENIGMA_REFINE_WINDOW` env
+> than its width: the coarse winner's `start2` offset can be pinned (0 losses in
+> 600 trials) and its `ring1` **derived** rather than banded, taking the set
+> from 84 500 candidates to 650. `refinement.md` has the algebra, the design and
+> the verification plan; the measurement-only `ENIGMA_REFINE_WINDOW` env
 > override (default off, byte-identical) reproduces the width columns.
 
 **The MIDDLE wheel is banded, and the band is derived rather than enumerated.**
@@ -944,11 +953,10 @@ winner's — established by *enumeration*, not sampling: simulating the real
 schedule (double step included) over every rotor pair × 26 start1 × 26 start2 ×
 every shift 1–25 at L=600 gives max divergence 2, never 3 (the original run
 covered 1–13, the old `K` ceiling; it was re-run over the full range when the
-ceiling rose to 26 and the bound is unchanged). One step is the
-ordinary time shift; the second is **double stepping**, when the two schedules
-straddle the middle wheel's own notch. Two-notch right rotors (VI–VIII) change
-how *often* that happens, not how far it reaches — the worst case is rotor II,
-single-notch.
+ceiling rose to 26 and the bound is unchanged). One step is the ordinary time
+shift; the second is **double stepping**, when the two schedules straddle the
+middle wheel's own notch. Two-notch right rotors (VI–VIII) change how *often*
+that happens, not how far it reaches — the worst case is rotor II, single-notch.
 
 The band is on the **offset** `(start1 − ring1) mod 26`, **not on raw `ring1`**
 — under §7.12 the reported ring1/start1 are class representatives, so raw ring1

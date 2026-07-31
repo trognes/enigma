@@ -3524,6 +3524,12 @@ standard the band itself was held to.)
 of the middle one** — which is exactly the asymmetry the shipped code already encodes,
 one pinned offset and one banded.
 
+> ✅ **SHIPPED, and the enumerated refinement below is history.** The offsets are
+> now derived rather than banded: `25 × 130 × 26` = 84 500 candidates became
+> `25 ×` the start1 range, measured equivalent on the stride-specific miss rate
+> (0 for both, 360 paired trials). `mid_ring_window` and the "not paying for
+> itself" warning are both gone. `refinement.md` carries the shipped design.
+
 **Why the middle offset moves at all, and what it implies — see `refinement.md`.**
 Dumping the misses settled the mechanism: the coarse winner is not "the truth with a
 wrong ring2", it is the truth with a wrong ring2 *and a compensating middle offset*. A
