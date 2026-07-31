@@ -469,7 +469,7 @@ behaviour, not a regression.
 
 So the metric to hold a refinement to is the **stride-specific miss** — the
 exhaustive search recovers it and the strided run does not — and on that metric
-both refinements are clean:
+the derived refinement is clean where the enumerated one is not quite:
 
 | L | K | trials `K=1` recovers | enumerated misses | derived misses |
 |---:|---:|---:|---:|---:|
@@ -478,6 +478,13 @@ both refinements are clean:
 | 60 | 5 | 48 | 0 | 0 |
 | 150 | 2 | 55 | 0 | 0 |
 | 150 | 3 | 55 | 0 | 0 |
+| 150 | 5 | 55 | **1** | 0 |
+| | | **309** | **1** | **0** |
+
+One miss in 309 is a single trial, so read it as "no worse", not as evidence the
+derivation recovers more; what it does rule out is the derived set being the
+weaker of the two, which is what the direct binary-to-binary comparison appeared
+to show.
 
 This also settles §10's decision 3 in the negative: the ±1 band was built for a
 failure the derivation cannot correct, and there were no such failures to
