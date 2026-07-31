@@ -134,6 +134,38 @@ trunc() { printf '%s' "$PT" | cut -c1-"$1"; }
 # encrypt PLAIN PLUGBOARD -> ciphertext at the fixed reference settings.
 encrypt() { printf '%s' "$1" | "$HEAD_BIN" -i -u B -w 123 -r AAA -g AAA -s "$2" 2>/dev/null; }
 
+# Sub-second wall clock, probed once at startup. Not every date(1) supports %N:
+# GNU date does, recent macOS does (verified on Sequoia), but older macOS and
+# other BSDs emit a literal "N". awk then parses "1753920000.N" as a whole number
+# and the timer silently drops to 1-SECOND resolution on a ~2s benchmark, which
+# manufactures confident-looking deltas out of pure quantisation. Probing beats
+# guessing by platform, and an unusable clock is a hard error rather than a
+# silent fallback to whole seconds.
+#   date +%s.%N    -> used directly when it really returns fractional seconds
+#   gdate          -> Homebrew coreutils, if date(1) cannot
+#   python3        -> works everywhere, but each call pays interpreter startup
+#                     (~30ms), which inflates ABSOLUTE times; A/B deltas are
+#                     affected far less, since both sides pay it equally
+case "$(date +%s.%N 2>/dev/null)" in
+  *.[0-9]*) now() { date +%s.%N; } ;;
+  *)
+    if command -v gdate >/dev/null 2>&1 && [ -n "$(gdate +%N 2>/dev/null)" ]; then
+      now() { gdate +%s.%N; }
+    elif command -v python3 >/dev/null 2>&1; then
+      now() { python3 -c 'import time; print(time.time())'; }
+      echo "note: no GNU date; timing via python3, so absolute times include" >&2
+      echo "      ~30ms of interpreter startup per sample. For clean numbers:" >&2
+      echo "      brew install coreutils" >&2
+    else
+      echo "error: no sub-second clock available. This platform's date(1) lacks" >&2
+      echo "       %N, so timings would have 1-second resolution and every delta" >&2
+      echo "       would be quantisation noise. Install GNU coreutils (macOS:" >&2
+      echo "       brew install coreutils) or python3." >&2
+      exit 1
+    fi
+    ;;
+esac
+
 # min_time BIN REPS WARMUP CT ARGS... -> minimum wall-clock seconds over REPS
 # runs (after WARMUP discarded runs), feeding CT on stdin.
 min_time() {
@@ -147,9 +179,9 @@ min_time() {
   _min=""
   _i=0
   while [ "$_i" -lt "$_reps" ]; do
-    _t0=$(date +%s.%N)
+    _t0=$(now)
     printf '%s' "$_ct" | ENIGMA_DATA="$_data" "$_bin" "$@" >/dev/null 2>&1
-    _t1=$(date +%s.%N)
+    _t1=$(now)
     _dt=$(awk -v a="$_t0" -v b="$_t1" 'BEGIN { printf "%.4f", b - a }')
     if [ -z "$_min" ] || awk -v d="$_dt" -v m="$_min" 'BEGIN { exit !(d < m) }'; then
       _min=$_dt
