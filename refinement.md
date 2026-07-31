@@ -490,6 +490,23 @@ This also settles §10's decision 3 in the negative: the ±1 band was built for 
 failure the derivation cannot correct, and there were no such failures to
 correct — every apparent one was a scoring failure. Shipped at 0.
 
+**The hot path is unaffected, measured on the target that matters.** `make bench
+LONG=1 BASE=origin/dev` on an idle Apple M1 with clang — the configuration
+CLAUDE.md flags as the layout-sensitive one:
+
+| tier | search | hillclimb |
+|---|--:|--:|
+| quick | −0.1% | +0.2% |
+| long | −0.1% | −0.7% |
+
+Four deltas within ±0.7% across both tiers. That is worth more than it looks:
+the concern was never the scoring loop (nothing was added to it) but the ~70
+lines added to a translation unit with a documented history of ±20–60% layout
+swings under clang on Apple silicon. Two earlier attempts to measure this on a
+shared Linux container were worthless — its base-vs-base control, identical
+source on both sides, reported **+20.8%** on `search` — so quiet hardware was
+the only way to get an answer.
+
 **Two implementation traps, both caught by tooling rather than by reading.**
 
 - **`mod26()` adds a single alphabet**, so it is correct only for `x ≥ −26`. The
