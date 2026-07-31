@@ -157,7 +157,8 @@ def trial(L, rng):
         # well inside a 110-character message
         g = g[0] + place_start1(rng, wn[1], rng.randrange(1, 3)) + g[2]
     pt = cat_text(rng, L)
-    ct = run(["-i", "-u", u, "-w", w, "-r", r, "-g", g, "-s", " ".join(pairs)], pt)
+    ct = run(["-i", "-u", u, "-w", w, "-r", r, "-g", g,
+              "-s", " ".join(pairs)], pt)
 
     if MODE == "hidden":
         base = ["-f", "-l", "wehrmacht", "-c", "-u", u, "-w", w,
@@ -168,7 +169,8 @@ def trial(L, rng):
         base = ["-f", "-l", "wehrmacht", "-u", u, "-w", w,
                 "-r", "...", "-g", "...", "-s", " ".join(pairs), "-T", THREADS]
 
-    out = {"left": left_steps(wn, g, L), 1: run(base, ct) == pt}
+    out = {"left": left_steps(wn, g, L),
+           1: run(base, ct) == pt}
     for K in KS:
         out[K] = run(base + ["--ring-stride", str(K)], ct) == pt
     return out
@@ -177,7 +179,8 @@ def trial(L, rng):
 def sweep():
     print("# mode=%s trials=%d seed=%d hide=%d threads=%s"
           % (MODE, TRIALS, SEED, HIDE, THREADS))
-    print("# lost = the exhaustive K=1 search recovers it and the stride does not")
+    print("# lost = the exhaustive K=1 search recovers it and the stride"
+          " does not")
     cols = ["len", "K", "n", "K=1 base", "strided", "lost", "lost%"]
     if MODE != "hidden":
         cols += ["n left-step", "lost there"]
@@ -192,9 +195,11 @@ def sweep():
             lost = [row for row in base if not row[K]]
             cells = [str(L), str(K), str(TRIALS),
                      "%d%%" % round(100 * len(base) / TRIALS),
-                     "%d%%" % round(100 * sum(1 for r in rows if r[K]) / TRIALS),
+                     "%d%%"
+                     % round(100 * sum(1 for r in rows if r[K]) / TRIALS),
                      str(len(lost)),
-                     "%.1f%%" % (100.0 * len(lost) / max(len(base), 1))]
+                     "%.1f%%"
+                     % (100.0 * len(lost) / max(len(base), 1))]
             if MODE != "hidden":
                 cells += [str(len(stepped)),
                           str(sum(1 for r in stepped if not r[K]))]
