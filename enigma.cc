@@ -4934,7 +4934,7 @@ void alltoupper(char * text)
    exit 1. */
 void version(FILE * out)
 {
-  fprintf(out, "Enigma cipher tool version 2.0.0\n");
+  fprintf(out, "Enigma cipher tool version 2.1.0\n");
   fprintf(out, "Copyright (C) 2017-2026 Torbjørn Rognes\n");
   fprintf(out, "\n");
 }
