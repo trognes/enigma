@@ -33,10 +33,12 @@ evidence for a shortcut, not evidence that none exists.
 
 **Scoring looks near its ceiling.** The discrimination floor is ~1% at L40–60
 and ~0 beyond, and an 8× sweep of the model's order weights moves the
-search-failure rate by <1pp. But this conclusion has been drawn before and did
-not hold: it was the stated position immediately before `-f` shipped, and `-f`
-then gained **+3.0–4.4pp** over `-a`. Treat "no headroom" as a prior, not a
-finding.
+search-failure rate by <1pp. What floor there is at L40 is information, not
+model: the **unicity distance is ≈25 characters** (§4), so L40 sits at ~1.6× it
+and some misranking is expected there whatever the objective. But this
+conclusion has been drawn before and did not hold: it was the stated position
+immediately before `-f` shipped, and `-f` then gained **+3.0–4.4pp** over `-a`.
+Treat "no headroom" as a prior, not a finding.
 
 **The recommended model is `-f`** (fused weighted-all-order + IC), not `-a`. It
 beats `-a` by +3.0–4.4pp on english, german *and* wehrmacht — the only scoring
@@ -72,12 +74,10 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   `make crackquality` as written.
 - 🟢 **The narrow L40 scoring re-opening.** The only observed scoring failures
   sit right at the identifiability floor — 5–10% at L40, robust across two
-  seeds, 0 elsewhere. Length-sensitive scoring ideas could only help at L ≲ 40,
-  where recovery is already near the information floor, so the payoff is small.
-- 🟢 **The wheel-order scoring gate was never run.** The gate that parked
-  scoring work tested *start*-discrimination only, with wheels and reflector
-  pinned true. A wheel-order scoring failure would need the heavier unfiltered
-  full-crack gate, so the "no scoring problem" claim is narrower than it reads.
+  seeds, 0 elsewhere. That floor is now quantified (§4, the wheel-order gate
+  entry): unicity distance is **≈25 characters**, so L40 is only ~1.6× it.
+  Length-sensitive scoring ideas could only help at L ≲ 40, where recovery is
+  already near the information floor, so the payoff is small.
 
 ### Throughput saved but not yet converted
 
@@ -191,7 +191,8 @@ Getting a trustworthy number here is harder than it looks — most of the traps 
 
 ## 4. Measured down — do not re-attempt
 
-Each of these was built or prototyped, measured, and lost. Re-attempt only in a
+Each of these was built or prototyped, measured, and lost — or, in the last row,
+ruled out by an argument cheaper than the measurement. Re-attempt only in a
 materially different regime, and read the evidence in `archived/` first.
 
 | idea | verdict |
@@ -214,6 +215,31 @@ materially different regime, and read the evidence in `archived/` first.
 | Rotor-stepping reuse across starts | measured down |
 | Top-M coarse refinement (`--ring-stride`) | wheels already right 96/96 |
 | Plugboard→score cache (`--score-tt`) | only ~7–13% cacheable; net loss |
+| Wheel-order scoring gate (`FULLCRACK`) | **reasoned** down — see below |
+
+**The wheel-order scoring gate, closed without running it.** The gate that
+parked scoring work (`archived/CRACKQUALITY_TESTS.md` §1) pinned wheels and
+reflector to the truth and wildcarded only the start, so it measured
+*start*-discrimination. Its own caveat notes that a wheel-order scoring failure
+would need the heavier unfiltered `FULLCRACK` gate — which reads as an open
+question. It is not one:
+
+The rotor key is `3·8·7·6·26⁶` ≈ 2^38.2 (`enigma.cc`'s own `uwwwrrrggg` figure),
+less log2(26) = 4.7 bits for the unidentifiable left-wheel ring; a 10-pair
+plugboard is 26!/(6!·10!·2¹⁰) ≈ 2^47.1. So **H(K) ≈ 80.6 bits**, and against a
+natural-language redundancy near 3.2 bits/char the **unicity distance is ≈25
+characters** (23.7–26.9 over D = 3.4…3.0).
+
+Two things follow. The measured L40 scoring failures are **expected rather than
+a model defect** — L40 is only ~1.6× the unicity distance, and a finite-sample
+quadgram table discriminates worse than the entropy bound assumes. And unpinning
+the wheels adds only log2(60) = 5.9 bits, moving the unicity distance **~1.8
+characters**, so `FULLCRACK` is predicted to reproduce the start gate's shape
+shifted right by about two characters: a few percent at L40, zero from L50 up. A
+powered run costs ~3 h to confirm a two-character shift.
+
+The archived caveat stands as an accurate record of what had been *run*; it is
+superseded as a question.
 
 ## 5. Pitfalls
 
