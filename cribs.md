@@ -574,6 +574,77 @@ be poor and that alignment simply loses to another.
 
 ---
 
+## 7a. Crib as a seed: very short cribs, 8-12 letters
+
+§7's hybrid assumes the crib is long enough to pick out one hypothesis. Below
+about 14 letters it cannot, and a different use opens up: stop trying to *solve*
+the plugboard and use the crib only to *start* the hill-climb somewhere better
+than random.
+
+**What a very short crib deduces**, from the true hypothesis at the true rotor
+setting, 300 random keys and boards:
+
+| crib length | letters settled | true cables found |
+|--:|--:|--:|
+| 6 | 7.0 / 26 | 3.0 / 10 |
+| **8** | 9.7 | **4.1** |
+| **10** | 12.5 | **5.3** |
+| 12 | 15.5 | 6.5 |
+| 16 | 20.7 | 8.5 |
+
+A 10-letter crib lands on five cables — exactly the knee of §7's value curve,
+where most of the benefit already sits.
+
+**The cost, and why it is not obviously worth paying.** A crib this short
+rejects nothing (§4.1), so all 26 hypotheses survive at every rotor setting and
+each one gives a *different* seed. You must climb from all of them, so the sweep
+costs **26 climbs per rotor setting** instead of one. That is the entire
+objection, and it has to be met head-on: is 26 seeded climbs better than 26
+ordinary restarts?
+
+**Measured, at L=60 with the true rotor key, 40 trials:**
+
+| | recovery |
+|---|--:|
+| 0 plugs given, `-R 16` | 0% |
+| 0 plugs given, `-R 416` — the 26x compute spent on restarts | **12%** |
+| 5 plugs given, `-R 16` — one correct seed among 26 | **55%** |
+| 7 plugs given, `-R 16` | 68% |
+
+Only one of the 26 hypotheses carries the correct seed, so the crib-seeded sweep
+succeeds at about the 55% rate against 12% for the same compute spent on random
+restarts. **Four to five times better**, at the short lengths where the tool is
+currently weakest.
+
+**Why this is a different kind of lever.** `IMPROVEMENTS.md` records that
+restarts stall because the truth is a rare deep basin and no truth-free signal
+exists to steer toward it — per-plug consensus across converged boards is only
+~1.1 correct plugs in 10. A crib is exactly such a signal, and it comes from
+*outside* the score landscape rather than being mined out of it. That is why it
+can beat compute rather than merely adding to it.
+
+**Three cautions, none of them yet measured.**
+
+1. The table above seeds the climb with *correct* plugs. In a real sweep 25 of
+   the 26 hypotheses seed garbage, and a garbage seed at the true rotor setting
+   could in principle converge to something scoring higher than the correct seed
+   does. The ~1% scoring-failure floor makes that unlikely, but unlikely is not
+   measured.
+2. At *wrong* rotor settings you now run 26 climbs instead of one. That is where
+   the whole 26x goes, and without loops none of it can be skipped.
+3. Coverage assumes the crib is exactly right. An 8-letter crib is far more
+   likely to be present (§4.2) *and* far more likely to be a coincidental match
+   that deduces confident nonsense. Short cribs make both errors more common at
+   once.
+
+**Where this sits in the plan.** It shares all the machinery of §6 — the same
+menu, the same deduction, the same `--no-plug` output — and differs only in what
+it does with the result: seed rather than solve. So it costs almost nothing
+extra to build once §6 exists, and it should be a flag rather than a separate
+path.
+
+---
+
 ## 8. Suggested command line
 
 Consistent with existing options; names open to discussion.
@@ -584,6 +655,8 @@ Consistent with existing options; names open to discussion.
   --crib-at N          pin the crib to position N (default: sweep all)
   --crib-min-loops N   skip alignments whose menu has fewer than N loops
   --no-plug LETTERS    these letters are known to carry no cable
+  --crib-seed          seed the climb from the deduction instead of
+                       requiring it to solve the board (§7a)
 ```
 
 Notes:
@@ -713,6 +786,10 @@ numbers independently and produces the test vectors step 3 needs.
 makes it usable on a real message.
 
 **Step 5 — the hybrid** (§7). The mode we expect to be used in practice.
+
+**Step 5a — crib-as-seed** (§7a). Nearly free once step 5 exists, and the mode
+that covers the short cribs the corpus actually supplies. Needs its own
+measurement of caution 1 above before being recommended.
 
 **Step 6 — crib lists** (`--crib-list`) and the budget logic. Only worth
 building once single cribs work.
