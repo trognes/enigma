@@ -636,6 +636,11 @@ be a *score threshold that can be turned off*, with the fallback being to sweep
 the whole list and rank, which costs the worst case but never discards the
 truth.
 
+The other stop criterion is a person watching the progress lines and stopping
+the run when the text turns into German. That needs no threshold at all, but it
+does need more of the text than the 19 characters a progress line shows today —
+hence `--full-text` in §8.
+
 ---
 
 ## 7. The hybrid: deduce, then climb
@@ -895,6 +900,8 @@ you do know.
   --no-plug LETTERS    these letters are known to carry no cable
   --crib-seed          seed the climb from the deduction instead of
                        requiring it to solve the board (§7a)
+  --full-text          print the whole decrypted message on each new best,
+                       not just the 19-character preview
 ```
 
 The file format is §5 step 6's: one crib per line, `#` comments, blank lines
@@ -921,6 +928,27 @@ Notes:
 - `--no-plug` needs no special handling for `--exhaust`, whose per-worker
   `PLUG_FIXED_EX` is a copy of `plug_fixed`, nor for the `--score` plug caps,
   which count pairs and are unaffected by marking a letter unpaired.
+- **`--full-text` supports the human stop criterion of §6.7.** A progress line
+  shows 19 characters (16 under `-4`, where the wider key eats three), which is
+  enough to notice a promising board but not enough to decide a run is finished.
+  Four points for building it:
+  - **Do not widen the fixed-width column.** The line is columnar by design and
+    fits an 79-column terminal. Print the full text on its own indented line
+    after the progress line instead, so the columns still line up when the
+    option is off *and* on.
+  - **The volume is already bounded.** A progress line is emitted only when a
+    board beats everything echoed so far, so the number of full texts printed is
+    the number of improvements, not the number of candidates scored — tens per
+    run, not millions. Nothing on the hot path changes.
+  - **Decode on the fly, as `showconfig()` already does.** It rebuilds the
+    preview from the machine's *current* board rather than reading
+    `m.plaintext`, which can be stale mid-climb; the full text must do the same.
+    The only
+    change is the buffer, which is a fixed 20 bytes today and would need to be
+    message-length sized.
+  - **It is useful on its own.** Nothing about it depends on cribs, so it can be
+    built and tested first, with its own test — a run under `--full-text` must
+    print a line matching the final plaintext.
 
 ---
 
