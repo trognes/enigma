@@ -147,8 +147,27 @@ part of the menu (see §6.3 for why only the largest):
 | 22 | 3.23 | 99.9% |
 | 25 | 4.93 | ~100% |
 
-So the working floor is about **16 letters**, and 20 is comfortable. Below 14 it
-does not work at all.
+**There is no hard floor.** A setting the crib fails to reject is not a failure,
+just a *stop* that has to be checked by decrypting the message and scoring it —
+and on a computer a stop costs microseconds. So a weak crib does not stop
+working, it only shifts effort from rejecting settings to checking them. Adding
+the two costs together, for one 200-letter message across all 60 wheel orders:
+
+| crib length | rejected | sweep | checking stops | total |
+|--:|--:|--:|--:|--:|
+| 14 | 1.8% | 80 s | 233 s | 314 s |
+| **16** | **36.8%** | 92 s | 53 s | **145 s** |
+| **18** | **85.0%** | 104 s | 8 s | **111 s** |
+| 20 | 97.5% | 115 s | 1 s | 116 s |
+
+A 14-letter crib rejects almost nothing and still finishes in five minutes. The
+curve is smooth, not a cliff — extending it, 12 letters costs about ten minutes
+and 10 letters about fifteen. What 16–18 letters buys is the *cheapest* total,
+not the only workable one.
+
+(The "20 letters, three loops" rule of thumb comes from 1941, when every stop
+cost a human several minutes at a checking machine. That economics is gone. See
+§6.3 for a second place the same assumption misled this plan.)
 
 **4.2 How often a crib is actually present.** Building a crib library from 57 of
 the 58 messages and testing it on the 58th:
@@ -157,10 +176,15 @@ the 58 messages and testing it on the 58th:
 |---|--:|--:|--:|--:|--:|
 | messages the library hits | 24% | 19% | 9% | 3% | 0% |
 
-Read §4.1 and §4.2 together and the tension is obvious: **cribs start working at
-about the length where they stop being findable.** The sweet spot on this
-evidence is 16–20 letters. This is the single most important number in the plan
-and it rests on only 58 messages — see §11.
+Read §4.1 and §4.2 together and the design follows: **shorter cribs are found
+far more often, and cost only a little more to use.** Going from 20 letters to
+16 raises the hit rate sixfold, from 3% to 19%, for a 25% increase in total
+time. Going down to 14 nearly doubles the hit rate again for another 2× in time,
+which may still be worth it when nothing longer matches.
+
+So the generator should target **16–18 letters, not 20**, and should keep 14 as
+a fallback tier rather than discarding it. This is the most consequential number
+in the plan, and it rests on only 58 messages — see §11.
 
 **4.3 Doubled words are the best crib source we have.** German operators sent
 important words twice for error correction. You can watch it working in message
@@ -202,8 +226,8 @@ than one place, with their length and how many distinct letters they use:
    BETRIEBSSPRUQ ×2   (13 letters,  9 distinct)
 ```
 
-Doubled, `STUERZBECHER` gives a 27-letter crib using 10 distinct letters. That
-is far past the floor.
+Doubled, `STUERZBECHER` gives a 27-letter crib using 10 distinct letters —
+comfortably inside the cheap band, with rejection to spare.
 
 **4.5 Two ways cribs fail, both seen in this corpus.**
 
@@ -219,7 +243,8 @@ crib spanning corrupted text fails outright.
 ```
 
 Same words, two extra `X` separators. The longest run they share drops to 10
-letters — below the floor. A crib built from one misses the other completely.
+letters, which is still usable but costs perhaps fifteen minutes instead of two.
+A crib built from one form misses the other form completely.
 **The generator must produce punctuation variants**; this is not an edge case.
 
 **4.6 A crib does two separate jobs.** Worth stating because they fail at
@@ -231,10 +256,12 @@ different lengths:
 2. **It rejects wrong rotor settings.** This needs loops, and fades as the crib
    gets shorter.
 
-At 16 letters you keep job 1 and mostly lose job 2. That is still useful, which
-is why the floor is lower than the folklore "20 letters, three loops" suggests.
-The folklore is right for a 1941 Bombe, where every stop cost a human being
-several minutes; on a computer a stop costs microseconds.
+At 16 letters you keep job 1 and mostly lose job 2, and that is still worth
+having — which is why short cribs stay usable rather than failing. Job 1 is what
+replaces the search; job 2 only decides how much checking is left over. The
+folklore "20 letters, three loops" is right for a 1941 Bombe, where every stop
+cost a human being several minutes at a checking machine; on a computer a stop
+costs microseconds.
 
 ---
 
@@ -272,14 +299,24 @@ by a phonetic letter (`SIEGFRIEDXSIEGFRIEDXTONI`).
 **Step 4 — score each candidate offline.** Two numbers, both computable without
 any ciphertext:
 
-- **length** — must be at least 16 (§4.1).
+- **length** — 16 to 18 is the target band (§4.1). Do not insist on 20: it is
+  six times rarer for almost no saving.
 - **spare letters** = length − number of distinct letters. This predicts whether
   the menu will close. Measured: at 20 letters, cribs with 8 or more spare
   letters close twice over 84% of the time; cribs with 5 spare only 65%.
 
-**Step 5 — sort and cut.** Sort by spare letters descending, drop anything under
-16 letters, and keep the top *N*. What *N* should be is set by the compute
-budget — see §9.
+**Step 5 — sort into tiers, do not simply cut.** Since a short crib costs more
+time rather than failing, the library should be *tiered* by length and used in
+that order:
+
+| tier | length | when to use it |
+|---|--:|---|
+| 1 | 16-20 | always try first — cheapest per crib |
+| 2 | 14-15 | when no tier-1 crib matches; ~2x the time |
+| 3 | under 14 | last resort; costs ten minutes or more each |
+
+Within each tier, sort by spare letters descending. How many to keep is set by
+the compute budget — see §9.
 
 **Step 6 — write the file**, one crib per line, with its two scores as comments
 so a human can inspect the ranking.
