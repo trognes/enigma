@@ -625,7 +625,8 @@ Three secondary reasons agree:
   10-letter one only seeds, at 26 climbs per setting (§7a). Mixing those inside
   one rotor sweep is awkward; crib-outer keeps them separate.
 - **`-T` parallelism is untouched** — each crib gets the full parallel keyspace
-  sweep the tool already does.
+  sweep the tool already does. The early exit is the one part that does touch
+  it; see below.
 
 **What this needs and the tool lacks: a stop criterion.** Early exit means
 deciding "this crib won" without being told the answer. The tool reports a best
@@ -640,6 +641,32 @@ The other stop criterion is a person watching the progress lines and stopping
 the run when the text turns into German. That needs no threshold at all, but it
 does need more of the text than the 19 characters a progress line shows today —
 hence `--full-text` in §8.
+
+**The early exit must not make the answer depend on `-T`.** Stopping is a
+cross-thread event: one worker crosses the threshold and the others have to
+stop, so *when* they stop is thread-timing dependent, and if the winner is
+simply "whoever crossed first" then two thread counts can return two different
+keys. That breaks the property the whole search is built on — every other
+feature here is `-T`-independent, enforced by `better_cand`'s
+lowest-work-index tie-break.
+
+The fix is to separate stopping from choosing. Crossing the threshold sets a
+shared atomic flag; each worker finishes the chunk it is in and merges its
+candidate through the existing mutex-guarded merge as usual, and the winner is
+the merge's, not the flag-setter's. That still leaves the *set* of chunks
+examined thread-dependent — a slower machine may finish more chunks before
+noticing the flag — so the guarantee has to be stated honestly and narrowly:
+
+- **guaranteed** — with the threshold off, the result is `-T`-independent, as
+  today;
+- **guaranteed** — with the threshold on, any key the tool returns scores above
+  the threshold;
+- **not guaranteed** — *which* above-threshold key it returns, when several
+  exist. Early exit trades that determinism for the up-to-50× saving, which is
+  the point of the flag.
+
+Tests must therefore compare a threshold run against `-T 1` on the
+*above-threshold* property, not against a fixed expected key. §10.7.
 
 ---
 
@@ -928,6 +955,51 @@ Notes:
 - `--no-plug` needs no special handling for `--exhaust`, whose per-worker
   `PLUG_FIXED_EX` is a copy of `plug_fixed`, nor for the `--score` plug caps,
   which count pairs and are unaffected by marking a letter unpaired.
+- **Say up front which flags it composes with.** §3.4 asks for the crib code to
+  be self-contained and skippable like `--exhaust`; that is a statement about
+  *code*, and it needs a matching statement about *option combinations*, decided
+  before step 3 rather than discovered during it. The tool already has two
+  precedents to follow: `--ring-stride` and `--polish` both reconstruct a key
+  from `best.idx` and so are rejected against `-F` and `--exhaust`, which encode
+  that index differently. Crib mode is a fourth search mode over the same sweep,
+  so the proposed matrix is:
+
+  - **`-c`, `-R`, `--random`, `-S`, `-J`, `-M` — compose.** The climb is
+    exactly what §7 hands the deduction to.
+  - **`--polish` — composes**, with the caveat below.
+  - **`-T` — composes**, with the early-exit caveat of §6.7.
+  - **`-F` — reject.** Tier 1 shortlists keys by a cheap IC climb, so a key the
+    crib would have settled can be filtered out before the crib is ever
+    consulted.
+  - **`--exhaust` — reject.** Both force plugs from outside the climb, and the
+    two pin sets can contradict each other.
+  - **`--ring-stride` — reject initially, revisit.** The derived refinement is a
+    second, separate sweep, so a crib hit found only in the refinement needs
+    thinking through. Not worth blocking step 3 on.
+  - **`-A` (annealing) — reject initially.** SA seeds itself with a built-in IC
+    pre-pass, which would overwrite the deduced board.
+
+  Rejections should be fatal at option-parsing time with a message naming both
+  flags, the way the existing ones are.
+
+- **`--polish` after a seeded climb needs one decision.** The finisher runs a
+  gain cascade on the best board and may re-plug any letter. If the deduced
+  plugs are marked in `plug_fixed[]` — as §7 intends — the cascade will skip
+  them, which is right when the deduction is right and traps the run when it is
+  not. Since §7a's whole premise is that 25 of the 26 hypotheses are wrong, the
+  default should be that deduced plugs are fixed for the climb but **released
+  before `--polish`**, so the finisher can undo a bad seed. That is one line of
+  state, but it is a behaviour choice, not an implementation detail.
+
+- **The echoed key may be a class representative.** Crib mode reports a rotor
+  key like everything else, so it inherits the §7.12 middle-wheel collapse: the
+  reported ring1/start1 can be a member of the same decode-equivalent class
+  rather than the true pair, and the leftmost wheel's ring is always `A`. The
+  plaintext is byte-identical either way. This matters more here than elsewhere,
+  because a crib run is the case where a user is most likely to compare the
+  echoed key against a key they already know — so the caveat belongs in the
+  crib-mode documentation, not only in `CHANGELOG.md`. `--true-key` disables the
+  collapse.
 - **`--full-text` supports the human stop criterion of §6.7.** A progress line
   shows 19 characters (16 under `-4`, where the wider key eats three), which is
   enough to notice a promising board but not enough to decide a run is finished.
@@ -1006,6 +1078,21 @@ Compare against today's hill-climb at matched wall time.
 **10.6 Nothing else changes.** With no crib option given, output must be
 byte-identical to today, and `make bench` must show no hot-path movement. This
 is the same standard `--ring-stride` and `--polish` were held to.
+
+**10.7 Flag interaction.** Two checks, both cheap, both easy to omit and
+expensive to omit:
+
+- every rejected combination in §8's matrix must fail at option-parsing time
+  with a message naming both flags — one invocation each, no search performed,
+  so the whole set costs milliseconds;
+- every composing combination must run to completion. With the early exit off,
+  `-T 1` and `-T 4` must agree exactly; with it on, the assertion is the weaker
+  one §6.7 states — the returned key scores above the threshold — since which
+  above-threshold key wins is not guaranteed.
+
+Size these to the property, not to realism: a rejection check needs no keyspace
+at all, and a `-T` agreement check needs the smallest one that exercises the
+merge. `tests/run_tests.sh` runs under sanitizers at roughly a 10× slowdown.
 
 A new test tier will be needed: `make crackquality` measures plugboard recovery
 with the rotor key given, so it cannot see this feature at all. Planting cribs
