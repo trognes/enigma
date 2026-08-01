@@ -28,8 +28,11 @@ something on the order of **two minutes**. The estimate is arithmetic on a
 measured throughput, not a benchmark, so treat it as "minutes, not hours" rather
 than as a precise figure.
 
-**The catch** is that you need a crib, it has to be exactly right, and it has to
-be long enough. Most of this plan is about those three problems.
+**The catch** is that you need a crib and it has to be exactly right. Length
+matters less than it first appears — §4.1 and §7a show there is no hard minimum,
+only a rising cost — so the plan spends most of its space on *supply*: where
+cribs come from, and what to do with the short ones the traffic actually
+provides.
 
 ---
 
@@ -117,9 +120,11 @@ tool would have to re-earn all of it.
 
 **And one reason that decides it:** the hybrid in §7 — deduce the plugs the crib
 determines, then hill-climb the ones it does not — is only possible *inside* the
-existing tool. A standalone Bombe cannot do it at all. Since we expect real
-cribs to be short and partly wrong, the hybrid is likely the mode that actually
-gets used.
+existing tool. A standalone Bombe cannot do it at all — and the measurements
+since have made that decisive rather than merely likely: the corpus supplies
+mostly *short* cribs (§7a: 79% of messages carry a 10-letter one, 3% a 20-letter
+one), and a 10-letter crib rejects nothing at all. It can only seed a climb.
+Without the climb to hand it to, most of the available cribs are worthless.
 
 **The argument against**, stated fairly: `enigma.cc` is a single large file, and
 this adds a fourth search mode alongside the plain scan, `-F` and `--exhaust`.
@@ -334,11 +339,12 @@ moves.
 time rather than failing, the library should be *tiered* by length and used in
 that order:
 
-| tier | length | cost each | hits | when to use it |
-|---|--:|--:|--:|---|
-| 1 | 16-20 | 2-3 min | 3-19% | always try first |
-| 2 | 14-15 | ~6 min | 24% | no tier-1 crib matched |
-| 3 | 12-13 | ~11 min | 55% | nothing longer has matched |
+| tier | length | mode | hits | when to use it |
+|---|--:|---|--:|---|
+| 1 | 16-20 | solve (§6, §7) | 3-19% | always try first |
+| 2 | 14-15 | solve, more checking | 24% | no tier-1 crib matched |
+| 3 | 12-13 | solve, much more checking | 55% | nothing longer matched |
+| 4 | 8-11 | **seed only** (§7a) | 79% | the common case |
 
 Within each tier, sort by spare letters descending. How many to keep is set by
 the compute budget — see §9.
@@ -858,12 +864,19 @@ in known plaintext is a new harness.
 maybe 300 lines. Whether it ever fires depends on the library, and the library
 is the part we cannot measure well.
 
-**The 58-message corpus is too small to size the library.** At 20 letters it
-contains exactly *one* phrase shared between two messages. The 3%/9%/19% hit
-rates in §4.2 come from that sample and should be treated as "we found a few",
-not as estimates. A real network's traffic would differ, probably favourably —
-more messages, more consistent formats — but this is not evidence, it is
-expectation.
+**The 58-message corpus is too small to size the library — but less badly than
+it first looked.** At 20 letters it contains exactly *one* phrase shared between
+two messages, which is why the early drafts of this plan read pessimistically.
+Harvesting shorter changes the picture: 53 phrases at 10 letters, covering 79%
+of messages (§7a). The short end is where the supply is, and §7a is the mode
+that can use it.
+
+What stays uncertain is whether phrases shared *within* this corpus would appear
+in genuinely new traffic. A real network would differ, probably favourably —
+more messages, more consistent formats — but that is expectation, not evidence,
+and short phrases recur partly *because* they are short. A 10-letter match is
+more likely than a 20-letter one to be coincidence rather than a predictable
+formula.
 
 **Garbling breaks exact matching.** Two of the five `SIEGFRIED` messages are
 badly corrupted. No amount of crib generation fixes that; only a
@@ -929,6 +942,12 @@ corpus than we have, and the effort belongs elsewhere.
    one guess. But the positions have to come from somewhere, and knowing 14 word
    boundaries may be as hard as knowing a phrase. Worth a measurement before any
    code.
-5. **Can the menu be reused across alignments?** Shifting a crib by one position
+5. **Does a wrong seed ever beat the right one?** §7a's caution 1. In the seeded
+   sweep 25 of the 26 hypotheses seed garbage; if one of those converges to a
+   board scoring above the correctly-seeded climb at the true rotor setting, the
+   mode silently loses that message. The ~1% scoring-failure floor says it
+   should be rare, but it is the one thing that could undo §7a and it is
+   unmeasured.
+6. **Can the menu be reused across alignments?** Shifting a crib by one position
    changes every edge, so probably not — but it is worth checking before
    assuming the alignment sweep costs full price each time.
