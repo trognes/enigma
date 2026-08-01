@@ -478,6 +478,40 @@ The full library is 2528 cribs; a 25-hour budget keeps the first 96.
 **Half the held-out hits come from the generic vocabulary** (25 of 57), which is
 the part that would carry over to a network this corpus does not resemble.
 
+**Enumerated number strings were measured and rejected.** Times and dates spell
+out to long, highly repetitive strings — `EINSEINSNULLNULL` is 16 letters with
+10 spare, a tier-1 crib on paper — so generating them exhaustively looks
+promising. It is not:
+
+| family | cribs | cost | hits | ≤25h coverage |
+|---|--:|--:|--:|--:|
+| *(baseline, no numbers)* | | | | **49/69** |
+| clock times `HH00` | 24 | 1.3h | 3/57 | 50/69 |
+| two digits, 00–31 | 20 | 7.8h | 15/57 | 48/69 |
+| two digits, 00–99 | 72 | 26.3h | 20/57 | 19/69 |
+| three digits | 1000 | 170h | 8/69 | — |
+| four digits | 10000 | 543h | 4/69 | — |
+
+**Marginal coverage is zero**: not one of the 12 uncovered messages contains any
+spelled-out number, so numbers cannot extend the library's reach at all. They
+can only hit *earlier*, and every family makes the median time-to-hit worse.
+
+Two things explain it. The number strings that do occur are **already in the
+library**, harvested as observed phrases — `NULLNULL` (4 messages), `EINSNULL`
+(5), `NULLNULLNULL`, `EINSNULLNULL`, `EINSSIEBEN` — sitting in the first thirty
+entries, because recurring is exactly what the harvester detects. And the cost
+runs backwards: a two-digit number is 8–12 letters, the **most expensive** band
+(§4.1: 977–1499 s each against 122 s for a 16-letter crib), while the four-digit
+times that are individually cheap occur 4 times in 10 000 candidates.
+
+A context marker does not rescue it: `XUHR` appears in **1 of 69** messages, so
+appending it to a time makes a specific crib that is almost never right.
+
+**The general rule this establishes:** an enumerated family pays only when it is
+small relative to its hit rate. The 19 vocabulary words pay (5 hours for 25 of
+57 hits); 100 two-digit numbers do not (26 hours to re-find phrases the
+harvester already has).
+
 **Three things the build settled that the plan had guessed at:**
 
 - **The ordering had to change** — see step 5. Ordering by tier costs more than
