@@ -138,6 +138,24 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   recommended K≤3. Settling it needs ~200 trials (~3–4 h) and buys nothing
   operational. The *fully* hidden cell is **vacuous and must not be read as a
   pass** — its K=1 base is 10%, one eligible trial in ten.
+- 🟢 **Two-notch wheels collapse ring × start by 13 — exact, unexploited.**
+  VI, VII and VIII all notch at `M` (12) and `Z` (25), exactly 13 apart, so
+  their notch set survives a shift of 13. For such a wheel in the **middle or
+  right** position, shifting its ring and start together by 13 is a
+  **byte-identical** decode — unconditionally, at every length, because the
+  offset is preserved and the only other consumer of the absolute position is
+  the notch test. Measured 152/152 (middle) and 138/138 (right) over random
+  keys; the single-notch control differs in 0/262 on the right, and in the
+  middle decays 62% → 18% → 0% across L = 60/200/900, which is §7.12's
+  *conditional* collapse and the reason the two are not the same thing.
+
+  Worth a clean **2× per affected wheel** — 34.8% of the keyspace averaged over
+  all 336 ordered triples from I–VIII, and **0% under the default `-x 5`**,
+  since none of I–V has two notches. So the payoff tracks how much `-x 8` gets
+  used. Implementation would sit beside the §7.10/§7.12 collapses in
+  `build_key_space()`; heed §7.12's warning that a wrong equivalence class drops
+  real keys silently. Derivation and numbers: `CLAUDE.md`, "Two-notch wheels
+  collapse ring × start by 13".
 - 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
   the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
   but whether spending it on `-R` raises recovery is untested.

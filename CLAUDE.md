@@ -853,6 +853,10 @@ three:
 | 1 (middle) | **partial, exact** — this section | **3–5× at short lengths** |
 | 2 (right) | none exact; only `--ring-stride`'s approximation | ~1.7×, lossy |
 
+That table is about *position*. There is a fourth collapse that depends on the
+*wheel* instead — the two-notch VI–VIII, exact and unconditional, **not
+exploited** — see "Two-notch wheels" below.
+
 Shifting `ring1` and `start1` together leaves `mod26(g1-r1)` — the middle
 wheel's entire contribution to the substitution — invariant, so two such pairs
 can differ *only* through `notch[w1][g1]`, the middle notch that gates the left
@@ -892,6 +896,48 @@ and a collapsed one would simply be absent.
 
 Full derivation, measurements and the shipped results: `archived/PERFORMANCE.md`
 §7.12.
+
+### Two-notch wheels collapse ring × start by 13 — exact, NOT exploited
+
+Wheels **VI, VII and VIII** all carry notches at `M` (12) and `Z` (25) — exactly
+`26/2 = 13` apart, so their notch *set* is invariant under a shift of 13. That
+makes a shift of 13 an **exact, unconditional** decode equivalence for such a
+wheel in the **middle or right** position:
+
+    ring_w += 13, start_w += 13 ⇒ byte-identical decode
+
+Two things reach the machine from a stepping wheel's (ring, start): the offset
+`(start − ring)`, which the joint shift preserves, and the **absolute**
+position, which is read only by the notch test — and that test cannot tell `g`
+from `g+13` when the notch set is `{12, 25}`. Nothing else downstream sees the
+wheel's absolute position, so every derived quantity (the middle-step schedule
+`S`, the left-step schedule `D` including double steps) is identical step for
+step, at every message length.
+
+In the **left** position there is no additional effect: that wheel's ring ×
+start already collapses for *every* shift under §7.10, so 13 is not special
+there.
+
+**Measured** (random keys, wheels I–VIII, L ∈ {40, 110, 400, 900}): identical in
+**152/152** middle-position and **138/138** right-position trials. The
+single-notch control is the useful contrast, because it separates this from
+§7.12's collapse — in the right position it differs in **0/262**, and in the
+middle position it is length-dependent and decays away (62% identical at L=60,
+18% at L=200, **0% at L=900**), while the two-notch case stays at **100% at
+every length**. Unconditional versus conditional is the whole distinction.
+
+Size: with a two-notch wheel on the right the distinct `(start1, start2)`
+classes drop from **651 to 326 of 676** — a clean factor of 2, or **1 bit**, per
+affected wheel, and 2 bits when VI–VIII sit in both the middle and the right
+positions. Averaged over all 336 ordered triples from I–VIII this is a **34.8%
+keyspace reduction**; under the default `-x 5` (wheels I–V) it is **0%**, since
+none of I–V has two notches. So it is worth exactly as much as `-x 8` is used.
+
+**Not implemented.** It would slot in beside the §7.10/§7.12 collapses in
+`build_key_space()`, gated on the wheel in that position having a period-13
+notch set — but read the §7.12 warning first: a wrong equivalence class drops
+real keys *silently*, which is why that code derives its masks by simulating the
+stepping rather than from a formula.
 
 ### Sparse ring sampling for the rightmost wheel — `--ring-stride`
 
