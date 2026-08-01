@@ -32,15 +32,16 @@ hedge), its spare letters (length minus distinct letters — what closes the
 deduction into a loop), how it was obtained, and how many corpus messages hold
 it.
 
-**Held-out coverage is 78%; a control with each crib's letters shuffled covers
+**Held-out coverage is 83%; a control with each crib's letters shuffled covers
 0%,** so the recurrence is real rather than short strings colliding. Coverage is
-*supply*, not recovery: 48 of the 54 hits are 8–11 letters, too short to reject
+*supply*, not recovery: 47 of the 57 hits are 8–11 letters, too short to reject
 a single rotor setting. See `cribs.md` §5a.
 
 The order is deliberately **not** by tier — a tier says what a crib can do, not
 whether it will match, and a crib that never matches costs its whole sweep.
-Ordering by evidence of recurrence takes the median time-to-first-hit from 141
-hours to 10.
+Ordering by evidence of recurrence, with `german-hgnord.txt`'s long words ahead
+of everything, takes the median time-to-first-hit from 141 hours to 6.7 and
+covers 49 of 69 messages within the 25 hours a no-crib run costs.
 
 ## `german-hgnord.txt`
 

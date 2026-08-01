@@ -14,9 +14,27 @@
 # phrase recurs, then by cost, so the ones most likely to end the run come
 # first (measured: median time to first hit 10h against 82h ordered by tier).
 
+SIEGFRIED                                  # t4 spare  2 vocab    seen 5
+EMPFANGEN                                  # t4 spare  2 vocab    seen 3
+UNTERWEGS                                  # t4 spare  1 vocab    seen 3
+MUNITION                                   # t4 spare  2 vocab    seen 3
+BETRIEBSTOFF                               # t3 spare  4 vocab    seen 2
+FELDLAZARETT                               # t3 spare  4 vocab    seen 2
+VERBINDUNG                                 # t4 spare  1 vocab    seen 2
+ABTEILUNG                                  # t4 spare  0 vocab    seen 2
+HEINRICH                                   # t4 spare  2 vocab    seen 2
+MORGENMELDUNG                              # t3 spare  4 vocab    seen 1
+ABENDMELDUNG                               # t3 spare  3 vocab    seen 1
+VERPFLEGUNG                                # t4 spare  2 vocab    seen 1
+FRIEDRICH                                  # t4 spare  2 vocab    seen 1
+TAGESMELDUNG                               # t3 spare  2 vocab    seen 0
+NACHRICHT                                  # t4 spare  2 vocab    seen 0
+DIVISION                                   # t4 spare  2 vocab    seen 0
+KAUFMANN                                   # t4 spare  2 vocab    seen 0
+STANDORT                                   # t4 spare  1 vocab    seen 0
+KOMPANIE                                   # t4 spare  0 vocab    seen 0
 BETRIEBS                                   # t4 spare  2 observed seen 7
 ROEMEINS                                   # t4 spare  1 observed seen 7
-SIEGFRIED                                  # t4 spare  2 observed seen 5
 ROEMEINSB                                  # t4 spare  1 observed seen 5
 EINSNULL                                   # t4 spare  2 observed seen 5
 XSIEBENX                                   # t4 spare  2 observed seen 5
@@ -40,13 +58,10 @@ XSCHUSTERX                                 # t4 spare  2 observed seen 3
 XSIEGFRIED                                 # t4 spare  2 observed seen 3
 XSCHNEIDER                                 # t4 spare  1 observed seen 3
 BETRIEBSS                                  # t4 spare  3 observed seen 3
-EMPFANGEN                                  # t4 spare  2 observed seen 3
 SXZANDERS                                  # t4 spare  1 observed seen 3
-UNTERWEGS                                  # t4 spare  1 observed seen 3
 XROEMEINS                                  # t4 spare  1 observed seen 3
 XZANDERSX                                  # t4 spare  1 observed seen 3
 ENMELDUN                                   # t4 spare  2 observed seen 3
-MUNITION                                   # t4 spare  2 observed seen 3
 XPORCHOW                                   # t4 spare  1 observed seen 3
 XFORDXFORDXVIKTORXAQTX                     # t1 spare 11 observed seen 2
 XSIEGFRIEDSIEGFRIED                        # t1 spare 11 observed seen 2
@@ -64,8 +79,6 @@ UNTERWEGSXSCH                              # t3 spare  2 observed seen 2
 NULLNULLNULL                               # t3 spare  9 observed seen 2
 EINSNULLNULL                               # t3 spare  6 observed seen 2
 SIEBENXNEUNX                               # t3 spare  5 observed seen 2
-BETRIEBSTOFF                               # t3 spare  4 observed seen 2
-FELDLAZARETT                               # t3 spare  4 observed seen 2
 AXOPOTSCHKAX                               # t3 spare  3 observed seen 2
 PANZXGRUPPEX                               # t3 spare  3 observed seen 2
 QUARTIERMEIS                               # t3 spare  3 observed seen 2
@@ -93,19 +106,7 @@ NEMPFANGEN                                 # t4 spare  3 observed seen 2
 SXZANDERSX                                 # t4 spare  2 observed seen 2
 TEUMGEHEND                                 # t4 spare  2 observed seen 2
 LDUNGFRAGE                                 # t4 spare  1 observed seen 2
-VERBINDUNG                                 # t4 spare  1 observed seen 2
 VERPFLXAMT                                 # t4 spare  0 observed seen 2
 NULLNULLX                                  # t4 spare  5 observed seen 2
 BETRIEBSR                                  # t4 spare  3 observed seen 2
 SCHBUSCHX                                  # t4 spare  3 observed seen 2
-XINFXDIVX                                  # t4 spare  3 observed seen 2
-XSIEBENXN                                  # t4 spare  3 observed seen 2
-XWASKOWAX                                  # t4 spare  3 observed seen 2
-EINSNULLX                                  # t4 spare  2 observed seen 2
-ENMELDUNG                                  # t4 spare  2 observed seen 2
-MELDUNGEN                                  # t4 spare  2 observed seen 2
-NGENTFAEL                                  # t4 spare  2 observed seen 2
-TONIXDIVX                                  # t4 spare  2 observed seen 2
-WXPORCHOW                                  # t4 spare  2 observed seen 2
-XEINSNULL                                  # t4 spare  2 observed seen 2
-XHEINRICH                                  # t4 spare  2 observed seen 2

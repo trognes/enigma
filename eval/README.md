@@ -179,7 +179,7 @@ deterministic checksum of `(git_sha, cli_options, solver_seed, instance)`.
 phrases guessed to be present in a message, for the planned crib-driven
 plugboard deduction in `cribs.md`. It writes `cribs/wehrmacht.cribs` and reports
 leave-one-out coverage, which is the number step 1 of that plan exists to
-produce: **78% held out, 0% for a shuffled-letter control.** Nothing in
+produce: **83% held out, 0% for a shuffled-letter control.** Nothing in
 `enigma.cc` reads the library yet.
 
 ```sh

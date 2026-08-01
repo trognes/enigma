@@ -315,6 +315,17 @@ out numbers, the phonetic alphabet, standard military nouns. These are guessable
 without having seen the traffic, which matters for messages unlike anything in
 the corpus.
 
+**The 19 entries of 8 letters or more are cribs in their own right**, not just
+raw material for step 3's doubling — `ABENDMELDUNG`, `FELDLAZARETT`,
+`VERPFLEGUNG`. Emitting them adds **+5pp of held-out coverage** (78% → 83%) for
+19 cribs, and they belong at the **front of the library** even though they are
+less likely to match than the best observed phrase: there are only 19, about
+five hours between them, and they are the only cribs that owe nothing to this
+particular corpus. Measured, trying them first covers **49 of 69** held-out
+messages within a 25-hour budget against 42 when they follow the observed
+phrases, and cuts the median time to the first hit from 10.1 to 6.7 hours for
+the same total coverage.
+
 **Step 3 — build candidate phrases.** For each word, emit the doubling variants
 (this is where §4.5's punctuation problem is handled):
 
@@ -406,12 +417,14 @@ corpus:
 |---|--:|--:|---|
 | by tier, then spare letters | 141h | 6% | strongest crib first |
 | by tier, then observed-before-guessed | 82h | 6% | |
-| **by evidence of recurrence, then cost** | **10h** | **61%** | tier last |
+| by evidence of recurrence, then cost | 10.1h | 61% | tier last |
+| **the same, generic vocabulary first** | **6.7h** | **71%** | step 2 |
 
 So order by how many corpus messages hold the phrase, then by cost, and let the
-tier follow. Against a no-crib run's 24.9 hours that is a real saving; ordered
-by tier it is a loss. Within equal evidence, prefer the cheaper (longer) crib,
-then more spare letters. Derived windows stay last however strong they look.
+tier follow — with step 2's generic vocabulary ahead of all of it. Against a
+no-crib run's 24.9 hours that is a real saving; ordered by tier it is a loss.
+Within equal evidence, prefer the cheaper (longer) crib, then more spare
+letters. Derived windows stay last however strong they look.
 
 How many to keep is set by the compute budget — see §9. `--budget-hours`
 truncates the library in this order, so the cut keeps what is most likely to end
@@ -441,7 +454,7 @@ number counts. Run it with `python3 eval/build_cribs.py`.
 | | coverage |
 |---|--:|
 | in-corpus (optimistic, not evidence) | 97% |
-| **held out** | **78%** |
+| **held out** | **83%** |
 | same cribs with their letters shuffled | **0%** |
 
 **The control is what makes the 78% believable.** Most hits are 8-to-11-letter
@@ -451,13 +464,19 @@ preserves its length and letter multiset and destroys only the phrase; coverage
 falls to nothing. So the recurrence is real, every bit of it.
 
 **Coverage is supply, not recovery.** It says the library holds a phrase the
-message contains. What that phrase then buys is §7a's business: 48 of the 54
+message contains. What that phrase then buys is §7a's business: 47 of the 57
 held-out hits are tier-4, too short to reject a single rotor setting, so they
 seed a climb rather than solve the key. The plan already expected this — it is
 why §3 argues for extending the tool rather than writing a Bombe.
 
+Within a **25-hour budget** — the same compute a no-crib run spends — the
+library reaches **49 of 69 messages, 71%**, at a median of 6.7 hours each.
+
 **What the corpus supplies:** 69 messages, 6843 letters, 352 distinct words.
-The full library is 2518 cribs; a 25-hour budget keeps the first 95.
+The full library is 2528 cribs; a 25-hour budget keeps the first 96.
+
+**Half the held-out hits come from the generic vocabulary** (25 of 57), which is
+the part that would carry over to a network this corpus does not resemble.
 
 **Three things the build settled that the plan had guessed at:**
 
@@ -468,7 +487,7 @@ The full library is 2518 cribs; a 25-hour budget keeps the first 95.
   between them, and essentially none of them match a held-out message. They are
   the doubling variants of words seen once; the doubling that really happened is
   already in the observed phrases.
-- **22% of messages are not covered at all**, and no ordering helps them. For
+- **17% of messages are not covered at all**, and no ordering helps them. For
   those the tool falls back to the plain climb, which is exactly what it does
   today — so the feature never makes a message *harder*, it only fails to help.
 
@@ -1254,7 +1273,7 @@ misses.
 **Step 1 — the crib generator** (§5). **Done** —
 `eval/build_cribs.py`, output `cribs/wehrmacht.cribs`. Needs no changes to the
 tool at all, and it answered the supply question before any C++ was written:
-**78% held-out coverage, 0% for a shuffled control** (§5a).
+**83% held-out coverage, 0% for a shuffled control** (§5a).
 
 **Step 2 — a menu builder and offline analysis**, in Python. Confirms §4.1's
 numbers independently and produces the test vectors step 3 needs.
@@ -1280,10 +1299,10 @@ testable thing; this step is what makes the feature usable, since you normally
 know a network's vocabulary rather than a particular message's contents. It is
 the deliverable, not polish.
 
-**Step 1 was the decision point, and it passed** (§5a): the library covers 78%
+**Step 1 was the decision point, and it passed** (§5a): the library covers 83%
 of held-out messages and a shuffled control covers none, so the recurrence is
 real rather than short strings colliding. The rest follows. Two qualifications
-carry forward — the coverage is *supply*, not recovery, and 48 of the 54 hits
+carry forward — the coverage is *supply*, not recovery, and 47 of the 57 hits
 are too short to reject a rotor setting, so **step 5a (crib-as-seed) is the mode
 that matters most on this corpus**, not step 5.
 
