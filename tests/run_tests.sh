@@ -1409,5 +1409,79 @@ check "--exhaust E within the remaining free pairs is accepted" \
   "$(np_rejects -c --exhaust 5 --no-plug "$np_many")" "0"
 
 echo
+echo "== Crib deduction: --crib =="
+
+# A crib is a guess at part of the plaintext WITH its position. Rotor settings that
+# cannot have produced it are rejected by arithmetic, before anything is scored.
+# One fixed key and one short wildcard, per the rule that a check is sized to the
+# property and not to realism.
+cb_pt=DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTETXDURCHDENEINSATZDERHILFSKRAEFTE
+cb_plugs="AB CD EF GH IJ KL MN OP QR ST"
+cb_ct=$(run "$cb_pt" -i -u B -w 123 -r AAA -g QEW -s "$cb_plugs")
+cb_key='-i -u B -w 123 -r AAA -g QEW'
+# shellcheck disable=SC2086
+cb_err() { printf '%s' "$cb_ct" | "$ENIGMA" $cb_key "$@" 2>&1 >/dev/null; }
+
+# The true key must survive its own crib. This is the zero-tolerance property: a
+# deduction that rejects the truth loses the message outright.
+check "--crib: the true key is not rejected" \
+  "$(cb_err --crib OBERKOMMANDO --crib-at 3 | grep -c 'Crib rejected 0 of 1')" "1"
+
+# Every plug the surviving hypothesis deduces must match the true board. AB/EF/GH/MN/OP
+# are real cables; YY and ZZ say Y and Z carry none, which is true (the board plugs
+# A-T only). A single wrong pair here would be a bug, not a near miss.
+check "--crib: deduced plugs match the true board" \
+  "$(cb_err --crib OBERKOMMANDO --crib-at 3 --crib-dump | grep '^cribstop' \
+     | sed 's/^cribstop [^ ]* [^ ]* [^ ]* [^ ]* [^ ]* //')" \
+  "AB BA EF FE GH HG MN NM OP PO YY ZZ"
+
+# Against a wildcarded start the crib throws away almost everything unscored -- that is
+# the whole point -- and the run still recovers the plaintext.
+check "--crib: rejects most keys but keeps the answer" \
+  "$(run "$cb_ct" -i -u B -w 123 -r AAA -g ... -s "$cb_plugs" --crib OBERKOMMANDO --crib-at 3)" \
+  "$cb_pt"
+cb_rej=$(printf '%s' "$cb_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g ... \
+         --crib OBERKOMMANDO --crib-at 3 2>&1 >/dev/null \
+         | sed -n 's/^Crib rejected \([0-9]*\) of \([0-9]*\).*/\1 \2/p')
+check "--crib: rejection is a large majority of the keyspace" \
+  "$(printf '%s' "$cb_rej" | awk '{print ($1 > 0.9 * $2)}')" "1"
+
+# The rejection count must not depend on thread count either. A key's restarts can
+# straddle a chunk boundary, so two workers can each see it as new -- counting there
+# rather than at the key's first work item made this drift with -T.
+cb_count() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... \
+             -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T "$1" 2>&1 >/dev/null \
+             | sed -n 's/^Crib rejected \([0-9]*\) .*/\1/p'; }
+check "--crib: rejection count is -T-independent" "$(cb_count 1)" "$(cb_count 4)"
+
+# Deterministic, like every other search option.
+check "--crib is -T-independent" \
+  "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g ... -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T 1)" \
+  "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g ... -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T 4)"
+
+# A crib cannot sit where it matches the ciphertext: an Enigma never encrypts a letter
+# to itself. Silently rejecting every key would look like a hard message rather than a
+# bad alignment, so it is fatal.
+cb_self=$(printf '%s' "$cb_ct" | cut -c4-15)
+check "--crib: self-encrypting alignment rejected" \
+  "$(cb_err --crib "$cb_self" --crib-at 3 >/dev/null 2>&1; echo $?)" "1"
+
+# The combinations cribs.md §8 rules out, each fatal at option-parsing time.
+cb_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... \
+                "$@" >/dev/null 2>&1; echo $?; }
+check "--crib without --crib-at rejected" "$(cb_reject --crib OBERKOMMANDO)" "1"
+check "--crib-at without --crib rejected" "$(cb_reject --crib-at 3)" "1"
+check "--crib with -F rejected" \
+  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 3 -F 5)" "1"
+check "--crib with --exhaust rejected" \
+  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 3 --exhaust 1)" "1"
+check "--crib with -A rejected" \
+  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 3 -A 100)" "1"
+check "--crib past the end of the ciphertext rejected" \
+  "$(cb_reject --crib OBERKOMMANDO --crib-at 900)" "1"
+check "--crib with a non-letter rejected" \
+  "$(cb_reject --crib "OBERKOMM4NDO" --crib-at 3)" "1"
+
+echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]

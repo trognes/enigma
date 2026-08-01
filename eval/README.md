@@ -217,6 +217,17 @@ with it, a 12-letter crib rejects **91%** of rotor settings and a loop-free
 12-letter menu still rejects 88%. `--no-diagonal` reproduces the old figures,
 which is what identifies the omission.
 
+## Crib deduction in the binary (`crib_vectors_check.py`)
+
+`crib_vectors_check.py` runs `enigma --crib` on the vectors `crib_menu.py` writes and
+compares its deduced plugs against the true board carried in each vector -- cribs.md
+10.1 and 10.2. It is not a Python-vs-C++ comparison: the vectors carry the answer key,
+and the Python only writes it down.
+
+```sh
+python3 eval/crib_vectors_check.py --generate --count 40 -v
+```
+
 ## Authentic message set (real traffic)
 
 `enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**
