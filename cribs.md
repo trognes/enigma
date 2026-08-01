@@ -154,13 +154,14 @@ part of the menu (see §6.3 for why only the largest):
 
 | crib length | loops | rotor settings rejected |
 |--:|--:|--:|
-| 12 | 0.32 | 0.01% |
-| 14 | 0.57 | 1.8% |
-| 16 | 1.00 | 36.8% |
-| 18 | 1.56 | 85.0% |
-| **20** | **2.13** | **97.5%** |
-| 22 | 3.23 | 99.9% |
-| 25 | 4.93 | ~100% |
+| 8 | 0.10 | 0.00% |
+| 10 | 0.22 | 0.00% |
+| 12 | 0.34 | 0.02% |
+| 14 | 0.58 | 2.0% |
+| 16 | 0.93 | 28.8% |
+| 18 | 1.56 | 85.3% |
+| **20** | **2.24** | **98.3%** |
+| 25 | 5.10 | ~100% |
 
 **There is no hard floor.** A setting the crib fails to reject is not a failure,
 just a *stop* that has to be checked by decrypting the message and scoring it —
@@ -172,12 +173,14 @@ rotor setting** — 60 wheel orders × 26³ positions — in a 200-letter messag
 
 | crib length | alignments | rejected | sweep | checking | total |
 |--:|--:|--:|--:|--:|--:|
-| 12 | 118 | 0.01% | 100 s | 585 s | 685 s |
-| 14 | 108 | 1.8% | 106 s | 237 s | 343 s |
-| **16** | 99 | **36.8%** | 111 s | 53 s | **165 s** |
-| **18** | 90 | **85.0%** | 114 s | 8 s | **122 s** |
-| 20 | 83 | 97.5% | 116 s | 1 s | 117 s |
-| 22 | 76 | 99.9% | 117 s | 0 s | 117 s |
+| 8 | 141 | 0.00% | 79 s | 1420 s | 1499 s |
+| 10 | 129 | 0.00% | 91 s | 886 s | 977 s |
+| 12 | 118 | 0.02% | 100 s | 548 s | 648 s |
+| 14 | 108 | 2.0% | 106 s | 229 s | 336 s |
+| **16** | 99 | **28.8%** | 111 s | 67 s | **178 s** |
+| **18** | 90 | **85.3%** | 114 s | 8 s | **122 s** |
+| 20 | 83 | 98.3% | 116 s | 1 s | 117 s |
+| 25 | 66 | ~100% | 116 s | 0 s | 116 s |
 
 ("Alignments" is after the self-encryption filter of §6.6, which removes about
 half of them.)
@@ -188,10 +191,10 @@ cancel — every row sweeps in 100–117 seconds. So crib length does not really
 trade against sweep cost at all. It trades **hit rate against checking cost**,
 and nothing else.
 
-A 14-letter crib rejects almost nothing and still finishes in under six minutes,
-and a 12-letter one — which rejects one setting in ten thousand — in eleven. The
-curve is smooth, not a cliff. What 16–18 letters buys is the *cheapest* total,
-not the only workable one.
+A 14-letter crib rejects almost nothing and still finishes in under six minutes;
+a 10-letter one, which rejects nothing whatever, in sixteen. The curve is
+smooth, not a cliff. What 16–18 letters buys is the *cheapest* total, not the
+only workable one.
 
 The "20 letters, three loops" rule of thumb comes from 1941, when every stop
 cost a human several minutes at a checking machine. That economics is gone, and
@@ -200,9 +203,9 @@ the length guidance moves with it.
 **4.2 How often a crib is actually present.** Building a crib library from 57 of
 the 58 messages and testing it on the 58th:
 
-| crib length | 12 | 14 | 16 | 18 | 20 | 25 |
-|---|--:|--:|--:|--:|--:|--:|
-| messages hit | 55% | 24% | 19% | 9% | 3% | 0% |
+| crib length | 8 | 10 | 12 | 14 | 16 | 18 | 20 | 25 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| messages hit | 93% | 79% | 55% | 24% | 19% | 9% | 3% | 0% |
 
 Read §4.1 and §4.2 together and the design follows: **shorter cribs are found
 far more often, and cost only a little more to use.** Going from 20 letters to
@@ -237,7 +240,7 @@ its own letters — it makes the menu close. Measured:
 | `XSIEGFRIEDSIEGFRIEDX` | 20 | 8 | 99.94% |
 | `XSCHUSTERXSCHUSTERX` | 19 | 8 | 98.8% |
 | `XZANDERSXZANDERSX` | 17 | 8 | ~0% (too short) |
-| *average 20-letter crib* | 20 | ~15 | 97.5% |
+| *average 20-letter crib* | 20 | ~15 | 98.3% |
 
 The rule that falls out: **a doubled name of eight letters or more.** `SCHUSTER`
 (8) works, `ZANDERS` (7) does not.
@@ -351,7 +354,7 @@ that order:
 | 1 | 16-20 | solve (§6, §7) | 3-19% | always try first |
 | 2 | 14-15 | solve, more checking | 24% | no tier-1 crib matched |
 | 3 | 12-13 | solve, much more checking | 55% | nothing longer matched |
-| 4 | 8-11 | **seed only** (§7a) | 79% | the common case |
+| 4 | 8-11 | **seed only** (§7a) | 79-93% | the common case |
 
 Within each tier, sort by spare letters descending. How many to keep is set by
 the compute budget — see §9.
@@ -394,7 +397,7 @@ is lost.
 
 **Pitfall.** Do not cost the solver as one starting guess *per* piece. That
 gives 26^C hypotheses, and an average 20-letter crib then appears to reject only
-28% of rotor settings rather than 97.5% — making cribs look far weaker than they
+28% of rotor settings rather than 98.3% — making cribs look far weaker than they
 are, and the shorter tiers look impossible.
 
 **6.4 For each rotor setting, try 26 hypotheses.** Pick one letter in the menu.
@@ -520,7 +523,7 @@ diagonal board of §6.4, and it is free here.
 One caveat: this trace is at the **true** rotor setting. At a wrong setting
 around nine hypotheses survive at this crib length, each yielding a
 plausible-looking board that still has to be decrypted and scored — which is the
-585 seconds of checking in §4.1's table.
+548 seconds of checking in §4.1's table.
 
 **6.5 Follow up each stop.** A surviving hypothesis gives a partial plugboard —
 the letters the crib touched. Fill in the rest (see §7), decrypt the whole
@@ -552,9 +555,10 @@ boards:
 | `XSIEGFRIEDSIEGFRIED` (19) | 21.5 | 8.8 | 3.9 |
 | `XFORDXFORDXVIKTORXAQTX` (22) | 23.2 | **9.3** | 4.5 |
 
-So a 12-letter crib typically hands over **seven of the ten cables** and
-confirms two or three letters as unplugged, leaving about ten free letters and
-three cables for the climb. A 22-letter crib leaves barely anything.
+(§7a's table gives the same figures by crib *length* rather than by crib.) So a
+12-letter crib typically hands over **seven of the ten cables** and confirms two
+or three letters as unplugged, leaving about ten free letters and three cables
+for the climb. A 22-letter crib leaves barely anything.
 
 **The two jobs are driven by different properties of the crib**, which the top
 four rows show plainly. All four 12-letter cribs deduce the same ~6.7 cables,
@@ -632,13 +636,16 @@ than random.
 **What a very short crib deduces**, from the true hypothesis at the true rotor
 setting, 300 random keys and boards:
 
-| crib length | letters settled | true cables found |
+| crib length | true cables found | letters shown unplugged |
 |--:|--:|--:|
-| 6 | 7.0 / 26 | 3.0 / 10 |
-| **8** | 9.7 | **4.1** |
-| **10** | 12.5 | **5.3** |
-| 12 | 15.5 | 6.5 |
-| 16 | 20.7 | 8.5 |
+| **8** | **4.1 / 10** | 1.4 |
+| **10** | **5.3** | 1.9 |
+| 12 | 6.5 | 2.5 |
+| 14 | 7.7 | 3.1 |
+| 16 | 8.5 | 3.7 |
+| 18 | 8.9 | 4.1 |
+| 20 | 9.2 | 4.4 |
+| 25 | 9.6 | 4.8 |
 
 A 10-letter crib lands on five cables — exactly the knee of §7's value curve,
 where most of the benefit already sits.
@@ -670,13 +677,16 @@ come to **26 / 3.3 ≈ 8×** a single unseeded climb.
 **The unplugged letters help too.** The deduction also settles letters as
 carrying *no* cable, and `--no-plug` (§8) would freeze those as well:
 
-| len | cables | unpl. | free | togg. | free now | togg. now | gain |
-|--:|--:|--:|--:|--:|--:|--:|--:|
-| 8 | 4.1 | 1.4 | 18 | 153 | 17 | 136 | 1.12× |
-| **10** | **5.3** | **1.9** | 16 | 120 | **14** | **91** | **1.32×** |
-| 12 | 6.5 | 2.5 | 12 | 66 | 10 | 45 | 1.47× |
-| 14 | 7.7 | 3.1 | 10 | 45 | 7 | 21 | 2.14× |
-| 16 | 8.5 | 3.7 | 8 | 28 | 4 | 6 | 4.67× |
+| crib len | free | toggles | free with `--no-plug` | toggles | gain |
+|--:|--:|--:|--:|--:|--:|
+| 8 | 18 | 153 | 17 | 136 | 1.12× |
+| **10** | 16 | 120 | **14** | **91** | **1.32×** |
+| 12 | 12 | 66 | 10 | 45 | 1.47× |
+| 14 | 10 | 45 | 7 | 21 | 2.14× |
+| 16 | 8 | 28 | 4 | 6 | 4.67× |
+| 18 | 8 | 28 | 4 | 6 | 4.67× |
+| 20 | 8 | 28 | 4 | 6 | 4.67× |
+| 25 | 6 | 15 | 2 | 1 | 15.0× |
 
 At the 10-letter tier that is another **1.32×**, putting the seeded sweep at
 roughly **6×** a single unseeded climb rather than 26×. It should help
