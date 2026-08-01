@@ -639,8 +639,11 @@ truth.
 
 The other stop criterion is a person watching the progress lines and stopping
 the run when the text turns into German. That needs no threshold at all, but it
-does need more of the text than the 19 characters a progress line shows today —
-hence `--full-text` in §8.
+needs two things the display does not give today: more of the text than the 19
+characters a progress line shows, and an indication of *which* crib and
+alignment produced the line — a crib run generates lines from many cribs, and
+the ones from a wrong crib look much like the ones from a right one. Both are in
+§8.
 
 **The early exit must not make the answer depend on `-T`.** Stopping is a
 cross-thread event: one worker crosses the threshold and the others have to
@@ -666,7 +669,7 @@ noticing the flag — so the guarantee has to be stated honestly and narrowly:
   the point of the flag.
 
 Tests must therefore compare a threshold run against `-T 1` on the
-*above-threshold* property, not against a fixed expected key. §10.7.
+*above-threshold* property, not against a fixed expected key. §10.8.
 
 ---
 
@@ -1022,6 +1025,39 @@ Notes:
     built and tested first, with its own test — a run under `--full-text` must
     print a line matching the final plaintext.
 
+- **The progress display must say which crib produced the line.** A crib run
+  tries a list of cribs at many alignments each, so a bare score-and-key line is
+  ambiguous in exactly the way that matters: two lines can look equally good and
+  come from a right crib and a wrong one. Whoever is watching — or reading the
+  log afterwards — needs to know which. Split it by what varies:
+
+  - **The crib goes in a banner line, once per crib.** Under §6.7's crib-outer
+    order a crib is fixed for a whole rotor sweep, so repeating it on every
+    progress line is noise. Print it when that crib's sweep begins, with its
+    position in the list so progress through the list is visible:
+
+    ```
+    crib 7/53  XOPOTSCHKAXOPOTSCHK  (19 letters, tier 1)
+    ```
+
+    Emit it under the same mutex as the progress lines, so a banner cannot land
+    in the middle of one when `-T` > 1.
+
+  - **The alignment goes in a column, because it varies line to line.** Add a
+    3-wide `A` column, and take the width from the preview: the line is budgeted
+    to land on exactly 80 columns and the comment above `progress_fmt_3` records
+    that the preview is the field that absorbs the difference. So 19 → 15
+    characters on a 3-wheel machine and 16 → 12 under `-4`. That is a real cost
+    on a run *without* `--full-text` and none at all with it, which is another
+    reason to build `--full-text` first.
+
+  - **The header must gain the column too.** `showconfig_header()` prints
+    through the same format string, which is what keeps the columns aligned; a
+    column added to one and not the other silently misaligns every line.
+
+  - **Only in crib mode.** With no crib option the format is unchanged, which
+    §10.6's byte-identical check already enforces.
+
 ---
 
 ## 9. What it should cost
@@ -1079,7 +1115,13 @@ Compare against today's hill-climb at matched wall time.
 byte-identical to today, and `make bench` must show no hot-path movement. This
 is the same standard `--ring-stride` and `--polish` were held to.
 
-**10.7 Flag interaction.** Two checks, both cheap, both easy to omit and
+**10.7 Display.** The progress line is budgeted to exactly 80 columns, so a
+crib run must be checked for width the way the existing one was: no line over 80
+columns for a 3-wheel machine or under `-4`, and the header aligned with the
+lines below it. Check it with a crib at the widest alignment and a full
+13-pair board.
+
+**10.8 Flag interaction.** Two checks, both cheap, both easy to omit and
 expensive to omit:
 
 - every rejected combination in §8's matrix must fail at option-parsing time
