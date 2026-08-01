@@ -638,6 +638,40 @@ costs **26 climbs per rotor setting** instead of one. That is the entire
 objection, and it has to be met head-on: is 26 seeded climbs better than 26
 ordinary restarts?
 
+**A seeded climb is far cheaper than an unseeded one**, which is most of why the
+answer is yes. Fixed plugs mark their letters in `plug_fixed[]` and the climb
+skips them, so the move set shrinks quadratically; there are also fewer plugs
+left to find, so fewer passes. Measured at L=60, `-R 16 -J --polish`, 30 trials
+— boards scored is a deterministic count, not a success rate:
+
+| plugs given | free letters | toggles/pass | boards scored | speedup |
+|--:|--:|--:|--:|--:|
+| 0 | 26 | 325 | 34,551 | 1.00× |
+| 3 | 20 | 190 | 18,681 | 1.85× |
+| **5** | **16** | **120** | **10,469** | **3.30×** |
+| 7 | 12 | 66 | 5,012 | 6.89× |
+| 8 | 10 | 45 | 3,218 | 10.74× |
+
+So 26 seeded climbs are not 26× the cost. At a 5-cable seed they cost **26 / 3.3
+≈ 8×** a single unseeded climb.
+
+**The unplugged letters help too.** The deduction also settles letters as
+carrying *no* cable, and `--no-plug` (§8) would freeze those as well:
+
+| len | cables | unpl. | free | togg. | free now | togg. now | gain |
+|--:|--:|--:|--:|--:|--:|--:|--:|
+| 8 | 4.1 | 1.4 | 18 | 153 | 17 | 136 | 1.12× |
+| **10** | **5.3** | **1.9** | 16 | 120 | **14** | **91** | **1.32×** |
+| 12 | 6.5 | 2.5 | 12 | 66 | 10 | 45 | 1.47× |
+| 14 | 7.7 | 3.1 | 10 | 45 | 7 | 21 | 2.14× |
+| 16 | 8.5 | 3.7 | 8 | 28 | 4 | 6 | 4.67× |
+
+At the 10-letter tier that is another **1.32×**, putting the seeded sweep at
+roughly **6×** a single unseeded climb rather than 26×. It should help
+*accuracy* too, by stopping the climb plugging a letter that carries no cable —
+but that is **not measured**, since `--no-plug` does not exist yet. Only the
+move-set arithmetic is certain.
+
 **Measured, at L=60 with the true rotor key, 40 trials:**
 
 | | recovery |
@@ -650,7 +684,8 @@ ordinary restarts?
 Only one of the 26 hypotheses carries the correct seed, so the crib-seeded sweep
 succeeds at about the 55% rate against 12% for the same compute spent on random
 restarts. **Four to five times better**, at the short lengths where the tool is
-currently weakest.
+currently weakest — and that comparison charged the seeded side the full 26×, so
+against the ~6× above it is conservative by about a factor of four.
 
 **What the corpus actually supplies at this length.** Harvesting 10-letter
 windows from the 58 messages gives 150 shared by two or more, merging into 53
