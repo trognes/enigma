@@ -196,9 +196,9 @@ Read §4.1 and §4.2 together and the design follows: **shorter cribs are found
 far more often, and cost only a little more to use.** Going from 20 letters to
 16 raises the hit rate sixfold, from 3% to 19%, for a 25% increase in total
 time. Going down to 14 doubles the hit rate again for about 2× the time, and 12
-letters reaches **55%** — more than half of all messages — for about
-eleven minutes each. That last row is the striking one: the cribs that are
-actually easy to find are affordable, just not cheap.
+letters reaches **55%** — more than half of all messages — for about eleven
+minutes each. That last row is the striking one: the cribs that are actually
+easy to find are affordable, just not cheap.
 
 So the generator should target **16–18 letters, not 20**, and should keep the
 12–15 range as fallback tiers rather than discarding it. This is the most
@@ -322,6 +322,13 @@ any ciphertext:
 - **spare letters** = length − number of distinct letters. This predicts whether
   the menu will close. Measured: at 20 letters, cribs with 8 or more spare
   letters close twice over 84% of the time; cribs with 5 spare only 65%.
+
+These two rank *different* things, and §7 shows how far apart they can be.
+Length predicts how many plugs get deduced; spare letters predict how many rotor
+settings get rejected. `NULLNULLNULL` and `UNITIONFUERL` are both 12 letters and
+both deduce ~6.7 cables, but reject 81% and 0%. Sort by spare letters — the
+checking cost varies by a factor of 500 across those two, while coverage barely
+moves.
 
 **Step 5 — sort into tiers, do not simply cut.** Since a short crib costs more
 time rather than failing, the library should be *tiered* by length and used in
@@ -485,9 +492,39 @@ expect more from it. Pinning the position uniquely would need a crib of about
 
 This is the part that justifies extending the tool rather than writing a Bombe.
 
-A crib rarely determines the whole plugboard. A 20-letter crib touches maybe 16
-letters, leaving 10 untouched — some of which carry cables we still have to
-find. The plan:
+A crib rarely determines the whole plugboard. **Measured** — deducing from the
+true hypothesis at the true rotor setting, averaged over 300 random keys and
+boards:
+
+| crib | letters settled | true cables found | shown unplugged |
+|---|--:|--:|--:|
+| `NULLNULLNULL` (12) | 16.3 / 26 | **6.9 / 10** | 2.5 |
+| `UNITIONFUERL` (12) | 15.8 | 6.6 | 2.5 |
+| `XSIEGFRIEDXS` (12) | 15.8 | 6.6 | 2.6 |
+| `XSIEGFRIEDSIEGFRIED` (19) | 21.5 | 8.8 | 3.9 |
+| `XFORDXFORDXVIKTORXAQTX` (22) | 23.2 | **9.3** | 4.5 |
+
+So a 12-letter crib typically hands over **seven of the ten cables** and
+confirms two or three letters as unplugged, leaving about ten free letters and
+three cables for the climb. A 22-letter crib leaves barely anything.
+
+**The two jobs are driven by different properties of the crib**, which the top
+four rows show plainly. All four 12-letter cribs deduce the same ~6.7 cables,
+yet `NULLNULLNULL` rejects 81% of rotor settings and `UNITIONFUERL` rejects 0%
+(§4.1). Coverage tracks crib **length** — the number of edges, hence the number
+of chances to derive something. Rejection tracks letter **repetition**, which is
+what closes loops. Ranking a library by spare letters (§5 step 4) optimises
+rejection and does nothing for coverage; ranking by length does the reverse.
+
+**A note on why coverage is as high as it is.** `NULLNULLNULL` has only three
+distinct plaintext letters, so its menu is three separate stars. Left alone
+those stay disconnected and the deduction would settle perhaps seven letters.
+What merges them is reciprocity: deriving that `L` connects to some letter that
+also appears on `N`'s star joins the two, and the cascade continues. The
+diagonal board (§6.4) therefore does more than add rejection power — it stitches
+the menu's components together, roughly doubling coverage in this case.
+
+The plan:
 
 1. **Deduce** the plugs the crib determines. These are known with certainty, not
    guessed.
@@ -497,9 +534,9 @@ find. The plan:
    letters only.
 
 This is strictly better than either method alone. Compared with the pure climb,
-most of the board is handed over for free and the search space is much smaller.
-Compared with a pure Bombe, a crib that determines only part of the board still
-produces a full answer.
+the search space drops from all 1.5 x 10^14 boards to the few cables left over
+about ten free letters. Compared with a pure Bombe, a crib that determines only
+part of the board still produces a full answer.
 
 It also degrades gracefully, which matters given §4.5. If the crib is slightly
 wrong, the deduction produces a bad partial board — but the follow-up score will
