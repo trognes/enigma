@@ -150,19 +150,53 @@ figures are from authentic telegraphic German — the 58 decrypted messages in
 
 **4.1 How long a crib has to be.** A crib works by contradiction: guess what one
 letter is plugged to, follow the chain of deductions, and see whether it comes
-back consistent. Loops are what make that possible. Using the largest connected
+back consistent. Measured with `eval/crib_menu.py`, using the largest connected
 part of the menu (see §6.3 for why only the largest):
 
-| crib length | loops | rotor settings rejected |
+| crib length | loops | menus with a loop | rotor settings rejected |
+|--:|--:|--:|--:|
+| 8 | 0.10 | 10% | 16.4% |
+| 10 | 0.05 | 5% | 55.1% |
+| **12** | 0.28 | 20% | **90.6%** |
+| 14 | 0.42 | 38% | 97.9% |
+| 16 | 0.68 | 52% | 99.9% |
+| 18 | 1.73 | 90% | 100% |
+| 20 | 2.08 | 92% | 100% |
+| 25 | 5.08 | 100% | 100% |
+
+**Loops are not the mechanism, and that is the single most important fact in
+this section.** The rejection above is almost entirely the work of Welchman's
+diagonal board — the constraint that a plug has two ends, so `steck[x] = y`
+forces `steck[y] = x` and no two letters may share a partner. Split the same
+measurement by whether the menu has a loop at all:
+
+| crib length | rejected, no loop | rejected, ≥1 loop |
 |--:|--:|--:|
-| 8 | 0.10 | 0.00% |
-| 10 | 0.22 | 0.00% |
-| 12 | 0.34 | 0.02% |
-| 14 | 0.58 | 2.0% |
-| 16 | 0.93 | 28.8% |
-| 18 | 1.56 | 85.3% |
-| **20** | **2.24** | **98.3%** |
-| 25 | 5.10 | ~100% |
+| 8 | 7.8% | 94.0% |
+| 10 | 53.0% | 95.5% |
+| 12 | 88.3% | 99.7% |
+| 16 | 99.7% | 100% |
+
+A **loop-free** 12-letter menu still rejects 88% of rotor settings. Turn the
+diagonal board off and run the identical trials and that column collapses to
+**0.00% at every length** — rejection then comes only from loops, exactly as the
+textbook account says. That control is what identifies the mechanism, and it is
+reproducible: `eval/crib_menu.py --no-diagonal`.
+
+This is Welchman's 1940 result rediscovered, and it is why the diagonal board
+mattered historically: it is what makes short, loop-free menus usable.
+
+> ⚠️ **Earlier versions of this table were measured without the diagonal board
+> and are wrong by orders of magnitude at the short end** — they read 0.00% at
+> 8 and 10 letters and 0.02% at 12, against 16%, 55% and 91% here. The
+> `--no-diagonal` control reproduces those old figures closely (28.98% at 16
+> letters against the old 28.8%), which is what identifies the omission.
+> **Everything downstream that was computed from the old rejection rates is
+> therefore suspect**: the cost table below, the tier boundaries in §5 step 5,
+> the claim that 8–11 letter cribs "can only seed", and the `COST` model in
+> `eval/build_cribs.py` that prices the library. Those are corrected where the
+> new measurement settles them and flagged where recomputing needs a timing run
+> that has not been done.
 
 **There is no hard floor.** A setting the crib fails to reject is not a failure,
 just a *stop* that has to be checked by decrypting the message and scoring it —
@@ -170,7 +204,12 @@ and on a computer a stop costs microseconds. So a weak crib does not stop
 working, it only shifts effort from rejecting settings to checking them.
 
 Adding both costs, for **one crib** tried at **every alignment** against **every
-rotor setting** — 60 wheel orders × 26³ positions — in a 200-letter message:
+rotor setting** — 60 wheel orders × 26³ positions — in a 200-letter message.
+**The rejection column here is the pre-diagonal-board one and is wrong**; the
+table is kept because its *sweep* column and the shape argument below do not
+depend on it, and because it is what `eval/build_cribs.py`'s cost model was
+built from. Recomputing the checking column needs a per-stop timing run, which
+belongs with the C++ deduction (§12 step 3):
 
 | crib length | alignments | rejected | sweep | checking | total |
 |--:|--:|--:|--:|--:|--:|
@@ -1357,8 +1396,11 @@ misses.
 tool at all, and it answered the supply question before any C++ was written:
 **83% held-out coverage, 0% for a shuffled control** (§5a).
 
-**Step 2 — a menu builder and offline analysis**, in Python. Confirms §4.1's
-numbers independently and produces the test vectors step 3 needs.
+**Step 2 — a menu builder and offline analysis** (`eval/crib_menu.py`).
+**Done, and it did not confirm §4.1 — it corrected it.** The rejection rates
+had been measured without the diagonal board and were wrong by orders of
+magnitude at the short end (§4.1). It also emits the test vectors step 3 needs
+(`--vectors`) and runs §10.1/§10.2 as oracle checks on itself.
 
 **Step 3 — deduction inside the tool**, one crib at one alignment (`--crib`,
 `--crib-at`). The smallest thing that can be checked against §10.1 and §10.2.
