@@ -973,6 +973,57 @@ It also degrades gracefully, which matters given §4.5. If the crib is slightly
 wrong, the deduction produces a bad partial board — but the follow-up score will
 be poor and that alignment simply loses to another.
 
+**7b. The climb to run after a deduction is not the recommended one.** The
+standard recipe (`-c -S m4f10 -J --polish -f`) is tuned for a climb starting
+from an empty board plus a random kick. A crib-seeded climb starts from five to
+seven correct plugs, and four of that recipe's parts stop making sense:
+
+- **No pre-pass.** `--score m4f10`'s mono or IC first stage exists because the
+  quad/weighted surface is *nearly flat when only a plug or two is set* — that
+  is the finding `-f`'s IC blend was built on. Starting from five plugs, the
+  surface already has gradient and the premise is gone. Worse, a pre-pass
+  optimises a **different objective**: the deduced plugs are safe in
+  `plug_fixed[]`, but an IC stage will add spurious plugs that the target stage
+  then has to unpick, from a board that was already good. Run the target model
+  alone. (§7a's measurements were already run this way — `-R 16 -J --polish`,
+  single stage — so the 55%/68% figures are pre-pass-free.)
+- **Cap the climb at 10 plugs**, `--score <model>10`. The cap counts *total*
+  pairs including the fixed ones, so with five deduced it leaves five to find.
+  This is the regime where a cap is measured to matter most: `-J` uncapped is a
+  known *loss* when few plugs are truly needed, and capping at the true count
+  turns it into a large win.
+- **`-M` off.** It makes the cap a strict descent target, which earns its keep
+  pulling an *over*-cap board down after a big kick. Seeded, the climb grows
+  from five to ten and is never over the cap, so `-M` is near-inert.
+- **`--random 0`.** The kick only perturbs free letters, so it cannot damage the
+  seed — but scattering the remaining five when you already start near the
+  answer is more likely to cost than to buy. The seeded climb wants to *finish*
+  a board, not go looking for a new basin.
+
+**`--polish` after, with the deduced plugs released first.** The finisher's gain
+cascade skips `plug_fixed[]` letters, which is right when the deduction is right
+and traps the run when it is not — and §7a's premise is that 25 of the 26
+hypotheses are wrong. Releasing them before the finisher is one line of state
+and it is what lets a bad seed be undone.
+
+**Which target model — `-q`, `-a` or `-f` — is genuinely open**, and the reason
+is worth stating rather than defaulting to the recommended `-f`. Its measured
++3.0–4.4pp over `-a` decomposes into **surface reshaping (+3.4pp) and selection
+(−0.0pp)**: `-f` is a better *climb*, not better *discrimination*. Crib mode
+needs both, in different places —
+
+- **discrimination** picks between the 26 hypotheses and between surviving rotor
+  settings, where `-f`'s advantage is measured at zero;
+- **surface** drives the climb over the last few plugs, which is where `-f`
+  wins — but a seeded climb has less surface left to cross, so its advantage
+  should be *smaller* here than on the plain sweep.
+
+Both pull the answer away from "obviously `-f`", and neither settles it. The
+A/B is `-q` vs `-a` vs `-f` as the target of a seeded, uncapped-pre-pass climb,
+scored on recovery from the correct seed. One further consideration: `-f`'s IC
+term is language-independent, which is worth something when the traffic's style
+is not certain to match the tables.
+
 ---
 
 ## 7a. Crib as a seed: very short cribs, 8-12 letters
@@ -1425,7 +1476,9 @@ makes it usable on a real message. It is also where the progress line gains its
 alignment column (§8), since this is the first step at which a run produces
 lines from more than one alignment.
 
-**Step 5 — the hybrid** (§7). The mode we expect to be used in practice.
+**Step 5 — the hybrid** (§7). The mode we expect to be used in practice. The
+climb it hands over to is not the recommended recipe — §7b says why, and leaves
+the target model (`-q`/`-a`/`-f`) as the one thing to A/B here.
 
 **Step 5a — crib-as-seed** (§7a). Nearly free once step 5 exists, and the mode
 that covers the short cribs the corpus actually supplies. Needs its own
