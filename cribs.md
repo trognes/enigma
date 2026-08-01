@@ -140,6 +140,7 @@ part of the menu (see §6.3 for why only the largest):
 
 | crib length | loops | rotor settings rejected |
 |--:|--:|--:|
+| 12 | 0.32 | 0.01% |
 | 14 | 0.57 | 1.8% |
 | 16 | 1.00 | 36.8% |
 | 18 | 1.56 | 85.0% |
@@ -155,14 +156,15 @@ the two costs together, for one 200-letter message across all 60 wheel orders:
 
 | crib length | rejected | sweep | checking stops | total |
 |--:|--:|--:|--:|--:|
-| 14 | 1.8% | 80 s | 233 s | 314 s |
+| 12 | 0.01% | 69 s | 585 s | 654 s |
+| 14 | 1.8% | 80 s | 237 s | 318 s |
 | **16** | **36.8%** | 92 s | 53 s | **145 s** |
 | **18** | **85.0%** | 104 s | 8 s | **111 s** |
 | 20 | 97.5% | 115 s | 1 s | 116 s |
 
-A 14-letter crib rejects almost nothing and still finishes in five minutes. The
-curve is smooth, not a cliff — extending it, 12 letters costs about ten minutes
-and 10 letters about fifteen. What 16–18 letters buys is the *cheapest* total,
+A 14-letter crib rejects almost nothing and still finishes in five minutes, and
+a 12-letter one — which rejects one setting in ten thousand — in eleven. The
+curve is smooth, not a cliff. What 16–18 letters buys is the *cheapest* total,
 not the only workable one.
 
 (The "20 letters, three loops" rule of thumb comes from 1941, when every stop
@@ -172,19 +174,21 @@ cost a human several minutes at a checking machine. That economics is gone. See
 **4.2 How often a crib is actually present.** Building a crib library from 57 of
 the 58 messages and testing it on the 58th:
 
-| crib length | 14 | 16 | 18 | 20 | 25 |
-|---|--:|--:|--:|--:|--:|
-| messages the library hits | 24% | 19% | 9% | 3% | 0% |
+| crib length | 12 | 14 | 16 | 18 | 20 | 25 |
+|---|--:|--:|--:|--:|--:|--:|
+| messages hit | 55% | 24% | 19% | 9% | 3% | 0% |
 
 Read §4.1 and §4.2 together and the design follows: **shorter cribs are found
 far more often, and cost only a little more to use.** Going from 20 letters to
 16 raises the hit rate sixfold, from 3% to 19%, for a 25% increase in total
 time. Going down to 14 nearly doubles the hit rate again for another 2× in time,
-which may still be worth it when nothing longer matches.
+and 12 letters reaches **55%** — more than half of all messages — for about
+eleven minutes each. That last row is the striking one: the cribs that are
+actually easy to find are affordable, just not cheap.
 
-So the generator should target **16–18 letters, not 20**, and should keep 14 as
-a fallback tier rather than discarding it. This is the most consequential number
-in the plan, and it rests on only 58 messages — see §11.
+So the generator should target **16–18 letters, not 20**, and should keep the
+12–15 range as fallback tiers rather than discarding it. This is the most
+consequential number in the plan, and it rests on only 58 messages — see §11.
 
 **4.3 Doubled words are the best crib source we have.** German operators sent
 important words twice for error correction. You can watch it working in message
@@ -244,8 +248,8 @@ crib spanning corrupted text fails outright.
 
 Same words, two extra `X` separators. The longest run they share drops to 10
 letters, which is still usable but costs perhaps fifteen minutes instead of two.
-A crib built from one form misses the other form completely.
-**The generator must produce punctuation variants**; this is not an edge case.
+A crib built from one form misses the other form completely. **The generator
+must produce punctuation variants**; this is not an edge case.
 
 **4.6 A crib does two separate jobs.** Worth stating because they fail at
 different lengths:
@@ -309,11 +313,11 @@ any ciphertext:
 time rather than failing, the library should be *tiered* by length and used in
 that order:
 
-| tier | length | when to use it |
-|---|--:|---|
-| 1 | 16-20 | always try first — cheapest per crib |
-| 2 | 14-15 | when no tier-1 crib matches; ~2x the time |
-| 3 | under 14 | last resort; costs ten minutes or more each |
+| tier | length | cost each | hits | when to use it |
+|---|--:|--:|--:|---|
+| 1 | 16-20 | ~2 min | 3-19% | always try first |
+| 2 | 14-15 | ~5 min | 24% | no tier-1 crib matched |
+| 3 | 12-13 | ~11 min | 55% | nothing shorter has matched |
 
 Within each tier, sort by spare letters descending. How many to keep is set by
 the compute budget — see §9.
