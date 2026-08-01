@@ -345,6 +345,42 @@ both deduce ~6.7 cables, but reject 81% and 0%. Sort by spare letters — the
 checking cost varies by a factor of 500 across those two, while coverage barely
 moves.
 
+**Step 4a — keep maximal phrases, and mark their sub-windows as derived.** When
+a phrase recurs, every shorter window inside it recurs too. Harvesting 10-letter
+windows from the corpus finds 150 shared by two or more messages — but they
+merge into only **53 distinct phrases**; the other 97 are slices of those.
+
+Emitting all 150 is worse than emitting none:
+
+| | worst case, nothing matches | vs no crib at all |
+|---|--:|--:|
+| all 150 windows, 10 letters each | **40.7 h** | 1.63× |
+| the 53 maximal phrases | **10.3 h** | 0.41× |
+| no crib at all | 24.9 h | 1.00× |
+
+**A sub-window is strictly dominated by its parent.** `XSIEGFRIEDSIEGFRIED` is
+19 letters, in two messages; all ten of its 10-letter windows are in the same
+two messages:
+
+| | cost | rejects | cables |
+|---|--:|--:|--:|
+| the 19-letter parent | 122 s | 85% | 8.9 |
+| any 10-letter window of it | 977 s | 0% | 5.3 |
+
+Eight times the cost, for strictly less, over exactly the same messages.
+
+**But do not discard them — demote them.** A window beats its parent in one
+case: when the parent does not match. `SIEGFRIEDSIEGFRIED` and
+`SIEGFRIEDXSIEGFRIED` differ by two separators, and the long crib misses the
+second form entirely while `XSIEGFRIED` hits both; garbling does the same
+(`COENIGSBNRG`). Sub-windows are a **hedge against §4.5's two failure modes** —
+worth having last, worthless first.
+
+So the generator must record which cribs are *derived* from a longer one it is
+already emitting, and step 5 must hold those back behind every independent crib.
+Length alone cannot express this: a derived 10-letter window and an independent
+10-letter phrase look identical.
+
 **Step 5 — sort into tiers, do not simply cut.** Since a short crib costs more
 time rather than failing, the library should be *tiered* by length and used in
 that order:
@@ -356,8 +392,17 @@ that order:
 | 3 | 12-13 | solve, much more checking | 55% | nothing longer matched |
 | 4 | 8-11 | **seed only** (§7a) | 79-93% | the common case |
 
-Within each tier, sort by spare letters descending. How many to keep is set by
-the compute budget — see §9.
+| 5 | any | derived windows (step 4a) | — | nothing else matched |
+
+Within each tier, sort by spare letters descending. Tier 5 holds the sub-windows
+of phrases already in tiers 1–4; it exists only to catch the messages where the
+parent phrase is garbled or punctuated differently, so it must come last however
+short its members are.
+
+How many to keep is set by the compute budget — see §9. Note the budget is spent
+worst-case: a run stops at the first crib that recovers the message, so ordering
+matters more than the cut. On this corpus the 8 phrases of 16 letters or more
+cost **0.3 hours between them** and should always be tried.
 
 **Step 6 — write the file**, one crib per line, with its two scores as comments
 so a human can inspect the ranking.
