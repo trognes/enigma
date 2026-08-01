@@ -582,6 +582,60 @@ That removes about 54% of alignments for a 20-letter crib — useful, but do not
 expect more from it. Pinning the position uniquely would need a crib of about
 130 letters.
 
+**6.7 Loop order: cribs outside, rotor settings inside.** With a list of, say,
+50 cribs there are two ways to arrange the work. Either sweep every rotor
+setting once and try all 50 cribs at each (rotor-outer), or run a complete rotor
+sweep for each crib in turn (crib-outer).
+
+Rotor-outer looks better at first, because `setup_mapping()` and `precompute()`
+are shared across the cribs at a given setting. That sharing is worth almost
+nothing:
+
+| per full rotor sweep, one 10-letter crib | cost |
+|---|--:|
+| deduction — 129 alignments × 26 hypotheses × 10 steps | **91 s** |
+| `setup_mapping()`, once per rotor setting | 0.5 s |
+| `precompute()`, once per wheel order | 0.00 s |
+
+Repeating the shared work 50 times wastes **27 s, or 0.6% of the run**. The
+deduction dwarfs it by about 180×, because every rotor setting pays 26
+hypotheses at each of ~129 alignments.
+
+**Crib-outer buys early exit, and that is worth up to 50×:**
+
+| | cost |
+|---|--:|
+| crib-outer, winner is crib #1 | **0.3 h** |
+| crib-outer, winner is #3 | 0.8 h |
+| crib-outer, winner is #10 | 2.7 h |
+| crib-outer, winner is #50 | 13.6 h |
+| **rotor-outer, any winner** | **13.6 h, always** |
+
+Rotor-outer cannot stop early on a crib basis — the winning combination might
+sit at the last rotor setting, so every crib is swept at every setting before
+anything is known. Since §5 tiers the list cheapest-and-strongest first, the
+winner is usually near the front; rotor-outer discards exactly that advantage.
+
+Three secondary reasons agree:
+
+- **It reuses the existing sweep unchanged.** Crib-outer is "call the sweep 50
+  times". Rotor-outer means threading the crib list into the inner loop and
+  touching the hot path.
+- **Cribs need different modes.** A 20-letter crib solves and rejects; a
+  10-letter one only seeds, at 26 climbs per setting (§7a). Mixing those inside
+  one rotor sweep is awkward; crib-outer keeps them separate.
+- **`-T` parallelism is untouched** — each crib gets the full parallel keyspace
+  sweep the tool already does.
+
+**What this needs and the tool lacks: a stop criterion.** Early exit means
+deciding "this crib won" without being told the answer. The tool reports a best
+result today and never concludes. At 200 letters — about 8× the unicity distance
+— the true decryption's score sits far above any wrong one and a threshold is
+reliable; at short lengths the margin narrows and it is not. So the exit should
+be a *score threshold that can be turned off*, with the fallback being to sweep
+the whole list and rank, which costs the worst case but never discards the
+truth.
+
 ---
 
 ## 7. The hybrid: deduce, then climb
