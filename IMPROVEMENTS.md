@@ -55,10 +55,6 @@ Nothing above 🟢. Ordered by expected payoff within each group.
 
 ### Search
 
-- 🟢 **Greedy plug-by-plug seed.** Pick the best single plug, fix it, repeat to
-  a small budget, then hand over to the swap climb — a better start than the
-  identity board. Cheap to try, and the last search idea not yet measured down.
-  Temper expectations against the compute-bound picture above.
 - 🟢 **ILS with incumbent-walk acceptance.** Nominally open but a long shot:
   converged boards are *scattered* rather than clustered near the truth, and
   clustering is the structure ILS would need to exploit.
@@ -234,6 +230,34 @@ materially different regime, and read the evidence in `archived/` first.
 | Top-M coarse refinement (`--ring-stride`) | wheels already right 96/96 |
 | Plugboard→score cache (`--score-tt`) | only ~7–13% cacheable; net loss |
 | Wheel-order scoring gate (`FULLCRACK`) | **reasoned** down — see below |
+| Greedy plug-by-plug seed | **reasoned** down — see below |
+
+**The greedy plug-by-plug seed, closed without running it.** The proposal:
+score all 325 single plugs, commit the best, repeat to a small budget, fix those
+plugs, and let the swap climb finish the rest — a constructed start instead of
+the `--random` kick.
+
+**The construction is already what the climb does.** Run from the identity
+board, the climb's first move *is* the best single plug, its second is the best
+plug given that one, and so on. The proposal differs in exactly one respect: it
+**fixes** the early plugs so the climb can no longer remove or rewire them. It
+therefore cannot find anything the current climb does not already find; it can
+only lose the ability to back out of a bad start.
+
+**And the start is unreliable, from two directions that are already measured.**
+Per-plug consensus across converged boards is **~1.1 correct in 10** (§1): the
+plugs that score well early are decoys, not truth. And with one or two plugs set
+the quadgram/weighted surface is **nearly flat** — the finding that motivated
+`-f`'s IC blend, since IC still has gradient there — so the first pick is close
+to noise. Fixing a decoy is strictly worse than not seeding.
+
+The seeding *effect* is real and large — a climb from five known cables recovers
+77% at L60 against 3% from an empty board (`cribs.md` §7a) — but that
+experiment supplies **correct** plugs from outside the score. Nothing in the
+converged-board population identifies which plugs are correct, which is the
+same absent selection signal that closed the GA, the truth-targeted kick and
+cross-restart consensus. A greedy seed is that signal being asked for once
+more, under a new name.
 
 **The wheel-order scoring gate, closed without running it.** The gate that
 parked scoring work (`archived/CRACKQUALITY_TESTS.md` §1) pinned wheels and
