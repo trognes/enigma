@@ -16,17 +16,25 @@ measured it at **0.338 milliseconds per rotor setting**, which over the full
 recovers the right answer only about half the time.
 
 A **crib** is a guess at some of the plaintext — say, you believe the message
-contains the word `SIEGFRIED` starting at letter 40. If the guess is right, you
-no longer have to *search* for the plugboard. You can *calculate* it. That is
-what this plan is about.
+contains the word `SIEGFRIED` starting at letter 40. If the guess is right, some
+of the plugboard follows by arithmetic instead of search. **Not all of it**: a
+12-letter crib settles about 7 of the 10 cables, a 10-letter one about 5. What
+the crib gives you is a *starting point* — a partly-built board that the
+existing hill-climb finishes, instead of the empty board it starts from today.
+That is what this plan is about.
+
+How much that is worth: at 60 letters, climbing from an empty board recovers 3%
+of messages; climbing from five known cables recovers 77%.
 
 The idea is not new — it is what the wartime Bombe machines did. What is new
 here is that the machinery it needs is already sitting in this tool, unused.
 
-**Rough gain**, from the same measurements: a crib turns the 24.9-hour job into
-something on the order of **two minutes**. The estimate is arithmetic on a
-measured throughput, not a benchmark, so treat it as "minutes, not hours" rather
-than as a precise figure.
+**Rough gain**, from the same measurements: with a crib long enough to narrow
+the rotor settings too (16 letters or more), the 24.9-hour job comes down to the
+order of **two minutes**. Shorter cribs do not narrow the rotor sweep at all and
+cost more, but still start the climb from a good board rather than an empty one.
+The two-minute figure is arithmetic on a measured throughput, not a benchmark —
+read it as "minutes, not hours".
 
 **The catch** is that you need a crib and it has to be exactly right. Length
 matters less than it might seem: there is no hard minimum, only a rising cost
@@ -764,9 +772,15 @@ path.
 
 Consistent with existing options; names open to discussion.
 
+**A list is the normal input, not a single crib.** You rarely know which phrase
+a message contains — you know the vocabulary of the network. §9's budget allows
+several hundred cribs per message, and §5's generator produces exactly such a
+file. A single crib on the command line is for testing and for the case where
+you do know.
+
 ```
-  --crib TEXT          the crib, as plaintext letters
-  --crib-list FILE     a file of cribs, one per line (from §5)
+  --crib-list FILE     cribs to try, one per line (the generator's output)
+  --crib TEXT          a single crib, as plaintext letters
   --crib-at N          pin the crib to position N (default: sweep all)
   --crib-min-loops N   skip alignments whose menu has fewer than N loops
   --no-plug LETTERS    these letters are known to carry no cable
@@ -774,12 +788,18 @@ Consistent with existing options; names open to discussion.
                        requiring it to solve the board (§7a)
 ```
 
+The file format is §5 step 6's: one crib per line, `#` comments, blank lines
+ignored. Order matters — the generator emits its tiers cheapest-first (§5 step
+5), and the tool should try them in file order so a tier-1 hit ends the search
+before the expensive tiers run.
+
 Notes:
 
-- `--crib` is a *different feature* from the existing `--crib-file`, which only
-  re-ranks finished boards and was measured to be worth about −0.1 percentage
-  points. Two similarly named options doing unrelated things is a trap; renaming
-  the old one to `--crib-rerank` is worth considering.
+- **The naming collision is a real hazard.** `--crib-file` already exists and
+  does something unrelated: it re-ranks *finished* boards by known-word content,
+  and was measured at about −0.1 percentage points. `--crib-list` beside it
+  would be two similar names for two unrelated features. Rename the old one to
+  `--crib-rerank` as part of this work.
 - The crib mode should imply the hybrid of §7 by default, since the pure
   deduction rarely yields a complete board.
 - **`--no-plug` is nearly free to build.** The climb already consults a
@@ -913,8 +933,10 @@ makes it usable on a real message.
 that covers the short cribs the corpus actually supplies. Needs its own
 measurement of caution 1 above before being recommended.
 
-**Step 6 — crib lists** (`--crib-list`) and the budget logic. Only worth
-building once single cribs work.
+**Step 6 — crib lists** (`--crib-list`) and the budget logic. Steps 3 to 5 take
+a single crib because that is the smallest testable thing; this step is what
+makes the feature usable, since you normally know a network's vocabulary rather
+than a particular message's contents. It is the deliverable, not polish.
 
 **Step 1 is the decision point.** If a generated library covers a useful
 fraction of held-out messages, the rest follows. If it covers almost nothing,
