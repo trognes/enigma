@@ -1,8 +1,9 @@
 # cribs.md — a plan for crib-driven plugboard deduction
 
-**Status: a plan. Nothing here is built yet.** The numbers quoted are from
-measurements made while writing it; where a figure is an estimate rather than a
-measurement, it says so.
+**Status: a plan, with steps 0 and 1 built** — `--full-text` and `--no-plug` in
+the tool, and the crib generator `eval/build_cribs.py` (§5a has its results).
+The numbers quoted are from measurements; where a figure is an estimate rather
+than a measurement, it says so.
 
 ---
 
@@ -300,8 +301,9 @@ costs microseconds.
 
 ## 5. Step by step: the crib generator
 
-A separate program, run once, producing a file. It does not touch `enigma.cc`.
-Suggested name: `eval/build_cribs.py`, output `cribs/<name>.cribs`.
+**Built: `eval/build_cribs.py`, output `cribs/wehrmacht.cribs`.** A separate
+program, run once, producing a file; it does not touch `enigma.cc`. §5a gives
+the results, which answer the go/no-go question this step exists to settle.
 
 **Step 1 — collect words.** Split every message in the source corpus on the
 letter `X` and keep the pieces of four letters or more. From our 58 messages
@@ -312,6 +314,17 @@ that gives 331 distinct words.
 out numbers, the phonetic alphabet, standard military nouns. These are guessable
 without having seen the traffic, which matters for messages unlike anything in
 the corpus.
+
+**The 19 entries of 8 letters or more are cribs in their own right**, not just
+raw material for step 3's doubling — `ABENDMELDUNG`, `FELDLAZARETT`,
+`VERPFLEGUNG`. Emitting them adds **+5pp of held-out coverage** (78% → 83%) for
+19 cribs, and they belong at the **front of the library** even though they are
+less likely to match than the best observed phrase: there are only 19, about
+five hours between them, and they are the only cribs that owe nothing to this
+particular corpus. Measured, trying them first covers **49 of 69** held-out
+messages within a 25-hour budget against 42 when they follow the observed
+phrases, and cuts the median time to the first hit from 10.1 to 6.7 hours for
+the same total coverage.
 
 **Step 3 — build candidate phrases.** For each word, emit the doubling variants
 (this is where §4.5's punctuation problem is handled):
@@ -381,36 +394,184 @@ already emitting, and step 5 must hold those back behind every independent crib.
 Length alone cannot express this: a derived 10-letter window and an independent
 10-letter phrase look identical.
 
-**Step 5 — sort into tiers, do not simply cut.** Since a short crib costs more
-time rather than failing, the library should be *tiered* by length and used in
-that order:
+**Step 5 — order by how likely a crib is to match, not by what it could do if
+it did.** A tier still says which *mode* a crib is for:
 
-| tier | length | mode | hits | when to use it |
-|---|--:|---|--:|---|
-| 1 | 16-20 | solve (§6, §7) | 3-19% | always try first |
-| 2 | 14-15 | solve, more checking | 24% | no tier-1 crib matched |
-| 3 | 12-13 | solve, much more checking | 55% | nothing longer matched |
-| 4 | 8-11 | **seed only** (§7a) | 79-93% | the common case |
+| tier | length | mode | when it applies |
+|---|--:|---|---|
+| 1 | 16+ | solve (§6, §7) | the deduction settles most of the board |
+| 2 | 14-15 | solve, more checking | |
+| 3 | 12-13 | solve, much more checking | |
+| 4 | 8-11 | **seed only** (§7a) | too short to reject anything |
+| 5 | any | derived windows (step 4a) | parent garbled or punctuated otherwise |
 
-| 5 | any | derived windows (step 4a) | — | nothing else matched |
+**But the tier must not set the order, and this is measured.** A run stops at
+the first crib that matches, so what the order decides is how long the run takes
+— and a crib that never matches costs its whole sweep for nothing. The generated
+library holds 884 tier-1 cribs, 30 hours between them, of which almost none
+match; trying them first buys nothing and delays the tier-4 crib that ends the
+run. Median time to the first matching crib, held out over the 69-message
+corpus:
 
-Within each tier, sort by spare letters descending. Tier 5 holds the sub-windows
-of phrases already in tiers 1–4; it exists only to catch the messages where the
-parent phrase is garbled or punctuated differently, so it must come last however
-short its members are.
+| order | median | ≤25h | note |
+|---|--:|--:|---|
+| by tier, then spare letters | 141h | 6% | strongest crib first |
+| by tier, then observed-before-guessed | 82h | 6% | |
+| by evidence of recurrence, then cost | 10.1h | 61% | tier last |
+| **the same, generic vocabulary first** | **6.7h** | **71%** | step 2 |
 
-How many to keep is set by the compute budget — see §9. Note the budget is spent
-worst-case: a run stops at the first crib that recovers the message, so ordering
-matters more than the cut. On this corpus the 8 phrases of 16 letters or more
-cost **0.3 hours between them** and should always be tried.
+So order by how many corpus messages hold the phrase, then by cost, and let the
+tier follow — with step 2's generic vocabulary ahead of all of it. Against a
+no-crib run's 24.9 hours that is a real saving; ordered by tier it is a loss.
+Within equal evidence, prefer the cheaper (longer) crib, then more spare
+letters. Derived windows stay last however strong they look.
 
-**Step 6 — write the file**, one crib per line, with its two scores as comments
-so a human can inspect the ranking.
+How many to keep is set by the compute budget — see §9. `--budget-hours`
+truncates the library in this order, so the cut keeps what is most likely to end
+the run early.
+
+**Step 6 — write the file**, one crib per line, with its scores as comments so a
+human can inspect the ranking.
 
 **What this step deliberately does not do:** generate text from the n-gram
 tables. A crib must be *exactly* right, and text sampled from a language model
 is plausible but almost certainly not the actual plaintext. Generation must come
 from templates that really do recur word for word.
+
+---
+
+## 5a. What the generator found — the decision point
+
+§12 makes step 1 the go/no-go: if a generated library covers a useful fraction
+of **held-out** messages, the rest of the plan follows. It does.
+
+The measure is leave-one-out. Build the library from 68 of the 69 authentic
+messages, then ask whether it contains a phrase the 69th really holds. Coverage
+measured on the messages the library was harvested from proves nothing — an
+observed phrase covers its own source by construction — so only the held-out
+number counts. Run it with `python3 eval/build_cribs.py`.
+
+| | coverage |
+|---|--:|
+| in-corpus (optimistic, not evidence) | 97% |
+| **held out** | **83%** |
+| same cribs with their letters shuffled | **0%** |
+
+**The control is what makes the 78% believable.** Most hits are 8-to-11-letter
+phrases, and §11 warns that short strings may recur because they are short
+rather than because the traffic repeats them. Shuffling each crib's letters
+preserves its length and letter multiset and destroys only the phrase; coverage
+falls to nothing. So the recurrence is real, every bit of it.
+
+**Coverage is supply, not recovery.** It says the library holds a phrase the
+message contains. What that phrase then buys is §7a's business: 47 of the 57
+held-out hits are tier-4, too short to reject a single rotor setting, so they
+seed a climb rather than solve the key. The plan already expected this — it is
+why §3 argues for extending the tool rather than writing a Bombe.
+
+Within a **25-hour budget** — the same compute a no-crib run spends — the
+library reaches **49 of 69 messages, 71%**, at a median of 6.7 hours each.
+
+**What the corpus supplies:** 69 messages, 6843 letters, 352 distinct words.
+The full library is 2528 cribs; a 25-hour budget keeps the first 96.
+
+**Half the held-out hits come from the generic vocabulary** (25 of 57), which is
+the part that would carry over to a network this corpus does not resemble.
+
+### 5b. How much of this is the corpus, and how much would carry over
+
+**Coverage is set by how much traffic the library was built from**, and the
+curve is steep at the low end (`build_cribs.py --transfer`):
+
+| training messages | coverage |
+|--:|--:|
+| 13 | ~57% |
+| 55 | ~80% |
+| 68 (§5a's leave-one-out) | 83% |
+
+**Whether it also depends on *which* traffic — the question that matters — this
+corpus cannot answer.** The obvious test is to train on one published
+collection and test on the other, and run alone it is misleading: the
+collections hold 13 and 56 messages, and a harvester that keeps phrases
+recurring in two or more messages finds far fewer in 13 than in 56, so the
+training-set size shows up looking exactly like a transfer loss. Each
+cross-collection run therefore has a same-collection control at the same
+training size:
+
+| training | cross-collection | same-collection control |
+|--:|--:|--:|
+| ~55 messages | 77% | 80% |
+| 13 messages | 57% | 51–70% (5 subsamples, mean 58%) |
+
+**No transfer loss is detectable.** The two collections are interchangeable —
+which is unsurprising, since both are HG Nord traffic from 1941, published
+separately but not otherwise different. So the corpus measures the *size* curve
+and says nothing about a genuinely unfamiliar network. That question stays open,
+and §11's warning about a 58-message corpus stands undiminished.
+
+**What a thin library leans on is measurable, and it is not the harvested
+phrases.** At 13 training messages the generic vocabulary supplies 20 of the 32
+hits and harvested phrases 2; at 55 it is 20 of 45 against 19. The vocabulary is
+a fixed file, so it neither grows nor decays with the corpus — it is simply
+what remains when the harvester has little to work with. Whatever a new network
+does to the harvested phrases, the vocabulary is the part that keeps working,
+and it is the cheapest thing to extend: one line in `cribs/german-hgnord.txt`.
+
+**Enumerated numbers behave the same way.** Times and dates spell out to long,
+repetitive strings — `EINSEINSNULLNULL` is 16 letters with 10 spare — so
+enumerating them looks promising. Regenerate this with
+`build_cribs.py --numbers-sweep`:
+
+| family | cribs | cost | in-corpus | held-out | ≤25h | thin library |
+|---|--:|--:|--:|--:|--:|--:|
+| *(baseline, no numbers)* | | | | | **49/69** | |
+| clock times `HH00` | 24 | 1.3h | 3/69 | 0 | 50/69 | 0 |
+| clock times `HH00`/`HH30` | 48 | 2.7h | 4/69 | 0 | 49/69 | 1 |
+| two digits, 00–31 | 20 | 7.8h | 15/69 | 0 | 48/69 | 2 |
+| two digits, 00–99 | 72 | 26.3h | 20/69 | 0 | 19/69 | **3** |
+| three digits | 1000 | 170h | 8/69 | 0 | 1/69 | 1 |
+| four digits | 10000 | 543h | 4/69 | 0 | 0/69 | 1 |
+
+*in-corpus* is how many messages hold a member of the family; *held-out* and
+*thin library* are how many messages the library **misses** that the family
+reaches, built from the other 68 messages and from 13 messages respectively.
+
+Against the full library the marginal is **zero for every family**, and the
+reason is circular: a number common enough to be worth guessing already
+*recurs*, so the harvester has it (`NULLNULL` in 4 messages, `EINSNULL` in 5),
+inside the first thirty entries. Against a **thin** library they earn +2 to +3
+messages — the same margin whether the 13 training messages come from the other
+collection or from the same one, which is what identifies this as a
+library-thinness effect and not a transfer one. Hence `--numbers`, off by
+default, worth turning on early in work on a network and not later.
+
+What holds in every setting is the *shape* of the family. The cost runs
+backwards from the intuition — a two-digit number is 8–12 letters, the **most
+expensive** band (§4.1: 977–1499 s each against 122 s for a 16-letter crib),
+while the four-digit times that are individually cheap occur 4 times in 10 000
+candidates — so `--numbers` emits the two-digit values and the round clock times
+and stops there. A context marker does not help either: `XUHR` appears in **1 of
+69** messages.
+
+**The general rule:** an enumerated family pays when it is small relative to its
+hit rate *against the library you actually have*. Nineteen vocabulary words pay
+in every condition; a hundred numbers pay only while the library is thin; ten
+thousand four-digit times never pay.
+
+**Three things the build settled that the plan had guessed at:**
+
+- **The ordering had to change** — see step 5. Ordering by tier costs more than
+  it saves; ordering by evidence of recurrence takes the median time-to-hit from
+  141 hours to 10.
+- **Tier 1 is a trap on this corpus.** 884 cribs of 16+ letters, 30 hours
+  between them, and essentially none of them match a held-out message. They are
+  the doubling variants of words seen once; the doubling that really happened is
+  already in the observed phrases.
+- **17% of messages are not covered at all**, and no ordering helps them. For
+  those the tool falls back to the plain climb, which is exactly what it does
+  today — so the feature never makes a message *harder*, it only fails to help.
+  With less traffic to build from the uncovered share is larger — 13 messages
+  give ~57% rather than 83% (§5b).
 
 ---
 
@@ -1191,10 +1352,10 @@ leaves them alone. Both are worth having on their own, and doing `--full-text`
 first means the alignment column added in step 4 costs nothing that anybody
 misses.
 
-**Step 1 — the crib generator** (§5), harvesting at the shortest length and
-keeping maximal runs (§7a), plus a coverage report. Needs no changes to the tool
-at all, and tells us whether there is a supply problem before any C++ is
-written.
+**Step 1 — the crib generator** (§5). **Done** —
+`eval/build_cribs.py`, output `cribs/wehrmacht.cribs`. Needs no changes to the
+tool at all, and it answered the supply question before any C++ was written:
+**83% held-out coverage, 0% for a shuffled control** (§5a).
 
 **Step 2 — a menu builder and offline analysis**, in Python. Confirms §4.1's
 numbers independently and produces the test vectors step 3 needs.
@@ -1220,10 +1381,12 @@ testable thing; this step is what makes the feature usable, since you normally
 know a network's vocabulary rather than a particular message's contents. It is
 the deliverable, not polish.
 
-**Step 1 is the decision point.** If a generated library covers a useful
-fraction of held-out messages, the rest follows. If it covers almost nothing,
-the honest conclusion is that this approach needs a larger or more uniform
-corpus than we have, and the effort belongs elsewhere.
+**Step 1 was the decision point, and it passed** (§5a): the library covers 83%
+of held-out messages and a shuffled control covers none, so the recurrence is
+real rather than short strings colliding. The rest follows. Two qualifications
+carry forward — the coverage is *supply*, not recovery, and 47 of the 57 hits
+are too short to reject a rotor setting, so **step 5a (crib-as-seed) is the mode
+that matters most on this corpus**, not step 5.
 
 ---
 
