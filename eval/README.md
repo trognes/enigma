@@ -173,6 +173,20 @@ printf '%s' "$CT" | ./enigma <cli_options> -u U -w W -r R -g G
 Check out the row's `git_sha` first for a byte-exact replay; `score_iter` is a
 deterministic checksum of `(git_sha, cli_options, solver_seed, instance)`.
 
+## Crib library (`build_cribs.py`)
+
+`build_cribs.py` harvests a **crib library** from the authentic messages —
+phrases guessed to be present in a message, for the planned crib-driven
+plugboard deduction in `cribs.md`. It writes `cribs/wehrmacht.cribs` and reports
+leave-one-out coverage, which is the number step 1 of that plan exists to
+produce: **78% held out, 0% for a shuffled-letter control.** Nothing in
+`enigma.cc` reads the library yet.
+
+```sh
+python3 eval/build_cribs.py -v                           # report, per message
+python3 eval/build_cribs.py --out cribs/wehrmacht.cribs --budget-hours 25
+```
+
 ## Authentic message set (real traffic)
 
 `enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**

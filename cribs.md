@@ -1,8 +1,9 @@
 # cribs.md — a plan for crib-driven plugboard deduction
 
-**Status: a plan. Nothing here is built yet.** The numbers quoted are from
-measurements made while writing it; where a figure is an estimate rather than a
-measurement, it says so.
+**Status: a plan, with steps 0 and 1 built** — `--full-text` and `--no-plug` in
+the tool, and the crib generator `eval/build_cribs.py` (§5a has its results).
+The numbers quoted are from measurements; where a figure is an estimate rather
+than a measurement, it says so.
 
 ---
 
@@ -300,8 +301,9 @@ costs microseconds.
 
 ## 5. Step by step: the crib generator
 
-A separate program, run once, producing a file. It does not touch `enigma.cc`.
-Suggested name: `eval/build_cribs.py`, output `cribs/<name>.cribs`.
+**Built: `eval/build_cribs.py`, output `cribs/wehrmacht.cribs`.** A separate
+program, run once, producing a file; it does not touch `enigma.cc`. §5a gives
+the results, which answer the go/no-go question this step exists to settle.
 
 **Step 1 — collect words.** Split every message in the source corpus on the
 letter `X` and keep the pieces of four letters or more. From our 58 messages
@@ -381,36 +383,94 @@ already emitting, and step 5 must hold those back behind every independent crib.
 Length alone cannot express this: a derived 10-letter window and an independent
 10-letter phrase look identical.
 
-**Step 5 — sort into tiers, do not simply cut.** Since a short crib costs more
-time rather than failing, the library should be *tiered* by length and used in
-that order:
+**Step 5 — order by how likely a crib is to match, not by what it could do if
+it did.** A tier still says which *mode* a crib is for:
 
-| tier | length | mode | hits | when to use it |
-|---|--:|---|--:|---|
-| 1 | 16-20 | solve (§6, §7) | 3-19% | always try first |
-| 2 | 14-15 | solve, more checking | 24% | no tier-1 crib matched |
-| 3 | 12-13 | solve, much more checking | 55% | nothing longer matched |
-| 4 | 8-11 | **seed only** (§7a) | 79-93% | the common case |
+| tier | length | mode | when it applies |
+|---|--:|---|---|
+| 1 | 16+ | solve (§6, §7) | the deduction settles most of the board |
+| 2 | 14-15 | solve, more checking | |
+| 3 | 12-13 | solve, much more checking | |
+| 4 | 8-11 | **seed only** (§7a) | too short to reject anything |
+| 5 | any | derived windows (step 4a) | parent garbled or punctuated otherwise |
 
-| 5 | any | derived windows (step 4a) | — | nothing else matched |
+**But the tier must not set the order, and this is measured.** A run stops at
+the first crib that matches, so what the order decides is how long the run takes
+— and a crib that never matches costs its whole sweep for nothing. The generated
+library holds 884 tier-1 cribs, 30 hours between them, of which almost none
+match; trying them first buys nothing and delays the tier-4 crib that ends the
+run. Median time to the first matching crib, held out over the 69-message
+corpus:
 
-Within each tier, sort by spare letters descending. Tier 5 holds the sub-windows
-of phrases already in tiers 1–4; it exists only to catch the messages where the
-parent phrase is garbled or punctuated differently, so it must come last however
-short its members are.
+| order | median | ≤25h | note |
+|---|--:|--:|---|
+| by tier, then spare letters | 141h | 6% | strongest crib first |
+| by tier, then observed-before-guessed | 82h | 6% | |
+| **by evidence of recurrence, then cost** | **10h** | **61%** | tier last |
 
-How many to keep is set by the compute budget — see §9. Note the budget is spent
-worst-case: a run stops at the first crib that recovers the message, so ordering
-matters more than the cut. On this corpus the 8 phrases of 16 letters or more
-cost **0.3 hours between them** and should always be tried.
+So order by how many corpus messages hold the phrase, then by cost, and let the
+tier follow. Against a no-crib run's 24.9 hours that is a real saving; ordered
+by tier it is a loss. Within equal evidence, prefer the cheaper (longer) crib,
+then more spare letters. Derived windows stay last however strong they look.
 
-**Step 6 — write the file**, one crib per line, with its two scores as comments
-so a human can inspect the ranking.
+How many to keep is set by the compute budget — see §9. `--budget-hours`
+truncates the library in this order, so the cut keeps what is most likely to end
+the run early.
+
+**Step 6 — write the file**, one crib per line, with its scores as comments so a
+human can inspect the ranking.
 
 **What this step deliberately does not do:** generate text from the n-gram
 tables. A crib must be *exactly* right, and text sampled from a language model
 is plausible but almost certainly not the actual plaintext. Generation must come
 from templates that really do recur word for word.
+
+---
+
+## 5a. What the generator found — the decision point
+
+§12 makes step 1 the go/no-go: if a generated library covers a useful fraction
+of **held-out** messages, the rest of the plan follows. It does.
+
+The measure is leave-one-out. Build the library from 68 of the 69 authentic
+messages, then ask whether it contains a phrase the 69th really holds. Coverage
+measured on the messages the library was harvested from proves nothing — an
+observed phrase covers its own source by construction — so only the held-out
+number counts. Run it with `python3 eval/build_cribs.py`.
+
+| | coverage |
+|---|--:|
+| in-corpus (optimistic, not evidence) | 97% |
+| **held out** | **78%** |
+| same cribs with their letters shuffled | **0%** |
+
+**The control is what makes the 78% believable.** Most hits are 8-to-11-letter
+phrases, and §11 warns that short strings may recur because they are short
+rather than because the traffic repeats them. Shuffling each crib's letters
+preserves its length and letter multiset and destroys only the phrase; coverage
+falls to nothing. So the recurrence is real, every bit of it.
+
+**Coverage is supply, not recovery.** It says the library holds a phrase the
+message contains. What that phrase then buys is §7a's business: 48 of the 54
+held-out hits are tier-4, too short to reject a single rotor setting, so they
+seed a climb rather than solve the key. The plan already expected this — it is
+why §3 argues for extending the tool rather than writing a Bombe.
+
+**What the corpus supplies:** 69 messages, 6843 letters, 352 distinct words.
+The full library is 2518 cribs; a 25-hour budget keeps the first 95.
+
+**Three things the build settled that the plan had guessed at:**
+
+- **The ordering had to change** — see step 5. Ordering by tier costs more than
+  it saves; ordering by evidence of recurrence takes the median time-to-hit from
+  141 hours to 10.
+- **Tier 1 is a trap on this corpus.** 884 cribs of 16+ letters, 30 hours
+  between them, and essentially none of them match a held-out message. They are
+  the doubling variants of words seen once; the doubling that really happened is
+  already in the observed phrases.
+- **22% of messages are not covered at all**, and no ordering helps them. For
+  those the tool falls back to the plain climb, which is exactly what it does
+  today — so the feature never makes a message *harder*, it only fails to help.
 
 ---
 
@@ -1191,10 +1251,10 @@ leaves them alone. Both are worth having on their own, and doing `--full-text`
 first means the alignment column added in step 4 costs nothing that anybody
 misses.
 
-**Step 1 — the crib generator** (§5), harvesting at the shortest length and
-keeping maximal runs (§7a), plus a coverage report. Needs no changes to the tool
-at all, and tells us whether there is a supply problem before any C++ is
-written.
+**Step 1 — the crib generator** (§5). **Done** —
+`eval/build_cribs.py`, output `cribs/wehrmacht.cribs`. Needs no changes to the
+tool at all, and it answered the supply question before any C++ was written:
+**78% held-out coverage, 0% for a shuffled control** (§5a).
 
 **Step 2 — a menu builder and offline analysis**, in Python. Confirms §4.1's
 numbers independently and produces the test vectors step 3 needs.
@@ -1220,10 +1280,12 @@ testable thing; this step is what makes the feature usable, since you normally
 know a network's vocabulary rather than a particular message's contents. It is
 the deliverable, not polish.
 
-**Step 1 is the decision point.** If a generated library covers a useful
-fraction of held-out messages, the rest follows. If it covers almost nothing,
-the honest conclusion is that this approach needs a larger or more uniform
-corpus than we have, and the effort belongs elsewhere.
+**Step 1 was the decision point, and it passed** (§5a): the library covers 78%
+of held-out messages and a shuffled control covers none, so the recurrence is
+real rather than short strings colliding. The rest follows. Two qualifications
+carry forward — the coverage is *supply*, not recovery, and 48 of the 54 hits
+are too short to reject a rotor setting, so **step 5a (crib-as-seed) is the mode
+that matters most on this corpus**, not step 5.
 
 ---
 
