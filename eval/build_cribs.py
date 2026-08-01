@@ -24,10 +24,10 @@ WHAT IT EMITS
             having read its traffic, so they are what would carry over to
             traffic this corpus does not resemble
   number    a spelled-out number -- EINSNULL, EINSEINSNULLNULL.  Off by
-            default (--numbers), because within this corpus they earn nothing:
-            the numbers that occur already recur, so the harvester has them.
-            They earn a little only on traffic the corpus does not cover, which
-            is the case they exist for
+            default (--numbers).  Against a full library they earn nothing: a
+            number common enough to guess already RECURS, so the harvester has
+            it.  Against a thin one -- a network you have only started breaking
+            -- they earn a few messages, which is the case they exist for
   doubled   a doubling variant of a word -- XSCHUSTERXSCHUSTERX and its four
             cousins.  Operators repeated important words for error correction,
             which is what makes these worth guessing at all: doubling makes a
@@ -470,19 +470,9 @@ def numbers_sweep(messages, args):
     print()
 
 
-def transfer_report(args):
-    """Train on one message set, test on the other.
-
-    Leave-one-out is the weaker test, and knowing how much weaker matters: the
-    69 messages come from two published collections of the same network, so a
-    held-out message often has near-neighbours in the training set.  A crib
-    library is meant for traffic nobody has read yet, and this split is the
-    closest thing the corpus allows to that.
-
-    What it shows is which crib classes GENERALISE.  Harvested phrases are
-    fitted to their corpus by construction; the generic vocabulary is not.
-    """
-    sets = []
+def collections():
+    """The corpus as its two published collections, kept apart."""
+    out = []
     for fn in FILES:
         txt = open(os.path.join(HERE, fn), encoding="utf-8").read()
         msgs = []
@@ -494,22 +484,78 @@ def transfer_report(args):
                 pt = re.sub(r"[^A-Z-]", "", m.group(1))
                 if pt:
                     msgs.append((mid, pt))
-        sets.append((fn, msgs))
-    print("Cross-corpus transfer (train on one collection, test on the other)")
-    for (trn, tr), (ten, te) in ((sets[0], sets[1]), (sets[1], sets[0])):
-        lib = build_library(tr, not args.no_vocab, args.order,
-                            not args.no_vocab_cribs, args.numbers)
-        kinds, cov = defaultdict(int), 0
-        for _, pt in te:
-            for crib, _t, _sp, kind, _s in lib:
-                if occurs(crib, pt):
-                    cov += 1
-                    kinds[kind] += 1
-                    break
-        print("  train %-30s (%2d msgs)" % (trn, len(tr)))
-        print("   test %-30s (%2d msgs): %2d = %.0f%%   %s"
-              % (ten, len(te), cov, 100.0 * cov / len(te),
+        out.append((fn, msgs))
+    return out
+
+
+def first_hits(lib, test):
+    """(messages covered, hits by kind) walking lib in order for each."""
+    kinds, cov = defaultdict(int), 0
+    for _, pt in test:
+        for crib, _t, _sp, kind, _s in lib:
+            if occurs(crib, pt):
+                cov += 1
+                kinds[kind] += 1
+                break
+    return cov, kinds
+
+
+def transfer_report(args):
+    """Does a library built on one body of traffic work on another?
+
+    The obvious test -- train on one published collection, test on the other --
+    ANSWERS THE WRONG QUESTION ON ITS OWN, and that is the point of this
+    report.  The two collections differ in size (13 and 56 messages), and a
+    harvester that keeps phrases recurring in two or more messages finds far
+    fewer of them in 13 than in 56.  Run the cross-collection test alone and
+    the training-set size shows up looking exactly like a transfer loss.
+
+    So each cross-collection row is printed beside a SAME-collection control at
+    the same training size: leave-one-out within the larger collection (matched
+    to the 56-message direction), and a subsample of 13 of its messages tested
+    on the rest (matched to the 13-message direction).  Whatever differs
+    between a row and its control is transfer; whatever they share is size.
+    """
+    def build(tr):
+        return build_library(tr, not args.no_vocab, args.order,
+                             not args.no_vocab_cribs, args.numbers)
+
+    def line(label, cov, n, kinds):
+        print("  %-42s %2d/%-2d = %3.0f%%  %s"
+              % (label, cov, n, 100.0 * cov / n,
                  ", ".join("%s=%d" % (k, kinds[k]) for k in sorted(kinds))))
+
+    (an, a), (bn, b) = collections()
+    if len(a) > len(b):
+        (an, a), (bn, b) = (bn, b), (an, a)      # a = small, b = large
+    print("Transfer, each row against a same-collection control of the same")
+    print("training size (%s = %d msgs, %s = %d msgs)\n"
+          % (an, len(a), bn, len(b)))
+
+    print("Training on ~%d messages:" % (len(b) - 1))
+    cov, kinds = first_hits(build(b), a)
+    line("cross: train large, test small", cov, len(a), kinds)
+    cov, kinds, tot = 0, defaultdict(int), 0
+    for i, m in enumerate(b):
+        c, k = first_hits(build(b[:i] + b[i + 1:]), [m])
+        cov += c
+        tot += 1
+        for kk, v in k.items():
+            kinds[kk] += v
+    line("control: leave-one-out inside large", cov, tot, kinds)
+    print()
+
+    print("Training on %d messages:" % len(a))
+    cov, kinds = first_hits(build(a), b)
+    line("cross: train small, test large", cov, len(b), kinds)
+    for seed in range(args.control_seeds):
+        rng = random.Random(seed)
+        idx = set(rng.sample(range(len(b)), len(a)))
+        tr = [m for i, m in enumerate(b) if i in idx]
+        te = [m for i, m in enumerate(b) if i not in idx]
+        cov, kinds = first_hits(build(tr), te)
+        line("control: %d of large, test the rest (seed %d)"
+             % (len(a), seed), cov, len(te), kinds)
     print()
 
 
@@ -668,9 +714,10 @@ def main():
                     help="regenerate cribs.md §5b's comparison of the number "
                     "families, in-corpus, held out and across collections")
     ap.add_argument("--transfer", action="store_true",
-                    help="report cross-corpus transfer instead of "
-                    "leave-one-out: train on one message set, test on the "
-                    "other")
+                    help="report cross-collection transfer against a "
+                    "same-collection control at the same training size")
+    ap.add_argument("--control-seeds", type=int, default=5,
+                    help="subsample controls to run for --transfer [5]")
     ap.add_argument("--no-vocab-cribs", action="store_true",
                     help="do not emit long vocabulary words as cribs in "
                     "their own right (they still seed doubling variants)")

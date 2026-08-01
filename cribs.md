@@ -478,39 +478,51 @@ The full library is 2528 cribs; a 25-hour budget keeps the first 96.
 **Half the held-out hits come from the generic vocabulary** (25 of 57), which is
 the part that would carry over to a network this corpus does not resemble.
 
-### 5b. What generalises, and what only looks like it does
+### 5b. How much of this is the corpus, and how much would carry over
 
-**Leave-one-out flatters the harvested phrases, and the size of the flattery is
-measurable.** The 69 messages are two published collections of the same network,
-so a held-out message often has near-neighbours in the training set. A crib
-library is for traffic nobody has read yet. The closest thing this corpus allows
-to that test is to train on one collection and test on the other
-(`build_cribs.py --transfer`):
+**Coverage is set by how much traffic the library was built from**, and the
+curve is steep at the low end (`build_cribs.py --transfer`):
 
-| | coverage | where the hits come from |
-|---|--:|---|
-| leave-one-out, 68 → 1 | **83%** | observed 26, vocab 25, derived 4 |
-| train 13 → test 56 | **57%** | **vocab 20**, doubled 8, observed 2 |
-| train 56 → test 13 | 77% | vocab 5, observed 4 |
+| training messages | coverage |
+|--:|--:|
+| 13 | ~57% |
+| 55 | ~80% |
+| 68 (§5a's leave-one-out) | 83% |
 
-**Across collections the harvested phrases contribute almost nothing** — 2 hits
-of 32 — and the generic vocabulary carries the library. Removing the 19
-vocabulary words from that run drops it from 57% to 36%. They are the highest-
-leverage part of the whole generator, and the cheapest to extend: adding a word
-to `cribs/german-hgnord.txt` costs one line.
+**Whether it also depends on *which* traffic — the question that matters — this
+corpus cannot answer.** The obvious test is to train on one published
+collection and test on the other, and run alone it is misleading: the
+collections hold 13 and 56 messages, and a harvester that keeps phrases
+recurring in two or more messages finds far fewer in 13 than in 56, so the
+training-set size shows up looking exactly like a transfer loss. Each
+cross-collection run therefore has a same-collection control at the same
+training size:
 
-So read §5a's 83% as an upper bound for traffic like this corpus, and the 57% as
-the closer estimate for traffic that is not. Neither is a prediction for a
-different network, and 69 messages cannot supply one.
+| training | cross-collection | same-collection control |
+|--:|--:|--:|
+| ~55 messages | 77% | 80% |
+| 13 messages | 57% | 51–70% (5 subsamples, mean 58%) |
 
-**Enumerated numbers follow the same rule, and it reverses their verdict.**
-Times and dates spell out to long, repetitive strings — `EINSEINSNULLNULL` is 16
-letters with 10 spare — so enumerating them looks promising. Within this corpus
-it is worthless:
+**No transfer loss is detectable.** The two collections are interchangeable —
+which is unsurprising, since both are HG Nord traffic from 1941, published
+separately but not otherwise different. So the corpus measures the *size* curve
+and says nothing about a genuinely unfamiliar network. That question stays open,
+and §11's warning about a 58-message corpus stands undiminished.
 
-Regenerate this table with `build_cribs.py --numbers-sweep`:
+**What a thin library leans on is measurable, and it is not the harvested
+phrases.** At 13 training messages the generic vocabulary supplies 20 of the 32
+hits and harvested phrases 2; at 55 it is 20 of 45 against 19. The vocabulary is
+a fixed file, so it neither grows nor decays with the corpus — it is simply
+what remains when the harvester has little to work with. Whatever a new network
+does to the harvested phrases, the vocabulary is the part that keeps working,
+and it is the cheapest thing to extend: one line in `cribs/german-hgnord.txt`.
 
-| family | cribs | cost | in-corpus | held-out | ≤25h | transfer |
+**Enumerated numbers behave the same way.** Times and dates spell out to long,
+repetitive strings — `EINSEINSNULLNULL` is 16 letters with 10 spare — so
+enumerating them looks promising. Regenerate this with
+`build_cribs.py --numbers-sweep`:
+
+| family | cribs | cost | in-corpus | held-out | ≤25h | thin library |
 |---|--:|--:|--:|--:|--:|--:|
 | *(baseline, no numbers)* | | | | | **49/69** | |
 | clock times `HH00` | 24 | 1.3h | 3/69 | 0 | 50/69 | 0 |
@@ -521,37 +533,30 @@ Regenerate this table with `build_cribs.py --numbers-sweep`:
 | four digits | 10000 | 543h | 4/69 | 0 | 0/69 | 1 |
 
 *in-corpus* is how many messages hold a member of the family; *held-out* and
-*transfer* are how many messages the library **misses** that the family reaches,
-with the library built from the other 68 messages and from the other collection
-respectively; *≤25h* is coverage within a 25-hour budget with the family tried
-first.
+*thin library* are how many messages the library **misses** that the family
+reaches, built from the other 68 messages and from 13 messages respectively.
 
-Marginal coverage leave-one-out is **zero for every family** — not one of the 12
-uncovered messages contains a spelled-out number, three digits and four digits
-included. The reason is the same flattery as
-above — the numbers that occur *recur*, so the harvester already has them
-(`NULLNULL` in 4 messages, `EINSNULL` in 5, `NULLNULLNULL`, `EINSNULLNULL`),
-sitting in the first thirty entries.
+Against the full library the marginal is **zero for every family**, and the
+reason is circular: a number common enough to be worth guessing already
+*recurs*, so the harvester has it (`NULLNULL` in 4 messages, `EINSNULL` in 5),
+inside the first thirty entries. Against a **thin** library they earn +2 to +3
+messages — the same margin whether the 13 training messages come from the other
+collection or from the same one, which is what identifies this as a
+library-thinness effect and not a transfer one. Hence `--numbers`, off by
+default, worth turning on early in work on a network and not later.
 
-**Across collections they pay: 57% → 62%, three messages.** Nine are *first*
-reached by a number crib, but six of those the library would have reached
-anyway further down; the three that matter are the ones it would otherwise miss
-entirely. A message we have not read carries numbers we have not seen, which is
-exactly the case leave-one-out cannot show. Hence `--numbers`, off by default
-and worth turning on when the traffic is not what the library was built from.
-
-Two things stay true in both settings. The cost runs backwards from the
-intuition — a two-digit number is 8–12 letters, the **most expensive** band
-(§4.1: 977–1499 s each against 122 s for a 16-letter crib), while the four-digit
-times that are individually cheap occur 4 times in 10 000 candidates, so
-`--numbers` emits the two-digit values and the round clock times and stops
-there. And a context marker does not help: `XUHR` appears in **1 of 69**
-messages.
+What holds in every setting is the *shape* of the family. The cost runs
+backwards from the intuition — a two-digit number is 8–12 letters, the **most
+expensive** band (§4.1: 977–1499 s each against 122 s for a 16-letter crib),
+while the four-digit times that are individually cheap occur 4 times in 10 000
+candidates — so `--numbers` emits the two-digit values and the round clock times
+and stops there. A context marker does not help either: `XUHR` appears in **1 of
+69** messages.
 
 **The general rule:** an enumerated family pays when it is small relative to its
-hit rate *on traffic you have not read*. Nineteen vocabulary words pay
-handsomely; a hundred numbers pay a little; ten thousand four-digit times never
-will.
+hit rate *against the library you actually have*. Nineteen vocabulary words pay
+in every condition; a hundred numbers pay only while the library is thin; ten
+thousand four-digit times never pay.
 
 **Three things the build settled that the plan had guessed at:**
 
@@ -565,7 +570,8 @@ will.
 - **17% of messages are not covered at all**, and no ordering helps them. For
   those the tool falls back to the plain climb, which is exactly what it does
   today — so the feature never makes a message *harder*, it only fails to help.
-  On traffic unlike this corpus the uncovered share is larger — see §5b.
+  With less traffic to build from the uncovered share is larger — 13 messages
+  give ~57% rather than 83% (§5b).
 
 ---
 

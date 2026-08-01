@@ -179,13 +179,14 @@ deterministic checksum of `(git_sha, cli_options, solver_seed, instance)`.
 phrases guessed to be present in a message, for the planned crib-driven
 plugboard deduction in `cribs.md`. It writes `cribs/wehrmacht.cribs` and reports
 leave-one-out coverage, which is the number step 1 of that plan exists to
-produce: **83% held out, 0% for a shuffled-letter control.** Nothing in
+produce: **83% held out, 0% for a shuffled-letter control** (57% from a
+13-message training set -- `--transfer` measures the curve). Nothing in
 `enigma.cc` reads the library yet.
 
 ```sh
 python3 eval/build_cribs.py -v                # report, per message
-python3 eval/build_cribs.py --transfer        # train on one collection, test
-                                              # on the other -- what generalises
+python3 eval/build_cribs.py --transfer        # coverage vs training size, with
+                                              # same-collection controls
 python3 eval/build_cribs.py --numbers-sweep   # the number-family comparison
 python3 eval/build_cribs.py --out cribs/wehrmacht.cribs --budget-hours 25
 ```

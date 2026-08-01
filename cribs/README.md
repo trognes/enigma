@@ -33,12 +33,13 @@ deduction into a loop), how it was obtained, and how many corpus messages hold
 it.
 
 **Held-out coverage is 83%; a control with each crib's letters shuffled covers
-0%,** so the recurrence is real rather than short strings colliding. Read the
-83% as an upper bound: it is leave-one-out over two collections of the same
-network. Trained on one collection and tested on the other it is **57%**, and
-there the generic vocabulary supplies 20 of the 32 hits while harvested phrases
-supply 2 — `--transfer` reports this, and `--numbers` (off by default) is worth
-turning on for the same reason. Coverage is
+0%,** so the recurrence is real rather than short strings colliding. That figure
+is set by how much traffic the library was built from — 68 messages gives 83%,
+13 gives ~57% — and `--transfer` measures the curve against same-collection
+controls at matched training size. No transfer loss between the two published
+collections is detectable, so this corpus says nothing about an unfamiliar
+network. A thin library leans on the generic vocabulary (20 of 32 hits at 13
+training messages) and is where `--numbers` earns its keep. Coverage is
 *supply*, not recovery: 47 of the 57 hits are 8–11 letters, too short to reject
 a single rotor setting. See `cribs.md` §5a.
 
