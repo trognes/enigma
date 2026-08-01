@@ -29,10 +29,9 @@ measured throughput, not a benchmark, so treat it as "minutes, not hours" rather
 than as a precise figure.
 
 **The catch** is that you need a crib and it has to be exactly right. Length
-matters less than it first appears — §4.1 and §7a show there is no hard minimum,
-only a rising cost — so the plan spends most of its space on *supply*: where
-cribs come from, and what to do with the short ones the traffic actually
-provides.
+matters less than it might seem: there is no hard minimum, only a rising cost
+(§4.1, §7a). So the plan spends most of its space on *supply* — where cribs come
+from, and what to do with the short ones the traffic actually provides.
 
 ---
 
@@ -186,9 +185,9 @@ and a 12-letter one — which rejects one setting in ten thousand — in eleven.
 curve is smooth, not a cliff. What 16–18 letters buys is the *cheapest* total,
 not the only workable one.
 
-(The "20 letters, three loops" rule of thumb comes from 1941, when every stop
-cost a human several minutes at a checking machine. That economics is gone. See
-§6.3 for a second place the same assumption misled this plan.)
+The "20 letters, three loops" rule of thumb comes from 1941, when every stop
+cost a human several minutes at a checking machine. That economics is gone, and
+the length guidance moves with it.
 
 **4.2 How often a crib is actually present.** Building a crib library from 57 of
 the 58 messages and testing it on the 58th:
@@ -385,11 +384,10 @@ starting guess, so always exactly 26 hypotheses to try.** For a typical
 20-letter crib the largest piece holds about 17 of the 20 positions, so little
 is lost.
 
-*This was got wrong once while planning.* Costing the solver as "one guess per
-piece" made an average 20-letter crib look nearly useless (28% of settings
-rejected). Using only the largest piece — which is what a real Bombe menu is —
-the same crib rejects **97.5%**. The lesson is that the algorithm choice, not
-the crib, was the limiting factor.
+**Pitfall.** Do not cost the solver as one starting guess *per* piece. That
+gives 26^C hypotheses, and an average 20-letter crib then appears to reject only
+28% of rotor settings rather than 97.5% — making cribs look far weaker than they
+are, and the shorter tiers look impossible.
 
 **6.4 For each rotor setting, try 26 hypotheses.** Pick one letter in the menu.
 Suppose it is plugged to `A`, then to `B`, and so on through all 26
@@ -658,8 +656,8 @@ left to find, so fewer passes. Measured at L=60, `-R 16 -J --polish`, 30 trials
 | 7 | 12 | 66 | 5,012 | 6.89× |
 | 8 | 10 | 45 | 3,218 | 10.74× |
 
-So 26 seeded climbs are not 26× the cost. At a 5-cable seed they cost **26 / 3.3
-≈ 8×** a single unseeded climb.
+So the 26 climbs are not 26× the cost of the baseline. At a 5-cable seed they
+come to **26 / 3.3 ≈ 8×** a single unseeded climb.
 
 **The unplugged letters help too.** The deduction also settles letters as
 carrying *no* cable, and `--no-plug` (§8) would freeze those as well:
@@ -690,8 +688,8 @@ move-set arithmetic is certain.
 Only one of the 26 hypotheses carries the correct seed, so the crib-seeded sweep
 succeeds at about the 55% rate against 12% for the same compute spent on random
 restarts. **Four to five times better**, at the short lengths where the tool is
-currently weakest — and that comparison charged the seeded side the full 26×, so
-against the ~6× above it is conservative by about a factor of four.
+currently weakest. That comparison prices the seeded side at the full 26×; the
+measurements below put it nearer 6×, so the true margin is wider.
 
 **What the corpus actually supplies at this length.** Harvesting 10-letter
 windows from the 58 messages gives 150 shared by two or more, merging into 53
@@ -864,12 +862,11 @@ in known plaintext is a new harness.
 maybe 300 lines. Whether it ever fires depends on the library, and the library
 is the part we cannot measure well.
 
-**The 58-message corpus is too small to size the library — but less badly than
-it first looked.** At 20 letters it contains exactly *one* phrase shared between
-two messages, which is why the early drafts of this plan read pessimistically.
-Harvesting shorter changes the picture: 53 phrases at 10 letters, covering 79%
-of messages (§7a). The short end is where the supply is, and §7a is the mode
-that can use it.
+**The 58-message corpus is too small to size the library.** At 20 letters it
+holds exactly *one* phrase shared between two messages; at 10 letters it holds
+53, covering 79% (§7a). The short end is where the supply is, and §7a is the
+mode that can use it — but neither figure is an estimate of what a real network
+would yield.
 
 What stays uncertain is whether phrases shared *within* this corpus would appear
 in genuinely new traffic. A real network would differ, probably favourably —
