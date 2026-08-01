@@ -538,6 +538,36 @@ the search space drops from all 1.5 x 10^14 boards to the few cables left over
 about ten free letters. Compared with a pure Bombe, a crib that determines only
 part of the board still produces a full answer.
 
+**How much this is worth, measured.** Giving the true rotor key and *N* of the
+ten cables via `-s`, then climbing the rest with `-R 16 -J --polish`, 40 trials
+per cell on authentic telegraphic German:
+
+| message length | 0 given | 5 given | **7 given** | 8 given |
+|--:|--:|--:|--:|--:|
+| 60 | 2% | 52% | **62%** | 68% |
+| 100 | 15% | 80% | **82%** | 85% |
+| 150 | 50% | 95% | **95%** | 100% |
+
+At 60 letters seven known cables take exact recovery from **2% to 62%** — a
+factor of 31 — and the gain is largest exactly where the tool is weakest today.
+
+**The curve saturates early, and that is the useful part.** Going from 0 to 5
+cables buys +50 points at L=60; 5 to 7 buys only +10; 7 to 8 buys +6. Almost all
+the value is in the first five. Two consequences:
+
+- **The crib does not have to be good.** A deduction recovering only 5 of 10
+  cables captures roughly 80% of the available benefit, and even a 12-letter
+  crib averages 6.9. Essentially any usable crib is past the knee.
+- **A partly wrong crib may still help.** Some deduced plugs being wrong costs
+  the climb the work of undoing them, but if enough are right the hybrid still
+  starts well up the curve.
+
+**One thing the tool cannot currently express.** The deduction settles about 2.5
+letters as *definitely carrying no cable* (§7's table above counts them), and
+`-s` cannot say that — it fixes pairs only. Those letters are then left free and
+the climb wastes moves trying to plug them. Marking them would shrink the free
+set from roughly 12 letters to 9 at no cost. See §8.
+
 It also degrades gracefully, which matters given §4.5. If the crib is slightly
 wrong, the deduction produces a bad partial board — but the follow-up score will
 be poor and that alignment simply loses to another.
@@ -553,6 +583,7 @@ Consistent with existing options; names open to discussion.
   --crib-list FILE     a file of cribs, one per line (from §5)
   --crib-at N          pin the crib to position N (default: sweep all)
   --crib-min-loops N   skip alignments whose menu has fewer than N loops
+  --no-plug LETTERS    these letters are known to carry no cable
 ```
 
 Notes:
@@ -563,6 +594,16 @@ Notes:
   the old one to `--crib-rerank` is worth considering.
 - The crib mode should imply the hybrid of §7 by default, since the pure
   deduction rarely yields a complete board.
+- **`--no-plug` is nearly free to build.** The climb already consults a
+  per-letter table, `plug_fixed[]`, and skips any letter marked in it; `-s` sets
+  it for both ends of each given pair. All `--no-plug` needs is to set the same
+  flag for a letter while leaving the board unpaired there. It is useful on its
+  own — a user who knows a letter was never steckered can say so today only by
+  inventing a fake pair — but its real job is carrying the deduction's
+  "definitely unplugged" findings into the climb (§7).
+- `--no-plug` needs no special handling for `--exhaust`, whose per-worker
+  `PLUG_FIXED_EX` is a copy of `plug_fixed`, nor for the `--score` plug caps,
+  which count pairs and are unaffected by marking a letter unpaired.
 
 ---
 
