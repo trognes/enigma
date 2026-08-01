@@ -123,6 +123,17 @@ wider M4 key, so the line always fits 80 columns):
  -4.3335 B241 AAA QEW AB CD EF GH IJ KL                      THEQUICKANALYSISOFL
 ```
 
+That preview is enough to notice a board turning into German and not enough to
+read the message. **`--full-text`** prints the whole decryption under each
+progress line, wrapped and indented, for when you are watching the output rather
+than waiting for a score:
+
+```
+ -4.3335 B241 AAA QEW AB CD EF GH IJ KL                      THEQUICKANALYSISOFL
+  THEQUICKANALYSISOFLONGMESSAGESISWHATMAKESTHISWORTHWATCHINGATALLXXXXXXXXXXXXXX
+  XXXXXXXXXXXXXXXXXXXX
+```
+
 ## Options
 
 Defaults are shown in `[brackets]`. A dot `.` is the wildcard for the reflector,
@@ -143,6 +154,9 @@ wheels, ring and start positions — any position left as `.` is brute-forced.
   `[...]`
 - **`-s AB…`** — Known plugboard pairs, e.g. `-s "AB CD EF"`; held fixed during
   `-c`/`-A` (the climb keeps them and recovers the rest) `[none]`
+- **`--no-plug LETTERS`** — Letters known to carry **no** cable, e.g.
+  `--no-plug XQZ`; the climb leaves them unplugged, exactly as `-s` holds its
+  pairs plugged. Needs `-c` `[none]`
 
 `-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's `start −
 ring` offset is recoverable, so a full M4 wildcard search enumerates the
@@ -231,6 +245,12 @@ English tables.
   all restarts. It runs once after all restarts, so its cost is fixed —
   negligible at a high `-R`, a few % of a low-`R` run — for a small quality bump
   on top of `-R` (needs `-c`; off by default)
+- **`--no-plug LETTERS`** — Letters known to carry no cable: the climb, the
+  re-pair and the `--random` kick all leave them unplugged. The counterpart
+  of `-s` — that one says "these two are plugged to each other", this one says
+  "this one is plugged to nothing" — and worth more than it looks, since a
+  cable has two ends: each marked letter removes 25 of the 325 candidate plugs
+  (needs `-c`; off by default)
 - **`-R N` / `--restarts N`** — Random restart attempts: `0` = one deterministic
   climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best
   `[0]`
@@ -519,7 +539,9 @@ unknown.
   the number of rotor combinations analysed and plugboards scored, then
   wall-clock time, thread count, the precomputed-table memory and peak memory.
   With `-F`, the pre-filter's ranking phase shows a live progress line
-  (percentage of keys ranked) when stderr is a terminal.
+  (percentage of keys ranked) when stderr is a terminal. **`--full-text`** adds
+  the whole decrypted message under each progress line instead of the
+  19-character preview.
 - A scoring model is needed only when the run actually scores — a wildcard
   search or a plugboard hill-climb (`-c`). Those require `-l` (or `-i`). Pure
   encryption/decryption — a fully specified machine with no `-c` — needs no

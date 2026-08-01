@@ -120,6 +120,18 @@ static const char * opt_steckerbrett;
    re-pair or SA toggle, so -s pairs are *known* plugs that survive the climb rather than
    a mere seed (see plug_fixed / PLUG_FIXED_EX below for the storage and the parallel
    --exhaust arrangement, REDESIGN Part D). */
+/* --no-plug LETTERS: letters KNOWN to carry no cable. The other half of what -s
+   expresses -- -s says "these two are plugged to each other", --no-plug says "this one is
+   plugged to nothing" -- and until now there was no way to say it except by inventing a
+   fake pair. Both end up in the same place: the letter is marked in plug_fixed[], so the
+   climb, the SA toggle, the re-pair and the --random kick all leave it alone. The
+   difference is only in the board they start from -- -s pairs its letters, --no-plug
+   leaves its letters self-steckered.
+     A cable has two ends, so knowing a letter is unsteckered constrains the board twice
+   over: it removes 25 candidate plugs, not one. That shrinks the climb's move set
+   quadratically (each marked letter drops 25 of the 325 toggles) and, more to the point,
+   stops the climb spending moves on plugs that cannot exist. */
+static const char * opt_no_plug;
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french, swedish, finnish,
                                       icelandic, polish, spanish, wehrmacht; no default */
@@ -317,6 +329,18 @@ static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of t
    the same mutex, so it never affects which candidate wins (-T-deterministic results are
    preserved; only the line ORDER is thread-timing dependent). Very verbose; off by default. */
 static bool opt_dump_all;
+
+/* --full-text: print the WHOLE decrypted message with each progress line, instead of the
+   19-character preview the fixed-width line has room for. The preview is enough to notice
+   a board turning into German and not enough to decide a run is finished, which matters
+   when the stop criterion is a person reading the output rather than a score threshold.
+     Printed on its own wrapped, indented lines BELOW the progress line rather than by
+   widening it: the columns are budgeted to land exactly on 80 (see progress_fmt_3), and
+   they have to keep lining up whether this is on or off.
+     Not a hot-path concern: a progress line is emitted only when a board beats everything
+   echoed so far, so this prints once per improvement -- tens of times in a run -- not once
+   per board scored. Off by default. */
+static bool opt_full_text;
 
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
@@ -998,7 +1022,7 @@ static thread_local bool plug_fixed_ex[asize];   /* clang: thread_local scratch 
 #define PLUG_FIXED_EX m.plug_fixed_ex           /* g++: the machine member declared above */
 #endif
 
-void init_plug_fixed(const char * steckerbrett_string)
+void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_string)
 {
   for (int j = 0; j < asize; j++)
     plug_fixed[j] = false;
@@ -1008,6 +1032,11 @@ void init_plug_fixed(const char * steckerbrett_string)
       plug_fixed[char2num(steckerbrett_string[2*i+0])] = true;
       plug_fixed[char2num(steckerbrett_string[2*i+1])] = true;
     }
+  /* --no-plug letters are fixed in exactly the same sense -- the climb may not rewire
+     them -- they are simply fixed to nothing rather than to a partner. Since they stay
+     self-steckered, every move set that skips a fixed letter skips them too. */
+  for (const char * p = no_plug_string; *p != 0; p++)
+    plug_fixed[char2num(*p)] = true;
 }
 
 void init_walzen(machine & m, int u, int a, int b, int c)
@@ -1601,6 +1630,32 @@ static void format_key(machine & m, char (&w)[8], char (&r)[8], char (&g)[8])
     }
 }
 
+/* --full-text: print the whole decrypted message below the progress line, wrapped and
+   indented so it reads as a continuation of that line rather than as another one.
+     Decoded on the fly from m's CURRENT board for the same reason the preview is:
+   m.plaintext holds an earlier candidate while a climb is running. Called from
+   showconfig(), so it inherits the best-result mutex and cannot interleave with another
+   thread's output. */
+static const int full_text_indent = 2;
+static const int full_text_width = 76;   /* + indent = 78, inside a 79-column terminal */
+
+static void show_full_text(machine & m)
+{
+  const unsigned char * steck = m.steckerbrett;
+  const unsigned char * const * rows = m.rows;
+  char line[full_text_width + 1];
+  for (int i = 0; i < textlength; i += full_text_width)
+    {
+      int n = textlength - i;
+      if (n > full_text_width)
+        n = full_text_width;
+      for (int j = 0; j < n; j++)
+        line[j] = num2char(decode_at(steck, rows, num_ciphertext, i + j));
+      line[n] = 0;
+      fprintf(stderr, "%*s%s\n", full_text_indent, "", line);
+    }
+}
+
 /* Format m's plugboard into s: canonical (each pair low-high, pairs ordered by low
    letter), so a harness can dedupe boards by string equality. */
 static void format_plugboard(machine & m, char (&s)[3 * 13])
@@ -1638,6 +1693,9 @@ void showconfig(machine & m, double score)
   char scorebuf[16];
   snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
   fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, text);
+
+  if (opt_full_text)
+    show_full_text(m);
 }
 
 /* ENIGMA_IC_BLEND probe (archived/PERFORMANCE.md 6.4): fuse the index of coincidence into the
@@ -2536,7 +2594,8 @@ static inline uint64_t splitmix64(uint64_t * s)
 }
 
 /* Inject exactly k random plug pairs into the current plugboard, drawing only from
-   letters that are still unplugged (so any fixed -s pairs are preserved). This is
+   letters that are still unplugged AND not fixed (so -s pairs are preserved, and so are
+   --no-plug letters, which are self-steckered and would otherwise look free here). This is
    the per-restart perturbation: a kick of k random plugs (default_perturb, or an rN
    token) into a new basin, near the typical plug count so the staged climb need not
    tear down a near-saturated board (CODE_REVIEW §9). With k=0 it is a no-op (so r0
@@ -2546,7 +2605,7 @@ void perturb_steckerbrett(machine & m, uint64_t * rng, int k)
   unsigned char freelet[asize];
   int nfree = 0;
   for (int i = 0; i < asize; i++)
-    if (m.steckerbrett[i] == i)
+    if ((m.steckerbrett[i] == i) && (! plug_fixed[i]))
       freelet[nfree++] = static_cast<unsigned char>(i);
 
   int want = k * 2;                  /* free letters to pair up */
@@ -2837,6 +2896,8 @@ static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
       c.used[char2num(opt_steckerbrett[2*i+0])] = true;
       c.used[char2num(opt_steckerbrett[2*i+1])] = true;
     }
+  for (const char * p = opt_no_plug; *p != 0; p++)   /* --no-plug: not available to force */
+    c.used[char2num(*p)] = true;
 }
 
 /* One parallel exhaustion unit: all combos whose first forced pair is g_exhaust_firsts[fi],
@@ -2904,6 +2965,8 @@ static void build_exhaust_firsts()
       sfixed[char2num(opt_steckerbrett[2*i+0])] = true;
       sfixed[char2num(opt_steckerbrett[2*i+1])] = true;
     }
+  for (const char * p = opt_no_plug; *p != 0; p++)   /* --no-plug: never force a pair here */
+    sfixed[char2num(*p)] = true;
   g_exhaust_firsts.clear();
   for (int x = 0; x < asize; x++)
     {
@@ -4962,6 +5025,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "-s, --plugboard AB...",
           "Plugboard (steckerbrett) A-Z letter pairs [none];");
   fprintf(out, "  %-24s %s\n", "", "held fixed; the -c/-A climb finds the rest");
+  fprintf(out, "  %-24s %s\n", "--no-plug LETTERS",
+          "Letters known to carry NO cable: the climb leaves");
+  fprintf(out, "  %-24s %s\n", "", "them unplugged, as -s holds its pairs plugged");
+  fprintf(out, "  %-24s %s\n", "", "(needs -c) [none]");
   fprintf(out, "  %-24s %s\n", "-n, --norway",
           "Norway Enigma: reflector N and wheels (1-5)");
   fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
@@ -5058,6 +5125,9 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--random K",
           "Random-kick size: plug pairs injected per restart");
   fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = no kick, a control) [10]");
+  fprintf(out, "  %-24s %s\n", "--full-text",
+          "Print the whole decrypted message with each");
+  fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
@@ -5154,7 +5224,8 @@ void show_settings()
   if (opt_hillclimb && opt_exhaust)
     {
       int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
-      int free_letters = asize - 2 * fixed_pairs;
+      int free_letters = asize - 2 * fixed_pairs
+                         - static_cast<int>(strlen(opt_no_plug));
       double combos = disjoint_pair_combinations(free_letters, opt_exhaust);
       fprintf(stderr, "            partial exhaustion: %d forced pair(s) on top of %d "
               "-s pair(s) (%.0f combinations)\n", opt_exhaust, fixed_pairs, combos);
@@ -5234,6 +5305,8 @@ void show_settings()
     }
   else
     fprintf(stderr, "(none)\n");
+  if (opt_no_plug[0])
+    fprintf(stderr, "            %s known unplugged (--no-plug)\n", opt_no_plug);
 }
 
 int main(int argc, char * * argv)
@@ -5254,6 +5327,7 @@ int main(int argc, char * * argv)
   opt_ringstellung = 0;
   opt_grundstellung = 0;
   opt_steckerbrett = "";
+  opt_no_plug = "";
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q/-a) */
   opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "ngrams" */
   opt_plaintext = 0;
@@ -5272,6 +5346,7 @@ int main(int argc, char * * argv)
   opt_crib = 0;
   g_cribs.clear();
   opt_dump_all = false;
+  opt_full_text = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -5295,7 +5370,8 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
-         OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE };
+         OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
+         OPT_NOPLUG, OPT_FULLTEXT };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -5342,6 +5418,8 @@ int main(int argc, char * * argv)
       { "crib-file",      required_argument, nullptr, OPT_CRIB },
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { "ring-stride",    required_argument, nullptr, OPT_RINGSTRIDE },
+      { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
+      { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -5446,6 +5524,13 @@ int main(int argc, char * * argv)
           break;
         case OPT_RINGSTRIDE:
           opt_ring_stride = atoi(optarg);
+          break;
+        case OPT_NOPLUG:
+          alltoupper(optarg);
+          opt_no_plug = optarg;
+          break;
+        case OPT_FULLTEXT:
+          opt_full_text = true;
           break;
         case OPT_CRIB:
           opt_crib_file = optarg;
@@ -5628,6 +5713,35 @@ int main(int argc, char * * argv)
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
 
+  /* --no-plug LETTERS: letters known to carry no cable. Three ways to get it wrong, all
+     fatal because each means the command line says something the search cannot honour:
+     a non-letter, the same letter twice (harmless but always a typo for a different
+     letter), and a letter that -s also plugs -- that one is a contradiction, since -s
+     says the letter carries a cable and --no-plug says it does not. */
+  if ((strlen(opt_no_plug) > asize) ||
+      (strspn(opt_no_plug, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") < strlen(opt_no_plug)))
+    fatal("Illegal --no-plug string (must be letters A-Z)");
+  {
+    bool seen[asize];
+    for (int j = 0; j < asize; j++)
+      seen[j] = false;
+    for (const char * p = opt_no_plug; *p != 0; p++)
+      {
+        if (seen[char2num(*p)])
+          fatal("Illegal --no-plug string (a letter is repeated)");
+        seen[char2num(*p)] = true;
+      }
+    size_t nplugged = strlen(opt_steckerbrett);   /* letters, not pairs */
+    for (size_t i = 0; i < nplugged; i++)
+      if (seen[char2num(opt_steckerbrett[i])])
+        fatal("A letter is both plugged by -s and marked unplugged by --no-plug");
+  }
+  /* Without a climb the plugboard is whatever -s says and nothing searches for more, so
+     there is nothing for --no-plug to constrain -- the same reason --random needs -c. */
+  if (opt_no_plug[0] && (! opt_hillclimb))
+    fatal("--no-plug needs -c (it constrains the plugboard climb; without one the "
+          "plugboard is fixed anyway)");
+
   /* --restarts 0 (the new default) is legal: one deterministic climb from the seed, no
      kick. --restarts N>=1 runs N kicked climbs. */
   if ((opt_restarts < 0) || (opt_restarts > max_restarts))
@@ -5775,11 +5889,15 @@ int main(int argc, char * * argv)
   if (opt_exhaust)
     {
       int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
-      int free_pairs = pairs_uncapped - fixed_pairs;   /* free letters / 2 */
+      /* --no-plug letters are unavailable to force a pair on, so they come off the
+         free-letter count exactly as an -s pair's two letters do. */
+      int free_pairs = (asize - 2 * fixed_pairs
+                        - static_cast<int>(strlen(opt_no_plug))) / 2;
       if (opt_exhaust < 1)
         fatal("Illegal partial exhaustion (--exhaust must be >= 1 forced plug pairs)");
       if (opt_exhaust > free_pairs)
-        fatal("Partial exhaustion (--exhaust E): E exceeds the free plug pairs (13 minus -s pairs)");
+        fatal("Partial exhaustion (--exhaust E): E exceeds the free plug pairs "
+              "(13 minus the -s pairs and half the --no-plug letters)");
       build_exhaust_firsts();   /* the parallel first-pair work list (read-only after) */
     }
 
@@ -5790,7 +5908,8 @@ int main(int argc, char * * argv)
   if (opt_hillclimb && (opt_restarts >= 1))
     {
       int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
-      int free_letters = asize - 2 * (fixed_pairs + opt_exhaust);
+      int free_letters = asize - 2 * (fixed_pairs + opt_exhaust)
+                         - static_cast<int>(strlen(opt_no_plug));
       if (free_letters < 0)
         free_letters = 0;
       int keff = opt_perturb;
@@ -5898,7 +6017,7 @@ int main(int argc, char * * argv)
 
   init();
 
-  init_plug_fixed(opt_steckerbrett);   /* -s seed each worker thread copies into plug_fixed */
+  init_plug_fixed(opt_steckerbrett, opt_no_plug);   /* -s pairs + --no-plug letters */
 
   /* try all combinations (bruteforce allocates one machine per worker thread) */
 
