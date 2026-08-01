@@ -1179,6 +1179,12 @@ crackquality` measures and what most of the tool's tuning targets.
 
 Each step should be worth doing even if the next one never happens.
 
+**Step 0 — `--full-text`** (§8). Nothing about it depends on cribs: it prints
+the whole decrypted message on each new best instead of the 19-character
+preview. It is worth having on its own, it is the smallest possible change to
+the display code, and doing it first means the alignment column added in step 4
+costs nothing that anybody misses.
+
 **Step 1 — the crib generator** (§5), harvesting at the shortest length and
 keeping maximal runs (§7a), plus a coverage report. Needs no changes to the tool
 at all, and tells us whether there is a supply problem before any C++ is
@@ -1191,7 +1197,9 @@ numbers independently and produces the test vectors step 3 needs.
 `--crib-at`). The smallest thing that can be checked against §10.1 and §10.2.
 
 **Step 4 — the alignment sweep**, with the self-encryption filter. This is what
-makes it usable on a real message.
+makes it usable on a real message. It is also where the progress line gains its
+alignment column (§8), since this is the first step at which a run produces
+lines from more than one alignment.
 
 **Step 5 — the hybrid** (§7). The mode we expect to be used in practice.
 
@@ -1199,10 +1207,12 @@ makes it usable on a real message.
 that covers the short cribs the corpus actually supplies. Needs its own
 measurement of caution 1 above before being recommended.
 
-**Step 6 — crib lists** (`--crib-list`) and the budget logic. Steps 3 to 5 take
-a single crib because that is the smallest testable thing; this step is what
-makes the feature usable, since you normally know a network's vocabulary rather
-than a particular message's contents. It is the deliverable, not polish.
+**Step 6 — crib lists** (`--crib-list`) and the budget logic, plus the
+per-crib banner (§8) and the rename of the existing `--crib-file` to
+`--crib-rerank`. Steps 3 to 5 take a single crib because that is the smallest
+testable thing; this step is what makes the feature usable, since you normally
+know a network's vocabulary rather than a particular message's contents. It is
+the deliverable, not polish.
 
 **Step 1 is the decision point.** If a generated library covers a useful
 fraction of held-out messages, the rest follows. If it covers almost nothing,
@@ -1218,21 +1228,19 @@ corpus than we have, and the effort belongs elsewhere.
 2. **Should the crib mode reject or rank?** Rejecting a rotor setting outright
    is faster; keeping a score for every setting is more robust to a slightly
    wrong crib. Perhaps both, under a flag.
-3. **Should `--crib-file` be renamed?** Two options with nearly the same name
-   doing unrelated things is a documented trap in this repo's own history.
-4. **Is the X-separator variant worth building?** Knowing only *where the
+3. **Is the X-separator variant worth building?** Knowing only *where the
    separators are* — not what the words are — is a valid crib and an unusually
    efficient one: 14 known separator positions reject as strongly as a 22-letter
    phrase, because every deduction starts from the same letter and so needs only
    one guess. But the positions have to come from somewhere, and knowing 14 word
    boundaries may be as hard as knowing a phrase. Worth a measurement before any
    code.
-5. **Does a wrong seed ever beat the right one?** §7a's caution 1. In the seeded
+4. **Does a wrong seed ever beat the right one?** §7a's caution 1. In the seeded
    sweep 25 of the 26 hypotheses seed garbage; if one of those converges to a
    board scoring above the correctly-seeded climb at the true rotor setting, the
    mode silently loses that message. The ~1% scoring-failure floor says it
    should be rare, but it is the one thing that could undo §7a and it is
    unmeasured.
-6. **Can the menu be reused across alignments?** Shifting a crib by one position
+5. **Can the menu be reused across alignments?** Shifting a crib by one position
    changes every edge, so probably not — but it is worth checking before
    assuming the alignment sweep costs full price each time.
