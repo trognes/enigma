@@ -508,25 +508,37 @@ Times and dates spell out to long, repetitive strings — `EINSEINSNULLNULL` is 
 letters with 10 spare — so enumerating them looks promising. Within this corpus
 it is worthless:
 
-| family | cribs | cost | ≤25h coverage |
-|---|--:|--:|--:|
-| *(baseline, no numbers)* | | | **49/69** |
-| clock times `HH00` | 24 | 1.3h | 50/69 |
-| two digits, 00–31 | 20 | 7.8h | 48/69 |
-| two digits, 00–99 | 72 | 26.3h | 19/69 |
-| three digits | 1000 | 170h | — |
-| four digits | 10000 | 543h | — |
+Regenerate this table with `build_cribs.py --numbers-sweep`:
 
-Marginal coverage leave-one-out is **zero**: not one of the 12 uncovered
-messages contains a spelled-out number. The reason is the same flattery as
+| family | cribs | cost | in-corpus | held-out | ≤25h | transfer |
+|---|--:|--:|--:|--:|--:|--:|
+| *(baseline, no numbers)* | | | | | **49/69** | |
+| clock times `HH00` | 24 | 1.3h | 3/69 | 0 | 50/69 | 0 |
+| clock times `HH00`/`HH30` | 48 | 2.7h | 4/69 | 0 | 49/69 | 1 |
+| two digits, 00–31 | 20 | 7.8h | 15/69 | 0 | 48/69 | 2 |
+| two digits, 00–99 | 72 | 26.3h | 20/69 | 0 | 19/69 | **3** |
+| three digits | 1000 | 170h | 8/69 | 0 | 1/69 | 1 |
+| four digits | 10000 | 543h | 4/69 | 0 | 0/69 | 1 |
+
+*in-corpus* is how many messages hold a member of the family; *held-out* and
+*transfer* are how many messages the library **misses** that the family reaches,
+with the library built from the other 68 messages and from the other collection
+respectively; *≤25h* is coverage within a 25-hour budget with the family tried
+first.
+
+Marginal coverage leave-one-out is **zero for every family** — not one of the 12
+uncovered messages contains a spelled-out number, three digits and four digits
+included. The reason is the same flattery as
 above — the numbers that occur *recur*, so the harvester already has them
 (`NULLNULL` in 4 messages, `EINSNULL` in 5, `NULLNULLNULL`, `EINSNULLNULL`),
 sitting in the first thirty entries.
 
-**Across collections they pay: 57% → 62%, nine hits.** A message we have not
-read will carry numbers we have not seen, which is exactly the case
-leave-one-out cannot show. Hence `--numbers`, off by default and worth turning
-on when the traffic is not what the library was built from.
+**Across collections they pay: 57% → 62%, three messages.** Nine are *first*
+reached by a number crib, but six of those the library would have reached
+anyway further down; the three that matter are the ones it would otherwise miss
+entirely. A message we have not read carries numbers we have not seen, which is
+exactly the case leave-one-out cannot show. Hence `--numbers`, off by default
+and worth turning on when the traffic is not what the library was built from.
 
 Two things stay true in both settings. The cost runs backwards from the
 intuition — a two-digit number is 8–12 letters, the **most expensive** band

@@ -183,9 +183,17 @@ produce: **83% held out, 0% for a shuffled-letter control.** Nothing in
 `enigma.cc` reads the library yet.
 
 ```sh
-python3 eval/build_cribs.py -v                           # report, per message
+python3 eval/build_cribs.py -v                # report, per message
+python3 eval/build_cribs.py --transfer        # train on one collection, test
+                                              # on the other -- what generalises
+python3 eval/build_cribs.py --numbers-sweep   # the number-family comparison
 python3 eval/build_cribs.py --out cribs/wehrmacht.cribs --budget-hours 25
 ```
+
+Every table in `cribs.md` §5a/§5b comes from one of those four commands. The
+hours are a model (§4.1's measured per-crib sweep costs, interpolated), good for
+ranking and budgeting, not a prediction; and coverage is *supply* -- whether the
+library holds a phrase the message contains -- not recovery.
 
 ## Authentic message set (real traffic)
 

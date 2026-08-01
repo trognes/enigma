@@ -357,6 +357,119 @@ def shuffled_control(lib, seed=0):
     return out
 
 
+def number_families():
+    """The candidate number families, as they were compared.
+
+    number_cribs() ships only the two that survived.  These are what it was
+    chosen from, kept so --numbers-sweep can regenerate the comparison rather
+    than the reader having to take cribs.md section 5b on trust.
+    """
+    def n(t):
+        return "".join(DIGIT[d] for d in t)
+    fams = [
+        ("clock times HH00", sorted({n((h // 10, h % 10, 0, 0))
+                                     for h in range(24)})),
+        ("clock times HH00/HH30",
+         sorted({n((h // 10, h % 10, m // 10, m % 10))
+                 for h in range(24) for m in (0, 30)})),
+        ("two digits 00-31", sorted({n(divmod(v, 10)) for v in range(32)})),
+        ("two digits 00-99", sorted({n((a, b)) for a in range(10)
+                                     for b in range(10)})),
+        ("three digits", sorted({n(t) for t in
+                                 [(a, b, c) for a in range(10)
+                                  for b in range(10) for c in range(10)]})),
+        ("four digits", sorted({n(t) for t in
+                                [(a, b, c, d) for a in range(10)
+                                 for b in range(10) for c in range(10)
+                                 for d in range(10)]})),
+    ]
+    return [(lab, [c for c in f if len(c) >= MIN_CRIB]) for lab, f in fams]
+
+
+def numbers_sweep(messages, args):
+    """Regenerate cribs.md section 5b's number tables.
+
+    Three questions, because they have different answers and only the third
+    decides anything:
+
+      in-corpus   does the family occur in this traffic at all
+      held out    does it reach a message the library misses -- the honest
+                  within-corpus test, and the one that reads zero, because a
+                  number common enough to be worth guessing already RECURS,
+                  which is exactly what the harvester detects
+      transfer    does it reach a message the library misses when the library
+                  was built from OTHER traffic -- the case the family exists
+                  for, and the only one where it pays
+    """
+    n = len(messages)
+    rows = held_out_coverage(messages, not args.no_vocab, args.order,
+                             not args.no_vocab_cribs, False)
+    uncovered = [(mid, pt) for (mid, pt), r in zip(messages, rows)
+                 if r[2] is None]
+    covered = [(mid, pt) for (mid, pt), r in zip(messages, rows)
+               if r[2] is not None]
+    cur = {mid: r[3] for (mid, _), r in zip(messages, rows)}
+    base = sorted(h for h in cur.values() if h is not None)
+    base_25 = sum(1 for h in base if h <= 25)
+
+    # Transfer split: the two published collections (see transfer_report).
+    half = []
+    for fn in FILES:
+        txt = open(os.path.join(HERE, fn), encoding="utf-8").read()
+        msgs = []
+        for blk in re.split(r"^### Message", txt, flags=re.M)[1:]:
+            m = re.search(r"DECRYPT:\s+((?:.*\n)(?:             .*\n)*)", blk)
+            if m:
+                pt = re.sub(r"[^A-Z-]", "", m.group(1))
+                if pt:
+                    msgs.append((blk.split("\n", 1)[0].strip(), pt))
+        half.append(msgs)
+    tlib = [e[0] for e in build_library(half[0], not args.no_vocab, args.order,
+                                        not args.no_vocab_cribs, False)]
+    tmiss = [pt for _, pt in half[1] if not any(occurs(c, pt) for c in tlib)]
+
+    print("Number families (cribs.md §5b). Baseline library: %d of %d messages "
+          "held out,\n%d within 25h, median %.1fh.\n"
+          % (len(covered), n, base_25, base[len(base) // 2]))
+    print("  %-22s %6s %7s %9s %8s %8s %9s"
+          % ("family", "cribs", "cost", "in-corpus", "held-out", "<=25h",
+             "transfer"))
+    print("  %-22s %6s %7s %9s %8s %8s %9s"
+          % ("", "", "", "covered", "rescues", "if first", "rescues"))
+    for lab, fam in number_families():
+        cost = sum(crib_cost(len(c)) for c in fam) / 3600.0
+        incorp = sum(1 for _, pt in messages
+                     if any(occurs(c, pt) for c in fam))
+        resc = sum(1 for _, pt in uncovered
+                   if any(occurs(c, pt) for c in fam))
+        tres = sum(1 for pt in tmiss if any(occurs(c, pt) for c in fam))
+        # Family tried FIRST: a message it holds is reached after the part of
+        # the family up to that crib; every other message pays the whole family
+        # on top of what it cost before.
+        new = []
+        for mid, pt in covered:
+            t = 0.0
+            for c in fam:
+                t += crib_cost(len(c)) / 3600.0
+                if occurs(c, pt):
+                    break
+            else:
+                t = cur[mid] + cost
+            new.append(min(t, cur[mid] + cost))
+        print("  %-22s %6d %6.1fh %6d/%-2d %8d %5d/%-2d %9d"
+              % (lab, len(fam), cost, incorp, n, resc,
+                 sum(1 for h in new if h <= 25), n, tres))
+    print()
+    print("  in-corpus  the family occurs in this many messages")
+    print("  held-out   messages the library misses that the family reaches")
+    print("  <=25h      messages reached within a 25h budget with the family")
+    print("             tried first (baseline %d/%d)" % (base_25, n))
+    print("  transfer   messages the library misses that the family reaches,")
+    print("             library built from the OTHER collection (%d missed)"
+          % len(tmiss))
+    print()
+
+
 def transfer_report(args):
     """Train on one message set, test on the other.
 
@@ -551,6 +664,9 @@ def main():
                     help="also emit spelled-out numbers (two-digit values and "
                     "clock times); worth it only on traffic this corpus does "
                     "not cover")
+    ap.add_argument("--numbers-sweep", action="store_true",
+                    help="regenerate cribs.md §5b's comparison of the number "
+                    "families, in-corpus, held out and across collections")
     ap.add_argument("--transfer", action="store_true",
                     help="report cross-corpus transfer instead of "
                     "leave-one-out: train on one message set, test on the "
@@ -567,6 +683,9 @@ def main():
         sys.exit("no messages found in %s" % ", ".join(FILES))
     if args.transfer:
         transfer_report(args)
+        return
+    if args.numbers_sweep:
+        numbers_sweep(messages, args)
         return
     lib = build_library(messages, not args.no_vocab, args.order,
                         not args.no_vocab_cribs, args.numbers)
