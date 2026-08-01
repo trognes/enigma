@@ -23,6 +23,11 @@ WHAT IT EMITS
             FELDLAZARETT are guessable from knowing the network, not from
             having read its traffic, so they are what would carry over to
             traffic this corpus does not resemble
+  number    a spelled-out number -- EINSNULL, EINSEINSNULLNULL.  Off by
+            default (--numbers), because within this corpus they earn nothing:
+            the numbers that occur already recur, so the harvester has them.
+            They earn a little only on traffic the corpus does not cover, which
+            is the case they exist for
   doubled   a doubling variant of a word -- XSCHUSTERXSCHUSTERX and its four
             cousins.  Operators repeated important words for error correction,
             which is what makes these worth guessing at all: doubling makes a
@@ -141,6 +146,35 @@ def vocab_words():
     return out
 
 
+# Wehrmacht telegraphic orthography spells digits out, with Q for ch: ZWO not
+# ZWEI, AQT not ACHT, SEQS not SECHS.  Measured over the corpus, the Q forms are
+# the only ones used (ZWO in 17 messages, ZWEI in 1; ACHT and SECHS in none).
+DIGIT = {0: "NULL", 1: "EINS", 2: "ZWO", 3: "DREI", 4: "VIER",
+         5: "FUENF", 6: "SEQS", 7: "SIEBEN", 8: "AQT", 9: "NEUN"}
+
+
+def number_cribs():
+    """Spelled-out numbers: every two-digit value, and clock times on the hour
+    and half hour.
+
+    Three- and four-digit numbers are deliberately absent.  They are
+    individually excellent -- EINSEINSNULLNULL is 16 letters with 10 spare --
+    but only 4 of the 10 000 four-digit strings occur anywhere in the corpus,
+    so enumerating the family costs hundreds of hours to find one.  The cost
+    runs backwards from the intuition: the SHORT numbers are the common ones,
+    and 8-12 letters is the most expensive band to sweep.
+    """
+    out = set()
+    for a in range(10):
+        for b in range(10):
+            out.add(DIGIT[a] + DIGIT[b])
+    for h in range(24):
+        for m in (0, 30):
+            out.add(DIGIT[h // 10] + DIGIT[h % 10]
+                    + DIGIT[m // 10] + DIGIT[m % 10])
+    return {c for c in out if len(c) >= MIN_CRIB}
+
+
 def doubling_variants(w):
     """The five ways a repeated word appears, differing only in where the
     operator put separators.  cribs.md section 4.5: this is exactly the
@@ -204,7 +238,7 @@ def tier(crib, kind):
 
 
 def build_library(messages, use_vocab=True, order="spare",
-                  vocab_cribs=True):
+                  vocab_cribs=True, numbers=False):
     """[(crib, tier, spare, kind, support)], ordered as it should be tried."""
     kept, derived = repeated_phrases(messages)
     entries = {}
@@ -214,7 +248,8 @@ def build_library(messages, use_vocab=True, order="spare",
             return
         # An observed phrase outranks the same string guessed by doubling, and
         # both outrank a derived window -- keep the strongest claim.
-        rank = {"vocab": 0, "observed": 1, "doubled": 2, "derived": 3}
+        rank = {"vocab": 0, "observed": 1, "number": 2, "doubled": 3,
+                "derived": 4}
         old = entries.get(crib)
         if old is None or rank[kind] < rank[old[0]]:
             entries[crib] = (kind, support)
@@ -232,6 +267,12 @@ def build_library(messages, use_vocab=True, order="spare",
             if len(w) >= MIN_CRIB:
                 sup = {mid for mid, pt in messages if occurs(w, pt)}
                 add(w, "vocab", sup)
+    if numbers:
+        # After the attested phrases and before the speculative doublings: a
+        # number is a real form, but which number a message carries is anyone's
+        # guess, so it ranks below a phrase the traffic is known to repeat.
+        for c in sorted(number_cribs()):
+            add(c, "number", {mid for mid, pt in messages if occurs(c, pt)})
     src = words(messages) | vocab
     for w in sorted(src):
         for v in doubling_variants(w):
@@ -255,7 +296,8 @@ def build_library(messages, use_vocab=True, order="spare",
     # them first covers 47 of 69 held-out messages within a 25-hour budget
     # against 42 when they follow the observed phrases, and halves the median
     # time to the first hit (6.0h against 10.1h) for the same total coverage.
-    rank = {"vocab": 0, "observed": 1, "doubled": 2, "derived": 3}
+    rank = {"vocab": 0, "observed": 1, "number": 2, "doubled": 3,
+            "derived": 4}
     if order == "value":
         # Tier LAST, not first.  A tier says what a crib can do if it matches;
         # it says nothing about whether it will, and a crib that never matches
@@ -271,7 +313,7 @@ def build_library(messages, use_vocab=True, order="spare",
 
 
 def held_out_coverage(messages, use_vocab=True, order="spare",
-                      vocab_cribs=True):
+                      vocab_cribs=True, numbers=False):
     """Leave-one-out: for each message, build the library from the OTHERS and
     ask whether it contains that message.  This is the honest measure -- a
     phrase harvested from a message covers that message by construction.
@@ -285,7 +327,7 @@ def held_out_coverage(messages, use_vocab=True, order="spare",
     rows = []
     for i, (mid, pt) in enumerate(messages):
         others = messages[:i] + messages[i + 1:]
-        lib = build_library(others, use_vocab, order, vocab_cribs)
+        lib = build_library(others, use_vocab, order, vocab_cribs, numbers)
         hit, spent = None, 0.0
         for crib, tr, sp, kind, _ in lib:
             spent += crib_cost(len(crib)) / 3600.0
@@ -313,6 +355,49 @@ def shuffled_control(lib, seed=0):
         rng.shuffle(letters)
         out.append(("".join(letters), t, sp, kind, sup))
     return out
+
+
+def transfer_report(args):
+    """Train on one message set, test on the other.
+
+    Leave-one-out is the weaker test, and knowing how much weaker matters: the
+    69 messages come from two published collections of the same network, so a
+    held-out message often has near-neighbours in the training set.  A crib
+    library is meant for traffic nobody has read yet, and this split is the
+    closest thing the corpus allows to that.
+
+    What it shows is which crib classes GENERALISE.  Harvested phrases are
+    fitted to their corpus by construction; the generic vocabulary is not.
+    """
+    sets = []
+    for fn in FILES:
+        txt = open(os.path.join(HERE, fn), encoding="utf-8").read()
+        msgs = []
+        for blk in re.split(r"^### Message", txt, flags=re.M)[1:]:
+            mid = blk.split("\n", 1)[0].strip()
+            mid = mid.split("(")[0].split("--")[0].strip()
+            m = re.search(r"DECRYPT:\s+((?:.*\n)(?:             .*\n)*)", blk)
+            if m:
+                pt = re.sub(r"[^A-Z-]", "", m.group(1))
+                if pt:
+                    msgs.append((mid, pt))
+        sets.append((fn, msgs))
+    print("Cross-corpus transfer (train on one collection, test on the other)")
+    for (trn, tr), (ten, te) in ((sets[0], sets[1]), (sets[1], sets[0])):
+        lib = build_library(tr, not args.no_vocab, args.order,
+                            not args.no_vocab_cribs, args.numbers)
+        kinds, cov = defaultdict(int), 0
+        for _, pt in te:
+            for crib, _t, _sp, kind, _s in lib:
+                if occurs(crib, pt):
+                    cov += 1
+                    kinds[kind] += 1
+                    break
+        print("  train %-30s (%2d msgs)" % (trn, len(tr)))
+        print("   test %-30s (%2d msgs): %2d = %.0f%%   %s"
+              % (ten, len(te), cov, 100.0 * cov / len(te),
+                 ", ".join("%s=%d" % (k, kinds[k]) for k in sorted(kinds))))
+    print()
 
 
 def worst_case_hours(lib):
@@ -351,7 +436,7 @@ def report(messages, lib, args):
     incorpus = sum(1 for _, pt in messages
                    if any(occurs(c, pt) for c, _, _, _, _ in lib))
     rows = held_out_coverage(messages, not args.no_vocab, args.order,
-                             not args.no_vocab_cribs)
+                             not args.no_vocab_cribs, args.numbers)
     hits = [r for r in rows if r[2]]
     print("Coverage (crib order: %s)" % args.order)
     print("  in-corpus (optimistic): %d/%d = %.0f%%"
@@ -394,7 +479,8 @@ def report(messages, lib, args):
         others = messages[:i] + messages[i + 1:]
         clib = shuffled_control(build_library(others, not args.no_vocab,
                                              args.order,
-                                             not args.no_vocab_cribs))
+                                             not args.no_vocab_cribs,
+                                             args.numbers))
         if any(occurs(c, pt) for c, _, _, _, _ in clib):
             ctrl += 1
     print("Control: same cribs with their letters shuffled cover %d/%d = %.0f%%"
@@ -461,6 +547,14 @@ def main():
                     "with tier last (value, the default)")
     ap.add_argument("--no-vocab", action="store_true",
                     help="corpus words only, no generic vocabulary file")
+    ap.add_argument("--numbers", action="store_true",
+                    help="also emit spelled-out numbers (two-digit values and "
+                    "clock times); worth it only on traffic this corpus does "
+                    "not cover")
+    ap.add_argument("--transfer", action="store_true",
+                    help="report cross-corpus transfer instead of "
+                    "leave-one-out: train on one message set, test on the "
+                    "other")
     ap.add_argument("--no-vocab-cribs", action="store_true",
                     help="do not emit long vocabulary words as cribs in "
                     "their own right (they still seed doubling variants)")
@@ -471,8 +565,11 @@ def main():
     messages = load_messages()
     if not messages:
         sys.exit("no messages found in %s" % ", ".join(FILES))
+    if args.transfer:
+        transfer_report(args)
+        return
     lib = build_library(messages, not args.no_vocab, args.order,
-                        not args.no_vocab_cribs)
+                        not args.no_vocab_cribs, args.numbers)
     report(messages, lib, args)
     if args.out:
         out = lib

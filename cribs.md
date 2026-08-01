@@ -478,39 +478,68 @@ The full library is 2528 cribs; a 25-hour budget keeps the first 96.
 **Half the held-out hits come from the generic vocabulary** (25 of 57), which is
 the part that would carry over to a network this corpus does not resemble.
 
-**Enumerated number strings were measured and rejected.** Times and dates spell
-out to long, highly repetitive strings — `EINSEINSNULLNULL` is 16 letters with
-10 spare, a tier-1 crib on paper — so generating them exhaustively looks
-promising. It is not:
+### 5b. What generalises, and what only looks like it does
 
-| family | cribs | cost | hits | ≤25h coverage |
-|---|--:|--:|--:|--:|
-| *(baseline, no numbers)* | | | | **49/69** |
-| clock times `HH00` | 24 | 1.3h | 3/57 | 50/69 |
-| two digits, 00–31 | 20 | 7.8h | 15/57 | 48/69 |
-| two digits, 00–99 | 72 | 26.3h | 20/57 | 19/69 |
-| three digits | 1000 | 170h | 8/69 | — |
-| four digits | 10000 | 543h | 4/69 | — |
+**Leave-one-out flatters the harvested phrases, and the size of the flattery is
+measurable.** The 69 messages are two published collections of the same network,
+so a held-out message often has near-neighbours in the training set. A crib
+library is for traffic nobody has read yet. The closest thing this corpus allows
+to that test is to train on one collection and test on the other
+(`build_cribs.py --transfer`):
 
-**Marginal coverage is zero**: not one of the 12 uncovered messages contains any
-spelled-out number, so numbers cannot extend the library's reach at all. They
-can only hit *earlier*, and every family makes the median time-to-hit worse.
+| | coverage | where the hits come from |
+|---|--:|---|
+| leave-one-out, 68 → 1 | **83%** | observed 26, vocab 25, derived 4 |
+| train 13 → test 56 | **57%** | **vocab 20**, doubled 8, observed 2 |
+| train 56 → test 13 | 77% | vocab 5, observed 4 |
 
-Two things explain it. The number strings that do occur are **already in the
-library**, harvested as observed phrases — `NULLNULL` (4 messages), `EINSNULL`
-(5), `NULLNULLNULL`, `EINSNULLNULL`, `EINSSIEBEN` — sitting in the first thirty
-entries, because recurring is exactly what the harvester detects. And the cost
-runs backwards: a two-digit number is 8–12 letters, the **most expensive** band
+**Across collections the harvested phrases contribute almost nothing** — 2 hits
+of 32 — and the generic vocabulary carries the library. Removing the 19
+vocabulary words from that run drops it from 57% to 36%. They are the highest-
+leverage part of the whole generator, and the cheapest to extend: adding a word
+to `cribs/german-hgnord.txt` costs one line.
+
+So read §5a's 83% as an upper bound for traffic like this corpus, and the 57% as
+the closer estimate for traffic that is not. Neither is a prediction for a
+different network, and 69 messages cannot supply one.
+
+**Enumerated numbers follow the same rule, and it reverses their verdict.**
+Times and dates spell out to long, repetitive strings — `EINSEINSNULLNULL` is 16
+letters with 10 spare — so enumerating them looks promising. Within this corpus
+it is worthless:
+
+| family | cribs | cost | ≤25h coverage |
+|---|--:|--:|--:|
+| *(baseline, no numbers)* | | | **49/69** |
+| clock times `HH00` | 24 | 1.3h | 50/69 |
+| two digits, 00–31 | 20 | 7.8h | 48/69 |
+| two digits, 00–99 | 72 | 26.3h | 19/69 |
+| three digits | 1000 | 170h | — |
+| four digits | 10000 | 543h | — |
+
+Marginal coverage leave-one-out is **zero**: not one of the 12 uncovered
+messages contains a spelled-out number. The reason is the same flattery as
+above — the numbers that occur *recur*, so the harvester already has them
+(`NULLNULL` in 4 messages, `EINSNULL` in 5, `NULLNULLNULL`, `EINSNULLNULL`),
+sitting in the first thirty entries.
+
+**Across collections they pay: 57% → 62%, nine hits.** A message we have not
+read will carry numbers we have not seen, which is exactly the case
+leave-one-out cannot show. Hence `--numbers`, off by default and worth turning
+on when the traffic is not what the library was built from.
+
+Two things stay true in both settings. The cost runs backwards from the
+intuition — a two-digit number is 8–12 letters, the **most expensive** band
 (§4.1: 977–1499 s each against 122 s for a 16-letter crib), while the four-digit
-times that are individually cheap occur 4 times in 10 000 candidates.
+times that are individually cheap occur 4 times in 10 000 candidates, so
+`--numbers` emits the two-digit values and the round clock times and stops
+there. And a context marker does not help: `XUHR` appears in **1 of 69**
+messages.
 
-A context marker does not rescue it: `XUHR` appears in **1 of 69** messages, so
-appending it to a time makes a specific crib that is almost never right.
-
-**The general rule this establishes:** an enumerated family pays only when it is
-small relative to its hit rate. The 19 vocabulary words pay (5 hours for 25 of
-57 hits); 100 two-digit numbers do not (26 hours to re-find phrases the
-harvester already has).
+**The general rule:** an enumerated family pays when it is small relative to its
+hit rate *on traffic you have not read*. Nineteen vocabulary words pay
+handsomely; a hundred numbers pay a little; ten thousand four-digit times never
+will.
 
 **Three things the build settled that the plan had guessed at:**
 
@@ -524,6 +553,7 @@ harvester already has).
 - **17% of messages are not covered at all**, and no ordering helps them. For
   those the tool falls back to the plain climb, which is exactly what it does
   today — so the feature never makes a message *harder*, it only fails to help.
+  On traffic unlike this corpus the uncovered share is larger — see §5b.
 
 ---
 
