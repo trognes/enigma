@@ -186,6 +186,21 @@ reproducible: `eval/crib_menu.py --no-diagonal`.
 This is Welchman's 1940 result rediscovered, and it is why the diagonal board
 mattered historically: it is what makes short, loop-free menus usable.
 
+**Where this leaves the plan, so far.** The useful floor moves from about 16–20
+letters down to about **12**, and that is the length the corpus actually
+supplies: **55% of messages carry a 12-letter crib**, against 3% for a
+20-letter one (§7a). The two halves of the problem — a crib strong enough to be
+worth trying, and a crib you are likely to have — now overlap, which on the old
+numbers they barely did. Two consequences the rest of this document has not yet
+absorbed: the 8–11 letter band is **not** seed-only (8 letters rejects 16%, 10
+rejects 55%), and §5's tier boundaries were drawn on the old figures.
+
+What is *not* settled is whether this converts into wall time. Rejection is what
+makes a rotor setting cheap, but the conversion needs a per-stop cost — how long
+a surviving hypothesis takes to check — and that measurement belongs with the
+C++ deduction (§12 step 3). Until then the cost table below, and everything
+priced from it, stands flagged rather than corrected.
+
 > ⚠️ **Earlier versions of this table were measured without the diagonal board
 > and are wrong by orders of magnitude at the short end** — they read 0.00% at
 > 8 and 10 letters and 0.02% at 12, against 16%, 55% and 91% here. The
