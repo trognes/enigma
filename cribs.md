@@ -400,6 +400,42 @@ possibilities. For each:
 If all 26 hypotheses die, the rotor setting is rejected outright. Otherwise it
 is a *stop*.
 
+**What "26 hypotheses" means, exactly.** They are 26 guesses about **one
+letter** — not 26 cribs, and not 26 alignments. Three points that are easy to
+get wrong:
+
+- **Only one letter ever needs guessing.** That is what §6.3's "largest
+  component only" buys: inside a connected menu, fixing one letter's plug forces
+  every other letter in it by the chain rule. A menu in three pieces would need
+  three guesses and 26³ combinations, which is why the small pieces are thrown
+  away rather than used.
+- **"Plugged to itself" means unplugged, and is a real answer.** Ten cables
+  cover only 20 letters, so 6 of the 26 carry none. Dropping that case would
+  sometimes discard the truth — it *is* the truth in §6.4a's example.
+- **The Bombe did all 26 at once, in hardware.** Twenty-six wires into the
+  letter's terminal, one per hypothesis, with current spreading through the
+  menu's wiring; a contradiction lit everything up and the machine stopped when
+  it did *not*. Our version walks them in a loop — slower per hypothesis,
+  enormously cheaper per second.
+
+For §6.4a's crib at the true rotor setting, all 26 look like this:
+
+```
+   X plugged to A   (chain contradicts itself)              DEAD
+   X plugged to B   (chain contradicts itself)              DEAD
+   ...
+   X plugged to X   AQ BJ CH DL EF GM IK NP OR SU           SURVIVES
+   ...
+   X plugged to Z   (chain contradicts itself)              DEAD
+```
+
+Twenty-five die and one hands over the exact true board. That sharpness is a
+property of the **true** rotor setting. At a wrong setting the core tables are
+wrong, so the chains contradict more or less at random: at 12 letters about nine
+of the 26 survive by luck, each a plausible-looking but wrong board that must be
+decrypted and scored. That is where §4.1's checking cost comes from, and in §7a
+it is where the 26× falls.
+
 **6.4a A worked example.** Crib `XSIEGFRIEDXS` — twelve letters — with the true
 rotor key and a real ten-cable board hidden:
 
