@@ -65,7 +65,9 @@ enforces "if `A` is plugged to `B` then `B` is plugged to `A`". It costs us
 nothing (see §6.4).
 
 **rotor core** — the rotor stack plus reflector, with the plugboard taken off.
-In the source this is the `rows[i]` table.
+It is a 26-letter lookup table, different at every character position because
+the rotors step. In the source this is the `rows[i]` table; §6.4a prints four
+real ones.
 
 ---
 
@@ -378,6 +380,80 @@ possibilities. For each:
 
 If all 26 hypotheses die, the rotor setting is rejected outright. Otherwise it
 is a *stop*.
+
+**6.4a A worked example.** Crib `XSIEGFRIEDXS` — twelve letters — with the true
+rotor key and a real ten-cable board hidden:
+
+```
+   crib     X S I E G F R I E D X S
+   cipher   O N M T U Q J T G C D X
+```
+
+The **core** is the rotor stack plus reflector with the plugboard taken off: one
+26-letter table per position, different at each because the rotors step. These
+are the real ones for this key — note the right-hand rotor offset counting up:
+
+```
+              ABCDEFGHIJKLMNOPQRSTUVWXYZ
+   core[ 0]   JLYQUTOPSANBVKGHDXIFEMZRCW    offsets  4  4  4
+   core[ 4]   FRJOHATEZCWYSPDNVBMGXQKULI    offsets  4  4  8
+   core[ 6]   HOETCWVAQSYRPUBMILJDNGFZKX    offsets  4  4 10
+   core[10]   JQEZCMOTYAPXFSGKBUNHRWVLID    offsets  4  4 14
+```
+
+Read `core[0]` as A→J, B→L, … X→R. Two properties, both from the reflector, and
+both verified across all twelve tables:
+
+- **each core is its own inverse** — `core[0]` sends `X` to `R` *and* `R` to
+  `X`, so the deduction runs in whichever direction you have knowledge;
+- **no core maps a letter to itself** — the same fact that lets §6.6 rule out
+  alignments.
+
+Now guess *X is unplugged* and let it run:
+
+```
+   pos  0   X->X known, so core[ 0][X] = R    gives  O-R
+   pos  6   R->O known, so core[ 6][O] = B    gives  J-B
+   pos 10   X->X known, so core[10][X] = L    gives  D-L
+   pos 11   X->X known,                       gives  S-U
+   pos  1   S->U known,                       gives  N-P
+   pos  4   U->S known, so core[ 4][S] = M    gives  G-M
+   pos  8   G->M known,                       gives  E-F
+   pos  9   D->L known,                       gives  C-H
+   pos  2   M->G known,                       gives  I-K
+   pos  3   E->F known,                       gives  T-T
+   pos  5   F->E known,                       gives  Q-A
+
+   result:  AQ BJ CH DL EF GM IK NP OR SU
+```
+
+That is the complete true plugboard — all ten cables — from twelve crib letters,
+and for this crib **only 1 of the 26 hypotheses survives** at the true rotor
+setting. Wrong guesses die instead:
+
+```
+   X->B :  ... pos 4  G->F known, gives U-A  ->  contradiction, dead
+   X->M :  ... pos 1  S->A known, gives N-T  ->  contradiction, dead
+```
+
+Three things this makes concrete:
+
+**No loops were used.** Every line derives something new; none comes back to
+re-check a letter already assigned. That is why §4.1's short cribs still work.
+
+**The chain does not run left to right** — it goes 0, 6, 10, 11, 1, 4, 8, 9, 2,
+3, 5, jumping to whichever position has just become solvable, like filling in a
+crossword.
+
+**Reciprocity does the heavy lifting.** Twelve crib letters produced *twenty*
+letters of plugboard, because deriving "O connects to R" at once gives "R
+connects to O", which unlocks position 6, which unlocks more. That is the
+diagonal board of §6.4, and it is free here.
+
+One caveat: this trace is at the **true** rotor setting. At a wrong setting
+around nine hypotheses survive at this crib length, each yielding a
+plausible-looking board that still has to be decrypted and scored — which is the
+585 seconds of checking in §4.1's table.
 
 **6.5 Follow up each stop.** A surviving hypothesis gives a partial plugboard —
 the letters the crib touched. Fill in the rest (see §7), decrypt the whole
