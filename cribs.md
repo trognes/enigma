@@ -652,6 +652,46 @@ succeeds at about the 55% rate against 12% for the same compute spent on random
 restarts. **Four to five times better**, at the short lengths where the tool is
 currently weakest.
 
+**What the corpus actually supplies at this length.** Harvesting 10-letter
+windows from the 58 messages gives 150 shared by two or more, merging into 53
+maximal phrases that cover **46 of 58 messages — 79%**. Coverage by harvest
+length:
+
+| harvest length | 20 | 16 | 12 | 10 |
+|---|--:|--:|--:|--:|
+| messages covered | 3% | 19% | 55% | **79%** |
+
+A representative sample, measured as above:
+
+| phrase | len | spare | loops | rejects | cables | msgs |
+|---|--:|--:|--:|--:|--:|---|
+| `XFORDXFORDXVIKTORXAQTX` | 22 | 11 | 3.93 | 100% | 9.3 | 18, 23 |
+| `XOPOTSCHKAXOPOTSCHK` | 19 | 10 | 2.51 | 99.3% | 9.0 | 9, 35, 43 |
+| `XZANDERSXZANDERS` | 16 | 8 | 1.39 | 75.5% | 8.2 | 20, 23 |
+| `NULLNULLNULL` | 12 | 9 | 1.43 | 78.2% | 6.9 | 53, 57 |
+| `XHOCKXHOCKX` | 11 | 6 | 0.54 | 1.1% | 6.3 | 11, 16 |
+| `XSIEGFRIED` | 10 | 2 | 0.18 | **0.0%** | 5.6 | 0, 23, 25 |
+| `XSCHUSTERX` | 10 | 2 | 0.15 | **0.0%** | 5.3 | 18, 23, 24 |
+| `VERBINDUNG` | 10 | 1 | 0.05 | **0.0%** | 5.5 | 14, 32 |
+| `VERPFLXAMT` | 10 | 0 | 0.07 | **0.0%** | 4.7 | 21, 56 |
+
+**Every genuine 10-letter crib rejects 0.0% and still deduces 5 to 5.6 cables.**
+That is precisely the shape §7a is for: they are seeds, not solvers, and the
+knee of the value curve sits at five.
+
+Two things fall out of the harvest that the plan should act on:
+
+- **Harvest short even when you intend to use long cribs.**
+  `XOPOTSCHKAXOPOTSCHK` — a doubled place name in *three* messages, rejecting
+  99.3% and yielding 9 of 10 cables — never appeared at 12 or 16 letters. The
+  shared *window* had to drop to 10 before the full run emerged. §5 should
+  harvest at the shortest length and keep the maximal runs, not harvest at the
+  target length.
+- **Spare letters beat length again, and more sharply.** `NULLNULLNULL` (12
+  letters, 3 distinct) rejects 78% while `XHOCKXHOCKX` (11 letters, 5 distinct)
+  rejects 1%. At the bottom, `VERPFLXAMT` has ten distinct letters in ten
+  positions — zero spare, zero rejection, and the weakest coverage in the table.
+
 **Why this is a different kind of lever.** `IMPROVEMENTS.md` records that
 restarts stall because the truth is a rare deep basin and no truth-free signal
 exists to steer toward it — per-plug consensus across converged boards is only
@@ -808,9 +848,10 @@ crackquality` measures and what most of the tool's tuning targets.
 
 Each step should be worth doing even if the next one never happens.
 
-**Step 1 — the crib generator** (§5), plus a coverage report. Needs no changes
-to the tool at all, and tells us whether there is a supply problem before any
-C++ is written.
+**Step 1 — the crib generator** (§5), harvesting at the shortest length and
+keeping maximal runs (§7a), plus a coverage report. Needs no changes to the tool
+at all, and tells us whether there is a supply problem before any C++ is
+written.
 
 **Step 2 — a menu builder and offline analysis**, in Python. Confirms §4.1's
 numbers independently and produces the test vectors step 3 needs.
