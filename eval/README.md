@@ -196,6 +196,27 @@ hours are a model (§4.1's measured per-crib sweep costs, interpolated), good fo
 ranking and budgeting, not a prediction; and coverage is *supply* -- whether the
 library holds a phrase the message contains -- not recovery.
 
+## Crib menus and closure deduction (`crib_menu.py`)
+
+`crib_menu.py` builds the menu for a crib and runs the closure deduction over all
+26 hypotheses -- the Turing/Welchman logic of `cribs.md` §6, in Python, as §12
+step 2. It regenerates §4.1's table, emits test vectors for the C++ step, and
+checks itself against the answer key (§10.1/§10.2: the true rotor setting must
+survive, and every plug it deduces must match the true board).
+
+```sh
+python3 eval/crib_menu.py --selftest        # anchor vs ./enigma, then the logic
+python3 eval/crib_menu.py --cribs 40        # regenerate 4.1
+python3 eval/crib_menu.py --no-diagonal     # the control: no diagonal board
+python3 eval/crib_menu.py --vectors FILE    # test vectors for the C++ deduction
+```
+
+**It corrected §4.1 rather than confirming it.** The old rejection rates were
+measured without Welchman's diagonal board and read 0.00% at 8-10 letters;
+with it, a 12-letter crib rejects **91%** of rotor settings and a loop-free
+12-letter menu still rejects 88%. `--no-diagonal` reproduces the old figures,
+which is what identifies the omission.
+
 ## Authentic message set (real traffic)
 
 `enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**
