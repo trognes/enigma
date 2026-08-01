@@ -361,6 +361,21 @@ are read from a **data directory** (filenames built as
   and skipped by every switch/remove/ re-pair/toggle move), so `-s` supplies
   *known* plugs and the search recovers only the rest. They still seed a plain
   (no-climb) decrypt as before.
+- `--no-plug LETTERS` letters **known to carry no cable** (needs `-c`; off by
+  default). The other half of what `-s` expresses — `-s` says "these two are
+  plugged to each other", `--no-plug` says "this one is plugged to nothing" —
+  and until now the only way to say it was to invent a fake pair. Both end up in
+  the same `plug_fixed[]` mark, so the climb, the SA toggle, the re-pair and the
+  `--random` kick all skip the letter; the difference is only the board they
+  start from (`-s` pairs its letters, `--no-plug` leaves its letters
+  self-steckered). **The kick needed the extra guard**: it draws from
+  self-steckered letters, which is exactly what a `--no-plug` letter looks like,
+  so `perturb_steckerbrett()` tests `plug_fixed[]` as well as
+  `steckerbrett[i] == i`. `--exhaust` excludes them from its forced pairs and
+  from its free-letter bound the same way. A cable has two ends, so a marked
+  letter removes **25 of the 325** candidate toggles, not one. Fatal on a letter
+  `-s` also plugs (the two statements contradict), a repeated letter, a
+  non-letter, or no `-c`. `-T`-deterministic.
 - `-c` hill-climb the plugboard. The climb rule is **steepest ascent** by
   default: each step scans the whole 325-pair toggle operator and applies the
   single best improving move, to convergence. `-J` swaps that rule for
@@ -645,6 +660,13 @@ are read from a **data directory** (filenames built as
     redirected logs and the tests stay clean. A shared atomic counter drives it,
     and because each atomic add owns a disjoint slice, exactly one thread prints
     each 1% step — no races, `-T`-safe.
+- `--full-text` print the **whole decrypted message** with each progress line
+  instead of the 19-character preview (16 under `-4`), on its own wrapped,
+  indented lines *below* the line rather than by widening it — the columns are
+  budgeted to land exactly on 80 and must keep lining up whether it is on or
+  off. Not a hot-path concern: a progress line is emitted only when a board
+  beats everything echoed so far, so this prints once per improvement, not once
+  per board scored. Off by default.
 - `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else
   `ngrams`)
 - `-T N` worker threads for the search (default 1, max 256). Parallelises over

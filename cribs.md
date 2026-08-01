@@ -916,6 +916,11 @@ path.
 
 Consistent with existing options; names open to discussion.
 
+**Two of these are built.** `--no-plug` and `--full-text` are in the tool
+already: neither depends on the crib work, both are useful on their own, and
+building them first is step 0 of §12. The rest of this section is still a
+proposal.
+
 **A list is the normal input, not a single crib.** You rarely know which phrase
 a message contains — you know the vocabulary of the network. §9's budget allows
 several hundred cribs per message, and §5's generator produces exactly such a
@@ -1179,11 +1184,12 @@ crackquality` measures and what most of the tool's tuning targets.
 
 Each step should be worth doing even if the next one never happens.
 
-**Step 0 — `--full-text`** (§8). Nothing about it depends on cribs: it prints
-the whole decrypted message on each new best instead of the 19-character
-preview. It is worth having on its own, it is the smallest possible change to
-the display code, and doing it first means the alignment column added in step 4
-costs nothing that anybody misses.
+**Step 0 — `--full-text` and `--no-plug`** (§8). **Done.** Neither depends on
+cribs: one prints the whole decrypted message on each new best instead of the
+19-character preview, the other marks letters as carrying no cable so the climb
+leaves them alone. Both are worth having on their own, and doing `--full-text`
+first means the alignment column added in step 4 costs nothing that anybody
+misses.
 
 **Step 1 — the crib generator** (§5), harvesting at the shortest length and
 keeping maximal runs (§7a), plus a coverage report. Needs no changes to the tool

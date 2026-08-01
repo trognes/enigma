@@ -1336,6 +1336,78 @@ check "collapse applies on the pinned-ring2 keyspace (control)" \
 check "no collapse line under --true-key" \
   "$(mw_line -r "A.L" -g "A.T" -c -F 5 --true-key B123AQLADT)" "0"
 
+echo "== Progress display: --full-text =="
+
+# --full-text prints the whole decrypted message below each progress line, wrapped and
+# indented, instead of the 19-character preview the fixed-width line has room for.
+# One fully-specified key, so this costs a single decrypt: the option is about DISPLAY,
+# and the display code runs identically over any keyspace.
+ft_pt=DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTETXDURCHDENEINSATZDERHILFSKRAEFTEXMELDUNGFOLGT
+ft_ct=$(run "$ft_pt" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGH)
+ft_key='-i -u B -w 123 -r AAA -g QEW -s ABCDEFGH'
+# The continuation lines are the indented all-letter ones; joining them must give back
+# the plaintext exactly -- that is the whole contract of the option.
+# shellcheck disable=SC2086
+ft_lines() { printf '%s' "$ft_ct" | "$ENIGMA" $ft_key "$@" 2>&1 >/dev/null | grep '^  [A-Z]*$'; }
+check "--full-text prints the whole message" \
+  "$(ft_lines --full-text | tr -d ' \n')" "$ft_pt"
+
+# Off by default: without the flag there are no continuation lines at all. Guards the
+# byte-identical-when-absent property at the point where it is easiest to break.
+check "--full-text is off by default" "$(ft_lines | wc -l | tr -d ' ')" "0"
+
+# The progress line is budgeted to exactly 80 columns and the wrapped text must stay
+# inside it too, so nothing wraps a second time in an 80-column terminal.
+check "--full-text stays within 80 columns" \
+  "$(printf '%s' "$ft_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGH --full-text 2>&1 >/dev/null \
+     | awk '{ if (length($0) > 80) n++ } END { print n+0 }')" "0"
+
+echo
+echo "== Known-unplugged letters: --no-plug =="
+
+# --no-plug marks letters as carrying no cable, so nothing may ever plug them: not the
+# climb, not the re-pair, and not the --random kick (which draws from self-steckered
+# letters, exactly what a --no-plug letter looks like). --dump-all shows every converged
+# board across the restarts, so one run covers all three.
+np_boards() { printf '%s' "$ft_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+                -c -R 8 --random 10 --dump-all "$@" 2>&1 >/dev/null \
+              | grep '^dumpall' | awk '{ for (i = 6; i <= NF; i++) printf "%s", $i }'; }
+check "--no-plug letters are never plugged" \
+  "$(np_boards --no-plug XYZQ | grep -c '[XYZQ]')" "0"
+# Without the option the same run does plug them -- otherwise the check above would pass
+# for the wrong reason (a 10-pair kick covers 20 of the 26 letters, so this is not close).
+check "--no-plug control: unmarked letters do get plugged" \
+  "$(np_boards | grep -c '[XYZQ]')" "1"
+
+# Determinism is the standing contract for every search option.
+check "--no-plug is -T-independent" \
+  "$(run "$ft_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 8 --no-plug XYZQ -T 1)" \
+  "$(run "$ft_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 8 --no-plug XYZQ -T 4)"
+
+# Four ways to get the option wrong, all fatal. The overlap case is the interesting one:
+# -s says the letter carries a cable and --no-plug says it does not, so the command line
+# contradicts itself and there is no sensible reading to pick.
+np_rejects() { printf '%s' "$ft_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+                 "$@" >/dev/null 2>&1; echo $?; }
+check "--no-plug rejects a letter also plugged by -s" \
+  "$(np_rejects -c -s XZ --no-plug XY)" "1"
+check "--no-plug rejects a repeated letter" "$(np_rejects -c --no-plug XX)" "1"
+check "--no-plug rejects a non-letter" "$(np_rejects -c --no-plug X7)" "1"
+check "--no-plug rejects a run with no climb" "$(np_rejects --no-plug XY)" "1"
+
+# --no-plug letters are unavailable to --exhaust as well, so they come off its free-letter
+# count: 26 - 16 marked = 10 free letters = 45 first pairs, and 5 forced pairs is the most
+# that fits. E=6 must be refused rather than silently enumerating nothing.
+np_many=XYZQKLMNOPRSTUVW
+check "--exhaust sees --no-plug letters as unavailable" \
+  "$(printf '%s' "$ft_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+       --exhaust 1 --no-plug "$np_many" 2>&1 >/dev/null \
+     | grep -oE '\([0-9]+ combinations\)')" "(45 combinations)"
+check "--exhaust E is bounded by the remaining free pairs" \
+  "$(np_rejects -c --exhaust 6 --no-plug "$np_many")" "1"
+check "--exhaust E within the remaining free pairs is accepted" \
+  "$(np_rejects -c --exhaust 5 --no-plug "$np_many")" "0"
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
