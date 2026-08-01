@@ -4013,6 +4013,64 @@ table-level check.)
 > future change to startup, check whether the two tiers moved by the same *seconds*
 > rather than the same *percent* before believing either number.
 
+### 7.14 Two-notch wheels: ring × start collapses by 13 — exact, NOT exploited
+
+Wheels **VI, VII and VIII** notch at `M` (12) and `Z` (25) — exactly `26/2 = 13` apart, so
+the notch *set* is invariant under a shift of 13. A stepping wheel's (ring, start) reaches
+the machine through only two channels: the offset `(start − ring)`, which a joint shift
+preserves, and the **absolute** position, which nothing reads except the notch test. With a
+period-13 notch set that test cannot distinguish `g` from `g+13`, so every derived quantity
+— the middle-step schedule `S`, the left-step schedule `D` including double steps — is
+identical step for step. Hence, for such a wheel in the **middle or right** position:
+
+    ring_w += 13, start_w += 13   ⇒   byte-identical decode, at every length
+
+In the **left** position it adds nothing: §7.10 already collapses that wheel's ring × start
+for *every* shift, so 13 is not special there.
+
+**Measured** (random keys, reflectors A/B/C, wheels I–VIII, L ∈ {40, 110, 400, 900}):
+
+| wheel in position | shift ring+start by 13 | identical |
+|---|---|--:|
+| middle, two-notch | yes | **152 / 152** |
+| right, two-notch | yes | **138 / 138** |
+| right, single-notch (control) | — | 0 / 262 |
+
+**The single-notch control is what makes this readable**, because it separates the new
+collapse from §7.12's. On the right it never fires. In the *middle* it does fire, but
+conditionally — it is §7.12's length-dependent class merging, and it decays away:
+
+| L | 60 | 200 | 900 |
+|---|--:|--:|--:|
+| single-notch middle, +13 identical | 62% | 18% | **0%** |
+| two-notch middle, +13 identical | **100%** | **100%** | **100%** |
+
+Unconditional versus conditional is the whole distinction. A run at one short length would
+have shown both at "mostly identical" and proved nothing.
+
+**Size.** With a two-notch wheel on the right the distinct `(start1, start2)` classes drop
+from **651 to 326 of 676** (the residual 326 = 338 from the 13-periodicity, less 12 from
+the double-step merge — the two effects compose). That is a clean factor of 2, i.e. **1
+bit**, per affected wheel; 2 bits when VI–VIII occupy both the middle and the right.
+Averaged over all 336 ordered triples from I–VIII the keyspace shrinks **34.8%** — and
+**0%** under the default `-x 5`, since none of I–V has two notches. The value of
+implementing it is therefore exactly the value of `-x 8`.
+
+**Not implemented.** It would sit beside the §7.10/§7.12 collapses in `build_key_space()`,
+gated on the wheel in that position having a period-13 notch set. Read §7.12's warning
+first: a wrong equivalence class drops real keys **silently**, which is why that code
+derives its masks by simulating the stepping rather than from a formula. The same standard
+applies here — the derivation above is clean, but the shipped form should be verified by
+equivalence against an unstrided search, not by recovery rate.
+
+**Historical aside.** The cost is self-inflicted and was avoidable. Two notches bought the
+Kriegsmarine something real — VI/VII/VIII share the same `MZ` pattern, so observing a
+turnover identifies the wheel only as "one of three", where I–V have distinct notches
+(`Q E V J Z`) that Bletchley used to identify the right-hand wheel; and the doubled
+turnover rate makes a crib more likely to straddle a turnover. None of that required the
+notches to be **antipodal**. Placing them 12 apart instead of 13 would have kept every
+benefit and left no periodicity to exploit.
+
 ---
 
 ## 8. Novel / higher-risk
