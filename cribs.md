@@ -153,19 +153,31 @@ part of the menu (see §6.3 for why only the largest):
 **There is no hard floor.** A setting the crib fails to reject is not a failure,
 just a *stop* that has to be checked by decrypting the message and scoring it —
 and on a computer a stop costs microseconds. So a weak crib does not stop
-working, it only shifts effort from rejecting settings to checking them. Adding
-the two costs together, for one 200-letter message across all 60 wheel orders:
+working, it only shifts effort from rejecting settings to checking them.
 
-| crib length | rejected | sweep | checking stops | total |
-|--:|--:|--:|--:|--:|
-| 12 | 0.01% | 69 s | 585 s | 654 s |
-| 14 | 1.8% | 80 s | 237 s | 318 s |
-| **16** | **36.8%** | 92 s | 53 s | **145 s** |
-| **18** | **85.0%** | 104 s | 8 s | **111 s** |
-| 20 | 97.5% | 115 s | 1 s | 116 s |
+Adding both costs, for **one crib** tried at **every alignment** against **every
+rotor setting** — 60 wheel orders × 26³ positions — in a 200-letter message:
 
-A 14-letter crib rejects almost nothing and still finishes in five minutes, and
-a 12-letter one — which rejects one setting in ten thousand — in eleven. The
+| crib length | alignments | rejected | sweep | checking | total |
+|--:|--:|--:|--:|--:|--:|
+| 12 | 118 | 0.01% | 100 s | 585 s | 685 s |
+| 14 | 108 | 1.8% | 106 s | 237 s | 343 s |
+| **16** | 99 | **36.8%** | 111 s | 53 s | **165 s** |
+| **18** | 90 | **85.0%** | 114 s | 8 s | **122 s** |
+| 20 | 83 | 97.5% | 116 s | 1 s | 117 s |
+| 22 | 76 | 99.9% | 117 s | 0 s | 117 s |
+
+("Alignments" is after the self-encryption filter of §6.6, which removes about
+half of them.)
+
+**The sweep is flat, and that is the important shape.** A longer crib costs more
+work per alignment but has fewer alignments to try, and the two almost exactly
+cancel — every row sweeps in 100–117 seconds. So crib length does not really
+trade against sweep cost at all. It trades **hit rate against checking cost**,
+and nothing else.
+
+A 14-letter crib rejects almost nothing and still finishes in under six minutes,
+and a 12-letter one — which rejects one setting in ten thousand — in eleven. The
 curve is smooth, not a cliff. What 16–18 letters buys is the *cheapest* total,
 not the only workable one.
 
@@ -183,8 +195,8 @@ the 58 messages and testing it on the 58th:
 Read §4.1 and §4.2 together and the design follows: **shorter cribs are found
 far more often, and cost only a little more to use.** Going from 20 letters to
 16 raises the hit rate sixfold, from 3% to 19%, for a 25% increase in total
-time. Going down to 14 nearly doubles the hit rate again for another 2× in time,
-and 12 letters reaches **55%** — more than half of all messages — for about
+time. Going down to 14 doubles the hit rate again for about 2× the time, and 12
+letters reaches **55%** — more than half of all messages — for about
 eleven minutes each. That last row is the striking one: the cribs that are
 actually easy to find are affordable, just not cheap.
 
@@ -317,9 +329,9 @@ that order:
 
 | tier | length | cost each | hits | when to use it |
 |---|--:|--:|--:|---|
-| 1 | 16-20 | ~2 min | 3-19% | always try first |
-| 2 | 14-15 | ~5 min | 24% | no tier-1 crib matched |
-| 3 | 12-13 | ~11 min | 55% | nothing shorter has matched |
+| 1 | 16-20 | 2-3 min | 3-19% | always try first |
+| 2 | 14-15 | ~6 min | 24% | no tier-1 crib matched |
+| 3 | 12-13 | ~11 min | 55% | nothing longer has matched |
 
 Within each tier, sort by spare letters descending. How many to keep is set by
 the compute budget — see §9.
@@ -525,7 +537,7 @@ plugboard unknown:
 | approach | time | outcome |
 |---|--:|---|
 | today: climb every rotor setting | 24.9 h *(measured)* | ~50% success |
-| with a crib | ~2 min *(estimated)* | certain, if the crib is right |
+| with one crib | ~2 min *(estimated)* | certain, if the crib is right |
 | for comparison: plugboard given | 137 s *(measured)* | certain |
 
 The third row is the useful one. **A good crib is worth roughly as much as being
