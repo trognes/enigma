@@ -262,6 +262,15 @@ python3 eval/crib_seed_cost.py --reps 3
 seeded climb also converges in fewer passes. `-J` is worth a further **1.8x** on the
 seeded climb (cost only; the recovery side is unmeasured).
 
+`-s` is only a **proxy** for a deduction, though: its plugs are all correct and it says
+nothing about the letters a deduction shows carry no cable, which are pinned too. The
+last arm measures the real path -- boards scored per surviving hypothesis (each one a
+seeded climb), the hypotheses counted with `--crib-dump`. **A deduced seed is 3.6x to
+20x cheaper than a full climb**, and at matched pinned-letter count it lands on the same
+number as the `-s` proxy (3.6x against 3.55x), even though most of those seeds come from
+*wrong* hypotheses -- cost tracks letters pinned, not whether the pins are right. See
+cribs.md 7a.
+
 ## What the deduction itself costs (`crib_deduce_cost.py`)
 
 The other half of the same question: cribs.md priced the climb and assumed the

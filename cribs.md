@@ -1253,6 +1253,52 @@ recovery side is unmeasured here, and this is the known-few-plug regime where
 `-J` is documented to need a cap to win on quality, so the pairing to test is
 `-J` with `--score f10` rather than `-J` alone.
 
+**`-s` is still only a proxy, and the real deduced seed does better.** A
+deduction differs from `-s` on three counts: it pins the letters it shows carry
+**no** cable as well as the cables it finds, 25 of its 26 hypotheses pin plugs
+that are simply *wrong*, and the search runs one climb per surviving hypothesis
+rather than one per key. Measured on that path — boards scored per surviving
+hypothesis, the hypotheses counted with `--crib-dump`, against the same key
+space's unseeded climb:
+
+| crib | mode | hypotheses | letters pinned | boards/climb | vs full climb |
+|--:|---|--:|--:|--:|--:|
+| — | unseeded | — | 0 | 3 179 | 1.0× |
+| 8 | swept | 6 188 | 10.4 | 859 | 3.6× |
+| **8** | **pinned** | 13 786 | 14.5 | 358 | **8.9×** |
+| 12 | swept | 51 563 | 12.4 | 600 | 5.3× |
+| 12 | pinned | 14 | 16.6 | 246 | 12.9× |
+| 16 | swept | 9 | 15.6 | 309 | 10.3× |
+| 16 | pinned | 2 | 17.0 | 155 | 20.5× |
+| 20 | swept | 2 | 24.0 | 3 | 1060× |
+
+**Cost tracks letters pinned, not whether the pins are right.** At 10.4 pinned
+letters the deduction gives **3.6×** against the `-s` proxy's **3.55×** at five
+plugs — the same number, although most of these seeds come from wrong
+hypotheses. A wrong plug shrinks the move set exactly as a right one does. So
+`-s` is a fair proxy for *cost*, and the tables above stand; it is emphatically
+not a proxy for *quality*, which is §7c's separate question.
+
+**The no-cable pins are worth more than the arithmetic credited them with.**
+Against the move-set formula — `C(26 − pinned, 2)` toggles against 325 — every
+row comes out 1.4–2.3× better: 5.4× predicted against 8.9× measured at 14.5
+pinned letters, 8.2× against 12.9× at 16.6. Same direction and same cause as
+the `-s` rows: the formula counts only the shrinking scan, while a seeded climb
+also converges in fewer passes.
+
+**Swept seeds are weaker as well as more numerous, and that is survivorship
+bias.** At every length the swept survivors pin *fewer* letters than the pinned
+ones (10.4 against 14.5 at 8 letters, 12.4 against 16.6 at 12) — a hypothesis
+that deduces less has fewer chances to contradict itself, so the ones that
+survive a wrong alignment are systematically the ones that deduced least. The
+sweep therefore pays twice: more climbs, each from a poorer seed.
+
+**Read the sparse rows with care.** The 16- and 20-letter rows rest on 2 to 9
+climbs, all at or beside the true key, where convergence need not resemble the
+average wrong key that dominates the unseeded baseline. The claim rests on the
+well-populated rows — 8 pinned, 8 swept and 12 swept, at 6 000 to 52 000 climbs
+each.
+
 **The unplugged letters help too.** The deduction also settles letters as
 carrying *no* cable, and `--no-plug` (§8) would freeze those as well:
 

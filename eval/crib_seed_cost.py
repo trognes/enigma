@@ -19,6 +19,10 @@ problems:
               CLIMB's cost from the deduction's
   climb rule  steepest ascent (default) against -J first-improvement, on the
               seeded climb, which cribs.md §7b left unargued
+  deduced     the same question on the REAL path -- plugs deduced by the crib
+              rather than handed over -- since `-s` is only a proxy for it: its
+              plugs are all correct, and it says nothing about the letters a
+              deduction shows carry NO cable, which are pinned too
 
 Each arm is the min of several repetitions.  The plugboard is otherwise hidden
 and the rotor key wildcarded over its start positions, so the run is dominated
@@ -51,10 +55,10 @@ def encipher(pt):
     return p.stdout.strip()
 
 
-def timed(ct, extra, reps, lang):
+def timed(ct, extra, reps, lang, start="...", climb=True):
     """Min wall time over reps, plus the plugboards-scored counter."""
-    cmd = [BIN, "-u", "B", "-w", "123", "-r", "AAA", "-g", "...", "-c",
-           "-f", "-l", lang, "-T", "1"] + extra
+    cmd = [BIN, "-u", "B", "-w", "123", "-r", "AAA", "-g", start,
+           "-f", "-l", lang, "-T", "1"] + (["-c"] if climb else []) + extra
     env = dict(os.environ, ENIGMA_SEED="0")
     best, scored = None, 0
     for _ in range(reps):
@@ -103,6 +107,58 @@ def main():
                          ("-J first-improve", five + ["-J"])):
         t, s = timed(ct, extra, args.reps, args.lang)
         print("  %-18s %9.2fs %14d" % (label, t, s))
+
+    deduced(ct, args)
+
+
+def deduced(ct, args):
+    """The same question with the plugs REALLY deduced, not handed over.
+
+    `-s` above is a proxy: its plugs are correct, come from the true board, and
+    say nothing about letters that carry no cable.  A crib deduction differs on
+    all three counts -- it also pins the letters it shows unplugged, and 25 of
+    its 26 hypotheses pin plugs that are simply WRONG.  So the per-climb cost is
+    measured here on the real path, as boards scored per SURVIVING HYPOTHESIS
+    (each of which is one seeded climb) against boards per unseeded climb.
+    """
+    print("\nWith the plugs really deduced, per surviving hypothesis\n")
+    # The 8-letter swept arm rejects nothing, so on the full key space it runs
+    # ~2300 climbs per key (cribs.md 4.2b).  Measured on 26 keys instead, with
+    # its own baseline -- the ratio is per-climb, so the key space cancels.
+    rows = [(8, "pinned", "..."), (8, "swept", "AA."), (12, "pinned", "..."),
+            (12, "swept", "..."), (16, "pinned", "..."), (16, "swept", "..."),
+            (20, "swept", "...")]
+    base = {}
+    for start in ("...", "AA."):
+        keys = 17576 if start == "..." else 26
+        _, s = timed(ct, [], 1, args.lang, start=start)
+        base[start] = float(s) / keys
+        print("  unseeded climb, %5d keys: %7.0f boards each"
+              % (keys, base[start]))
+    print("\n  %-18s %8s %9s %10s %9s"
+          % ("crib", "hyps", "pinned", "boards", "vs full"))
+    for n, mode, start in rows:
+        crib = PT[3:3 + n]
+        at = ["--crib-at", "3"] if mode == "pinned" else []
+        # The dump is a plain scan, so it counts hypotheses without climbing.
+        cmd = [BIN, "-u", "B", "-w", "123", "-r", "AAA", "-g", start,
+               "-f", "-l", args.lang, "-T", "1", "--crib", crib,
+               "--crib-dump"] + at
+        p = subprocess.run(cmd, input=ct, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.PIPE, universal_newlines=True,
+                           env=dict(os.environ, ENIGMA_SEED="0"))
+        stops = [ln.split() for ln in p.stderr.splitlines()
+                 if ln.startswith("cribstop")]
+        if not stops:
+            print("  %-2d letters %-7s   no surviving hypothesis" % (n, mode))
+            continue
+        # Fields 7.. are the pinned letters: both ends of each deduced cable,
+        # plus the self-steckered letters the deduction shows carry none.
+        pinned = sum(len(f) - 7 for f in stops) / float(len(stops))
+        _, s = timed(ct, ["--crib", crib] + at, 1, args.lang, start=start)
+        per = float(s) / len(stops)
+        print("  %-2d letters %-7s %8d %9.1f %10.0f %8.1fx"
+              % (n, mode, len(stops), pinned, per, base[start] / per))
 
 
 if __name__ == "__main__":
