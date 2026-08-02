@@ -1381,17 +1381,32 @@ exists to steer toward it — per-plug consensus across converged boards is only
 *outside* the score landscape rather than being mined out of it. That is why it
 can beat compute rather than merely adding to it.
 
-**Three cautions. The first is now measured; the others are not.**
+**Three cautions. The first two are now measured; the third is not.**
 
 1. ~~The table above seeds the climb with correct plugs, and a garbage seed
    could in principle out-score them.~~ **Measured, and it happens only at 8
    letters** — see §7c.
-2. At *wrong* rotor settings you now run 26 climbs instead of one. That is where
-   the whole 26x goes, and without loops none of it can be skipped.
+2. ~~At *wrong* rotor settings you now run 26 climbs instead of one.~~
+   **Measured in §4.2b, and "26" is wrong in both directions.** The unit is
+   surviving hypotheses per key, counted with `--crib-dump`, and 26 is only the
+   number *tried* per alignment. **Pinned it is far cheaper than 26**: most of
+   the 26 die on the diagonal board before any climb runs, leaving 1.4 per
+   surviving key at 8 letters and exactly 1.0 wherever a crib rejects at all —
+   which is why a pinned 8-letter crib is a 12× *saving* rather than a 26× cost.
+   **Swept it is far worse than 26**: the count is `alignments × 26` tried and
+   **235 surviving** per key at 8 letters, a 66× slowdown. So the real caution
+   is not "26×" but "pinned or near-pinned alignment", and the cost is
+   measurable before it is paid (`crib_estimate`, reported per crib).
 3. Coverage assumes the crib is exactly right. An 8-letter crib is far more
    likely to be present (§4.2) *and* far more likely to be a coincidental match
    that deduces confident nonsense. Short cribs make both errors more common at
-   once.
+   once. **Still unmeasured, and §7c does not cover it**: that measures a wrong
+   *hypothesis* winning while the crib genuinely is in the message. The open
+   question is the other one — with a crib that is **absent**, does the run
+   return a confident wrong answer, or does it visibly fail? What would settle
+   it is a run with a crib known not to occur, comparing the winning score
+   against the same message's no-crib winner: a false positive is a crib-seeded
+   board that scores *above* what the unseeded search finds.
 
 ### 7c. Does a wrong hypothesis ever win? Measured
 
@@ -1431,7 +1446,8 @@ where a crib can filter a swept search, 10 is where it can safely seed one.
 Below 10 the answer can be wrong without looking wrong, which is worse than
 being slow.
 
-Cautions 2 and 3 remain unmeasured.
+Caution 2 has since been measured in §4.2b (and found wrong in both
+directions); caution 3 remains open.
 
 **Where this sits in the plan.** It shares all the machinery of §6 — the same
 menu, the same deduction, the same `--no-plug` output — and differs only in what
