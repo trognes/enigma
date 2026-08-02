@@ -55,14 +55,17 @@ def run(rec):
     """Run the binary on one vector and return its cribstop lines, parsed."""
     cmd = [BIN, "-i", "-u", rec["reflector"], "-w", rec["wheels"],
            "-r", rec["ring"], "-g", rec["start"],
-           "--crib", rec["crib"], "--crib-at", rec["at"], "--crib-dump"]
+           "--crib", rec["crib"],
+           # --crib-at is 1-based; the vectors carry 0-based offsets
+           "--crib-at", str(int(rec["at"]) + 1),
+           "--crib-dump"]
     p = subprocess.run(cmd, input=rec["cipher"], stdout=subprocess.DEVNULL,
                        stderr=subprocess.PIPE, universal_newlines=True)
     out = {}
     for line in p.stderr.splitlines():
         f = line.split()
         if f and f[0] == "cribstop":
-            # cribstop <wheels> <ring> <start> <at> <anchor> <hypothesis> <plugs...>
+            # cribstop <wheels> <ring> <start> <at> <anchor> <hyp> <plugs..>
             # The vectors pin --crib-at, so every line is at that one alignment.
             out[f[6]] = sorted(f[7:])
     return out, p.returncode

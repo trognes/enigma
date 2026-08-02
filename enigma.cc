@@ -1993,8 +1993,10 @@ void showconfig(machine & m, double score)
   snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
   if (opt_crib_text)
     {
-      char at[8];
-      snprintf(at, sizeof(at), "%d", g_crib_stop_shown);
+      char at[16];   /* wide enough for any int, so no truncation warning */
+      /* 1-based, matching --crib-at: a displayed alignment must be a value the
+         reader can type straight back in. */
+      snprintf(at, sizeof(at), "%d", g_crib_stop_shown + 1);
       fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, at, text);
     }
   else
@@ -3610,7 +3612,7 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
         int anchor = crib_anchor_at[a];
         if (! crib_try(m, crib_align[a], anchor, h, board))
           continue;
-        fprintf(stderr, "cribstop %s %s %s %d %c %c", w, r, g, crib_align[a],
+        fprintf(stderr, "cribstop %s %s %s %d %c %c", w, r, g, crib_align[a] + 1,
                 num2char(anchor), num2char(h));
         for (int x = 0; x < asize; x++)
           if (board[x] >= 0)
@@ -5951,12 +5953,15 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "it deduces seed the climb. No -F/--exhaust/");
   fprintf(out, "  %-24s %s\n", "", "--ring-stride/-A [off]");
   fprintf(out, "  %-24s %s\n", "--crib-at N",
-          "Where the crib sits (0-based); omit to sweep every");
+          "Where the crib sits (1-based); omit to sweep every");
   fprintf(out, "  %-24s %s\n", "", "alignment -- but rejections multiply across");
   fprintf(out, "  %-24s %s\n", "", "them, so a swept crib needs 16+ letters");
+  fprintf(out, "  %-24s %s\n", "--crib-dump",
+          "Print every surviving crib hypothesis and the plugs");
+  fprintf(out, "  %-24s %s\n", "", "it deduces (diagnostic; needs --crib) [off]");
   fprintf(out, "  %-24s %s\n", "--crib-list F",
-          "Crib library, one per line ('#' comments), tried in");
-  fprintf(out, "  %-24s %s\n", "", "file order, one rotor sweep each; best kept [off]");
+          "Crib library, one per line ('#' comments); one rotor");
+  fprintf(out, "  %-24s %s\n", "", "sweep each, best board kept [off]");
   fprintf(out, "  %-24s %s\n", "--no-crib-reorder",
           "Keep a --crib-list in file order. By default it is");
   fprintf(out, "  %-24s %s\n", "", "run cheapest-measured-cost first, since a long");
@@ -6144,7 +6149,7 @@ void show_settings()
     {
       if (opt_crib_at >= 0)
         fprintf(stderr, "Crib:       %s at position %d\n",
-                opt_crib_text, opt_crib_at);
+                opt_crib_text, opt_crib_at + 1);
       else
         fprintf(stderr, "Crib:       %s, sweeping every alignment\n", opt_crib_text);
     }
@@ -6398,7 +6403,16 @@ int main(int argc, char * * argv)
           opt_crib_text = optarg;
           break;
         case OPT_CRIBAT:
-          opt_crib_at = atoi(optarg);
+          /* 1-BASED on the command line -- "the crib starts at the Nth letter" is
+             how a person reads a message. Converted here to the 0-based index the
+             menu and the alignment sweep use, so only this one line and the two
+             display sites below know about the offset.
+               Rejected HERE rather than in validation because 0 - 1 == -1 is the
+             "not given" sentinel: a --crib-at 0 that fell through would silently
+             mean "sweep every alignment" instead of erroring. */
+          if (atoi(optarg) < 1)
+            fatal("--crib-at is 1-based: the first position is 1, not 0");
+          opt_crib_at = atoi(optarg) - 1;
           break;
         case OPT_CRIBDUMP:
           opt_crib_dump = true;
@@ -6607,8 +6621,7 @@ int main(int argc, char * * argv)
         }
       if (opt_crib_at == -1)
         { /* no --crib-at: sweep every alignment (cribs.md 12 step 4) */ }
-      else if (opt_crib_at < 0)
-        fatal("--crib-at must not be negative");
+      /* Negative and zero are rejected at parse time (see OPT_CRIBAT). */
       if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
         fatal("--crib is not supported with -F (tier 1 could filter out the very key "
               "the crib settles)");

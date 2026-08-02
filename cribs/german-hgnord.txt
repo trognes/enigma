@@ -1,4 +1,4 @@
-# Generic HG Nord / Wehrmacht telegraphic vocabulary for the --crib-file finisher.
+# Generic HG Nord / Wehrmacht telegraphic vocabulary for the --crib-rerank finisher.
 # Operational words that recur across German Army traffic (spelled numbers, the phonetic
 # alphabet, standard military nouns/verbs and abbreviations) -- chosen from general
 # telegraphy conventions and the words Ostwald & Weierud name (Berta, Eins, Frage, Roem),

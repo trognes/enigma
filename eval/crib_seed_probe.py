@@ -49,7 +49,7 @@ def run_crib(ct, key, crib, at, args):
     wheels, refl, ring, start = key
     cmd = [BIN, "-u", refl, "-w", "".join(str(w + 1) for w in wheels),
            "-r", txt(ring), "-g", txt(start), "-c",
-           "--crib", crib, "--crib-at", str(at),
+           "--crib", crib, "--crib-at", str(at + 1),   # --crib-at is 1-based
            "-f", "-l", args.lang, "--score", "f10", "-T", str(args.threads)]
     env = dict(os.environ, ENIGMA_SEED="0")
     p = subprocess.run(cmd, input=ct, stdout=subprocess.PIPE,

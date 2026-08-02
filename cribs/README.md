@@ -2,10 +2,10 @@
 
 A **crib** file is a list of known words (one per line, optional weight after
 it; `#` comments) used by the opt-in `--crib-rerank` finisher. After each
-restart
-plugboard climb converges, its board is ranked by `n-gram score + --crib-weight
-× crib_score`, where `crib_score` sums the weights of listed words that appear
-as substrings of the decrypt (telegraphic traffic concatenates words within a
+restart plugboard climb converges, its board is ranked by `n-gram score +
+--crib-weight × crib_score`, where `crib_score` sums the weights of listed
+words that appear as substrings of the decrypt (telegraphic traffic
+concatenates words within a
 clause, so substring — not token — matching is used). The intent is Ostwald &
 Weierud's "assessment stage": lift the true board above a spurious one that
 scores higher on n-grams but contains no real words.
@@ -27,11 +27,12 @@ python3 eval/build_cribs.py                              # coverage report only
 python3 eval/build_cribs.py --out cribs/wehrmacht.cribs --budget-hours 1500
 ```
 
-Each line is one crib, tried in file order, with its tier (what the crib can do
-if it matches: 1–3 reject rotor settings, 4 can only seed a climb, 5 is a
-hedge), its spare letters (length minus distinct letters — what closes the
-deduction into a loop), how it was obtained, and how many corpus messages hold
-it.
+Each line is one crib, with its tier (what the crib can do if it matches: 1–3
+reject rotor settings, 4 can only seed a climb, 5 is a hedge), its spare letters
+(length minus distinct letters — what closes the deduction into a loop), how it
+was obtained, and how many corpus messages hold it. The file's own order is by
+evidence of recurrence, but `enigma --crib-list` runs the cribs **cheapest
+measured cost first** by default; `--no-crib-reorder` falls back to file order.
 
 **Held-out coverage is 83%; a control with each crib's letters shuffled covers
 0%,** so the recurrence is real rather than short strings colliding. That figure
@@ -44,16 +45,16 @@ training messages) and is where `--numbers` earns its keep. Coverage is
 *supply*, not recovery: 47 of the 57 hits are 8–11 letters, too short to reject
 a single rotor setting. See `cribs.md` §5a.
 
-The order is deliberately **not** by tier — a tier says what a crib can do, not
-whether it will match, and a crib that never matches costs its whole sweep.
-Ordering by evidence of recurrence, with `german-hgnord.txt`'s long words ahead
-of everything, takes the median time-to-first-hit from 141 hours to 6.7 and
-covers 49 of 69 messages within the 25 hours a no-crib run costs.
+The file order is deliberately **not** by tier — a tier says what a crib can do,
+not whether it will match. It is by evidence of recurrence, with
+`german-hgnord.txt`'s long words ahead of everything, which took the median
+time-to-first-hit from 141 hours to 6.7 when cribs were priced by the *modelled*
+cost. That model was later measured wrong (`cribs.md` §12 step 6), which is why
+the tool reorders by measured cost at run time rather than trusting this order.
 
-**Do not prune this file by cost.** Cost is *anti-correlated* with the
-chance of a hit: the short
-cribs that dominate the hits — 47 of 57 are 8–11 letters — are also the ones
-that reject nothing and so cost most, at 59–120 surviving hypotheses per key
+**Do not prune this file by cost.** Cost is *anti-correlated* with the chance of
+a hit: the short cribs that dominate the hits — 47 of 57 are 8–11 letters — are
+also the ones that reject nothing and so cost most, at 59–120 hypotheses per key
 against ~1 for a 16-letter crib. Measured, a cost rule applied to this library
 skipped **all four** cribs actually present in a test message and recovered
 nothing, where running them recovered it exactly in 8 seconds. A flag that did

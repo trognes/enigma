@@ -256,7 +256,8 @@ English tables.
   never scored — measured **99.9%** of a start-position keyspace on a 12-letter
   crib. The deduction chains `steck[p] = core[steck[c]]` from a single guessed
   plug and enforces plugboard reciprocity (Welchman's diagonal board), which is
-  what makes even short, loop-free cribs bite. **`--crib-at` is optional**: omit
+  what makes even short, loop-free cribs bite. **`--crib-at` is 1-based and
+  optional**: omit
   it and every alignment is tried, but rejections then multiply across
   alignments, so a swept crib needs **16 letters or more** to be worth anything
   (12 rejects 99.9% pinned and 5.3% swept). Not combinable with `-F`,
@@ -267,8 +268,8 @@ English tables.
   92% of letters recovered against 8% unseeded, on an 88-letter message with the
   plugboard hidden
 - **`--crib-list FILE`** — A whole **crib library** instead of one crib: one per
-  line, `#` comments, tried in **file order** (the generator emits
-  most-likely-to-match first), one complete rotor sweep each, best board kept.
+  line, `#` comments, one complete rotor sweep each, best board kept — run
+  **cheapest measured cost first** unless `--no-crib-reorder` is given.
   You rarely know which phrase a message contains — you know the vocabulary of
   the network, which is what `eval/build_cribs.py` harvests. A crib that is too
   long, cannot sit anywhere, or rejects every key is skipped rather than fatal,

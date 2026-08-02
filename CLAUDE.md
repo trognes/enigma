@@ -674,7 +674,8 @@ are read from a **data directory** (filenames built as
   pure per-key test and `-T`-deterministic; zero cost when the option is off.
   **The diagonal board is what does the work**, not menu loops: a loop-free
   12-letter menu still rejects 88% of settings against 0% without it (`cribs.md`
-  §4.1). `--crib-at` is optional: given, the crib is pinned there; omitted,
+  §4.1). `--crib-at` is **1-based** and optional: given, the crib is pinned
+  there; omitted,
   every alignment the self-encryption filter leaves is tried and a key is
   rejected only if **every** alignment rejects it. **That compounding sets the
   usable crib length.** Rejections multiply, so what matters is `∏ p_i` over the
