@@ -1856,6 +1856,27 @@ from these three trials, and is the actual argument for the default.
 > held-out (leave-one-out) library is what would settle the question, and has
 > not been run.
 
+**The held-out version was built, run, and abandoned — and why it failed is
+itself the finding.** `crib_order_probe.py` now rebuilds the library per trial
+from the corpus *minus* the message under test (`holdout_library()`), which
+removes file order's unfair advantage exactly. Run that way, **no crib in the
+library recovered the message in either trial before the run was stopped.**
+
+That is not a bug in the harness, and it does not contradict §5a's 83% held-out
+coverage. Coverage is **supply, not recovery**: 47 of the 57 held-out hits are
+8–11 letters, which §7a's tiers call seed-only, and a seed alone will not carry
+a 120-letter message with the board hidden to a 95%-correct decrypt. Holding a
+message out removes precisely the long cribs that *would* have solved it,
+because those are the ones harvested from the message itself.
+
+So **the ordering question cannot be settled on this corpus at all** — not with
+more trials, since honest hits are too rare to accumulate a sample against. The
+cheapest-first default therefore rests on the **cost cliff** above, which is
+directly measured and corpus-independent, and not on any time-to-first-hit
+result. The leave-one-out code stays in the probe for a larger corpus; the
+in-sample table above stays with its warning, as the only end-to-end figure
+there is.
+
 **A `--crib-max-hyps` flag that *discarded* costly cribs was built, measured,
 and removed.** It skipped any crib above a cap in surviving hypotheses per key,
 measured on a fixed 256-key stride. Run against the shipped library on a message
