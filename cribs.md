@@ -1,7 +1,8 @@
 # cribs.md — a plan for crib-driven plugboard deduction
 
-**Status: a plan, with steps 0 and 1 built** — `--full-text` and `--no-plug` in
-the tool, and the crib generator `eval/build_cribs.py` (§5a has its results).
+**Status: a plan, with steps 0 to 3 built** — `--full-text`, `--no-plug` and the
+`--crib` key filter in the tool, plus `eval/build_cribs.py` (§5a) and
+`eval/crib_menu.py` (§4.1).
 The numbers quoted are from measurements; where a figure is an estimate rather
 than a measurement, it says so.
 
@@ -1469,7 +1470,12 @@ magnitude at the short end (§4.1). It also emits the test vectors step 3 needs
 (`--vectors`) and runs §10.1/§10.2 as oracle checks on itself.
 
 **Step 3 — deduction inside the tool**, one crib at one alignment (`--crib`,
-`--crib-at`). The smallest thing that can be checked against §10.1 and §10.2.
+`--crib-at`). **Done**, as a key filter: a rotor setting the crib proves
+impossible is skipped without being scored. Checked against §10.1 and §10.2 by
+`eval/crib_vectors_check.py`, which runs the binary on `crib_menu.py`'s vectors
+and compares against the true board — 40/40 exact, crib lengths 8–25. Measured
+99.9% of a start-position keyspace rejected on a 12-letter crib. `--crib-dump`
+prints each surviving hypothesis and its deduced plugs.
 
 **Step 4 — the alignment sweep**, with the self-encryption filter. This is what
 makes it usable on a real message. It is also where the progress line gains its

@@ -660,6 +660,30 @@ are read from a **data directory** (filenames built as
     redirected logs and the tests stay clean. A shared atomic counter drives it,
     and because each atomic add owns a disjoint slice, exactly one thread prints
     each 1% step — no races, `-T`-safe.
+- `--crib TEXT` / `--crib-at N` **known-plaintext key filter** (off by default;
+  `cribs.md` §12 step 3). A crib is a guess at part of the plaintext *together
+  with where it sits*. Decryption is `p = steck[core_i[steck[c]]]` and the rotor
+  core is an involution, so it rearranges to `steck[p] = core_i[steck[c]]` — one
+  lookup on the `rows[]` table `setup_mapping()` already builds. Guess a single
+  plug, chain that along every crib position, and add reciprocity (`steck[x]=y`
+  ⇒ `steck[y]=x`, and no two letters share a partner — **Welchman's diagonal
+  board**, free because the board is an involution). A contradiction kills the
+  guess; all 26 dead means the rotor setting cannot have produced the crib, so
+  the search skips it **without scoring anything** — measured 99.9% of keys on a
+  12-letter crib. Runs after `setup_mapping()`, reads only `rows[]`, so it is a
+  pure per-key test and `-T`-deterministic; zero cost when the option is off.
+  **The diagonal board is what does the work**, not menu loops: a loop-free
+  12-letter menu still rejects 88% of settings against 0% without it
+  (`cribs.md` §4.1). `--crib-at` is required (the alignment sweep is step 4) and
+  the crib mode is rejected against `-F`, `--exhaust`, `--ring-stride` and `-A`.
+  A crib that matches the ciphertext anywhere is fatal — an Enigma never
+  encrypts a letter to itself, so that alignment is impossible. `--crib-dump`
+  prints each surviving hypothesis and the plugs it deduces (diagnostic, needs
+  `--crib`); `eval/crib_vectors_check.py` checks those against
+  `eval/crib_menu.py`'s vectors, which carry the true board — 40/40 exact.
+  **The rejection count is reported per key, counted at the key's first work
+  item**: a key's restarts can straddle a chunk boundary and be seen as new by
+  two workers, so counting at the deduction would make the total depend on `-T`.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are
@@ -1354,7 +1378,14 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   (`.github/workflows/ci.yml`) runs on every push and PR: the suite `-Werror`
   under g++ and clang++, ASan+UBSan, valgrind, cppcheck, clang-tidy (config in
   `.clang-tidy`), and shellcheck; a separate CodeQL workflow runs on PRs and
-  weekly. Keep all of these green. A `Bench` workflow
+  weekly. Keep all of these green. **The two lint jobs are the ones easiest to
+  meet for the first time in CI rather than locally, and both run in seconds** —
+  `clang-tidy enigma.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
+  tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`
+  installs the binary). Run them before pushing, and grep clang-tidy's output
+  for `error:` rather than for the names you touched — it prints one file-scope
+  error and suppresses ~24 000 warnings from system headers, so a name-filtered
+  grep looks clean when it is not. A `Bench` workflow
   (`.github/workflows/bench.yml`) additionally runs `make bench LONG=1` on a
   {g++, clang++} × {x86_64, arm64-Linux} matrix — on PRs as a same-machine A/B
   vs the PR base, but **advisory only** (`continue-on-error`): shared runners

@@ -132,6 +132,29 @@ static const char * opt_steckerbrett;
    quadratically (each marked letter drops 25 of the 325 toggles) and, more to the point,
    stops the climb spending moves on plugs that cannot exist. */
 static const char * opt_no_plug;
+/* --crib TEXT / --crib-at N: a guess at part of the plaintext, together with where it
+   sits. Given one that is right, part of the plugboard follows by ARITHMETIC instead of
+   search, and rotor settings that cannot produce it are rejected without ever being
+   scored -- Turing's menu and Welchman's diagonal board, on the machine equation this
+   file already computes. See cribs.md; the deduction itself is crib_deduce() below.
+     Step 3 of cribs.md 12: one crib at one alignment, used as a KEY FILTER. The
+   alignment sweep and the seeded climb are later steps, so --crib-at is required. */
+static const char * opt_crib_text;
+static int opt_crib_at = -1;
+static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
+/* The menu, built once by init_crib(): an edge per crib position, plus the anchor letter
+   the 26 hypotheses are about. Read-only during the search.
+     DELIBERATELY DECLARED HERE, beside the cold option globals, and not next to the
+   deduction code further down -- that would put ~6 KB of arrays a few dozen lines from
+   plug_fixed, the hot climb-loop global whose placement this file is already documented
+   as sensitive to (see the struct-layout note in CLAUDE.md). Keeping cold data away from
+   it costs nothing and removes a whole class of accidental regression. */
+static unsigned char crib_p[maxlen];    /* plaintext letter of each menu edge */
+static unsigned char crib_c[maxlen];    /* ciphertext letter of the same edge */
+static int crib_pos[maxlen];            /* message position, indexing rows[] */
+static int crib_edges = 0;
+static int crib_anchor = -1;            /* the letter we hypothesise about */
+static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossible */
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french, swedish, finnish,
                                       icelandic, polish, spanish, wehrmacht; no default */
@@ -1037,6 +1060,152 @@ void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_stri
      self-steckered, every move set that skips a fixed letter skips them too. */
   for (const char * p = no_plug_string; *p != 0; p++)
     plug_fixed[char2num(*p)] = true;
+}
+
+/* --- crib deduction (--crib): the menu and its closure ---------------------------
+   Decryption of one character is  p = steck[core_i[steck[c]]], and the rotor core is its
+   own inverse, so the same line rearranges to
+
+       steck[p] = core_i[steck[c]]
+
+   -- if you know what the ciphertext letter is plugged to, the core tells you what the
+   plaintext letter is plugged to. That is the whole deduction step: one table lookup, on
+   the rows[] table setup_mapping() already builds.
+
+   The crib gives one such equation per position. Guess a single plug, chain the rule
+   along every equation, and add RECIPROCITY -- steck[x] = y implies steck[y] = x, and no
+   two letters may share a partner. That second part is Welchman's diagonal board, free
+   here because the plugboard is stored as an involution, and measured to supply almost
+   all of the rejecting power: a loop-free 12-letter menu still rejects 88% of rotor
+   settings, against 0% without it (cribs.md 4.1).
+
+   A contradiction kills the guess. Kill all 26 and the rotor setting cannot have produced
+   the crib, so the search skips it without scoring anything.
+
+   The menu is a property of the crib and the ciphertext, not of the key, so its edges and
+   its anchor letter are built once at startup by init_crib(). */
+/* Build the menu once: an edge per crib position joining the plaintext letter to the
+   ciphertext letter under it, and the anchor -- the highest-degree letter of the largest
+   connected component, so one guess reaches as far as it can before a second is needed. */
+static void init_crib()
+{
+  crib_edges = static_cast<int>(strlen(opt_crib_text));
+  for (int j = 0; j < crib_edges; j++)
+    {
+      crib_p[j] = static_cast<unsigned char>(char2num(opt_crib_text[j]));
+      crib_c[j] = num_ciphertext[opt_crib_at + j];
+      crib_pos[j] = opt_crib_at + j;
+    }
+
+  /* components by union-find over the edges, then the largest one's busiest letter */
+  int parent[asize];
+  for (int i = 0; i < asize; i++)
+    parent[i] = i;
+  for (int j = 0; j < crib_edges; j++)
+    {
+      int a = crib_p[j], b = crib_c[j];
+      while (parent[a] != a) a = parent[a];
+      while (parent[b] != b) b = parent[b];
+      if (a != b)
+        parent[a] = b;
+    }
+  int size[asize], deg[asize];
+  for (int i = 0; i < asize; i++)
+    size[i] = deg[i] = 0;
+  for (int j = 0; j < crib_edges; j++)
+    {
+      deg[crib_p[j]]++;
+      deg[crib_c[j]]++;
+    }
+  int root[asize];
+  for (int i = 0; i < asize; i++)
+    {
+      int r = i;
+      while (parent[r] != r) r = parent[r];
+      root[i] = r;
+      if (deg[i])
+        size[r]++;
+    }
+  int big = -1;
+  for (int i = 0; i < asize; i++)
+    if (deg[i] && ((big < 0) || (size[root[i]] > size[root[big]])))
+      big = i;
+  crib_anchor = -1;
+  for (int i = 0; i < asize; i++)
+    if (deg[i] && (root[i] == root[big])
+        && ((crib_anchor < 0) || (deg[i] > deg[crib_anchor])))
+      crib_anchor = i;
+}
+
+/* One hypothesis: "the anchor letter is plugged to hyp". Propagates to a fixed point and
+   returns false on contradiction. `board` is left holding the partial plugboard it
+   deduced (-1 = still unknown), which is what the hybrid will seed a climb from.
+     `board` is int, not signed char: it holds -1 alongside letter values coming out of
+   the UNSIGNED char rows[] table, and mixing those two signednesses is the bug class
+   clang-tidy's bugprone-signed-char-misuse exists to catch. 26 ints, read once per key,
+   cost nothing. */
+static bool crib_try(const machine & m, int hyp, int * board)
+{
+  for (int i = 0; i < asize; i++)
+    board[i] = -1;
+  const unsigned char * const * rows = m.rows;
+
+  /* assign steck[x] = y, and its reciprocal, failing on any disagreement */
+#define CRIB_SET(x, y)                                          \
+  do {                                                          \
+    int xx = (x), yy = (y);                                     \
+    if ((board[xx] >= 0) && (board[xx] != yy)) return false;    \
+    if ((board[yy] >= 0) && (board[yy] != xx)) return false;    \
+    board[xx] = yy;                                             \
+    board[yy] = xx;                                             \
+  } while (0)
+
+  CRIB_SET(crib_anchor, hyp);
+  bool changed = true;
+  while (changed)
+    {
+      changed = false;
+      for (int j = 0; j < crib_edges; j++)
+        {
+          const unsigned char * core = rows[crib_pos[j]];
+          int p = crib_p[j], c = crib_c[j];
+          if ((board[c] >= 0) && (board[p] < 0))
+            {
+              CRIB_SET(p, static_cast<int>(core[board[c]]));
+              changed = true;
+            }
+          else if ((board[p] >= 0) && (board[c] < 0))
+            {
+              CRIB_SET(c, static_cast<int>(core[board[p]]));
+              changed = true;
+            }
+          else if ((board[p] >= 0) && (board[c] >= 0))
+            {
+              if (static_cast<int>(core[board[c]]) != board[p])
+                return false;
+            }
+        }
+    }
+#undef CRIB_SET
+  return true;
+}
+
+/* True when every hypothesis contradicts: this rotor setting cannot have produced the
+   crib, so the caller skips it entirely. Pure function of the key -- no shared state, so
+   it is thread-safe and -T-deterministic. */
+/* --crib-dump: print every surviving hypothesis and the plugs it deduces, so a harness
+   can check them against a known board (cribs.md 10.1). Display-only and under the same
+   mutex as the progress lines, so it cannot affect which candidate wins. Very verbose;
+   off by default. */
+static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g3);
+
+static bool crib_rejects(const machine & m)
+{
+  int board[asize];
+  for (int h = 0; h < asize; h++)
+    if (crib_try(m, h, board))
+      return false;
+  return true;
 }
 
 void init_walzen(machine & m, int u, int a, int b, int c)
@@ -3213,6 +3382,32 @@ static void dump_all(machine & m, double score)
   fprintf(stderr, "dumpall %s %s %s %.4f %s\n", w, r, g, score, s);
 }
 
+/* --crib-dump: one line per surviving hypothesis at this key -- "cribstop <key> <anchor>
+   <letter> <plugs>" -- so a harness can check the deduced plugs against a known board
+   (cribs.md 10.1) and count stops (10.3). The rotor key is rebuilt from the caller's
+   ring/start rather than read from the machine, because on the scan path setup_mapping
+   has already stepped grundstellung (the documented lazy restore). Under the same mutex
+   as --dump-all; display-only, so results stay -T-deterministic. */
+static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g3)
+{
+  char w[8], r[8], g[8];
+  init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+  format_key(m, w, r, g);
+  int board[asize];
+  std::lock_guard<std::mutex> lock(g_dump_mutex);
+  for (int h = 0; h < asize; h++)
+    {
+      if (! crib_try(m, h, board))
+        continue;
+      fprintf(stderr, "cribstop %s %s %s %c %c", w, r, g,
+              num2char(crib_anchor), num2char(h));
+      for (int x = 0; x < asize; x++)
+        if (board[x] >= 0)
+          fprintf(stderr, " %c%c", num2char(x), num2char(board[x]));
+      fputc('\n', stderr);
+    }
+}
+
 /* One plugboard-recovery climb from the seed board. In kicked mode (--restarts N>=1) every
    climb -- including index 0 -- injects a fresh --random kick first, so the un-kicked seed
    climb is not run (REDESIGN Option A). With --restarts 0 there is a single un-kicked climb.
@@ -3591,6 +3786,24 @@ void search_worker(machine & m,
                      and no extra per-key writes on its init-dominated path). */
                   if (opt_hillclimb)
                     init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+
+                  /* --crib: reject keys the crib proves impossible, before any
+                     scoring. rows[] is valid here (setup_mapping just filled it) and
+                     the deduction reads nothing else, so this is a pure per-key test
+                     and stays -T-deterministic. */
+                  if (opt_crib_text && crib_rejects(m))
+                    {
+                      key_skipped = true;
+                      /* Count only the key's FIRST work item. A key's restarts can
+                         straddle a chunk boundary, in which case two workers each
+                         see it as new and each evaluate it -- counting there would
+                         make the total depend on -T. Every key has exactly one item
+                         with restart == 0, so this is exact and thread-invariant. */
+                      if (restart == 0)
+                        g_crib_rejected.fetch_add(1, std::memory_order_relaxed);
+                    }
+                  else if (opt_crib_dump)
+                    crib_dump(m, r1, r2, r3, g1, g2, g3);
                 }
             }
 
@@ -5128,6 +5341,12 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
+  fprintf(out, "  %-24s %s\n", "--crib TEXT",
+          "Known plaintext at --crib-at: rotor settings that");
+  fprintf(out, "  %-24s %s\n", "", "cannot produce it are rejected unscored. Needs");
+  fprintf(out, "  %-24s %s\n", "", "--crib-at; no -F/--exhaust/--ring-stride/-A [off]");
+  fprintf(out, "  %-24s %s\n", "--crib-at N",
+          "Where the crib sits (0-based letter position)");
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
@@ -5307,6 +5526,8 @@ void show_settings()
     fprintf(stderr, "(none)\n");
   if (opt_no_plug[0])
     fprintf(stderr, "            %s known unplugged (--no-plug)\n", opt_no_plug);
+  if (opt_crib_text)
+    fprintf(stderr, "Crib:       %s at position %d\n", opt_crib_text, opt_crib_at);
 }
 
 int main(int argc, char * * argv)
@@ -5328,6 +5549,9 @@ int main(int argc, char * * argv)
   opt_grundstellung = 0;
   opt_steckerbrett = "";
   opt_no_plug = "";
+  opt_crib_text = nullptr;
+  opt_crib_at = -1;
+  opt_crib_dump = false;
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q/-a) */
   opt_datadir = 0;    /* resolved after parsing: -d > $ENIGMA_DATA > "ngrams" */
   opt_plaintext = 0;
@@ -5371,7 +5595,7 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
-         OPT_NOPLUG, OPT_FULLTEXT };
+         OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -5420,6 +5644,9 @@ int main(int argc, char * * argv)
       { "ring-stride",    required_argument, nullptr, OPT_RINGSTRIDE },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
+      { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
+      { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
+      { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -5531,6 +5758,16 @@ int main(int argc, char * * argv)
           break;
         case OPT_FULLTEXT:
           opt_full_text = true;
+          break;
+        case OPT_CRIBTEXT:
+          alltoupper(optarg);
+          opt_crib_text = optarg;
+          break;
+        case OPT_CRIBAT:
+          opt_crib_at = atoi(optarg);
+          break;
+        case OPT_CRIBDUMP:
+          opt_crib_dump = true;
           break;
         case OPT_CRIB:
           opt_crib_file = optarg;
@@ -5712,6 +5949,32 @@ int main(int argc, char * * argv)
       (strspn(opt_steckerbrett, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") <
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
+
+  /* --crib TEXT / --crib-at N: cribs.md 12 step 3 is one crib at one alignment, so the
+     position is required -- the sweep is step 4. The combination rules follow cribs.md 8:
+     the crib composes with the climb options, and is rejected against the search modes
+     whose key handling it would have to be reconciled with. */
+  if (opt_crib_text)
+    {
+      size_t n = strlen(opt_crib_text);
+      if ((n < 2) || (n > static_cast<size_t>(maxlen)) ||
+          (strspn(opt_crib_text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") < n))
+        fatal("Illegal --crib string (must be at least 2 letters A-Z)");
+      if (opt_crib_at < 0)
+        fatal("--crib needs --crib-at N (the alignment sweep is not implemented yet)");
+      if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
+        fatal("--crib is not supported with -F (tier 1 could filter out the very key "
+              "the crib settles)");
+      if (opt_exhaust)
+        fatal("--crib is not supported with --exhaust (both force plugs from outside "
+              "the climb)");
+      if (opt_ring_stride > 1)
+        fatal("--crib is not supported with --ring-stride");
+      if (opt_anneal > 0)
+        fatal("--crib is not supported with -A (annealing seeds its own board)");
+    }
+  else if ((opt_crib_at >= 0) || opt_crib_dump)
+    fatal("--crib-at and --crib-dump need --crib");
 
   /* --no-plug LETTERS: letters known to carry no cable. Three ways to get it wrong, all
      fatal because each means the command line says something the search cannot honour:
@@ -6019,6 +6282,23 @@ int main(int argc, char * * argv)
 
   init_plug_fixed(opt_steckerbrett, opt_no_plug);   /* -s pairs + --no-plug letters */
 
+  /* --crib: the menu depends on the ciphertext, so it is built here rather than during
+     option validation. The checks that need the ciphertext live here too. */
+  if (opt_crib_text)
+    {
+      int n = static_cast<int>(strlen(opt_crib_text));
+      if (opt_crib_at + n > textlength)
+        fatal("--crib runs past the end of the ciphertext (check --crib-at)");
+      /* An Enigma never encrypts a letter to itself, so a position where the crib letter
+         equals the ciphertext letter proves this alignment impossible -- every key would
+         be rejected and the run would find nothing. Say so instead. */
+      for (int j = 0; j < n; j++)
+        if (char2num(opt_crib_text[j]) == num_ciphertext[opt_crib_at + j])
+          fatal("--crib matches the ciphertext at some position: an Enigma never "
+                "encrypts a letter to itself, so the crib cannot sit there");
+      init_crib();
+    }
+
   /* try all combinations (bruteforce allocates one machine per worker thread) */
 
   char result[maxlen+1];
@@ -6053,6 +6333,14 @@ int main(int argc, char * * argv)
           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
           static_cast<unsigned long long>(g_plugboards_scored),
           (g_plugboards_scored == 1) ? "" : "s");
+  if (opt_crib_text)
+    {
+      size_t rej = g_crib_rejected.load(std::memory_order_relaxed);
+      fprintf(stderr,
+              "Crib rejected %zu of %zu rotor combination%s (%.1f%%) unscored\n",
+              rej, g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
+              g_keys_analysed ? (100.0 * rej / g_keys_analysed) : 0.0);
+    }
   fprintf(stderr, "Finished in %.2f s using %d thread%s\n",
           secs, opt_threads, (opt_threads == 1) ? "" : "s");
   fprintf(stderr, "Precomputed %zu rotor table%s (%.1f MB); peak memory %.0f MB\n",

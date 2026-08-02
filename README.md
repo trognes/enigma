@@ -251,6 +251,14 @@ English tables.
   "this one is plugged to nothing" — and worth more than it looks, since a
   cable has two ends: each marked letter removes 25 of the 325 candidate plugs
   (needs `-c`; off by default)
+- **`--crib TEXT` / `--crib-at N`** — **Known plaintext**, and where it sits. A
+  rotor setting that cannot have produced the crib is rejected by arithmetic and
+  never scored — measured **99.9%** of a start-position keyspace on a 12-letter
+  crib. The deduction chains `steck[p] = core[steck[c]]` from a single guessed
+  plug and enforces plugboard reciprocity (Welchman's diagonal board), which is
+  what makes even short, loop-free cribs bite. `--crib-at` is required; not
+  combinable with `-F`, `--exhaust`, `--ring-stride` or `-A`. Add `--crib-dump`
+  to print the plugs each surviving hypothesis deduces `[off]`
 - **`-R N` / `--restarts N`** — Random restart attempts: `0` = one deterministic
   climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best
   `[0]`
