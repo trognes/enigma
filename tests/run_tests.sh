@@ -1518,6 +1518,13 @@ cb_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -
 check "--crib without --crib-at sweeps (accepted)" \
   "$(cb_reject --crib OBERKOMMANDO)" "0"
 check "--crib-at without --crib rejected" "$(cb_reject --crib-at 4)" "1"
+# --crib-at is 1-based, so 0 is not a position. It must be rejected at PARSE
+# time: 0 - 1 is -1, which is the "not given" sentinel, so a fall-through would
+# silently mean "sweep every alignment" instead of erroring.
+check "--crib-at 0 rejected (1-based)" \
+  "$(cb_reject --crib OBERKOMMANDO --crib-at 0)" "1"
+check "--crib-at negative rejected" \
+  "$(cb_reject --crib OBERKOMMANDO --crib-at -2)" "1"
 check "--crib with -F rejected" \
   "$(cb_reject -c --crib OBERKOMMANDO --crib-at 4 -F 5)" "1"
 check "--crib with --exhaust rejected" \
