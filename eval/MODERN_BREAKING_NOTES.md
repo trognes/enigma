@@ -164,11 +164,11 @@ And since Appendix C is aggregate over the same HG Nord traffic family, the win 
 domain-matched table measured on in-domain real traffic, not a claim about arbitrary German
 (no message's plaintext went into the tables).
 
-## 7. Crib (known-word) finisher — measured-down (`--crib-file`, `eval/eval_crib.py`)
+## 7. Crib (known-word) finisher — measured-down (`--crib-rerank`, `eval/eval_crib.py`)
 
 The article's other pointer for the short-message floor is a "special assessment stage
 evaluating words we know are frequently used by HG Nord (Berta, Eins, Frage, Roem)" — a
-crib / known-word objective. Implemented as `--crib-file` (Option B, a re-ranking finisher):
+crib / known-word objective. Implemented as `--crib-rerank` (Option B, a re-ranking finisher):
 after each restart climb converges, the board is ranked by `n-gram score + weight·crib_score`,
 where `crib_score` sums the weights of known words (`cribs/german-hgnord.txt` — generic
 operational vocabulary: spelled numbers, phonetic alphabet, standard military nouns, chosen

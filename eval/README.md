@@ -299,3 +299,25 @@ crib does reject, the surviving hypothesis is essentially unique and the run is
 `build_enigma_messages.py` regenerates and validates it; `crack_real.py` runs plugboard
 recovery on the real messages (`-a` vs `-q`). See **`MODERN_BREAKING_NOTES.md`** for the
 paper's method, how it maps onto this tool, and the real-traffic findings.
+
+## Cheapest-first crib ordering (`crib_order_probe.py`)
+
+Times the run to the first crib that recovers the message -- what a human
+watching progress lines waits for, there being no automatic early exit. Each
+crib is run alone and timed, and the run order is read from the tool's own
+table, so the ordering cannot use hindsight the tool does not have.
+
+```sh
+python3 eval/crib_order_probe.py --trials 3
+```
+
+**In-sample it is a mean win and a median loss**: 2.06x mean, faster in 1 of 3
+trials, the mean carried entirely by one trial where 260 s became 6 s.
+
+**Held out it measures nothing.** Rebuilding the library per trial without the
+message under test (`holdout_library()`), no crib recovered the message in
+either trial before the run was stopped. Coverage is *supply*, not recovery --
+holding a message out removes the long cribs that would have solved it, leaving
+the 8-11 letter ones that can only seed. So the ordering default rests on the
+measured cost cliff rather than on this harness, and the held-out mode is kept
+for a larger corpus. See cribs.md 12 step 6.

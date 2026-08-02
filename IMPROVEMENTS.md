@@ -65,7 +65,7 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   the forced plugs through the machine equation, reject contradictions
   (Turing/Welchman menu logic). This pins plugs *with certainty before* the
   climb runs rather than re-ranking after it, which is why it is worth more than
-  the crib re-ranker that shipped and was measured down (`--crib-file`, −0.1pp
+  the crib re-ranker that shipped and was measured down (`--crib-rerank`, −0.1pp
   at weight 0.5). Needs a new crib-planting harness tier and is invisible to
   `make crackquality` as written.
 - 🟢 **The narrow L40 scoring re-opening.** The only observed scoring failures
@@ -231,6 +231,29 @@ materially different regime, and read the evidence in `archived/` first.
 | Plugboard→score cache (`--score-tt`) | only ~7–13% cacheable; net loss |
 | Wheel-order scoring gate (`FULLCRACK`) | **reasoned** down — see below |
 | Greedy plug-by-plug seed | **reasoned** down — see below |
+| Cost-pruning a crib library by default | prunes the likeliest hits |
+
+**Cost-pruning a crib library, measured down and removed.** A `--crib-max-hyps`
+flag skipped a `--crib-list` crib whose sampled cost exceeded a cap in surviving
+hypotheses per key — the right *unit*, since under `-c` a surviving key is
+climbed once per surviving hypothesis (`cribs.md` §4.2b). It was wrong twice
+over, and the flag no longer exists.
+
+The premise fails: "no crib" is not the same outcome more cheaply, it usually
+**fails** (§7a measures a 5-cable seed recovering 55% against 12% at matched
+compute), so comparing a crib's cost against a cheaper way of failing always
+rejects the crib. And no threshold rescues it, because **cost is anti-correlated
+with the chance of a hit** — short cribs reject nothing, so hypotheses survive
+everywhere and they are the most expensive, while §4.2 measures 93% of messages
+carrying an 8-letter crib against 3% for a 20-letter one. Cost-ordered pruning
+removes the most valuable entries first.
+
+Measured on the shipped 96-crib library against a message containing four of its
+cribs: skipping at break-even dropped **all four** and recovered nothing, where
+not skipping recovered the message exactly in 8 s. What replaced it is
+cheapest-first reordering, which gets the same throughput by running the cheap
+long cribs *first* — a preference rather than a filter, so a wrong guess about
+cost costs time and never the answer.
 
 **The greedy plug-by-plug seed, closed without running it.** The proposal:
 score all 325 single plugs, commit the best, repeat to a small budget, fix those

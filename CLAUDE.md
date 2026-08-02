@@ -42,7 +42,7 @@ ngrams/<lang>_monograms.txt   Single-letter frequencies.
 ngrams/<lang>_bigrams.txt     Two-letter frequencies.
 ngrams/<lang>_trigrams.txt    Three-letter frequencies.
 ngrams/<lang>_quadgrams.txt   Four-letter frequencies.
-cribs/                    Known-word lists for the --crib-file finisher.
+cribs/                    Known-word lists for the --crib-rerank finisher.
 eval/                     Authentic-message database, eval harnesses, and the
                           Appendix-C source tables the wehrmacht language is built from.
 ```
@@ -241,7 +241,7 @@ are read from a **data directory** (filenames built as
 > conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
 > `--polish`, kept because it is the only gain cascade that works with
-> `-F`/`--exhaust`), `--crib-file` (measured-down) and `--exhaust`. Each is
+> `-F`/`--exhaust`), `--crib-rerank` (measured-down) and `--exhaust`. Each is
 > tagged **not recommended** in its entry below and in `--help`. `--ring-stride`
 > was on this list until its accuracy numbers turned out to be contaminated by a
 > `--polish` guard bug — at `K=2`/`K=3` it costs only ~0.5–2pp of exact recovery
@@ -707,7 +707,54 @@ are read from a **data directory** (filenames built as
   to the other 25. Measured on an 88-letter message with the board hidden and a
   12-letter crib: **92% of letters recovered against 8% unseeded** (10% at
   `-R 64`), and the same 92% swept as pinned, so seeding does not need the
-  alignment to be known.
+  alignment to be known. **That was measured with the rotor key given**, one
+  key; with the key unknown the sweep is not free — see `--crib-list`.
+- `--crib-list FILE` **a whole crib library**, one crib per line (`#` comments,
+  duplicates dropped, **file order preserved** — the generator emits
+  most-likely-to-match first and re-sorting would throw away the early exit).
+  Runs **one complete rotor sweep per crib** — crib-outer, because the shared
+  `setup_mapping`/`precompute` a rotor-outer loop would save is 0.6% of the run
+  while early exit is worth up to 50× (`cribs.md` §6.7) — and keeps the best
+  board across all of them. Three things that are fatal for a single `--crib`
+  merely skip the crib here: longer than the ciphertext, matching the ciphertext
+  at every alignment, or rejecting every key. A library is written against a
+  network's vocabulary, not one message, so most of its cribs not fitting is the
+  normal case. Rejected with `--crib` and with `--crib-at` (which pins *one*
+  alignment, and the cribs differ in length). The progress-line column header is
+  printed once for the run, and the echo high-water mark carries across cribs so
+  a later crib cannot re-print boards worse than the best already found.
+- `--no-crib-reorder` **keep a `--crib-list` in file order** (off by default,
+  i.e. cribs run cheapest-measured-cost first). Reverses `cribs.md` §5 step
+  5, which priced cribs with
+  `build_cribs.py`'s *modelled* cost — flat-ish by length. The measured curve is
+  a **cliff**: relative to a no-crib sweep, 8 letters costs **52×**, 12 costs
+  0.67×, 25 costs 0.02× — a ~2 600× spread against the model's 13×, with the
+  16-letter point cross-checked on a 5× larger key space (0.074× vs 0.085×).
+  Since how often a crib is *present* spans only ~26× (§4.2), the cost term
+  dominates: the whole long tail of a library costs less than one short crib.
+  Ordering is a **preference, not a filter**: nothing is discarded, so the
+  worst case is a later win, never a lost one. **A `--crib-max-hyps` flag that
+  *discarded* costly cribs was built and removed**: cost is anti-correlated with
+  the chance of a hit — short cribs are the most expensive *and* the most likely
+  to be present (93% of messages carry an 8-letter crib, 3% a 20-letter one) —
+  so on the shipped library it skipped all four cribs actually in the message
+  and recovered nothing, where not skipping recovered it in 8 s. Reordering
+  captures the throughput without that risk, which is why it replaced it.
+- **The crib list reports an expected gain per crib**, printed as a table before
+  each sweep: `# crib len algn hyp/key gain`. `gain` is what a key costs
+  *without* the crib over what it costs *with* it — above 1 it saves work, below
+  1 it costs more than using no crib at all. **Measured, not modelled**:
+  `crib_unit()` and `hillclimb_one()` are both run on the same eight sampled
+  keys and their plugboards-scored counters compared, so it already contains
+  both opposing effects (keys rejected for free, extra climbs where they are
+  not). Boards rather than wall time, so a printed number stays reproducible.
+  It omits the deduction's own cost (outside the score loop), so a crib
+  rejecting nearly everything is flattered — hence `>1000x` rather than a
+  figure. `<` marks a crib that hit the work budget: a bound, not a measurement.
+  The table is also the standing argument against acting on it automatically —
+  on the shipped library the cribs actually present in the message are the ones
+  scoring ~0.03–0.07×, so the column guides the reader rather than gating a
+  crib.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are

@@ -20,6 +20,7 @@
 #include <new>
 #include <queue>
 #include <random>
+#include <set>
 #include <string>
 #include <thread>
 #include <utility>
@@ -156,6 +157,29 @@ static int crib_align[maxlen];          /* viable alignments, in order */
 static unsigned char crib_anchor_at[maxlen];   /* anchor letter of each one's menu */
 static int crib_aligns = 0;
 static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossible */
+/* --crib-list FILE: a whole library of cribs, tried in file order, one full rotor
+   sweep each (cribs.md 6.7 -- crib-outer, because early exit is worth up to 50x while
+   the shared setup_mapping/precompute a rotor-outer loop would save is 0.6%).
+     You rarely know which phrase a message contains; you know the vocabulary of the
+   network, which is what eval/build_cribs.py emits. A single --crib is for testing and
+   for the case where you do know. */
+static const char * opt_crib_list = nullptr;
+static std::vector<std::string> g_crib_list;    /* read-only after load_crib_list() */
+static const size_t crib_sample_keys = 256;
+/* --no-crib-reorder: keep a --crib-list in file order instead of running it
+   cheapest-measured-cost first. Reordering is the DEFAULT, so the flag names the
+   exception -- and it can safely be a default because ordering discards nothing: the
+   worst case is that the winner is found later, never that it is lost. See
+   crib_cheaper() for why cheapest-first, and why it reverses what cribs.md 5 step 5
+   concluded from a modelled cost. */
+static bool opt_crib_reorder = true;
+/* Keys on which both sides of the choice are actually RUN, to measure the expected
+   gain (the hypothesis count above needs a much larger sample, but it is far cheaper
+   per key -- a climb costs thousands of board scores where a deduction costs tens of
+   propagations). Eight keys, and a crib that has fallen this far behind on them is
+   reported as a bound rather than measured further. */
+static const size_t crib_gain_keys = 8;
+static const uint64_t crib_gain_budget = 64;
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french, swedish, finnish,
                                       icelandic, polish, spanish, wehrmacht; no default */
@@ -223,7 +247,7 @@ static double opt_cascade_gate;
    cascade found nothing). --polish turns it on for the single best-board finisher. */
 static int opt_cascade3;
 static int opt_polish;
-/* --crib-file / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
+/* --crib-rerank / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
    score + opt_crib_weight * crib_score(decrypt), where crib_score sums the weights of known
@@ -240,7 +264,7 @@ static int opt_polish;
    answer is the artifact). Off by default (no crib file ->
    opt_crib 0 -> byte-identical); needs -c; -T-deterministic (the combined score is a
    deterministic function of the board). See crib_score()/load_cribs(). */
-static const char * opt_crib_file = nullptr;
+static const char * opt_crib_rerank = nullptr;
 static double opt_crib_weight = 0.5;   /* the least-harmful weight measured (still net ~0) */
 static int opt_crib = 0;               /* set once a non-empty crib file is loaded */
 static std::vector<std::pair<std::string, double>> g_cribs;   /* read-only after load */
@@ -1565,7 +1589,7 @@ static double crib_score(const machine & m)
   return s;
 }
 
-/* Load the known-word list for --crib-file: one word per line, an optional weight after
+/* Load the known-word list for --crib-rerank: one word per line, an optional weight after
    it (default 1.0); '#' starts a comment. Words are folded to A-Z uppercase (matching the
    ciphertext/plaintext readers). Populates g_cribs and sets opt_crib. */
 static void load_cribs(const char * fname)
@@ -1604,6 +1628,48 @@ static void load_cribs(const char * fname)
     }
   fclose(f);
   opt_crib = g_cribs.empty() ? 0 : 1;
+}
+
+/* Load the crib LIBRARY for --crib-list: one crib per line, '#' starts a comment, and
+   anything after the crib on a line is informational (build_cribs.py writes the tier,
+   spare letters and provenance there). Letters are folded to A-Z uppercase like every
+   other text this tool reads.
+     File ORDER is significant and preserved: the generator emits its cribs most-likely-
+   to-match first, and a run stops at the first crib that wins, so re-sorting the list
+   would throw away the early exit that makes crib-outer worth doing (cribs.md 5 step 5
+   measured median time-to-first-hit at 10 h in this order against 82 h ordered by
+   tier). Duplicates are dropped -- a repeated crib costs a full rotor sweep to learn
+   nothing new -- but the FIRST occurrence keeps its position. */
+static void load_crib_list(const char * fname)
+{
+  FILE * f = fopen(fname, "r");
+  if (f == nullptr)
+    fatal("Cannot open --crib-list file");
+  char line[1024];
+  std::set<std::string> seen;
+  while (fgets(line, sizeof line, f) != nullptr)
+    {
+      char * p = line;
+      while ((*p == ' ') || (*p == '\t'))
+        p++;
+      if ((*p == '#') || (*p == '\n') || (*p == '\r') || (*p == '\0'))
+        continue;
+      std::string crib;
+      while ((*p != '\0') && (*p != ' ') && (*p != '\t')
+             && (*p != '\n') && (*p != '\r'))
+        {
+          int u = toupper(static_cast<unsigned char>(*p));
+          if ((u >= 'A') && (u <= 'Z'))
+            crib += static_cast<char>(u);
+          p++;
+        }
+      /* A 1-letter crib has no menu edge to chain along, matching --crib's own limit. */
+      if ((crib.size() >= 2) && seen.insert(crib).second)
+        g_crib_list.push_back(crib);
+    }
+  fclose(f);
+  if (g_crib_list.empty())
+    fatal("--crib-list file holds no usable cribs (need at least 2 letters A-Z each)");
 }
 
 /* --- plaintext scoring models ------------------------------------------- */
@@ -3732,13 +3798,28 @@ static int mid_first_fire(int w1, int w2, int s1, int s2, int limit)
   return -1;
 }
 
+/* The column header is printed once per PROCESS, not once per best_result.
+   --crib-list runs one sweep (and so one best_result) per crib, and the columns are
+   identical between them, so a per-sweep flag would reprint the header for every
+   crib. Only one best_result is live at a time -- the cribs run in sequence and the
+   --ring-stride refinement runs after its search has joined -- so writing this under
+   whichever mutex is current is safe. */
+static bool g_header_shown = false;
+
+/* Highest score echoed by ANY sweep so far, for the same reason: --crib-list runs one
+   sweep per crib and the progress lines are one stream to the reader, so the mark that
+   suppresses a repeat has to outlive a single best_result. Read and written between
+   sweeps only (the cribs run in sequence), never on the hot path. */
+static double g_shown_high = score_min;
+
 /* Print one progress line under the best-result mutex, emitting the column
    header before the first line of the run. */
 static void progress_line(best_result & b, machine & m, double score)
 {
-  if (! b.header_shown)
+  if (! b.header_shown && ! g_header_shown)
     {
       b.header_shown = true;
+      g_header_shown = true;
       showconfig_header();
     }
   showconfig(m, score);
@@ -4558,7 +4639,187 @@ static void run_parallel(int nthreads, F per_thread)
     th.join();
 }
 
-void bruteforce(char * result)
+/* --- what a crib will COST, measured before paying it (cribs.md 4.2b) ---------------
+
+   The unit is surviving HYPOTHESES per key, not rejection rate and not crib length.
+   Under -c a surviving key is climbed once per surviving hypothesis, so that count is
+   what decides whether a crib pays for itself: measured 1.0 per key where a crib
+   rejects at all against 235 where it does not, which is the difference between a 126x
+   speedup and a 66x slowdown.
+
+   It CANNOT be predicted from the crib. NULLNULLNULL (12 letters) rejects 78% of rotor
+   settings while XHOCKXHOCKX (11 letters) rejects 1% -- length and distinct-letter
+   count do not track it, because the count depends on the crib AND the ciphertext
+   together. So it is measured, on a sample.
+
+   Nor can it be capped mid-run: an accumulated count across workers with an abort
+   would make the result depend on thread timing, and the whole search holds to
+   -T-determinism. So the decision is taken here, BEFORE the sweep, single-threaded,
+   over a fixed stride of the key space -- deterministic by construction.
+
+   Only wheel order 0's table is built (457 KB, one precompute), because the survival
+   rate is a property of the crib and the ciphertext rather than of any particular
+   rotor stack; the sample ranges over that order's whole ring x start space. */
+struct crib_cost
+{
+  double hyps_per_key;   /* surviving hypotheses per sampled key */
+  double pinned;         /* letters pinned per surviving hypothesis */
+  size_t sampled;        /* keys actually sampled (after the 7.12 collapse) */
+  /* Expected throughput gain: what a key costs WITHOUT this crib over what it costs
+     WITH it, both measured on the same keys as plugboards scored -- so it already
+     contains the two effects that pull against each other, the keys the crib rejects
+     outright and the extra climbs it adds for every surviving hypothesis. No model:
+     the seeded climb is actually run rather than priced by move-set arithmetic.
+       > 1 means the crib is expected to save work, < 1 that it costs more than not
+     using a crib at all. It measures THROUGHPUT ONLY and says nothing about recovery,
+     which is the whole reason it must not be used to prune a library on its own
+     (cribs.md 12 step 6). Zero when there was nothing to measure. */
+  double gain;
+  /* Plugboards scored per key WITH this crib -- the deduction's surviving hypotheses,
+     each climbed once. This is the quantity the default ordering sorts on: it is what
+     the crib will actually cost per key when swept, measured rather than modelled. */
+  double per_key;
+  uint64_t boards;       /* plugboards the estimate itself scored, for the totals */
+  bool gain_bounded;     /* the crib side hit its work budget: gain is "at most this" */
+  bool gain_atleast;     /* the crib scored NOTHING on the gain keys: "at least this" */
+};
+
+static crib_cost crib_estimate(size_t nsample)
+{
+  crib_cost c = { 0.0, 0.0, 0, 0.0, 0.0, 0, false, false };
+  key_space ks = build_key_space();
+  size_t rg = ks.rsize * ks.gsize;
+  if ((rg == 0) || ks.tasks.empty())
+    return c;
+
+  subst_table all = allocate_subst_tables(1);
+  machine * m = new machine();
+  m->plugboards_scored = 0;   /* differenced below; explicit so cppcheck can see it */
+  size_t cur_wo = static_cast<size_t>(-1);
+  int rg6[6];
+
+  /* Build wheel order 0's table exactly as phase 1 does, then reuse it for every
+     sampled key: key_to_machine points m.subst_array at `all + wo * asize`, and wo is
+     0 for every index below rg. */
+  init_walzen(*m, ks.tasks[0].u, ks.tasks[0].w[0], ks.tasks[0].w[1], ks.tasks[0].w[2]);
+  m->greek = ks.tasks[0].greek;
+  m->greek_offset = ks.tasks[0].greek_off;
+  m->subst_array = all;
+  set_effective_reflector(*m);
+  precompute(*m);
+
+  size_t stride = (rg + nsample - 1) / nsample;
+  if (stride < 1)
+    stride = 1;
+  size_t hyps = 0, pins = 0;
+  int board[asize];
+  for (size_t idx = 0; idx < rg; idx += stride)
+    {
+      if (! key_to_machine(*m, idx, ks.tasks, ks.range, ks.rc, ks.gc, all,
+                           rg, ks.gsize,
+                           static_cast<size_t>(ks.rc[1]) * ks.rc[2],
+                           static_cast<size_t>(ks.gc[1]) * ks.gc[2], cur_wo, rg6))
+        continue;                       /* collapsed away by 7.12 */
+      c.sampled++;
+      for (int a = 0; a < crib_aligns; a++)
+        for (int h = 0; h < asize; h++)
+          if (crib_try(*m, crib_align[a], crib_anchor_at[a], h, board))
+            {
+              hyps++;
+              for (int i = 0; i < asize; i++)
+                if (board[i] >= 0)
+                  pins++;
+            }
+    }
+
+  if (c.sampled > 0)
+    c.hyps_per_key = static_cast<double>(hyps) / static_cast<double>(c.sampled);
+  if (hyps > 0)
+    c.pinned = static_cast<double>(pins) / static_cast<double>(hyps);
+
+  /* EXPECTED GAIN, measured rather than modelled: run both sides of the choice on the
+     same keys and compare plugboards scored. crib_unit() is the real per-key work with
+     this crib -- the deduction, then one seeded climb per surviving hypothesis -- and
+     hillclimb_one() is the real per-key work without it. Their ratio therefore already
+     contains both effects that pull against each other, the keys the crib rejects for
+     free and the extra climbs it adds where it does not.
+       Counting boards rather than timing keeps the number reproducible, which matters
+     because it is printed. The one thing it leaves out is the deduction's own cost,
+     which runs outside the score loop and so is not counted (the caveat CLAUDE.md
+     records for score_iter generally) -- it flatters a crib that rejects nearly
+     everything, where the true gain saturates at the deduction's own price.
+       Only under -c: without a climb there is nothing to seed, and a crib is measured
+     to lose against a plain scan anyway (cribs.md 4.2b). */
+  if (opt_hillclimb && (c.sampled > 0))
+    {
+      size_t gstride = stride * ((c.sampled + crib_gain_keys - 1) / crib_gain_keys);
+      if (gstride < stride)
+        gstride = stride;
+      uint64_t with = 0, without = 0;
+      size_t done = 0;
+      for (size_t idx = 0; (idx < rg) && (done < crib_gain_keys); idx += gstride)
+        {
+          if (! key_to_machine(*m, idx, ks.tasks, ks.range, ks.rc, ks.gc, all,
+                               rg, ks.gsize,
+                               static_cast<size_t>(ks.rc[1]) * ks.rc[2],
+                               static_cast<size_t>(ks.gc[1]) * ks.gc[2], cur_wo, rg6))
+            continue;
+          uint64_t b0 = m->plugboards_scored;
+          crib_unit(*m, idx, 0);
+          with += m->plugboards_scored - b0;
+          /* Re-decode the key: the climb above left the machine holding its own board,
+             and hillclimb_one must start from the same state crib_unit did. */
+          key_to_machine(*m, idx, ks.tasks, ks.range, ks.rc, ks.gc, all, rg, ks.gsize,
+                         static_cast<size_t>(ks.rc[1]) * ks.rc[2],
+                         static_cast<size_t>(ks.gc[1]) * ks.gc[2], cur_wo, rg6);
+          b0 = m->plugboards_scored;
+          hillclimb_one(*m, idx, 0);
+          without += m->plugboards_scored - b0;
+          done++;
+          /* A crib that rejects nothing runs a climb per surviving hypothesis, so a
+             few keys of it can cost more than the whole rest of the estimate. Once it
+             is that far behind, the exact figure does not matter -- stop and report
+             the bound. Deterministic: fixed key order, fixed threshold. */
+          if (with > crib_gain_budget * without)
+            {
+              c.gain_bounded = true;
+              break;
+            }
+        }
+      /* with == 0 means the crib rejected every one of the gain keys, so it cost no
+         climbs at all -- the best possible result, and the one place a ratio has no
+         denominator. Report the lower bound the sample supports (as if a single board
+         had been scored) rather than nothing, which would read as "no information"
+         for the strongest cribs in the list. */
+      if (with > 0)
+        c.gain = static_cast<double>(without) / static_cast<double>(with);
+      else if (without > 0)
+        {
+          c.gain = static_cast<double>(without);
+          c.gain_atleast = true;
+        }
+      /* The estimate runs real climbs, so its work belongs in the run's totals rather
+         than vanishing with the machine it used -- ~150 ms per crib is small beside a
+         sweep but should not be invisible. */
+      c.boards = with + without;
+      if (done > 0)
+        c.per_key = static_cast<double>(with) / static_cast<double>(done);
+    }
+
+  delete m;
+  delete[] all;
+  return c;
+}
+
+/* One complete rotor sweep. Returns the best score, or score_min when nothing was
+   scored at all -- which only happens when a crib rejected every key. That is fatal
+   for a single run (nothing to print) but ORDINARY for --crib-list: a crib that does
+   not match the message is expected to reject everything, and the caller moves on to
+   the next one. Hence `allow_empty` rather than an unconditional fatal() here.
+     Called once per crib under --crib-list, so anything it leaves behind must be
+   per-sweep state. The two counters it sets (g_keys_analysed, g_plugboards_scored)
+   are ASSIGNED, not accumulated, so the caller sums them across cribs. */
+static double bruteforce(char * result, bool allow_empty)
 {
   key_space ks = build_key_space();
   const std::vector<wheel_task> & tasks = ks.tasks;
@@ -4648,6 +4909,12 @@ void bruteforce(char * result)
      total_keys; the non-F sweep is over work_items (keys x restarts), so it gets its own
      chunk below. */
   best_result best;
+  /* Carry the display high-water mark ACROSS sweeps. Under --crib-list each crib gets
+     its own best_result, so without this a later crib would re-echo every board that
+     beats its own (fresh) mark -- flooding stderr with lines scoring below the winner
+     an earlier crib already found. Display state only: `shown` is never read by the
+     merge logic, so which candidate wins stays -T-deterministic. */
+  best.shown.store(g_shown_high, std::memory_order_relaxed);
   g_progress = & best;   /* climbs echo intermediate improvements against this */
   size_t chunk = total_keys / (static_cast<size_t>(nthreads) * 16);
   if (chunk < 1)
@@ -5203,10 +5470,197 @@ void bruteforce(char * result)
     delete machines[t];
   delete[] all;
 
+  double shown_now = best.shown.load(std::memory_order_relaxed);
+  if (shown_now > g_shown_high)
+    g_shown_high = shown_now;
+
+  /* `best` is about to go out of scope, so the global must stop pointing at it. This
+     was harmless while bruteforce() ran once per process, but --crib-list calls it
+     once per crib and runs climbs BETWEEN the calls (the cost estimate), and those
+     climbs read g_progress -- a dangling stack reference, caught by clang-analyzer.
+     Clearing it also makes the estimate's climbs correctly silent: they are
+     measurement, not search, and must not emit progress lines. */
+  g_progress = nullptr;
+
   if (! best.found)
-    fatal("No machine configuration produced a score");
+    {
+      if (allow_empty)
+        return score_min;      /* the crib rejected every key -- caller tries the next */
+      fatal("No machine configuration produced a score");
+    }
 
   memcpy(result, best.plaintext, textlength + 1);
+  return best.score;
+}
+
+/* --- --crib-list: one rotor sweep per crib (cribs.md 6.7, 12 step 6) -----------------
+
+   Crib-outer, not rotor-outer. The sharing a rotor-outer loop would buy -- one
+   setup_mapping and precompute across all the cribs at a given setting -- is 0.6% of
+   the run, because the deduction dwarfs it ~180x. What crib-outer buys is EARLY EXIT,
+   worth up to 50x, and it reuses the existing parallel sweep unchanged rather than
+   threading a crib list into the hot path.
+
+   Three things a single --crib treats as fatal are ordinary here, and skip the crib
+   instead: it can be longer than the ciphertext, it can match the ciphertext at every
+   alignment (so it cannot sit anywhere), and it can reject every key. A library is
+   written against a network's vocabulary, not against one message, so most of its
+   cribs do not fit any given message -- that is the normal case, not an error.
+
+   The counters bruteforce() sets are per-sweep, so they are summed here and written
+   back for the final diagnostic. */
+/* One entry of the run plan: a crib, whether it is usable at all, and what it was
+   measured to cost. Built for every crib BEFORE any sweep starts, because the order
+   the sweeps run in is decided from the costs. */
+struct crib_plan
+{
+  size_t index;          /* position in the file, 1-based -- printed, and the tie-break */
+  int len;
+  int aligns;
+  crib_cost cost;
+  const char * skip;     /* why this crib is not run, or null */
+};
+
+/* Cheapest first, ties by file order.
+
+   This is the DEFAULT because the cost spread across crib lengths is enormous and
+   runs the opposite way to intuition: measured on one message, a 20-letter crib swept
+   in 0.15 s where a 10-letter one took 13.65 s -- 90x, because the long crib rejects
+   almost every key by arithmetic and the short one rejects none, so every key is
+   climbed once per surviving hypothesis. The whole long tail of a library therefore
+   costs less than a single short crib, and running it first is very nearly free.
+
+   It is worth being explicit that this REVERSES what cribs.md 5 step 5 concluded.
+   That measurement ordered by a MODELLED cost -- build_cribs.py prices a crib by its
+   length on the assumption that sweep cost is roughly flat across lengths (4.1's
+   table: 100-117 s for every row) -- and 4.2b showed the model has the wrong unit
+   entirely. With a flat cost model, ordering by anything but hit probability can only
+   delay the winner, which is exactly the 141 h against 6.7 h it reported. With
+   measured costs the arithmetic changes, because the cost spread (~90x) is larger
+   than the hit-rate spread (~26x: 93% of messages carry an 8-letter crib against 3%
+   for a 20-letter one, 4.2).
+
+   Ordering is a preference, not a filter: nothing is discarded, so the worst case is
+   that the winner is found later rather than not at all. That is why this may default
+   on where --crib-max-hyps, which does discard, must not. */
+static bool crib_cheaper(const crib_plan & a, const crib_plan & b)
+{
+  if (a.cost.per_key != b.cost.per_key)
+    return a.cost.per_key < b.cost.per_key;
+  return a.index < b.index;
+}
+
+static void run_crib_list(char * result)
+{
+  char text[maxlen+1];
+  double best_score = score_min;
+  bool have = false;
+  size_t tot_keys = 0, tried = 0, skipped = 0;
+  unsigned long long tot_boards = 0;
+  size_t n = g_crib_list.size();
+
+  /* Pass 1: measure every crib. This has to finish before any sweep starts, since the
+     order of the sweeps is decided from the results -- and it is cheap next to them
+     (~150 ms per crib, independent of the key space, against sweeps of minutes). */
+  std::vector<crib_plan> plan;
+  plan.reserve(n);
+  for (size_t i = 0; i < n; i++)
+    {
+      crib_plan p;
+      p.index = i + 1;
+      p.len = static_cast<int>(g_crib_list[i].size());
+      p.aligns = 0;
+      p.cost = { 0.0, 0.0, 0, 0.0, 0.0, 0, false, false };
+      p.skip = nullptr;
+      if (p.len > textlength)
+        p.skip = "longer than the ciphertext";
+      else
+        {
+          opt_crib_text = g_crib_list[i].c_str();
+          init_crib();
+          p.aligns = crib_aligns;
+          /* Every alignment has the crib matching the ciphertext, which an Enigma
+             never does -- so this crib cannot sit anywhere in this message. */
+          if (crib_aligns == 0)
+            p.skip = "cannot sit anywhere";
+          else
+            {
+              p.cost = crib_estimate(crib_sample_keys);
+              tot_boards += p.cost.boards;
+            }
+        }
+      plan.push_back(p);
+    }
+
+  /* Stable, so equal-cost cribs keep the file order the generator chose. */
+  if (opt_crib_reorder)
+    std::stable_sort(plan.begin(), plan.end(), crib_cheaper);
+
+  /* Pass 2: the table, in the order the sweeps will actually run, so it doubles as
+     the run plan. "gain" is what a key costs without the crib over what it costs with
+     it, both measured -- the guide to why a crib is worth running or was skipped. */
+  fprintf(stderr, "  %4s  %-24s %4s %4s %9s %8s  %s\n",
+          "#", "crib", "len", "algn", "hyp/key", "gain", "note");
+  for (const crib_plan & p : plan)
+    {
+      const std::string & crib = g_crib_list[p.index - 1];
+      char hyp[16], gain[16];
+      /* A strong crib leaves NO hypothesis alive anywhere in the sample, which is the
+         best possible news and would read as an error printed as "0.0"; say what was
+         actually measured, a bound from the sample size. */
+      if (p.cost.sampled == 0)
+        snprintf(hyp, sizeof hyp, "%s", "-");
+      else if (p.cost.hyps_per_key == 0.0)
+        snprintf(hyp, sizeof hyp, "<%.3f",
+                 1.0 / static_cast<double>(p.cost.sampled));
+      else
+        snprintf(hyp, sizeof hyp, "%.1f", p.cost.hyps_per_key);
+      if (p.cost.gain <= 0.0)
+        snprintf(gain, sizeof gain, "%s", "-");
+      else if (p.cost.gain >= 1000.0)
+        snprintf(gain, sizeof gain, "%s", ">1000x");   /* beyond useful resolution */
+      else
+        snprintf(gain, sizeof gain, "%s%.2gx",
+                 p.cost.gain_bounded ? "<" : (p.cost.gain_atleast ? ">" : ""),
+                 p.cost.gain);
+      char aln[8];
+      if (p.len > textlength)
+        snprintf(aln, sizeof aln, "%s", "-");   /* never got as far as a menu */
+      else
+        snprintf(aln, sizeof aln, "%d", p.aligns);
+      fprintf(stderr, "  %4zu  %-24s %4d %4s %9s %8s%s%s\n",
+              p.index, crib.c_str(), p.len, aln, hyp, gain,
+              p.skip ? "  skipped: " : "", p.skip ? p.skip : "");
+    }
+
+  /* Pass 3: sweep, cheapest first unless the caller asked for file order. */
+  for (const crib_plan & p : plan)
+    {
+      if (p.skip != nullptr)
+        {
+          skipped++;
+          continue;
+        }
+      opt_crib_text = g_crib_list[p.index - 1].c_str();
+      init_crib();          /* the menu globals belong to whichever crib ran last */
+      tried++;
+      double s = bruteforce(text, true);
+      tot_keys += g_keys_analysed;
+      tot_boards += g_plugboards_scored;
+      if ((s > score_min) && (! have || (s > best_score)))
+        {
+          best_score = s;
+          have = true;
+          memcpy(result, text, textlength + 1);
+        }
+    }
+
+  g_keys_analysed = tot_keys;
+  g_plugboards_scored = tot_boards;
+  fprintf(stderr, "Crib list:  %zu crib%s, %zu tried, %zu skipped\n",
+          n, (n == 1) ? "" : "s", tried, skipped);
+  if (! have)
+    fatal("No crib in the list produced a scored configuration");
 }
 
 /* --- input, output, help, and CLI --------------------------------------- */
@@ -5475,7 +5929,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "so nothing above 13 pays until K=26, which is 15%");
   fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
   fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
-  fprintf(out, "  %-24s %s\n", "--crib-file F",
+  fprintf(out, "  %-24s %s\n", "--crib-rerank F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
   fprintf(out, "  %-24s %s\n", "", "neutral/dominated (needs -c) [off], not recommended");
@@ -5492,13 +5946,21 @@ void help(FILE * out)
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
   fprintf(out, "  %-24s %s\n", "--crib TEXT",
-          "Known plaintext at --crib-at: rotor settings that");
-  fprintf(out, "  %-24s %s\n", "", "cannot produce it are rejected unscored. Needs");
-  fprintf(out, "  %-24s %s\n", "", "--crib-at; no -F/--exhaust/--ring-stride/-A [off]");
+          "Known plaintext: rotor settings that cannot produce");
+  fprintf(out, "  %-24s %s\n", "", "it are rejected unscored, and with -c the plugs");
+  fprintf(out, "  %-24s %s\n", "", "it deduces seed the climb. No -F/--exhaust/");
+  fprintf(out, "  %-24s %s\n", "", "--ring-stride/-A [off]");
   fprintf(out, "  %-24s %s\n", "--crib-at N",
           "Where the crib sits (0-based); omit to sweep every");
   fprintf(out, "  %-24s %s\n", "", "alignment -- but rejections multiply across");
   fprintf(out, "  %-24s %s\n", "", "them, so a swept crib needs 16+ letters");
+  fprintf(out, "  %-24s %s\n", "--crib-list F",
+          "Crib library, one per line ('#' comments), tried in");
+  fprintf(out, "  %-24s %s\n", "", "file order, one rotor sweep each; best kept [off]");
+  fprintf(out, "  %-24s %s\n", "--no-crib-reorder",
+          "Keep a --crib-list in file order. By default it is");
+  fprintf(out, "  %-24s %s\n", "", "run cheapest-measured-cost first, since a long");
+  fprintf(out, "  %-24s %s\n", "", "crib can cost ~2600x less than a short one [off]");
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
@@ -5686,6 +6148,14 @@ void show_settings()
       else
         fprintf(stderr, "Crib:       %s, sweeping every alignment\n", opt_crib_text);
     }
+  if (opt_crib_list)
+    {
+      fprintf(stderr, "Crib list:  %s (%zu crib%s)\n", opt_crib_list,
+              g_crib_list.size(), (g_crib_list.size() == 1) ? "" : "s");
+      fprintf(stderr, "Crib order: %s\n",
+              opt_crib_reorder ? "cheapest measured cost first"
+                               : "file order (--no-crib-reorder)");
+    }
 }
 
 int main(int argc, char * * argv)
@@ -5708,6 +6178,9 @@ int main(int argc, char * * argv)
   opt_steckerbrett = "";
   opt_no_plug = "";
   opt_crib_text = nullptr;
+  opt_crib_list = nullptr;
+  g_crib_list.clear();
+  opt_crib_reorder = true;
   opt_crib_at = -1;
   opt_crib_dump = false;
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q/-a) */
@@ -5723,7 +6196,7 @@ int main(int argc, char * * argv)
   opt_cascade_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
   opt_cascade3 = 0;
   opt_polish = 0;
-  opt_crib_file = nullptr;
+  opt_crib_rerank = nullptr;
   opt_crib_weight = 0.5;
   opt_crib = 0;
   g_cribs.clear();
@@ -5752,8 +6225,9 @@ int main(int argc, char * * argv)
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
-         OPT_POLISH, OPT_CRIB, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
-         OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP };
+         OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
+         OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
+         OPT_CRIBLIST, OPT_NOCRIBREORDER };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -5797,7 +6271,7 @@ int main(int argc, char * * argv)
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
       { "cascade",        optional_argument, nullptr, OPT_CASCADE },
       { "polish",         no_argument,       nullptr, OPT_POLISH },
-      { "crib-file",      required_argument, nullptr, OPT_CRIB },
+      { "crib-rerank",    required_argument, nullptr, OPT_CRIBRERANK },
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { "ring-stride",    required_argument, nullptr, OPT_RINGSTRIDE },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
@@ -5805,6 +6279,8 @@ int main(int argc, char * * argv)
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
+      { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
+      { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -5927,8 +6403,14 @@ int main(int argc, char * * argv)
         case OPT_CRIBDUMP:
           opt_crib_dump = true;
           break;
-        case OPT_CRIB:
-          opt_crib_file = optarg;
+        case OPT_CRIBLIST:
+          opt_crib_list = optarg;
+          break;
+        case OPT_NOCRIBREORDER:
+          opt_crib_reorder = false;
+          break;
+        case OPT_CRIBRERANK:
+          opt_crib_rerank = optarg;
           break;
         case OPT_CRIBWEIGHT:
           opt_crib_weight = strtod(optarg, nullptr);
@@ -6112,12 +6594,17 @@ int main(int argc, char * * argv)
      position is required -- the sweep is step 4. The combination rules follow cribs.md 8:
      the crib composes with the climb options, and is rejected against the search modes
      whose key handling it would have to be reconciled with. */
-  if (opt_crib_text)
+  if (opt_crib_text && opt_crib_list)
+    fatal("--crib and --crib-list are alternatives: give one crib or a library of them");
+  if (opt_crib_text || opt_crib_list)
     {
-      size_t n = strlen(opt_crib_text);
-      if ((n < 2) || (n > static_cast<size_t>(maxlen)) ||
-          (strspn(opt_crib_text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") < n))
-        fatal("Illegal --crib string (must be at least 2 letters A-Z)");
+      if (opt_crib_text)
+        {
+          size_t n = strlen(opt_crib_text);
+          if ((n < 2) || (n > static_cast<size_t>(maxlen)) ||
+              (strspn(opt_crib_text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") < n))
+            fatal("Illegal --crib string (must be at least 2 letters A-Z)");
+        }
       if (opt_crib_at == -1)
         { /* no --crib-at: sweep every alignment (cribs.md 12 step 4) */ }
       else if (opt_crib_at < 0)
@@ -6132,9 +6619,20 @@ int main(int argc, char * * argv)
         fatal("--crib is not supported with --ring-stride");
       if (opt_anneal > 0)
         fatal("--crib is not supported with -A (annealing seeds its own board)");
+      /* A library holds cribs of many lengths, so one --crib-at cannot be right for
+         all of them; and the cost estimate is what makes a library affordable. */
+      if (opt_crib_list && (opt_crib_at >= 0))
+        fatal("--crib-at pins ONE alignment, so it cannot apply to a whole "
+              "--crib-list (the cribs differ in length and position)");
+      /* With one crib there is no order to choose, so a request for one would
+         silently do nothing -- say so rather than accept and ignore it. */
+      if ((! opt_crib_reorder) && (opt_crib_list == nullptr))
+        fatal("--no-crib-reorder needs --crib-list (there is nothing to order)");
     }
   else if ((opt_crib_at >= 0) || opt_crib_dump)
     fatal("--crib-at and --crib-dump need --crib");
+  else if (! opt_crib_reorder)
+    fatal("--no-crib-reorder needs --crib-list (there is nothing to order)");
 
   /* --no-plug LETTERS: letters known to carry no cable. Three ways to get it wrong, all
      fatal because each means the command line says something the search cannot honour:
@@ -6277,8 +6775,8 @@ int main(int argc, char * * argv)
     fatal("--dump-all needs the plugboard hill-climb (-c)");
 
   /* The crib finisher re-ranks converged plugboards, so it needs the climb. */
-  if (opt_crib_file && (! opt_hillclimb))
-    fatal("The crib finisher (--crib-file) needs the plugboard hill-climb (-c)");
+  if (opt_crib_rerank && (! opt_hillclimb))
+    fatal("The crib finisher (--crib-rerank) needs the plugboard hill-climb (-c)");
 
   /* --true-key reports the true key's tier-1 rank, so it needs the pre-filter (-F);
      it is a standard-Enigma diagnostic and parses into g_tk_* here. */
@@ -6422,8 +6920,13 @@ int main(int argc, char * * argv)
 
   /* Load the known-word list for the crib finisher (sets opt_crib), before consuming
      stdin so a missing/empty file fails fast. */
-  if (opt_crib_file != nullptr)
-    load_cribs(opt_crib_file);
+  if (opt_crib_rerank != nullptr)
+    load_cribs(opt_crib_rerank);
+
+  /* Same reason: read the crib library before stdin, so a missing or empty file is
+     reported immediately rather than after the ciphertext has been consumed. */
+  if (opt_crib_list != nullptr)
+    load_crib_list(opt_crib_list);
 
   /* read ciphertext */
 
@@ -6468,7 +6971,10 @@ int main(int argc, char * * argv)
   /* try all combinations (bruteforce allocates one machine per worker thread) */
 
   char result[maxlen+1];
-  bruteforce(result);
+  if (opt_crib_list == nullptr)
+    bruteforce(result, false);
+  else
+    run_crib_list(result);
 
   /* write plaintext */
 
@@ -6499,14 +7005,24 @@ int main(int argc, char * * argv)
           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
           static_cast<unsigned long long>(g_plugboards_scored),
           (g_plugboards_scored == 1) ? "" : "s");
-  if (opt_crib_text)
+  if (opt_crib_text || opt_crib_list)
     {
+      /* With a list, crib_aligns belongs to whichever crib ran last and would be a lie
+         about the run as a whole, so the alignment count is reported only for a single
+         crib. The rejection total IS meaningful across cribs: both counters accumulate
+         over every sweep. */
       size_t rej = g_crib_rejected.load(std::memory_order_relaxed);
-      fprintf(stderr,
-              "Crib: %d alignment%s, rejected %zu of %zu key%s (%.1f%%) unscored\n",
-              crib_aligns, (crib_aligns == 1) ? "" : "s",
-              rej, g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
-              g_keys_analysed ? (100.0 * rej / g_keys_analysed) : 0.0);
+      if (opt_crib_list)
+        fprintf(stderr, "Crib: rejected %zu of %zu key%s (%.1f%%) unscored, "
+                "over every crib tried\n",
+                rej, g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
+                g_keys_analysed ? (100.0 * rej / g_keys_analysed) : 0.0);
+      else
+        fprintf(stderr,
+                "Crib: %d alignment%s, rejected %zu of %zu key%s (%.1f%%) unscored\n",
+                crib_aligns, (crib_aligns == 1) ? "" : "s",
+                rej, g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
+                g_keys_analysed ? (100.0 * rej / g_keys_analysed) : 0.0);
     }
   fprintf(stderr, "Finished in %.2f s using %d thread%s\n",
           secs, opt_threads, (opt_threads == 1) ? "" : "s");

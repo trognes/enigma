@@ -266,6 +266,25 @@ English tables.
   is where a short crib earns its keep even though it cannot filter — measured
   92% of letters recovered against 8% unseeded, on an 88-letter message with the
   plugboard hidden
+- **`--crib-list FILE`** — A whole **crib library** instead of one crib: one per
+  line, `#` comments, tried in **file order** (the generator emits
+  most-likely-to-match first), one complete rotor sweep each, best board kept.
+  You rarely know which phrase a message contains — you know the vocabulary of
+  the network, which is what `eval/build_cribs.py` harvests. A crib that is too
+  long, cannot sit anywhere, or rejects every key is skipped rather than fatal,
+  because most of a library not fitting a given message is the normal case.
+  Each crib gets a row before its sweep — length, viable alignments, measured
+  cost, and **expected gain** (what a key costs without the crib over what it
+  costs with it, so above 1 saves work and below 1 costs more than no crib),
+  which is the guide to why a crib is worth running or was skipped
+- **`--no-crib-reorder`** — Keep a `--crib-list` in the library's own order.
+  By default it is run **cheapest measured cost first**. The cost of a crib
+  against its length is a *cliff*: relative to a sweep with no crib, 8 letters
+  costs **52×**, 12 costs 0.67×, 25 costs 0.02×. Since how often a crib is
+  present spans only ~26×, cost dominates — the whole long tail of a library
+  costs less than one short crib, so running it first is nearly free. Ordering
+  discards nothing, so the worst case is finding the answer later, never not at
+  all
 - **`-R N` / `--restarts N`** — Random restart attempts: `0` = one deterministic
   climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best
   `[0]`
@@ -353,7 +372,7 @@ German text (and `make crackquality`) should stay on `-l german`. Regenerate the
 tables with `python3 eval/build_telegraphic_ngrams.py`; see
 `eval/MODERN_BREAKING_NOTES.md` §6.
 
-A known-word (**crib**) finisher, `--crib-file <f>`, re-ranks converged
+A known-word (**crib**) finisher, `--crib-rerank <f>`, re-ranks converged
 plugboards by `score + --crib-weight × (known words present in the decrypt)`,
 with the word list read from `<f>` (vocabulary in `cribs/`) and `--crib-weight
 X` setting how much that bonus counts against the n-gram score `[0.5]`. It is
