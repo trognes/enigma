@@ -1217,19 +1217,57 @@ exists to steer toward it — per-plug consensus across converged boards is only
 *outside* the score landscape rather than being mined out of it. That is why it
 can beat compute rather than merely adding to it.
 
-**Three cautions, none of them yet measured.**
+**Three cautions. The first is now measured; the others are not.**
 
-1. The table above seeds the climb with *correct* plugs. In a real sweep 25 of
-   the 26 hypotheses seed garbage, and a garbage seed at the true rotor setting
-   could in principle converge to something scoring higher than the correct seed
-   does. The ~1% scoring-failure floor makes that unlikely, but unlikely is not
-   measured.
+1. ~~The table above seeds the climb with correct plugs, and a garbage seed
+   could in principle out-score them.~~ **Measured, and it happens only at 8
+   letters** — see §7c.
 2. At *wrong* rotor settings you now run 26 climbs instead of one. That is where
    the whole 26x goes, and without loops none of it can be skipped.
 3. Coverage assumes the crib is exactly right. An 8-letter crib is far more
    likely to be present (§4.2) *and* far more likely to be a coincidental match
    that deduces confident nonsense. Short cribs make both errors more common at
    once.
+
+### 7c. Does a wrong hypothesis ever win? Measured
+
+The seeding mode rests on the solver keeping the best of 26 boards, exactly one
+of which is seeded with the truth. If a wrong seed ever converges above the
+right one, the run returns a confident answer that is not the message and
+nothing in the output says so. §7a named this as the single thing that could
+undo the mode. `eval/crib_seed_probe.py` measures it: plant a crib in an
+authentic plaintext, hide the board, give the tool the rotor key, and compare
+the winner's plug for the anchor letter against the truth — the anchor's partner
+*is* the hypothesis, so no new diagnostic is needed.
+
+150 trials per row, 90-letter messages, 10 cables hidden, `-f -l wehrmacht
+--score f10`:
+
+| crib | right hypothesis won | mean recovery | exact |
+|--:|--:|--:|--:|
+| **8** | **95%** | 74.4% | 85/150 |
+| 10 | 100% | 89.7% | 119/150 |
+| 12 | 100% | 94.9% | 132/150 |
+| 16 | 100% | 97.4% | 138/150 |
+
+**The risk is real and confined to 8 letters.** There a wrong hypothesis wins 5%
+of the time, and when it does the failure is total: mean recovery **8.6%**,
+median 7.8%, not one exact — indistinguishable from having no crib at all, with
+nothing in the output to flag it. From 10 letters up it did not happen once in
+450 trials.
+
+The mechanism is the obvious one. An 8-letter crib deduces about 4 cables
+(§7's table), so the correct seed is only slightly better than a wrong one and
+the score has little to separate them; at 10 letters (~5.3 cables) the
+advantage is already decisive.
+
+**So the seed mode's floor is 10 letters, not 8** — a floor set by *silent
+failure*, not by cost. This is a different boundary from §4.2a's: 16 letters is
+where a crib can filter a swept search, 10 is where it can safely seed one.
+Below 10 the answer can be wrong without looking wrong, which is worse than
+being slow.
+
+Cautions 2 and 3 remain unmeasured.
 
 **Where this sits in the plan.** It shares all the machinery of §6 — the same
 menu, the same deduction, the same `--no-plug` output — and differs only in what
@@ -1558,9 +1596,10 @@ different direction — so its lift may be small or absent here. That is an A/B 
 run once step 5 exists and there is something to measure it on, not a reason to
 hold up the step.
 
-**Step 5a — crib-as-seed** (§7a). Nearly free once step 5 exists, and the mode
-that covers the short cribs the corpus actually supplies. Needs its own
-measurement of caution 1 above before being recommended.
+**Step 5a — crib-as-seed** (§7a). **Done** — step 5's seeding is the mechanism,
+and §7c is the measurement caution 1 was waiting for: a wrong hypothesis wins 5%
+of the time at 8 letters and never from 10 up (450 trials), so **the seed mode's
+floor is 10 letters**, set by silent failure rather than by cost.
 
 **Step 6 — crib lists** (`--crib-list`) and the budget logic, plus the per-crib
 banner (§8) and the rename of the existing `--crib-file` to `--crib-rerank`.
@@ -1592,7 +1631,9 @@ that matters most on this corpus**, not step 5.
    one guess. But the positions have to come from somewhere, and knowing 14 word
    boundaries may be as hard as knowing a phrase. Worth a measurement before any
    code.
-4. **Does a wrong seed ever beat the right one?** §7a's caution 1. In the seeded
+4. ~~**Does a wrong seed ever beat the right one?**~~ **Answered in §7c**: at 8
+   letters, 5% of the time; from 10 letters up, never in 450 trials. Left here
+   for the shape of the argument. In the seeded
    sweep 25 of the 26 hypotheses seed garbage; if one of those converges to a
    board scoring above the correctly-seeded climb at the true rotor setting, the
    mode silently loses that message. The ~1% scoring-failure floor says it

@@ -228,6 +228,24 @@ and the Python only writes it down.
 python3 eval/crib_vectors_check.py --generate --count 40 -v
 ```
 
+## Does a wrong crib hypothesis ever win? (`crib_seed_probe.py`)
+
+A crib pins one letter's plug only by guessing it, so the solver tries all 26 guesses and
+keeps the best-scoring board. Exactly one is the truth. `crib_seed_probe.py` measures how
+often a wrong one wins -- cribs.md 7a's caution 1, and the one thing named as able to undo
+the seeding mode. It needs no new diagnostic: the anchor letter's partner IS the
+hypothesis, so comparing the winner's board against the true board at that letter settles
+it.
+
+```sh
+python3 eval/crib_seed_probe.py --trials 150 --crib 12
+```
+
+**Measured (150 trials per length, 90-letter messages, 10 cables hidden): a wrong
+hypothesis wins 5% of the time at 8 letters and never from 10 up.** When it does win the
+failure is total -- 8.6% mean recovery, nothing in the output to flag it -- so the seed
+mode's floor is 10 letters, set by silent failure rather than by cost. See cribs.md 7c.
+
 ## Authentic message set (real traffic)
 
 `enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**
