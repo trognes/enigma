@@ -277,8 +277,8 @@ English tables.
   cost, and **expected gain** (what a key costs without the crib over what it
   costs with it, so above 1 saves work and below 1 costs more than no crib),
   which is the guide to why a crib is worth running or was skipped
-- **`--crib-order cost|file`** — Run a `--crib-list` **cheapest measured cost
-  first** (the default), or in the library's own order. The cost of a crib
+- **`--no-crib-reorder`** — Keep a `--crib-list` in the library's own order.
+  By default it is run **cheapest measured cost first**. The cost of a crib
   against its length is a *cliff*: relative to a sweep with no crib, 8 letters
   costs **52×**, 12 costs 0.67×, 25 costs 0.02×. Since how often a crib is
   present spans only ~26×, cost dominates — the whole long tail of a library

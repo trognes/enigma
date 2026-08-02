@@ -57,7 +57,7 @@ that reject nothing and so cost most, at 59–120 surviving hypotheses per key
 against ~1 for a 16-letter crib. Measured, a cost rule applied to this library
 skipped **all four** cribs actually present in a test message and recovered
 nothing, where running them recovered it exactly in 8 seconds. A flag that did
-that pruning was built and removed for this reason; `enigma --crib-order cost`
+that pruning was built and removed for this reason; the default crib reorder
 captures the throughput instead, by running the cheap long cribs *first* rather
 than discarding the expensive ones (`cribs.md` §12 step 6).
 

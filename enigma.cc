@@ -166,12 +166,13 @@ static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossi
 static const char * opt_crib_list = nullptr;
 static std::vector<std::string> g_crib_list;    /* read-only after load_crib_list() */
 static const size_t crib_sample_keys = 256;
-/* --crib-order: run a --crib-list cheapest-measured-cost first (the default) or in
-   file order. Ordering discards nothing -- the worst case is that the winner is found
-   later, not that it is lost -- which is why this may default on where the skipping
-   in --crib-max-hyps must not. See crib_cheaper() for why cheapest-first, and why it
-   reverses what cribs.md 5 step 5 concluded from a modelled cost. */
-static bool opt_crib_order_cost = true;
+/* --no-crib-reorder: keep a --crib-list in file order instead of running it
+   cheapest-measured-cost first. Reordering is the DEFAULT, so the flag names the
+   exception -- and it can safely be a default because ordering discards nothing: the
+   worst case is that the winner is found later, never that it is lost. See
+   crib_cheaper() for why cheapest-first, and why it reverses what cribs.md 5 step 5
+   concluded from a modelled cost. */
+static bool opt_crib_reorder = true;
 /* Keys on which both sides of the choice are actually RUN, to measure the expected
    gain (the hypothesis count above needs a much larger sample, but it is far cheaper
    per key -- a climb costs thousands of board scores where a deduction costs tens of
@@ -5592,7 +5593,7 @@ static void run_crib_list(char * result)
     }
 
   /* Stable, so equal-cost cribs keep the file order the generator chose. */
-  if (opt_crib_order_cost)
+  if (opt_crib_reorder)
     std::stable_sort(plan.begin(), plan.end(), crib_cheaper);
 
   /* Pass 2: the table, in the order the sweeps will actually run, so it doubles as
@@ -5956,10 +5957,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--crib-list F",
           "Crib library, one per line ('#' comments), tried in");
   fprintf(out, "  %-24s %s\n", "", "file order, one rotor sweep each; best kept [off]");
-  fprintf(out, "  %-24s %s\n", "--crib-order O",
-          "Order a --crib-list by measured 'cost' (cheapest");
-  fprintf(out, "  %-24s %s\n", "", "first -- long cribs are far cheaper) or 'file'");
-  fprintf(out, "  %-24s %s\n", "", "to keep the library's own order [cost]");
+  fprintf(out, "  %-24s %s\n", "--no-crib-reorder",
+          "Keep a --crib-list in file order. By default it is");
+  fprintf(out, "  %-24s %s\n", "", "run cheapest-measured-cost first, since a long");
+  fprintf(out, "  %-24s %s\n", "", "crib can cost ~2600x less than a short one [off]");
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
@@ -6152,7 +6153,8 @@ void show_settings()
       fprintf(stderr, "Crib list:  %s (%zu crib%s)\n", opt_crib_list,
               g_crib_list.size(), (g_crib_list.size() == 1) ? "" : "s");
       fprintf(stderr, "Crib order: %s\n",
-              opt_crib_order_cost ? "cheapest measured cost first" : "file order");
+              opt_crib_reorder ? "cheapest measured cost first"
+                               : "file order (--no-crib-reorder)");
     }
 }
 
@@ -6178,7 +6180,7 @@ int main(int argc, char * * argv)
   opt_crib_text = nullptr;
   opt_crib_list = nullptr;
   g_crib_list.clear();
-  opt_crib_order_cost = true;
+  opt_crib_reorder = true;
   opt_crib_at = -1;
   opt_crib_dump = false;
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q/-a) */
@@ -6225,7 +6227,7 @@ int main(int argc, char * * argv)
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
-         OPT_CRIBLIST, OPT_CRIBORDER };
+         OPT_CRIBLIST, OPT_NOCRIBREORDER };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -6278,7 +6280,7 @@ int main(int argc, char * * argv)
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
-      { "crib-order",     required_argument, nullptr, OPT_CRIBORDER },
+      { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -6404,13 +6406,8 @@ int main(int argc, char * * argv)
         case OPT_CRIBLIST:
           opt_crib_list = optarg;
           break;
-        case OPT_CRIBORDER:
-          if (strcmp(optarg, "cost") == 0)
-            opt_crib_order_cost = true;
-          else if (strcmp(optarg, "file") == 0)
-            opt_crib_order_cost = false;
-          else
-            fatal("--crib-order must be 'cost' (cheapest first) or 'file'");
+        case OPT_NOCRIBREORDER:
+          opt_crib_reorder = false;
           break;
         case OPT_CRIBRERANK:
           opt_crib_rerank = optarg;
@@ -6629,13 +6626,13 @@ int main(int argc, char * * argv)
               "--crib-list (the cribs differ in length and position)");
       /* With one crib there is no order to choose, so a request for one would
          silently do nothing -- say so rather than accept and ignore it. */
-      if ((! opt_crib_order_cost) && (opt_crib_list == nullptr))
-        fatal("--crib-order needs --crib-list (there is nothing to order otherwise)");
+      if ((! opt_crib_reorder) && (opt_crib_list == nullptr))
+        fatal("--no-crib-reorder needs --crib-list (there is nothing to order)");
     }
   else if ((opt_crib_at >= 0) || opt_crib_dump)
     fatal("--crib-at and --crib-dump need --crib");
-  else if (! opt_crib_order_cost)
-    fatal("--crib-order needs --crib-list (there is nothing to order otherwise)");
+  else if (! opt_crib_reorder)
+    fatal("--no-crib-reorder needs --crib-list (there is nothing to order)");
 
   /* --no-plug LETTERS: letters known to carry no cable. Three ways to get it wrong, all
      fatal because each means the command line says something the search cannot honour:

@@ -73,7 +73,7 @@ def tool_order(ct, key, lib, args):
     wheels, refl, ring, start = key
     cmd = [BIN, "-u", refl, "-w", "".join(str(w + 1) for w in wheels),
            "-r", txt(ring), "-g", args.start, "-c", "-f", "-l", args.lang,
-           "-T", str(args.threads), "--crib-list", lib, "--crib-order", "cost"]
+           "-T", str(args.threads), "--crib-list", lib]   # reorder is default
     # The table is printed in one block BEFORE the first sweep, so the order can
     # be read off and the process stopped without paying for any of the sweeps.
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,

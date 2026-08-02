@@ -251,7 +251,7 @@ removes the most valuable entries first.
 Measured on the shipped 96-crib library against a message containing four of its
 cribs: skipping at break-even dropped **all four** and recovered nothing, where
 not skipping recovered the message exactly in 8 s. What replaced it is
-`--crib-order cost`, which captures the same throughput by running the cheap
+cheapest-first reordering, which gets the same throughput by running the cheap
 long cribs *first* — a preference rather than a filter, so a wrong guess about
 cost costs time and never the answer.
 

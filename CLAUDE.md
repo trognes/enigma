@@ -708,7 +708,7 @@ are read from a **data directory** (filenames built as
   12-letter crib: **92% of letters recovered against 8% unseeded** (10% at
   `-R 64`), and the same 92% swept as pinned, so seeding does not need the
   alignment to be known. **That was measured with the rotor key given**, one
-  key; with the key unknown the sweep is not free — see `--crib-order`.
+  key; with the key unknown the sweep is not free — see `--crib-list`.
 - `--crib-list FILE` **a whole crib library**, one crib per line (`#` comments,
   duplicates dropped, **file order preserved** — the generator emits
   most-likely-to-match first and re-sorting would throw away the early exit).
@@ -723,8 +723,9 @@ are read from a **data directory** (filenames built as
   alignment, and the cribs differ in length). The progress-line column header is
   printed once for the run, and the echo high-water mark carries across cribs so
   a later crib cannot re-print boards worse than the best already found.
-- `--crib-order cost|file` **run a `--crib-list` cheapest-measured-cost first**
-  (default `cost`). Reverses `cribs.md` §5 step 5, which priced cribs with
+- `--no-crib-reorder` **keep a `--crib-list` in file order** (off by default,
+  i.e. cribs run cheapest-measured-cost first). Reverses `cribs.md` §5 step
+  5, which priced cribs with
   `build_cribs.py`'s *modelled* cost — flat-ish by length. The measured curve is
   a **cliff**: relative to a no-crib sweep, 8 letters costs **52×**, 12 costs
   0.67×, 25 costs 0.02× — a ~2 600× spread against the model's 13×, with the

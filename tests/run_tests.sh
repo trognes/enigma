@@ -1590,21 +1590,18 @@ check "--crib-list prints one progress header for the run" \
 # crib lengths is ~90x and runs opposite to intuition (a 20-letter crib swept in
 # 0.15 s where a 10-letter one took 13.65 s). Ordering discards nothing, so it can
 # default on: it discards nothing, so the worst case is a later win.
-cl_order() { cl_run -c --crib-order "$1" 2>&1 >/dev/null \
+cl_order() { cl_run -c "$@" 2>&1 >/dev/null \
                | grep -E '^ +[1-9][0-9]*  [A-Z]' | awk '{print $2}'; }
-check "--crib-list keeps file order under --crib-order file" \
-  "$(cl_order file | tr '\n' ' ')" "OBERKOMMANDO XSIEGFRIEDXX NOTINTHISMESSAGE "
+check "--crib-list keeps file order under --no-crib-reorder" \
+  "$(cl_order --no-crib-reorder | tr '\n' ' ')" \
+  "OBERKOMMANDO XSIEGFRIEDXX NOTINTHISMESSAGE "
 # NOTINTHISMESSAGE (16) rejects the whole sample and so costs nothing; the two shorter
 # cribs cost real climbs. Cheapest-first therefore has to move it to the front.
 check "--crib-list runs the cheapest crib first by default" \
-  "$(cl_order cost | head -1)" "NOTINTHISMESSAGE"
-check "--crib-order cost is the default" \
-  "$(cl_order cost | tr '\n' ' ')" "$(cl_run -c 2>&1 >/dev/null \
-     | grep -E '^ +[1-9][0-9]*  [A-Z]' | awk '{print $2}' | tr '\n' ' ')"
+  "$(cl_order | head -1)" "NOTINTHISMESSAGE"
 # Order changes which crib runs first, never which board wins.
 check "--crib-list result does not depend on the order" \
-  "$(cl_run -c --crib-order cost 2>/dev/null)" \
-  "$(cl_run -c --crib-order file 2>/dev/null)"
+  "$(cl_run -c 2>/dev/null)" "$(cl_run -c --no-crib-reorder 2>/dev/null)"
 
 # The option combinations, per cribs.md §8. --crib-at pins ONE alignment and the cribs
 # in a list differ in length, so the two cannot be combined.
@@ -1616,10 +1613,10 @@ check "--crib-list with --crib-at rejected" \
   "$(cl_reject --crib-list "$cl_file" --crib-at 3)" "1"
 check "--crib-list with -F rejected" \
   "$(cl_reject -c --crib-list "$cl_file" -F 5)" "1"
-check "--crib-order with a bad value rejected" \
-  "$(cl_reject --crib-list "$cl_file" --crib-order sideways)" "1"
-check "--crib-order without --crib-list rejected" \
-  "$(cl_reject --crib OBERKOMMANDO --crib-order file)" "1"
+check "--no-crib-reorder without --crib-list rejected" \
+  "$(cl_reject --crib OBERKOMMANDO --no-crib-reorder)" "1"
+check "--crib-order is no longer accepted" \
+  "$(cl_reject --crib-list "$cl_file" --crib-order cost)" "1"
 check "--crib-max-hyps is no longer accepted" \
   "$(cl_reject --crib-list "$cl_file" --crib-max-hyps 5)" "1"
 check "--crib-list with a missing file rejected" \
