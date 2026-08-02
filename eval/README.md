@@ -262,6 +262,27 @@ python3 eval/crib_seed_cost.py --reps 3
 seeded climb also converges in fewer passes. `-J` is worth a further **1.8x** on the
 seeded climb (cost only; the recovery side is unmeasured).
 
+## What the deduction itself costs (`crib_deduce_cost.py`)
+
+The other half of the same question: cribs.md priced the climb and assumed the
+deduction was negligible, but it runs 26 hypotheses at every viable alignment
+before any climb starts. `crib_deduce_cost.py` times it on a fixed 17576-key
+space, first as a plain scan (no climb involved, so the arms isolate the
+deduction) and then with `-c`.
+
+```sh
+python3 eval/crib_deduce_cost.py --reps 3
+```
+
+**A propagation costs ~3 ns** -- about one character-decode, which is the
+assumption cribs.md 9's estimate rests on. Pinned, the deduction is free at
+every length. Two results invert the intuition. **Against a plain scan a crib
+cannot pay for itself** (a score is ~7 us, a swept deduction ~70 us), and
+**under `-c` a crib that does not reject costs 66x MORE**, because a surviving
+key is climbed once per surviving hypothesis rather than checked once. Where a
+crib does reject, the surviving hypothesis is essentially unique and the run is
+126x faster. See cribs.md 4.2b.
+
 ## Authentic message set (real traffic)
 
 `enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**
