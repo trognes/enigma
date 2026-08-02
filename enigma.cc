@@ -1139,8 +1139,12 @@ static void init_crib()
 
 /* One hypothesis: "the anchor letter is plugged to hyp". Propagates to a fixed point and
    returns false on contradiction. `board` is left holding the partial plugboard it
-   deduced (-1 = still unknown), which is what the hybrid will seed a climb from. */
-static bool crib_try(const machine & m, int hyp, signed char * board)
+   deduced (-1 = still unknown), which is what the hybrid will seed a climb from.
+     `board` is int, not signed char: it holds -1 alongside letter values coming out of
+   the UNSIGNED char rows[] table, and mixing those two signednesses is the bug class
+   clang-tidy's bugprone-signed-char-misuse exists to catch. 26 ints, read once per key,
+   cost nothing. */
+static bool crib_try(const machine & m, int hyp, int * board)
 {
   for (int i = 0; i < asize; i++)
     board[i] = -1;
@@ -1150,10 +1154,10 @@ static bool crib_try(const machine & m, int hyp, signed char * board)
 #define CRIB_SET(x, y)                                          \
   do {                                                          \
     int xx = (x), yy = (y);                                     \
-    if ((board[xx] >= 0) && (board[xx] != yy)) return false;     \
-    if ((board[yy] >= 0) && (board[yy] != xx)) return false;     \
-    board[xx] = static_cast<signed char>(yy);                   \
-    board[yy] = static_cast<signed char>(xx);                   \
+    if ((board[xx] >= 0) && (board[xx] != yy)) return false;    \
+    if ((board[yy] >= 0) && (board[yy] != xx)) return false;    \
+    board[xx] = yy;                                             \
+    board[yy] = xx;                                             \
   } while (0)
 
   CRIB_SET(crib_anchor, hyp);
@@ -1167,17 +1171,17 @@ static bool crib_try(const machine & m, int hyp, signed char * board)
           int p = crib_p[j], c = crib_c[j];
           if ((board[c] >= 0) && (board[p] < 0))
             {
-              CRIB_SET(p, core[board[c]]);
+              CRIB_SET(p, static_cast<int>(core[board[c]]));
               changed = true;
             }
           else if ((board[p] >= 0) && (board[c] < 0))
             {
-              CRIB_SET(c, core[board[p]]);
+              CRIB_SET(c, static_cast<int>(core[board[p]]));
               changed = true;
             }
           else if ((board[p] >= 0) && (board[c] >= 0))
             {
-              if (core[board[c]] != board[p])
+              if (static_cast<int>(core[board[c]]) != board[p])
                 return false;
             }
         }
@@ -1197,7 +1201,7 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
 
 static bool crib_rejects(const machine & m)
 {
-  signed char board[asize];
+  int board[asize];
   for (int h = 0; h < asize; h++)
     if (crib_try(m, h, board))
       return false;
@@ -3389,7 +3393,7 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
   char w[8], r[8], g[8];
   init_ring_grund(m, r1, r2, r3, g1, g2, g3);
   format_key(m, w, r, g);
-  signed char board[asize];
+  int board[asize];
   std::lock_guard<std::mutex> lock(g_dump_mutex);
   for (int h = 0; h < asize; h++)
     {

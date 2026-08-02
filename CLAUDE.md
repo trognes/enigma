@@ -1378,7 +1378,14 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   (`.github/workflows/ci.yml`) runs on every push and PR: the suite `-Werror`
   under g++ and clang++, ASan+UBSan, valgrind, cppcheck, clang-tidy (config in
   `.clang-tidy`), and shellcheck; a separate CodeQL workflow runs on PRs and
-  weekly. Keep all of these green. A `Bench` workflow
+  weekly. Keep all of these green. **The two lint jobs are the ones easiest to
+  meet for the first time in CI rather than locally, and both run in seconds** —
+  `clang-tidy enigma.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
+  tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`
+  installs the binary). Run them before pushing, and grep clang-tidy's output
+  for `error:` rather than for the names you touched — it prints one file-scope
+  error and suppresses ~24 000 warnings from system headers, so a name-filtered
+  grep looks clean when it is not. A `Bench` workflow
   (`.github/workflows/bench.yml`) additionally runs `make bench LONG=1` on a
   {g++, clang++} × {x86_64, arm64-Linux} matrix — on PRs as a same-machine A/B
   vs the PR base, but **advisory only** (`continue-on-error`): shared runners

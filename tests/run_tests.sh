@@ -1419,8 +1419,11 @@ cb_pt=DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTETXDURCHDENEINSATZD
 cb_plugs="AB CD EF GH IJ KL MN OP QR ST"
 cb_ct=$(run "$cb_pt" -i -u B -w 123 -r AAA -g QEW -s "$cb_plugs")
 cb_key='-i -u B -w 123 -r AAA -g QEW'
+# Braces so the stdout redirect is unambiguous: this keeps stderr and drops stdout,
+# which shellcheck flags as SC2069 when written the other way round on an unpiped
+# command (the suite's other uses of that idiom all feed a pipe).
 # shellcheck disable=SC2086
-cb_err() { printf '%s' "$cb_ct" | "$ENIGMA" $cb_key "$@" 2>&1 >/dev/null; }
+cb_err() { { printf '%s' "$cb_ct" | "$ENIGMA" $cb_key "$@" >/dev/null; } 2>&1; }
 
 # The true key must survive its own crib. This is the zero-tolerance property: a
 # deduction that rejects the truth loses the message outright.
