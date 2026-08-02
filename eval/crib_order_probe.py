@@ -42,11 +42,40 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from crib_menu import corpus, random_key                  # noqa: E402
+from crib_menu import random_key                          # noqa: E402
+from build_cribs import (load_messages, build_library,   # noqa: E402
+                         crib_cost)
 from ring_stride_geometry_probe import txt, plugboard, crypt   # noqa: E402
 
 BIN = os.path.join(HERE, os.pardir, "enigma")
 ROW = re.compile(r"^\s+(\d+)\s+([A-Z]+)\s")
+
+
+def holdout_library(messages, hold_id, budget_hours, path):
+    """Build a library from every message EXCEPT hold_id, and write it.
+
+    This is what makes the comparison honest.  The shipped library's file order
+    is by evidence of recurrence, counted over the whole corpus -- so testing on
+    a message that helped set those counts front-loads phrases already known to
+    be in it, which is information no external message would supply.  Leaving it
+    out removes exactly that advantage and leaves the cribs a real network's
+    vocabulary would have given.
+    """
+    lib = build_library([m for m in messages if m[0] != hold_id])
+    # Same cheapest-first budget fill the generator uses.
+    priced = sorted(((crib_cost(len(e[0])) / 3600.0, i, e)
+                     for i, e in enumerate(lib)), key=lambda x: (x[0], x[1]))
+    keep, spent = set(), 0.0
+    for c, i, _e in priced:
+        if spent + c > budget_hours:
+            continue
+        keep.add(i)
+        spent += c
+    cribs = [e[0] for i, e in enumerate(lib) if i in keep]
+    with open(path, "w", encoding="utf-8") as f:
+        for c in cribs:
+            f.write(c + "\n")
+    return cribs
 
 
 def load_library(path):
@@ -137,29 +166,37 @@ def main():
                     help="%%-correct counted as recovering the message")
     ap.add_argument("--lang", default="wehrmacht")
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--budget-hours", type=float, default=1500.0,
+                    help="budget for the per-trial held-out library")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
-    lib = load_library(args.library)
-    texts = [t for t in corpus() if len(t) >= args.length]
-    if not texts:
-        sys.exit("no corpus text of at least %d letters" % args.length)
+    messages = load_messages()
+    usable_msgs = [m for m in messages if len(m[1]) >= args.length]
+    if not usable_msgs:
+        sys.exit("no corpus message of at least %d letters" % args.length)
     rng = random.Random(args.seed)
+    tmplib = os.path.join(os.path.dirname(os.path.abspath(args.library)),
+                          ".holdout.cribs")
 
     print("Time to the first crib that recovers the message\n"
-          "(%d cribs, %d-letter messages, %d plugs hidden, -g %s, -T %d,\n"
+          "(HELD OUT: the library is rebuilt per trial without the message\n"
+          "under test, %d-letter messages, %d plugs hidden, -T %d,\n"
           "hit = %.0f%% of letters correct)\n"
-          % (len(lib), args.length, args.plugs, args.start, args.threads,
-             args.hit))
+          % (args.length, args.plugs, args.threads, args.hit))
     print("  %-6s %10s %10s %10s   %s"
           % ("trial", "file", "cost", "speedup", "first hit (cost order)"))
 
     wins = fileT = costT = 0.0
     rows = 0
     for t in range(args.trials):
-        src = rng.choice(texts)
+        hold_id, src = rng.choice(usable_msgs)
         off = rng.randrange(len(src) - args.length + 1)
         pt = src[off:off + args.length]
+        # Held out: the library is built without this message, so a hit is a
+        # crib that genuinely recurs rather than one harvested from the target.
+        lib = holdout_library(messages, hold_id, args.budget_hours, tmplib)
+        args.library = tmplib
         key = random_key(rng)
         plug = plugboard(np.random.default_rng(rng.randrange(1 << 30)),
                          args.plugs)
