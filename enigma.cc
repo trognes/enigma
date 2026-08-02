@@ -1217,10 +1217,15 @@ static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board
   return true;
 }
 
-/* --crib-dump: print every surviving hypothesis and the plugs it deduces, so a harness
-   can check them against a known board (cribs.md 10.1). Display-only and under the same
-   mutex as the progress lines, so it cannot affect which candidate wins. Very verbose;
-   off by default. */
+/* --crib-dump: print every surviving hypothesis, the alignment it survived at, and the
+   plugs it deduces, so a harness can check them against a known board (cribs.md 10.1).
+   Display-only and under the same mutex as the progress lines, so it cannot affect which
+   candidate wins. Very verbose; off by default.
+
+   THE LINE FORMAT HAS TWO CONSUMERS that both parse it positionally --
+   eval/crib_vectors_check.py and the --crib checks in tests/run_tests.sh -- so adding a
+   field here silently breaks them until they are updated. Adding the alignment field did
+   exactly that. Change both when changing this. */
 static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g3);
 
 /* The first alignment at which some hypothesis survives, or -1 when every hypothesis at

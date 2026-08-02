@@ -1435,7 +1435,7 @@ check "--crib: the true key is not rejected" \
 # A-T only). A single wrong pair here would be a bug, not a near miss.
 check "--crib: deduced plugs match the true board" \
   "$(cb_err --crib OBERKOMMANDO --crib-at 3 --crib-dump | grep '^cribstop' \
-     | sed 's/^cribstop [^ ]* [^ ]* [^ ]* [^ ]* [^ ]* //')" \
+     | sed 's/^cribstop \([^ ]* \)\{6\}//')" \
   "AB BA EF FE GH HG MN NM OP PO YY ZZ"
 
 # Against a wildcarded start the crib throws away almost everything unscored -- that is
