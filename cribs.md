@@ -1797,6 +1797,65 @@ speedup and a 66× slowdown. And a crib's cost cannot be read off the crib:
 length and spare letters — the two numbers the generator ranks by — do not
 predict it. It depends on the crib *and* the ciphertext together.
 
+**Every crib's expected gain is reported**, as one row per crib before its
+sweep: `# crib len algn hyp/key gain`. `gain` is what a key costs *without* the
+crib over what it costs *with* it — above 1 it saves work, below 1 it costs more
+than using no crib at all. **Measured, not modelled**: `crib_unit()` and
+`hillclimb_one()` are both run on the same eight sampled keys and their
+plugboards-scored counters compared, so it already contains both opposing
+effects — keys rejected for free, and extra climbs where they are not. Boards
+rather than wall time, so a printed number stays reproducible. It omits the
+deduction's own cost (outside the score loop), so a crib rejecting nearly
+everything is flattered — hence `>1000x` rather than a figure; `<` marks a crib
+that hit the work budget, a bound rather than a measurement.
+
+**Cribs run cheapest-measured-cost first by default** (`--no-crib-reorder` keeps
+the library's own order). This reverses §5 step 5, which priced cribs with
+`build_cribs.py`'s *modelled* cost — charged by length, on the assumption that
+sweep cost is roughly flat (§4.1's table: 100–117 s for every row). Measured on
+one message and one key space, startup subtracted, the curve is a **cliff**:
+
+| letters | 8 | 10 | 12 | 14 | 16 | 20 | 25 |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| cost vs no crib | **52×** | 6.7× | 0.67× | 0.074× | 0.074× | 0.037× | 0.02× |
+
+A ~2 600× spread against the old model's 13×, with the 16-letter point agreeing
+with an independent measurement on a 5× larger key space (0.074× against
+0.085×). How often a crib is *present* spans only ~26× (§4.2), so the cost term
+dominates: the whole long tail of a library costs less than one short crib.
+Ordering is a **preference, not a filter** — nothing is discarded, so the worst
+case is a later win, never a lost one.
+
+**Measured end to end, it is a mean win and a median loss.**
+`eval/crib_order_probe.py` times the run to the first crib that recovers the
+message — what a human watching progress lines waits for, there being no
+automatic early exit (§6.7). Three trials, 120-letter messages, 10 cables
+hidden:
+
+| trial | file order | cost order | speedup | winning crib |
+|--:|--:|--:|--:|---|
+| 1 | 15.3 s | 22.4 s | 0.68× | `XNAQZIEHENX` (11) |
+| 2 | 260.5 s | 6.1 s | **42.9×** | `AXOPOTSCHKAX` (12) |
+| 3 | 122.5 s | 164.9 s | 0.74× | `FRIEDRICH` (9) |
+| **mean** | **132.8 s** | **64.4 s** | **2.06×** | |
+
+Cost order is faster in **1 of 3** trials and the 2.06× mean rests entirely on
+trial 2, so the distribution favours it and the median does not, at a sample far
+too small to separate them. What the shape shows is an **asymmetry**: the loss
+is bounded by the cost of running the long tail first (a few seconds), the win
+is not (260 s → 6 s). That asymmetry follows from the cost cliff rather than
+from these three trials, and is the actual argument for the default.
+
+> ⚠️ **Those are in-sample numbers, and they flatter file order.** The library's
+> file order is by evidence of recurrence counted on the 69 corpus messages, and
+> the probe draws its test messages from that same corpus — so file order
+> front-loads phrases already known to occur in the message being attacked. On
+> external traffic those counts carry no such information. Measured cost has no
+> such problem: it is re-measured against the actual ciphertext every run. The
+> bias runs *against* cheapest-first, so the asymmetry survives it — but a
+> held-out (leave-one-out) library is what would settle the question, and has
+> not been run.
+
 **A `--crib-max-hyps` flag that *discarded* costly cribs was built, measured,
 and removed.** It skipped any crib above a cap in surviving hypotheses per key,
 measured on a fixed 256-key stride. Run against the shipped library on a message
