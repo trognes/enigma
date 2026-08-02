@@ -1049,11 +1049,24 @@ seven correct plugs, and four of that recipe's parts stop making sense:
   answer is more likely to cost than to buy. The seeded climb wants to *finish*
   a board, not go looking for a new basin.
 
-**`--polish` after, with the deduced plugs released first.** The finisher's gain
-cascade skips `plug_fixed[]` letters, which is right when the deduction is right
-and traps the run when it is not — and §7a's premise is that 25 of the 26
-hypotheses are wrong. Releasing them before the finisher is one line of state
-and it is what lets a bad seed be undone.
+**`--polish` after, with the deduced plugs still fixed.** The finisher's gain
+cascade skips `plug_fixed[]` letters, and that is what should happen: a deduced
+plug is derived by arithmetic from the machine equation, while the cascade is
+score-driven local repair, so releasing them lets the weaker evidence overwrite
+the stronger — on exactly the board you least want disturbed.
+
+A wrong hypothesis needs no help from the finisher, because it is already
+handled by something decisive: each of the 26 produces its own board and score,
+and the best wins. Nor could the finisher help. It completes a near-solution
+board; it cannot relocate a wrong basin — the same finding that puts `-R`
+restarts ahead of every finisher variant in the search playbook.
+
+One residual case argues for measurement rather than for releasing. If the crib
+is right but **garbled** at a position (§4.5), that bad edge can chain into a
+wrong deduced plug without necessarily contradicting, so the seed is wrong while
+the hypothesis still looks sound. Freeing the plugs would repair that — at the
+cost of weakening every un-garbled run, which is the common case. Measure how
+often a garbled position produces a silent wrong plug before paying that.
 
 **Which target model — `-q`, `-a` or `-f` — is genuinely open**, and the reason
 is worth stating rather than defaulting to the recommended `-f`. Its measured
@@ -1305,14 +1318,14 @@ Notes:
   Rejections should be fatal at option-parsing time with a message naming both
   flags, the way the existing ones are.
 
-- **`--polish` after a seeded climb needs one decision.** The finisher runs a
-  gain cascade on the best board and may re-plug any letter. If the deduced
-  plugs are marked in `plug_fixed[]` — as §7 intends — the cascade will skip
-  them, which is right when the deduction is right and traps the run when it is
-  not. Since §7a's whole premise is that 25 of the 26 hypotheses are wrong, the
-  default should be that deduced plugs are fixed for the climb but **released
-  before `--polish`**, so the finisher can undo a bad seed. That is one line of
-  state, but it is a behaviour choice, not an implementation detail.
+- **`--polish` keeps the deduced plugs fixed**, which needs no new state: the
+  finisher's gain cascade already skips `plug_fixed[]` letters. A deduced plug
+  comes from arithmetic on the machine equation; the cascade is score-driven
+  local repair. Letting the latter rewrite the former would put weaker evidence
+  over stronger. A wrong hypothesis is handled by losing on score to the other
+  25, not by being repaired — and repair could not do it anyway, since the
+  finisher completes a near-solution board rather than relocating a wrong basin.
+  See §7b for the one case (a garbled crib) that is worth measuring first.
 
 - **The echoed key may be a class representative.** Crib mode reports a rotor
   key like everything else, so it inherits the §7.12 middle-wheel collapse: the
@@ -1533,6 +1546,13 @@ changes the economics, and §4.2a records how.**
 **Step 5 — the hybrid** (§7). The mode we expect to be used in practice. The
 climb it hands over to is not the recommended recipe — §7b says why, and leaves
 the target model (`-q`/`-a`/`-f`) as the one thing to A/B here.
+
+**Whether `--polish` earns its keep at all on a seeded board is a separate
+question, deliberately deferred.** It is a fixed-cost pass that completes
+near-solution boards, and a crib-seeded board is already near-solution from a
+different direction — so its lift may be small or absent here. That is an A/B to
+run once step 5 exists and there is something to measure it on, not a reason to
+hold up the step.
 
 **Step 5a — crib-as-seed** (§7a). Nearly free once step 5 exists, and the mode
 that covers the short cribs the corpus actually supplies. Needs its own
