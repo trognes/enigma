@@ -233,11 +233,11 @@ materially different regime, and read the evidence in `archived/` first.
 | Greedy plug-by-plug seed | **reasoned** down — see below |
 | Cost-pruning a crib library by default | prunes the likeliest hits |
 
-**Cost-pruning a crib library, measured down as a default.** `--crib-max-hyps`
-skips a `--crib-list` crib whose sampled cost exceeds a cap in surviving
+**Cost-pruning a crib library, measured down and removed.** A `--crib-max-hyps`
+flag skipped a `--crib-list` crib whose sampled cost exceeded a cap in surviving
 hypotheses per key — the right *unit*, since under `-c` a surviving key is
-climbed once per surviving hypothesis (`cribs.md` §4.2b). Making it apply by
-default, at break-even, was wrong twice over.
+climbed once per surviving hypothesis (`cribs.md` §4.2b). It was wrong twice
+over, and the flag no longer exists.
 
 The premise fails: "no crib" is not the same outcome more cheaply, it usually
 **fails** (§7a measures a 5-cable seed recovering 55% against 12% at matched
@@ -249,10 +249,11 @@ carrying an 8-letter crib against 3% for a 20-letter one. Cost-ordered pruning
 removes the most valuable entries first.
 
 Measured on the shipped 96-crib library against a message containing four of its
-cribs: the break-even default skipped **all four** and recovered nothing, where
-not skipping recovered the message exactly in 8 s. The flag ships opt-in and
-**not recommended**, for the case a user can recognise rather than as a rule the
-tool applies unasked.
+cribs: skipping at break-even dropped **all four** and recovered nothing, where
+not skipping recovered the message exactly in 8 s. What replaced it is
+`--crib-order cost`, which captures the same throughput by running the cheap
+long cribs *first* — a preference rather than a filter, so a wrong guess about
+cost costs time and never the answer.
 
 **The greedy plug-by-plug seed, closed without running it.** The proposal:
 score all 325 single plugs, commit the best, repeat to a small budget, fix those

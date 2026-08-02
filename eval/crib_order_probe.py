@@ -73,16 +73,24 @@ def tool_order(ct, key, lib, args):
     wheels, refl, ring, start = key
     cmd = [BIN, "-u", refl, "-w", "".join(str(w + 1) for w in wheels),
            "-r", txt(ring), "-g", args.start, "-c", "-f", "-l", args.lang,
-           "-T", str(args.threads), "--crib-list", lib, "--crib-order", "cost",
-           "--crib-max-hyps", "1e-9"]      # estimate every crib, sweep none
-    p = subprocess.run(cmd, input=ct, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.PIPE, universal_newlines=True,
-                       env=dict(os.environ, ENIGMA_SEED="0"))
-    order = []
-    for line in p.stderr.splitlines():
+           "-T", str(args.threads), "--crib-list", lib, "--crib-order", "cost"]
+    # The table is printed in one block BEFORE the first sweep, so the order can
+    # be read off and the process stopped without paying for any of the sweeps.
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                            universal_newlines=True,
+                            env=dict(os.environ, ENIGMA_SEED="0"))
+    proc.stdin.write(ct)
+    proc.stdin.close()
+    order, want = [], len(load_library(lib))
+    for line in proc.stderr:
         m = ROW.match(line)
         if m:
             order.append(m.group(2))
+            if len(order) >= want:
+                break
+    proc.kill()
+    proc.wait()
     return order
 
 

@@ -165,28 +165,6 @@ static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossi
    for the case where you do know. */
 static const char * opt_crib_list = nullptr;
 static std::vector<std::string> g_crib_list;    /* read-only after load_crib_list() */
-/* --crib-max-hyps X: skip a --crib-list crib whose sampled cost exceeds X surviving
-   hypotheses per key. Under -c a surviving key is not scored once, it is CLIMBED once
-   per surviving hypothesis (cribs.md 4.2b), so this -- not the crib's length, and not
-   its rejection rate -- is what a crib actually costs. Measured 1.0 per key where a
-   crib rejects at all against 235 where it does not.
-     DEFAULT OFF (0), and that default is measured rather than cautious. A break-even
-   rule -- skip when the crib would cost more than using no crib -- was built first and
-   is WRONG, because "no crib" is not the same outcome more cheaply: it usually FAILS
-   (cribs.md 7a measures a 5-cable seed recovering 55% against 12% for the same compute
-   spent on restarts). Worse, the cost is ANTI-CORRELATED with the chance of a hit:
-   short cribs are both the most expensive per key and the most likely to be present
-   (4.2 -- 93% of messages carry an 8-letter crib, 3% a 20-letter one). On the shipped
-   library that rule skipped all four cribs actually present in the message and
-   recovered nothing, where not skipping recovered it exactly (cribs.md 12 step 6).
-     So the knob exists for the case a user can recognise -- a library dominated by
-   very short cribs, where a few catastrophic ones would swamp the run -- and it must
-   be asked for. */
-static double opt_crib_max_hyps = 0.0;
-/* Keys sampled by the cost estimate. The deduction costs ~3 ns per propagation
-   (cribs.md 4.2b), so a few hundred keys at ~90 alignments x 26 hypotheses is tens of
-   milliseconds -- negligible beside the sweep it decides whether to run, and large
-   enough that the per-key rate has settled. */
 static const size_t crib_sample_keys = 256;
 /* --crib-order: run a --crib-list cheapest-measured-cost first (the default) or in
    file order. Ordering discards nothing -- the worst case is that the winner is found
@@ -5608,9 +5586,6 @@ static void run_crib_list(char * result)
             {
               p.cost = crib_estimate(crib_sample_keys);
               tot_boards += p.cost.boards;
-              if ((opt_crib_max_hyps > 0.0)
-                  && (p.cost.hyps_per_key > opt_crib_max_hyps))
-                p.skip = "over --crib-max-hyps";
             }
         }
       plan.push_back(p);
@@ -5985,12 +5960,6 @@ void help(FILE * out)
           "Order a --crib-list by measured 'cost' (cheapest");
   fprintf(out, "  %-24s %s\n", "", "first -- long cribs are far cheaper) or 'file'");
   fprintf(out, "  %-24s %s\n", "", "to keep the library's own order [cost]");
-  fprintf(out, "  %-24s %s\n", "--crib-max-hyps X",
-          "Skip a --crib-list crib costing more than X");
-  fprintf(out, "  %-24s %s\n", "", "surviving hypotheses per key (each is one climb),");
-  fprintf(out, "  %-24s %s\n", "", "measured on a sample first. NOT recommended: cost");
-  fprintf(out, "  %-24s %s\n", "", "is anti-correlated with the chance of a hit, so");
-  fprintf(out, "  %-24s %s\n", "", "this prunes the likeliest cribs [0 = never skip]");
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
@@ -6184,9 +6153,6 @@ void show_settings()
               g_crib_list.size(), (g_crib_list.size() == 1) ? "" : "s");
       fprintf(stderr, "Crib order: %s\n",
               opt_crib_order_cost ? "cheapest measured cost first" : "file order");
-      if (opt_crib_max_hyps > 0.0)
-        fprintf(stderr, "Crib cost:  skip above %.1f hypotheses per key\n",
-                opt_crib_max_hyps);
     }
 }
 
@@ -6212,7 +6178,6 @@ int main(int argc, char * * argv)
   opt_crib_text = nullptr;
   opt_crib_list = nullptr;
   g_crib_list.clear();
-  opt_crib_max_hyps = 0.0;
   opt_crib_order_cost = true;
   opt_crib_at = -1;
   opt_crib_dump = false;
@@ -6260,7 +6225,7 @@ int main(int argc, char * * argv)
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
-         OPT_CRIBLIST, OPT_CRIBMAXHYPS, OPT_CRIBORDER };
+         OPT_CRIBLIST, OPT_CRIBORDER };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -6313,7 +6278,6 @@ int main(int argc, char * * argv)
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
-      { "crib-max-hyps",  required_argument, nullptr, OPT_CRIBMAXHYPS },
       { "crib-order",     required_argument, nullptr, OPT_CRIBORDER },
       { nullptr,          0,                 nullptr, 0   }
     };
@@ -6439,9 +6403,6 @@ int main(int argc, char * * argv)
           break;
         case OPT_CRIBLIST:
           opt_crib_list = optarg;
-          break;
-        case OPT_CRIBMAXHYPS:
-          opt_crib_max_hyps = strtod(optarg, nullptr);
           break;
         case OPT_CRIBORDER:
           if (strcmp(optarg, "cost") == 0)
@@ -6666,20 +6627,13 @@ int main(int argc, char * * argv)
       if (opt_crib_list && (opt_crib_at >= 0))
         fatal("--crib-at pins ONE alignment, so it cannot apply to a whole "
               "--crib-list (the cribs differ in length and position)");
-      if (opt_crib_max_hyps < 0.0)
-        fatal("--crib-max-hyps must not be negative (0, the default, never skips)");
-      /* A single --crib was asked for explicitly and is never skipped, so a cap on it
-         would silently do nothing -- say so rather than accept and ignore it. */
-      if ((opt_crib_max_hyps != 0.0) && (opt_crib_list == nullptr))
-        fatal("--crib-max-hyps needs --crib-list (a single --crib is never skipped)");
-      /* Same shape: with one crib there is no order to choose. */
+      /* With one crib there is no order to choose, so a request for one would
+         silently do nothing -- say so rather than accept and ignore it. */
       if ((! opt_crib_order_cost) && (opt_crib_list == nullptr))
         fatal("--crib-order needs --crib-list (there is nothing to order otherwise)");
     }
   else if ((opt_crib_at >= 0) || opt_crib_dump)
     fatal("--crib-at and --crib-dump need --crib");
-  else if (opt_crib_max_hyps != 0.0)
-    fatal("--crib-max-hyps needs --crib-list");
   else if (! opt_crib_order_cost)
     fatal("--crib-order needs --crib-list (there is nothing to order otherwise)");
 

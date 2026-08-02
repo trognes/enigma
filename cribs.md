@@ -1797,112 +1797,30 @@ speedup and a 66× slowdown. And a crib's cost cannot be read off the crib:
 length and spare letters — the two numbers the generator ranks by — do not
 predict it. It depends on the crib *and* the ciphertext together.
 
-So `--crib-max-hyps X` **measures** each crib before paying for it, on a fixed
-stride of 256 keys (~20 ms at ~3 ns per propagation), and skips any crib costing
-more than `X` surviving hypotheses per key. Two properties fall out of the
-design rather than being tested for: the sample is a fixed stride, so the
-decision is reproducible; and it is taken *before* the sweep, single-threaded,
-so it cannot depend on thread timing. A mid-run cap could not have had either
-property — an accumulated count across workers with an abort would have broken
-the `-T`-determinism the whole search holds to.
-
-**Cribs run cheapest-measured-cost first by default** (`--crib-order file`
-keeps the library's own order). This reverses what §5 step 5 concluded, and the
-reason is that §5 priced cribs with `build_cribs.py`'s *modelled* cost — which
-charges by length on the assumption that sweep cost is roughly flat (§4.1's
-table: 100–117 s for every row). Measured on one message and one key space, with
-process startup subtracted, the real curve is a **cliff**:
-
-| letters | 8 | 10 | 12 | 14 | 16 | 20 | 25 |
-|---|--:|--:|--:|--:|--:|--:|--:|
-| cost vs no crib | **52×** | 6.7× | 0.67× | 0.074× | 0.074× | 0.037× | 0.02× |
-
-A ~2 600× spread, against the 13× the old model had — and the 16-letter figure
-agrees with an independent measurement on a 5× larger key space (0.074× against
-0.085×), which is what makes it a correction rather than a rescaling. Against
-that, how often a crib is *present* spans only ~26× (§4.2). When the cost spread
-is the larger of the two, cheapest-first wins: the entire long tail of a library
-costs less than one short crib, so running it first is very nearly free.
-
-Ordering is a **preference, not a filter** — nothing is discarded, so the worst
-case is that the winner is found later, never that it is lost. That is why it
-may default on where `--crib-max-hyps`, which does discard, must not.
-
-**The generator's cost model and budget were corrected to match**, and the
-consequence is large. `COST` is now measured hours per length, and the budget
-fills **cheapest-first** rather than walking the library in order: the old fill
-stopped at the first unaffordable crib, which with a cliff-shaped curve
-truncated the library to almost nothing, since it opens with short vocabulary
-cribs costing hundreds of hours each. The corpus supplies **1 150 cribs of 14
-letters or more** and the shipped library held **10** of them. It now holds all
-1 150 plus the 31 most-recurrent short ones — 1 181 against 96 — because at
-0.02–0.07× a no-crib sweep each, the long tail is nearly free to carry.
-
-**Every crib's expected gain is reported, whether or not anything is skipped.**
-The run prints one row per crib before its sweep:
-
-```
-     #  crib                      len algn   hyp/key     gain  note
-     1  XSIEGFRIED                 10   80      59.3   0.063x
-     2  VERBINDUNG                 10   76      69.7   0.069x
-     3  XSTUERZBECHERX             14   59       0.4      12x
-     4  OBERKOMMANDODERWEHRMACHT   24   37    <0.004   >1000x
-     5  SIEGFRIED                   9   81     119.2   0.032x
-```
-
-`gain` is what a key costs **without** this crib over what it costs **with**
-it — above 1 the crib saves work, below 1 it costs more than using no crib at
-all. It is **measured, not modelled**: `crib_unit()` and `hillclimb_one()` are
-both run on the same eight sampled keys and their plugboards-scored counters
-compared, so the figure already contains the two effects that pull against each
-other — the keys the crib rejects for free, and the extra climbs it adds
-wherever it does not. Counting boards rather than timing keeps it reproducible,
-since it is printed; the one thing it omits is the deduction's own cost, which
-runs outside the score loop, so a crib rejecting nearly everything is flattered
-(`>1000x` is reported rather than a number, because past that the true figure
-saturates at the deduction's price rather than the climb's). `<` marks a crib
-that hit the work budget — a bound, not a measurement.
-
-**And the table is the argument for not acting on it automatically.** Read the
-`gain` column above beside which cribs are actually *in* the message: all four
-present ones — `XSIEGFRIED`, `VERBINDUNG`, `SIEGFRIED` and the 24-letter
-parent — and the three cheapest-to-run entries are the three that recover
-nothing. The one crib scoring `>1000x` is the 24-letter phrase you would rarely
-have. That is the anti-correlation below, made visible per run rather than
-argued from tables.
-
-**So the cost check defaults to OFF, and that is a measured result, not
-caution.** The default was going to be *break-even*: skip when the estimate says
-the crib would cost more than using no crib at all. That rule was built, and it
-is wrong.
-
-Run against the shipped 96-crib library on a message containing four of its
-cribs:
+**A `--crib-max-hyps` flag that *discarded* costly cribs was built, measured,
+and removed.** It skipped any crib above a cap in surviving hypotheses per key,
+measured on a fixed 256-key stride. Run against the shipped library on a message
+containing four of its cribs:
 
 | | outcome |
 |---|---|
-| break-even default | **all four present cribs skipped**, nothing recovered |
-| `--crib-max-hyps 0` | **100% recovered**, 8 s |
+| skipping at break-even | **all four present cribs skipped**, nothing found |
+| not skipping | **100% recovered**, 8 s |
 
-The premise is the error. "No crib" is not the same outcome more cheaply — it
-usually *fails*: §7a measures a 5-cable seed recovering **55% against 12%** for
-the same compute spent on restarts. Comparing a crib's cost against a cheaper
-way of failing will always reject the crib.
+Wrong twice over. The premise fails — "no crib" is not the same outcome more
+cheaply, it usually *fails*: §7a measures a 5-cable seed recovering **55%
+against 12%** for the same compute spent on restarts, so comparing a crib's cost
+against a cheaper way of failing will always reject the crib. And no threshold
+rescues it, because **cost is anti-correlated with the chance of a hit**: short
+cribs reject nothing, so hypotheses survive everywhere and they are the most
+expensive, while §4.2 measures **93% of messages carrying an 8-letter crib
+against 3% for a 20-letter one**. Cost-ordered *pruning* removes the library's
+most valuable entries first.
 
-And there is a second, sharper reason, which is why no threshold rescues the
-rule. **Cost is anti-correlated with the chance of a hit.** Short cribs are both
-the most expensive per key — they reject nothing, so hypotheses survive
-everywhere — and by far the most likely to be present: §4.2 measures **93% of
-messages carrying an 8-letter crib against 3% for a 20-letter one**. A
-cost-ordered pruning therefore removes the library's most valuable entries
-first. In the run above the four present cribs cost 59–120 hypotheses per key
-while the 26 cribs cheap enough to survive the rule contained none of them.
-
-So the knob is **opt-in and not recommended**: it exists for a case a user can
-recognise — a library dominated by very short cribs where a few catastrophic
-ones would swamp the run — and the tool will not apply it unasked. It applies to
-`--crib-list` only; a single `--crib` was asked for explicitly and is always
-run.
+**Reordering captures the same throughput without the risk**, which is why it
+replaced the flag rather than joining it: cheapest-first runs the long tail
+early and costs nothing when it misses, because nothing is discarded and the
+run continues.
 
 This is the same shape as `--ring-stride`: a real throughput lever that trades
 away recovery, correctly measured only once it was run end to end rather than

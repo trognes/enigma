@@ -708,7 +708,7 @@ are read from a **data directory** (filenames built as
   12-letter crib: **92% of letters recovered against 8% unseeded** (10% at
   `-R 64`), and the same 92% swept as pinned, so seeding does not need the
   alignment to be known. **That was measured with the rotor key given**, one
-  key; with the key unknown the sweep is not free — see `--crib-max-hyps`.
+  key; with the key unknown the sweep is not free — see `--crib-order`.
 - `--crib-list FILE` **a whole crib library**, one crib per line (`#` comments,
   duplicates dropped, **file order preserved** — the generator emits
   most-likely-to-match first and re-sorting would throw away the early exit).
@@ -732,8 +732,13 @@ are read from a **data directory** (filenames built as
   Since how often a crib is *present* spans only ~26× (§4.2), the cost term
   dominates: the whole long tail of a library costs less than one short crib.
   Ordering is a **preference, not a filter**: nothing is discarded, so the
-  worst case is a later win, never a lost one — which is why it may default on
-  where `--crib-max-hyps` must not.
+  worst case is a later win, never a lost one. **A `--crib-max-hyps` flag that
+  *discarded* costly cribs was built and removed**: cost is anti-correlated with
+  the chance of a hit — short cribs are the most expensive *and* the most likely
+  to be present (93% of messages carry an 8-letter crib, 3% a 20-letter one) —
+  so on the shipped library it skipped all four cribs actually in the message
+  and recovered nothing, where not skipping recovered it in 8 s. Reordering
+  captures the throughput without that risk, which is why it replaced it.
 - **The crib list reports an expected gain per crib**, printed as a table before
   each sweep: `# crib len algn hyp/key gain`. `gain` is what a key costs
   *without* the crib over what it costs *with* it — above 1 it saves work, below
@@ -747,30 +752,8 @@ are read from a **data directory** (filenames built as
   figure. `<` marks a crib that hit the work budget: a bound, not a measurement.
   The table is also the standing argument against acting on it automatically —
   on the shipped library the cribs actually present in the message are the ones
-  scoring ~0.03–0.07×.
-- `--crib-max-hyps X` **skip a crib that costs too many hypotheses** (**not
-  recommended** — measured down; needs `--crib-list`; **default 0 = off**). The
-  unit is **surviving hypotheses per key**, not rejection rate and not crib
-  length, because under `-c` a surviving key is climbed once per surviving
-  hypothesis: measured 1.0 per key where a crib rejects at all against 235 where
-  it does not (`cribs.md` §4.2b). It **cannot be predicted from the crib** —
-  `NULLNULLNULL` (12 letters) rejects 78% while `XHOCKXHOCKX` (11) rejects 1% —
-  so it is *measured*, on a fixed stride of `crib_sample_keys` = 256 keys
-  (~20 ms at ~3 ns per propagation). Two properties come from the design rather
-  than from a test: the stride is fixed, so the decision is reproducible; and it
-  is taken **before the sweep, single-threaded**, so it cannot depend on thread
-  timing — a mid-run cap with an abort would have broken `-T`-determinism.
-  **The default is off because a break-even default was built and measured
-  down**: on the shipped 96-crib library it skipped all four cribs actually
-  present in the message and recovered nothing, where not skipping recovered it
-  exactly in 8 s. Two reasons, and the second admits no threshold. "No crib" is
-  not the same outcome more cheaply — it usually *fails* (§7a: 55% against 12%
-  at matched compute), so comparing against it always rejects the crib. And
-  **cost is anti-correlated with the chance of a hit**: short cribs are the most
-  expensive per key *and* the most likely to be present (93% of messages carry
-  an 8-letter crib, 3% a 20-letter one), so cost-ordered pruning removes the
-  most valuable entries first. Same shape as `--ring-stride` — a real throughput
-  lever that trades away recovery. A single `--crib` is never skipped.
+  scoring ~0.03–0.07×, so the column guides the reader rather than gating a
+  crib.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are

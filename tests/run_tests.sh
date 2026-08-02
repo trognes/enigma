@@ -1567,22 +1567,6 @@ check "--crib-list cost table is -T-independent" \
   "$(cl_run -c -T 1 2>&1 >/dev/null | grep -E '^ +[1-9][0-9]*  [A-Z]')" \
   "$(cl_run -c -T 4 2>&1 >/dev/null | grep -E '^ +[1-9][0-9]*  [A-Z]')"
 
-# The cost check (cribs.md §4.2b): under -c a surviving key is climbed once per
-# surviving HYPOTHESIS, so a crib that rejects nothing multiplies the work instead of
-# skipping it. A cap of 0.001 per key is below anything real, so every crib that costs
-# ANYTHING is skipped -- NOTINTHISMESSAGE rejects the whole sample and measures a flat
-# zero, so it is correctly kept, which is the behaviour worth pinning down.
-check "--crib-list --crib-max-hyps skips costly cribs" \
-  "$(cl_run -c --crib-max-hyps 0.001 2>&1 >/dev/null | grep -c 'skipped: over')" "2"
-# It is OFF unless asked for, and that default is measured, not cautious: a break-even
-# rule skipped every crib actually present in the message (cribs.md §12 step 6). A
-# check that only fired with the flag would pass just as well if the default were
-# wrong, so assert the default explicitly.
-check "--crib-list skips nothing by default" \
-  "$(cl_run -c 2>&1 >/dev/null | grep -c 'skipped: over')" "0"
-check "--crib-max-hyps rejects a negative cap" \
-  "$(cl_run -c --crib-max-hyps -3 >/dev/null 2>&1; echo $?)" "1"
-
 # A crib longer than the ciphertext, or one that cannot sit anywhere, is fatal for a
 # single --crib but ORDINARY for a library: skip it and try the next. The ciphertext
 # itself is the one crib guaranteed to have no viable alignment -- it has exactly one,
@@ -1597,14 +1581,6 @@ check "--crib-list says why each crib was skipped" \
   "$(cl_bad_run 2>&1 >/dev/null | grep -c 'skipped: \(longer than\|cannot sit\)')" "2"
 rm -f "$cl_bad"
 
-# Skipping every crib leaves nothing scored, which is fatal rather than silently empty.
-cl_none=$(mktemp)
-printf 'OBERKOMMANDO\nXSIEGFRIEDXX\n' > "$cl_none"
-check "--crib-list with every crib skipped is fatal" \
-  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
-     --crib-list "$cl_none" --crib-max-hyps 0.001 >/dev/null 2>&1; echo $?)" "1"
-rm -f "$cl_none"
-
 # The column header is printed once for the whole run, not once per crib, and a later
 # crib must not re-echo boards worse than the best already shown.
 check "--crib-list prints one progress header for the run" \
@@ -1613,7 +1589,7 @@ check "--crib-list prints one progress header for the run" \
 # Ordering: cheapest measured cost first by default, since the cost spread across
 # crib lengths is ~90x and runs opposite to intuition (a 20-letter crib swept in
 # 0.15 s where a 10-letter one took 13.65 s). Ordering discards nothing, so it can
-# default on where the skipping in --crib-max-hyps must not.
+# default on: it discards nothing, so the worst case is a later win.
 cl_order() { cl_run -c --crib-order "$1" 2>&1 >/dev/null \
                | grep -E '^ +[1-9][0-9]*  [A-Z]' | awk '{print $2}'; }
 check "--crib-list keeps file order under --crib-order file" \
@@ -1638,14 +1614,14 @@ check "--crib-list with --crib rejected" \
   "$(cl_reject --crib-list "$cl_file" --crib OBERKOMMANDO)" "1"
 check "--crib-list with --crib-at rejected" \
   "$(cl_reject --crib-list "$cl_file" --crib-at 3)" "1"
-check "--crib-max-hyps without --crib-list rejected" \
-  "$(cl_reject --crib OBERKOMMANDO --crib-max-hyps 5)" "1"
 check "--crib-list with -F rejected" \
   "$(cl_reject -c --crib-list "$cl_file" -F 5)" "1"
 check "--crib-order with a bad value rejected" \
   "$(cl_reject --crib-list "$cl_file" --crib-order sideways)" "1"
 check "--crib-order without --crib-list rejected" \
   "$(cl_reject --crib OBERKOMMANDO --crib-order file)" "1"
+check "--crib-max-hyps is no longer accepted" \
+  "$(cl_reject --crib-list "$cl_file" --crib-max-hyps 5)" "1"
 check "--crib-list with a missing file rejected" \
   "$(cl_reject --crib-list /nonexistent/crib/library)" "1"
 cl_empty=$(mktemp)

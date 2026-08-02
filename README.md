@@ -277,18 +277,14 @@ English tables.
   cost, and **expected gain** (what a key costs without the crib over what it
   costs with it, so above 1 saves work and below 1 costs more than no crib),
   which is the guide to why a crib is worth running or was skipped
-- **`--crib-max-hyps X`** — Skip a `--crib-list` crib costing more than `X`
-  surviving *hypotheses per key* — the real unit, since under `-c` a surviving
-  key is climbed once per surviving hypothesis (measured 1.0 where a crib
-  rejects at all, 235 where it does not). It cannot be read off the crib
-  (`NULLNULLNULL`, 12 letters, rejects 78%; `XHOCKXHOCKX`, 11 letters, rejects
-  1%), so it is measured on a fixed 256-key sample before the sweep —
-  reproducible, and independent of `-T`. **Off by default and not recommended**:
-  cost is *anti-correlated* with the chance of a hit, because short cribs are
-  both the most expensive per key and by far the most likely to be present (93%
-  of messages carry an 8-letter crib against 3% for a 20-letter one). Measured
-  on the shipped library, a cost rule skipped every crib actually in the message
-  `[0 = never skip]`
+- **`--crib-order cost|file`** — Run a `--crib-list` **cheapest measured cost
+  first** (the default), or in the library's own order. The cost of a crib
+  against its length is a *cliff*: relative to a sweep with no crib, 8 letters
+  costs **52×**, 12 costs 0.67×, 25 costs 0.02×. Since how often a crib is
+  present spans only ~26×, cost dominates — the whole long tail of a library
+  costs less than one short crib, so running it first is nearly free. Ordering
+  discards nothing, so the worst case is finding the answer later, never not at
+  all
 - **`-R N` / `--restarts N`** — Random restart attempts: `0` = one deterministic
   climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best
   `[0]`
