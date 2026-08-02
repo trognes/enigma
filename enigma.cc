@@ -156,6 +156,11 @@ static int crib_edges = 0;              /* = the crib length */
 static int crib_align[maxlen];          /* viable alignments, in order */
 static unsigned char crib_anchor_at[maxlen];   /* anchor letter of each one's menu */
 static int crib_aligns = 0;
+/* Menu edge order per alignment, BFS outward from that alignment's anchor -- see
+   init_crib(). crib_aligns x crib_edges, indexed [a * crib_edges + step]. A vector
+   because both bounds are message-dependent and a maxlen x maxlen array would be a
+   megabyte of mostly-unused cold storage. Read-only once init_crib() returns. */
+static std::vector<unsigned short> crib_order;
 static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossible */
 /* --crib-list FILE: a whole library of cribs, tried in file order, one full rotor
    sweep each (cribs.md 6.7 -- crib-outer, because early exit is worth up to 50x while
@@ -1128,6 +1133,7 @@ static void init_crib()
   int first = (opt_crib_at >= 0) ? opt_crib_at : 0;
   int last = (opt_crib_at >= 0) ? opt_crib_at : textlength - crib_edges;
   crib_aligns = 0;
+  crib_order.clear();
   for (int at = first; at <= last; at++)
     {
       bool viable = true;
@@ -1181,10 +1187,76 @@ static void init_crib()
       if (anchor < 0)
         continue;
 
+      /* Edge order: BREADTH-FIRST OUTWARD FROM THE ANCHOR, not crib order.
+         An edge can only deduce anything once one of its endpoints is known, and the
+         only letter known at the start is the anchor. In crib order the loop therefore
+         visits edges whose endpoints are both still unknown, does nothing, and relies
+         on the enclosing `while (changed)` to come back for them -- so a long menu is
+         re-scanned repeatedly. Visiting edges as the frontier reaches them makes the
+         work track the COMPONENT rather than the edge count.
+           Measured on wrong keys (the case a sweep spends its time on), total edge
+         steps for the 26 hypotheses: 226 -> 97 at a 16-letter crib and 253 -> 93 at
+         50 letters, i.e. 2.3x rising to 2.7x, because the BFS cost stays flat (~95)
+         while crib order grows with length. Longest cribs gain most.
+           This is a pure REORDERING: the closure is order-independent, so exactly the
+         same keys are rejected and exactly the same plugs deduced. It changes when a
+         contradiction is found, never whether. */
+      {
+        size_t base = static_cast<size_t>(crib_aligns) * crib_edges;
+        crib_order.resize(base + crib_edges);
+        bool used[maxlen] = { false };
+        bool seen[asize] = { false };
+        int queue[asize], qh = 0, qt = 0, n = 0;
+        seen[anchor] = true;
+        queue[qt++] = anchor;
+        while (qh < qt)
+          {
+            int x = queue[qh++];
+            for (int j = 0; j < crib_edges; j++)
+              {
+                if (used[j])
+                  continue;
+                int a2 = crib_p[j], b2 = num_ciphertext[at + j];
+                if ((a2 != x) && (b2 != x))
+                  continue;
+                used[j] = true;
+                crib_order[base + n++] = static_cast<unsigned short>(j);
+                int other = (a2 == x) ? b2 : a2;
+                if (! seen[other])
+                  {
+                    seen[other] = true;
+                    queue[qt++] = other;
+                  }
+              }
+          }
+        /* Edges in other components can never fire from this anchor, but they still
+           have to be present: crib_try walks all crib_edges slots. */
+        for (int j = 0; j < crib_edges; j++)
+          if (! used[j])
+            crib_order[base + n++] = static_cast<unsigned short>(j);
+      }
+
       crib_align[crib_aligns] = at;
       crib_anchor_at[crib_aligns] = static_cast<unsigned char>(anchor);
       crib_aligns++;
     }
+}
+
+/* Assign steck[x] = y and its reciprocal, returning false on any disagreement.
+   The two guards ARE Welchman's diagonal board: a letter already plugged to
+   something else contradicts, and so does a partner already claimed by a third
+   letter. Nearly all of the crib's rejecting power comes from these two tests,
+   not from the menu itself. Callers must propagate the false -- there is no
+   partial write, so the board is unchanged when it fails. */
+static inline bool crib_set(int * board, int x, int y)
+{
+  if ((board[x] >= 0) && (board[x] != y))
+    return false;
+  if ((board[y] >= 0) && (board[y] != x))
+    return false;
+  board[x] = y;
+  board[y] = x;
+  return true;
 }
 
 /* One hypothesis at one alignment: "the anchor letter is plugged to hyp". Propagates to a
@@ -1195,39 +1267,34 @@ static void init_crib()
    the UNSIGNED char rows[] table, and mixing those two signednesses is the bug class
    clang-tidy's bugprone-signed-char-misuse exists to catch. 26 ints, read once per key,
    cost nothing. */
-static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board)
+static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board,
+                     const unsigned short * order)
 {
   for (int i = 0; i < asize; i++)
     board[i] = -1;
   const unsigned char * const * rows = m.rows;
 
-  /* assign steck[x] = y, and its reciprocal, failing on any disagreement */
-#define CRIB_SET(x, y)                                          \
-  do {                                                          \
-    int xx = (x), yy = (y);                                     \
-    if ((board[xx] >= 0) && (board[xx] != yy)) return false;    \
-    if ((board[yy] >= 0) && (board[yy] != xx)) return false;    \
-    board[xx] = yy;                                             \
-    board[yy] = xx;                                             \
-  } while (0)
-
-  CRIB_SET(anchor, hyp);
+  if (! crib_set(board, anchor, hyp))
+    return false;
   bool changed = true;
   while (changed)
     {
       changed = false;
-      for (int j = 0; j < crib_edges; j++)
+      for (int jj = 0; jj < crib_edges; jj++)
         {
+          int j = order[jj];
           const unsigned char * core = rows[at + j];
           int p = crib_p[j], c = num_ciphertext[at + j];
           if ((board[c] >= 0) && (board[p] < 0))
             {
-              CRIB_SET(p, static_cast<int>(core[board[c]]));
+              if (! crib_set(board, p, static_cast<int>(core[board[c]])))
+                return false;
               changed = true;
             }
           else if ((board[p] >= 0) && (board[c] < 0))
             {
-              CRIB_SET(c, static_cast<int>(core[board[p]]));
+              if (! crib_set(board, c, static_cast<int>(core[board[p]])))
+                return false;
               changed = true;
             }
           else if ((board[p] >= 0) && (board[c] >= 0))
@@ -1237,7 +1304,6 @@ static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board
             }
         }
     }
-#undef CRIB_SET
   return true;
 }
 
@@ -1267,7 +1333,8 @@ static int crib_first_stop(const machine & m)
   int board[asize];
   for (int a = 0; a < crib_aligns; a++)
     for (int h = 0; h < asize; h++)
-      if (crib_try(m, crib_align[a], crib_anchor_at[a], h, board))
+      if (crib_try(m, crib_align[a], crib_anchor_at[a], h, board,
+                   &crib_order[static_cast<size_t>(a) * crib_edges]))
         return crib_align[a];
   return -1;
 }
@@ -3244,7 +3311,8 @@ static double crib_unit(machine & m, size_t key_index, int restart)
   for (int a = 0; a < crib_aligns; a++)
     for (int h = 0; h < asize; h++)
       {
-        if (! crib_try(m, crib_align[a], crib_anchor_at[a], h, board))
+        if (! crib_try(m, crib_align[a], crib_anchor_at[a], h, board,
+                       &crib_order[static_cast<size_t>(a) * crib_edges]))
           continue;
         init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
         memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
@@ -3610,7 +3678,8 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
     for (int h = 0; h < asize; h++)
       {
         int anchor = crib_anchor_at[a];
-        if (! crib_try(m, crib_align[a], anchor, h, board))
+        if (! crib_try(m, crib_align[a], anchor, h, board,
+                       &crib_order[static_cast<size_t>(a) * crib_edges]))
           continue;
         fprintf(stderr, "cribstop %s %s %s %d %c %c", w, r, g, crib_align[a] + 1,
                 num2char(anchor), num2char(h));
@@ -4725,7 +4794,8 @@ static crib_cost crib_estimate(size_t nsample)
       c.sampled++;
       for (int a = 0; a < crib_aligns; a++)
         for (int h = 0; h < asize; h++)
-          if (crib_try(*m, crib_align[a], crib_anchor_at[a], h, board))
+          if (crib_try(*m, crib_align[a], crib_anchor_at[a], h, board,
+                       &crib_order[static_cast<size_t>(a) * crib_edges]))
             {
               hyps++;
               for (int i = 0; i < asize; i++)

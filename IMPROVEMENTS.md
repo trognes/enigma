@@ -232,6 +232,70 @@ materially different regime, and read the evidence in `archived/` first.
 | Wheel-order scoring gate (`FULLCRACK`) | **reasoned** down — see below |
 | Greedy plug-by-plug seed | **reasoned** down — see below |
 | Cost-pruning a crib library by default | prunes the likeliest hits |
+| Bombe-style bit-parallel crib deduction | 30–50× SLOWER — see below |
+
+**A Bombe-style bit-parallel crib deduction, measured down.** The crib
+deduction runs 26 chained hypotheses per alignment and a rejecting key pays all
+26, so replacing them with one bit-parallel closure looks like an obvious ~26×.
+Two forms were built and both lost. **Both pack the 26 candidate *values* of a
+letter into a word** — that is the axis the Bombe's 26 wires actually
+represent; the separate "26 *hypotheses* in lockstep" axis is reasoned down at
+the end of this entry.
+
+*Intersection (arc-consistency).* Narrow a 26×26 possibility relation from
+all-possible: `M[p] &= permute(M[c], core_j)`, plus the diagonal board as
+symmetry. It rejects **nothing** — 0 of 150 keys at both 12 and 20 letters,
+against a ~5% break-even. All-ones is a **fixpoint**: permuting "everything is
+possible" returns itself, so nothing ever narrows and nothing contradicts.
+
+*Union (the actual Bombe).* Grow `S[x]`, a 26-bit set of possible values for
+`steck[x]`, from one seed: `S[p] |= permute(S[c], core_j)` plus reciprocity.
+This one is **correct and sound** — saturation of `S[anchor]` refutes all 26
+hypotheses at once (the implication relation is symmetric, so every seed in the
+blob floods alike), it saturates on 120/120 wrong keys at 20 letters, and it
+produced **zero false rejections in 240 keys**. It is also **30–50× slower**:
+
+| crib | 26 BFS chains | 1 flood | |
+|--:|--:|--:|--:|
+| 12 | 98 core lookups | 2 920 | 0.03× |
+| 20 | 97 | 3 256 | 0.03× |
+| 40 | 94 | 5 158 | 0.02× |
+
+The flood must propagate to **saturation** — 26 letters each ending with a
+26-bit set, one table lookup per set bit per edge — while a chain dies after
+under 4 lookups. **This is exactly why the Bombe was built that way and software
+should not be**: in hardware 26 wires carry current simultaneously in one clock,
+so flooding is free; in software every bit is paid for. The parallelism that
+made the Bombe fast is what makes it slow here.
+
+Note the BFS menu ordering (shipped) is what made this conclusive: it cut the
+chains from ~230 lookups to 97, so the gap went from ~13× to ~30×. Making the
+chains cheap closed the door on replacing them.
+
+*Lockstep over the 26 hypotheses — a different axis, reasoned down, not
+built.* The natural form is `W[x][v]`, a 26-bit mask over hypotheses saying
+"`board[x] == v` in hypothesis `h`", so propagating an edge is `for v:
+W[p][core[v]] |= W[c][v]` — a permute-and-OR of **26 words per edge**, plus
+roughly as much again for the contradiction bookkeeping. Every lane pays it
+whether alive or not, and lockstep cannot exit until *all* 26 die. Against that,
+the scalar cost of **all 26 chains combined** is the 94–98 core lookups tabled
+above: ~3.7 per hypothesis, because a wrong guess contradicts almost at once.
+One lockstep pass over a 12-edge menu is therefore ~312 word-ops before
+bookkeeping, against 97 lookups for the whole job — 3–7× worse, and it degrades
+with crib length where the scalar path stays flat.
+
+The floor argument is the general one, and it is why no scheme on this axis can
+win: ~3–4 constraints is the minimum for a contradiction to be *visible*, so
+~26 × 4 lookups is close to the information-theoretic cost of refuting 26
+hypotheses, and the scalar chains are already there. Early death is the whole
+optimization — the same conclusion as the union flood, relocated.
+
+One thing in `crib_try` *is* plausibly mispriced and needs no parallelism:
+the `board[i] = -1` reset is 26 stores × 26 hypotheses = **676 stores per
+alignment**, against ~97 core lookups. A touched-list undo (the closure writes
+typically 4–8 letters) would remove it. Unmeasured — the reset vectorises and
+the lookups are latency-bound, so it may well not dominate; measure before
+building.
 
 **Cost-pruning a crib library, measured down and removed.** A `--crib-max-hyps`
 flag skipped a `--crib-list` crib whose sampled cost exceeded a cap in surviving
