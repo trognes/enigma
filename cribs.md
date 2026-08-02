@@ -1400,13 +1400,29 @@ can beat compute rather than merely adding to it.
 3. Coverage assumes the crib is exactly right. An 8-letter crib is far more
    likely to be present (§4.2) *and* far more likely to be a coincidental match
    that deduces confident nonsense. Short cribs make both errors more common at
-   once. **Still unmeasured, and §7c does not cover it**: that measures a wrong
-   *hypothesis* winning while the crib genuinely is in the message. The open
-   question is the other one — with a crib that is **absent**, does the run
-   return a confident wrong answer, or does it visibly fail? What would settle
-   it is a run with a crib known not to occur, comparing the winning score
-   against the same message's no-crib winner: a false positive is a crib-seeded
-   board that scores *above* what the unseeded search finds.
+   once. **Measured, and it does not happen** — `eval/crib_absent_probe.py`, 30
+   trials, 90-letter messages, the crib a real 10-letter phrase taken from
+   another corpus message and checked absent, board hidden, rotor key given,
+   `-J -R 64`:
+
+   | | absent crib | no crib |
+   |---|--:|--:|
+   | mean winning score | −9.5588 | **−8.4389** |
+   | mean %-correct | 9.9% | 44.3% |
+   | false positives (crib scores higher) | **0 / 30** | — |
+
+   Zero, and 0 of the 8 trials where the no-crib baseline actually solved. The
+   mechanism is that wrong pins **handicap** the climb rather than helping it:
+   a deduced plug is held fixed, so an absent crib locks in plugs the climb
+   cannot undo and converges over a point *below* an unconstrained one. A
+   false positive would need the wrong pins to out-bid a free climb, and they
+   are strictly worse-off. So an absent crib fails visibly, on score.
+
+   > ⚠️ **The baseline must be able to solve, or this measures nothing.** At
+   > `-R 0` the same probe reported **40%** false positives — but recovery was
+   > 10.1% with the crib against 11.6% without, i.e. *both* arms failing, so
+   > the comparison was a coin flip between two garbage scores. Restarts are
+   > what give the no-crib arm a real answer to defend.
 
 ### 7c. Does a wrong hypothesis ever win? Measured
 
