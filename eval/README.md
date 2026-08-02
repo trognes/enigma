@@ -228,6 +228,70 @@ and the Python only writes it down.
 python3 eval/crib_vectors_check.py --generate --count 40 -v
 ```
 
+## Does a wrong crib hypothesis ever win? (`crib_seed_probe.py`)
+
+A crib pins one letter's plug only by guessing it, so the solver tries all 26 guesses and
+keeps the best-scoring board. Exactly one is the truth. `crib_seed_probe.py` measures how
+often a wrong one wins -- cribs.md 7a's caution 1, and the one thing named as able to undo
+the seeding mode. It needs no new diagnostic: the anchor letter's partner IS the
+hypothesis, so comparing the winner's board against the true board at that letter settles
+it.
+
+```sh
+python3 eval/crib_seed_probe.py --trials 150 --crib 12
+```
+
+**Measured (150 trials per length, 90-letter messages, 10 cables hidden): a wrong
+hypothesis wins 5% of the time at 8 letters and never from 10 up.** When it does win the
+failure is total -- 8.6% mean recovery, nothing in the output to flag it -- so the seed
+mode's floor is 10 letters, set by silent failure rather than by cost. See cribs.md 7c.
+
+## What a seeded climb costs (`crib_seed_cost.py`)
+
+cribs.md 7a priced a seeded climb by move-set combinatorics and never timed it.
+`crib_seed_cost.py` does: a fixed 17576-key sweep, one deterministic climb per key, plugs
+given with `-s` so they pin exactly as a deduction's do, min of several reps, single-
+threaded.
+
+```sh
+python3 eval/crib_seed_cost.py --reps 3
+```
+
+**Measured: 3.55x at five preset plugs and 12.48x at eight** -- slightly better than the
+3.30x/10.74x predicted, because the arithmetic counted only the shrinking move set while a
+seeded climb also converges in fewer passes. `-J` is worth a further **1.8x** on the
+seeded climb (cost only; the recovery side is unmeasured).
+
+`-s` is only a **proxy** for a deduction, though: its plugs are all correct and it says
+nothing about the letters a deduction shows carry no cable, which are pinned too. The
+last arm measures the real path -- boards scored per surviving hypothesis (each one a
+seeded climb), the hypotheses counted with `--crib-dump`. **A deduced seed is 3.6x to
+20x cheaper than a full climb**, and at matched pinned-letter count it lands on the same
+number as the `-s` proxy (3.6x against 3.55x), even though most of those seeds come from
+*wrong* hypotheses -- cost tracks letters pinned, not whether the pins are right. See
+cribs.md 7a.
+
+## What the deduction itself costs (`crib_deduce_cost.py`)
+
+The other half of the same question: cribs.md priced the climb and assumed the
+deduction was negligible, but it runs 26 hypotheses at every viable alignment
+before any climb starts. `crib_deduce_cost.py` times it on a fixed 17576-key
+space, first as a plain scan (no climb involved, so the arms isolate the
+deduction) and then with `-c`.
+
+```sh
+python3 eval/crib_deduce_cost.py --reps 3
+```
+
+**A propagation costs ~3 ns** -- about one character-decode, which is the
+assumption cribs.md 9's estimate rests on. Pinned, the deduction is free at
+every length. Two results invert the intuition. **Against a plain scan a crib
+cannot pay for itself** (a score is ~7 us, a swept deduction ~70 us), and
+**under `-c` a crib that does not reject costs 66x MORE**, because a surviving
+key is climbed once per surviving hypothesis rather than checked once. Where a
+crib does reject, the surviving hypothesis is essentially unique and the run is
+126x faster. See cribs.md 4.2b.
+
 ## Authentic message set (real traffic)
 
 `enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**

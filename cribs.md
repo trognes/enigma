@@ -201,11 +201,12 @@ rejects 55%), and §5's tier boundaries were drawn on the old figures.
 > the alignment and has to sweep, and rejection then compounds multiplicatively
 > — see §4.2a, which puts the swept floor back at **16**.
 
-What is *not* settled is whether this converts into wall time. Rejection is what
-makes a rotor setting cheap, but the conversion needs a per-stop cost — how long
-a surviving hypothesis takes to check — and that measurement belongs with the
-C++ deduction (§12 step 3). Until then the cost table below, and everything
-priced from it, stands flagged rather than corrected.
+Whether this converts into wall time is **now measured, in §4.2b**, and it
+converts in a way the cost table below does not express: a deduction step costs
+about what decoding one character costs, the checking unit is a surviving
+*hypothesis* rather than a surviving *key*, and the conversion has the opposite
+sign against a scan and against a climb. The table below stands as history —
+read §4.2b for what it should say.
 
 > ⚠️ **Earlier versions of this table were measured without the diagonal board
 > and are wrong by orders of magnitude at the short end** — they read 0.00% at 8
@@ -229,8 +230,9 @@ rotor setting** — 60 wheel orders × 26³ positions — in a 200-letter messag
 **The rejection column here is the pre-diagonal-board one and is wrong**; the
 table is kept because its *sweep* column and the shape argument below do not
 depend on it, and because it is what `eval/build_cribs.py`'s cost model was
-built from. Recomputing the checking column needs a per-stop timing run, which
-belongs with the C++ deduction (§12 step 3):
+built from. **The checking column is wrong in its unit as well as its
+arithmetic** — it charges one check per surviving key, and §4.2b measures up to
+235 per key — so read it as the shape argument only:
 
 | crib length | alignments | rejected | sweep | checking | total |
 |--:|--:|--:|--:|--:|--:|
@@ -302,6 +304,93 @@ swept, it is not. And since only about 19% of messages carry a 16-letter crib
 against 55% for a 12-letter one (§4.2), the common case is a crib that cannot
 filter a swept search at all — which is exactly the case §7a's crib-as-seed mode
 exists for, and is now the measured argument for it rather than an expectation.
+
+**4.2b What the deduction itself costs — and the unit the cost table got
+wrong.** Every figure above prices the *climb* and assumes the deduction is
+negligible: "one table lookup". It is not one lookup, it is 26 chained
+hypotheses at every viable alignment, so a swept short crib runs up to ~2 300 of
+them per rotor setting before any climb starts. Measured by
+`eval/crib_deduce_cost.py` on a 125-letter message over 17 576 keys, as a
+**plain scan** so no climb is involved and the only per-key work is
+`setup_mapping`, the deduction, and one score:
+
+| crib | mode | alignments | rejected | wall | net | per hypothesis |
+|--:|---|--:|--:|--:|--:|--:|
+| 8 | pinned | 1 | 44.4% | 0.13 s | +0.01 s | 22 ns |
+| 8 | swept | 86 | 0.0% | 0.12 s | +0.00 s | — |
+| 12 | pinned | 1 | 99.9% | 0.13 s | +0.01 s | 31 ns |
+| 12 | swept | 71 | 5.3% | 0.68 s | +0.57 s | 17 ns |
+| 16 | pinned | 1 | 99.9% | 0.13 s | +0.01 s | 28 ns |
+| **16** | **swept** | 56 | **99.9%** | 1.38 s | **+1.26 s** | **49 ns** |
+| 20 | pinned | 1 | 100% | 0.13 s | +0.01 s | 32 ns |
+| 20 | swept | 45 | 100% | 1.15 s | +1.03 s | 50 ns |
+
+The 16-letter swept row is the one that prices a hypothesis exactly, because
+near-total rejection means almost every hypothesis really is tried: 25.6 M of
+them in 1.26 s is **49 ns each**, and at 16 propagations per chain about **3 ns
+per propagation**. That is roughly what decoding one character costs — which is
+precisely the assumption §9's estimate rests on, now measured instead of
+guessed. **Pinned, the deduction is free at every length** (+0.01 s on a 0.12 s
+run).
+
+**Against a plain scan a crib cannot pay for itself, and that inverts the
+intuition.** Scoring one key costs ~7 µs; a swept deduction costs ~70 µs. So
+rejecting 99.9% of a scan saves less than the sweep costs — the 16-letter row is
+*ten times slower* than not using the crib at all. Rejection is only worth
+buying when what it skips is expensive.
+
+**Against a climb it is, by two orders of magnitude — where it rejects.** Same
+key space, with `-c`:
+
+| | wall | vs no crib | rejected |
+|---|--:|--:|--:|
+| no crib | 16.05 s | — | — |
+| 12 letters pinned | 0.13 s | **126×** | 99.9% |
+| 16 letters pinned | 0.13 s | **127×** | 100% |
+| 16 letters swept | 1.36 s | 11.8× | 99.9% |
+| 20 letters pinned | 0.13 s | 126× | 100% |
+| 20 letters swept | 1.15 s | 14.0× | 100% |
+
+**But "rejected" is the wrong unit, and this is the correction that matters.**
+§4.1's cost table charges *checking* per surviving **key**. Under `-c` a
+surviving key is not checked once — it is climbed once per surviving
+**hypothesis**, and there are up to 26 of those per alignment. Counting them
+directly with `--crib-dump`:
+
+| crib | mode | keys rejected | surviving hypotheses | per surviving key |
+|--:|---|--:|--:|--:|
+| 8 | pinned | 44.4% | 13 786 | 1.4 |
+| **8** | **swept** | **0.0%** | **4 139 010** | **235** |
+| 12 | pinned | 99.9% | 14 | 1.0 |
+| 12 | swept | 5.3% | 51 563 | 3.1 |
+| 16 | pinned | 99.9% | 2 | 1.0 |
+| 16 | swept | 99.9% | 9 | 1.0 |
+
+**Where a crib rejects at all, the survivor is essentially unique.** At 12
+pinned, 16 pinned and 16 swept every surviving key carries exactly **one**
+surviving hypothesis, so the crib does not merely skip keys — it replaces the
+whole plugboard search on the keys it keeps with a single seeded climb, which is
+itself 3–12× cheaper than the unseeded one (§7a). That is where the 126× comes
+from, and it is a bigger effect than rejection alone would give.
+
+The explosion is confined to cribs too weak to reject anything. At 8 letters
+swept, 235 hypotheses survive per key and the run costs **66× more** than no
+crib at all (26-key space, boards scored — exact and startup-free):
+
+| | boards scored | vs no crib |
+|---|--:|--:|
+| no crib | 79 922 | — |
+| 8 letters pinned | 6 666 | **0.08×** |
+| 8 letters swept | 5 319 938 | **66.6×** |
+| 12 letters swept | 48 300 | 0.6× |
+
+**So the seed mode of §7a needs a pinned or near-pinned alignment.** §7a priced
+it at "26 climbs per rotor setting"; that is the *pinned* price, and pinned it
+is a 12× *saving* even at 8 letters, because most of the 26 hypotheses die on
+the diagonal board before any climb runs. Swept it is `alignments × 26`, and at
+8 letters that is worse than doing nothing. §12 step 5's "seeding works swept as
+well as pinned" stands as measured — but it was measured with the rotor key
+*given*, one key, where the multiplier has nothing to multiply.
 
 **4.2 How often a crib is actually present.** Building a crib library from 57 of
 the 58 messages and testing it on the 58th:
@@ -1043,6 +1132,11 @@ seven correct plugs, and four of that recipe's parts stop making sense:
 - **`-M` off.** It makes the cap a strict descent target, which earns its keep
   pulling an *over*-cap board down after a big kick. Seeded, the climb grows
   from five to ten and is never over the cap, so `-M` is near-inert.
+- **`-J` on.** Measured 1.8× cheaper on a seeded climb (§7a's timing table),
+  which at equal wall time buys more of everything else. Its documented failure
+  mode is over-plugging when few plugs are truly needed — exactly this regime —
+  so pair it with the cap above rather than running it bare, and confirm the
+  recovery side before recommending it outright.
 - **`--random 0`.** The kick only perturbs free letters, so it cannot damage the
   seed — but scattering the remaining five when you already start near the
   answer is more likely to cost than to buy. The seeded climb wants to *finish*
@@ -1135,6 +1229,76 @@ left to find, so fewer passes. Measured at L=60, `-R 16 -J --polish`, 30 trials
 So the 26 climbs are not 26× the cost of the baseline. At a 5-cable seed they
 come to **26 / 3.3 ≈ 8×** a single unseeded climb.
 
+**That table counted boards, not seconds; timed, it is slightly conservative.**
+`eval/crib_seed_cost.py` runs a fixed 17 576-key sweep with one deterministic
+climb per key, the plugs given by `-s` so they pin exactly as a deduction's do
+(min of 3 reps, `-T 1`, `-f -l wehrmacht`):
+
+| plugs given | wall | speedup | boards scored | predicted above |
+|--:|--:|--:|--:|--:|
+| 0 | 15.71 s | 1.00× | 55 881 692 | — |
+| **5** | **4.42 s** | **3.55×** | 15 256 095 | 3.30× |
+| 8 | 1.26 s | 12.48× | 4 002 530 | 10.74× |
+
+Wall time and the board counter move together here (3.55× against 3.66× at five
+plugs), which is what should happen when nothing runs outside the score loop —
+no cascade, no finisher. The measured speedups slightly exceed the predicted
+ones because the arithmetic counted only the shrinking move set, while a seeded
+climb also converges in fewer passes.
+
+**`-J` is worth another 1.8× on a seeded climb.** At five preset plugs, first-
+improvement with dynamic ordering takes the same sweep from 4.36 s to **2.40 s**
+(15.3 M boards to 7.6 M) — so §7b's recipe should carry `-J`. **Cost only**: the
+recovery side is unmeasured here, and this is the known-few-plug regime where
+`-J` is documented to need a cap to win on quality, so the pairing to test is
+`-J` with `--score f10` rather than `-J` alone.
+
+**`-s` is still only a proxy, and the real deduced seed does better.** A
+deduction differs from `-s` on three counts: it pins the letters it shows carry
+**no** cable as well as the cables it finds, 25 of its 26 hypotheses pin plugs
+that are simply *wrong*, and the search runs one climb per surviving hypothesis
+rather than one per key. Measured on that path — boards scored per surviving
+hypothesis, the hypotheses counted with `--crib-dump`, against the same key
+space's unseeded climb:
+
+| crib | mode | hypotheses | letters pinned | boards/climb | vs full climb |
+|--:|---|--:|--:|--:|--:|
+| — | unseeded | — | 0 | 3 179 | 1.0× |
+| 8 | swept | 6 188 | 10.4 | 859 | 3.6× |
+| **8** | **pinned** | 13 786 | 14.5 | 358 | **8.9×** |
+| 12 | swept | 51 563 | 12.4 | 600 | 5.3× |
+| 12 | pinned | 14 | 16.6 | 246 | 12.9× |
+| 16 | swept | 9 | 15.6 | 309 | 10.3× |
+| 16 | pinned | 2 | 17.0 | 155 | 20.5× |
+| 20 | swept | 2 | 24.0 | 3 | 1060× |
+
+**Cost tracks letters pinned, not whether the pins are right.** At 10.4 pinned
+letters the deduction gives **3.6×** against the `-s` proxy's **3.55×** at five
+plugs — the same number, although most of these seeds come from wrong
+hypotheses. A wrong plug shrinks the move set exactly as a right one does. So
+`-s` is a fair proxy for *cost*, and the tables above stand; it is emphatically
+not a proxy for *quality*, which is §7c's separate question.
+
+**The no-cable pins are worth more than the arithmetic credited them with.**
+Against the move-set formula — `C(26 − pinned, 2)` toggles against 325 — every
+row comes out 1.4–2.3× better: 5.4× predicted against 8.9× measured at 14.5
+pinned letters, 8.2× against 12.9× at 16.6. Same direction and same cause as
+the `-s` rows: the formula counts only the shrinking scan, while a seeded climb
+also converges in fewer passes.
+
+**Swept seeds are weaker as well as more numerous, and that is survivorship
+bias.** At every length the swept survivors pin *fewer* letters than the pinned
+ones (10.4 against 14.5 at 8 letters, 12.4 against 16.6 at 12) — a hypothesis
+that deduces less has fewer chances to contradict itself, so the ones that
+survive a wrong alignment are systematically the ones that deduced least. The
+sweep therefore pays twice: more climbs, each from a poorer seed.
+
+**Read the sparse rows with care.** The 16- and 20-letter rows rest on 2 to 9
+climbs, all at or beside the true key, where convergence need not resemble the
+average wrong key that dominates the unseeded baseline. The claim rests on the
+well-populated rows — 8 pinned, 8 swept and 12 swept, at 6 000 to 52 000 climbs
+each.
+
 **The unplugged letters help too.** The deduction also settles letters as
 carrying *no* cable, and `--no-plug` (§8) would freeze those as well:
 
@@ -1217,19 +1381,57 @@ exists to steer toward it — per-plug consensus across converged boards is only
 *outside* the score landscape rather than being mined out of it. That is why it
 can beat compute rather than merely adding to it.
 
-**Three cautions, none of them yet measured.**
+**Three cautions. The first is now measured; the others are not.**
 
-1. The table above seeds the climb with *correct* plugs. In a real sweep 25 of
-   the 26 hypotheses seed garbage, and a garbage seed at the true rotor setting
-   could in principle converge to something scoring higher than the correct seed
-   does. The ~1% scoring-failure floor makes that unlikely, but unlikely is not
-   measured.
+1. ~~The table above seeds the climb with correct plugs, and a garbage seed
+   could in principle out-score them.~~ **Measured, and it happens only at 8
+   letters** — see §7c.
 2. At *wrong* rotor settings you now run 26 climbs instead of one. That is where
    the whole 26x goes, and without loops none of it can be skipped.
 3. Coverage assumes the crib is exactly right. An 8-letter crib is far more
    likely to be present (§4.2) *and* far more likely to be a coincidental match
    that deduces confident nonsense. Short cribs make both errors more common at
    once.
+
+### 7c. Does a wrong hypothesis ever win? Measured
+
+The seeding mode rests on the solver keeping the best of 26 boards, exactly one
+of which is seeded with the truth. If a wrong seed ever converges above the
+right one, the run returns a confident answer that is not the message and
+nothing in the output says so. §7a named this as the single thing that could
+undo the mode. `eval/crib_seed_probe.py` measures it: plant a crib in an
+authentic plaintext, hide the board, give the tool the rotor key, and compare
+the winner's plug for the anchor letter against the truth — the anchor's partner
+*is* the hypothesis, so no new diagnostic is needed.
+
+150 trials per row, 90-letter messages, 10 cables hidden, `-f -l wehrmacht
+--score f10`:
+
+| crib | right hypothesis won | mean recovery | exact |
+|--:|--:|--:|--:|
+| **8** | **95%** | 74.4% | 85/150 |
+| 10 | 100% | 89.7% | 119/150 |
+| 12 | 100% | 94.9% | 132/150 |
+| 16 | 100% | 97.4% | 138/150 |
+
+**The risk is real and confined to 8 letters.** There a wrong hypothesis wins 5%
+of the time, and when it does the failure is total: mean recovery **8.6%**,
+median 7.8%, not one exact — indistinguishable from having no crib at all, with
+nothing in the output to flag it. From 10 letters up it did not happen once in
+450 trials.
+
+The mechanism is the obvious one. An 8-letter crib deduces about 4 cables
+(§7's table), so the correct seed is only slightly better than a wrong one and
+the score has little to separate them; at 10 letters (~5.3 cables) the
+advantage is already decisive.
+
+**So the seed mode's floor is 10 letters, not 8** — a floor set by *silent
+failure*, not by cost. This is a different boundary from §4.2a's: 16 letters is
+where a crib can filter a swept search, 10 is where it can safely seed one.
+Below 10 the answer can be wrong without looking wrong, which is worse than
+being slow.
+
+Cautions 2 and 3 remain unmeasured.
 
 **Where this sits in the plan.** It shares all the machinery of §6 — the same
 menu, the same deduction, the same `--no-plug` output — and differs only in what
@@ -1406,8 +1608,11 @@ The third row is the useful one. **A good crib is worth roughly as much as being
 handed the plugboard** — both leave you with just the rotor sweep.
 
 The estimate assumes the deduction costs about as much per step as decoding one
-character. The deduction is branchier than the tool's tight scoring loop, so
-2–3× worse would not be surprising. Even at six minutes the conclusion holds.
+character. **Measured, that assumption holds**: §4.2b times a propagation at
+~3 ns, and the feared 2–3× penalty for the deduction being branchier than the
+tool's tight scoring loop does not appear. What the estimate *does* get wrong is
+the unit — the checking cost is per surviving hypothesis, not per surviving key
+— which matters only for cribs too weak to reject (§4.2b).
 
 **The crib budget.** Since a wrong crib is cheap to reject, you can afford to
 try many. At roughly two minutes each against 24.9 hours, the budget is on the
@@ -1547,7 +1752,10 @@ board. Measured end to end on an 88-letter message with the plugboard hidden and
 only a 12-letter crib given: **92% of letters recovered, against 8% for the same
 climb unseeded and 10% at `-R 64`.** Seeding works swept as well as pinned (92%
 either way), so it does not need the alignment to be known — which matters,
-because a 12-letter crib cannot *filter* a swept search at all (§4.2a). The
+because a 12-letter crib cannot *filter* a swept search at all (§4.2a). **That
+was measured with the rotor key given**, though, and §4.2b shows the sweep is
+not free once the rotor key is unknown: each surviving hypothesis costs a climb,
+so a crib too weak to reject multiplies the work rather than skipping it. The
 climb it hands over to is not the recommended recipe — §7b says why, and leaves
 the target model (`-q`/`-a`/`-f`) as the one thing to A/B here.
 
@@ -1558,9 +1766,10 @@ different direction — so its lift may be small or absent here. That is an A/B 
 run once step 5 exists and there is something to measure it on, not a reason to
 hold up the step.
 
-**Step 5a — crib-as-seed** (§7a). Nearly free once step 5 exists, and the mode
-that covers the short cribs the corpus actually supplies. Needs its own
-measurement of caution 1 above before being recommended.
+**Step 5a — crib-as-seed** (§7a). **Done** — step 5's seeding is the mechanism,
+and §7c is the measurement caution 1 was waiting for: a wrong hypothesis wins 5%
+of the time at 8 letters and never from 10 up (450 trials), so **the seed mode's
+floor is 10 letters**, set by silent failure rather than by cost.
 
 **Step 6 — crib lists** (`--crib-list`) and the budget logic, plus the per-crib
 banner (§8) and the rename of the existing `--crib-file` to `--crib-rerank`.
@@ -1592,7 +1801,9 @@ that matters most on this corpus**, not step 5.
    one guess. But the positions have to come from somewhere, and knowing 14 word
    boundaries may be as hard as knowing a phrase. Worth a measurement before any
    code.
-4. **Does a wrong seed ever beat the right one?** §7a's caution 1. In the seeded
+4. ~~**Does a wrong seed ever beat the right one?**~~ **Answered in §7c**: at 8
+   letters, 5% of the time; from 10 letters up, never in 450 trials. Left here
+   for the shape of the argument. In the seeded
    sweep 25 of the 26 hypotheses seed garbage; if one of those converges to a
    board scoring above the correctly-seeded climb at the true rotor setting, the
    mode silently loses that message. The ~1% scoring-failure floor says it
