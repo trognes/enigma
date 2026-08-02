@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Does the --crib-file finisher help on top of the telegraphic tables? For each of the 69
+# Does the --crib-rerank finisher help on top of the telegraphic tables? For each of the 69
 # authentic messages: fix the rotor key, hide the plugboard, hill-climb it back under the
 # telegraphic tables WITHOUT cribs vs WITH cribs (lambda sweep), mean %-letters-correct.
 # The crib finisher can only help where the true board is among the converged restarts but
@@ -45,7 +45,7 @@ def recover(rc, lam):
             "--random", "10", "-a", "-S", "m4a10", "-J", "--polish",
             "-l", "wehrmacht", "-T", T]
     if lam is not None:
-        args += ["--crib-file", CRIB, "--crib-weight", str(lam)]
+        args += ["--crib-rerank", CRIB, "--crib-weight", str(lam)]
     out = subprocess.run(args, input=rc["body"].replace("-", "A"), stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL, universal_newlines=True).stdout.strip().upper()
     out = re.sub(r"[^A-Z]", "", out)

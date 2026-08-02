@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/): the major number changes when
 existing command lines can behave differently or stop working.
 
+## Unreleased
+
+### Changed
+
+- **BREAKING: `--crib-file` is now `--crib-rerank`.** It re-ranks *finished*
+  boards by known-word content and has nothing to do with the crib deduction;
+  beside the new `--crib-list` the two names would have been one letter apart
+  for two unrelated features. The old name is not accepted — **the next release
+  carrying this needs a major version bump.**
+
 ## 2.1.0
 
 36 commits on the tool since 2.0.0. It adds a **fused scoring model** that is

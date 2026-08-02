@@ -1,7 +1,8 @@
-# cribs — known-word lists for the `--crib-file` finisher
+# cribs — known-word lists for the `--crib-rerank` finisher
 
 A **crib** file is a list of known words (one per line, optional weight after
-it; `#` comments) used by the opt-in `--crib-file` finisher. After each restart
+it; `#` comments) used by the opt-in `--crib-rerank` finisher. After each
+restart
 plugboard climb converges, its board is ranked by `n-gram score + --crib-weight
 × crib_score`, where `crib_score` sums the weights of listed words that appear
 as substrings of the decrypt (telegraphic traffic concatenates words within a
@@ -10,7 +11,7 @@ Weierud's "assessment stage": lift the true board above a spurious one that
 scores higher on n-grams but contains no real words.
 
 ```sh
-./enigma -c -a -l wehrmacht --crib-file cribs/german-hgnord.txt \
+./enigma -c -a -l wehrmacht --crib-rerank cribs/german-hgnord.txt \
          -S m4a10 -J --polish -R 200 -T4 -u B -w 421 -r YHO -g WAS < cipher.txt
 ```
 
@@ -48,6 +49,16 @@ whether it will match, and a crib that never matches costs its whole sweep.
 Ordering by evidence of recurrence, with `german-hgnord.txt`'s long words ahead
 of everything, takes the median time-to-first-hit from 141 hours to 6.7 and
 covers 49 of 69 messages within the 25 hours a no-crib run costs.
+
+**Do not re-order or prune this file by cost.** `enigma --crib-list` reads it in
+file order, and cost is *anti-correlated* with the chance of a hit: the short
+cribs that dominate the hits — 47 of 57 are 8–11 letters — are also the ones
+that reject nothing and so cost the most, at 59–120 surviving hypotheses per key
+against ~1 for a 16-letter crib. Measured, a cost rule applied to this library
+skipped **all four** cribs actually present in a test message and recovered
+nothing, where running them recovered it exactly in 8 seconds. `--crib-max-hyps`
+exists for that pruning and is off by default for this reason (`cribs.md` §12
+step 6).
 
 ## `german-hgnord.txt`
 

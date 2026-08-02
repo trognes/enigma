@@ -42,7 +42,7 @@ ngrams/<lang>_monograms.txt   Single-letter frequencies.
 ngrams/<lang>_bigrams.txt     Two-letter frequencies.
 ngrams/<lang>_trigrams.txt    Three-letter frequencies.
 ngrams/<lang>_quadgrams.txt   Four-letter frequencies.
-cribs/                    Known-word lists for the --crib-file finisher.
+cribs/                    Known-word lists for the --crib-rerank finisher.
 eval/                     Authentic-message database, eval harnesses, and the
                           Appendix-C source tables the wehrmacht language is built from.
 ```
@@ -241,7 +241,7 @@ are read from a **data directory** (filenames built as
 > conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
 > `--polish`, kept because it is the only gain cascade that works with
-> `-F`/`--exhaust`), `--crib-file` (measured-down) and `--exhaust`. Each is
+> `-F`/`--exhaust`), `--crib-rerank` (measured-down) and `--exhaust`. Each is
 > tagged **not recommended** in its entry below and in `--help`. `--ring-stride`
 > was on this list until its accuracy numbers turned out to be contaminated by a
 > `--polish` guard bug — at `K=2`/`K=3` it costs only ~0.5–2pp of exact recovery
@@ -707,7 +707,45 @@ are read from a **data directory** (filenames built as
   to the other 25. Measured on an 88-letter message with the board hidden and a
   12-letter crib: **92% of letters recovered against 8% unseeded** (10% at
   `-R 64`), and the same 92% swept as pinned, so seeding does not need the
-  alignment to be known.
+  alignment to be known. **That was measured with the rotor key given**, one
+  key; with the key unknown the sweep is not free — see `--crib-max-hyps`.
+- `--crib-list FILE` **a whole crib library**, one crib per line (`#` comments,
+  duplicates dropped, **file order preserved** — the generator emits
+  most-likely-to-match first and re-sorting would throw away the early exit).
+  Runs **one complete rotor sweep per crib** — crib-outer, because the shared
+  `setup_mapping`/`precompute` a rotor-outer loop would save is 0.6% of the run
+  while early exit is worth up to 50× (`cribs.md` §6.7) — and keeps the best
+  board across all of them. Three things that are fatal for a single `--crib`
+  merely skip the crib here: longer than the ciphertext, matching the ciphertext
+  at every alignment, or rejecting every key. A library is written against a
+  network's vocabulary, not one message, so most of its cribs not fitting is the
+  normal case. Rejected with `--crib` and with `--crib-at` (which pins *one*
+  alignment, and the cribs differ in length). The progress-line column header is
+  printed once for the run, and the echo high-water mark carries across cribs so
+  a later crib cannot re-print boards worse than the best already found.
+- `--crib-max-hyps X` **skip a crib that costs too many hypotheses** (**not
+  recommended** — measured down; needs `--crib-list`; **default 0 = off**). The
+  unit is **surviving hypotheses per key**, not rejection rate and not crib
+  length, because under `-c` a surviving key is climbed once per surviving
+  hypothesis: measured 1.0 per key where a crib rejects at all against 235 where
+  it does not (`cribs.md` §4.2b). It **cannot be predicted from the crib** —
+  `NULLNULLNULL` (12 letters) rejects 78% while `XHOCKXHOCKX` (11) rejects 1% —
+  so it is *measured*, on a fixed stride of `crib_sample_keys` = 256 keys
+  (~20 ms at ~3 ns per propagation). Two properties come from the design rather
+  than from a test: the stride is fixed, so the decision is reproducible; and it
+  is taken **before the sweep, single-threaded**, so it cannot depend on thread
+  timing — a mid-run cap with an abort would have broken `-T`-determinism.
+  **The default is off because a break-even default was built and measured
+  down**: on the shipped 96-crib library it skipped all four cribs actually
+  present in the message and recovered nothing, where not skipping recovered it
+  exactly in 8 s. Two reasons, and the second admits no threshold. "No crib" is
+  not the same outcome more cheaply — it usually *fails* (§7a: 55% against 12%
+  at matched compute), so comparing against it always rejects the crib. And
+  **cost is anti-correlated with the chance of a hit**: short cribs are the most
+  expensive per key *and* the most likely to be present (93% of messages carry
+  an 8-letter crib, 3% a 20-letter one), so cost-ordered pruning removes the
+  most valuable entries first. Same shape as `--ring-stride` — a real throughput
+  lever that trades away recovery. A single `--crib` is never skipped.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are

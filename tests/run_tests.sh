@@ -380,13 +380,13 @@ check "restarts: -R 8 result is -T-independent" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -T 1)" \
   "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -T 4)"
 
-# --crib-file (measured-down opt-in): the crib bonus is a deterministic function of the
+# --crib-rerank (measured-down opt-in): the crib bonus is a deterministic function of the
 # board, so the re-ranked winner must stay -T-independent. Also exercises loading the file.
 crib_file=$(mktemp)
 printf 'ENGLISH 2\nLANGUAGE 2\nANALYSIS 2\n' > "$crib_file"
-check "crib: --crib-file result is -T-independent" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-file "$crib_file" -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-file "$crib_file" -T 4)"
+check "crib: --crib-rerank result is -T-independent" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-rerank "$crib_file" -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-rerank "$crib_file" -T 4)"
 rm -f "$crib_file"
 
 # --dump-all (diagnostic): prints the full setting (rotor key + score + plugboard) of every
@@ -1528,6 +1528,100 @@ check "--crib past the end of the ciphertext rejected" \
   "$(cb_reject --crib OBERKOMMANDO --crib-at 900)" "1"
 check "--crib with a non-letter rejected" \
   "$(cb_reject --crib "OBERKOMM4NDO" --crib-at 3)" "1"
+
+echo
+echo "== Crib libraries: --crib-list =="
+
+# A library is written against a network's vocabulary, not against one message, so most
+# of its cribs do not fit any given message. The list runs one rotor sweep per crib
+# (crib-outer, cribs.md §6.7) and keeps the best board across all of them.
+cl_file=$(mktemp)
+printf '# a library\nOBERKOMMANDO\nXSIEGFRIEDXX\n\nNOTINTHISMESSAGE\n' > "$cl_file"
+cl_run() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+             --crib-list "$cl_file" "$@"; }
+
+# The winning crib's answer is the run's answer: a later, worse crib must not displace
+# an earlier, better one.
+check "--crib-list recovers the plaintext" "$(cl_run -c 2>/dev/null)" "$cb_pt"
+
+# Comments, blank lines and duplicates are dropped; the count in the banner is what the
+# loader actually kept, so an off-by-one in the parser shows up here.
+check "--crib-list loads the cribs it should" \
+  "$(cl_run 2>&1 >/dev/null | grep -c '^crib [123]/3 ')" "3"
+
+# Deterministic like every other search option -- including the sampled cost estimate,
+# which is single-threaded by construction precisely so a skip decision cannot depend
+# on thread timing.
+check "--crib-list is -T-independent" \
+  "$(cl_run -c -T 1 2>/dev/null)" "$(cl_run -c -T 4 2>/dev/null)"
+check "--crib-list cost estimate is -T-independent" \
+  "$(cl_run -c -T 1 2>&1 >/dev/null | grep -c 'hyp')" \
+  "$(cl_run -c -T 4 2>&1 >/dev/null | grep -c 'hyp')"
+
+# The cost check (cribs.md §4.2b): under -c a surviving key is climbed once per
+# surviving HYPOTHESIS, so a crib that rejects nothing multiplies the work instead of
+# skipping it. A cap of 0.001 hypotheses per key is below anything real, so every crib
+# must be skipped.
+check "--crib-list --crib-max-hyps skips costly cribs" \
+  "$(cl_run -c --crib-max-hyps 0.001 2>&1 >/dev/null | grep -c 'skipped: .* exceeds')" "3"
+# It is OFF unless asked for, and that default is measured, not cautious: a break-even
+# rule skipped every crib actually present in the message (cribs.md §12 step 6). A
+# check that only fired with the flag would pass just as well if the default were
+# wrong, so assert the default explicitly.
+check "--crib-list skips nothing by default" \
+  "$(cl_run -c 2>&1 >/dev/null | grep -c 'skipped: .* exceeds')" "0"
+check "--crib-list runs no cost estimate by default" \
+  "$(cl_run -c 2>&1 >/dev/null | grep -c 'hyp/key')" "0"
+# Skipping every crib leaves nothing scored, which is fatal rather than silently empty.
+check "--crib-list with every crib skipped is fatal" \
+  "$(cl_run -c --crib-max-hyps 0.001 >/dev/null 2>&1; echo $?)" "1"
+check "--crib-max-hyps rejects a negative cap" \
+  "$(cl_run -c --crib-max-hyps -3 >/dev/null 2>&1; echo $?)" "1"
+
+# A crib longer than the ciphertext, or one that cannot sit anywhere, is fatal for a
+# single --crib but ORDINARY for a library: skip it and try the next.
+cl_bad=$(mktemp)
+cl_self=$(printf '%s' "$cb_ct" | cut -c4-15)
+printf '%s\n%s\nOBERKOMMANDO\n' "$(printf 'A%.0s' $(seq 1 200))" "$cl_self" > "$cl_bad"
+check "--crib-list skips unusable cribs instead of dying" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+     --crib-list "$cl_bad" 2>/dev/null)" "$cb_pt"
+check "--crib-list says why each crib was skipped" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+     --crib-list "$cl_bad" 2>&1 >/dev/null \
+     | grep -c 'skipped: \(longer than\|cannot sit\)')" "2"
+rm -f "$cl_bad"
+
+# The column header is printed once for the whole run, not once per crib, and a later
+# crib must not re-echo boards worse than the best already shown.
+check "--crib-list prints one column header for the run" \
+  "$(cl_run -c 2>&1 >/dev/null | grep -c '^ *Score .*Text$')" "1"
+
+# The option combinations, per cribs.md §8. --crib-at pins ONE alignment and the cribs
+# in a list differ in length, so the two cannot be combined.
+cl_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+                "$@" >/dev/null 2>&1; echo $?; }
+check "--crib-list with --crib rejected" \
+  "$(cl_reject --crib-list "$cl_file" --crib OBERKOMMANDO)" "1"
+check "--crib-list with --crib-at rejected" \
+  "$(cl_reject --crib-list "$cl_file" --crib-at 3)" "1"
+check "--crib-max-hyps without --crib-list rejected" \
+  "$(cl_reject --crib OBERKOMMANDO --crib-max-hyps 5)" "1"
+check "--crib-list with -F rejected" \
+  "$(cl_reject -c --crib-list "$cl_file" -F 5)" "1"
+check "--crib-list with a missing file rejected" \
+  "$(cl_reject --crib-list /nonexistent/crib/library)" "1"
+cl_empty=$(mktemp)
+printf '# only comments\n\n' > "$cl_empty"
+check "--crib-list with no usable cribs rejected" \
+  "$(cl_reject --crib-list "$cl_empty")" "1"
+rm -f "$cl_empty" "$cl_file"
+
+# The old --crib-file name is gone: it re-ranked finished boards and now collides in
+# meaning with --crib-list, so it was renamed (cribs.md §8).
+check "--crib-file is no longer accepted" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+     --crib-file /dev/null >/dev/null 2>&1; echo $?)" "1"
 
 echo
 echo "passed: $pass, failed: $fail"

@@ -1475,11 +1475,12 @@ before the expensive tiers run.
 
 Notes:
 
-- **The naming collision is a real hazard.** `--crib-file` already exists and
-  does something unrelated: it re-ranks *finished* boards by known-word content,
-  and was measured at about −0.1 percentage points. `--crib-list` beside it
-  would be two similar names for two unrelated features. Rename the old one to
-  `--crib-rerank` as part of this work.
+- **The naming collision was a real hazard, and is resolved.** The option that
+  re-ranks *finished* boards by known-word content — unrelated to the deduction,
+  and measured at about −0.1 percentage points — used to be called
+  `--crib-file`, which beside `--crib-list` would have been two similar names
+  for two unrelated features. It is now **`--crib-rerank`**, renamed as part of
+  this work.
 - The crib mode should imply the hybrid of §7 by default, since the pure
   deduction rarely yields a complete board.
 - **`--no-plug` is nearly free to build.** The climb already consults a
@@ -1771,12 +1772,81 @@ and §7c is the measurement caution 1 was waiting for: a wrong hypothesis wins 5
 of the time at 8 letters and never from 10 up (450 trials), so **the seed mode's
 floor is 10 letters**, set by silent failure rather than by cost.
 
-**Step 6 — crib lists** (`--crib-list`) and the budget logic, plus the per-crib
-banner (§8) and the rename of the existing `--crib-file` to `--crib-rerank`.
-Steps 3 to 5 take a single crib because that is the smallest testable thing;
-this step is what makes the feature usable, since you normally know a network's
-vocabulary rather than a particular message's contents. It is the deliverable,
-not polish.
+**Step 6 — crib lists** (`--crib-list`), the cost check, the per-crib banner
+(§8) and the rename of the old `--crib-file` to `--crib-rerank`. **Done.** Steps
+3 to 5 take a single crib because that is the smallest testable thing; this step
+is what makes the feature usable, since you normally know a network's vocabulary
+rather than a particular message's contents.
+
+`--crib-list FILE` reads the generator's output — one crib per line, `#`
+comments, duplicates dropped, **file order preserved** — and runs one complete
+rotor sweep per crib (crib-outer, §6.7), keeping the best board across all of
+them. Three things that are fatal for a single `--crib` are ordinary for a
+library and merely skip the crib: it can be longer than the ciphertext, it can
+match the ciphertext at every alignment, and it can reject every key. A library
+is written against a network's vocabulary, not against one message, so most of
+its cribs not fitting is the normal case rather than an error.
+
+**The budget logic became a cost check, and §4.2b is why.** The plan called for
+"try cribs until the budget runs out". That would have been wrong in two ways.
+The unit is not cribs or rotor settings but **surviving hypotheses**, because
+under `-c` a surviving key is climbed once per surviving hypothesis — 1.0 per
+key where a crib rejects, 235 where it does not, the difference between a 126×
+speedup and a 66× slowdown. And a crib's cost cannot be read off the crib:
+`NULLNULLNULL` (12 letters) rejects 78% while `XHOCKXHOCKX` (11) rejects 1%, so
+length and spare letters — the two numbers the generator ranks by — do not
+predict it. It depends on the crib *and* the ciphertext together.
+
+So `--crib-max-hyps X` **measures** each crib before paying for it, on a fixed
+stride of 256 keys (~20 ms at ~3 ns per propagation), and skips any crib costing
+more than `X` surviving hypotheses per key. Two properties fall out of the
+design rather than being tested for: the sample is a fixed stride, so the
+decision is reproducible; and it is taken *before* the sweep, single-threaded,
+so it cannot depend on thread timing. A mid-run cap could not have had either
+property — an accumulated count across workers with an abort would have broken
+the `-T`-determinism the whole search holds to.
+
+**But it defaults to OFF, and that is a measured result, not caution.** The
+default was going to be *break-even*: skip when the estimate says the crib would
+cost more than using no crib at all. That rule was built, and it is wrong.
+
+Run against the shipped 96-crib library on a message containing four of its
+cribs:
+
+| | outcome |
+|---|---|
+| break-even default | **all four present cribs skipped**, nothing recovered |
+| `--crib-max-hyps 0` | **100% recovered**, 8 s |
+
+The premise is the error. "No crib" is not the same outcome more cheaply — it
+usually *fails*: §7a measures a 5-cable seed recovering **55% against 12%** for
+the same compute spent on restarts. Comparing a crib's cost against a cheaper
+way of failing will always reject the crib.
+
+And there is a second, sharper reason, which is why no threshold rescues the
+rule. **Cost is anti-correlated with the chance of a hit.** Short cribs are both
+the most expensive per key — they reject nothing, so hypotheses survive
+everywhere — and by far the most likely to be present: §4.2 measures **93% of
+messages carrying an 8-letter crib against 3% for a 20-letter one**. A
+cost-ordered pruning therefore removes the library's most valuable entries
+first. In the run above the four present cribs cost 59–120 hypotheses per key
+while the 26 cribs cheap enough to survive the rule contained none of them.
+
+So the knob is **opt-in and not recommended**: it exists for a case a user can
+recognise — a library dominated by very short cribs where a few catastrophic
+ones would swamp the run — and the tool will not apply it unasked. It applies to
+`--crib-list` only; a single `--crib` was asked for explicitly and is always
+run.
+
+This is the same shape as `--ring-stride`: a real throughput lever that trades
+away recovery, correctly measured only once it was run end to end rather than
+judged on its cost model.
+
+Still open, and deliberately not built here: the **score threshold for early
+exit** (§6.7). The run currently sweeps the whole list and ranks, which costs
+the worst case but never discards the truth — the fallback §6.7 itself
+recommends. The threshold is the optimisation on top, and it needs a measured
+per-length margin before it can be trusted to stop a run.
 
 **Step 1 was the decision point, and it passed** (§5a): the library covers 83%
 of held-out messages and a shuffled control covers none, so the recurrence is
