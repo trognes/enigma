@@ -1760,12 +1760,38 @@ so a crib too weak to reject multiplies the work rather than skipping it. The
 climb it hands over to is not the recommended recipe — §7b says why, and leaves
 the target model (`-q`/`-a`/`-f`) as the one thing to A/B here.
 
-**Whether `--polish` earns its keep at all on a seeded board is a separate
-question, deliberately deferred.** It is a fixed-cost pass that completes
-near-solution boards, and a crib-seeded board is already near-solution from a
-different direction — so its lift may be small or absent here. That is an A/B to
-run once step 5 exists and there is something to measure it on, not a reason to
-hold up the step.
+**`--polish` and `-J` on a seeded board — MEASURED** (`crib_finisher_probe.py`,
+60 trials, 90-letter messages, an 8-letter crib pinned, 10 cables hidden, rotor
+key given; a 12-letter crib saturates at 100% and measures nothing):
+
+| arm | mean %-correct | exact | boards scored |
+|---|--:|--:|--:|
+| baseline | 73.7% | 33/60 | 319 221 |
+| `--polish` | 76.1% (+2.4pp) | 35/60 | 917 461 |
+| **`-J`** | **75.7% (+2.1pp)** | 35/60 | **153 321** |
+| `-J --score f10` | 75.7% (+2.1pp) | 35/60 | 139 735 |
+| `-J --polish` | **79.7% (+6.0pp)** | 38/60 | 800 849 |
+
+**`-J` is a strict dominance win on a seeded climb** — +2.1pp recovery at
+**2.1× fewer boards**. §7a measured only its cost and left the recovery side
+open with the caveat that this is the known-few-plug regime where `-J` is
+documented to need a cap; the cap turns out to be **inert here**, `-J --score
+f10` recovering identically to `-J` alone. So §7b's recipe should carry `-J`
+unqualified.
+
+**`--polish` earns its keep only alongside `-J`, and it is not cheap.** Alone it
+buys +2.4pp for **2.9× the boards** — the same lift `-J` gives for *less than
+half* the baseline cost, so on its own it is dominated. Combined it is the best
+arm at +6.0pp, and superadditive (2.1 + 2.4 = 4.5 against 6.0 measured), which
+is consistent with the cheaper climb affording the finisher a better board to
+work on.
+
+> The costs here are **not matched**, and the comparison the rest of this
+> project makes for finishers — against spending the same compute on more `-R`
+> restarts, which `CLAUDE.md` records as dominating every finisher variant — is
+> **not made**: the rotor key is given and `-R` is left at its default, so there
+> is no restart axis in this measurement. `-J`'s win needs no such defence,
+> being cheaper *and* better; `--polish`'s +6.0pp at 2.5× does.
 
 **Step 5a — crib-as-seed** (§7a). **Done** — step 5's seeding is the mechanism,
 and §7c is the measurement caution 1 was waiting for: a wrong hypothesis wins 5%
