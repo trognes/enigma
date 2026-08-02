@@ -188,6 +188,12 @@ static double opt_crib_max_hyps = 0.0;
    milliseconds -- negligible beside the sweep it decides whether to run, and large
    enough that the per-key rate has settled. */
 static const size_t crib_sample_keys = 256;
+/* --crib-order: run a --crib-list cheapest-measured-cost first (the default) or in
+   file order. Ordering discards nothing -- the worst case is that the winner is found
+   later, not that it is lost -- which is why this may default on where the skipping
+   in --crib-max-hyps must not. See crib_cheaper() for why cheapest-first, and why it
+   reverses what cribs.md 5 step 5 concluded from a modelled cost. */
+static bool opt_crib_order_cost = true;
 /* Keys on which both sides of the choice are actually RUN, to measure the expected
    gain (the hypothesis count above needs a much larger sample, but it is far cheaper
    per key -- a climb costs thousands of board scores where a deduction costs tens of
@@ -4690,6 +4696,10 @@ struct crib_cost
      which is the whole reason it must not be used to prune a library on its own
      (cribs.md 12 step 6). Zero when there was nothing to measure. */
   double gain;
+  /* Plugboards scored per key WITH this crib -- the deduction's surviving hypotheses,
+     each climbed once. This is the quantity the default ordering sorts on: it is what
+     the crib will actually cost per key when swept, measured rather than modelled. */
+  double per_key;
   uint64_t boards;       /* plugboards the estimate itself scored, for the totals */
   bool gain_bounded;     /* the crib side hit its work budget: gain is "at most this" */
   bool gain_atleast;     /* the crib scored NOTHING on the gain keys: "at least this" */
@@ -4697,7 +4707,7 @@ struct crib_cost
 
 static crib_cost crib_estimate(size_t nsample)
 {
-  crib_cost c = { 0.0, 0.0, 0, 0.0, 0, false, false };
+  crib_cost c = { 0.0, 0.0, 0, 0.0, 0.0, 0, false, false };
   key_space ks = build_key_space();
   size_t rg = ks.rsize * ks.gsize;
   if ((rg == 0) || ks.tasks.empty())
@@ -4813,6 +4823,8 @@ static crib_cost crib_estimate(size_t nsample)
          than vanishing with the machine it used -- ~150 ms per crib is small beside a
          sweep but should not be invisible. */
       c.boards = with + without;
+      if (done > 0)
+        c.per_key = static_cast<double>(with) / static_cast<double>(done);
     }
 
   delete m;
@@ -5518,6 +5530,47 @@ static double bruteforce(char * result, bool allow_empty)
 
    The counters bruteforce() sets are per-sweep, so they are summed here and written
    back for the final diagnostic. */
+/* One entry of the run plan: a crib, whether it is usable at all, and what it was
+   measured to cost. Built for every crib BEFORE any sweep starts, because the order
+   the sweeps run in is decided from the costs. */
+struct crib_plan
+{
+  size_t index;          /* position in the file, 1-based -- printed, and the tie-break */
+  int len;
+  int aligns;
+  crib_cost cost;
+  const char * skip;     /* why this crib is not run, or null */
+};
+
+/* Cheapest first, ties by file order.
+
+   This is the DEFAULT because the cost spread across crib lengths is enormous and
+   runs the opposite way to intuition: measured on one message, a 20-letter crib swept
+   in 0.15 s where a 10-letter one took 13.65 s -- 90x, because the long crib rejects
+   almost every key by arithmetic and the short one rejects none, so every key is
+   climbed once per surviving hypothesis. The whole long tail of a library therefore
+   costs less than a single short crib, and running it first is very nearly free.
+
+   It is worth being explicit that this REVERSES what cribs.md 5 step 5 concluded.
+   That measurement ordered by a MODELLED cost -- build_cribs.py prices a crib by its
+   length on the assumption that sweep cost is roughly flat across lengths (4.1's
+   table: 100-117 s for every row) -- and 4.2b showed the model has the wrong unit
+   entirely. With a flat cost model, ordering by anything but hit probability can only
+   delay the winner, which is exactly the 141 h against 6.7 h it reported. With
+   measured costs the arithmetic changes, because the cost spread (~90x) is larger
+   than the hit-rate spread (~26x: 93% of messages carry an 8-letter crib against 3%
+   for a 20-letter one, 4.2).
+
+   Ordering is a preference, not a filter: nothing is discarded, so the worst case is
+   that the winner is found later rather than not at all. That is why this may default
+   on where --crib-max-hyps, which does discard, must not. */
+static bool crib_cheaper(const crib_plan & a, const crib_plan & b)
+{
+  if (a.cost.per_key != b.cost.per_key)
+    return a.cost.per_key < b.cost.per_key;
+  return a.index < b.index;
+}
+
 static void run_crib_list(char * result)
 {
   char text[maxlen+1];
@@ -5527,70 +5580,93 @@ static void run_crib_list(char * result)
   unsigned long long tot_boards = 0;
   size_t n = g_crib_list.size();
 
-  /* One columnar line per crib, under a header, so the list reads as a table and a
-     skip sits beside the numbers that explain it. "gain" is what a key costs without
-     this crib over what it costs with it, both measured (crib_estimate) -- the guide
-     to why a crib is or is not worth running. */
-  fprintf(stderr, "  %4s  %-24s %4s %4s %9s %8s  %s\n",
-          "#", "crib", "len", "algn", "hyp/key", "gain", "note");
-
+  /* Pass 1: measure every crib. This has to finish before any sweep starts, since the
+     order of the sweeps is decided from the results -- and it is cheap next to them
+     (~150 ms per crib, independent of the key space, against sweeps of minutes). */
+  std::vector<crib_plan> plan;
+  plan.reserve(n);
   for (size_t i = 0; i < n; i++)
     {
-      opt_crib_text = g_crib_list[i].c_str();
-      int len = static_cast<int>(g_crib_list[i].size());
-      char row[128];
-      snprintf(row, sizeof row, "  %4zu  %-24s %4d", i + 1, opt_crib_text, len);
-      if (len > textlength)
+      crib_plan p;
+      p.index = i + 1;
+      p.len = static_cast<int>(g_crib_list[i].size());
+      p.aligns = 0;
+      p.cost = { 0.0, 0.0, 0, 0.0, 0.0, 0, false, false };
+      p.skip = nullptr;
+      if (p.len > textlength)
+        p.skip = "longer than the ciphertext";
+      else
         {
-          fprintf(stderr, "%s %4s %9s %8s  skipped: longer than the ciphertext\n",
-                  row, "-", "-", "-");
-          skipped++;
-          continue;
-        }
-      init_crib();
-      if (crib_aligns == 0)
-        {
+          opt_crib_text = g_crib_list[i].c_str();
+          init_crib();
+          p.aligns = crib_aligns;
           /* Every alignment has the crib matching the ciphertext, which an Enigma
              never does -- so this crib cannot sit anywhere in this message. */
-          fprintf(stderr, "%s %4s %9s %8s  skipped: cannot sit anywhere\n",
-                  row, "0", "-", "-");
-          skipped++;
-          continue;
+          if (crib_aligns == 0)
+            p.skip = "cannot sit anywhere";
+          else
+            {
+              p.cost = crib_estimate(crib_sample_keys);
+              tot_boards += p.cost.boards;
+              if ((opt_crib_max_hyps > 0.0)
+                  && (p.cost.hyps_per_key > opt_crib_max_hyps))
+                p.skip = "over --crib-max-hyps";
+            }
         }
+      plan.push_back(p);
+    }
 
-      /* Measure the crib before paying for it: the estimate runs over a fixed stride
-         of the key space, single-threaded, so both the reported numbers and any skip
-         are reproducible and independent of -T. */
-      crib_cost c = crib_estimate(crib_sample_keys);
-      tot_boards += c.boards;
+  /* Stable, so equal-cost cribs keep the file order the generator chose. */
+  if (opt_crib_order_cost)
+    std::stable_sort(plan.begin(), plan.end(), crib_cheaper);
 
+  /* Pass 2: the table, in the order the sweeps will actually run, so it doubles as
+     the run plan. "gain" is what a key costs without the crib over what it costs with
+     it, both measured -- the guide to why a crib is worth running or was skipped. */
+  fprintf(stderr, "  %4s  %-24s %4s %4s %9s %8s  %s\n",
+          "#", "crib", "len", "algn", "hyp/key", "gain", "note");
+  for (const crib_plan & p : plan)
+    {
+      const std::string & crib = g_crib_list[p.index - 1];
+      char hyp[16], gain[16];
       /* A strong crib leaves NO hypothesis alive anywhere in the sample, which is the
          best possible news and would read as an error printed as "0.0"; say what was
          actually measured, a bound from the sample size. */
-      char hyp[16], gain[16];
-      if (c.sampled == 0)
+      if (p.cost.sampled == 0)
         snprintf(hyp, sizeof hyp, "%s", "-");
-      else if (c.hyps_per_key == 0.0)
-        snprintf(hyp, sizeof hyp, "<%.3f", 1.0 / static_cast<double>(c.sampled));
+      else if (p.cost.hyps_per_key == 0.0)
+        snprintf(hyp, sizeof hyp, "<%.3f",
+                 1.0 / static_cast<double>(p.cost.sampled));
       else
-        snprintf(hyp, sizeof hyp, "%.1f", c.hyps_per_key);
-      if (c.gain <= 0.0)
+        snprintf(hyp, sizeof hyp, "%.1f", p.cost.hyps_per_key);
+      if (p.cost.gain <= 0.0)
         snprintf(gain, sizeof gain, "%s", "-");
-      else if (c.gain >= 1000.0)
-        snprintf(gain, sizeof gain, "%s", ">1000x");    /* beyond useful resolution */
+      else if (p.cost.gain >= 1000.0)
+        snprintf(gain, sizeof gain, "%s", ">1000x");   /* beyond useful resolution */
       else
         snprintf(gain, sizeof gain, "%s%.2gx",
-                 c.gain_bounded ? "<" : (c.gain_atleast ? ">" : ""), c.gain);
+                 p.cost.gain_bounded ? "<" : (p.cost.gain_atleast ? ">" : ""),
+                 p.cost.gain);
+      char aln[8];
+      if (p.len > textlength)
+        snprintf(aln, sizeof aln, "%s", "-");   /* never got as far as a menu */
+      else
+        snprintf(aln, sizeof aln, "%d", p.aligns);
+      fprintf(stderr, "  %4zu  %-24s %4d %4s %9s %8s%s%s\n",
+              p.index, crib.c_str(), p.len, aln, hyp, gain,
+              p.skip ? "  skipped: " : "", p.skip ? p.skip : "");
+    }
 
-      if ((opt_crib_max_hyps > 0.0) && (c.hyps_per_key > opt_crib_max_hyps))
+  /* Pass 3: sweep, cheapest first unless the caller asked for file order. */
+  for (const crib_plan & p : plan)
+    {
+      if (p.skip != nullptr)
         {
-          fprintf(stderr, "%s %4d %9s %8s  skipped: over --crib-max-hyps %.3g\n",
-                  row, crib_aligns, hyp, gain, opt_crib_max_hyps);
           skipped++;
           continue;
         }
-      fprintf(stderr, "%s %4d %9s %8s\n", row, crib_aligns, hyp, gain);
-
+      opt_crib_text = g_crib_list[p.index - 1].c_str();
+      init_crib();          /* the menu globals belong to whichever crib ran last */
       tried++;
       double s = bruteforce(text, true);
       tot_keys += g_keys_analysed;
@@ -5905,6 +5981,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--crib-list F",
           "Crib library, one per line ('#' comments), tried in");
   fprintf(out, "  %-24s %s\n", "", "file order, one rotor sweep each; best kept [off]");
+  fprintf(out, "  %-24s %s\n", "--crib-order O",
+          "Order a --crib-list by measured 'cost' (cheapest");
+  fprintf(out, "  %-24s %s\n", "", "first -- long cribs are far cheaper) or 'file'");
+  fprintf(out, "  %-24s %s\n", "", "to keep the library's own order [cost]");
   fprintf(out, "  %-24s %s\n", "--crib-max-hyps X",
           "Skip a --crib-list crib costing more than X");
   fprintf(out, "  %-24s %s\n", "", "surviving hypotheses per key (each is one climb),");
@@ -6102,6 +6182,8 @@ void show_settings()
     {
       fprintf(stderr, "Crib list:  %s (%zu crib%s)\n", opt_crib_list,
               g_crib_list.size(), (g_crib_list.size() == 1) ? "" : "s");
+      fprintf(stderr, "Crib order: %s\n",
+              opt_crib_order_cost ? "cheapest measured cost first" : "file order");
       if (opt_crib_max_hyps > 0.0)
         fprintf(stderr, "Crib cost:  skip above %.1f hypotheses per key\n",
                 opt_crib_max_hyps);
@@ -6131,6 +6213,7 @@ int main(int argc, char * * argv)
   opt_crib_list = nullptr;
   g_crib_list.clear();
   opt_crib_max_hyps = 0.0;
+  opt_crib_order_cost = true;
   opt_crib_at = -1;
   opt_crib_dump = false;
   opt_language = 0;   /* no default; required for n-gram scoring (-m/-b/-t/-q/-a) */
@@ -6177,7 +6260,7 @@ int main(int argc, char * * argv)
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
-         OPT_CRIBLIST, OPT_CRIBMAXHYPS };
+         OPT_CRIBLIST, OPT_CRIBMAXHYPS, OPT_CRIBORDER };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -6231,6 +6314,7 @@ int main(int argc, char * * argv)
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
       { "crib-max-hyps",  required_argument, nullptr, OPT_CRIBMAXHYPS },
+      { "crib-order",     required_argument, nullptr, OPT_CRIBORDER },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -6358,6 +6442,14 @@ int main(int argc, char * * argv)
           break;
         case OPT_CRIBMAXHYPS:
           opt_crib_max_hyps = strtod(optarg, nullptr);
+          break;
+        case OPT_CRIBORDER:
+          if (strcmp(optarg, "cost") == 0)
+            opt_crib_order_cost = true;
+          else if (strcmp(optarg, "file") == 0)
+            opt_crib_order_cost = false;
+          else
+            fatal("--crib-order must be 'cost' (cheapest first) or 'file'");
           break;
         case OPT_CRIBRERANK:
           opt_crib_rerank = optarg;
@@ -6580,11 +6672,16 @@ int main(int argc, char * * argv)
          would silently do nothing -- say so rather than accept and ignore it. */
       if ((opt_crib_max_hyps != 0.0) && (opt_crib_list == nullptr))
         fatal("--crib-max-hyps needs --crib-list (a single --crib is never skipped)");
+      /* Same shape: with one crib there is no order to choose. */
+      if ((! opt_crib_order_cost) && (opt_crib_list == nullptr))
+        fatal("--crib-order needs --crib-list (there is nothing to order otherwise)");
     }
   else if ((opt_crib_at >= 0) || opt_crib_dump)
     fatal("--crib-at and --crib-dump need --crib");
   else if (opt_crib_max_hyps != 0.0)
     fatal("--crib-max-hyps needs --crib-list");
+  else if (! opt_crib_order_cost)
+    fatal("--crib-order needs --crib-list (there is nothing to order otherwise)");
 
   /* --no-plug LETTERS: letters known to carry no cable. Three ways to get it wrong, all
      fatal because each means the command line says something the search cannot honour:

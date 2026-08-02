@@ -60,10 +60,28 @@ ROOT = os.path.join(HERE, os.pardir)
 FILES = ["enigma-messages.txt", "enigma-army-messages-1941.txt"]
 VOCAB = os.path.join(ROOT, "cribs", "german-hgnord.txt")
 
-# Measured seconds to sweep a 200-letter message with one crib of each length
-# (cribs.md section 4.1: rejection is what makes a long crib cheap, so the cost
-# falls steeply with length and then flattens).  Used only to price a library.
-COST = {8: 1499, 10: 977, 12: 648, 14: 336, 16: 178, 18: 122, 20: 117, 25: 116}
+# Hours to sweep one message with one crib of each length, against the 24.9 h a
+# no-crib run costs.  MEASURED (cribs.md 4.2b and 12 step 6), not modelled: each
+# length was timed on one message over one key space with -c, the ~0.12 s process
+# startup subtracted, and the ratio to the same sweep without a crib taken.  The
+# 16-letter figure agrees with an independent measurement on a 5x larger key
+# space (0.074x here against 0.085x there), which is what makes the correction
+# credible rather than a rescaling.
+#
+# THE SHAPE IS A CLIFF, NOT A SLOPE, and the previous table had neither the shape
+# nor the magnitude: it read {8: 1499 s ... 25: 116 s}, a 13x spread declining
+# smoothly, taken from 4.1's cost table.  That table charged CHECKING per
+# surviving KEY, and 4.2b showed the unit is the surviving HYPOTHESIS -- under -c
+# each one is climbed.  A crib too short to reject therefore multiplies the work
+# rather than dividing it, which is why 8 letters costs 52x a no-crib run while
+# 25 letters costs 0.02x.  The real spread is ~2600x.
+#
+# The consequence for a library is the opposite of what the old model implied:
+# cribs of 14 letters and up are nearly free, so a budget should admit all of
+# them, and it is the 8-11 letter band that has to be rationed.
+COST_HOURS = {8: 1293.0, 10: 167.0, 12: 16.7, 14: 1.8,
+              16: 1.8, 18: 1.2, 20: 0.92, 25: 0.5}
+COST = {n: h * 3600.0 for n, h in COST_HOURS.items()}   # seconds, as before
 
 MIN_WORD = 4        # shorter pieces are not words, they are fragments
 MIN_CRIB = 8        # cribs.md tiers stop here: below it a crib rejects nothing
@@ -740,13 +758,35 @@ def main():
     if args.out:
         out = lib
         if args.budget_hours:
-            out, spent = [], 0.0
-            for e in lib:
-                c = crib_cost(len(e[0])) / 3600.0
+            # Fill the budget CHEAPEST FIRST, then restore the library's own
+            # order for writing.  Two corrections in one, both forced by the
+            # measured cost cliff (see COST_HOURS above).
+            #
+            # Walking in library order and stopping at the first unaffordable
+            # crib -- what this used to do -- truncated the library to nothing,
+            # because the library is ordered by evidence of recurrence and so
+            # opens with short vocabulary cribs costing hundreds of hours each.
+            # Merely skipping those instead still spends most of the budget on
+            # the few short cribs that happen to fit, and admits ~29 cribs.
+            #
+            # Cheapest-first admits every long crib before any short one, which
+            # is what the cost curve says to do: a 25-letter crib costs 0.02x a
+            # no-crib sweep against 52x for an 8-letter one, so the entire long
+            # tail fits in the space of a single short crib.  The corpus supplies
+            # ~1150 cribs of 14 letters or more, and they were being thrown away.
+            #
+            # The FILE order is left alone -- it stays by evidence of recurrence,
+            # which is what the tool's --crib-order file preserves.  Selection and
+            # ordering are separate questions and only selection is at stake here.
+            priced = [(crib_cost(len(e[0])) / 3600.0, i, e)
+                      for i, e in enumerate(lib)]
+            keep, spent = set(), 0.0
+            for c, i, _e in sorted(priced, key=lambda x: (x[0], x[1])):
                 if spent + c > args.budget_hours:
-                    break
-                out.append(e)
+                    continue
+                keep.add(i)
                 spent += c
+            out = [e for i, e in enumerate(lib) if i in keep]
         write_library(args.out, out, messages)
         print("wrote %s (%d of %d cribs, %.1fh worst case)"
               % (args.out, len(out), len(lib), worst_case_hours(out)))

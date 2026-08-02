@@ -723,6 +723,17 @@ are read from a **data directory** (filenames built as
   alignment, and the cribs differ in length). The progress-line column header is
   printed once for the run, and the echo high-water mark carries across cribs so
   a later crib cannot re-print boards worse than the best already found.
+- `--crib-order cost|file` **run a `--crib-list` cheapest-measured-cost first**
+  (default `cost`). Reverses `cribs.md` §5 step 5, which priced cribs with
+  `build_cribs.py`'s *modelled* cost — flat-ish by length. The measured curve is
+  a **cliff**: relative to a no-crib sweep, 8 letters costs **52×**, 12 costs
+  0.67×, 25 costs 0.02× — a ~2 600× spread against the model's 13×, with the
+  16-letter point cross-checked on a 5× larger key space (0.074× vs 0.085×).
+  Since how often a crib is *present* spans only ~26× (§4.2), the cost term
+  dominates: the whole long tail of a library costs less than one short crib.
+  Ordering is a **preference, not a filter**: nothing is discarded, so the
+  worst case is a later win, never a lost one — which is why it may default on
+  where `--crib-max-hyps` must not.
 - **The crib list reports an expected gain per crib**, printed as a table before
   each sweep: `# crib len algn hyp/key gain`. `gain` is what a key costs
   *without* the crib over what it costs *with* it — above 1 it saves work, below

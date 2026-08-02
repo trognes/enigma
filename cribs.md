@@ -1806,6 +1806,38 @@ so it cannot depend on thread timing. A mid-run cap could not have had either
 property — an accumulated count across workers with an abort would have broken
 the `-T`-determinism the whole search holds to.
 
+**Cribs run cheapest-measured-cost first by default** (`--crib-order file`
+keeps the library's own order). This reverses what §5 step 5 concluded, and the
+reason is that §5 priced cribs with `build_cribs.py`'s *modelled* cost — which
+charges by length on the assumption that sweep cost is roughly flat (§4.1's
+table: 100–117 s for every row). Measured on one message and one key space, with
+process startup subtracted, the real curve is a **cliff**:
+
+| letters | 8 | 10 | 12 | 14 | 16 | 20 | 25 |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| cost vs no crib | **52×** | 6.7× | 0.67× | 0.074× | 0.074× | 0.037× | 0.02× |
+
+A ~2 600× spread, against the 13× the old model had — and the 16-letter figure
+agrees with an independent measurement on a 5× larger key space (0.074× against
+0.085×), which is what makes it a correction rather than a rescaling. Against
+that, how often a crib is *present* spans only ~26× (§4.2). When the cost spread
+is the larger of the two, cheapest-first wins: the entire long tail of a library
+costs less than one short crib, so running it first is very nearly free.
+
+Ordering is a **preference, not a filter** — nothing is discarded, so the worst
+case is that the winner is found later, never that it is lost. That is why it
+may default on where `--crib-max-hyps`, which does discard, must not.
+
+**The generator's cost model and budget were corrected to match**, and the
+consequence is large. `COST` is now measured hours per length, and the budget
+fills **cheapest-first** rather than walking the library in order: the old fill
+stopped at the first unaffordable crib, which with a cliff-shaped curve
+truncated the library to almost nothing, since it opens with short vocabulary
+cribs costing hundreds of hours each. The corpus supplies **1 150 cribs of 14
+letters or more** and the shipped library held **10** of them. It now holds all
+1 150 plus the 31 most-recurrent short ones — 1 181 against 96 — because at
+0.02–0.07× a no-crib sweep each, the long tail is nearly free to carry.
+
 **Every crib's expected gain is reported, whether or not anything is skipped.**
 The run prints one row per crib before its sweep:
 
