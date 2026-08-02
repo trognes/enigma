@@ -45,6 +45,7 @@ PT = ("DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTETXDURCHDEN"
       "EINSATZDERHILFSKRAEFTEXMELDUNGFOLGTXSPAETERXNEUNXUHRXABENDS")
 ALIGN = re.compile(r"^Crib: (\d+) alignment.*rejected (\d+) of (\d+)", re.M)
 KEYS = re.compile(r"Analysed (\d+) rotor")
+SCORED = re.compile(r"scored (\d+) plugboard")
 
 
 def encipher(pt):
@@ -55,12 +56,12 @@ def encipher(pt):
     return p.stdout.strip()
 
 
-def timed(ct, extra, reps, lang):
+def timed(ct, extra, reps, lang, start="..."):
     """Min wall time over reps, with the crib diagnostics parsed out."""
-    cmd = [BIN, "-u", "B", "-w", "123", "-r", "AAA", "-g", "...",
+    cmd = [BIN, "-u", "B", "-w", "123", "-r", "AAA", "-g", start,
            "-f", "-l", lang, "-T", "1"] + extra
     env = dict(os.environ, ENIGMA_SEED="0")
-    best, aligns, rej, keys = None, 1, 0, 0
+    best, aligns, rej, keys, scored = None, 1, 0, 0, 0
     for _ in range(reps):
         t0 = time.time()
         p = subprocess.run(cmd, input=ct, stdout=subprocess.DEVNULL,
@@ -74,7 +75,10 @@ def timed(ct, extra, reps, lang):
         k = KEYS.search(p.stderr)
         if k:
             keys = int(k.group(1))
-    return best, aligns, rej, keys
+        s = SCORED.search(p.stderr)
+        if s:
+            scored = int(s.group(1))
+    return best, aligns, rej, keys, scored
 
 
 def main():
@@ -87,7 +91,7 @@ def main():
         sys.exit("build the binary first")
     ct = encipher(PT)
 
-    base, _, _, keys = timed(ct, [], args.reps, args.lang)
+    base, _, _, keys, _ = timed(ct, [], args.reps, args.lang)
     print("Deduction cost, plain scan over %d keys, %d-letter message\n"
           "(min of %d reps, -T 1, no -c so no climb is involved)\n"
           % (keys, len(PT), args.reps))
@@ -98,7 +102,7 @@ def main():
         crib = PT[3:3 + n]
         for label, extra in (("pinned", ["--crib", crib, "--crib-at", "3"]),
                              ("swept", ["--crib", crib])):
-            t, a, r, k = timed(ct, extra, args.reps, args.lang)
+            t, a, r, k, _ = timed(ct, extra, args.reps, args.lang)
             # Upper bound on hypotheses: every key sweeping every alignment.
             # Real runs exit at the first survivor, so dividing by it is exact
             # only when almost everything is rejected and low elsewhere.
@@ -108,16 +112,41 @@ def main():
                      1e9 * max(t - base, 0.0) / hyps))
     # The scan arm above prices the deduction against a SCORE. What a crib run
     # actually skips is a CLIMB, which costs three orders of magnitude more, so
-    # the same deduction can lose on a scan and win overwhelmingly with -c.
-    print("\nAgainst a climb (-c), which is what a crib run actually skips\n")
-    cbase, _, _, k = timed(ct, ["-c"], args.reps, args.lang)
-    print("  %-22s %9s %9s" % ("", "wall", "vs no crib"))
-    print("  %-22s %8.2fs %9s" % ("no crib", cbase, "-"))
-    for n in args.lengths:
+    # the same deduction can lose on a scan and win overwhelmingly with -c --
+    # but ONLY where it rejects. Under `-c` a surviving key is not scored once,
+    # it is climbed once PER surviving hypothesis, so a crib that rejects
+    # nothing multiplies the work instead of skipping it. Hence two tables: the
+    # cribs strong enough to reject on the full key space, and the weak ones on
+    # a 26-key space where the explosion is affordable to measure.
+    print("\nAgainst a climb (-c): the cribs that reject\n")
+    cbase, _, _, k, _ = timed(ct, ["-c"], args.reps, args.lang)
+    print("  %-22s %9s %11s %9s" % ("", "wall", "vs no crib", "rejected"))
+    print("  %-22s %8.2fs %11s %9s" % ("no crib", cbase, "-", "-"))
+    for n in (12, 16, 20):
         crib = PT[3:3 + n]
-        t, a, r, k = timed(ct, ["-c", "--crib", crib], args.reps, args.lang)
-        print("  %-2d letters swept      %8.2fs %8.2fx  (%.1f%% rejected)"
-              % (n, t, cbase / t, 100.0 * r / max(k, 1)))
+        for label, extra in (("pinned", ["--crib-at", "3"]), ("swept", [])):
+            if n == 12 and label == "swept":
+                continue          # rejects only 5%, so it belongs below
+            t, a, r, k, _ = timed(ct, ["-c", "--crib", crib] + extra,
+                                  args.reps, args.lang)
+            print("  %-2d letters %-11s %8.2fs %10.1fx %8.1f%%"
+                  % (n, label, t, cbase / t, 100.0 * r / max(k, 1)))
+
+    # A crib that does not reject seeds a climb from every surviving
+    # hypothesis, so the cost goes UP by roughly alignments x 26. Boards scored
+    # is the honest axis here: it is exact, deterministic, and free of the
+    # ~0.12 s startup that would swamp wall time on a key space this small.
+    print("\nWhere it does NOT reject, -c costs MORE (26 keys, -g AA.)\n")
+    sbase, _, _, sk, sc = timed(ct, ["-c"], 1, args.lang, start="AA.")
+    print("  %-22s %9s %14s %11s" % ("", "wall", "boards scored", "vs no crib"))
+    print("  %-22s %8.2fs %14d %11s" % ("no crib", sbase, sc, "-"))
+    for n, label, extra in ((8, "pinned", ["--crib-at", "3"]),
+                            (8, "swept", []), (12, "swept", [])):
+        crib = PT[3:3 + n]
+        t, a, r, k, s = timed(ct, ["-c", "--crib", crib] + extra, 1,
+                              args.lang, start="AA.")
+        print("  %-2d letters %-11s %8.2fs %14d %10.1fx"
+              % (n, label, t, s, float(s) / max(sc, 1)))
 
     print("\n  net      wall time against the no-crib baseline: the deduction")
     print("           costs propagations and saves the scores it rejects")
