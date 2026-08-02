@@ -776,7 +776,7 @@ def main():
             # ~1150 cribs of 14 letters or more, and they were being thrown away.
             #
             # The FILE order is left alone -- it stays by evidence of recurrence,
-            # which is what the tool's --crib-order file preserves.  Selection and
+            # which is what the tool's --no-crib-reorder preserves.  Selection and
             # ordering are separate questions and only selection is at stake here.
             priced = [(crib_cost(len(e[0])) / 3600.0, i, e)
                       for i, e in enumerate(lib)]

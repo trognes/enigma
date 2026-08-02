@@ -28,7 +28,8 @@ running the whole library once per ordering.
 THE ORDERING IS NOT ALLOWED TO CHEAT.  The tool orders by its own sampled
 ESTIMATE, made before any sweep runs; sorting by the measured wall time would
 give it knowledge it does not have.  So the cost order is read from the tool's
-own table (`--crib-order cost`), and only the timing comes from this harness.
+own table (cheapest-first is its default), and only the timing comes from
+this harness.
 """
 import argparse
 import os

@@ -5954,9 +5954,12 @@ void help(FILE * out)
           "Where the crib sits (0-based); omit to sweep every");
   fprintf(out, "  %-24s %s\n", "", "alignment -- but rejections multiply across");
   fprintf(out, "  %-24s %s\n", "", "them, so a swept crib needs 16+ letters");
+  fprintf(out, "  %-24s %s\n", "--crib-dump",
+          "Print every surviving crib hypothesis and the plugs");
+  fprintf(out, "  %-24s %s\n", "", "it deduces (diagnostic; needs --crib) [off]");
   fprintf(out, "  %-24s %s\n", "--crib-list F",
-          "Crib library, one per line ('#' comments), tried in");
-  fprintf(out, "  %-24s %s\n", "", "file order, one rotor sweep each; best kept [off]");
+          "Crib library, one per line ('#' comments); one rotor");
+  fprintf(out, "  %-24s %s\n", "", "sweep each, best board kept [off]");
   fprintf(out, "  %-24s %s\n", "--no-crib-reorder",
           "Keep a --crib-list in file order. By default it is");
   fprintf(out, "  %-24s %s\n", "", "run cheapest-measured-cost first, since a long");

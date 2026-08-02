@@ -1633,6 +1633,16 @@ check "--crib-file is no longer accepted" \
   "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
      --crib-file /dev/null >/dev/null 2>&1; echo $?)" "1"
 
+# Every long option must appear in --help. --crib-dump was absent for four
+# releases because nothing checked, so this compares the getopt table in the
+# source against the help text rather than trusting a human to notice.
+help_missing=$("$ENIGMA" -h 2>&1 > /tmp/enigma_help.$$ ; \
+  grep -oE '\{ "[a-z-]+",' "$(dirname "$0")/../enigma.cc" \
+  | sed 's/{ "//;s/",//' | sort -u \
+  | while read -r o; do grep -q -- "--$o" /tmp/enigma_help.$$ || echo "$o"; done)
+rm -f /tmp/enigma_help.$$
+check "help lists every long option" "$help_missing" ""
+
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
