@@ -694,6 +694,20 @@ are read from a **data directory** (filenames built as
   rejection count is reported per key, counted at the key's first work item**: a
   key's restarts can straddle a chunk boundary and be seen as new by two
   workers, so counting at the deduction would make the total depend on `-T`.
+- **With `-c` the crib also SEEDS the climb** (the hybrid, `cribs.md` §7):
+  instead of starting from an empty board, each surviving hypothesis's deduced
+  plugs are pinned in `PLUG_FIXED_EX` — the same per-worker pin set `--exhaust`
+  uses, since `plug_fixed` is a read-only global no worker may touch — and the
+  climb finds the rest. Letters the deduction settles as carrying **no** cable
+  are pinned too (that is a finding, not an absence of one, and it stops the
+  climb spending moves on them). The pins stay fixed through `--polish`: a
+  deduced plug is arithmetic on the machine equation and the cascade is
+  score-driven local repair, so releasing them would let weaker evidence
+  overwrite stronger, and a wrong hypothesis needs no rescue — it loses on score
+  to the other 25. Measured on an 88-letter message with the board hidden and a
+  12-letter crib: **92% of letters recovered against 8% unseeded** (10% at
+  `-R 64`), and the same 92% swept as pinned, so seeding does not need the
+  alignment to be known.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are

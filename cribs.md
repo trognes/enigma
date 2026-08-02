@@ -2,9 +2,8 @@
 
 **Status: a plan, with steps 0 to 3 built** — `--full-text`, `--no-plug` and the
 `--crib` key filter in the tool, plus `eval/build_cribs.py` (§5a) and
-`eval/crib_menu.py` (§4.1).
-The numbers quoted are from measurements; where a figure is an estimate rather
-than a measurement, it says so.
+`eval/crib_menu.py` (§4.1). The numbers quoted are from measurements; where a
+figure is an estimate rather than a measurement, it says so.
 
 ---
 
@@ -189,9 +188,9 @@ mattered historically: it is what makes short, loop-free menus usable.
 
 **Where this leaves the plan, so far.** The useful floor moves from about 16–20
 letters down to about **12**, and that is the length the corpus actually
-supplies: **55% of messages carry a 12-letter crib**, against 3% for a
-20-letter one (§7a). The two halves of the problem — a crib strong enough to be
-worth trying, and a crib you are likely to have — now overlap, which on the old
+supplies: **55% of messages carry a 12-letter crib**, against 3% for a 20-letter
+one (§7a). The two halves of the problem — a crib strong enough to be worth
+trying, and a crib you are likely to have — now overlap, which on the old
 numbers they barely did. Two consequences the rest of this document has not yet
 absorbed: the 8–11 letter band is **not** seed-only (8 letters rejects 16%, 10
 rejects 55%), and §5's tier boundaries were drawn on the old figures.
@@ -209,8 +208,8 @@ C++ deduction (§12 step 3). Until then the cost table below, and everything
 priced from it, stands flagged rather than corrected.
 
 > ⚠️ **Earlier versions of this table were measured without the diagonal board
-> and are wrong by orders of magnitude at the short end** — they read 0.00% at
-> 8 and 10 letters and 0.02% at 12, against 16%, 55% and 91% here. The
+> and are wrong by orders of magnitude at the short end** — they read 0.00% at 8
+> and 10 letters and 0.02% at 12, against 16%, 55% and 91% here. The
 > `--no-diagonal` control reproduces those old figures closely (28.98% at 16
 > letters against the old 28.8%), which is what identifies the omission.
 > **Everything downstream that was computed from the old rejection rates is
@@ -289,8 +288,8 @@ The arithmetic is ordinary compounding, not something subtler. Measuring each of
 the 70 alignments separately for the 12-letter crib gives per-alignment
 rejection from **63.4%** to 100% (median 99.2%), and the product of those
 seventy numbers is **5.2%** against the 5.3% measured. Two things follow. The
-weakest alignments dominate — a single 63% one costs more than thirty 99% ones
-— and a crib that looks strong on average can still be useless swept.
+weakest alignments dominate — a single 63% one costs more than thirty 99% ones —
+and a crib that looks strong on average can still be useless swept.
 
 **This restores §5's 16-letter tier boundary, for a different reason than the
 plan gave.** The old rationale was that loops appear around there; §4.1 showed
@@ -497,8 +496,8 @@ already emitting, and step 5 must hold those back behind every independent crib.
 Length alone cannot express this: a derived 10-letter window and an independent
 10-letter phrase look identical.
 
-**Step 5 — order by how likely a crib is to match, not by what it could do if
-it did.** A tier still says which *mode* a crib is for:
+**Step 5 — order by how likely a crib is to match, not by what it could do if it
+did.** A tier still says which *mode* a crib is for:
 
 | tier | length | mode | when it applies |
 |---|--:|---|---|
@@ -575,8 +574,8 @@ why §3 argues for extending the tool rather than writing a Bombe.
 Within a **25-hour budget** — the same compute a no-crib run spends — the
 library reaches **49 of 69 messages, 71%**, at a median of 6.7 hours each.
 
-**What the corpus supplies:** 69 messages, 6843 letters, 352 distinct words.
-The full library is 2528 cribs; a 25-hour budget keeps the first 96.
+**What the corpus supplies:** 69 messages, 6843 letters, 352 distinct words. The
+full library is 2528 cribs; a 25-hour budget keeps the first 96.
 
 **Half the held-out hits come from the generic vocabulary** (25 of 57), which is
 the part that would carry over to a network this corpus does not resemble.
@@ -593,13 +592,12 @@ curve is steep at the low end (`build_cribs.py --transfer`):
 | 68 (§5a's leave-one-out) | 83% |
 
 **Whether it also depends on *which* traffic — the question that matters — this
-corpus cannot answer.** The obvious test is to train on one published
-collection and test on the other, and run alone it is misleading: the
-collections hold 13 and 56 messages, and a harvester that keeps phrases
-recurring in two or more messages finds far fewer in 13 than in 56, so the
-training-set size shows up looking exactly like a transfer loss. Each
-cross-collection run therefore has a same-collection control at the same
-training size:
+corpus cannot answer.** The obvious test is to train on one published collection
+and test on the other, and run alone it is misleading: the collections hold 13
+and 56 messages, and a harvester that keeps phrases recurring in two or more
+messages finds far fewer in 13 than in 56, so the training-set size shows up
+looking exactly like a transfer loss. Each cross-collection run therefore has a
+same-collection control at the same training size:
 
 | training | cross-collection | same-collection control |
 |--:|--:|--:|
@@ -615,15 +613,15 @@ and §11's warning about a 58-message corpus stands undiminished.
 **What a thin library leans on is measurable, and it is not the harvested
 phrases.** At 13 training messages the generic vocabulary supplies 20 of the 32
 hits and harvested phrases 2; at 55 it is 20 of 45 against 19. The vocabulary is
-a fixed file, so it neither grows nor decays with the corpus — it is simply
-what remains when the harvester has little to work with. Whatever a new network
-does to the harvested phrases, the vocabulary is the part that keeps working,
-and it is the cheapest thing to extend: one line in `cribs/german-hgnord.txt`.
+a fixed file, so it neither grows nor decays with the corpus — it is simply what
+remains when the harvester has little to work with. Whatever a new network does
+to the harvested phrases, the vocabulary is the part that keeps working, and it
+is the cheapest thing to extend: one line in `cribs/german-hgnord.txt`.
 
 **Enumerated numbers behave the same way.** Times and dates spell out to long,
 repetitive strings — `EINSEINSNULLNULL` is 16 letters with 10 spare — so
-enumerating them looks promising. Regenerate this with
-`build_cribs.py --numbers-sweep`:
+enumerating them looks promising. Regenerate this with `build_cribs.py
+--numbers-sweep`:
 
 | family | cribs | cost | in-corpus | held-out | ≤25h | thin library |
 |---|--:|--:|--:|--:|--:|--:|
@@ -914,8 +912,8 @@ cross-thread event: one worker crosses the threshold and the others have to
 stop, so *when* they stop is thread-timing dependent, and if the winner is
 simply "whoever crossed first" then two thread counts can return two different
 keys. That breaks the property the whole search is built on — every other
-feature here is `-T`-independent, enforced by `better_cand`'s
-lowest-work-index tie-break.
+feature here is `-T`-independent, enforced by `better_cand`'s lowest-work-index
+tie-break.
 
 The fix is to separate stopping from choosing. Crossing the threshold sets a
 shared atomic flag; each worker finishes the chunk it is in and merges its
@@ -1012,11 +1010,12 @@ the value is in the first five. Two consequences:
   the climb the work of undoing them, but if enough are right the hybrid still
   starts well up the curve.
 
-**One thing the tool cannot currently express.** The deduction settles about 2.5
-letters as *definitely carrying no cable* (§7's table above counts them), and
-`-s` cannot say that — it fixes pairs only. Those letters are then left free and
-the climb wastes moves trying to plug them. Marking them would shrink the free
-set from roughly 12 letters to 9 at no cost. See §8.
+**The letters the deduction settles as carrying no cable are used too.** It
+finds about 2.5 of them (§7's table above counts them), and they are a real
+finding rather than an absence of one: the seeded climb pins them exactly as it
+pins the deduced pairs, so it never wastes a move trying to plug a letter that
+cannot be plugged. This is what §8 wanted `--no-plug` for, and the hybrid gets
+it for free — `--no-plug` remains the way to say it by hand.
 
 It also degrades gracefully, which matters given §4.5. If the crib is slightly
 wrong, the deduction produces a bad partial board — but the follow-up score will
@@ -1076,12 +1075,12 @@ needs both, in different places —
 
 - **discrimination** picks between the 26 hypotheses and between surviving rotor
   settings, where `-f`'s advantage is measured at zero;
-- **surface** drives the climb over the last few plugs, which is where `-f`
-  wins — but a seeded climb has less surface left to cross, so its advantage
-  should be *smaller* here than on the plain sweep.
+- **surface** drives the climb over the last few plugs, which is where `-f` wins
+  — but a seeded climb has less surface left to cross, so its advantage should
+  be *smaller* here than on the plain sweep.
 
-Both pull the answer away from "obviously `-f`", and neither settles it. The
-A/B is `-q` vs `-a` vs `-f` as the target of a seeded, uncapped-pre-pass climb,
+Both pull the answer away from "obviously `-f`", and neither settles it. The A/B
+is `-q` vs `-a` vs `-f` as the target of a seeded, uncapped-pre-pass climb,
 scored on recovery from the correct seed. One further consideration: `-f`'s IC
 term is language-independent, which is worth something when the traffic's style
 is not certain to match the tables.
@@ -1300,8 +1299,8 @@ Notes:
   that index differently. Crib mode is a fourth search mode over the same sweep,
   so the proposed matrix is:
 
-  - **`-c`, `-R`, `--random`, `-S`, `-J`, `-M` — compose.** The climb is
-    exactly what §7 hands the deduction to.
+  - **`-c`, `-R`, `--random`, `-S`, `-J`, `-M` — compose.** The climb is exactly
+    what §7 hands the deduction to.
   - **`--polish` — composes**, with the caveat below.
   - **`-T` — composes**, with the early-exit caveat of §6.7.
   - **`-F` — reject.** Tier 1 shortlists keys by a cheap IC climb, so a key the
@@ -1351,9 +1350,8 @@ Notes:
   - **Decode on the fly, as `showconfig()` already does.** It rebuilds the
     preview from the machine's *current* board rather than reading
     `m.plaintext`, which can be stale mid-climb; the full text must do the same.
-    The only
-    change is the buffer, which is a fixed 20 bytes today and would need to be
-    message-length sized.
+    The only change is the buffer, which is a fixed 20 bytes today and would
+    need to be message-length sized.
   - **It is useful on its own.** Nothing about it depends on cribs, so it can be
     built and tested first, with its own test — a run under `--full-text` must
     print a line matching the final plaintext.
@@ -1448,11 +1446,11 @@ Compare against today's hill-climb at matched wall time.
 byte-identical to today, and `make bench` must show no hot-path movement. This
 is the same standard `--ring-stride` and `--polish` were held to.
 
-**10.7 Display.** The progress line is budgeted to exactly 80 columns, so a
-crib run must be checked for width the way the existing one was: no line over 80
+**10.7 Display.** The progress line is budgeted to exactly 80 columns, so a crib
+run must be checked for width the way the existing one was: no line over 80
 columns for a 3-wheel machine or under `-4`, and the header aligned with the
-lines below it. Check it with a crib at the widest alignment and a full
-13-pair board.
+lines below it. Check it with a crib at the widest alignment and a full 13-pair
+board.
 
 **10.8 Flag interaction.** Two checks, both cheap, both easy to omit and
 expensive to omit:
@@ -1519,16 +1517,16 @@ leaves them alone. Both are worth having on their own, and doing `--full-text`
 first means the alignment column added in step 4 costs nothing that anybody
 misses.
 
-**Step 1 — the crib generator** (§5). **Done** —
-`eval/build_cribs.py`, output `cribs/wehrmacht.cribs`. Needs no changes to the
-tool at all, and it answered the supply question before any C++ was written:
-**83% held-out coverage, 0% for a shuffled control** (§5a).
+**Step 1 — the crib generator** (§5). **Done** — `eval/build_cribs.py`, output
+`cribs/wehrmacht.cribs`. Needs no changes to the tool at all, and it answered
+the supply question before any C++ was written: **83% held-out coverage, 0% for
+a shuffled control** (§5a).
 
-**Step 2 — a menu builder and offline analysis** (`eval/crib_menu.py`).
-**Done, and it did not confirm §4.1 — it corrected it.** The rejection rates
-had been measured without the diagonal board and were wrong by orders of
-magnitude at the short end (§4.1). It also emits the test vectors step 3 needs
-(`--vectors`) and runs §10.1/§10.2 as oracle checks on itself.
+**Step 2 — a menu builder and offline analysis** (`eval/crib_menu.py`). **Done,
+and it did not confirm §4.1 — it corrected it.** The rejection rates had been
+measured without the diagonal board and were wrong by orders of magnitude at the
+short end (§4.1). It also emits the test vectors step 3 needs (`--vectors`) and
+runs §10.1/§10.2 as oracle checks on itself.
 
 **Step 3 — deduction inside the tool**, one crib at one alignment (`--crib`,
 `--crib-at`). **Done**, as a key filter: a rotor setting the crib proves
@@ -1543,7 +1541,13 @@ prints each surviving hypothesis and its deduced plugs.
 leaves. It also carries the progress line's alignment column (§8). **The sweep
 changes the economics, and §4.2a records how.**
 
-**Step 5 — the hybrid** (§7). The mode we expect to be used in practice. The
+**Step 5 — the hybrid** (§7). **Done** — with `-c`, the climb starts from the
+plugs each surviving hypothesis deduces, held fixed, instead of from an empty
+board. Measured end to end on an 88-letter message with the plugboard hidden and
+only a 12-letter crib given: **92% of letters recovered, against 8% for the same
+climb unseeded and 10% at `-R 64`.** Seeding works swept as well as pinned (92%
+either way), so it does not need the alignment to be known — which matters,
+because a 12-letter crib cannot *filter* a swept search at all (§4.2a). The
 climb it hands over to is not the recommended recipe — §7b says why, and leaves
 the target model (`-q`/`-a`/`-f`) as the one thing to A/B here.
 
@@ -1558,12 +1562,12 @@ hold up the step.
 that covers the short cribs the corpus actually supplies. Needs its own
 measurement of caution 1 above before being recommended.
 
-**Step 6 — crib lists** (`--crib-list`) and the budget logic, plus the
-per-crib banner (§8) and the rename of the existing `--crib-file` to
-`--crib-rerank`. Steps 3 to 5 take a single crib because that is the smallest
-testable thing; this step is what makes the feature usable, since you normally
-know a network's vocabulary rather than a particular message's contents. It is
-the deliverable, not polish.
+**Step 6 — crib lists** (`--crib-list`) and the budget logic, plus the per-crib
+banner (§8) and the rename of the existing `--crib-file` to `--crib-rerank`.
+Steps 3 to 5 take a single crib because that is the smallest testable thing;
+this step is what makes the feature usable, since you normally know a network's
+vocabulary rather than a particular message's contents. It is the deliverable,
+not polish.
 
 **Step 1 was the decision point, and it passed** (§5a): the library covers 83%
 of held-out messages and a shuffled control covers none, so the recurrence is
