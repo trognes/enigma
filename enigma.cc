@@ -142,18 +142,19 @@ static const char * opt_no_plug;
 static const char * opt_crib_text;
 static int opt_crib_at = -1;
 static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
-/* The menu, built once by init_crib(): an edge per crib position, plus the anchor letter
-   the 26 hypotheses are about. Read-only during the search.
+/* The menu, built once by init_crib(). A menu is a property of the crib AND the place it
+   sits, so everything except the crib letters themselves is per ALIGNMENT: the ciphertext
+   letters it pairs with, and therefore the anchor letter the 26 hypotheses are about.
      DELIBERATELY DECLARED HERE, beside the cold option globals, and not next to the
-   deduction code further down -- that would put ~6 KB of arrays a few dozen lines from
-   plug_fixed, the hot climb-loop global whose placement this file is already documented
-   as sensitive to (see the struct-layout note in CLAUDE.md). Keeping cold data away from
-   it costs nothing and removes a whole class of accidental regression. */
-static unsigned char crib_p[maxlen];    /* plaintext letter of each menu edge */
-static unsigned char crib_c[maxlen];    /* ciphertext letter of the same edge */
-static int crib_pos[maxlen];            /* message position, indexing rows[] */
-static int crib_edges = 0;
-static int crib_anchor = -1;            /* the letter we hypothesise about */
+   deduction code further down -- that would put several KB of arrays a few dozen lines
+   from plug_fixed, the hot climb-loop global whose placement this file is already
+   documented as sensitive to (see the struct-layout note in CLAUDE.md). Keeping cold data
+   away from it costs nothing and removes a whole class of accidental regression. */
+static unsigned char crib_p[maxlen];    /* the crib's letters, one per menu edge */
+static int crib_edges = 0;              /* = the crib length */
+static int crib_align[maxlen];          /* viable alignments, in order */
+static unsigned char crib_anchor_at[maxlen];   /* anchor letter of each one's menu */
+static int crib_aligns = 0;
 static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossible */
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french, swedish, finnish,
@@ -1084,67 +1085,93 @@ void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_stri
 
    The menu is a property of the crib and the ciphertext, not of the key, so its edges and
    its anchor letter are built once at startup by init_crib(). */
-/* Build the menu once: an edge per crib position joining the plaintext letter to the
-   ciphertext letter under it, and the anchor -- the highest-degree letter of the largest
-   connected component, so one guess reaches as far as it can before a second is needed. */
+/* Build the alignment list once, and each alignment's anchor.
+
+   An alignment is VIABLE only if the crib disagrees with the ciphertext at every position:
+   an Enigma never encrypts a letter to itself, so a match there proves the crib cannot sit
+   at that offset. That test costs nothing and removes about half the alignments outright
+   (cribs.md 6.6) -- it is pure arithmetic on the ciphertext, done here rather than per key.
+
+   The anchor is the highest-degree letter of the menu's largest connected component, so
+   one guess reaches as far as it can before a second would be needed. It depends on which
+   ciphertext letters the crib lands on, hence one per alignment. */
 static void init_crib()
 {
   crib_edges = static_cast<int>(strlen(opt_crib_text));
   for (int j = 0; j < crib_edges; j++)
-    {
-      crib_p[j] = static_cast<unsigned char>(char2num(opt_crib_text[j]));
-      crib_c[j] = num_ciphertext[opt_crib_at + j];
-      crib_pos[j] = opt_crib_at + j;
-    }
+    crib_p[j] = static_cast<unsigned char>(char2num(opt_crib_text[j]));
 
-  /* components by union-find over the edges, then the largest one's busiest letter */
-  int parent[asize];
-  for (int i = 0; i < asize; i++)
-    parent[i] = i;
-  for (int j = 0; j < crib_edges; j++)
+  int first = (opt_crib_at >= 0) ? opt_crib_at : 0;
+  int last = (opt_crib_at >= 0) ? opt_crib_at : textlength - crib_edges;
+  crib_aligns = 0;
+  for (int at = first; at <= last; at++)
     {
-      int a = crib_p[j], b = crib_c[j];
-      while (parent[a] != a) a = parent[a];
-      while (parent[b] != b) b = parent[b];
-      if (a != b)
-        parent[a] = b;
+      bool viable = true;
+      for (int j = 0; j < crib_edges; j++)
+        if (crib_p[j] == num_ciphertext[at + j])
+          {
+            viable = false;
+            break;
+          }
+      if (! viable)
+        continue;
+
+      /* components by union-find over this alignment's edges, then the largest
+         component's busiest letter */
+      int parent[asize], deg[asize];
+      for (int i = 0; i < asize; i++)
+        {
+          parent[i] = i;
+          deg[i] = 0;
+        }
+      for (int j = 0; j < crib_edges; j++)
+        {
+          int a = crib_p[j], b = num_ciphertext[at + j];
+          deg[a]++;
+          deg[b]++;
+          while (parent[a] != a) a = parent[a];
+          while (parent[b] != b) b = parent[b];
+          if (a != b)
+            parent[a] = b;
+        }
+      int size[asize], root[asize];
+      for (int i = 0; i < asize; i++)
+        size[i] = 0;
+      for (int i = 0; i < asize; i++)
+        {
+          int r = i;
+          while (parent[r] != r) r = parent[r];
+          root[i] = r;
+          if (deg[i])
+            size[r]++;
+        }
+      int big = -1;
+      for (int i = 0; i < asize; i++)
+        if (deg[i] && ((big < 0) || (size[root[i]] > size[root[big]])))
+          big = i;
+      int anchor = -1;
+      for (int i = 0; i < asize; i++)
+        if (deg[i] && (root[i] == root[big])
+            && ((anchor < 0) || (deg[i] > deg[anchor])))
+          anchor = i;
+      if (anchor < 0)
+        continue;
+
+      crib_align[crib_aligns] = at;
+      crib_anchor_at[crib_aligns] = static_cast<unsigned char>(anchor);
+      crib_aligns++;
     }
-  int size[asize], deg[asize];
-  for (int i = 0; i < asize; i++)
-    size[i] = deg[i] = 0;
-  for (int j = 0; j < crib_edges; j++)
-    {
-      deg[crib_p[j]]++;
-      deg[crib_c[j]]++;
-    }
-  int root[asize];
-  for (int i = 0; i < asize; i++)
-    {
-      int r = i;
-      while (parent[r] != r) r = parent[r];
-      root[i] = r;
-      if (deg[i])
-        size[r]++;
-    }
-  int big = -1;
-  for (int i = 0; i < asize; i++)
-    if (deg[i] && ((big < 0) || (size[root[i]] > size[root[big]])))
-      big = i;
-  crib_anchor = -1;
-  for (int i = 0; i < asize; i++)
-    if (deg[i] && (root[i] == root[big])
-        && ((crib_anchor < 0) || (deg[i] > deg[crib_anchor])))
-      crib_anchor = i;
 }
 
-/* One hypothesis: "the anchor letter is plugged to hyp". Propagates to a fixed point and
+/* One hypothesis at one alignment: "the anchor letter is plugged to hyp". Propagates to a
+   fixed point and
    returns false on contradiction. `board` is left holding the partial plugboard it
    deduced (-1 = still unknown), which is what the hybrid will seed a climb from.
      `board` is int, not signed char: it holds -1 alongside letter values coming out of
    the UNSIGNED char rows[] table, and mixing those two signednesses is the bug class
    clang-tidy's bugprone-signed-char-misuse exists to catch. 26 ints, read once per key,
    cost nothing. */
-static bool crib_try(const machine & m, int hyp, int * board)
+static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board)
 {
   for (int i = 0; i < asize; i++)
     board[i] = -1;
@@ -1160,15 +1187,15 @@ static bool crib_try(const machine & m, int hyp, int * board)
     board[yy] = xx;                                             \
   } while (0)
 
-  CRIB_SET(crib_anchor, hyp);
+  CRIB_SET(anchor, hyp);
   bool changed = true;
   while (changed)
     {
       changed = false;
       for (int j = 0; j < crib_edges; j++)
         {
-          const unsigned char * core = rows[crib_pos[j]];
-          int p = crib_p[j], c = crib_c[j];
+          const unsigned char * core = rows[at + j];
+          int p = crib_p[j], c = num_ciphertext[at + j];
           if ((board[c] >= 0) && (board[p] < 0))
             {
               CRIB_SET(p, static_cast<int>(core[board[c]]));
@@ -1190,22 +1217,30 @@ static bool crib_try(const machine & m, int hyp, int * board)
   return true;
 }
 
-/* True when every hypothesis contradicts: this rotor setting cannot have produced the
-   crib, so the caller skips it entirely. Pure function of the key -- no shared state, so
-   it is thread-safe and -T-deterministic. */
 /* --crib-dump: print every surviving hypothesis and the plugs it deduces, so a harness
    can check them against a known board (cribs.md 10.1). Display-only and under the same
    mutex as the progress lines, so it cannot affect which candidate wins. Very verbose;
    off by default. */
 static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g3);
 
-static bool crib_rejects(const machine & m)
+/* The first alignment at which some hypothesis survives, or -1 when every hypothesis at
+   every viable alignment contradicts -- in which case this rotor setting cannot have
+   produced the crib ANYWHERE in the message, and the caller skips it without scoring.
+
+   Returning the alignment rather than a bool is what step 5 will seed a climb from, and
+   what the progress line reports now. The early exit matters and is asymmetric: a key that
+   survives usually does so at one of the first alignments tried, while a REJECTED key pays
+   the whole sweep -- and rejected keys are meant to be the common case.
+
+   Pure function of the key: no shared state, so it is thread-safe and -T-deterministic. */
+static int crib_first_stop(const machine & m)
 {
   int board[asize];
-  for (int h = 0; h < asize; h++)
-    if (crib_try(m, h, board))
-      return false;
-  return true;
+  for (int a = 0; a < crib_aligns; a++)
+    for (int h = 0; h < asize; h++)
+      if (crib_try(m, crib_align[a], crib_anchor_at[a], h, board))
+        return crib_align[a];
+  return -1;
 }
 
 void init_walzen(machine & m, int u, int a, int b, int c)
@@ -1733,21 +1768,45 @@ static const int preview_len_4 = 16;   /* 4-wheel M4: the wider key costs 3 char
 static const int preview_max = 19;     /* buffer size: the larger of the two */
 static const char progress_fmt_3[] = "%8s %-4s %-3s %-3s %-38s %s\n";
 static const char progress_fmt_4[] = "%8s %-5s %-4s %-4s %-38s %s\n";
+/* --crib adds an "A" column: which alignment the crib survived at. A crib run produces
+   lines from many alignments and they are otherwise indistinguishable, so the line has to
+   say which. The width comes out of the preview, the field the 80-column budget already
+   designates as absorbing the difference between the two key layouts:
+     3-wheel + crib: 8+1+4+1+3+1+3+1+38+1+3+1+15 = 80
+     M4      + crib: 8+1+5+1+4+1+4+1+38+1+3+1+12 = 80 */
+static const int preview_len_3c = 15;
+static const int preview_len_4c = 12;
+static const char progress_fmt_3c[] = "%8s %-4s %-3s %-3s %-38s %3s %s\n";
+static const char progress_fmt_4c[] = "%8s %-5s %-4s %-4s %-38s %3s %s\n";
+
+/* The alignment the current key's crib survived at, for the progress line. Display-only
+   and per worker: set by search_worker once per key, read by showconfig from both the
+   key-level merge and from inside a climb. thread_local rather than a `machine` member so
+   struct machine's layout -- which the hot loops are documented to be sensitive to -- is
+   left alone; nothing here is on a hot path. */
+static thread_local int g_crib_stop_shown = -1;
 
 static inline const char * progress_fmt(void)
 {
+  if (opt_crib_text)
+    return opt_m4 ? progress_fmt_4c : progress_fmt_3c;
   return opt_m4 ? progress_fmt_4 : progress_fmt_3;
 }
 
 static inline int preview_len(void)
 {
+  if (opt_crib_text)
+    return opt_m4 ? preview_len_4c : preview_len_3c;
   return opt_m4 ? preview_len_4 : preview_len_3;
 }
 
 /* Column header, printed once before the first progress line of a search. */
 void showconfig_header(void)
 {
-  fprintf(stderr, progress_fmt(), "Score", "W", "R", "G", "S", "Text");
+  if (opt_crib_text)
+    fprintf(stderr, progress_fmt(), "Score", "W", "R", "G", "S", "A", "Text");
+  else
+    fprintf(stderr, progress_fmt(), "Score", "W", "R", "G", "S", "Text");
 }
 
 /* Format m's rotor key into w (reflector+wheels), r (ring), g (start) -- the columns
@@ -1861,7 +1920,14 @@ void showconfig(machine & m, double score)
 
   char scorebuf[16];
   snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
-  fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, text);
+  if (opt_crib_text)
+    {
+      char at[8];
+      snprintf(at, sizeof(at), "%d", g_crib_stop_shown);
+      fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, at, text);
+    }
+  else
+    fprintf(stderr, progress_fmt(), scorebuf, w, r, g, s, text);
 
   if (opt_full_text)
     show_full_text(m);
@@ -3395,17 +3461,19 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
   format_key(m, w, r, g);
   int board[asize];
   std::lock_guard<std::mutex> lock(g_dump_mutex);
-  for (int h = 0; h < asize; h++)
-    {
-      if (! crib_try(m, h, board))
-        continue;
-      fprintf(stderr, "cribstop %s %s %s %c %c", w, r, g,
-              num2char(crib_anchor), num2char(h));
-      for (int x = 0; x < asize; x++)
-        if (board[x] >= 0)
-          fprintf(stderr, " %c%c", num2char(x), num2char(board[x]));
-      fputc('\n', stderr);
-    }
+  for (int a = 0; a < crib_aligns; a++)
+    for (int h = 0; h < asize; h++)
+      {
+        int anchor = crib_anchor_at[a];
+        if (! crib_try(m, crib_align[a], anchor, h, board))
+          continue;
+        fprintf(stderr, "cribstop %s %s %s %d %c %c", w, r, g, crib_align[a],
+                num2char(anchor), num2char(h));
+        for (int x = 0; x < asize; x++)
+          if (board[x] >= 0)
+            fprintf(stderr, " %c%c", num2char(x), num2char(board[x]));
+        fputc('\n', stderr);
+      }
 }
 
 /* One plugboard-recovery climb from the seed board. In kicked mode (--restarts N>=1) every
@@ -3714,6 +3782,7 @@ void search_worker(machine & m,
   size_t cur_wo = static_cast<size_t>(-1);
   size_t cur_key = static_cast<size_t>(-1);
   int r1 = 0, r2 = 0, r3 = 0, g1 = 0, g2 = 0, g3 = 0;   /* current key's ring/start */
+  int crib_stop_at = -1;                /* --crib: alignment that survived at this key */
   const uint32_t * mid_row = nullptr;   /* §7.12 mask row for the current wheel order */
   bool key_skipped = false;             /* current key collapsed away (§7.12) */
 
@@ -3787,11 +3856,13 @@ void search_worker(machine & m,
                   if (opt_hillclimb)
                     init_ring_grund(m, r1, r2, r3, g1, g2, g3);
 
-                  /* --crib: reject keys the crib proves impossible, before any
-                     scoring. rows[] is valid here (setup_mapping just filled it) and
-                     the deduction reads nothing else, so this is a pure per-key test
-                     and stays -T-deterministic. */
-                  if (opt_crib_text && crib_rejects(m))
+                  /* --crib: reject keys the crib proves impossible at EVERY viable
+                     alignment, before any scoring. rows[] is valid here (setup_mapping
+                     just filled it) and the deduction reads nothing else, so this is a
+                     pure per-key test and stays -T-deterministic. */
+                  if (opt_crib_text)
+                    crib_stop_at = g_crib_stop_shown = crib_first_stop(m);
+                  if (opt_crib_text && (crib_stop_at < 0))
                     {
                       key_skipped = true;
                       /* Count only the key's FIRST work item. A key's restarts can
@@ -5346,7 +5417,9 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "cannot produce it are rejected unscored. Needs");
   fprintf(out, "  %-24s %s\n", "", "--crib-at; no -F/--exhaust/--ring-stride/-A [off]");
   fprintf(out, "  %-24s %s\n", "--crib-at N",
-          "Where the crib sits (0-based letter position)");
+          "Where the crib sits (0-based); omit to sweep every");
+  fprintf(out, "  %-24s %s\n", "", "alignment -- but rejections multiply across");
+  fprintf(out, "  %-24s %s\n", "", "them, so a swept crib needs 16+ letters");
   fprintf(out, "\n");
   fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
   fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
@@ -5527,7 +5600,13 @@ void show_settings()
   if (opt_no_plug[0])
     fprintf(stderr, "            %s known unplugged (--no-plug)\n", opt_no_plug);
   if (opt_crib_text)
-    fprintf(stderr, "Crib:       %s at position %d\n", opt_crib_text, opt_crib_at);
+    {
+      if (opt_crib_at >= 0)
+        fprintf(stderr, "Crib:       %s at position %d\n",
+                opt_crib_text, opt_crib_at);
+      else
+        fprintf(stderr, "Crib:       %s, sweeping every alignment\n", opt_crib_text);
+    }
 }
 
 int main(int argc, char * * argv)
@@ -5960,8 +6039,10 @@ int main(int argc, char * * argv)
       if ((n < 2) || (n > static_cast<size_t>(maxlen)) ||
           (strspn(opt_crib_text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") < n))
         fatal("Illegal --crib string (must be at least 2 letters A-Z)");
-      if (opt_crib_at < 0)
-        fatal("--crib needs --crib-at N (the alignment sweep is not implemented yet)");
+      if (opt_crib_at == -1)
+        { /* no --crib-at: sweep every alignment (cribs.md 12 step 4) */ }
+      else if (opt_crib_at < 0)
+        fatal("--crib-at must not be negative");
       if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
         fatal("--crib is not supported with -F (tier 1 could filter out the very key "
               "the crib settles)");
@@ -6287,16 +6368,22 @@ int main(int argc, char * * argv)
   if (opt_crib_text)
     {
       int n = static_cast<int>(strlen(opt_crib_text));
-      if (opt_crib_at + n > textlength)
+      if (n > textlength)
+        fatal("--crib is longer than the ciphertext");
+      if ((opt_crib_at >= 0) && (opt_crib_at + n > textlength))
         fatal("--crib runs past the end of the ciphertext (check --crib-at)");
-      /* An Enigma never encrypts a letter to itself, so a position where the crib letter
-         equals the ciphertext letter proves this alignment impossible -- every key would
-         be rejected and the run would find nothing. Say so instead. */
-      for (int j = 0; j < n; j++)
-        if (char2num(opt_crib_text[j]) == num_ciphertext[opt_crib_at + j])
-          fatal("--crib matches the ciphertext at some position: an Enigma never "
-                "encrypts a letter to itself, so the crib cannot sit there");
       init_crib();
+      /* An Enigma never encrypts a letter to itself, so an alignment where the crib
+         matches the ciphertext is impossible. With --crib-at that kills the one alignment
+         asked for, and every key would be rejected: say so rather than silently finding
+         nothing. Sweeping, it is just the filter doing its job -- unless it removes
+         everything, which means the crib cannot sit anywhere in this message. */
+      if (crib_aligns == 0)
+        fatal((opt_crib_at >= 0)
+              ? "--crib matches the ciphertext at that position: an Enigma never "
+                "encrypts a letter to itself, so the crib cannot sit there"
+              : "--crib cannot sit anywhere in this ciphertext: every alignment has "
+                "the crib matching the ciphertext, which an Enigma never does");
     }
 
   /* try all combinations (bruteforce allocates one machine per worker thread) */
@@ -6337,7 +6424,8 @@ int main(int argc, char * * argv)
     {
       size_t rej = g_crib_rejected.load(std::memory_order_relaxed);
       fprintf(stderr,
-              "Crib rejected %zu of %zu rotor combination%s (%.1f%%) unscored\n",
+              "Crib: %d alignment%s, rejected %zu of %zu key%s (%.1f%%) unscored\n",
+              crib_aligns, (crib_aligns == 1) ? "" : "s",
               rej, g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
               g_keys_analysed ? (100.0 * rej / g_keys_analysed) : 0.0);
     }

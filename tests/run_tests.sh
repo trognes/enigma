@@ -1428,7 +1428,7 @@ cb_err() { { printf '%s' "$cb_ct" | "$ENIGMA" $cb_key "$@" >/dev/null; } 2>&1; }
 # The true key must survive its own crib. This is the zero-tolerance property: a
 # deduction that rejects the truth loses the message outright.
 check "--crib: the true key is not rejected" \
-  "$(cb_err --crib OBERKOMMANDO --crib-at 3 | grep -c 'Crib rejected 0 of 1')" "1"
+  "$(cb_err --crib OBERKOMMANDO --crib-at 3 | grep -c 'rejected 0 of 1 key')" "1"
 
 # Every plug the surviving hypothesis deduces must match the true board. AB/EF/GH/MN/OP
 # are real cables; YY and ZZ say Y and Z carry none, which is true (the board plugs
@@ -1445,7 +1445,7 @@ check "--crib: rejects most keys but keeps the answer" \
   "$cb_pt"
 cb_rej=$(printf '%s' "$cb_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g ... \
          --crib OBERKOMMANDO --crib-at 3 2>&1 >/dev/null \
-         | sed -n 's/^Crib rejected \([0-9]*\) of \([0-9]*\).*/\1 \2/p')
+         | sed -n 's/^Crib: .*rejected \([0-9]*\) of \([0-9]*\).*/\1 \2/p')
 check "--crib: rejection is a large majority of the keyspace" \
   "$(printf '%s' "$cb_rej" | awk '{print ($1 > 0.9 * $2)}')" "1"
 
@@ -1454,8 +1454,31 @@ check "--crib: rejection is a large majority of the keyspace" \
 # rather than at the key's first work item made this drift with -T.
 cb_count() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... \
              -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T "$1" 2>&1 >/dev/null \
-             | sed -n 's/^Crib rejected \([0-9]*\) .*/\1/p'; }
+             | sed -n 's/^Crib: .*rejected \([0-9]*\) .*/\1/p'; }
 check "--crib: rejection count is -T-independent" "$(cb_count 1)" "$(cb_count 4)"
+
+# Without --crib-at the crib is tried at every alignment the self-encryption filter
+# leaves. That filter is pure arithmetic on the ciphertext -- an Enigma never encrypts a
+# letter to itself -- and removes roughly half of them.
+cb_sweep=$(printf '%s' "$cb_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g ... \
+           --crib OBERKOMMANDO 2>&1 >/dev/null \
+           | sed -n 's/^Crib: \([0-9]*\) alignment.*/\1/p')
+check "--crib sweeps more than one alignment" \
+  "$(printf '%s' "$cb_sweep" | awk '{print ($1 > 1)}')" "1"
+check "--crib: the sweep still recovers the plaintext" \
+  "$(run "$cb_ct" -i -u B -w 123 -r AAA -g ... -s "$cb_plugs" --crib OBERKOMMANDO)" \
+  "$cb_pt"
+
+# The alignment the crib survived at goes in its own progress-line column, since a swept
+# run produces lines from many alignments and they are otherwise indistinguishable. The
+# line is budgeted to exactly 80 columns either way.
+check "--crib: progress lines carry an alignment column" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... -c \
+     --crib OBERKOMMANDO 2>&1 >/dev/null | grep -c '^ *Score .*  A Text$')" "1"
+check "--crib: progress lines stay within 80 columns" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... -c \
+     --crib OBERKOMMANDO 2>&1 >/dev/null | grep -E "$progress_re|^ *Score " \
+     | awk '{ if (length($0) > 80) n++ } END { print n+0 }')" "0"
 
 # Deterministic, like every other search option.
 check "--crib is -T-independent" \
@@ -1472,7 +1495,8 @@ check "--crib: self-encrypting alignment rejected" \
 # The combinations cribs.md §8 rules out, each fatal at option-parsing time.
 cb_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... \
                 "$@" >/dev/null 2>&1; echo $?; }
-check "--crib without --crib-at rejected" "$(cb_reject --crib OBERKOMMANDO)" "1"
+check "--crib without --crib-at sweeps (accepted)" \
+  "$(cb_reject --crib OBERKOMMANDO)" "0"
 check "--crib-at without --crib rejected" "$(cb_reject --crib-at 3)" "1"
 check "--crib with -F rejected" \
   "$(cb_reject -c --crib OBERKOMMANDO --crib-at 3 -F 5)" "1"
