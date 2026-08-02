@@ -1242,6 +1242,23 @@ static void init_crib()
     }
 }
 
+/* Assign steck[x] = y and its reciprocal, returning false on any disagreement.
+   The two guards ARE Welchman's diagonal board: a letter already plugged to
+   something else contradicts, and so does a partner already claimed by a third
+   letter. Nearly all of the crib's rejecting power comes from these two tests,
+   not from the menu itself. Callers must propagate the false -- there is no
+   partial write, so the board is unchanged when it fails. */
+static inline bool crib_set(int * board, int x, int y)
+{
+  if ((board[x] >= 0) && (board[x] != y))
+    return false;
+  if ((board[y] >= 0) && (board[y] != x))
+    return false;
+  board[x] = y;
+  board[y] = x;
+  return true;
+}
+
 /* One hypothesis at one alignment: "the anchor letter is plugged to hyp". Propagates to a
    fixed point and
    returns false on contradiction. `board` is left holding the partial plugboard it
@@ -1257,17 +1274,8 @@ static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board
     board[i] = -1;
   const unsigned char * const * rows = m.rows;
 
-  /* assign steck[x] = y, and its reciprocal, failing on any disagreement */
-#define CRIB_SET(x, y)                                          \
-  do {                                                          \
-    int xx = (x), yy = (y);                                     \
-    if ((board[xx] >= 0) && (board[xx] != yy)) return false;    \
-    if ((board[yy] >= 0) && (board[yy] != xx)) return false;    \
-    board[xx] = yy;                                             \
-    board[yy] = xx;                                             \
-  } while (0)
-
-  CRIB_SET(anchor, hyp);
+  if (! crib_set(board, anchor, hyp))
+    return false;
   bool changed = true;
   while (changed)
     {
@@ -1279,12 +1287,14 @@ static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board
           int p = crib_p[j], c = num_ciphertext[at + j];
           if ((board[c] >= 0) && (board[p] < 0))
             {
-              CRIB_SET(p, static_cast<int>(core[board[c]]));
+              if (! crib_set(board, p, static_cast<int>(core[board[c]])))
+                return false;
               changed = true;
             }
           else if ((board[p] >= 0) && (board[c] < 0))
             {
-              CRIB_SET(c, static_cast<int>(core[board[p]]));
+              if (! crib_set(board, c, static_cast<int>(core[board[p]])))
+                return false;
               changed = true;
             }
           else if ((board[p] >= 0) && (board[c] >= 0))
@@ -1294,7 +1304,6 @@ static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board
             }
         }
     }
-#undef CRIB_SET
   return true;
 }
 
