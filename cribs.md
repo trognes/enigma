@@ -1806,9 +1806,43 @@ so it cannot depend on thread timing. A mid-run cap could not have had either
 property — an accumulated count across workers with an abort would have broken
 the `-T`-determinism the whole search holds to.
 
-**But it defaults to OFF, and that is a measured result, not caution.** The
-default was going to be *break-even*: skip when the estimate says the crib would
-cost more than using no crib at all. That rule was built, and it is wrong.
+**Every crib's expected gain is reported, whether or not anything is skipped.**
+The run prints one row per crib before its sweep:
+
+```
+     #  crib                      len algn   hyp/key     gain  note
+     1  XSIEGFRIED                 10   80      59.3   0.063x
+     2  VERBINDUNG                 10   76      69.7   0.069x
+     3  XSTUERZBECHERX             14   59       0.4      12x
+     4  OBERKOMMANDODERWEHRMACHT   24   37    <0.004   >1000x
+     5  SIEGFRIED                   9   81     119.2   0.032x
+```
+
+`gain` is what a key costs **without** this crib over what it costs **with**
+it — above 1 the crib saves work, below 1 it costs more than using no crib at
+all. It is **measured, not modelled**: `crib_unit()` and `hillclimb_one()` are
+both run on the same eight sampled keys and their plugboards-scored counters
+compared, so the figure already contains the two effects that pull against each
+other — the keys the crib rejects for free, and the extra climbs it adds
+wherever it does not. Counting boards rather than timing keeps it reproducible,
+since it is printed; the one thing it omits is the deduction's own cost, which
+runs outside the score loop, so a crib rejecting nearly everything is flattered
+(`>1000x` is reported rather than a number, because past that the true figure
+saturates at the deduction's price rather than the climb's). `<` marks a crib
+that hit the work budget — a bound, not a measurement.
+
+**And the table is the argument for not acting on it automatically.** Read the
+`gain` column above beside which cribs are actually *in* the message: all four
+present ones — `XSIEGFRIED`, `VERBINDUNG`, `SIEGFRIED` and the 24-letter
+parent — and the three cheapest-to-run entries are the three that recover
+nothing. The one crib scoring `>1000x` is the 24-letter phrase you would rarely
+have. That is the anti-correlation below, made visible per run rather than
+argued from tables.
+
+**So the cost check defaults to OFF, and that is a measured result, not
+caution.** The default was going to be *break-even*: skip when the estimate says
+the crib would cost more than using no crib at all. That rule was built, and it
+is wrong.
 
 Run against the shipped 96-crib library on a message containing four of its
 cribs:

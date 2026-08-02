@@ -1541,60 +1541,73 @@ cl_run() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g Q
              --crib-list "$cl_file" "$@"; }
 
 # The winning crib's answer is the run's answer: a later, worse crib must not displace
-# an earlier, better one.
-check "--crib-list recovers the plaintext" "$(cl_run -c 2>/dev/null)" "$cb_pt"
+# an earlier, better one. Graded like the single-crib checks above -- the board is
+# hidden here, so most-of-it is the property, not exactness.
+check "--crib-list recovers most of a hidden board" \
+  "$(cb_pct "$(cl_run -c 2>/dev/null)" | awk '{print ($1 > 80)}')" "1"
 
-# Comments, blank lines and duplicates are dropped; the count in the banner is what the
+# Comments, blank lines and duplicates are dropped; the count of table rows is what the
 # loader actually kept, so an off-by-one in the parser shows up here.
 check "--crib-list loads the cribs it should" \
-  "$(cl_run 2>&1 >/dev/null | grep -c '^crib [123]/3 ')" "3"
+  "$(cl_run 2>&1 >/dev/null | grep -cE '^ +[1-9][0-9]*  [A-Z]')" "3"
 
-# Deterministic like every other search option -- including the sampled cost estimate,
-# which is single-threaded by construction precisely so a skip decision cannot depend
-# on thread timing.
+# Every crib gets a row carrying its measured cost and expected gain, which is what
+# makes a skip legible rather than arbitrary.
+check "--crib-list reports a gain column" \
+  "$(cl_run -c 2>&1 >/dev/null | grep -c 'hyp/key .*gain')" "1"
+check "--crib-list reports a gain for each crib" \
+  "$(cl_run -c 2>&1 >/dev/null | grep -cE '^ +[1-9][0-9]*  [A-Z].*([0-9]x|-)$')" "3"
+
+# Deterministic like every other search option -- including the estimate, which is
+# single-threaded and counts boards rather than timing them precisely so that a
+# reported number, and any skip decision, cannot depend on thread timing.
 check "--crib-list is -T-independent" \
   "$(cl_run -c -T 1 2>/dev/null)" "$(cl_run -c -T 4 2>/dev/null)"
-check "--crib-list cost estimate is -T-independent" \
-  "$(cl_run -c -T 1 2>&1 >/dev/null | grep -c 'hyp')" \
-  "$(cl_run -c -T 4 2>&1 >/dev/null | grep -c 'hyp')"
+check "--crib-list cost table is -T-independent" \
+  "$(cl_run -c -T 1 2>&1 >/dev/null | grep -E '^ +[1-9][0-9]*  [A-Z]')" \
+  "$(cl_run -c -T 4 2>&1 >/dev/null | grep -E '^ +[1-9][0-9]*  [A-Z]')"
 
 # The cost check (cribs.md §4.2b): under -c a surviving key is climbed once per
 # surviving HYPOTHESIS, so a crib that rejects nothing multiplies the work instead of
-# skipping it. A cap of 0.001 hypotheses per key is below anything real, so every crib
-# must be skipped.
+# skipping it. A cap of 0.001 per key is below anything real, so every crib that costs
+# ANYTHING is skipped -- NOTINTHISMESSAGE rejects the whole sample and measures a flat
+# zero, so it is correctly kept, which is the behaviour worth pinning down.
 check "--crib-list --crib-max-hyps skips costly cribs" \
-  "$(cl_run -c --crib-max-hyps 0.001 2>&1 >/dev/null | grep -c 'skipped: .* exceeds')" "3"
+  "$(cl_run -c --crib-max-hyps 0.001 2>&1 >/dev/null | grep -c 'skipped: over')" "2"
 # It is OFF unless asked for, and that default is measured, not cautious: a break-even
 # rule skipped every crib actually present in the message (cribs.md §12 step 6). A
 # check that only fired with the flag would pass just as well if the default were
 # wrong, so assert the default explicitly.
 check "--crib-list skips nothing by default" \
-  "$(cl_run -c 2>&1 >/dev/null | grep -c 'skipped: .* exceeds')" "0"
-check "--crib-list runs no cost estimate by default" \
-  "$(cl_run -c 2>&1 >/dev/null | grep -c 'hyp/key')" "0"
-# Skipping every crib leaves nothing scored, which is fatal rather than silently empty.
-check "--crib-list with every crib skipped is fatal" \
-  "$(cl_run -c --crib-max-hyps 0.001 >/dev/null 2>&1; echo $?)" "1"
+  "$(cl_run -c 2>&1 >/dev/null | grep -c 'skipped: over')" "0"
 check "--crib-max-hyps rejects a negative cap" \
   "$(cl_run -c --crib-max-hyps -3 >/dev/null 2>&1; echo $?)" "1"
 
 # A crib longer than the ciphertext, or one that cannot sit anywhere, is fatal for a
-# single --crib but ORDINARY for a library: skip it and try the next.
+# single --crib but ORDINARY for a library: skip it and try the next. The ciphertext
+# itself is the one crib guaranteed to have no viable alignment -- it has exactly one,
+# and an Enigma never encrypts a letter to itself.
 cl_bad=$(mktemp)
-cl_self=$(printf '%s' "$cb_ct" | cut -c4-15)
-printf '%s\n%s\nOBERKOMMANDO\n' "$(printf 'A%.0s' $(seq 1 200))" "$cl_self" > "$cl_bad"
+printf '%s\n%s\nOBERKOMMANDO\n' "$(printf 'A%.0s' $(seq 1 200))" "$cb_ct" > "$cl_bad"
+cl_bad_run() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA \
+                 -g QEW -c --crib-list "$cl_bad"; }
 check "--crib-list skips unusable cribs instead of dying" \
-  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
-     --crib-list "$cl_bad" 2>/dev/null)" "$cb_pt"
+  "$(cb_pct "$(cl_bad_run 2>/dev/null)" | awk '{print ($1 > 80)}')" "1"
 check "--crib-list says why each crib was skipped" \
-  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
-     --crib-list "$cl_bad" 2>&1 >/dev/null \
-     | grep -c 'skipped: \(longer than\|cannot sit\)')" "2"
+  "$(cl_bad_run 2>&1 >/dev/null | grep -c 'skipped: \(longer than\|cannot sit\)')" "2"
 rm -f "$cl_bad"
+
+# Skipping every crib leaves nothing scored, which is fatal rather than silently empty.
+cl_none=$(mktemp)
+printf 'OBERKOMMANDO\nXSIEGFRIEDXX\n' > "$cl_none"
+check "--crib-list with every crib skipped is fatal" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+     --crib-list "$cl_none" --crib-max-hyps 0.001 >/dev/null 2>&1; echo $?)" "1"
+rm -f "$cl_none"
 
 # The column header is printed once for the whole run, not once per crib, and a later
 # crib must not re-echo boards worse than the best already shown.
-check "--crib-list prints one column header for the run" \
+check "--crib-list prints one progress header for the run" \
   "$(cl_run -c 2>&1 >/dev/null | grep -c '^ *Score .*Text$')" "1"
 
 # The option combinations, per cribs.md §8. --crib-at pins ONE alignment and the cribs

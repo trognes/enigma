@@ -272,7 +272,11 @@ English tables.
   You rarely know which phrase a message contains — you know the vocabulary of
   the network, which is what `eval/build_cribs.py` harvests. A crib that is too
   long, cannot sit anywhere, or rejects every key is skipped rather than fatal,
-  because most of a library not fitting a given message is the normal case
+  because most of a library not fitting a given message is the normal case.
+  Each crib gets a row before its sweep — length, viable alignments, measured
+  cost, and **expected gain** (what a key costs without the crib over what it
+  costs with it, so above 1 saves work and below 1 costs more than no crib),
+  which is the guide to why a crib is worth running or was skipped
 - **`--crib-max-hyps X`** — Skip a `--crib-list` crib costing more than `X`
   surviving *hypotheses per key* — the real unit, since under `-c` a surviving
   key is climbed once per surviving hypothesis (measured 1.0 where a crib

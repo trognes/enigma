@@ -188,6 +188,13 @@ static double opt_crib_max_hyps = 0.0;
    milliseconds -- negligible beside the sweep it decides whether to run, and large
    enough that the per-key rate has settled. */
 static const size_t crib_sample_keys = 256;
+/* Keys on which both sides of the choice are actually RUN, to measure the expected
+   gain (the hypothesis count above needs a much larger sample, but it is far cheaper
+   per key -- a climb costs thousands of board scores where a deduction costs tens of
+   propagations). Eight keys, and a crib that has fallen this far behind on them is
+   reported as a bound rather than measured further. */
+static const size_t crib_gain_keys = 8;
+static const uint64_t crib_gain_budget = 64;
 static char * opt_plaintext; /* plaintext to compare to */
 static const char * opt_language; /* english, german, danish, french, swedish, finnish,
                                       icelandic, polish, spanish, wehrmacht; no default */
@@ -4673,11 +4680,23 @@ struct crib_cost
   double hyps_per_key;   /* surviving hypotheses per sampled key */
   double pinned;         /* letters pinned per surviving hypothesis */
   size_t sampled;        /* keys actually sampled (after the 7.12 collapse) */
+  /* Expected throughput gain: what a key costs WITHOUT this crib over what it costs
+     WITH it, both measured on the same keys as plugboards scored -- so it already
+     contains the two effects that pull against each other, the keys the crib rejects
+     outright and the extra climbs it adds for every surviving hypothesis. No model:
+     the seeded climb is actually run rather than priced by move-set arithmetic.
+       > 1 means the crib is expected to save work, < 1 that it costs more than not
+     using a crib at all. It measures THROUGHPUT ONLY and says nothing about recovery,
+     which is the whole reason it must not be used to prune a library on its own
+     (cribs.md 12 step 6). Zero when there was nothing to measure. */
+  double gain;
+  bool gain_bounded;     /* the crib side hit its work budget: gain is "at most this" */
+  bool gain_atleast;     /* the crib scored NOTHING on the gain keys: "at least this" */
 };
 
 static crib_cost crib_estimate(size_t nsample)
 {
-  crib_cost c = { 0.0, 0.0, 0 };
+  crib_cost c = { 0.0, 0.0, 0, 0.0, false, false };
   key_space ks = build_key_space();
   size_t rg = ks.rsize * ks.gsize;
   if ((rg == 0) || ks.tasks.empty())
@@ -4722,12 +4741,76 @@ static crib_cost crib_estimate(size_t nsample)
             }
     }
 
-  delete m;
-  delete[] all;
   if (c.sampled > 0)
     c.hyps_per_key = static_cast<double>(hyps) / static_cast<double>(c.sampled);
   if (hyps > 0)
     c.pinned = static_cast<double>(pins) / static_cast<double>(hyps);
+
+  /* EXPECTED GAIN, measured rather than modelled: run both sides of the choice on the
+     same keys and compare plugboards scored. crib_unit() is the real per-key work with
+     this crib -- the deduction, then one seeded climb per surviving hypothesis -- and
+     hillclimb_one() is the real per-key work without it. Their ratio therefore already
+     contains both effects that pull against each other, the keys the crib rejects for
+     free and the extra climbs it adds where it does not.
+       Counting boards rather than timing keeps the number reproducible, which matters
+     because it is printed. The one thing it leaves out is the deduction's own cost,
+     which runs outside the score loop and so is not counted (the caveat CLAUDE.md
+     records for score_iter generally) -- it flatters a crib that rejects nearly
+     everything, where the true gain saturates at the deduction's own price.
+       Only under -c: without a climb there is nothing to seed, and a crib is measured
+     to lose against a plain scan anyway (cribs.md 4.2b). */
+  if (opt_hillclimb && (c.sampled > 0))
+    {
+      size_t gstride = stride * ((c.sampled + crib_gain_keys - 1) / crib_gain_keys);
+      if (gstride < stride)
+        gstride = stride;
+      uint64_t with = 0, without = 0;
+      size_t done = 0;
+      for (size_t idx = 0; (idx < rg) && (done < crib_gain_keys); idx += gstride)
+        {
+          if (! key_to_machine(*m, idx, ks.tasks, ks.range, ks.rc, ks.gc, all,
+                               rg, ks.gsize,
+                               static_cast<size_t>(ks.rc[1]) * ks.rc[2],
+                               static_cast<size_t>(ks.gc[1]) * ks.gc[2], cur_wo, rg6))
+            continue;
+          uint64_t b0 = m->plugboards_scored;
+          crib_unit(*m, idx, 0);
+          with += m->plugboards_scored - b0;
+          /* Re-decode the key: the climb above left the machine holding its own board,
+             and hillclimb_one must start from the same state crib_unit did. */
+          key_to_machine(*m, idx, ks.tasks, ks.range, ks.rc, ks.gc, all, rg, ks.gsize,
+                         static_cast<size_t>(ks.rc[1]) * ks.rc[2],
+                         static_cast<size_t>(ks.gc[1]) * ks.gc[2], cur_wo, rg6);
+          b0 = m->plugboards_scored;
+          hillclimb_one(*m, idx, 0);
+          without += m->plugboards_scored - b0;
+          done++;
+          /* A crib that rejects nothing runs a climb per surviving hypothesis, so a
+             few keys of it can cost more than the whole rest of the estimate. Once it
+             is that far behind, the exact figure does not matter -- stop and report
+             the bound. Deterministic: fixed key order, fixed threshold. */
+          if (with > crib_gain_budget * without)
+            {
+              c.gain_bounded = true;
+              break;
+            }
+        }
+      /* with == 0 means the crib rejected every one of the gain keys, so it cost no
+         climbs at all -- the best possible result, and the one place a ratio has no
+         denominator. Report the lower bound the sample supports (as if a single board
+         had been scored) rather than nothing, which would read as "no information"
+         for the strongest cribs in the list. */
+      if (with > 0)
+        c.gain = static_cast<double>(without) / static_cast<double>(with);
+      else if (without > 0)
+        {
+          c.gain = static_cast<double>(without);
+          c.gain_atleast = true;
+        }
+    }
+
+  delete m;
+  delete[] all;
   return c;
 }
 
@@ -5430,14 +5513,23 @@ static void run_crib_list(char * result)
   unsigned long long tot_boards = 0;
   size_t n = g_crib_list.size();
 
+  /* One columnar line per crib, under a header, so the list reads as a table and a
+     skip sits beside the numbers that explain it. "gain" is what a key costs without
+     this crib over what it costs with it, both measured (crib_estimate) -- the guide
+     to why a crib is or is not worth running. */
+  fprintf(stderr, "  %4s  %-24s %4s %4s %9s %8s  %s\n",
+          "#", "crib", "len", "algn", "hyp/key", "gain", "note");
+
   for (size_t i = 0; i < n; i++)
     {
       opt_crib_text = g_crib_list[i].c_str();
       int len = static_cast<int>(g_crib_list[i].size());
+      char row[128];
+      snprintf(row, sizeof row, "  %4zu  %-24s %4d", i + 1, opt_crib_text, len);
       if (len > textlength)
         {
-          fprintf(stderr, "crib %zu/%zu  %-24s skipped: longer than the ciphertext\n",
-                  i + 1, n, opt_crib_text);
+          fprintf(stderr, "%s %4s %9s %8s  skipped: longer than the ciphertext\n",
+                  row, "-", "-", "-");
           skipped++;
           continue;
         }
@@ -5446,42 +5538,43 @@ static void run_crib_list(char * result)
         {
           /* Every alignment has the crib matching the ciphertext, which an Enigma
              never does -- so this crib cannot sit anywhere in this message. */
-          fprintf(stderr, "crib %zu/%zu  %-24s skipped: cannot sit anywhere\n",
-                  i + 1, n, opt_crib_text);
+          fprintf(stderr, "%s %4s %9s %8s  skipped: cannot sit anywhere\n",
+                  row, "0", "-", "-");
           skipped++;
           continue;
         }
 
-      /* Measure the crib before paying for it. The estimate is over a fixed stride of
-         the key space, so it is deterministic and independent of -T. */
-      crib_cost c = { 0.0, 0.0, 0 };
-      if (opt_crib_max_hyps > 0.0)
-        {
-          c = crib_estimate(crib_sample_keys);
-          if (c.hyps_per_key > opt_crib_max_hyps)
-            {
-              fprintf(stderr,
-                      "crib %zu/%zu  %-24s skipped: %.1f hypotheses/key exceeds %.1f\n",
-                      i + 1, n, opt_crib_text, c.hyps_per_key, opt_crib_max_hyps);
-              skipped++;
-              continue;
-            }
-        }
+      /* Measure the crib before paying for it: the estimate runs over a fixed stride
+         of the key space, single-threaded, so both the reported numbers and any skip
+         are reproducible and independent of -T. */
+      crib_cost c = crib_estimate(crib_sample_keys);
 
-      fprintf(stderr, "crib %zu/%zu  %-24s %d letters, %d alignment%s",
-              i + 1, n, opt_crib_text, len,
-              crib_aligns, (crib_aligns == 1) ? "" : "s");
-      if (c.sampled > 0)
+      /* A strong crib leaves NO hypothesis alive anywhere in the sample, which is the
+         best possible news and would read as an error printed as "0.0"; say what was
+         actually measured, a bound from the sample size. */
+      char hyp[16], gain[16];
+      if (c.sampled == 0)
+        snprintf(hyp, sizeof hyp, "%s", "-");
+      else if (c.hyps_per_key == 0.0)
+        snprintf(hyp, sizeof hyp, "<%.3f", 1.0 / static_cast<double>(c.sampled));
+      else
+        snprintf(hyp, sizeof hyp, "%.1f", c.hyps_per_key);
+      if (c.gain <= 0.0)
+        snprintf(gain, sizeof gain, "%s", "-");
+      else if (c.gain >= 1000.0)
+        snprintf(gain, sizeof gain, "%s", ">1000x");    /* beyond useful resolution */
+      else
+        snprintf(gain, sizeof gain, "%s%.2gx",
+                 c.gain_bounded ? "<" : (c.gain_atleast ? ">" : ""), c.gain);
+
+      if ((opt_crib_max_hyps > 0.0) && (c.hyps_per_key > opt_crib_max_hyps))
         {
-          /* A strong crib leaves NO hypothesis alive anywhere in the sample, which is
-             the best possible news and would read as an error printed as "0.0". Say
-             what was actually measured -- an upper bound from the sample size. */
-          if (c.hyps_per_key == 0.0)
-            fprintf(stderr, ", under %.3f hyp/key", 1.0 / static_cast<double>(c.sampled));
-          else
-            fprintf(stderr, ", %.1f hyp/key, %.1f pinned", c.hyps_per_key, c.pinned);
+          fprintf(stderr, "%s %4d %9s %8s  skipped: over --crib-max-hyps %.3g\n",
+                  row, crib_aligns, hyp, gain, opt_crib_max_hyps);
+          skipped++;
+          continue;
         }
-      fprintf(stderr, "\n");
+      fprintf(stderr, "%s %4d %9s %8s\n", row, crib_aligns, hyp, gain);
 
       tried++;
       double s = bruteforce(text, true);
@@ -6468,6 +6561,10 @@ int main(int argc, char * * argv)
               "--crib-list (the cribs differ in length and position)");
       if (opt_crib_max_hyps < 0.0)
         fatal("--crib-max-hyps must not be negative (0, the default, never skips)");
+      /* A single --crib was asked for explicitly and is never skipped, so a cap on it
+         would silently do nothing -- say so rather than accept and ignore it. */
+      if ((opt_crib_max_hyps != 0.0) && (opt_crib_list == nullptr))
+        fatal("--crib-max-hyps needs --crib-list (a single --crib is never skipped)");
     }
   else if ((opt_crib_at >= 0) || opt_crib_dump)
     fatal("--crib-at and --crib-dump need --crib");

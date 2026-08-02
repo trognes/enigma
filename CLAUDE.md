@@ -723,6 +723,20 @@ are read from a **data directory** (filenames built as
   alignment, and the cribs differ in length). The progress-line column header is
   printed once for the run, and the echo high-water mark carries across cribs so
   a later crib cannot re-print boards worse than the best already found.
+- **The crib list reports an expected gain per crib**, printed as a table before
+  each sweep: `# crib len algn hyp/key gain`. `gain` is what a key costs
+  *without* the crib over what it costs *with* it — above 1 it saves work, below
+  1 it costs more than using no crib at all. **Measured, not modelled**:
+  `crib_unit()` and `hillclimb_one()` are both run on the same eight sampled
+  keys and their plugboards-scored counters compared, so it already contains
+  both opposing effects (keys rejected for free, extra climbs where they are
+  not). Boards rather than wall time, so a printed number stays reproducible.
+  It omits the deduction's own cost (outside the score loop), so a crib
+  rejecting nearly everything is flattered — hence `>1000x` rather than a
+  figure. `<` marks a crib that hit the work budget: a bound, not a measurement.
+  The table is also the standing argument against acting on it automatically —
+  on the shipped library the cribs actually present in the message are the ones
+  scoring ~0.03–0.07×.
 - `--crib-max-hyps X` **skip a crib that costs too many hypotheses** (**not
   recommended** — measured down; needs `--crib-list`; **default 0 = off**). The
   unit is **surviving hypotheses per key**, not rejection rate and not crib
