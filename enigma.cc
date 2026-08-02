@@ -3143,6 +3143,78 @@ static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
 /* One parallel exhaustion unit: all combos whose first forced pair is g_exhaust_firsts[fi],
    over all restarts. Leaves m at the unit's best board/plaintext and returns its score, or
    a sentinel below any real score if the first pair leaves no room for E-1 more pairs. */
+/* --- the hybrid: deduce, then climb (cribs.md 7, 12 step 5) --------------------------
+
+   One work item at a key the crib did not reject: climb once from EVERY surviving
+   hypothesis, seeded with the plugs that hypothesis deduces, and keep the best.
+
+   The deduced plugs are HELD FIXED for the climb, in PLUG_FIXED_EX -- the same per-worker
+   pin set --exhaust uses, because plug_fixed is a read-only global that no worker may
+   touch. They stay fixed through --polish too: a deduced plug comes from arithmetic on the
+   machine equation, while the finisher's cascade is score-driven local repair, so
+   releasing them would let weaker evidence overwrite stronger (cribs.md 7b). A WRONG
+   hypothesis needs no such rescue -- it loses on score to the other 25.
+
+   Letters the deduction settles as carrying NO cable are pinned as well: board[x] == x is
+   a real finding, not an absence of one, and marking it stops the climb wasting moves on a
+   letter that cannot be plugged. That is the value cribs.md 7 wanted --no-plug for, had
+   here for free.
+
+   Cost is one climb per surviving hypothesis. With a long crib that is usually one; with a
+   short one it is the several that cribs.md 7a's seed mode expects and prices. */
+static void dump_all(machine & m, double score);   /* defined with the other diagnostics */
+
+static double crib_unit(machine & m, size_t key_index, int restart)
+{
+  double best = 0.0;
+  bool have = false;
+  char best_pt[maxlen + 1];
+  unsigned char best_steck[asize];
+  int best_at = -1;
+  int board[asize];
+
+  for (int a = 0; a < crib_aligns; a++)
+    for (int h = 0; h < asize; h++)
+      {
+        if (! crib_try(m, crib_align[a], crib_anchor_at[a], h, board))
+          continue;
+        init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
+        memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
+        for (int x = 0; x < asize; x++)
+          if (board[x] >= 0)
+            {
+              m.steckerbrett[x] = static_cast<unsigned char>(board[x]);
+              PLUG_FIXED_EX[x] = true;               /* ... plus this deduction */
+            }
+        /* The kick is off by default here and should stay off: it can only scatter the
+           letters the deduction did NOT settle, and a seeded climb starts near the answer
+           (cribs.md 7b). -R N still asks for N kicked passes if that is wanted. */
+        if (opt_restarts >= 1)
+          {
+            uint64_t rng = restart_seed(key_index, restart);
+            perturb_steckerbrett(m, & rng, opt_perturb);
+          }
+        double sc = run_stages<true>(m);
+        if (opt_dump_all)
+          dump_all(m, sc);
+        if (! have || (sc > best))
+          {
+            best = sc;
+            have = true;
+            best_at = crib_align[a];
+            memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+            memcpy(best_steck, m.steckerbrett, asize);
+          }
+      }
+
+  if (! have)
+    return -1e300;      /* no hypothesis survived: never wins the merge */
+  memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+  memcpy(m.steckerbrett, best_steck, asize);
+  g_crib_stop_shown = best_at;   /* the progress line reports the winning alignment */
+  return best;
+}
+
 static double exhaust_unit(machine & m, size_t key_index, size_t fi)
 {
   exhaust_ctx c;
@@ -3895,8 +3967,10 @@ void search_worker(machine & m,
              materialised only for a new best, below. */
           double score;
           if (opt_hillclimb)
-            score = opt_exhaust ? exhaust_unit(m, keyidx, static_cast<size_t>(restart))
-                                : hillclimb_one(m, keyidx, restart);
+            score = opt_exhaust
+                      ? exhaust_unit(m, keyidx, static_cast<size_t>(restart))
+                      : (opt_crib_text ? crib_unit(m, keyidx, restart)
+                                       : hillclimb_one(m, keyidx, restart));
           else
             {
               init_steckerbrett(m, opt_steckerbrett);

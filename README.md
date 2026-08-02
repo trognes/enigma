@@ -261,7 +261,11 @@ English tables.
   alignments, so a swept crib needs **16 letters or more** to be worth anything
   (12 rejects 99.9% pinned and 5.3% swept). Not combinable with `-F`,
   `--exhaust`, `--ring-stride` or `-A`. Add `--crib-dump` to print the plugs
-  each surviving hypothesis deduces `[off]`
+  each surviving hypothesis deduces `[off]`. **With `-c` the crib also seeds the
+  climb**: the deduced plugs are held fixed and the climb finds the rest, which
+  is where a short crib earns its keep even though it cannot filter — measured
+  92% of letters recovered against 8% unseeded, on an 88-letter message with the
+  plugboard hidden
 - **`-R N` / `--restarts N`** — Random restart attempts: `0` = one deterministic
   climb from the seed (no kick); `N` = exactly `N` kicked climbs, keep the best
   `[0]`

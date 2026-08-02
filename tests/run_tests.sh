@@ -1480,6 +1480,26 @@ check "--crib: progress lines stay within 80 columns" \
      --crib OBERKOMMANDO 2>&1 >/dev/null | grep -E "$progress_re|^ *Score " \
      | awk '{ if (length($0) > 80) n++ } END { print n+0 }')" "0"
 
+# The hybrid (cribs.md §7): with -c the climb starts from the plugs each surviving
+# hypothesis deduces, held fixed, instead of from an empty board. The plugboard is
+# HIDDEN here -- only the crib is given -- which is the case the mode exists for.
+cb_pct() { python3 -c 'import sys
+t, g = sys.argv[1], sys.argv[2]
+print(int(100.0 * sum(a == b for a, b in zip(t, g)) / len(t)))' "$cb_pt" "$1"; }
+check "--crib: the seeded climb recovers most of a hidden board" \
+  "$(cb_pct "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g QEW -c \
+                  --crib OBERKOMMANDO --crib-at 3)" | awk '{print ($1 > 80)}')" "1"
+# The control: the same climb without the crib gets nowhere on this message, so the
+# check above cannot pass for some reason other than the seeding.
+check "--crib control: the same climb unseeded does not" \
+  "$(cb_pct "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 64)" \
+     | awk '{print ($1 < 40)}')" "1"
+# Sweeping costs nothing for seeding: a 12-letter crib cannot filter a swept search
+# (§4.2a), but the right alignment's hypothesis still produces the best board.
+check "--crib: seeding works swept, not just pinned" \
+  "$(cb_pct "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g QEW -c \
+                  --crib OBERKOMMANDO)" | awk '{print ($1 > 80)}')" "1"
+
 # Deterministic, like every other search option.
 check "--crib is -T-independent" \
   "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g ... -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T 1)" \
