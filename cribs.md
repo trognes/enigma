@@ -1043,6 +1043,11 @@ seven correct plugs, and four of that recipe's parts stop making sense:
 - **`-M` off.** It makes the cap a strict descent target, which earns its keep
   pulling an *over*-cap board down after a big kick. Seeded, the climb grows
   from five to ten and is never over the cap, so `-M` is near-inert.
+- **`-J` on.** Measured 1.8× cheaper on a seeded climb (§7a's timing table),
+  which at equal wall time buys more of everything else. Its documented failure
+  mode is over-plugging when few plugs are truly needed — exactly this regime —
+  so pair it with the cap above rather than running it bare, and confirm the
+  recovery side before recommending it outright.
 - **`--random 0`.** The kick only perturbs free letters, so it cannot damage the
   seed — but scattering the remaining five when you already start near the
   answer is more likely to cost than to buy. The seeded climb wants to *finish*
@@ -1134,6 +1139,30 @@ left to find, so fewer passes. Measured at L=60, `-R 16 -J --polish`, 30 trials
 
 So the 26 climbs are not 26× the cost of the baseline. At a 5-cable seed they
 come to **26 / 3.3 ≈ 8×** a single unseeded climb.
+
+**That table counted boards, not seconds; timed, it is slightly conservative.**
+`eval/crib_seed_cost.py` runs a fixed 17 576-key sweep with one deterministic
+climb per key, the plugs given by `-s` so they pin exactly as a deduction's do
+(min of 3 reps, `-T 1`, `-f -l wehrmacht`):
+
+| plugs given | wall | speedup | boards scored | predicted above |
+|--:|--:|--:|--:|--:|
+| 0 | 15.71 s | 1.00× | 55 881 692 | — |
+| **5** | **4.42 s** | **3.55×** | 15 256 095 | 3.30× |
+| 8 | 1.26 s | 12.48× | 4 002 530 | 10.74× |
+
+Wall time and the board counter move together here (3.55× against 3.66× at five
+plugs), which is what should happen when nothing runs outside the score loop —
+no cascade, no finisher. The measured speedups slightly exceed the predicted
+ones because the arithmetic counted only the shrinking move set, while a seeded
+climb also converges in fewer passes.
+
+**`-J` is worth another 1.8× on a seeded climb.** At five preset plugs, first-
+improvement with dynamic ordering takes the same sweep from 4.36 s to **2.40 s**
+(15.3 M boards to 7.6 M) — so §7b's recipe should carry `-J`. **Cost only**: the
+recovery side is unmeasured here, and this is the known-few-plug regime where
+`-J` is documented to need a cap to win on quality, so the pairing to test is
+`-J` with `--score f10` rather than `-J` alone.
 
 **The unplugged letters help too.** The deduction also settles letters as
 carrying *no* cable, and `--no-plug` (§8) would freeze those as well:

@@ -246,6 +246,22 @@ hypothesis wins 5% of the time at 8 letters and never from 10 up.** When it does
 failure is total -- 8.6% mean recovery, nothing in the output to flag it -- so the seed
 mode's floor is 10 letters, set by silent failure rather than by cost. See cribs.md 7c.
 
+## What a seeded climb costs (`crib_seed_cost.py`)
+
+cribs.md 7a priced a seeded climb by move-set combinatorics and never timed it.
+`crib_seed_cost.py` does: a fixed 17576-key sweep, one deterministic climb per key, plugs
+given with `-s` so they pin exactly as a deduction's do, min of several reps, single-
+threaded.
+
+```sh
+python3 eval/crib_seed_cost.py --reps 3
+```
+
+**Measured: 3.55x at five preset plugs and 12.48x at eight** -- slightly better than the
+3.30x/10.74x predicted, because the arithmetic counted only the shrinking move set while a
+seeded climb also converges in fewer passes. `-J` is worth a further **1.8x** on the
+seeded climb (cost only; the recovery side is unmeasured).
+
 ## Authentic message set (real traffic)
 
 `enigma-messages.txt` is a database of **13 genuine 1941 Wehrmacht Enigma messages**
