@@ -370,12 +370,12 @@ are read from a **data directory** (filenames built as
   start from (`-s` pairs its letters, `--no-plug` leaves its letters
   self-steckered). **The kick needed the extra guard**: it draws from
   self-steckered letters, which is exactly what a `--no-plug` letter looks like,
-  so `perturb_steckerbrett()` tests `plug_fixed[]` as well as
-  `steckerbrett[i] == i`. `--exhaust` excludes them from its forced pairs and
-  from its free-letter bound the same way. A cable has two ends, so a marked
-  letter removes **25 of the 325** candidate toggles, not one. Fatal on a letter
-  `-s` also plugs (the two statements contradict), a repeated letter, a
-  non-letter, or no `-c`. `-T`-deterministic.
+  so `perturb_steckerbrett()` tests `plug_fixed[]` as well as `steckerbrett[i]
+  == i`. `--exhaust` excludes them from its forced pairs and from its
+  free-letter bound the same way. A cable has two ends, so a marked letter
+  removes **25 of the 325** candidate toggles, not one. Fatal on a letter `-s`
+  also plugs (the two statements contradict), a repeated letter, a non-letter,
+  or no `-c`. `-T`-deterministic.
 - `-c` hill-climb the plugboard. The climb rule is **steepest ascent** by
   default: each step scans the whole 325-pair toggle operator and applies the
   single best improving move, to convergence. `-J` swaps that rule for
@@ -673,17 +673,27 @@ are read from a **data directory** (filenames built as
   12-letter crib. Runs after `setup_mapping()`, reads only `rows[]`, so it is a
   pure per-key test and `-T`-deterministic; zero cost when the option is off.
   **The diagonal board is what does the work**, not menu loops: a loop-free
-  12-letter menu still rejects 88% of settings against 0% without it
-  (`cribs.md` §4.1). `--crib-at` is required (the alignment sweep is step 4) and
-  the crib mode is rejected against `-F`, `--exhaust`, `--ring-stride` and `-A`.
-  A crib that matches the ciphertext anywhere is fatal — an Enigma never
-  encrypts a letter to itself, so that alignment is impossible. `--crib-dump`
-  prints each surviving hypothesis and the plugs it deduces (diagnostic, needs
-  `--crib`); `eval/crib_vectors_check.py` checks those against
-  `eval/crib_menu.py`'s vectors, which carry the true board — 40/40 exact.
-  **The rejection count is reported per key, counted at the key's first work
-  item**: a key's restarts can straddle a chunk boundary and be seen as new by
-  two workers, so counting at the deduction would make the total depend on `-T`.
+  12-letter menu still rejects 88% of settings against 0% without it (`cribs.md`
+  §4.1). `--crib-at` is optional: given, the crib is pinned there; omitted,
+  every alignment the self-encryption filter leaves is tried and a key is
+  rejected only if **every** alignment rejects it. **That compounding sets the
+  usable crib length.** Rejections multiply, so what matters is `∏ p_i` over the
+  alignments, not `p`: measured on a 125-letter message, a 12-letter crib
+  rejects 99.9% pinned but only **5.3%** swept, while 16 letters holds at 99.9%
+  either way — and the product of the 70 measured per-alignment rates (63.4% to
+  100%) predicts 5.2% against 5.3% observed, so the weakest alignments dominate.
+  16 letters is the swept floor; below it a crib can only seed a climb
+  (`cribs.md` §4.2a). The crib mode is rejected against `-F`, `--exhaust`,
+  `--ring-stride` and `-A`. A crib that matches the ciphertext anywhere is fatal
+  — an Enigma never encrypts a letter to itself, so that alignment is
+  impossible. `--crib-dump` prints each surviving hypothesis, its alignment and
+  the plugs it deduces (diagnostic, needs `--crib`); the progress line gains an
+  **`A` column** for the alignment, its width taken from the preview so the
+  80-column budget holds; `eval/crib_vectors_check.py` checks those against
+  `eval/crib_menu.py`'s vectors, which carry the true board — 40/40 exact. **The
+  rejection count is reported per key, counted at the key's first work item**: a
+  key's restarts can straddle a chunk boundary and be seen as new by two
+  workers, so counting at the deduction would make the total depend on `-T`.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are

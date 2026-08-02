@@ -196,6 +196,12 @@ numbers they barely did. Two consequences the rest of this document has not yet
 absorbed: the 8–11 letter band is **not** seed-only (8 letters rejects 16%, 10
 rejects 55%), and §5's tier boundaries were drawn on the old figures.
 
+
+> ⚠️ **That floor of 12 holds only when you know WHERE the crib sits.** Every
+> rejection figure in this section is *per alignment*. A real run does not know
+> the alignment and has to sweep, and rejection then compounds multiplicatively
+> — see §4.2a, which puts the swept floor back at **16**.
+
 What is *not* settled is whether this converts into wall time. Rejection is what
 makes a rotor setting cheap, but the conversion needs a per-stop cost — how long
 a surviving hypothesis takes to check — and that measurement belongs with the
@@ -255,6 +261,48 @@ only workable one.
 The "20 letters, three loops" rule of thumb comes from 1941, when every stop
 cost a human several minutes at a checking machine. That economics is gone, and
 the length guidance moves with it.
+
+**4.2a Sweeping alignments multiplies the survival, and that sets the real
+floor.** A run that does not know where the crib sits must try every alignment
+the self-encryption filter leaves, and a rotor setting is only rejected if it is
+rejected at *all* of them. Rejections therefore multiply: with per-alignment
+rejection `p` over `A` alignments the setting survives unless every one of them
+kills it, so what matters is `∏ p_i`, not `p`.
+
+Measured end to end on a 125-letter message (`--crib` with and without
+`--crib-at`, same crib, 17 576 keys):
+
+| crib length | viable alignments | rejected, pinned | rejected, sweeping |
+|--:|--:|--:|--:|
+| 8 | 86 | 44.4% | **0.0%** |
+| 10 | 78 | 96.1% | **0.0%** |
+| 12 | 71 | 99.9% | **5.3%** |
+| **16** | 56 | 100.0% | **99.9%** |
+| 20 | 45 | 100.0% | 100.0% |
+| 25 | 36 | 100.0% | 100.0% |
+
+**16 letters is the floor for a swept run**, and the transition is abrupt: one
+step down, at 12 letters, the filter throws away 5% of the keyspace instead of
+99.9%.
+
+The arithmetic is ordinary compounding, not something subtler. Measuring each of
+the 70 alignments separately for the 12-letter crib gives per-alignment
+rejection from **63.4%** to 100% (median 99.2%), and the product of those
+seventy numbers is **5.2%** against the 5.3% measured. Two things follow. The
+weakest alignments dominate — a single 63% one costs more than thirty 99% ones
+— and a crib that looks strong on average can still be useless swept.
+
+**This restores §5's 16-letter tier boundary, for a different reason than the
+plan gave.** The old rationale was that loops appear around there; §4.1 showed
+loops are not the mechanism. The real reason is that 16 letters is where
+per-alignment rejection gets close enough to 1 to survive being raised to the
+70th power.
+
+It also sharpens where each mode applies. **Pinned, 12 letters is plenty**;
+swept, it is not. And since only about 19% of messages carry a 16-letter crib
+against 55% for a 12-letter one (§4.2), the common case is a crib that cannot
+filter a swept search at all — which is exactly the case §7a's crib-as-seed mode
+exists for, and is now the measured argument for it rather than an expectation.
 
 **4.2 How often a crib is actually present.** Building a crib library from 57 of
 the 58 messages and testing it on the 58th:
@@ -1477,10 +1525,10 @@ and compares against the true board — 40/40 exact, crib lengths 8–25. Measur
 99.9% of a start-position keyspace rejected on a 12-letter crib. `--crib-dump`
 prints each surviving hypothesis and its deduced plugs.
 
-**Step 4 — the alignment sweep**, with the self-encryption filter. This is what
-makes it usable on a real message. It is also where the progress line gains its
-alignment column (§8), since this is the first step at which a run produces
-lines from more than one alignment.
+**Step 4 — the alignment sweep**, with the self-encryption filter. **Done** —
+`--crib-at` is now optional, and omitting it tries every alignment the filter
+leaves. It also carries the progress line's alignment column (§8). **The sweep
+changes the economics, and §4.2a records how.**
 
 **Step 5 — the hybrid** (§7). The mode we expect to be used in practice. The
 climb it hands over to is not the recommended recipe — §7b says why, and leaves

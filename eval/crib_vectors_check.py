@@ -62,8 +62,9 @@ def run(rec):
     for line in p.stderr.splitlines():
         f = line.split()
         if f and f[0] == "cribstop":
-            # cribstop <wheels> <ring> <start> <anchor> <hypothesis> <plugs...>
-            out[f[5]] = sorted(f[6:])
+            # cribstop <wheels> <ring> <start> <at> <anchor> <hypothesis> <plugs...>
+            # The vectors pin --crib-at, so every line is at that one alignment.
+            out[f[6]] = sorted(f[7:])
     return out, p.returncode
 
 
