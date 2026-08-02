@@ -4690,13 +4690,14 @@ struct crib_cost
      which is the whole reason it must not be used to prune a library on its own
      (cribs.md 12 step 6). Zero when there was nothing to measure. */
   double gain;
+  uint64_t boards;       /* plugboards the estimate itself scored, for the totals */
   bool gain_bounded;     /* the crib side hit its work budget: gain is "at most this" */
   bool gain_atleast;     /* the crib scored NOTHING on the gain keys: "at least this" */
 };
 
 static crib_cost crib_estimate(size_t nsample)
 {
-  crib_cost c = { 0.0, 0.0, 0, 0.0, false, false };
+  crib_cost c = { 0.0, 0.0, 0, 0.0, 0, false, false };
   key_space ks = build_key_space();
   size_t rg = ks.rsize * ks.gsize;
   if ((rg == 0) || ks.tasks.empty())
@@ -4704,6 +4705,7 @@ static crib_cost crib_estimate(size_t nsample)
 
   subst_table all = allocate_subst_tables(1);
   machine * m = new machine();
+  m->plugboards_scored = 0;   /* differenced below; explicit so cppcheck can see it */
   size_t cur_wo = static_cast<size_t>(-1);
   int rg6[6];
 
@@ -4807,6 +4809,10 @@ static crib_cost crib_estimate(size_t nsample)
           c.gain = static_cast<double>(without);
           c.gain_atleast = true;
         }
+      /* The estimate runs real climbs, so its work belongs in the run's totals rather
+         than vanishing with the machine it used -- ~150 ms per crib is small beside a
+         sweep but should not be invisible. */
+      c.boards = with + without;
     }
 
   delete m;
@@ -5477,6 +5483,14 @@ static double bruteforce(char * result, bool allow_empty)
   if (shown_now > g_shown_high)
     g_shown_high = shown_now;
 
+  /* `best` is about to go out of scope, so the global must stop pointing at it. This
+     was harmless while bruteforce() ran once per process, but --crib-list calls it
+     once per crib and runs climbs BETWEEN the calls (the cost estimate), and those
+     climbs read g_progress -- a dangling stack reference, caught by clang-analyzer.
+     Clearing it also makes the estimate's climbs correctly silent: they are
+     measurement, not search, and must not emit progress lines. */
+  g_progress = nullptr;
+
   if (! best.found)
     {
       if (allow_empty)
@@ -5548,6 +5562,7 @@ static void run_crib_list(char * result)
          of the key space, single-threaded, so both the reported numbers and any skip
          are reproducible and independent of -T. */
       crib_cost c = crib_estimate(crib_sample_keys);
+      tot_boards += c.boards;
 
       /* A strong crib leaves NO hypothesis alive anywhere in the sample, which is the
          best possible news and would read as an error printed as "0.0"; say what was
