@@ -1428,23 +1428,23 @@ cb_err() { { printf '%s' "$cb_ct" | "$ENIGMA" $cb_key "$@" >/dev/null; } 2>&1; }
 # The true key must survive its own crib. This is the zero-tolerance property: a
 # deduction that rejects the truth loses the message outright.
 check "--crib: the true key is not rejected" \
-  "$(cb_err --crib OBERKOMMANDO --crib-at 3 | grep -c 'rejected 0 of 1 key')" "1"
+  "$(cb_err --crib OBERKOMMANDO --crib-at 4 | grep -c 'rejected 0 of 1 key')" "1"
 
 # Every plug the surviving hypothesis deduces must match the true board. AB/EF/GH/MN/OP
 # are real cables; YY and ZZ say Y and Z carry none, which is true (the board plugs
 # A-T only). A single wrong pair here would be a bug, not a near miss.
 check "--crib: deduced plugs match the true board" \
-  "$(cb_err --crib OBERKOMMANDO --crib-at 3 --crib-dump | grep '^cribstop' \
+  "$(cb_err --crib OBERKOMMANDO --crib-at 4 --crib-dump | grep '^cribstop' \
      | sed 's/^cribstop \([^ ]* \)\{6\}//')" \
   "AB BA EF FE GH HG MN NM OP PO YY ZZ"
 
 # Against a wildcarded start the crib throws away almost everything unscored -- that is
 # the whole point -- and the run still recovers the plaintext.
 check "--crib: rejects most keys but keeps the answer" \
-  "$(run "$cb_ct" -i -u B -w 123 -r AAA -g ... -s "$cb_plugs" --crib OBERKOMMANDO --crib-at 3)" \
+  "$(run "$cb_ct" -i -u B -w 123 -r AAA -g ... -s "$cb_plugs" --crib OBERKOMMANDO --crib-at 4)" \
   "$cb_pt"
 cb_rej=$(printf '%s' "$cb_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g ... \
-         --crib OBERKOMMANDO --crib-at 3 2>&1 >/dev/null \
+         --crib OBERKOMMANDO --crib-at 4 2>&1 >/dev/null \
          | sed -n 's/^Crib: .*rejected \([0-9]*\) of \([0-9]*\).*/\1 \2/p')
 check "--crib: rejection is a large majority of the keyspace" \
   "$(printf '%s' "$cb_rej" | awk '{print ($1 > 0.9 * $2)}')" "1"
@@ -1453,7 +1453,7 @@ check "--crib: rejection is a large majority of the keyspace" \
 # straddle a chunk boundary, so two workers can each see it as new -- counting there
 # rather than at the key's first work item made this drift with -T.
 cb_count() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... \
-             -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T "$1" 2>&1 >/dev/null \
+             -c -R 4 --crib OBERKOMMANDO --crib-at 4 -T "$1" 2>&1 >/dev/null \
              | sed -n 's/^Crib: .*rejected \([0-9]*\) .*/\1/p'; }
 check "--crib: rejection count is -T-independent" "$(cb_count 1)" "$(cb_count 4)"
 
@@ -1488,7 +1488,7 @@ t, g = sys.argv[1], sys.argv[2]
 print(int(100.0 * sum(a == b for a, b in zip(t, g)) / len(t)))' "$cb_pt" "$1"; }
 check "--crib: the seeded climb recovers most of a hidden board" \
   "$(cb_pct "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g QEW -c \
-                  --crib OBERKOMMANDO --crib-at 3)" | awk '{print ($1 > 80)}')" "1"
+                  --crib OBERKOMMANDO --crib-at 4)" | awk '{print ($1 > 80)}')" "1"
 # The control: the same climb without the crib gets nowhere on this message, so the
 # check above cannot pass for some reason other than the seeding.
 check "--crib control: the same climb unseeded does not" \
@@ -1502,32 +1502,32 @@ check "--crib: seeding works swept, not just pinned" \
 
 # Deterministic, like every other search option.
 check "--crib is -T-independent" \
-  "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g ... -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T 1)" \
-  "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g ... -c -R 4 --crib OBERKOMMANDO --crib-at 3 -T 4)"
+  "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g ... -c -R 4 --crib OBERKOMMANDO --crib-at 4 -T 1)" \
+  "$(run "$cb_ct" -q -l german -u B -w 123 -r AAA -g ... -c -R 4 --crib OBERKOMMANDO --crib-at 4 -T 4)"
 
 # A crib cannot sit where it matches the ciphertext: an Enigma never encrypts a letter
 # to itself. Silently rejecting every key would look like a hard message rather than a
 # bad alignment, so it is fatal.
 cb_self=$(printf '%s' "$cb_ct" | cut -c4-15)
 check "--crib: self-encrypting alignment rejected" \
-  "$(cb_err --crib "$cb_self" --crib-at 3 >/dev/null 2>&1; echo $?)" "1"
+  "$(cb_err --crib "$cb_self" --crib-at 4 >/dev/null 2>&1; echo $?)" "1"
 
 # The combinations cribs.md §8 rules out, each fatal at option-parsing time.
 cb_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... \
                 "$@" >/dev/null 2>&1; echo $?; }
 check "--crib without --crib-at sweeps (accepted)" \
   "$(cb_reject --crib OBERKOMMANDO)" "0"
-check "--crib-at without --crib rejected" "$(cb_reject --crib-at 3)" "1"
+check "--crib-at without --crib rejected" "$(cb_reject --crib-at 4)" "1"
 check "--crib with -F rejected" \
-  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 3 -F 5)" "1"
+  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 4 -F 5)" "1"
 check "--crib with --exhaust rejected" \
-  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 3 --exhaust 1)" "1"
+  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 4 --exhaust 1)" "1"
 check "--crib with -A rejected" \
-  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 3 -A 100)" "1"
+  "$(cb_reject -c --crib OBERKOMMANDO --crib-at 4 -A 100)" "1"
 check "--crib past the end of the ciphertext rejected" \
   "$(cb_reject --crib OBERKOMMANDO --crib-at 900)" "1"
 check "--crib with a non-letter rejected" \
-  "$(cb_reject --crib "OBERKOMM4NDO" --crib-at 3)" "1"
+  "$(cb_reject --crib "OBERKOMM4NDO" --crib-at 4)" "1"
 
 echo
 echo "== Crib libraries: --crib-list =="
@@ -1610,7 +1610,7 @@ cl_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -
 check "--crib-list with --crib rejected" \
   "$(cl_reject --crib-list "$cl_file" --crib OBERKOMMANDO)" "1"
 check "--crib-list with --crib-at rejected" \
-  "$(cl_reject --crib-list "$cl_file" --crib-at 3)" "1"
+  "$(cl_reject --crib-list "$cl_file" --crib-at 4)" "1"
 check "--crib-list with -F rejected" \
   "$(cl_reject -c --crib-list "$cl_file" -F 5)" "1"
 check "--no-crib-reorder without --crib-list rejected" \

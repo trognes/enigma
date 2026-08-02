@@ -256,7 +256,8 @@ English tables.
   never scored — measured **99.9%** of a start-position keyspace on a 12-letter
   crib. The deduction chains `steck[p] = core[steck[c]]` from a single guessed
   plug and enforces plugboard reciprocity (Welchman's diagonal board), which is
-  what makes even short, loop-free cribs bite. **`--crib-at` is optional**: omit
+  what makes even short, loop-free cribs bite. **`--crib-at` is 1-based and
+  optional**: omit
   it and every alignment is tried, but rejections then multiply across
   alignments, so a swept crib needs **16 letters or more** to be worth anything
   (12 rejects 99.9% pinned and 5.3% swept). Not combinable with `-F`,

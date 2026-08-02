@@ -55,7 +55,7 @@ def run(ct, key, crib, at, arm, args):
     wheels, refl, ring, start = key
     cmd = [BIN, "-u", refl, "-w", "".join(str(w + 1) for w in wheels),
            "-r", txt(ring), "-g", txt(start), "-c", "-f", "-l", args.lang,
-           "--crib", crib, "--crib-at", str(at),
+           "--crib", crib, "--crib-at", str(at + 1),   # --crib-at is 1-based
            "-T", str(args.threads)] + arm
     p = subprocess.run(cmd, input=ct, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE, universal_newlines=True,
