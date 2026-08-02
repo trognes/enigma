@@ -1381,17 +1381,48 @@ exists to steer toward it — per-plug consensus across converged boards is only
 *outside* the score landscape rather than being mined out of it. That is why it
 can beat compute rather than merely adding to it.
 
-**Three cautions. The first is now measured; the others are not.**
+**Three cautions. The first two are now measured; the third is not.**
 
 1. ~~The table above seeds the climb with correct plugs, and a garbage seed
    could in principle out-score them.~~ **Measured, and it happens only at 8
    letters** — see §7c.
-2. At *wrong* rotor settings you now run 26 climbs instead of one. That is where
-   the whole 26x goes, and without loops none of it can be skipped.
+2. ~~At *wrong* rotor settings you now run 26 climbs instead of one.~~
+   **Measured in §4.2b, and "26" is wrong in both directions.** The unit is
+   surviving hypotheses per key, counted with `--crib-dump`, and 26 is only the
+   number *tried* per alignment. **Pinned it is far cheaper than 26**: most of
+   the 26 die on the diagonal board before any climb runs, leaving 1.4 per
+   surviving key at 8 letters and exactly 1.0 wherever a crib rejects at all —
+   which is why a pinned 8-letter crib is a 12× *saving* rather than a 26× cost.
+   **Swept it is far worse than 26**: the count is `alignments × 26` tried and
+   **235 surviving** per key at 8 letters, a 66× slowdown. So the real caution
+   is not "26×" but "pinned or near-pinned alignment", and the cost is
+   measurable before it is paid (`crib_estimate`, reported per crib).
 3. Coverage assumes the crib is exactly right. An 8-letter crib is far more
    likely to be present (§4.2) *and* far more likely to be a coincidental match
    that deduces confident nonsense. Short cribs make both errors more common at
-   once.
+   once. **Measured, and it does not happen** — `eval/crib_absent_probe.py`, 30
+   trials, 90-letter messages, the crib a real 10-letter phrase taken from
+   another corpus message and checked absent, board hidden, rotor key given,
+   `-J -R 64`:
+
+   | | absent crib | no crib |
+   |---|--:|--:|
+   | mean winning score | −9.5588 | **−8.4389** |
+   | mean %-correct | 9.9% | 44.3% |
+   | false positives (crib scores higher) | **0 / 30** | — |
+
+   Zero, and 0 of the 8 trials where the no-crib baseline actually solved. The
+   mechanism is that wrong pins **handicap** the climb rather than helping it:
+   a deduced plug is held fixed, so an absent crib locks in plugs the climb
+   cannot undo and converges over a point *below* an unconstrained one. A
+   false positive would need the wrong pins to out-bid a free climb, and they
+   are strictly worse-off. So an absent crib fails visibly, on score.
+
+   > ⚠️ **The baseline must be able to solve, or this measures nothing.** At
+   > `-R 0` the same probe reported **40%** false positives — but recovery was
+   > 10.1% with the crib against 11.6% without, i.e. *both* arms failing, so
+   > the comparison was a coin flip between two garbage scores. Restarts are
+   > what give the no-crib arm a real answer to defend.
 
 ### 7c. Does a wrong hypothesis ever win? Measured
 
@@ -1431,7 +1462,8 @@ where a crib can filter a swept search, 10 is where it can safely seed one.
 Below 10 the answer can be wrong without looking wrong, which is worse than
 being slow.
 
-Cautions 2 and 3 remain unmeasured.
+Caution 2 has since been measured in §4.2b (and found wrong in both
+directions); caution 3 remains open.
 
 **Where this sits in the plan.** It shares all the machinery of §6 — the same
 menu, the same deduction, the same `--no-plug` output — and differs only in what
@@ -1760,12 +1792,38 @@ so a crib too weak to reject multiplies the work rather than skipping it. The
 climb it hands over to is not the recommended recipe — §7b says why, and leaves
 the target model (`-q`/`-a`/`-f`) as the one thing to A/B here.
 
-**Whether `--polish` earns its keep at all on a seeded board is a separate
-question, deliberately deferred.** It is a fixed-cost pass that completes
-near-solution boards, and a crib-seeded board is already near-solution from a
-different direction — so its lift may be small or absent here. That is an A/B to
-run once step 5 exists and there is something to measure it on, not a reason to
-hold up the step.
+**`--polish` and `-J` on a seeded board — MEASURED** (`crib_finisher_probe.py`,
+60 trials, 90-letter messages, an 8-letter crib pinned, 10 cables hidden, rotor
+key given; a 12-letter crib saturates at 100% and measures nothing):
+
+| arm | mean %-correct | exact | boards scored |
+|---|--:|--:|--:|
+| baseline | 73.7% | 33/60 | 319 221 |
+| `--polish` | 76.1% (+2.4pp) | 35/60 | 917 461 |
+| **`-J`** | **75.7% (+2.1pp)** | 35/60 | **153 321** |
+| `-J --score f10` | 75.7% (+2.1pp) | 35/60 | 139 735 |
+| `-J --polish` | **79.7% (+6.0pp)** | 38/60 | 800 849 |
+
+**`-J` is a strict dominance win on a seeded climb** — +2.1pp recovery at
+**2.1× fewer boards**. §7a measured only its cost and left the recovery side
+open with the caveat that this is the known-few-plug regime where `-J` is
+documented to need a cap; the cap turns out to be **inert here**, `-J --score
+f10` recovering identically to `-J` alone. So §7b's recipe should carry `-J`
+unqualified.
+
+**`--polish` earns its keep only alongside `-J`, and it is not cheap.** Alone it
+buys +2.4pp for **2.9× the boards** — the same lift `-J` gives for *less than
+half* the baseline cost, so on its own it is dominated. Combined it is the best
+arm at +6.0pp, and superadditive (2.1 + 2.4 = 4.5 against 6.0 measured), which
+is consistent with the cheaper climb affording the finisher a better board to
+work on.
+
+> The costs here are **not matched**, and the comparison the rest of this
+> project makes for finishers — against spending the same compute on more `-R`
+> restarts, which `CLAUDE.md` records as dominating every finisher variant — is
+> **not made**: the rotor key is given and `-R` is left at its default, so there
+> is no restart axis in this measurement. `-J`'s win needs no such defence,
+> being cheaper *and* better; `--polish`'s +6.0pp at 2.5× does.
 
 **Step 5a — crib-as-seed** (§7a). **Done** — step 5's seeding is the mechanism,
 and §7c is the measurement caution 1 was waiting for: a wrong hypothesis wins 5%
@@ -1873,8 +1931,9 @@ So **the ordering question cannot be settled on this corpus at all** — not wit
 more trials, since honest hits are too rare to accumulate a sample against. The
 cheapest-first default therefore rests on the **cost cliff** above, which is
 directly measured and corpus-independent, and not on any time-to-first-hit
-result. The leave-one-out code stays in the probe for a larger corpus; the
-in-sample table above stays with its warning, as the only end-to-end figure
+result. The leave-one-out code stays in the probe for a larger corpus, should
+one appear — **none is available, so this is dropped rather than deferred**.
+The in-sample table above stays with its warning, as the only end-to-end figure
 there is.
 
 **A `--crib-max-hyps` flag that *discarded* costly cribs was built, measured,
@@ -1906,11 +1965,13 @@ This is the same shape as `--ring-stride`: a real throughput lever that trades
 away recovery, correctly measured only once it was run end to end rather than
 judged on its cost model.
 
-Still open, and deliberately not built here: the **score threshold for early
-exit** (§6.7). The run currently sweeps the whole list and ranks, which costs
-the worst case but never discards the truth — the fallback §6.7 itself
-recommends. The threshold is the optimisation on top, and it needs a measured
-per-length margin before it can be trusted to stop a run.
+**The score threshold for early exit (§6.7) is CLOSED, not pending.** The
+run sweeps the whole list and ranks — §6.7's own fallback: worst-case
+cost, but it never discards the truth. Stopping is by **human inspection**,
+which is what the per-crib table, the progress lines and `--full-text` are for,
+and which needs no threshold. A threshold would need a measured per-length
+score margin to be trusted, and the measurement above shows this corpus cannot
+supply one — so it is dropped rather than deferred.
 
 **Step 1 was the decision point, and it passed** (§5a): the library covers 83%
 of held-out messages and a shuffled control covers none, so the recurrence is
