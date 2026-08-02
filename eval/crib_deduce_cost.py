@@ -99,9 +99,9 @@ def main():
         for label, extra in (("pinned", ["--crib", crib, "--crib-at", "3"]),
                              ("swept", ["--crib", crib])):
             t, a, r, k = timed(ct, extra, args.reps, args.lang)
-            # Upper bound on propagations: every key sweeping every alignment.
-            # Real runs exit at the first survivor, so this is exact only when
-            # almost everything is rejected.
+            # Upper bound on hypotheses: every key sweeping every alignment.
+            # Real runs exit at the first survivor, so dividing by it is exact
+            # only when almost everything is rejected and low elsewhere.
             hyps = float(k) * a * 26
             print("  %-2d letters %-7s %8d %7.1f%% %8.2fs %+8.2fs %9.0f ns"
                   % (n, label, a, 100.0 * r / max(k, 1), t, t - base,
@@ -121,10 +121,10 @@ def main():
 
     print("\n  net      wall time against the no-crib baseline: the deduction")
     print("           costs propagations and saves the scores it rejects")
-    print("  per hyp  net / (keys x alignments x 26). Exact only where almost")
-    print("           everything is rejected -- elsewhere the early exit at the")
-    print("           first surviving hypothesis makes it an overestimate of")
-    print("           the true per-propagation cost")
+    print("  per hyp  net / (keys x alignments x 26). That denominator is an")
+    print("           UPPER bound -- a real run exits at the first surviving")
+    print("           hypothesis -- so the column is exact only where almost")
+    print("           everything is rejected, and an underestimate elsewhere")
 
 
 if __name__ == "__main__":
