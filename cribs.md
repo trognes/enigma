@@ -1873,8 +1873,9 @@ So **the ordering question cannot be settled on this corpus at all** — not wit
 more trials, since honest hits are too rare to accumulate a sample against. The
 cheapest-first default therefore rests on the **cost cliff** above, which is
 directly measured and corpus-independent, and not on any time-to-first-hit
-result. The leave-one-out code stays in the probe for a larger corpus; the
-in-sample table above stays with its warning, as the only end-to-end figure
+result. The leave-one-out code stays in the probe for a larger corpus, should
+one appear — **none is available, so this is dropped rather than deferred**.
+The in-sample table above stays with its warning, as the only end-to-end figure
 there is.
 
 **A `--crib-max-hyps` flag that *discarded* costly cribs was built, measured,
@@ -1906,11 +1907,13 @@ This is the same shape as `--ring-stride`: a real throughput lever that trades
 away recovery, correctly measured only once it was run end to end rather than
 judged on its cost model.
 
-Still open, and deliberately not built here: the **score threshold for early
-exit** (§6.7). The run currently sweeps the whole list and ranks, which costs
-the worst case but never discards the truth — the fallback §6.7 itself
-recommends. The threshold is the optimisation on top, and it needs a measured
-per-length margin before it can be trusted to stop a run.
+**The score threshold for early exit (§6.7) is CLOSED, not pending.** The
+run sweeps the whole list and ranks — §6.7's own fallback: worst-case
+cost, but it never discards the truth. Stopping is by **human inspection**,
+which is what the per-crib table, the progress lines and `--full-text` are for,
+and which needs no threshold. A threshold would need a measured per-length
+score margin to be trusted, and the measurement above shows this corpus cannot
+supply one — so it is dropped rather than deferred.
 
 **Step 1 was the decision point, and it passed** (§5a): the library covers 83%
 of held-out messages and a shuffled control covers none, so the recurrence is
