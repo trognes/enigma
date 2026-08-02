@@ -695,6 +695,21 @@ are read from a **data directory** (filenames built as
   rejection count is reported per key, counted at the key's first work item**: a
   key's restarts can straddle a chunk boundary and be seen as new by two
   workers, so counting at the deduction would make the total depend on `-T`.
+- **The menu is walked BREADTH-FIRST FROM THE ANCHOR, not in crib order.** An
+  edge deduces nothing until one endpoint is known, and at the start only the
+  anchor is; in crib order the loop visits edges whose endpoints are both
+  unknown, does nothing, and leaves the enclosing `while (changed)` to come back
+  for them, so a long menu is re-scanned repeatedly. Visiting edges as the
+  frontier reaches them makes the work track the **component** rather than
+  the edge count. Measured on wrong keys — the case a sweep spends its time on —
+  total edge steps for the 26 hypotheses fall 226 → 97 at a 16-letter crib and
+  253 → 93 at 50 letters, because the BFS cost stays flat (~95) while crib order
+  grows with length; **wall time 1.61× at 16 letters rising to 1.72× at 40**, so
+  the longest cribs gain most. It is a pure **reordering**: the closure is
+  order-independent, so exactly the same keys are rejected and the same plugs
+  deduced — verified by `crib_vectors_check.py` (40/40) and by unchanged
+  rejection counts. The order is built once per alignment in `init_crib()`, so
+  nothing in the per-key deduction changes shape.
 - **With `-c` the crib also SEEDS the climb** (the hybrid, `cribs.md` §7):
   instead of starting from an empty board, each surviving hypothesis's deduced
   plugs are pinned in `PLUG_FIXED_EX` — the same per-worker pin set `--exhaust`
