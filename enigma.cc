@@ -1367,25 +1367,19 @@ void init_ring_grund(machine & m, int a, int b, int c, int x, int y, int z)
   m.grundstellung[2] = z;
 }
 
-inline int mod26(int x)
-{
-  return (x+asize)%asize;
-}
+/* Modular arithmetic on alphabet positions. Everything the machine holds -- a
+   grundstellung, a ringstellung, a rotor-table entry, a letter -- lives in [0, 25], so
+   these three narrow forms cover every site in the program except the three noted on
+   mod26_full() below. Each compiles to a compare and a conditional move, where a general
+   `% 26` compiles to a magic-constant division.
 
-/* Narrow-domain replacements for mod26() on the two shapes the stepping loops use.
-   Both compile to a compare and a conditional move; mod26() compiles to a full
-   magic-constant division, and setup_mapping() calls it SIX times per character
-   (three step increments, three ring offsets). Measured on a 300-character plain
-   scan: setup_mapping 974.7M -> 590.8M instructions (-39%), whole run -22% wall
-   -- against a base-vs-base control of +0.6/+1.7% on the same box. It is the
-   dominant cost of a plain scan (53.8% of instructions there) even though it is
-   under 0.1% of a hill-climb, which is why the profile looks nothing like the
-   "~99% is the score loop" figure that describes `-c`.
-
-   DO NOT push this into mod26() itself. That takes x >= -26 but has no upper
-   bound, and at least one caller exceeds a single alphabet (`mod26(v +
-   coarse_off2)` in the --ring-stride refinement reaches 50), so one conditional
-   subtract would silently be wrong there. The narrow contracts are the point. */
+   That distinction was worth a lot more than it looks. setup_mapping() used a general
+   form SIX times per character (three step increments, three ring offsets) and
+   rotor_l/rotor_r twice each per rotor stage; narrowing them measured setup_mapping
+   -39% and precompute -40% in instructions, and `make bench` search -33% under g++ /
+   -41% under clang. The reason it went unnoticed is that it is invisible under `-c`
+   (setup_mapping is under 0.1% of a hill-climb) and only bites the plain scan, where it
+   was 53.8% of instructions at 300 characters. */
 inline int step26(int x)          /* x + 1 mod 26, for x in [0, 25] */
 {
   return (x == asize - 1) ? 0 : x + 1;
@@ -1422,12 +1416,13 @@ int rotor_r(machine & m, int x, int rotor_no)
   return diff26(x, y);
 }
 
-/* mod26() adds a SINGLE alphabet, so it is only correct for x >= -26 -- fine everywhere it
-   is used on a position plus a step. The --ring-stride refinement derives offsets from a
-   step-count difference that is not bounded that way (a candidate start1 far from the
-   coarse winner's can differ by several steps, and the difference is subtracted from a
-   position), so it uses this full-range form. Caught by UBSan as a negative subst_array
-   index, which then read out of bounds. */
+/* The only general form left, and it has exactly three callers -- all in the
+   --ring-stride refinement, which derives ring1/ring0/start0 from step-count DIFFERENCES
+   rather than from positions. A candidate start1 far from the coarse winner's can differ
+   by several steps, and that difference is subtracted from a position, so the result is
+   bounded by nothing and none of the narrow forms above will do. An earlier version used
+   a single-alphabet `(x + 26) % 26`, which is correct only for x >= -26; UBSan caught it
+   as a negative subst_array index that then read out of bounds. */
 inline int mod26_full(int x)
 {
   return ((x % asize) + asize) % asize;
@@ -1467,9 +1462,9 @@ void set_effective_reflector(machine & m)
   const unsigned char * gr = rotor_rev[m.greek];
   for (int x = 0; x < asize; x++)
     {
-      int a = mod26(gf[mod26(x + o)] - o);   /* Greek forward  (rotor_l style) */
+      int a = diff26(gf[add26(x, o)], o);    /* Greek forward  (rotor_l style) */
       int b = thin[a];                       /* thin reflector                 */
-      int c = mod26(gr[mod26(b + o)] - o);   /* Greek reverse  (rotor_r style) */
+      int c = diff26(gr[add26(b, o)], o);    /* Greek reverse  (rotor_r style) */
       m.reflector_eff[x] = static_cast<unsigned char>(c);
     }
 }
@@ -1566,7 +1561,8 @@ void setup_mapping(machine & m, bool copy_rows)
    step counts differ from the winner's by a constant reproduces the winner's
    alignment exactly when its ring offsets absorb that constant. w1/w2 are
    TRANSLATED rotor indices (as held in machine::walzenlage), since notch[] is
-   indexed that way. */
+   indexed that way. g1/g2 are start positions and so are in [0, 25], which is
+   what lets the stepping use step26(). */
 static void step_counts(int w1, int w2, int g1, int g2,
                         unsigned short * mid, unsigned short * left)
 {
@@ -1577,14 +1573,14 @@ static void step_counts(int w1, int w2, int g1, int g2,
         {
           nleft++;
           nmid++;
-          g1 = mod26(1 + g1);
+          g1 = step26(g1);
         }
       else if (notch[w2][g2])
         {
           nmid++;
-          g1 = mod26(1 + g1);
+          g1 = step26(g1);
         }
-      g2 = mod26(1 + g2);
+      g2 = step26(g2);
       mid[i] = static_cast<unsigned short>(nmid);
       left[i] = static_cast<unsigned short>(nleft);
     }
@@ -3857,7 +3853,7 @@ struct best_result
 static best_result * g_progress = nullptr;
 
 /* --- middle-wheel ring x start collapse (archived/PERFORMANCE.md §7.12) -------------
-   Shifting ring1 and start1 together leaves mod26(g1-r1) -- the middle wheel's whole
+   Shifting ring1 and start1 together leaves diff26(g1, r1) -- the middle wheel's whole
    contribution to the substitution -- invariant, so two such pairs can only differ
    through notch[w1][g1], the middle notch that gates the left wheel and the double
    step. The middle wheel steps only ~once per 26 characters, so in a short message it
@@ -3895,8 +3891,8 @@ static int mid_first_fire(int w1, int w2, int s1, int s2, int limit)
       if (notch[w1][g1])
         return i;                    /* the firing that steps the left wheel */
       if (notch[w2][g2])
-        g1 = mod26(1 + g1);
-      g2 = mod26(1 + g2);
+        g1 = step26(g1);
+      g2 = step26(g2);
     }
   return -1;
 }
@@ -4521,11 +4517,11 @@ static key_space build_key_space()
      unconditional -- not just "when it happens not to step" (some settings ARE
      merely unidentifiable per instance; this is a stronger, always-true fact).
      Nothing in setup_mapping() ever reads ringstellung[0] or grundstellung[0]
-     except the final subst_array lookup mod26(g0-r0): wheel 0 has no notch
+     except the final subst_array lookup diff26(g0, r0): wheel 0 has no notch
      check of its own (there is no wheel to its left to step), and its own
      stepping (driven entirely by wheel 1's notch) advances g0 by a pure
      additive constant untouched by r0 -- so shifting ring0 and start0 by the
-     same delta leaves mod26(g0(i)-r0) identical at every character position i,
+     same delta leaves diff26(g0(i), r0) identical at every character position i,
      for the ENTIRE message, regardless of length or how many times wheel 0
      steps (verified: -R/-g shifted together by 1..25 produced byte-identical
      decodes at 127 characters, vs. the middle/right wheels which visibly
@@ -4595,7 +4591,7 @@ static key_space build_key_space()
         seen[i] = false;
       for (int gp = gp_min; gp <= gp_max; gp++)
         for (int gr = gr_min; gr <= gr_max; gr++)
-          seen[mod26(gp - gr)] = true;
+          seen[diff26(gp, gr)] = true;
       for (int off = 0; off < asize; off++)   /* ascending: deterministic order */
         if (seen[off])
           offset_list.push_back(off);
@@ -5245,8 +5241,8 @@ static double bruteforce(char * result, bool allow_empty)
              but §7.10 is the DEGENERACY, that shifting ring0 and start0 together is
              decode-identical, which is not the same claim as pinning o0 across a ring2
              change.) */
-          int coarse_off1 = mod26(m.grundstellung[1] - m.ringstellung[1]);
-          int coarse_off2 = mod26(m.grundstellung[2] - m.ringstellung[2]);
+          int coarse_off1 = diff26(m.grundstellung[1], m.ringstellung[1]);
+          int coarse_off2 = diff26(m.grundstellung[2], m.ringstellung[2]);
           int coarse_g1 = m.grundstellung[1];
           int coarse_g2 = m.grundstellung[2];
           /* TRANSLATED rotor indices: notch[] is indexed that way, unlike the §7.12 mask
@@ -5365,7 +5361,7 @@ static double bruteforce(char * result, bool allow_empty)
             {
               if (! ((mask2 >> v) & 1u))
                 continue;
-              int g2 = mod26(v + coarse_off2);
+              int g2 = add26(v, coarse_off2);
               for (int g1 = range.g_min[1]; g1 <= range.g_max[1]; g1++)
                 {
                   if ((mrow != nullptr) && ! ((mrow[g2] >> g1) & 1u))
