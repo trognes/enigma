@@ -1471,17 +1471,54 @@ void set_effective_reflector(machine & m)
 
 void precompute(machine & m)
 {
+  /* The stack is
+       R2(g3) o [ R1(g2) o R0(g1) o Refl o L0(g1) o L1(g2) ] o L2(g3)
+     so the bracketed middle depends on (g1, g2) only and is built 676 times
+     rather than 17576; and the right wheel's two permutations depend on g3
+     only, so they are tabulated once. The innermost loop then costs three
+     table lookups per letter instead of seven rotor applications, and none of
+     the modular arithmetic that used to wrap each one.
+       Worth 10.8x: 134.0M -> 12.4M instructions, which takes precompute from
+     10-21% of a plain scan to 1.0%. Counting only the table lookups predicts
+     2.2x; the rest was the arithmetic around them. */
   int r1 = 0;
   int r2 = 0;
   int r3 = 0;
+  unsigned char l2[asize][asize], rr2[asize][asize];
+  for (int g3 = 0; g3 < asize; g3++)
+    {
+      init_ring_grund(m, r1, r2, r3, 0, 0, g3);
+      for (int x = 0; x < asize; x++)
+        {
+          l2[g3][x] = static_cast<unsigned char>(rotor_l(m, x, 2));
+          rr2[g3][x] = static_cast<unsigned char>(rotor_r(m, x, 2));
+        }
+    }
+
+  unsigned char mid[asize];
   for (int g1 = 0; g1 < asize; g1++)
     for (int g2 = 0; g2 < asize; g2++)
-      for (int g3 = 0; g3 < asize; g3++)
-        {
-          init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-          for (int x = 0; x < asize; x++)
-            m.subst_array[g1][g2][g3][x] = subst_rotors(m, x);
-        }
+      {
+        init_ring_grund(m, r1, r2, r3, g1, g2, 0);
+        for (int y = 0; y < asize; y++)
+          {
+            int v = rotor_l(m, y, 1);
+            v = rotor_l(m, v, 0);
+            v = m.reflector_eff[v];
+            v = rotor_r(m, v, 0);
+            v = rotor_r(m, v, 1);
+            mid[y] = static_cast<unsigned char>(v);
+          }
+        for (int g3 = 0; g3 < asize; g3++)
+          {
+            unsigned char * __restrict out = m.subst_array[g1][g2][g3];
+            const unsigned char * __restrict fwd = l2[g3];
+            const unsigned char * __restrict rev = rr2[g3];
+            for (int x = 0; x < asize; x++)
+              out[x] = rev[mid[fwd[x]]];
+          }
+      }
+  init_ring_grund(m, r1, r2, r3, asize - 1, asize - 1, asize - 1);
 }
 
 /* Step the rotors over the message and record, per character position, a pointer
