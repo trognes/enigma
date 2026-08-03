@@ -233,6 +233,32 @@ materially different regime, and read the evidence in `archived/` first.
 | Greedy plug-by-plug seed | **reasoned** down — see below |
 | Cost-pruning a crib library by default | prunes the likeliest hits |
 | Bombe-style bit-parallel crib deduction | 30–50× SLOWER — see below |
+| 2-byte row index instead of an 8-byte pointer | +26% — see below |
+
+**A 2-byte row index instead of `rows[]`'s 8-byte pointer, measured down.**
+`setup_mapping()` writes one pointer per character — the "playlist" of which
+precomputed 26-byte substitution row applies at each message position — and
+the scorers chase it. Storing a `uint16_t` index into `subst_array` instead
+shrinks that array 4×, at the cost of one multiply-and-add per lookup to
+rebuild the address. Built and measured against a control of −2.0%/+0.3%:
+
+| | 8-byte pointer | 2-byte index | |
+|---|---:|---:|---:|
+| scorer instructions | 378.4 M | 426.0 M | +12.6% |
+| `setup_mapping` instructions | 143.6 M | 283.9 M | **+97.7%** |
+| total | 728.0 M | 915.9 M | **+25.8%** |
+
+Wall: **+12…21% on the scan and ~+16% on the hill-climb**. Two reasons, and the
+second is the one that is easy to miss. The scorer does pay for the arithmetic
+(+12.6%) — but `setup_mapping` nearly **doubles**, because writing the index
+means computing `(row − sa_base) / asize` at every store, which is a
+magic-constant division. The producer loses more than the consumer saves, so the
+framing "cheaper to store, dearer to read" is wrong: it is dearer at both ends.
+
+And the premise never applied. `rows[]` is 8 bytes × message length — **2.4
+KB at 300 characters**, L1-resident either way — so there is no memory traffic
+for a 4× shrink to save. Check the working-set size before trading arithmetic
+for bytes.
 
 **A Bombe-style bit-parallel crib deduction, measured down.** The crib
 deduction runs 26 chained hypotheses per alignment and a rejecting key pays all

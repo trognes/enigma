@@ -1328,8 +1328,10 @@ wheel.
 >   fill (split at the ring-offset wrap so even that test leaves the inner
 >   loop). A further **−65%**.
 >
-> The profile that leaves is **49.4% scorer / 18.7% `setup_mapping`** at 300
-> characters and **27.4% / 11.9%** at 88 (plus ~19% one-off n-gram load there);
+> The profile that leaves is **52.0% scorer / 19.7% `setup_mapping`** at 300
+> characters and **30.3% / 13.1%** at 88 (plus ~33% one-off n-gram load there,
+> now dominated by the *text parse* rather than the log10s, which a memo on the
+> integer count cut by 90%);
 > `precompute` is down to **1.0%**. So the plain scan now looks like the
 > hill-climb — scorer-dominated — and "optimise the scorer" has become the
 > right instinct here for the first time. The `precompute` figure also retired
