@@ -1517,24 +1517,50 @@ void setup_mapping(machine & m, bool copy_rows)
   int g1 = m.grundstellung[1];
   int g2 = m.grundstellung[2];
 
+  /* Two things per character were being recomputed that only ever move by one.
+     The ring offsets advance in lockstep with the positions (stepping g by 1 steps
+     diff26(g, r) by 1), so they are carried incrementally instead of re-derived;
+     and the row address moves by a constant 26 bytes, so it is carried as a
+     pointer instead of a 3-D index costing two multiplies. The address only needs
+     rebuilding when the right wheel wraps (once per 26 characters) or the middle
+     wheel steps (about as often). `row` always points at blk[d2].
+       Worth -31% of setup_mapping's instructions (590.8M -> 408.6M on a 300-char
+     plain scan), where it is the largest single item in the profile. */
+  int d0 = diff26(g0, r0);
+  int d1 = diff26(g1, r1);
+  int d2 = diff26(g2, r2);
+  const unsigned char (* blk)[asize] = sa[d0][d1];
+  const unsigned char * row = blk[d2];
+
   for (int i = 0; i < textlength; i++)
     {
       /* stepping schedule including the Enigma double-stepping anomaly: the
          middle rotor advances (carrying the left one) when it sits on its own
          notch, as well as on the usual right-rotor carry */
+      bool mid_step = false;
       if (notch[w1][g1])
         {
-          g0 = step26(g0);
-          g1 = step26(g1);
+          g0 = step26(g0);  d0 = step26(d0);
+          g1 = step26(g1);  d1 = step26(d1);
+          mid_step = true;
         }
       else if (notch[w2][g2])
         {
-          g1 = step26(g1);
+          g1 = step26(g1);  d1 = step26(d1);
+          mid_step = true;
         }
-      g2 = step26(g2);
+      g2 = step26(g2);  d2 = step26(d2);
 
-      const unsigned char * row =
-        sa[diff26(g0, r0)][diff26(g1, r1)][diff26(g2, r2)];
+      if (mid_step)
+        {
+          blk = sa[d0][d1];
+          row = blk[d2];
+        }
+      else if (d2 == 0)
+        row = blk[0];
+      else
+        row += asize;
+
       if (copy_rows)
         {
           memcpy(m.mapping[i], row, asize);
