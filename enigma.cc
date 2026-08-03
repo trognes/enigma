@@ -404,6 +404,11 @@ static unsigned char num_ciphertext[maxlen];
 static unsigned char rotor_fwd[rotor_count][asize];
 static unsigned char rotor_rev[rotor_count][asize];
 static unsigned char notch[rotor_count][asize];
+/* notch_gap[w][g] = characters this wheel can advance from window position g
+   before its notch fires, i.e. the smallest k >= 0 with notch[w][(g+k) % 26].
+   Lets setup_mapping() skip straight to the next stepping event instead of
+   testing the notch once per character. Built by init(). */
+static unsigned char notch_gap[rotor_count][asize];
 static unsigned char reflector[reflector_count][asize];
 
 /* --- per-search state: struct machine ----------------------------------- */
@@ -1028,6 +1033,16 @@ void init()
         notch[i][j] = strchr(notch_string[i], num2char(j)) != NULL;
       }
 
+  for (int i=0; i < rotor_count; i++)
+    for (int j=0; j < asize; j++)
+      {
+        int k = 0;
+        while ((k < asize) && ! notch[i][(j + k) % asize])
+          k++;
+        /* 26 means the wheel has no notch at all */
+        notch_gap[i][j] = static_cast<unsigned char>(k);
+      }
+
   for (int i=0; i < reflector_count; i++)
     for (int j=0; j < asize; j++)
       reflector[i][j] = char2num(reflector_string[i][j]);
@@ -1554,62 +1569,95 @@ void setup_mapping(machine & m, bool copy_rows)
   int g1 = m.grundstellung[1];
   int g2 = m.grundstellung[2];
 
-  /* Two things per character were being recomputed that only ever move by one.
-     The ring offsets advance in lockstep with the positions (stepping g by 1 steps
-     diff26(g, r) by 1), so they are carried incrementally instead of re-derived;
-     and the row address moves by a constant 26 bytes, so it is carried as a
-     pointer instead of a 3-D index costing two multiplies. The address only needs
-     rebuilding when the right wheel wraps (once per 26 characters) or the middle
-     wheel steps (about as often). `row` always points at blk[d2].
-       Worth -31% of setup_mapping's instructions (590.8M -> 408.6M on a 300-char
-     plain scan), where it is the largest single item in the profile. */
+  /* Only the RIGHT wheel moves on most characters, and while it moves alone the
+     row address just walks 26 bytes at a time. So rather than test both notches
+     once per character, jump to the next stepping event: notch_gap[w2][g2] says
+     how many characters the right wheel has before its notch fires, and the
+     middle wheel's own notch cannot fire mid-run because g1 does not change
+     there. A run is then a branch-free pointer fill, and the branchy stepping
+     logic runs once per event (about once per 26 characters, twice for the
+     two-notch VI-VIII) instead of once per character. */
   int d0 = diff26(g0, r0);
   int d1 = diff26(g1, r1);
   int d2 = diff26(g2, r2);
   const unsigned char (* blk)[asize] = sa[d0][d1];
   const unsigned char * row = blk[d2];
 
-  for (int i = 0; i < textlength; i++)
+  int i = 0;
+  while (i < textlength)
     {
-      /* stepping schedule including the Enigma double-stepping anomaly: the
-         middle rotor advances (carrying the left one) when it sits on its own
-         notch, as well as on the usual right-rotor carry */
-      bool mid_step = false;
-      if (notch[w1][g1])
-        {
-          g0 = step26(g0);  d0 = step26(d0);
-          g1 = step26(g1);  d1 = step26(d1);
-          mid_step = true;
-        }
-      else if (notch[w2][g2])
-        {
-          g1 = step26(g1);  d1 = step26(d1);
-          mid_step = true;
-        }
-      g2 = step26(g2);  d2 = step26(d2);
+      g2 = add26(d2, r2);            /* invariant: d2 == diff26(g2, r2) */
 
-      if (mid_step)
+      /* A stepping event: the middle wheel advances, carrying the left one when
+         it sits on its own notch (the Enigma double step). One character. */
+      if (notch[w1][g1] || notch[w2][g2])
         {
+          if (notch[w1][g1])
+            {
+              g0 = step26(g0);  d0 = step26(d0);
+            }
+          g1 = step26(g1);  d1 = step26(d1);
+          d2 = step26(d2);      /* g2 is re-derived at the loop top */
           blk = sa[d0][d1];
           row = blk[d2];
+          if (copy_rows)
+            {
+              memcpy(m.mapping[i], row, asize);
+              rows[i] = m.mapping[i];
+            }
+          else
+            rows[i] = row;
+          i++;
+          continue;
         }
-      else if (d2 == 0)
-        row = blk[0];
-      else
-        row += asize;
 
-      if (copy_rows)
+      /* A run: the right wheel steps alone for `n` characters. g2 is not
+         tracked through it -- d2 == diff26(g2, r2) is an invariant, so g2 is
+         recovered from d2 at the top of the loop, which also keeps `n` (up to
+         26 for a notchless wheel) out of add26's [0, 25] domain. */
+      int n = notch_gap[w2][g2];
+      if (n > textlength - i)
+        n = textlength - i;
+      while (n > 0)
         {
-          memcpy(m.mapping[i], row, asize);
-          rows[i] = m.mapping[i];
+          /* Split at the ring-offset wrap so the fill itself is branch-free. */
+          int m2 = asize - 1 - d2;
+          if (m2 > n)
+            m2 = n;
+          for (int k = 0; k < m2; k++)
+            {
+              row += asize;
+              if (copy_rows)
+                {
+                  memcpy(m.mapping[i + k], row, asize);
+                  rows[i + k] = m.mapping[i + k];
+                }
+              else
+                rows[i + k] = row;
+            }
+          i += m2;
+          d2 += m2;
+          n -= m2;
+          if (n > 0)
+            {
+              d2 = 0;
+              row = blk[0];
+              if (copy_rows)
+                {
+                  memcpy(m.mapping[i], row, asize);
+                  rows[i] = m.mapping[i];
+                }
+              else
+                rows[i] = row;
+              i++;
+              n--;
+            }
         }
-      else
-        rows[i] = row;
     }
 
   m.grundstellung[0] = static_cast<unsigned char>(g0);
   m.grundstellung[1] = static_cast<unsigned char>(g1);
-  m.grundstellung[2] = static_cast<unsigned char>(g2);
+  m.grundstellung[2] = static_cast<unsigned char>(add26(d2, r2));
 }
 
 /* Cumulative step counts of the middle and left wheels, per character position,
