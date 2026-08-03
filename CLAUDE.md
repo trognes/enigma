@@ -1291,6 +1291,24 @@ wheel.
 
 ### Performance notes
 
+> **The profile is completely different in the two regimes, and only the
+> hill-climb one was ever measured.** Under `-c` the score loop really is
+> everything (callgrind, `-R 2`: **92.8%** scorer, `setup_mapping` under 0.1%).
+> On a **plain scan** it is not even the largest item — at 300 characters it is
+> **53.8% `setup_mapping`**, 20.9% scorer, 12.5% `precompute`; at 88 characters,
+> 33.7% / 12.9% / 26.4% with a further ~21% in the one-off n-gram load. That is
+> the regime `--ring-stride`, the crib sweeps and the `search` bench tier live
+> in, so "optimise the scorer" was the wrong instinct there for years. What it
+> cost: `mod26()` compiles to a magic-constant division and `setup_mapping()`
+> called it six times per character, `rotor_l`/`rotor_r` twice each per rotor
+> stage. Replacing them with the narrow-contract `step26`/`diff26`/`add26`
+> (compare + cmov) took **`search` −33% under g++ and −41% under clang** with
+> the hill-climb untouched. **Do not fold those into `mod26()` itself** — it
+> takes `x >= -26` with *no* upper bound and the `--ring-stride` refinement
+> calls it with values reaching 50, where one conditional subtract is silently
+> wrong. Profile the regime you are actually changing before believing any
+> share-of-runtime figure below.
+
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
 spent when hill-climbing. That is why the rotor stack is precomputed into
 `subst_array` and reached per position through `rows[pos]` so each character
