@@ -1367,24 +1367,6 @@ void init_ring_grund(machine & m, int a, int b, int c, int x, int y, int z)
   m.grundstellung[2] = z;
 }
 
-int rotor_l(machine & m, int x, int rotor_no)
-{
-  int y = m.grundstellung[rotor_no] - m.ringstellung[rotor_no];
-  x = (x + asize + y) % asize;
-  x = rotor_fwd[m.walzenlage[rotor_no]][x];
-  x = (x + asize - y) % asize;
-  return x;
-}
-
-int rotor_r(machine & m, int x, int rotor_no)
-{
-  int y = m.grundstellung[rotor_no] - m.ringstellung[rotor_no];
-  x = (x + asize + y) % asize;
-  x = rotor_rev[m.walzenlage[rotor_no]][x];
-  x = (x + asize - y) % asize;
-  return x;
-}
-
 inline int mod26(int x)
 {
   return (x+asize)%asize;
@@ -1413,6 +1395,31 @@ inline int diff26(int a, int b)   /* a - b mod 26, for a, b in [0, 25] */
 {
   const int d = a - b;
   return (d < 0) ? d + asize : d;
+}
+
+inline int add26(int a, int b)    /* a + b mod 26, for a, b in [0, 25] */
+{
+  const int s = a + b;
+  return (s >= asize) ? s - asize : s;
+}
+
+/* Apply one rotor forward / in reverse at its (start - ring) offset. The offset is
+   normalised into [0, 25] once, which is what lets both wrap-arounds be a single
+   conditional instead of the two magic-constant divisions `(x + 26 +- y) % 26` compiled
+   to. These run 7 times per entry while precompute() fills the 457 KB subst_array, i.e.
+   3.2M times per wheel order -- 12-26% of a plain scan's instructions. */
+int rotor_l(machine & m, int x, int rotor_no)
+{
+  const int y = diff26(m.grundstellung[rotor_no], m.ringstellung[rotor_no]);
+  x = rotor_fwd[m.walzenlage[rotor_no]][add26(x, y)];
+  return diff26(x, y);
+}
+
+int rotor_r(machine & m, int x, int rotor_no)
+{
+  const int y = diff26(m.grundstellung[rotor_no], m.ringstellung[rotor_no]);
+  x = rotor_rev[m.walzenlage[rotor_no]][add26(x, y)];
+  return diff26(x, y);
 }
 
 /* mod26() adds a SINGLE alphabet, so it is only correct for x >= -26 -- fine everywhere it
