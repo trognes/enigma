@@ -1298,8 +1298,8 @@ wheel.
 > **53.8% `setup_mapping`**, 20.9% scorer, 12.5% `precompute`; at 88 characters,
 > 33.7% / 12.9% / 26.4% with a further ~21% in the one-off n-gram load. That is
 > the regime `--ring-stride`, the crib sweeps and the `search` bench tier live
-> in, so "optimise the scorer" was the wrong instinct there for years. Three
-> things came out of it, worth **`search` −45% against the pre-fix `dev`** in
+> in, so "optimise the scorer" was the wrong instinct there for years. Four
+> things came out of it, worth **`search` −60.7% against the pre-fix `dev`** in
 > total, with the hill-climb untouched throughout:
 >
 > - **`mod26()` was a magic-constant division**, and `setup_mapping()` called it
@@ -1319,13 +1319,24 @@ wheel.
 >   wheel's permutations are tabulated once: three table lookups per letter
 >   instead of seven rotor applications. **10.8×** — where counting only the
 >   lookups predicts 2.2×, the rest being the arithmetic around them.
+> - **`setup_mapping()` tested both notches once per character** to learn
+>   something almost always false. On most characters only the right wheel
+>   moves, and while it moves alone the row just walks 26 bytes, so the loop
+>   jumps event to event instead: `notch_gap[w2][g2]` gives the characters
+>   before the right notch fires, and the middle wheel's own notch cannot fire
+>   mid-run because `g1` does not change there. A run is a branch-free pointer
+>   fill (split at the ring-offset wrap so even that test leaves the inner
+>   loop). A further **−65%**.
 >
-> The profile that leaves is **39.6% `setup_mapping` / 36.7% scorer** at 300
-> characters and **25.8% / 23.1%** at 88 (plus ~21% one-off n-gram load there);
-> `precompute` is down to **1.0%**. That last number retired a queued idea: its
-> inner loop is the only `vpshufb`-shaped kernel in the program, but there is no
-> longer 1% in it to win, so SIMD cannot repay a NEON path for the arm64 CI.
-> Profile the regime you are actually changing before believing any
+> The profile that leaves is **49.4% scorer / 18.7% `setup_mapping`** at 300
+> characters and **27.4% / 11.9%** at 88 (plus ~19% one-off n-gram load there);
+> `precompute` is down to **1.0%**. So the plain scan now looks like the
+> hill-climb — scorer-dominated — and "optimise the scorer" has become the
+> right instinct here for the first time. The `precompute` figure also retired
+> a queued idea: its inner loop is the only `vpshufb`-shaped kernel in the
+> program, but
+> there is no longer 1% in it to win, so SIMD cannot repay a NEON path for the
+> arm64 CI. Profile the regime you are actually changing before believing any
 > share-of-runtime figure below.
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
