@@ -1298,15 +1298,34 @@ wheel.
 > **53.8% `setup_mapping`**, 20.9% scorer, 12.5% `precompute`; at 88 characters,
 > 33.7% / 12.9% / 26.4% with a further ~21% in the one-off n-gram load. That is
 > the regime `--ring-stride`, the crib sweeps and the `search` bench tier live
-> in, so "optimise the scorer" was the wrong instinct there for years. What it
-> cost: `mod26()` compiles to a magic-constant division and `setup_mapping()`
-> called it six times per character, `rotor_l`/`rotor_r` twice each per rotor
-> stage. Replacing them with the narrow-contract `step26`/`diff26`/`add26`
-> (compare + cmov) took **`search` −33% under g++ and −41% under clang** with
-> the hill-climb untouched. **Do not fold those into `mod26()` itself** — it
-> takes `x >= -26` with *no* upper bound and the `--ring-stride` refinement
-> calls it with values reaching 50, where one conditional subtract is silently
-> wrong. Profile the regime you are actually changing before believing any
+> in, so "optimise the scorer" was the wrong instinct there for years. Three
+> things came out of it, worth **`search` −45% against the pre-fix `dev`** in
+> total, with the hill-climb untouched throughout:
+>
+> - **`mod26()` was a magic-constant division**, and `setup_mapping()` called it
+>   six times per character while `rotor_l`/`rotor_r` did twice each per rotor
+>   stage. Every input was already in `[0, 25]`, so `step26`/`diff26`/`add26`
+>   (compare + cmov) replaced them. **Do not fold those into a general
+>   `mod26()`** — that took `x >= -26` with *no* upper bound and the
+>   `--ring-stride` refinement passes values reaching 50, where one conditional
+>   subtract is silently wrong. It has since been deleted; `mod26_full()` is the
+>   only general form left and has exactly three callers.
+> - **`setup_mapping()` recomputed what only moved by one.** The ring offsets
+>   advance in lockstep with the positions, and the row address moves a constant
+>   26 bytes, so both are carried incrementally instead of re-derived (the 3-D
+>   index cost two multiplies per character). −31%.
+> - **`precompute()`'s stack factors** as `R2(g3) ∘ [ … (g1,g2) only … ] ∘
+>   L2(g3)`, so the middle is built 676 times rather than 17 576 and the right
+>   wheel's permutations are tabulated once: three table lookups per letter
+>   instead of seven rotor applications. **10.8×** — where counting only the
+>   lookups predicts 2.2×, the rest being the arithmetic around them.
+>
+> The profile that leaves is **39.6% `setup_mapping` / 36.7% scorer** at 300
+> characters and **25.8% / 23.1%** at 88 (plus ~21% one-off n-gram load there);
+> `precompute` is down to **1.0%**. That last number retired a queued idea: its
+> inner loop is the only `vpshufb`-shaped kernel in the program, but there is no
+> longer 1% in it to win, so SIMD cannot repay a NEON path for the arm64 CI.
+> Profile the regime you are actually changing before believing any
 > share-of-runtime figure below.
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
