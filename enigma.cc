@@ -1390,6 +1390,31 @@ inline int mod26(int x)
   return (x+asize)%asize;
 }
 
+/* Narrow-domain replacements for mod26() on the two shapes the stepping loops use.
+   Both compile to a compare and a conditional move; mod26() compiles to a full
+   magic-constant division, and setup_mapping() calls it SIX times per character
+   (three step increments, three ring offsets). Measured on a 300-character plain
+   scan: setup_mapping 974.7M -> 590.8M instructions (-39%), whole run -22% wall
+   -- against a base-vs-base control of +0.6/+1.7% on the same box. It is the
+   dominant cost of a plain scan (53.8% of instructions there) even though it is
+   under 0.1% of a hill-climb, which is why the profile looks nothing like the
+   "~99% is the score loop" figure that describes `-c`.
+
+   DO NOT push this into mod26() itself. That takes x >= -26 but has no upper
+   bound, and at least one caller exceeds a single alphabet (`mod26(v +
+   coarse_off2)` in the --ring-stride refinement reaches 50), so one conditional
+   subtract would silently be wrong there. The narrow contracts are the point. */
+inline int step26(int x)          /* x + 1 mod 26, for x in [0, 25] */
+{
+  return (x == asize - 1) ? 0 : x + 1;
+}
+
+inline int diff26(int a, int b)   /* a - b mod 26, for a, b in [0, 25] */
+{
+  const int d = a - b;
+  return (d < 0) ? d + asize : d;
+}
+
 /* mod26() adds a SINGLE alphabet, so it is only correct for x >= -26 -- fine everywhere it
    is used on a position plus a step. The --ring-stride refinement derives offsets from a
    step-count difference that is not bounded that way (a candidate start1 far from the
@@ -1497,17 +1522,17 @@ void setup_mapping(machine & m, bool copy_rows)
          notch, as well as on the usual right-rotor carry */
       if (notch[w1][g1])
         {
-          g0 = mod26(1 + g0);
-          g1 = mod26(1 + g1);
+          g0 = step26(g0);
+          g1 = step26(g1);
         }
       else if (notch[w2][g2])
         {
-          g1 = mod26(1 + g1);
+          g1 = step26(g1);
         }
-      g2 = mod26(1 + g2);
+      g2 = step26(g2);
 
       const unsigned char * row =
-        sa[mod26(g0 - r0)][mod26(g1 - r1)][mod26(g2 - r2)];
+        sa[diff26(g0, r0)][diff26(g1, r1)][diff26(g2, r2)];
       if (copy_rows)
         {
           memcpy(m.mapping[i], row, asize);
