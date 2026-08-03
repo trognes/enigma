@@ -1291,6 +1291,56 @@ wheel.
 
 ### Performance notes
 
+> **The profile is completely different in the two regimes, and only the
+> hill-climb one was ever measured.** Under `-c` the score loop really is
+> everything (callgrind, `-R 2`: **92.8%** scorer, `setup_mapping` under 0.1%).
+> On a **plain scan** it is not even the largest item — at 300 characters it is
+> **53.8% `setup_mapping`**, 20.9% scorer, 12.5% `precompute`; at 88 characters,
+> 33.7% / 12.9% / 26.4% with a further ~21% in the one-off n-gram load. That is
+> the regime `--ring-stride`, the crib sweeps and the `search` bench tier live
+> in, so "optimise the scorer" was the wrong instinct there for years. Four
+> things came out of it, worth **`search` −60.7% against the pre-fix `dev`** in
+> total, with the hill-climb untouched throughout:
+>
+> - **`mod26()` was a magic-constant division**, and `setup_mapping()` called it
+>   six times per character while `rotor_l`/`rotor_r` did twice each per rotor
+>   stage. Every input was already in `[0, 25]`, so `step26`/`diff26`/`add26`
+>   (compare + cmov) replaced them. **Do not fold those into a general
+>   `mod26()`** — that took `x >= -26` with *no* upper bound and the
+>   `--ring-stride` refinement passes values reaching 50, where one conditional
+>   subtract is silently wrong. It has since been deleted; `mod26_full()` is the
+>   only general form left and has exactly three callers.
+> - **`setup_mapping()` recomputed what only moved by one.** The ring offsets
+>   advance in lockstep with the positions, and the row address moves a constant
+>   26 bytes, so both are carried incrementally instead of re-derived (the 3-D
+>   index cost two multiplies per character). −31%.
+> - **`precompute()`'s stack factors** as `R2(g3) ∘ [ … (g1,g2) only … ] ∘
+>   L2(g3)`, so the middle is built 676 times rather than 17 576 and the right
+>   wheel's permutations are tabulated once: three table lookups per letter
+>   instead of seven rotor applications. **10.8×** — where counting only the
+>   lookups predicts 2.2×, the rest being the arithmetic around them.
+> - **`setup_mapping()` tested both notches once per character** to learn
+>   something almost always false. On most characters only the right wheel
+>   moves, and while it moves alone the row just walks 26 bytes, so the loop
+>   jumps event to event instead: `notch_gap[w2][g2]` gives the characters
+>   before the right notch fires, and the middle wheel's own notch cannot fire
+>   mid-run because `g1` does not change there. A run is a branch-free pointer
+>   fill (split at the ring-offset wrap so even that test leaves the inner
+>   loop). A further **−65%**.
+>
+> The profile that leaves is **52.0% scorer / 19.7% `setup_mapping`** at 300
+> characters and **30.3% / 13.1%** at 88 (plus ~33% one-off n-gram load there,
+> now dominated by the *text parse* rather than the log10s, which a memo on the
+> integer count cut by 90%);
+> `precompute` is down to **1.0%**. So the plain scan now looks like the
+> hill-climb — scorer-dominated — and "optimise the scorer" has become the
+> right instinct here for the first time. The `precompute` figure also retired
+> a queued idea: its inner loop is the only `vpshufb`-shaped kernel in the
+> program, but
+> there is no longer 1% in it to win, so SIMD cannot repay a NEON path for the
+> arm64 CI. Profile the regime you are actually changing before believing any
+> share-of-runtime figure below.
+
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
 spent when hill-climbing. That is why the rotor stack is precomputed into
 `subst_array` and reached per position through `rows[pos]` so each character

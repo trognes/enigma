@@ -24,6 +24,8 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <cmath>
+#include <limits>
 #include <vector>
 
 /* uwwwrrrggg = 3*8*7*6*26*26*26*26*26*26 = 311 387 102 208 */
@@ -404,6 +406,11 @@ static unsigned char num_ciphertext[maxlen];
 static unsigned char rotor_fwd[rotor_count][asize];
 static unsigned char rotor_rev[rotor_count][asize];
 static unsigned char notch[rotor_count][asize];
+/* notch_gap[w][g] = characters this wheel can advance from window position g
+   before its notch fires, i.e. the smallest k >= 0 with notch[w][(g+k) % 26].
+   Lets setup_mapping() skip straight to the next stepping event instead of
+   testing the notch once per character. Built by init(). */
+static unsigned char notch_gap[rotor_count][asize];
 static unsigned char reflector[reflector_count][asize];
 
 /* --- per-search state: struct machine ----------------------------------- */
@@ -893,17 +900,52 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
       bi_total   = bt ? static_cast<double>(bt) : 1.0;
       mono_total = mt ? static_cast<double>(mt) : 1.0;
     }
+  /* Every log10() here is applied to an INTEGER count, and counts repeat
+     heavily: the 389 373 rows of the english quadgram file hold only 38 529
+     distinct counts, and 92% of them are below 16384. Memoising on the count
+     therefore removes 90% of the calls, which were 9.2% of a short run.
+       Keyed on the count and evaluating the SAME expression, so every stored
+     byte is unchanged. Rewriting log10(c/tot) as log10(c) - log10(tot) would
+     NOT be safe: the two differ in the last ulp and these values feed a
+     rounding boundary -- the same reason the vals[] scratch below stores
+     doubles, not floats.
+       Inverting the quantiser instead (only 256 output levels, and monotone in
+     the count, so 256 thresholds plus a binary search would need no logs at
+     all) was measured worth a further ~1%, and only on the non-loglin path:
+     once the memo is in place, only the DISTINCT counts pay a log. */
+  const uint32_t logmemo_lim = 1u << 14;   /* ~92% of rows; larger blows L2 */
+  enum { LM_QUAD = 0, LM_TRI = 1, LM_BI = 2, LM_MONO = 3, LM_EFF = 4,
+         LM_N = 5 };
+  std::vector<double> logmemo[LM_N];
+  auto memo_slot = [&](int which, uint32_t c) -> double *
+  {
+    if (c >= logmemo_lim)
+      return nullptr;
+    std::vector<double> & mv = logmemo[which];
+    if (mv.empty())
+      mv.assign(logmemo_lim, std::numeric_limits<double>::quiet_NaN());
+    return &mv[c];
+  };
+
   /* joint log10(count/total) of one order with the hapax floor (unseen -> single occurrence) */
-  auto jlog = [](uint32_t c, double tot) -> double
-  { return log10((c > 0 ? static_cast<double>(c) : 1.0) / tot); };
+  auto jlog = [&](int which, uint32_t c, double tot) -> double
+  {
+    double * slot = memo_slot(which, c);
+    if ((slot != nullptr) && ! std::isnan(*slot))
+      return *slot;
+    const double v = log10((c > 0 ? static_cast<double>(c) : 1.0) / tot);
+    if (slot != nullptr)
+      *slot = v;
+    return v;
+  };
   auto loglin_v = [&](int idx) -> double
   {
     int d = idx % asize, c3 = (idx / asize) % asize;
     int b = (idx / (asize * asize)) % asize;   /* v depends only on B,C,D (+ full quad) */
-    double vq = jlog(table[idx], static_cast<double>(total));
-    double vt = jlog(tri_t[(b * asize + c3) * asize + d], tri_total);
-    double vb = jlog(bi_t[c3 * asize + d], bi_total);
-    double vm = jlog(mono_t[d], mono_total);
+    double vq = jlog(LM_QUAD, table[idx], static_cast<double>(total));
+    double vt = jlog(LM_TRI, tri_t[(b * asize + c3) * asize + d], tri_total);
+    double vb = jlog(LM_BI, bi_t[c3 * asize + d], bi_total);
+    double vm = jlog(LM_MONO, mono_t[d], mono_total);
     return lam[0] * vq + lam[1] * vt + lam[2] * vb + lam[3] * vm;
   };
   /* symmetric folding: all sub-grams of ABCD, each order divided by its window-multiplicity
@@ -912,14 +954,16 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   {
     int d = idx % asize, c3 = (idx / asize) % asize;
     int b = (idx / (asize * asize)) % asize, a = idx / (asize * asize * asize);
-    double vq = jlog(table[idx], static_cast<double>(total));
-    double vt = jlog(tri_t[(a * asize + b) * asize + c3], tri_total)
-              + jlog(tri_t[(b * asize + c3) * asize + d], tri_total);
-    double vb = jlog(bi_t[a * asize + b], bi_total)
-              + jlog(bi_t[b * asize + c3], bi_total)
-              + jlog(bi_t[c3 * asize + d], bi_total);
-    double vm = jlog(mono_t[a], mono_total) + jlog(mono_t[b], mono_total)
-              + jlog(mono_t[c3], mono_total) + jlog(mono_t[d], mono_total);
+    double vq = jlog(LM_QUAD, table[idx], static_cast<double>(total));
+    double vt = jlog(LM_TRI, tri_t[(a * asize + b) * asize + c3], tri_total)
+              + jlog(LM_TRI, tri_t[(b * asize + c3) * asize + d], tri_total);
+    double vb = jlog(LM_BI, bi_t[a * asize + b], bi_total)
+              + jlog(LM_BI, bi_t[b * asize + c3], bi_total)
+              + jlog(LM_BI, bi_t[c3 * asize + d], bi_total);
+    double vm = jlog(LM_MONO, mono_t[a], mono_total)
+              + jlog(LM_MONO, mono_t[b], mono_total)
+              + jlog(LM_MONO, mono_t[c3], mono_total)
+              + jlog(LM_MONO, mono_t[d], mono_total);
     return lam[0] * vq + lam[1] * vt / 2.0 + lam[2] * vb / 3.0 + lam[3] * vm / 4.0;
   };
   auto interp_P = [&](int idx) -> double
@@ -971,6 +1015,19 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   {
     if (interp) return log10(interp_P(idx));
     if (loglin) return loglin_sym ? loglin_v_sym(idx) : loglin_v(idx);
+    /* Default flat floor: eff_count() is a function of the count alone, so it
+       memoises like jlog above. laplace/background/overlap grade by idx and
+       must not. */
+    if (! (laplace || background || overlap))
+      {
+        double * slot = memo_slot(LM_EFF, table[idx]);
+        if ((slot != nullptr) && ! std::isnan(*slot))
+          return *slot - log_total;
+        const double v = log10(eff_count(idx, table[idx]));
+        if (slot != nullptr)
+          *slot = v;
+        return v - log_total;
+      }
     return log10(eff_count(idx, table[idx])) - log_total;
   };
 
@@ -1026,6 +1083,16 @@ void init()
         rotor_fwd[i][j] = char2num(rotor_string[i][j]);
         rotor_rev[i][j] = strchr(rotor_string[i],num2char(j)) - rotor_string[i];
         notch[i][j] = strchr(notch_string[i], num2char(j)) != NULL;
+      }
+
+  for (int i=0; i < rotor_count; i++)
+    for (int j=0; j < asize; j++)
+      {
+        int k = 0;
+        while ((k < asize) && ! notch[i][(j + k) % asize])
+          k++;
+        /* 26 means the wheel has no notch at all */
+        notch_gap[i][j] = static_cast<unsigned char>(k);
       }
 
   for (int i=0; i < reflector_count; i++)
@@ -1367,35 +1434,62 @@ void init_ring_grund(machine & m, int a, int b, int c, int x, int y, int z)
   m.grundstellung[2] = z;
 }
 
+/* Modular arithmetic on alphabet positions. Everything the machine holds -- a
+   grundstellung, a ringstellung, a rotor-table entry, a letter -- lives in [0, 25], so
+   these three narrow forms cover every site in the program except the three noted on
+   mod26_full() below. Each compiles to a compare and a conditional move, where a general
+   `% 26` compiles to a magic-constant division.
+
+   That distinction was worth a lot more than it looks. setup_mapping() used a general
+   form SIX times per character (three step increments, three ring offsets) and
+   rotor_l/rotor_r twice each per rotor stage; narrowing them measured setup_mapping
+   -39% and precompute -40% in instructions, and `make bench` search -33% under g++ /
+   -41% under clang. The reason it went unnoticed is that it is invisible under `-c`
+   (setup_mapping is under 0.1% of a hill-climb) and only bites the plain scan, where it
+   was 53.8% of instructions at 300 characters. */
+inline int step26(int x)          /* x + 1 mod 26, for x in [0, 25] */
+{
+  return (x == asize - 1) ? 0 : x + 1;
+}
+
+inline int diff26(int a, int b)   /* a - b mod 26, for a, b in [0, 25] */
+{
+  const int d = a - b;
+  return (d < 0) ? d + asize : d;
+}
+
+inline int add26(int a, int b)    /* a + b mod 26, for a, b in [0, 25] */
+{
+  const int s = a + b;
+  return (s >= asize) ? s - asize : s;
+}
+
+/* Apply one rotor forward / in reverse at its (start - ring) offset. The offset is
+   normalised into [0, 25] once, which is what lets both wrap-arounds be a single
+   conditional instead of the two magic-constant divisions `(x + 26 +- y) % 26` compiled
+   to. These run 7 times per entry while precompute() fills the 457 KB subst_array, i.e.
+   3.2M times per wheel order -- 12-26% of a plain scan's instructions. */
 int rotor_l(machine & m, int x, int rotor_no)
 {
-  int y = m.grundstellung[rotor_no] - m.ringstellung[rotor_no];
-  x = (x + asize + y) % asize;
-  x = rotor_fwd[m.walzenlage[rotor_no]][x];
-  x = (x + asize - y) % asize;
-  return x;
+  const int y = diff26(m.grundstellung[rotor_no], m.ringstellung[rotor_no]);
+  x = rotor_fwd[m.walzenlage[rotor_no]][add26(x, y)];
+  return diff26(x, y);
 }
 
 int rotor_r(machine & m, int x, int rotor_no)
 {
-  int y = m.grundstellung[rotor_no] - m.ringstellung[rotor_no];
-  x = (x + asize + y) % asize;
-  x = rotor_rev[m.walzenlage[rotor_no]][x];
-  x = (x + asize - y) % asize;
-  return x;
+  const int y = diff26(m.grundstellung[rotor_no], m.ringstellung[rotor_no]);
+  x = rotor_rev[m.walzenlage[rotor_no]][add26(x, y)];
+  return diff26(x, y);
 }
 
-inline int mod26(int x)
-{
-  return (x+asize)%asize;
-}
-
-/* mod26() adds a SINGLE alphabet, so it is only correct for x >= -26 -- fine everywhere it
-   is used on a position plus a step. The --ring-stride refinement derives offsets from a
-   step-count difference that is not bounded that way (a candidate start1 far from the
-   coarse winner's can differ by several steps, and the difference is subtracted from a
-   position), so it uses this full-range form. Caught by UBSan as a negative subst_array
-   index, which then read out of bounds. */
+/* The only general form left, and it has exactly three callers -- all in the
+   --ring-stride refinement, which derives ring1/ring0/start0 from step-count DIFFERENCES
+   rather than from positions. A candidate start1 far from the coarse winner's can differ
+   by several steps, and that difference is subtracted from a position, so the result is
+   bounded by nothing and none of the narrow forms above will do. An earlier version used
+   a single-alphabet `(x + 26) % 26`, which is correct only for x >= -26; UBSan caught it
+   as a negative subst_array index that then read out of bounds. */
 inline int mod26_full(int x)
 {
   return ((x % asize) + asize) % asize;
@@ -1435,26 +1529,63 @@ void set_effective_reflector(machine & m)
   const unsigned char * gr = rotor_rev[m.greek];
   for (int x = 0; x < asize; x++)
     {
-      int a = mod26(gf[mod26(x + o)] - o);   /* Greek forward  (rotor_l style) */
+      int a = diff26(gf[add26(x, o)], o);    /* Greek forward  (rotor_l style) */
       int b = thin[a];                       /* thin reflector                 */
-      int c = mod26(gr[mod26(b + o)] - o);   /* Greek reverse  (rotor_r style) */
+      int c = diff26(gr[add26(b, o)], o);    /* Greek reverse  (rotor_r style) */
       m.reflector_eff[x] = static_cast<unsigned char>(c);
     }
 }
 
 void precompute(machine & m)
 {
+  /* The stack is
+       R2(g3) o [ R1(g2) o R0(g1) o Refl o L0(g1) o L1(g2) ] o L2(g3)
+     so the bracketed middle depends on (g1, g2) only and is built 676 times
+     rather than 17576; and the right wheel's two permutations depend on g3
+     only, so they are tabulated once. The innermost loop then costs three
+     table lookups per letter instead of seven rotor applications, and none of
+     the modular arithmetic that used to wrap each one.
+       Worth 10.8x: 134.0M -> 12.4M instructions, which takes precompute from
+     10-21% of a plain scan to 1.0%. Counting only the table lookups predicts
+     2.2x; the rest was the arithmetic around them. */
   int r1 = 0;
   int r2 = 0;
   int r3 = 0;
+  unsigned char l2[asize][asize], rr2[asize][asize];
+  for (int g3 = 0; g3 < asize; g3++)
+    {
+      init_ring_grund(m, r1, r2, r3, 0, 0, g3);
+      for (int x = 0; x < asize; x++)
+        {
+          l2[g3][x] = static_cast<unsigned char>(rotor_l(m, x, 2));
+          rr2[g3][x] = static_cast<unsigned char>(rotor_r(m, x, 2));
+        }
+    }
+
+  unsigned char mid[asize];
   for (int g1 = 0; g1 < asize; g1++)
     for (int g2 = 0; g2 < asize; g2++)
-      for (int g3 = 0; g3 < asize; g3++)
-        {
-          init_ring_grund(m, r1, r2, r3, g1, g2, g3);
-          for (int x = 0; x < asize; x++)
-            m.subst_array[g1][g2][g3][x] = subst_rotors(m, x);
-        }
+      {
+        init_ring_grund(m, r1, r2, r3, g1, g2, 0);
+        for (int y = 0; y < asize; y++)
+          {
+            int v = rotor_l(m, y, 1);
+            v = rotor_l(m, v, 0);
+            v = m.reflector_eff[v];
+            v = rotor_r(m, v, 0);
+            v = rotor_r(m, v, 1);
+            mid[y] = static_cast<unsigned char>(v);
+          }
+        for (int g3 = 0; g3 < asize; g3++)
+          {
+            unsigned char * __restrict out = m.subst_array[g1][g2][g3];
+            const unsigned char * __restrict fwd = l2[g3];
+            const unsigned char * __restrict rev = rr2[g3];
+            for (int x = 0; x < asize; x++)
+              out[x] = rev[mid[fwd[x]]];
+          }
+      }
+  init_ring_grund(m, r1, r2, r3, asize - 1, asize - 1, asize - 1);
 }
 
 /* Step the rotors over the message and record, per character position, a pointer
@@ -1490,36 +1621,95 @@ void setup_mapping(machine & m, bool copy_rows)
   int g1 = m.grundstellung[1];
   int g2 = m.grundstellung[2];
 
-  for (int i = 0; i < textlength; i++)
-    {
-      /* stepping schedule including the Enigma double-stepping anomaly: the
-         middle rotor advances (carrying the left one) when it sits on its own
-         notch, as well as on the usual right-rotor carry */
-      if (notch[w1][g1])
-        {
-          g0 = mod26(1 + g0);
-          g1 = mod26(1 + g1);
-        }
-      else if (notch[w2][g2])
-        {
-          g1 = mod26(1 + g1);
-        }
-      g2 = mod26(1 + g2);
+  /* Only the RIGHT wheel moves on most characters, and while it moves alone the
+     row address just walks 26 bytes at a time. So rather than test both notches
+     once per character, jump to the next stepping event: notch_gap[w2][g2] says
+     how many characters the right wheel has before its notch fires, and the
+     middle wheel's own notch cannot fire mid-run because g1 does not change
+     there. A run is then a branch-free pointer fill, and the branchy stepping
+     logic runs once per event (about once per 26 characters, twice for the
+     two-notch VI-VIII) instead of once per character. */
+  int d0 = diff26(g0, r0);
+  int d1 = diff26(g1, r1);
+  int d2 = diff26(g2, r2);
+  const unsigned char (* blk)[asize] = sa[d0][d1];
+  const unsigned char * row = blk[d2];
 
-      const unsigned char * row =
-        sa[mod26(g0 - r0)][mod26(g1 - r1)][mod26(g2 - r2)];
-      if (copy_rows)
+  int i = 0;
+  while (i < textlength)
+    {
+      g2 = add26(d2, r2);            /* invariant: d2 == diff26(g2, r2) */
+
+      /* A stepping event: the middle wheel advances, carrying the left one when
+         it sits on its own notch (the Enigma double step). One character. */
+      if (notch[w1][g1] || notch[w2][g2])
         {
-          memcpy(m.mapping[i], row, asize);
-          rows[i] = m.mapping[i];
+          if (notch[w1][g1])
+            {
+              g0 = step26(g0);  d0 = step26(d0);
+            }
+          g1 = step26(g1);  d1 = step26(d1);
+          d2 = step26(d2);      /* g2 is re-derived at the loop top */
+          blk = sa[d0][d1];
+          row = blk[d2];
+          if (copy_rows)
+            {
+              memcpy(m.mapping[i], row, asize);
+              rows[i] = m.mapping[i];
+            }
+          else
+            rows[i] = row;
+          i++;
+          continue;
         }
-      else
-        rows[i] = row;
+
+      /* A run: the right wheel steps alone for `n` characters. g2 is not
+         tracked through it -- d2 == diff26(g2, r2) is an invariant, so g2 is
+         recovered from d2 at the top of the loop, which also keeps `n` (up to
+         26 for a notchless wheel) out of add26's [0, 25] domain. */
+      int n = notch_gap[w2][g2];
+      if (n > textlength - i)
+        n = textlength - i;
+      while (n > 0)
+        {
+          /* Split at the ring-offset wrap so the fill itself is branch-free. */
+          int m2 = asize - 1 - d2;
+          if (m2 > n)
+            m2 = n;
+          for (int k = 0; k < m2; k++)
+            {
+              row += asize;
+              if (copy_rows)
+                {
+                  memcpy(m.mapping[i + k], row, asize);
+                  rows[i + k] = m.mapping[i + k];
+                }
+              else
+                rows[i + k] = row;
+            }
+          i += m2;
+          d2 += m2;
+          n -= m2;
+          if (n > 0)
+            {
+              d2 = 0;
+              row = blk[0];
+              if (copy_rows)
+                {
+                  memcpy(m.mapping[i], row, asize);
+                  rows[i] = m.mapping[i];
+                }
+              else
+                rows[i] = row;
+              i++;
+              n--;
+            }
+        }
     }
 
   m.grundstellung[0] = static_cast<unsigned char>(g0);
   m.grundstellung[1] = static_cast<unsigned char>(g1);
-  m.grundstellung[2] = static_cast<unsigned char>(g2);
+  m.grundstellung[2] = static_cast<unsigned char>(add26(d2, r2));
 }
 
 /* Cumulative step counts of the middle and left wheels, per character position,
@@ -1534,7 +1724,8 @@ void setup_mapping(machine & m, bool copy_rows)
    step counts differ from the winner's by a constant reproduces the winner's
    alignment exactly when its ring offsets absorb that constant. w1/w2 are
    TRANSLATED rotor indices (as held in machine::walzenlage), since notch[] is
-   indexed that way. */
+   indexed that way. g1/g2 are start positions and so are in [0, 25], which is
+   what lets the stepping use step26(). */
 static void step_counts(int w1, int w2, int g1, int g2,
                         unsigned short * mid, unsigned short * left)
 {
@@ -1545,14 +1736,14 @@ static void step_counts(int w1, int w2, int g1, int g2,
         {
           nleft++;
           nmid++;
-          g1 = mod26(1 + g1);
+          g1 = step26(g1);
         }
       else if (notch[w2][g2])
         {
           nmid++;
-          g1 = mod26(1 + g1);
+          g1 = step26(g1);
         }
-      g2 = mod26(1 + g2);
+      g2 = step26(g2);
       mid[i] = static_cast<unsigned short>(nmid);
       left[i] = static_cast<unsigned short>(nleft);
     }
@@ -3825,7 +4016,7 @@ struct best_result
 static best_result * g_progress = nullptr;
 
 /* --- middle-wheel ring x start collapse (archived/PERFORMANCE.md §7.12) -------------
-   Shifting ring1 and start1 together leaves mod26(g1-r1) -- the middle wheel's whole
+   Shifting ring1 and start1 together leaves diff26(g1, r1) -- the middle wheel's whole
    contribution to the substitution -- invariant, so two such pairs can only differ
    through notch[w1][g1], the middle notch that gates the left wheel and the double
    step. The middle wheel steps only ~once per 26 characters, so in a short message it
@@ -3863,8 +4054,8 @@ static int mid_first_fire(int w1, int w2, int s1, int s2, int limit)
       if (notch[w1][g1])
         return i;                    /* the firing that steps the left wheel */
       if (notch[w2][g2])
-        g1 = mod26(1 + g1);
-      g2 = mod26(1 + g2);
+        g1 = step26(g1);
+      g2 = step26(g2);
     }
   return -1;
 }
@@ -4489,11 +4680,11 @@ static key_space build_key_space()
      unconditional -- not just "when it happens not to step" (some settings ARE
      merely unidentifiable per instance; this is a stronger, always-true fact).
      Nothing in setup_mapping() ever reads ringstellung[0] or grundstellung[0]
-     except the final subst_array lookup mod26(g0-r0): wheel 0 has no notch
+     except the final subst_array lookup diff26(g0, r0): wheel 0 has no notch
      check of its own (there is no wheel to its left to step), and its own
      stepping (driven entirely by wheel 1's notch) advances g0 by a pure
      additive constant untouched by r0 -- so shifting ring0 and start0 by the
-     same delta leaves mod26(g0(i)-r0) identical at every character position i,
+     same delta leaves diff26(g0(i), r0) identical at every character position i,
      for the ENTIRE message, regardless of length or how many times wheel 0
      steps (verified: -R/-g shifted together by 1..25 produced byte-identical
      decodes at 127 characters, vs. the middle/right wheels which visibly
@@ -4563,7 +4754,7 @@ static key_space build_key_space()
         seen[i] = false;
       for (int gp = gp_min; gp <= gp_max; gp++)
         for (int gr = gr_min; gr <= gr_max; gr++)
-          seen[mod26(gp - gr)] = true;
+          seen[diff26(gp, gr)] = true;
       for (int off = 0; off < asize; off++)   /* ascending: deterministic order */
         if (seen[off])
           offset_list.push_back(off);
@@ -5213,8 +5404,8 @@ static double bruteforce(char * result, bool allow_empty)
              but §7.10 is the DEGENERACY, that shifting ring0 and start0 together is
              decode-identical, which is not the same claim as pinning o0 across a ring2
              change.) */
-          int coarse_off1 = mod26(m.grundstellung[1] - m.ringstellung[1]);
-          int coarse_off2 = mod26(m.grundstellung[2] - m.ringstellung[2]);
+          int coarse_off1 = diff26(m.grundstellung[1], m.ringstellung[1]);
+          int coarse_off2 = diff26(m.grundstellung[2], m.ringstellung[2]);
           int coarse_g1 = m.grundstellung[1];
           int coarse_g2 = m.grundstellung[2];
           /* TRANSLATED rotor indices: notch[] is indexed that way, unlike the §7.12 mask
@@ -5333,7 +5524,7 @@ static double bruteforce(char * result, bool allow_empty)
             {
               if (! ((mask2 >> v) & 1u))
                 continue;
-              int g2 = mod26(v + coarse_off2);
+              int g2 = add26(v, coarse_off2);
               for (int g1 = range.g_min[1]; g1 <= range.g_max[1]; g1++)
                 {
                   if ((mrow != nullptr) && ! ((mrow[g2] >> g1) & 1u))

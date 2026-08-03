@@ -233,6 +233,32 @@ materially different regime, and read the evidence in `archived/` first.
 | Greedy plug-by-plug seed | **reasoned** down — see below |
 | Cost-pruning a crib library by default | prunes the likeliest hits |
 | Bombe-style bit-parallel crib deduction | 30–50× SLOWER — see below |
+| 2-byte row index instead of an 8-byte pointer | +26% — see below |
+
+**A 2-byte row index instead of `rows[]`'s 8-byte pointer, measured down.**
+`setup_mapping()` writes one pointer per character — the "playlist" of which
+precomputed 26-byte substitution row applies at each message position — and
+the scorers chase it. Storing a `uint16_t` index into `subst_array` instead
+shrinks that array 4×, at the cost of one multiply-and-add per lookup to
+rebuild the address. Built and measured against a control of −2.0%/+0.3%:
+
+| | 8-byte pointer | 2-byte index | |
+|---|---:|---:|---:|
+| scorer instructions | 378.4 M | 426.0 M | +12.6% |
+| `setup_mapping` instructions | 143.6 M | 283.9 M | **+97.7%** |
+| total | 728.0 M | 915.9 M | **+25.8%** |
+
+Wall: **+12…21% on the scan and ~+16% on the hill-climb**. Two reasons, and the
+second is the one that is easy to miss. The scorer does pay for the arithmetic
+(+12.6%) — but `setup_mapping` nearly **doubles**, because writing the index
+means computing `(row − sa_base) / asize` at every store, which is a
+magic-constant division. The producer loses more than the consumer saves, so the
+framing "cheaper to store, dearer to read" is wrong: it is dearer at both ends.
+
+And the premise never applied. `rows[]` is 8 bytes × message length — **2.4
+KB at 300 characters**, L1-resident either way — so there is no memory traffic
+for a 4× shrink to save. Check the working-set size before trading arithmetic
+for bytes.
 
 **A Bombe-style bit-parallel crib deduction, measured down.** The crib
 deduction runs 26 chained hypotheses per alignment and a rejecting key pays all
@@ -290,12 +316,46 @@ win: ~3–4 constraints is the minimum for a contradiction to be *visible*, so
 hypotheses, and the scalar chains are already there. Early death is the whole
 optimization — the same conclusion as the union flood, relocated.
 
-One thing in `crib_try` *is* plausibly mispriced and needs no parallelism:
-the `board[i] = -1` reset is 26 stores × 26 hypotheses = **676 stores per
-alignment**, against ~97 core lookups. A touched-list undo (the closure writes
-typically 4–8 letters) would remove it. Unmeasured — the reset vectorises and
-the lookups are latency-bound, so it may well not dominate; measure before
-building.
+**Two more things inside `crib_try`, both measured down.** Line-level callgrind
+on a crib sweep, where `crib_try` is **72.7%** of the run:
+
+| line | share of run |
+|---|---:|
+| `if ((board[y] >= 0) && (board[y] != x))` | 12.9% |
+| `if ((board[c] >= 0) && (board[p] < 0))` | 11.9% |
+| `int p = crib_p[j], c = num_ciphertext[at + j];` | 6.8% |
+| `for (int jj = 0; jj < crib_edges; jj++)` | 6.0% |
+| `const unsigned char * core = rows[at + j];` | 5.1% |
+| `board[i] = -1;` | **3.6%** |
+
+*The board reset, a lead that did not survive its own measurement.* The
+`board[i] = -1` clear is 26 stores × 26 hypotheses = 676 stores per alignment
+against ~97
+core lookups, which reads like a 7× mispricing and is not one: the compiler
+vectorises a 104-byte clear into a handful of wide stores while the lookups are
+**dependent** loads. It is 3.6% of the run, so a touched-list undo could recover
+~3% at best, in exchange for state whose failure mode is a stale board making
+silently wrong deductions. Not worth it.
+
+*Dropping the `while (changed)` second pass — unsound, and it looks provable.*
+BFS order visits every edge after one endpoint is known, so a single sweep
+"obviously" completes the closure and the second pass only confirms nothing
+changed. The hole is **reciprocity**: `crib_set` writes `board[y]` for `y =
+core[...]`, which can be any letter including one in a **different component**,
+reachable no other way — and that can make an already-passed edge deducible.
+Instrumented to count deductions and rejections happening on pass 2 or later:
+
+| crib | late deductions | late rejections |
+|---|---:|---:|
+| 12 letters, pinned, 52 728 keys | 1 | 0 |
+| 24 letters, swept | 0 | 0 |
+| 8 letters, swept, 17 576 keys | **5 252** | **595** |
+
+So on long cribs the second pass really does find nothing — and on short ones it
+finds a great deal. A single pass would lose 595 rejections in that last cell,
+i.e. climb keys that should have been skipped: not byte-identical and strictly
+worse filtering. Short cribs are also where a sweep is most expensive (§4.2b's
+cost cliff), so this fails exactly where it would have paid.
 
 **Cost-pruning a crib library, measured down and removed.** A `--crib-max-hyps`
 flag skipped a `--crib-list` crib whose sampled cost exceeded a cap in surviving
