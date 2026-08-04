@@ -1326,6 +1326,36 @@ static inline bool crib_set(int * board, int x, int y)
   return true;
 }
 
+/* One menu edge with everything the deduction needs in one place, laid out in
+   BFS order so the closure walks it sequentially. p and c are fixed for the
+   whole run once the alignment is chosen; only `core` changes, and only per
+   key. All three used to be re-gathered from three separate arrays --
+   crib_p[order[jj]], num_ciphertext[at + j] and rows[at + j] -- once per edge
+   per HYPOTHESIS, i.e. 26 times over for values that do not vary across the
+   26. They profiled at 17.1% of a crib sweep between them (5.93 + 5.22 + 4.45
+   + 1.48). */
+struct crib_edge
+{
+  const unsigned char * core;
+  unsigned char p, c;
+};
+
+/* Fill `ed` for alignment index `a` from this machine's rows[]. Called ONCE per
+   key per alignment; the 26 hypotheses then read it and nothing else. */
+static void crib_edges_for(const machine & m, int a, crib_edge * ed)
+{
+  const int at = crib_align[a];
+  const unsigned short * const order =
+    &crib_order[static_cast<size_t>(a) * crib_edges];
+  for (int jj = 0; jj < crib_edges; jj++)
+    {
+      const int j = order[jj];
+      ed[jj].core = m.rows[at + j];
+      ed[jj].p = crib_p[j];
+      ed[jj].c = num_ciphertext[at + j];
+    }
+}
+
 /* One hypothesis at one alignment: "the anchor letter is plugged to hyp". Propagates to a
    fixed point and
    returns false on contradiction. `board` is left holding the partial plugboard it
@@ -1334,12 +1364,11 @@ static inline bool crib_set(int * board, int x, int y)
    the UNSIGNED char rows[] table, and mixing those two signednesses is the bug class
    clang-tidy's bugprone-signed-char-misuse exists to catch. 26 ints, read once per key,
    cost nothing. */
-static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board,
-                     const unsigned short * order)
+static bool crib_try(int anchor, int hyp, int * board,
+                     const crib_edge * __restrict ed)
 {
   for (int i = 0; i < asize; i++)
     board[i] = -1;
-  const unsigned char * const * rows = m.rows;
 
   if (! crib_set(board, anchor, hyp))
     return false;
@@ -1349,9 +1378,8 @@ static bool crib_try(const machine & m, int at, int anchor, int hyp, int * board
       changed = false;
       for (int jj = 0; jj < crib_edges; jj++)
         {
-          int j = order[jj];
-          const unsigned char * core = rows[at + j];
-          int p = crib_p[j], c = num_ciphertext[at + j];
+          const unsigned char * core = ed[jj].core;
+          int p = ed[jj].p, c = ed[jj].c;
           if ((board[c] >= 0) && (board[p] < 0))
             {
               if (! crib_set(board, p, static_cast<int>(core[board[c]])))
@@ -1398,11 +1426,14 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
 static int crib_first_stop(const machine & m)
 {
   int board[asize];
+  crib_edge ed[maxlen];
   for (int a = 0; a < crib_aligns; a++)
-    for (int h = 0; h < asize; h++)
-      if (crib_try(m, crib_align[a], crib_anchor_at[a], h, board,
-                   &crib_order[static_cast<size_t>(a) * crib_edges]))
-        return crib_align[a];
+    {
+      crib_edges_for(m, a, ed);
+      for (int h = 0; h < asize; h++)
+        if (crib_try(crib_anchor_at[a], h, board, ed))
+          return crib_align[a];
+    }
   return -1;
 }
 
@@ -3514,11 +3545,13 @@ static double crib_unit(machine & m, size_t key_index, int restart)
   int best_at = -1;
   int board[asize];
 
+  crib_edge ed[maxlen];
   for (int a = 0; a < crib_aligns; a++)
-    for (int h = 0; h < asize; h++)
+    {
+      crib_edges_for(m, a, ed);
+      for (int h = 0; h < asize; h++)
       {
-        if (! crib_try(m, crib_align[a], crib_anchor_at[a], h, board,
-                       &crib_order[static_cast<size_t>(a) * crib_edges]))
+        if (! crib_try(crib_anchor_at[a], h, board, ed))
           continue;
         init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
         memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
@@ -3548,6 +3581,7 @@ static double crib_unit(machine & m, size_t key_index, int restart)
             memcpy(best_steck, m.steckerbrett, asize);
           }
       }
+    }
 
   if (! have)
     return -1e300;      /* no hypothesis survived: never wins the merge */
@@ -3880,12 +3914,14 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
   format_key(m, w, r, g);
   int board[asize];
   std::lock_guard<std::mutex> lock(g_dump_mutex);
+  crib_edge ed[maxlen];
   for (int a = 0; a < crib_aligns; a++)
-    for (int h = 0; h < asize; h++)
+    {
+      crib_edges_for(m, a, ed);
+      for (int h = 0; h < asize; h++)
       {
         int anchor = crib_anchor_at[a];
-        if (! crib_try(m, crib_align[a], anchor, h, board,
-                       &crib_order[static_cast<size_t>(a) * crib_edges]))
+        if (! crib_try(anchor, h, board, ed))
           continue;
         fprintf(stderr, "cribstop %s %s %s %d %c %c", w, r, g, crib_align[a] + 1,
                 num2char(anchor), num2char(h));
@@ -3894,6 +3930,7 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
             fprintf(stderr, " %c%c", num2char(x), num2char(board[x]));
         fputc('\n', stderr);
       }
+    }
 }
 
 /* One plugboard-recovery climb from the seed board. In kicked mode (--restarts N>=1) every
@@ -4974,6 +5011,8 @@ static crib_cost crib_estimate(size_t nsample)
   m->plugboards_scored = 0;   /* differenced below; explicit so cppcheck can see it */
   size_t cur_wo = static_cast<size_t>(-1);
   int rg6[6];
+  std::vector<crib_edge> edbuf(static_cast<size_t>(crib_edges));
+  crib_edge * ed = edbuf.data();   /* heap: the estimator is cold */
 
   /* Build wheel order 0's table exactly as phase 1 does, then reuse it for every
      sampled key: key_to_machine points m.subst_array at `all + wo * asize`, and wo is
@@ -4999,15 +5038,17 @@ static crib_cost crib_estimate(size_t nsample)
         continue;                       /* collapsed away by 7.12 */
       c.sampled++;
       for (int a = 0; a < crib_aligns; a++)
-        for (int h = 0; h < asize; h++)
-          if (crib_try(*m, crib_align[a], crib_anchor_at[a], h, board,
-                       &crib_order[static_cast<size_t>(a) * crib_edges]))
-            {
-              hyps++;
-              for (int i = 0; i < asize; i++)
-                if (board[i] >= 0)
-                  pins++;
-            }
+        {
+          crib_edges_for(*m, a, ed);
+          for (int h = 0; h < asize; h++)
+            if (crib_try(crib_anchor_at[a], h, board, ed))
+              {
+                hyps++;
+                for (int i = 0; i < asize; i++)
+                  if (board[i] >= 0)
+                    pins++;
+              }
+        }
     }
 
   if (c.sampled > 0)
