@@ -96,7 +96,9 @@ same-machine A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>`
 in a throwaway git worktree and runs both, failing if any benchmark
 is >`THRESHOLD`% (default 10) slower than BASE — run this around the planned
 global-state/threading refactor to confirm single-thread throughput hasn't
-regressed.
+regressed. **CI uses the same 10%** — the `Bench` workflow sets no
+`THRESHOLD` override, so there is one number and it cannot drift from this
+sentence. That step is `continue-on-error`, so the bound is non-blocking.
 
 > **Measure the noise floor before believing any A/B number.** Check the base
 > revision out into the working tree and run `make bench BASE=<that same ref>`;
@@ -110,7 +112,7 @@ regressed.
 > was a genuine regression (a hot-path struct grown from 48 to 156 bytes) while
 > simultaneous `hillclimb` scatter of +4.5%/−1.3%/+5.1% was nothing at all. Both
 > readings you would reach without the control — "both ~5%, so both noise" and
-> "fix the hillclimb number" — are wrong. The default 10% `THRESHOLD` is a
+> "fix the hillclimb number" — are wrong. The 10% `THRESHOLD` is a
 > coarse backstop, not a resolution limit: the `search` tier resolves ~1%, so a
 > sub-threshold move there can still be real, and a `hillclimb` move under ~5%
 > never is. Also don't trust a single compiler — clang reported `search`
@@ -1536,9 +1538,16 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   grep looks clean when it is not. A `Bench` workflow
   (`.github/workflows/bench.yml`) additionally runs `make bench LONG=1` on a
   {g++, clang++} × {x86_64, arm64-Linux} matrix — on PRs as a same-machine A/B
-  vs the PR base, but **advisory only** (`continue-on-error`): shared runners
-  are noisy/bimodal, so treat a flagged cell as "re-check on quiet hardware and
-  compare disassembly", never as an automatic block (or a pass as proof).
+  vs the PR base at the script's default **10%**, and **advisory only**
+  (`continue-on-error`), so treat a flagged cell as "re-check and compare
+  disassembly", never as an automatic block (or a pass as proof). **Do not
+  assume CI is the noisy end.** The GitHub runners have been observed *quieter*
+  than a local dev container: a base-vs-base control in one container measured
+  a **±10% floor on the clang `hillclimb` tier**, which is where an
+  intermediate revision's flagged +11–19% cell came from — `objdump` showed the
+  score loop was 118 instructions in both builds with only addresses differing,
+  i.e. pure code placement. Measure the floor wherever you are judging, and do
+  not import a number measured somewhere else.
 - **Every check in `tests/run_tests.sh` must be QUICK — size the keyspace to the
   property under test, not to realism.** The sanitizer job runs the *whole*
   suite at roughly a 10× slowdown, so a check that costs 2 s locally costs ~20 s
