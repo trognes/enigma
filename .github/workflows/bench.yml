@@ -52,7 +52,10 @@ jobs:
       - name: Bench A/B vs PR base (advisory)
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        run: make bench CXX=${{ matrix.cxx }} LONG=1 THRESHOLD=15 BASE=${{ github.event.pull_request.base.sha }}
+        # No THRESHOLD override: CI uses the same 10% the script defaults to,
+        # so there is one number and it cannot drift from the docs. The step is
+        # continue-on-error, so a flagged cell is a prompt to re-check, not a block.
+        run: make bench CXX=${{ matrix.cxx }} LONG=1 BASE=${{ github.event.pull_request.base.sha }}
       - name: Bench HEAD (reference timings)
         if: github.event_name != 'pull_request'
         run: make bench CXX=${{ matrix.cxx }} LONG=1
