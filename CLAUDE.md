@@ -74,13 +74,24 @@ make crackquality         # build, then run tests/crack_quality.py (cracking qua
 ./enigma -h               # help / usage
 ```
 
-`make bench` (`tests/bench.sh`) benchmarks the two hot paths **separately** —
-`search` (brute-force scan, no plugboard) and `hillclimb` (the `-c` plugboard
-loop) — because a change can regress one without touching the other. Each has a
-`quick` tier (default, a few seconds) and an opt-in `long` tier (`make bench
-LONG=1`, ≥15–30s each) for a stronger signal; `make bench SCALE=1` additionally
-sweeps `-T` to show thread scaling. Timing is the min of several repetitions
-(the per-tier benchmarks are single-threaded). The regression guard is a
+`make bench` (`tests/bench.sh`) benchmarks the hot paths **separately** —
+`search` (brute-force scan, no plugboard), `hillclimb` (the `-c` plugboard loop
+under `-q`), **`fused`** (the same climb under `-f`, the recommended model) and
+**`crib`** (a `--crib` sweep) — because a change can regress one without
+touching the others. The last two exist because coverage gaps are where the
+wins hide: `hillclimb` runs `-q`, which computes no index of coincidence, so it
+cannot see anything inside `ngram_ic_decode` — and that function is **91.9% of
+a `-f -c` run**, where a 10.5% item sat unnoticed until the three regimes were
+profiled separately (PR #152). `fused` differs from `hillclimb` only in the
+model, so a delta between the two rows is the scorer and nothing else;
+verified by A/B-ing across the change it was built to catch, where `fused`
+read −3.6/−4.1/−4.1% while `hillclimb` read +4.0/+5.3/−2.4%, i.e. noise.
+`crib` is the only tier that exercises `crib_try` (63.6% of a crib sweep) at
+all. Each has a `quick` tier (default, a few seconds) and an opt-in `long`
+tier (`make bench LONG=1`, ≥15–30s each) for a stronger signal; `make bench
+SCALE=1` additionally sweeps `-T` to show thread scaling. Timing is the min of
+several repetitions (the per-tier benchmarks are single-threaded). The
+regression guard is a
 same-machine A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>`
 in a throwaway git worktree and runs both, failing if any benchmark
 is >`THRESHOLD`% (default 10) slower than BASE — run this around the planned
