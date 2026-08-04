@@ -19,6 +19,17 @@
 #                  wildcarding the start position, so each of the start
 #                  positions runs a full hill-climb. Per key the climb costs
 #                  ~400x the bare scan, so this is ~99.7% hill-climb.
+#   * fused     -- the SAME climb under `-f`, the recommended scoring model.
+#                  `hillclimb` runs `-q`, which computes no index of
+#                  coincidence, so it cannot see anything in `ngram_ic_decode`
+#                  -- and that function is 91.9% of a `-f -c` run. A 10.5% item
+#                  inside it (the IC accumulation, PR #152) went unnoticed for
+#                  exactly this reason. The two rows differ ONLY in the model,
+#                  so they are directly comparable.
+#   * crib      -- a crib-driven sweep (`--crib`). Dominated by `crib_try`'s
+#                  deduction (63.6% of the run) rather than by scoring, because
+#                  a crib rejects most keys before anything is scored. Neither
+#                  other tier exercises that code at all.
 #
 # Each benchmark has a `quick` tier (default, a few seconds) and a `long` tier
 # (>=15-30s, opt in with LONG=1) that gives a stronger throughput signal.
@@ -246,8 +257,10 @@ sum_header
 
 # --- search: brute-force scan, no plugboard (wildcard wheels + start) ---------
 ct_s=$(encrypt "$(trunc 80)" "")
-# 3-permutations of wheels 1..3 (-x 3) x 26^3 start positions = 105456 keys
-bench search quick 105456 keys - "$ct_s" -q -u B -w ... -g ... -x 3 -l english
+# 3-permutations of wheels 1..3 (-x 3) x 26 ring2 x 26^3 starts = 2741856 keys.
+# The ring2 factor is easy to miss: no -r is given, so the default "AA." leaves
+# the rightmost ring wildcarded. Verified against the binary's own count.
+bench search quick 2741856 keys - "$ct_s" -q -u B -w ... -g ... -x 3 -l english
 
 # --- hillclimb: recover a 6-pair plugboard, wildcard start (-c) ---------------
 pb="AB CD EF GH IJ KL"
@@ -256,15 +269,35 @@ ct_h=$(encrypt "$pt_h" "$pb")
 # 26^2 start positions (first letter fixed to the true A), each a full climb
 bench hillclimb quick 676 climbs "$pt_h" "$ct_h" -q -c -u B -w 123 -r AAA -g A.. -l english
 
+# --- fused: the same climb under -f, the recommended model -------------------
+# Identical to the row above except for the model, so a delta between them is
+# the scorer and nothing else.
+bench fused quick 676 climbs "$pt_h" "$ct_h" -f -c -u B -w 123 -r AAA -g A.. -l english
+
+# --- crib: crib-driven sweep, deduction-bound rather than scoring-bound ------
+# CRIB is a 12-letter stretch of the benchmark plaintext at a pinned position
+# (1-based), so the true key survives and the run still recovers the message.
+# -r AAA pins the rings to keep the quick tier at 421824 keys; 96% are rejected
+# by arithmetic before being scored, which is the property under test.
+CRIB=LANGUAGESTAT
+CRIB_AT=19
+bench crib quick 421824 keys "$(trunc 80)" "$ct_s" -q -u B -w ... -g ... -x 4 -r AAA \
+      -l english --crib "$CRIB" --crib-at "$CRIB_AT"
+
 if [ "$LONG" = 1 ]; then
   ct_sl=$(encrypt "$(trunc 120)" "")
-  # 3-permutations of wheels 1..5 (-x 5) x 26^3 = 1054560 keys
-  bench search long 1054560 keys - "$ct_sl" -q -u B -w ... -g ... -x 5 -l english
+  # 3-permutations of wheels 1..5 (-x 5) x 26 ring2 x 26^3 = 27418560 keys
+  bench search long 27418560 keys - "$ct_sl" -q -u B -w ... -g ... -x 5 -l english
 
   pt_hl=$(trunc 160)
   ct_hl=$(encrypt "$pt_hl" "$pb")
   # full 26^3 start positions, each a full climb
   bench hillclimb long 17576 climbs "$pt_hl" "$ct_hl" -q -c -u B -w 123 -r AAA -g ... -l english
+  bench fused     long 17576 climbs "$pt_hl" "$ct_hl" -f -c -u B -w 123 -r AAA -g ... -l english
+
+  # -x 4 with the default rings wildcarded: 24 wheel orders x 26 x 26^3 keys
+  bench crib long 10967424 keys "$(trunc 120)" "$ct_sl" -q -u B -w ... -g ... -x 4 \
+        -l english --crib "$CRIB" --crib-at "$CRIB_AT"
 fi
 
 # --- thread scaling (opt in with SCALE=1) ------------------------------------
