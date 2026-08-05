@@ -331,6 +331,19 @@ static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force
    that is still a uniform sampling; past it only K=26 changes anything, and it changes
    accuracy more than cost. */
 static int opt_ring_stride;
+/* --ring-stride-mid K (default 1 = off): the same sparse sampling for the MIDDLE
+   stepping wheel's ring. Shifting ring1 and start1 together preserves diff26(g1, r1) --
+   the middle wheel's whole contribution to the substitution -- so a wrong ring1 with the
+   right offset decodes EXACTLY until the middle wheel's own notch fires at a different
+   position, and wrong from there. A shift of d moves that firing by ~26d characters, so
+   the corrupted fraction is ~26*d/L: unlike the rightmost wheel, the trade IMPROVES with
+   message length (~6pp per step at L=439, ~2.6pp at L=1000). Complementary to the 7.12
+   collapse, which is exact but decays to nothing past L~676.
+     Measured cost on 123 paired trials at L=439: 3.1% stride-specific miss at K=2 and
+   5.1% at K=3, against --ring-stride's 2% and 2-4% for comparable savings. Composes with
+   --ring-stride: the losses add rather than interact, and the coarse saving multiplies.
+   IMPROVEMENTS.md, "A --ring-stride for the MIDDLE wheel". */
+static int opt_ring_stride_mid;
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
@@ -4031,6 +4044,13 @@ struct search_range
      scattered and meant nothing). A byte holds 0..25 fine and keeps the struct near
      its original footprint. See archived/PERFORMANCE.md §7.11. */
   unsigned char r2_vals[asize];
+  /* --ring-stride-mid: ring1's tested set is {r_min[1], r_min[1]+K, ...}, a clean
+     arithmetic progression, so a stride multiplier suffices where ring2 needed a value
+     list (its refinement set is genuinely non-contiguous). 1 = every value.
+       Deliberately here, between r2_vals and r2_n: those leave two bytes of alignment
+     padding, so this costs the struct NOTHING. See the r2_vals note above for why that
+     matters. */
+  unsigned char r1_stride;
   int r2_n;
 };
 
@@ -4306,7 +4326,7 @@ void search_worker(machine & m,
 
               r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
               int rr = static_cast<int>(rflat % rc12);
-              r2 = range.r_min[1] + rr / rc[2];
+              r2 = range.r_min[1] + (rr / rc[2]) * range.r1_stride;
               /* ring2 can be a sparse set (--ring-stride); the range carries it as an
                  explicit list, so the decode is a lookup and needs no stride knowledge */
               r3 = range.r2_vals[rr % rc[2]];
@@ -4458,7 +4478,7 @@ static bool key_to_machine(machine & m, size_t idx,
 
   int r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
   int rr = static_cast<int>(rflat % rc12);
-  int r2 = range.r_min[1] + rr / rc[2];
+  int r2 = range.r_min[1] + (rr / rc[2]) * range.r1_stride;
   /* see the matching comment in search_worker() */
   int r3 = range.r2_vals[rr % rc[2]];   /* see the matching comment in search_worker() */
   int g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
@@ -4766,6 +4786,18 @@ static key_space build_key_space()
       ks.rc[i] = ks.range.r_max[i] - ks.range.r_min[i] + 1;
       ks.gc[i] = ks.range.g_max[i] - ks.range.g_min[i] + 1;
     }
+
+  /* --ring-stride-mid K: thin the MIDDLE wheel's ring the same way, keeping every Kth
+     value of the caller's range. Option parsing already required ring1 AND start1 to be
+     wildcarded -- with ring1 pinned each start1 carries a distinct offset and nothing is
+     redundant, the same precondition the other two wheels' reductions have.
+       An arithmetic progression, so a multiplier is enough here; ring2 needs a value list
+     only because its REFINEMENT set is non-contiguous. Note this leaves r_min[1]/r_max[1]
+     describing the caller's full bounds, which is what lets the refinement re-open ring1
+     to all 26 values simply by decoding with a stride of 1. */
+  ks.range.r1_stride = static_cast<unsigned char>(opt_ring_stride_mid);
+  if (opt_ring_stride_mid > 1)
+    ks.rc[1] = (ks.rc[1] + opt_ring_stride_mid - 1) / opt_ring_stride_mid;
 
   /* --ring-stride K (archived/PERFORMANCE.md §7.11): the rightmost wheel lacks wheel 0's exact
      collapse above (its own notch feeds forward into further stepping, so a ring+start
@@ -5341,7 +5373,7 @@ static double bruteforce(char * result, bool allow_empty)
      neither silently reverts the other's improvement by re-deriving from the stale
      pre-refinement best.idx. */
   size_t extra_keys_analysed = 0;   /* --ring-stride's refinement pass, added below */
-  if (best.found && (opt_polish || (opt_ring_stride > 1)))
+  if (best.found && (opt_polish || (opt_ring_stride > 1) || (opt_ring_stride_mid > 1)))
     {
       machine & m = *machines[0];
       size_t rg = rsize * gsize;
@@ -5384,7 +5416,7 @@ static double bruteforce(char * result, bool allow_empty)
          precomputed subst_array (same wheel order, so no re-precompute); the local
          best_result keeps its (mini-range-relative) idx from leaking into the outer
          best.idx, which nothing reads again after this point. */
-      if (opt_ring_stride > 1)
+      if ((opt_ring_stride > 1) || (opt_ring_stride_mid > 1))
         {
           /* The refinement tests EVERY ring2 the coarse pass skipped -- all 25 of
              them, unconditionally. No window, no budget, no dependence on K.
@@ -5526,7 +5558,24 @@ static double bruteforce(char * result, bool allow_empty)
              (confirmed by a concrete miss during testing). With every value in the set
              there is no edge to fall off. search_range carries ring2 as an explicit value
              list, so the punctured set goes in as-is: one mask, one search. */
-          unsigned int mask2 = ((1u << asize) - 1u) & ~(1u << center2);
+          /* Which ring2 values the refinement has to revisit depends on WHICH stride
+             ran, and getting this wrong is expensive in both directions.
+               --ring-stride skipped ring2 values outright, so every one of the other 25
+             must be tested. Its own centre needs no retest: phase 1 scored that exact
+             ring2 over a superset of what phase 2 searches there.
+               --ring-stride-mid skipped no ring2 at all -- it thinned ring1 -- so the
+             values to revisit are the ones where a skipped ring1 might hide the truth.
+             With only the middle stride running that is the CENTRE ALONE: the coarse pass
+             covered every ring2 exactly, so its winner is reliable and only ring1 needs
+             re-opening there. Refining all 26 in that case was measured costing 2.4x MORE
+             keys than not striding at all -- the saving went to a refinement that had
+             nothing to find.
+               With both strides on, both apply: all 25 skipped, plus the centre. */
+          unsigned int mask2 = 0;
+          if (opt_ring_stride > 1)
+            mask2 = ((1u << asize) - 1u) & ~(1u << center2);
+          if (opt_ring_stride_mid > 1)
+            mask2 |= 1u << center2;
 
           /* MEASUREMENT-ONLY override (ENIGMA_REFINE_WINDOW=k, unset/0/>=13 = off):
              restrict the refinement to the ring2 values within circular distance k of
@@ -5562,6 +5611,7 @@ static double bruteforce(char * result, bool allow_empty)
              translated. cur_wo was set by the key_to_machine() call above. */
           std::vector<wheel_task> rtasks(1, tasks[cur_wo]);
           search_range rrange;
+          rrange.r1_stride = 1;   /* candidates pin ring1 outright; never strided here */
           /* Every candidate pins all six positions, so each sub-search is a single key:
              the derived (ring2, start2) and (ring1, start1) are DIAGONALS, and
              search_range holds rectangles only. */
@@ -6257,6 +6307,17 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "so nothing above 13 pays until K=26, which is 15%");
   fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
   fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
+  fprintf(out, "  %-24s %s\n", "--ring-stride-mid K",
+          "The same for the MIDDLE wheel: test only every");
+  fprintf(out, "  %-24s %s\n", "", "Kth ring1, then refine the skipped ones (needs");
+  fprintf(out, "  %-24s %s\n", "", "-r and -g to wildcard that wheel; no -F/--exhaust)");
+  fprintf(out, "  %-24s %s\n", "", "[1..26, 1 = off]. Unlike --ring-stride the trade");
+  fprintf(out, "  %-24s %s\n", "", "IMPROVES with message length (corruption ~26*K/L),");
+  fprintf(out, "  %-24s %s\n", "", "so it is the long-message counterpart to the exact");
+  fprintf(out, "  %-24s %s\n", "", "middle-wheel collapse, which fades past L~676.");
+  fprintf(out, "  %-24s %s\n", "", "Measured 3.1%% miss at K=2, 5.1%% at K=3 (L=439).");
+  fprintf(out, "  %-24s %s\n", "", "Composes with --ring-stride: losses add, savings");
+  fprintf(out, "  %-24s %s\n", "", "multiply. Also an APPROXIMATION.");
   fprintf(out, "  %-24s %s\n", "--crib-rerank F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -6425,6 +6486,10 @@ void show_settings()
     fprintf(stderr, "Stride:     rightmost ring every %d (--ring-stride), then refine "
             "skipped\n            rings; approximate, may miss the true key\n",
             opt_ring_stride);
+  if (opt_ring_stride_mid > 1)
+    fprintf(stderr, "Stride:     middle ring every %d (--ring-stride-mid), then refine "
+            "skipped\n            rings; approximate, may miss the true key\n",
+            opt_ring_stride_mid);
 
   fprintf(stderr, "Threads:    %d\n", opt_threads);
 
@@ -6549,6 +6614,7 @@ int main(int argc, char * * argv)
   opt_seed_set = false;
   opt_anneal = 0;
   opt_ring_stride = 1;
+  opt_ring_stride_mid = 1;
 
   /* get arguments */
 
@@ -6558,7 +6624,7 @@ int main(int argc, char * * argv)
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
-         OPT_CRIBLIST, OPT_NOCRIBREORDER };
+         OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_RINGSTRIDEMID };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -6605,6 +6671,7 @@ int main(int argc, char * * argv)
       { "crib-rerank",    required_argument, nullptr, OPT_CRIBRERANK },
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { "ring-stride",    required_argument, nullptr, OPT_RINGSTRIDE },
+      { "ring-stride-mid", required_argument, nullptr, OPT_RINGSTRIDEMID },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
@@ -6716,6 +6783,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_RINGSTRIDE:
           opt_ring_stride = atoi(optarg);
+          break;
+        case OPT_RINGSTRIDEMID:
+          opt_ring_stride_mid = atoi(optarg);
           break;
         case OPT_NOPLUG:
           alltoupper(optarg);
@@ -6925,6 +6995,16 @@ int main(int argc, char * * argv)
     fatal("--ring-stride needs both -r and -g to wildcard the rightmost "
           "wheel's position (e.g. -r ..X -> -r ...)");
 
+  /* --ring-stride-mid K: the same, for the middle wheel. Same precondition and the
+     same reason -- with ring1 pinned, every start1 carries a distinct offset and
+     nothing is redundant to thin out. */
+  if ((opt_ring_stride_mid < 1) || (opt_ring_stride_mid > asize))
+    fatal("Illegal ring stride (--ring-stride-mid must be 1 to 26)");
+  if ((opt_ring_stride_mid > 1) &&
+      ((opt_ringstellung[1] != '.') || (opt_grundstellung[1] != '.')))
+    fatal("--ring-stride-mid needs both -r and -g to wildcard the middle "
+          "wheel's position (e.g. -r .X. -> -r ...)");
+
   if ((strlen(opt_steckerbrett) > asize) ||
       (strspn(opt_steckerbrett, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") <
        strlen(opt_steckerbrett)))
@@ -6956,6 +7036,8 @@ int main(int argc, char * * argv)
               "the climb)");
       if (opt_ring_stride > 1)
         fatal("--crib is not supported with --ring-stride");
+      if (opt_ring_stride_mid > 1)
+        fatal("--crib is not supported with --ring-stride-mid");
       if (opt_anneal > 0)
         fatal("--crib is not supported with -A (annealing seeds its own board)");
       /* A library holds cribs of many lengths, so one --crib-at cannot be right for
@@ -7101,6 +7183,9 @@ int main(int argc, char * * argv)
   if ((opt_ring_stride > 1) &&
       ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
     fatal("--ring-stride is not supported with -F or --exhaust");
+  if ((opt_ring_stride_mid > 1) &&
+      ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
+    fatal("--ring-stride-mid is not supported with -F or --exhaust");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */
