@@ -1333,7 +1333,16 @@ static inline bool crib_set(int * board, int x, int y)
    crib_p[order[jj]], num_ciphertext[at + j] and rows[at + j] -- once per edge
    per HYPOTHESIS, i.e. 26 times over for values that do not vary across the
    26. They profiled at 17.1% of a crib sweep between them (5.93 + 5.22 + 4.45
-   + 1.48). */
+   + 1.48).
+     Worth -13.1% of crib_try's instructions, but read the wall-clock caveat
+   before quoting a speed: the loads this removes are all L1-resident, so a
+   healthy out-of-order core hides them behind the dependent board[] chain and
+   the branch mispredicts. Measured -0.3..-1.9% on the CI runners (six cells,
+   all negative, so real but small) against -11.5% on one virtualised
+   container where they evidently sit on the critical path. The instruction
+   count is the portable number; the "-12%" in the commit message that
+   introduced this struct is not -- that figure came from the container,
+   and CI corrected it afterwards. */
 struct crib_edge
 {
   const unsigned char * core;
