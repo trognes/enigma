@@ -200,6 +200,36 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   Read the miss column, not the absolute one: the K=1 baseline was **80%**, so a
   fifth of trials are unsolvable at this length whatever the stride does.
 
+  **Attempted, and the obvious axis is the wrong one — read this before
+  building it.** Striding `ring1` directly (`--ring-stride-mid K`, the natural
+  mirror of `--ring-stride`) was implemented and measured **2.4× WORSE than not
+  striding at all**: 5 940 739 keys against a baseline of 2 443 064 at L=88.
+  The cause is one line in `build_key_space()`:
+
+      if ((ks.rc[1] == asize) && (ks.gc[1] == asize) && ! opt_true_key)
+
+  — §7.12's gate. Thinning `ring1` takes `rc[1]` from 26 to 13, which switches
+  the **exact, lossless** collapse off. The arithmetic is exact: the baseline
+  enumerates 26 × 26 × 17 576 and scores 2 443 064 (a 4.86× collapse), while the
+  strided run enumerates 13 × 26 × 17 576 and scores every one of them (1.00×).
+  A lossless 4.86× traded for a lossy 2×.
+
+  **Relaxing that gate would be unsound, not merely untidy.** §7.12 drops a
+  `start1` because some other `(ring1, start1')` with the same offset *and* the
+  same schedule survives — which needs `ring1` to range over **all 26** so every
+  offset is reachable from the representative. Strided, only 1 in `K` of them
+  is. The two reductions are not orthogonal, and getting it wrong loses keys
+  silently, exactly as §7.12's own warning says.
+
+  **The fix is to stride the other axis:** thin the `start1` **representatives
+  §7.12 has already produced** — every Kth surviving stepping class. That
+  composes with the collapse by construction rather than fighting it (5 classes
+  → 3 at short lengths, 26 → 13 at long ones), needs no `search_range` change at
+  all, and is the same *kind* of approximation, a neighbouring stepping
+  schedule. But note the measurement above strided **`ring1` with `start1`
+  free** — a different axis — so the 3.1%/5.1% figures do **not** transfer to
+  it. Re-measure before believing them.
+
 ### Maintainability and packaging
 
 - 🟢 **`-Wconversion` (~52) deliberately deferred.** 43 are `int → unsigned
