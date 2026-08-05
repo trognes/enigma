@@ -155,6 +155,50 @@ Nothing above 🟢. Ordered by expected payoff within each group.
 - 🟢 **Does the middle-wheel collapse's saving convert?** The same question for
   the §7.12 keyspace reduction (3–5× at short lengths): the compute is saved,
   but whether spending it on `-R` raises recovery is untested.
+- 🟢 **A `--ring-stride` for the MIDDLE wheel — premise measured, not built.**
+  Origin: a user reporting that on long texts the plaintext often stays legible
+  with the wrong `ring1`, as long as the offset is right. That is exactly the
+  §7.12 mechanism, and it has an explanation: shifting `ring1`+`start1` together
+  preserves `diff26(g1, r1)`, so the decode is **byte-exact** until the middle
+  wheel's own notch fires at a different position, and wrong from there. A shift
+  of δ moves that firing by ~26δ characters, so
+
+      corrupted ≈ 26·δ / L
+
+  Measured at L=439: **~6pp of letters lost per unit shift** (100/95/89/83 at
+  δ=1/2/3/4 for a typical `start1`), which is 26/439. §7.10's alarming
+  26/51/77 mismatches were taken at **L=127**, where 26/L is 20% per step — the
+  harshness was the length, not the wheel. **So the trade gets better as
+  messages lengthen** (2.6%/step at L=1000), which is the exact opposite of
+  §7.12, whose exact collapse gives 7.4× at L=40, 1.38× at L=439 and **1.00×
+  past L≈676**. The two would cover complementary halves of the length range.
+
+  **Recovery cost, 123 paired trials at L=439** (wheel order given, no
+  plugboard, `-q -l english` — the same isolation `--ring-stride` was validated
+  under), scored as "does the coarse winner still carry the true `offset1`",
+  which is what the existing refinement needs since it re-opens `start1` and
+  derives `ring1`:
+
+  | K₁ | coarse keys | stride-specific miss |
+  |---:|---:|---:|
+  | 2 | 2.00× | **3.1%** |
+  | 3 | 2.89× | **5.1%** |
+
+  Against `--ring-stride`'s 2% at K=2 and 2–4% at K=3 for 1.86×/2.61×, so
+  **roughly competitive** — slightly worse per unit of saving, same order.
+  Composes with the right-wheel stride: shifting both, the losses **add** rather
+  than interact (δ₁=4,δ₂=4 measured 70% correct against 68% predicted by
+  summing), and the coarse saving is **multiplicative**, so K₁=2 × K₂=3 ≈ 6×.
+
+  Three things a builder needs to know. §7.12 is **on the same axis** and its
+  classes are irregular, so a stride must sample within the surviving
+  representatives, not over raw `start1`. The failure mode is `start1` near its
+  own notch (no correct prefix at all — measured 6% of letters); ~4 of 26 start
+  values at L=439. And the numbers above are one length with no plugboard: the
+  end-to-end question, exact recovery with the board hidden, is untested.
+
+  Read the miss column, not the absolute one: the K=1 baseline was **80%**, so a
+  fifth of trials are unsolvable at this length whatever the stride does.
 
 ### Maintainability and packaging
 
