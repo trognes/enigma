@@ -4093,7 +4093,22 @@ Everything else identical: `-c -f -l english -J -S m4f10 --polish`, reflector B,
 wheels 231, ring0/start0 pinned to A, `-T 4`. 80 trials, random ring1/ring2,
 start1/start2, 10-pair plugboard and 200-letter English excerpt.
 `eval/tune_phase_vs_restarts.py`; raw data
-`eval/results-tune-phase-vs-restarts.jsonl`.
+`eval/results-tune-phase-vs-restarts.jsonl` (and
+`...-nopolish.jsonl` for the ablation below).
+
+> **The corpus is a PINNED FILE, and that is not incidental.** The first version
+> of the harness built it from `README.md` + `CLAUDE.md` + `IMPROVEMENTS.md` —
+> the very files this write-up edits. Documenting the result grew that text by
+> 654 letters, every excerpt offset shifted, and the follow-up ablation run
+> silently stopped solving the same problems: **38 of 40 trials drew a different
+> plaintext**. The trap is that ring, start and plugboard are drawn from the RNG
+> *without consulting the text*, so they stayed byte-identical — an "are these
+> the same instances?" check on those three fields passes while the actual
+> problems have changed underneath it. A check that compares everything except
+> the thing that moved is worse than no check: it converts a silent mismatch
+> into a confident wrong conclusion (here, an apparent bug in `--polish`). The
+> corpus now lives in `eval/corpus-tune-phase-ab.txt` and each trial records a
+> hash of its plaintext.
 
 **Result — the two metrics disagree, and both readings are real.**
 
@@ -4128,6 +4143,29 @@ mean %-correct assumes the graded signal is the lower-variance view of the same
 thing; here it is not — the two arms have genuinely different loss
 distributions, and the mean is measuring the *shape* of the failures rather than
 how many there are.
+
+**`--polish` is irrelevant to this comparison — measured, not assumed.** The
+finisher was on in both arms, and the obvious worry is that it is not neutral
+between them: arm B's characteristic miss is a near-solution board, which is
+exactly what a gain cascade repairs, while arm A's is a wrong offset, which
+nothing downstream can touch. If that were true the shipped split would be
+biased. It is not. Ablating `--polish` from both arms over the same 40 instances
+changes **nothing at all** — 88.1% / 23-40 for B and 85.7% / 32-40 for A, with
+and without, and all 80 runs byte-identical.
+
+That is a *null result, not an inert flag*. A low-budget control — true rotor
+key given, plugboard hidden, a single climb, 30 instances — has `--polish`
+change the output in **21 of 30** (17 better, 4 worse), so the flag works. It
+does nothing here because both arms carry enormous aggregate climb budgets
+(169 676 climbs in B, 2 704 × 24 = 64 896 in A), and the single best board over
+that many climbs is already past what one local repair pass can improve. §4.11 says as much — the
+finisher's lift "roughly halves R80→R160 and can vanish by R160", because
+restarts subsume the near-solution boards it targets. Both arms are far past
+R160-equivalent.
+
+The 4-worse cases in the control are worth noting on their own: `--polish` is
+monotone in **score**, not in truth, so at the scoring-failure floor it can
+replace a better plaintext with a higher-scoring one.
 
 **Caveats.** One length (L=200), one wheel order, English prose, plugboard
 hidden but ring0/start0 given to both arms. The budget is length-dependent —
