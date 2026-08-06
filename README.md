@@ -318,6 +318,20 @@ English tables.
   exhaustive refinement did, on the standard machine and on M4, with one- and
   two-notch wheels alike. The search is still an *approximation*, so a run says
   so in its echoed settings
+- **`--tune-phase N`** — Stop enumerating the middle and right wheels' *phase*
+  and optimise it instead: keep `N` starting phases per wheel, hill-climb the
+  plugboard as usual, then scan all 26 × 26 phases with that board **frozen**,
+  re-climb at the winner, and repeat until neither improves `[0..26, 0 = off]`.
+  A wheel's phase is its ring and start shifted together, so its offset — and
+  with it the wheel's whole contribution to the substitution — is unchanged and
+  the only thing moving is when its own notch fires. The sweep is then over
+  offsets alone, 26³ per wheel order instead of 26⁵. The plugboard has to be
+  recovered *before* the phase is scored: without a board the decrypt is ~95%
+  scrambled and the phase score is noise. Needs `-c`, and both `-r` and `-g`
+  must wildcard the middle and rightmost positions; rejects `--ring-stride`,
+  `-F`, `--exhaust`, `--crib` and `-A`. An *approximation* — the scan has a
+  capture radius of roughly `0.4 × length / 26`, so it wants long messages, and
+  a run says so in its echoed settings
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters, try
   every combination, keep the best climb (needs `-c`; parallel over the first
   forced pair, so `-T` helps) `[off]`. **Not recommended** — a

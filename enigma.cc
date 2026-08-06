@@ -331,6 +331,13 @@ static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force
    that is still a uniform sampling; past it only K=26 changes anything, and it changes
    accuracy more than cost. */
 static int opt_ring_stride;
+/* --tune-phase N (0 = off): N starting phases per wheel for tune_phase() below.
+   With it on, the sweep enumerates the middle and right wheels' OFFSETS only --
+   26^3 per wheel order instead of 26^5 -- and their 26x26 phase subspace
+   becomes a cheap per-key scan instead of enumerated keys. */
+static int opt_tune_phase;
+/* Alternation cap for tune_phase(); it converges well before this. */
+static const int tune_phase_rounds = 4;
 static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
@@ -3942,6 +3949,112 @@ static void crib_dump(machine & m, int r1, int r2, int r3, int g1, int g2, int g
     }
 }
 
+/* --tune-phase: after the plugboard climb, hold the board FIXED and scan the
+   middle and right wheels' PHASE -- ring and start shifted together, so each
+   wheel's OFFSET (and with it that wheel's whole contribution to the
+   substitution) is unchanged and the only thing moving is when its own notch
+   fires. Then re-climb the plugs at the winning phase and repeat: a
+   block-coordinate ascent alternating (board, phase).
+
+   THE ORDER IS LOAD-BEARING. Scoring a rotor key without a plugboard climb is
+   noise -- a rotor-only decrypt under a full board is ~95% scrambled, the same
+   reason -F's tier 1 is a climb and not a scan. The board must be recovered
+   first, then frozen, before the phase carries any signal at all.
+
+   SCANNED, NOT CLIMBED. The axis is only 26x26 and the score along it is not
+   reliably monotone (measured: the peak is correct far more often than the path
+   to it is uphill), so steepest ascent can stall short of the truth. An
+   exhaustive scan removes that question and costs about half a plugboard climb
+   -- against the 676 plugboard climbs it replaces, since the phase subspace no
+   longer has to be enumerated by the outer sweep.
+
+   MEASURED. With 10 plugs hidden and the board frozen, the score peaks at the
+   TRUE phase in 8/8 trials at L=439 when the starting phase error is <= 5, with
+   a wide margin (-4.98 against -7.1..-7.6). It degrades with distance -- 67% at
+   7, 33% at 9, 25% at 13 -- because past a point the climb starts from too much
+   corruption to recover a usable board at all (the failures all score badly
+   even AT the true phase). The capture radius is ~0.4*L/26, so it widens with
+   message length: 25% at L=439 against 67% at L=900 for distance 13. That is
+   why the key space keeps several starting phases rather than one. */
+static double tune_phase(machine & m, uint64_t * rng, double score)
+{
+  const int o1 = diff26(m.grundstellung[1], m.ringstellung[1]);
+  const int o2 = diff26(m.grundstellung[2], m.ringstellung[2]);
+  const int r0 = m.ringstellung[0];
+  const int g0 = m.grundstellung[0];
+  int best_p1 = m.ringstellung[1];
+  int best_p2 = m.ringstellung[2];
+  /* The tentative move below re-climbs the board at a candidate phase, and that
+     climb is not guaranteed to end above `score` (a staged --score schedule
+     optimises an earlier model first, so its target-model score can come out
+     lower). Rejecting the move then has to restore the BOARD as well as the
+     phase, or the returned score and the machine the caller merges would
+     describe different things. */
+  unsigned char save_board[asize];
+
+  for (int round = 0; round < tune_phase_rounds; round++)
+    {
+      /* Scan every phase with the board frozen. copy_rows is false: each phase
+         is scored once, so this reads rows straight from subst_array like the
+         plain sweep, instead of paying the climb path's per-position copy. */
+      double best = score;
+      int found_p1 = best_p1, found_p2 = best_p2;
+      for (int p1 = 0; p1 < asize; p1++)
+        for (int p2 = 0; p2 < asize; p2++)
+          {
+            init_ring_grund(m, r0, p1, p2, g0, add26(o1, p1), add26(o2, p2));
+            setup_mapping(m, false);
+            const double sc = score_iter(m);
+            if (sc > best)
+              {
+                best = sc;
+                found_p1 = p1;
+                found_p2 = p2;
+              }
+          }
+      /* Phase did not move: the board is already the best one for it. */
+      if ((found_p1 == best_p1) && (found_p2 == best_p2))
+        break;
+
+      /* Re-climb the plugs at the candidate phase. The machine changed under
+         the board, so the board is stale; resuming the climb from it rather
+         than reseeding is what makes the extra rounds cheap. */
+      memcpy(save_board, m.steckerbrett, asize);
+      init_ring_grund(m, r0, found_p1, found_p2, g0,
+                      add26(o1, found_p1), add26(o2, found_p2));
+      setup_mapping(m, true);
+      /* setup_mapping stepped grundstellung; restore it exactly as
+         search_worker's climb path does, so a progress line echoed from inside
+         the climb -- and the key recorded at the merge -- carry the true start
+         positions and not the ones the message stepped the wheels to. */
+      init_ring_grund(m, r0, found_p1, found_p2, g0,
+                      add26(o1, found_p1), add26(o2, found_p2));
+      const double after = optimize_once(m, rng);
+      if (after <= score)
+        {
+          memcpy(m.steckerbrett, save_board, asize);
+          break;               /* converged; the move is not committed */
+        }
+      best_p1 = found_p1;
+      best_p2 = found_p2;
+      score = after;
+    }
+
+  /* Leave the machine on the winning phase with the board, the mapping and the
+     plaintext all describing `score` -- the caller merges all four together --
+     and on the UNSTEPPED start positions (see above), since the merge records
+     them as the winning key. Both loop exits can land here with the machine set
+     to a phase that was scanned or climbed and then rejected, so this is a
+     restore, not a no-op. */
+  init_ring_grund(m, r0, best_p1, best_p2, g0,
+                  add26(o1, best_p1), add26(o2, best_p2));
+  setup_mapping(m, true);
+  init_ring_grund(m, r0, best_p1, best_p2, g0,
+                  add26(o1, best_p1), add26(o2, best_p2));
+  decode(m);
+  return score;
+}
+
 /* One plugboard-recovery climb from the seed board. In kicked mode (--restarts N>=1) every
    climb -- including index 0 -- injects a fresh --random kick first, so the un-kicked seed
    climb is not run (REDESIGN Option A). With --restarts 0 there is a single un-kicked climb.
@@ -3954,6 +4067,8 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
   double score = optimize_once(m, & rng);
+  if (opt_tune_phase > 0)
+    score = tune_phase(m, & rng, score);
   if (opt_dump_all)
     dump_all(m, score);
   return score;
@@ -4031,6 +4146,11 @@ struct search_range
      scattered and meant nothing). A byte holds 0..25 fine and keeps the struct near
      its original footprint. See archived/PERFORMANCE.md §7.11. */
   unsigned char r2_vals[asize];
+  /* --tune-phase spaces ring1's starting phases this far apart; 1 otherwise.
+     Deliberately here: r2_vals/r2_n leave alignment padding, so this costs the
+     struct nothing -- which matters because search_worker() reads it in the
+     per-key decode (see the r2_vals note above). */
+  unsigned char r_phase_step;
   int r2_n;
 };
 
@@ -4059,6 +4179,14 @@ struct best_result
   /* Winning plugboard, recorded at the merge so the post-search --polish pass can
      reconstruct the machine (via the key from `idx`) and finish the single best board. */
   unsigned char steckerbrett[asize];
+  /* Winning ring/start, recorded the same way. --tune-phase moves ring1/start1
+     and ring2/start2 away from the key the work index encodes, so `idx` alone
+     no longer identifies the winner and the --polish reconstruction would
+     restore the phase the climb STARTED from. Recorded unconditionally (a
+     6-byte copy under the merge mutex, off the hot path), read only when
+     --tune-phase is on. */
+  unsigned char ringstellung[3];
+  unsigned char grundstellung[3];
   /* Highest score already ECHOED as a progress line -- display state only, never read
      by the merge logic, so it cannot affect which candidate wins (the -T-determinism
      contract is untouched). It can run ahead of `score`: an intermediate plugboard
@@ -4279,6 +4407,20 @@ void search_worker(machine & m,
           size_t keyidx = idx / restarts;
           int restart = static_cast<int>(idx % restarts);
 
+          /* --tune-phase leaves the machine on the phase IT found, not the
+             one the work index encodes, so the "reused by its restarts"
+             sharing below no longer holds: restart 1 would start from restart
+             0's tuned phase, which both breaks the independence -R relies on
+             and makes the result depend on which thread ran which restart.
+             Rebuild the key for every work item instead -- one extra
+             setup_mapping per restart, and only with the option on. */
+          if ((opt_tune_phase > 0) && (keyidx == cur_key) && (! key_skipped))
+            {
+              init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+              setup_mapping(m, true);
+              init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+            }
+
           if (keyidx != cur_key)   /* new key: (re)build the rotor stack, reused by its restarts */
             {
               cur_key = keyidx;
@@ -4306,7 +4448,7 @@ void search_worker(machine & m,
 
               r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
               int rr = static_cast<int>(rflat % rc12);
-              r2 = range.r_min[1] + rr / rc[2];
+              r2 = range.r_min[1] + (rr / rc[2]) * range.r_phase_step;
               /* ring2 can be a sparse set (--ring-stride); the range carries it as an
                  explicit list, so the decode is a lookup and needs no stride knowledge */
               r3 = range.r2_vals[rr % rc[2]];
@@ -4398,6 +4540,13 @@ void search_worker(machine & m,
                   best.found = true;
                   memcpy(best.plaintext, m.plaintext, textlength + 1);
                   memcpy(best.steckerbrett, m.steckerbrett, asize);   /* for --polish */
+                  for (int i = 0; i < 3; i++)
+                    {
+                      best.ringstellung[i] =
+                        static_cast<unsigned char>(m.ringstellung[i]);
+                      best.grundstellung[i] =
+                        static_cast<unsigned char>(m.grundstellung[i]);
+                    }
                   /* Echo the new best -- unless a progress line already showed this
                      score (a climb's last accepted move IS its converged board, so
                      reprinting it here would just duplicate the line). Ties that
@@ -4407,8 +4556,15 @@ void search_worker(machine & m,
                     {
                       best.shown.store(score, std::memory_order_relaxed);
                       /* setup_mapping stepped grundstellung (scan path only; the
-                         climb path restored it right after setup_mapping) */
-                      init_ring_grund(m, r1, r2, r3, g1, g2, g3);
+                         climb path restored it right after setup_mapping).
+                         --tune-phase is the one case where m holds a DIFFERENT
+                         key than the work index encodes -- it left the machine
+                         on the winning phase, consistent with the board and
+                         the plaintext -- so restoring r1..g3 there would echo
+                         the phase this climb started from against the tuned
+                         phase's decrypt. */
+                      if (opt_tune_phase == 0)
+                        init_ring_grund(m, r1, r2, r3, g1, g2, g3);
                       progress_line(best, m, score);
                     }
                 }
@@ -4458,7 +4614,7 @@ static bool key_to_machine(machine & m, size_t idx,
 
   int r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
   int rr = static_cast<int>(rflat % rc12);
-  int r2 = range.r_min[1] + rr / rc[2];
+  int r2 = range.r_min[1] + (rr / rc[2]) * range.r_phase_step;
   /* see the matching comment in search_worker() */
   int r3 = range.r2_vals[rr % rc[2]];   /* see the matching comment in search_worker() */
   int g1 = range.g_min[0] + static_cast<int>(gflat / gc12);
@@ -4767,6 +4923,30 @@ static key_space build_key_space()
       ks.gc[i] = ks.range.g_max[i] - ks.range.g_min[i] + 1;
     }
 
+  /* --tune-phase N: the middle and right wheels' phase (ring and start shifted
+     together) is no longer enumerated -- tune_phase() scans it per key with the
+     plugboard frozen -- so the sweep enumerates OFFSETS only. Pinning
+     ring1/ring2 to a few starting phases and leaving start1/start2 over all 26
+     makes start_i the offset directly, the same reparameterisation wheel 0
+     already uses.
+       N starting phases rather than one because the scan has a capture radius:
+     the plug climb must start close enough to the true phase to recover a
+     usable board. N=2 puts the worst case 6-7 away, inside the radius at
+     L>=439. Requires ring and start wildcarded for both wheels, else the phases
+     are the caller's and not ours to move. */
+  ks.range.r_phase_step = 1;
+  if (opt_tune_phase > 0)
+    {
+      const int step = asize / opt_tune_phase;
+      for (int i = 1; i < wheels; i++)
+        {
+          ks.range.r_min[i] = 0;
+          ks.range.r_max[i] = (opt_tune_phase - 1) * step;
+          ks.rc[i] = opt_tune_phase;
+        }
+      ks.range.r_phase_step = static_cast<unsigned char>(step);
+    }
+
   /* --ring-stride K (archived/PERFORMANCE.md §7.11): the rightmost wheel lacks wheel 0's exact
      collapse above (its own notch feeds forward into further stepping, so a ring+start
      shift is only an approximation), but the corruption is small and grows smoothly, so
@@ -4779,8 +4959,12 @@ static key_space build_key_space()
      Validated by option parsing to fire only when opt_ringstellung[2]=='.' &&
      opt_grundstellung[2]=='.' (the same no-redundancy precondition as wheel 0's
      collapse). */
+  /* Under --tune-phase ring2's values are the starting PHASES, spaced `step`
+     apart, not a --ring-stride sample; validation makes the two exclusive. */
+  const int r2_step = (opt_tune_phase > 0) ? (asize / opt_tune_phase)
+                                           : opt_ring_stride;
   unsigned int r2_mask = 0;
-  for (int v = ks.range.r_min[2]; v <= ks.range.r_max[2]; v += opt_ring_stride)
+  for (int v = ks.range.r_min[2]; v <= ks.range.r_max[2]; v += r2_step)
     r2_mask |= 1u << v;
   set_ring2(ks.range, r2_mask);
   ks.rc[2] = ks.range.r2_n;
@@ -5351,6 +5535,21 @@ static double bruteforce(char * result, bool allow_empty)
       int rg6[6];
       key_to_machine(m, best.idx / restarts_par, tasks, range, rc, gc, all, rg, gsize,
                      rc12b, gc12b, cur_wo, rg6);
+      /* --tune-phase: the winner sits on a phase key_to_machine cannot derive
+         from best.idx (that is the whole point of tuning it), so overwrite the
+         reconstructed ring/start with the recorded one. rg6 is corrected too,
+         since it is what a finisher progress line would echo. */
+      if (opt_tune_phase > 0)
+        {
+          for (int i = 0; i < 3; i++)
+            {
+              rg6[i] = best.ringstellung[i];
+              rg6[3 + i] = best.grundstellung[i];
+            }
+          init_ring_grund(m, rg6[0], rg6[1], rg6[2], rg6[3], rg6[4], rg6[5]);
+          setup_mapping(m, true);
+          init_ring_grund(m, rg6[0], rg6[1], rg6[2], rg6[3], rg6[4], rg6[5]);
+        }
       for (int i = 0; i < asize; i++)
         m.steckerbrett[i] = best.steckerbrett[i];
       m.scoring = opt_scoring;
@@ -5562,6 +5761,7 @@ static double bruteforce(char * result, bool allow_empty)
              translated. cur_wo was set by the key_to_machine() call above. */
           std::vector<wheel_task> rtasks(1, tasks[cur_wo]);
           search_range rrange;
+          rrange.r_phase_step = 1;  /* candidates pin every position outright */
           /* Every candidate pins all six positions, so each sub-search is a single key:
              the derived (ring2, start2) and (ring1, start1) are DIAGONALS, and
              search_range holds rectangles only. */
@@ -6257,6 +6457,25 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "so nothing above 13 pays until K=26, which is 15%");
   fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
   fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
+  fprintf(out, "  %-24s %s\n", "--tune-phase N",
+          "Hill-climb the rotor PHASE instead of enumerating");
+  fprintf(out, "  %-24s %s\n", "",
+          "it: keep N starting phases per wheel, climb the");
+  fprintf(out, "  %-24s %s\n", "",
+          "plugboard, then scan all 26x26 middle/right ring");
+  fprintf(out, "  %-24s %s\n", "",
+          "positions with that board FROZEN (offsets held, so");
+  fprintf(out, "  %-24s %s\n", "",
+          "only the notch timing moves) and re-climb, until");
+  fprintf(out, "  %-24s %s\n", "",
+          "neither improves. Needs -c and -r/-g wildcarding");
+  fprintf(out, "  %-24s %s\n", "",
+          "the middle and right positions; no --ring-stride,");
+  fprintf(out, "  %-24s %s\n", "",
+          "-F, --exhaust, --crib or -A. An APPROXIMATION:");
+  fprintf(out, "  %-24s %s\n", "",
+          "capture radius ~0.4*L/26, so it wants long");
+  fprintf(out, "  %-24s %s\n", "", "messages [0..26, 0 = off]");
   fprintf(out, "  %-24s %s\n", "--crib-rerank F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
@@ -6426,6 +6645,16 @@ void show_settings()
             "skipped\n            rings; approximate, may miss the true key\n",
             opt_ring_stride);
 
+  /* Same reason: --tune-phase replaces the exhaustive enumeration of the middle
+     and right rings with N starting phases plus a frozen-board scan, so the run
+     is approximate and a log of it must not read like an exhaustive sweep. */
+  if (opt_tune_phase > 0)
+    fprintf(stderr,
+            "Phase:      %d starting phase%s per wheel, then tune ring1/ring2 "
+            "with the\n            plugboard frozen (--tune-phase); "
+            "approximate, may miss the true key\n",
+            opt_tune_phase, (opt_tune_phase == 1) ? "" : "s");
+
   fprintf(stderr, "Threads:    %d\n", opt_threads);
 
   /* Split over two lines so it stays within 79 columns (M4 in particular is wide, and
@@ -6549,6 +6778,7 @@ int main(int argc, char * * argv)
   opt_seed_set = false;
   opt_anneal = 0;
   opt_ring_stride = 1;
+  opt_tune_phase = 0;
 
   /* get arguments */
 
@@ -6558,7 +6788,7 @@ int main(int argc, char * * argv)
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
-         OPT_CRIBLIST, OPT_NOCRIBREORDER };
+         OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -6605,6 +6835,7 @@ int main(int argc, char * * argv)
       { "crib-rerank",    required_argument, nullptr, OPT_CRIBRERANK },
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { "ring-stride",    required_argument, nullptr, OPT_RINGSTRIDE },
+      { "tune-phase",     required_argument, nullptr, OPT_TUNEPHASE },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
@@ -6716,6 +6947,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_RINGSTRIDE:
           opt_ring_stride = atoi(optarg);
+          break;
+        case OPT_TUNEPHASE:
+          opt_tune_phase = atoi(optarg);
           break;
         case OPT_NOPLUG:
           alltoupper(optarg);
@@ -6925,6 +7159,34 @@ int main(int argc, char * * argv)
     fatal("--ring-stride needs both -r and -g to wildcard the rightmost "
           "wheel's position (e.g. -r ..X -> -r ...)");
 
+  /* --tune-phase N: keep N starting phases per wheel instead of enumerating all
+     26, and let tune_phase() find the rest by scanning with the plugboard
+     frozen. It REPLACES the outer enumeration of ring1/ring2, so it needs those
+     two positions -- and the starts that pair with them -- wildcarded, exactly
+     as --ring-stride needs the rightmost pair. It is a plugboard-climb step
+     (the phase carries no signal without a recovered board), so it needs -c. */
+  if ((opt_tune_phase < 0) || (opt_tune_phase > asize))
+    fatal("Illegal phase count (--tune-phase must be 0 to 26)");
+  if (opt_tune_phase > 0)
+    {
+      if (! opt_hillclimb)
+        fatal("Rotor phase tuning (--tune-phase) needs the plugboard "
+              "hill-climb (-c) -- with no board recovered the phase is noise");
+      for (int i = 1; i < 3; i++)
+        if ((opt_ringstellung[i] != '.') || (opt_grundstellung[i] != '.'))
+          fatal("--tune-phase needs both -r and -g to wildcard the middle and "
+                "rightmost wheels' positions (e.g. -r A.. -g ...)");
+      if (opt_ring_stride > 1)
+        fatal("--tune-phase and --ring-stride are alternatives: both "
+              "reparameterise the ring positions the search enumerates");
+      if (opt_crib_text || opt_crib_list)
+        fatal("--tune-phase is not supported with --crib (the crib deduction "
+              "is a per-key test, and the tuning moves the key under it)");
+      if (opt_anneal > 0)
+        fatal("--tune-phase is not supported with -A (the alternation is "
+              "defined against the greedy climb)");
+    }
+
   if ((strlen(opt_steckerbrett) > asize) ||
       (strspn(opt_steckerbrett, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") <
        strlen(opt_steckerbrett)))
@@ -7101,6 +7363,12 @@ int main(int argc, char * * argv)
   if ((opt_ring_stride > 1) &&
       ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
     fatal("--ring-stride is not supported with -F or --exhaust");
+  /* -F ranks keys by a rotor-key-indexed tier 1, and --exhaust re-encodes the
+     work index as forced pairs; --tune-phase moves the key out from under
+     both. */
+  if ((opt_tune_phase > 0) &&
+      ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0) || opt_exhaust))
+    fatal("--tune-phase is not supported with -F or --exhaust");
 
   /* --random and --exhaust are plugboard operations: they can do nothing in a bare rotor
      scan, so passing them without -c is an error (fail fast rather than silently ignore). */

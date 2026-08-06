@@ -1272,6 +1272,118 @@ rs_echo=$(printf '%s' "$rs_ct" | "$ENIGMA" -q -l english -u B -w 123 -r "AA." -g
 check "no stride line when --ring-stride is off" \
   "$(printf '%s' "$rs_echo" | grep -c '^Stride:')" "0"
 
+# --tune-phase N: hill-climb the rotor PHASE (the middle and right rings, with
+# the offsets held) instead of enumerating it.
+#
+# Two costs drive every check here and both are kept as small as the property
+# allows. (1) Message length: the capture radius grows with it, so the
+# ~100-letter plaintexts the rest of the file uses leave nothing to find -- 140
+# letters with
+# the true ring 2 and 1 position off the starting phase is the cheapest setup
+# that still does. (2) Climbs: each one pays a 26x26 phase scan, and the option
+# requires ring1/ring2/start1/start2 wildcarded, so 676 keys is the smallest
+# legal keyspace. Hence ONE run below covers four properties at once rather than
+# four runs covering one each.
+tp_pt="ENIGMAVARIANTREFLECTORNWHEELSANDTHEFOURROTORNAVALMTHINREFLECTORSUKWBCPLUSTHEBETAGAMMAGREEKWHEELTHESETTINGSARETHEREFLECTORUMKEHRWALZETHEWHEEL"
+tp_board="ABCDEFGHIJKLMNOPQRST"
+tp_ct=$(run "$tp_pt" -i -u B -w 231 -r ACB -g QMW -s "$tp_board")
+
+# The true ring is ACB; --tune-phase 1 offers a SINGLE starting phase (ring1 =
+# ring2 = A) and has to find C/B by scanning with the board frozen. The board is
+# given with -s so this is about the phase and not about plugboard recovery.
+# This one run establishes four things:
+#   * it recovers the plaintext at all;
+#   * the key it ECHOES is the tuned one, not the phase the climb started from
+#     -- tune_phase() leaves the machine on the winning phase, so the merge must
+#     not restore the key its work index encodes, and must not record the start
+#     positions setup_mapping stepped (a first version echoed a start one
+#     left-wheel step past the truth);
+#   * that key actually decrypts to what was printed (the end-to-end version,
+#     which catches a stale key from any source without knowing which);
+#   * --polish did not re-derive the key from best.idx, which no longer
+#     identifies it.
+tp_errf=$(mktemp)
+tp_out=$(printf '%s' "$tp_ct" | "$ENIGMA" -f -l english -c -u B -w 231 \
+         -r "A.." -g "Q.." -s "$tp_board" --tune-phase 1 -R 2 --polish -T 1 \
+         2>"$tp_errf")
+tp_line=$(grep -E '^ *-?[0-9]+\.' "$tp_errf" | tail -1)
+rm -f "$tp_errf"
+check "crack: --tune-phase 1 tunes the middle and right rings" \
+  "$tp_out" "$tp_pt"
+# Only the RIGHT wheel's phase is asserted. The middle wheel's ring x start is
+# a §7.12 equivalence class at this length -- the middle wheel never reaches its
+# notch in 140 characters, so ring1=A/start1=K and the true ring1=C/start1=M
+# decode identically and either may be reported. The right wheel's phase is
+# identifiable, so tuning it from the starting A to the true B is the assertion
+# with content here.
+check "--tune-phase reports the tuned key" \
+  "$(printf '%s' "$tp_line" \
+     | awk '{print $2, substr($3,3,1), substr($4,3,1)}')" "B231 B W"
+check "--tune-phase: the echoed key reproduces the printed plaintext" \
+  "$(run "$tp_ct" -u B -w 231 \
+        -r "$(printf '%s' "$tp_line" | awk '{print $3}')" \
+        -g "$(printf '%s' "$tp_line" | awk '{print $4}')" \
+        -s "$(printf '%s' "$tp_line" \
+              | awk '{s="";for(i=5;i<NF;i++)s=s $i;print s}')")" \
+  "$tp_out"
+# -T-independent like every other search option -- and with -R > 1 that is not
+# free: tune_phase() leaves the machine on the phase IT found, so restart 1
+# would start from restart 0's phase unless the key is rebuilt per work item,
+# which
+# both loses the independence -R relies on and makes the result depend on which
+# thread ran which restart.
+check "--tune-phase is -T-independent with restarts" \
+  "$(run "$tp_ct" -f -l english -c -u B -w 231 -r "A.." -g "Q.." \
+        -s "$tp_board" --tune-phase 1 -R 2 --polish -T 4)" \
+  "$tp_out"
+# The control: without the tuning, that same starting phase (ring pinned AAA)
+# cannot reach the truth, so the checks above measure the feature and not the
+# keyspace. No phase scan, so this run is ~60x cheaper than the two above.
+check "--tune-phase control: the fixed starting phase does not recover" \
+  "$(test "$(run "$tp_ct" -f -l english -c -u B -w 231 -r "AAA" -g "Q.." \
+            -s "$tp_board" -T 1)" = "$tp_pt" && echo recovered || echo no)" \
+  "no"
+
+# --tune-phase makes the search APPROXIMATE, so it is echoed in the settings for
+# the same reason --ring-stride is. show_settings() runs before the search, so
+# neither the keyspace nor the ciphertext matters here: the option needs ring1
+# and ring2 wildcarded, so the cheapest legal run is that keyspace over a
+# 4-letter input rather than the 140-letter one the recovery checks need.
+tp_echo=$(printf 'AAAA' | "$ENIGMA" -q -l english -c -u B -w 231 \
+          -r "A.." -g "A.." --tune-phase 2 -T 1 2>&1 >/dev/null)
+check "--tune-phase is echoed in the settings" \
+  "$(printf '%s' "$tp_echo" | grep -c '^Phase: .*starting phase')" "1"
+tp_echo=$(printf 'AAAA' | "$ENIGMA" -q -l english -c -u B -w 231 \
+          -r "A.." -g "A.." -T 1 2>&1 >/dev/null)
+check "no phase line when --tune-phase is off" \
+  "$(printf '%s' "$tp_echo" | grep -c '^Phase:')" "0"
+
+# Validation. Each of these means the command line says something the search
+# cannot honour, so it fails fast rather than quietly doing something else.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+tp_bad() { printf 'AAAA' | "$ENIGMA" -q -l english "$@" 2>&1 >/dev/null; }
+tp_err=$(printf 'AAAA' | "$ENIGMA" --tune-phase 27 2>&1 >/dev/null)
+check "--tune-phase 27 rejected" \
+  "$(printf '%s' "$tp_err" | grep -c 'Illegal phase count')" "1"
+tp_err=$(tp_bad --tune-phase 2)
+check "--tune-phase needs -c" \
+  "$(printf '%s' "$tp_err" | grep -c 'needs the plugboard hill-climb')" "1"
+tp_err=$(tp_bad -c -r "AAA" -g "..." --tune-phase 2)
+check "--tune-phase needs the middle/right rings wildcarded" \
+  "$(printf '%s' "$tp_err" | grep -c 'tune-phase needs')" "1"
+tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 --ring-stride 2)
+check "--tune-phase rejects --ring-stride" \
+  "$(printf '%s' "$tp_err" | grep -c 'ring-stride are alternatives')" "1"
+tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -F 100)
+check "--tune-phase rejects -F" \
+  "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -F')" "1"
+tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 --crib HELLO)
+check "--tune-phase rejects --crib" \
+  "$(printf '%s' "$tp_err" | grep -c 'not supported with --crib')" "1"
+tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -A 1000)
+check "--tune-phase rejects -A" \
+  "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -A')" "1"
+
 # Middle-wheel ring x start collapse (archived/PERFORMANCE.md §7.12). Shifting ring1 and start1
 # together only changes the decode through the middle notch, which most start1 values
 # never reach in a short message -- so those start1 values are skipped as duplicates.
