@@ -30,7 +30,14 @@ BIN = "./enigma"
 LEN = int(os.environ.get("AB_LEN", "200"))
 PLUGS = 10
 THREADS = "4"
-CLIMB = ["-f", "-l", "english", "-J", "-S", "m4f10", "--polish", "-c"]
+CLIMB = ["-f", "-l", "english", "-J", "-S", "m4f10", "-c"]
+# AB_POLISH=0 ablates the finisher from BOTH arms.  It is on by default because
+# it is the recommended recipe, but it is not neutral between the arms: arm B's
+# characteristic miss is a near-solution board (right key, a few plugs wrong),
+# which is exactly what the finisher repairs, while arm A's is a wrong offset,
+# which nothing downstream can.
+if os.environ.get("AB_POLISH", "1") != "0":
+    CLIMB.append("--polish")
 WHEELS = ["-u", "B", "-w", "231"]
 
 ARM_B = ["-r", "A..", "-g", "A..", "-R", "0"]
