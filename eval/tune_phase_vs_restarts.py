@@ -19,6 +19,7 @@ Paired: each trial's ciphertext goes to both arms.  Metrics are the graded
 %-of-letters-correct (primary, per CLAUDE.md) and exact recovery (secondary).
 Results append to a JSONL file so the run is resumable.
 """
+import hashlib
 import json
 import os
 import random
@@ -50,9 +51,20 @@ NTRIALS = int(sys.argv[2]) if len(sys.argv) > 2 else 20
 SEED = int(sys.argv[3]) if len(sys.argv) > 3 else 12345
 
 
+# The corpus is PINNED to a file, not read from the repo's own documentation.
+# The first version of this harness built it from README/CLAUDE/IMPROVEMENTS,
+# which are mutable: writing up the result edited those files, the corpus grew
+# by 654 letters, and every excerpt offset shifted.  38 of 40 trials then drew a
+# DIFFERENT plaintext while ring/start/board stayed identical -- because those
+# draws do not depend on the text -- so an "are these the same instances?" check
+# on the key and board passed while the actual problems had changed underneath.
+# A follow-up run silently stopped being paired with the first one.  The file
+# below is the exact corpus the shipped §7.15 numbers were measured on.
+CORPUS = "eval/corpus-tune-phase-ab.txt"
+
+
 def corpus():
-    t = "".join(open(f, encoding="utf-8").read()
-                for f in ("README.md", "CLAUDE.md", "IMPROVEMENTS.md"))
+    t = open(CORPUS, encoding="utf-8").read()
     return "".join(c for c in t.upper() if "A" <= c <= "Z")
 
 
@@ -94,7 +106,8 @@ def main():
         ct = run(["-i"] + WHEELS + ["-r", ring, "-g", start, "-s", board],
                  plain)
 
-        rec = {"trial": i, "ring": ring, "start": start, "board": board}
+        rec = {"trial": i, "ring": ring, "start": start, "board": board,
+               "pt": hashlib.sha1(plain.encode()).hexdigest()[:12]}
         for name, arm in (("B_restarts", ARM_B), ("A_tunephase", ARM_A)):
             t0 = time.time()
             got = run(CLIMB + WHEELS + arm + ["-T", THREADS], ct)
