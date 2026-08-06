@@ -259,8 +259,14 @@ are read from a **data directory** (filenames built as
 > was on this list until its accuracy numbers turned out to be contaminated by a
 > `--polish` guard bug — at `K=2`/`K=3` it costs only ~0.5–2pp of exact recovery
 > for 1.86×/2.61× fewer keys, so it is now **recommended when throughput
-> matters** (K≥5 still is not); see its entry. **Removed options** (dominated or
-> subsumed; the measurements survive in `archived/PERFORMANCE.md`): `-I` (bare
+> matters** (K≥5 still is not); see its entry. `--tune-phase` is **new and not
+> yet proven end-to-end**: the mechanism it rests on is measured (a frozen-board
+> phase scan peaks at the true phase in 8/8 trials within the capture radius,
+> and it recovers the true ring from a single starting phase when the offsets
+> are given), but no matched-compute A/B against spending the same time on `-R`
+> exists yet — so treat it as an experiment, not a recipe. **Removed options**
+> (dominated or subsumed; the measurements survive in
+> `archived/PERFORMANCE.md`): `-I` (bare
 > first-improvement — `-J` supersedes it; the internal climb path remains, set
 > by `-J`), `--infl-order`, `--repair3`, `--gainfix-best` (superseded by the
 > finisher), `--dump-restarts` (subsumed by `--dump-all`), `--restart-tt` and
@@ -368,6 +374,23 @@ are read from a **data directory** (filenames built as
   988), and `-r A.. -g A..` 50 787 against 100 724 (was 68 987). There is no
   longer a keyspace where the stride costs more than it saves, which is why the
   warning was removed.
+- `--tune-phase N` **hill-climb the rotor phase instead of enumerating it**
+  (N=0..26, default 0 = off; needs `-c`, and both `-r` and `-g` wildcarding the
+  middle *and* rightmost positions; rejected with `--ring-stride`, `-F`,
+  `--exhaust`, `--crib` and `-A`). The middle and right wheels' **phase** (ring
+  and start shifted together, so each wheel's *offset* — its whole contribution
+  to the substitution — is unchanged and only the notch timing moves) stops
+  being an enumerated key axis: the sweep enumerates **offsets only** (26³ per
+  wheel order rather than 26⁵), and each converged plugboard climb is followed
+  by a scan of all 26 × 26 phases **with that board frozen**, then a re-climb at
+  the winner, alternating until neither improves. See "Tuning the rotor phase"
+  below. **The order is load-bearing**: scoring a rotor key without a recovered
+  board is noise (a rotor-only decrypt under a full board is ~95% scrambled —
+  the same reason `-F`'s tier 1 is a climb and not a scan), so the plugboard is
+  climbed first and only then frozen. An **approximation**, echoed in the
+  settings as such: the scan has a capture radius of ~`0.4·L/26`, so it wants
+  long messages, and `N` starting phases per wheel exist to put the worst case
+  inside that radius.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,
@@ -1301,6 +1324,89 @@ Verified byte-identical to the previous implementation across 200 comparisons
 unstrided search exactly. The mask-then-expand idiom mirrors
 `build_key_space()`'s existing `seen[]`→`offset_list` handling of the M4 Greek
 wheel.
+
+### Tuning the rotor phase instead of enumerating it — `--tune-phase`
+
+Every reduction above removes keys the machine cannot tell apart.
+`--tune-phase N` is a different move: it takes an axis the machine *can* tell
+apart — the middle and right wheels' **phase** — out of the enumeration and
+**optimises** it per key instead.
+
+Split each stepping wheel's `(ring, start)` into two coordinates:
+
+| coordinate | definition | what it reaches |
+|---|---|---|
+| **offset** | `(start − ring) mod 26` | the whole substitution |
+| **phase** | `ring`, `start` shifted to hold it | *only* the notch timing |
+
+Wheel 0's phase reaches nothing at all, which is why §7.10 collapses it
+outright. Wheel 1's reaches only the notch, rarely, which is why §7.12's
+collapse is partial and length-dependent. Wheels 1 and 2 keep a real phase
+axis — and it is a **smooth** one: a wrong phase mistimes the notch, so the
+decode is right until the first mistimed step and drifts afterwards, corrupting
+roughly `26·δ/L` of the message for a phase error `δ`. Score against phase
+therefore has a peak at the truth rather than the flat noise a wrong *offset*
+gives, and can be searched.
+
+**The order is load-bearing, and it is the whole design.** Scoring a rotor key
+with no plugboard is noise — a rotor-only decrypt under a full board is ~95%
+scrambled, the same reason `-F`'s tier 1 is a climb and not a scan. So each work
+item runs:
+
+1. climb the plugboard at the starting phase (the ordinary `-c` climb);
+2. **freeze that board** and scan all 26 × 26 phases, keeping the best;
+3. re-climb the plugboard at the winning phase;
+4. repeat 2–3 until neither improves (capped at 4 rounds; it converges sooner).
+
+Step 2 is **scanned, not climbed**: the axis is only 26 × 26 and the score along
+it is not reliably monotone (the peak is correct far more often than the path to
+it is uphill), so steepest ascent can stall short of the truth. The scan costs
+about half a plugboard climb — against the 676 plugboard climbs it *replaces*,
+since the outer sweep no longer enumerates the phase subspace at all.
+
+**Measured** (L=439, 10 plugs hidden, board frozen): the score peaks at the true
+phase in **8/8** trials when the starting phase error is ≤ 5, with a wide margin
+(−4.98 against −7.1…−7.6). It degrades with distance — 67% at 7, 33% at 9, 25%
+at 13 — and the failures score badly *even at the true phase*, i.e. the climb
+started from too much corruption to recover a usable board at all. So there is a
+**capture radius**, and it grows with length: distance 13 recovers 25% at L=439
+but 67% at L=900, i.e. roughly `0.4·L/26`. That is why `N` is a knob rather than
+1 — `N` starting phases per wheel put the worst case `13/N` away.
+
+Implementation notes worth knowing before touching it:
+
+- **`build_key_space()` reparameterises rather than adding a special case.**
+  `ring_i` is pinned to the `N` starting phases (`r_min = 0`, `r_max =
+  (N−1)·step`, `step = 26/N`) and `start_i` is left over all 26, so `start_i`
+  *is* the offset — the same reparameterisation wheel 0 already uses.
+  `search_range` carries the stride as `unsigned char r_phase_step`, placed in
+  existing padding so the struct stays 80 bytes (see the `--ring-stride` note
+  above on why that size is load-bearing).
+- **The winning key is no longer derivable from the work index.** `tune_phase()`
+  moves ring1/start1 and ring2/start2, so `best.idx` identifies only where the
+  climb *started*. `best_result` therefore records the ring/start alongside the
+  plugboard at the merge, the merge does **not** restore the index-derived key
+  before echoing, and `--polish` overwrites `key_to_machine()`'s reconstruction
+  with the recorded one. Getting any of the three wrong prints a key that does
+  not decrypt to the plaintext on stdout.
+- **The restarts of one key can no longer share the machine.** `search_worker()`
+  normally builds the rotor stack once per key and reuses it across that key's
+  `-R` restarts; `tune_phase()` leaves it on the phase *it* found, so restart 1
+  would start from restart 0's phase — losing the independence `-R` relies on
+  and, worse, making the result depend on which thread ran which restart. With
+  the option on, the key is rebuilt per work item.
+- **`setup_mapping()` steps `grundstellung`**, and `tune_phase()` calls it
+  outside `search_worker()`'s usual restore, so every call is followed by a
+  fresh `init_ring_grund()`. The first version did not, and reported `AGD RET`
+  for a key whose true value was `AGD QMW` — the left wheel had stepped once
+  over 439 characters.
+- **A rejected phase move must restore the board too.** The tentative re-climb
+  in step 3 is not guaranteed to end above the current score (a staged `--score`
+  schedule optimises an earlier model first), so the board is snapshotted before
+  it and restored if the move loses; otherwise the returned score and the
+  machine the caller merges describe different things.
+- Rejected with `--ring-stride` (both reparameterise the ring positions), with
+  `-F`/`--exhaust` (both re-encode the work index) and with `--crib`/`-A`.
 
 ### Performance notes
 

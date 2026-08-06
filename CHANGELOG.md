@@ -6,6 +6,29 @@ existing command lines can behave differently or stop working.
 
 ## Unreleased
 
+### Added
+
+- **`--tune-phase N`** (0–26, default 0 = off) — hill-climb the middle and right
+  wheels' *phase* instead of enumerating it. A wheel's phase is its ring and
+  start shifted together, so its offset — and with it the wheel's whole
+  contribution to the substitution — stays put and the only thing that moves is
+  when its own notch fires. With the flag on, the sweep enumerates offsets alone
+  (26³ per wheel order instead of 26⁵) and each work item climbs the plugboard,
+  **freezes that board**, scans all 26 × 26 phases, re-climbs at the winner, and
+  repeats until neither improves.
+
+  The order matters: a rotor key scored without a plugboard is noise — a
+  rotor-only decrypt under a full board is ~95% scrambled — so the board is
+  recovered first and only then held fixed. Measured with 10 plugs hidden at
+  L=439, the frozen-board score peaks at the true phase in 8/8 trials when the
+  starting phase is within 5 of it, and the capture radius grows with length
+  (roughly `0.4 × length / 26`), which is what `N` starting phases per wheel are
+  for. It is an *approximation* and says so in the echoed settings.
+
+  Needs `-c`, and both `-r` and `-g` must wildcard the middle and rightmost
+  positions; rejected with `--ring-stride`, `-F`, `--exhaust`, `--crib` and
+  `-A`. Off by default and byte-identical to the previous release when off.
+
 ### Changed
 
 - **BREAKING: `--crib-file` is now `--crib-rerank`.** It re-ranks *finished*
