@@ -4158,8 +4158,8 @@ key given, plugboard hidden, a single climb, 30 instances — has `--polish`
 change the output in **21 of 30** (17 better, 4 worse), so the flag works. It
 does nothing here because both arms carry enormous aggregate climb budgets
 (169 676 climbs in B, 2 704 × 24 = 64 896 in A), and the single best board over
-that many climbs is already past what one local repair pass can improve. §4.11 says as much — the
-finisher's lift "roughly halves R80→R160 and can vanish by R160", because
+that many climbs is already past what one local repair pass can improve. §4.11
+says as much — the finisher's lift "roughly halves R80→R160 and can vanish by R160", because
 restarts subsume the near-solution boards it targets. Both arms are far past
 R160-equivalent.
 
