@@ -1,0 +1,9 @@
+trials: 80   wall: B 28s  A 28s (per trial, mean)
+
+                      mean %%-correct    exact
+  B  restarts, full       91.0          51/80
+  A  --tune-phase 2       85.5          63/80
+
+paired difference A-B: -5.4 pp   95% CI [-14.5, +3.7]
+exact recovery: both 42   only A 21   only B 9   neither 8
+McNemar exact p = 0.043 (on 30 discordant pairs)

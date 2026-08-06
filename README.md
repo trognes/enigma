@@ -331,7 +331,13 @@ English tables.
   must wildcard the middle and rightmost positions; rejects `--ring-stride`,
   `-F`, `--exhaust`, `--crib` and `-A`. An *approximation* — the scan has a
   capture radius of roughly `0.4 × length / 26`, so it wants long messages, and
-  a run says so in its echoed settings
+  a run says so in its echoed settings. Measured against spending the same wall
+  time on `-R` restarts over the full ring enumeration (80 paired trials, 200
+  letters): it recovers the message exactly more often — 63 times against 51 —
+  but gets a lower average fraction of the letters right, because when it fails
+  it has usually settled on the wrong offset and the answer is worthless, where
+  the exhaustive sweep normally returns a nearly-correct plaintext. Reach for it
+  when only a full break is useful to you
 - **`--exhaust E`** — Force `E` extra plug pairs among the free letters, try
   every combination, keep the best climb (needs `-c`; parallel over the first
   forced pair, so `-T` helps) `[off]`. **Not recommended** — a

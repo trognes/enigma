@@ -4071,6 +4071,71 @@ turnover rate makes a crib more likely to straddle a turnover. None of that requ
 notches to be **antipodal**. Placing them 12 apart instead of 13 would have kept every
 benefit and left no periodicity to exploit.
 
+### 7.15 Tuning the rotor phase vs. spending the compute on restarts
+
+**⚖️ MEASURED, SPLIT.**
+
+`--tune-phase` (§7.14's neighbour in the shipped code; see CLAUDE.md "Tuning the
+rotor phase") removes the middle and right wheels' phase from the enumeration
+and optimises it per key instead. That is a 123× smaller keyspace on the ring
+axis, which raises the obvious question the feature shipped without answering:
+**is the saved compute better spent on the phase search, or on `-R` restarts
+against the full enumeration?**
+
+**Design.** Paired, matched wall time, same instance to both arms.
+
+| arm | keyspace | restarts | wall |
+|---|---:|---:|---:|
+| **B** restarts | full ring1/ring2, 169 676 keys at L=200 after §7.12 | `-R 0` | 28 s |
+| **A** tune-phase | offsets only, `--tune-phase 2` → 2 704 keys | `-R 24` | 28 s |
+
+Everything else identical: `-c -f -l english -J -S m4f10 --polish`, reflector B,
+wheels 231, ring0/start0 pinned to A, `-T 4`. 80 trials, random ring1/ring2,
+start1/start2, 10-pair plugboard and 200-letter English excerpt.
+`eval/tune_phase_vs_restarts.py`; raw data
+`eval/results-tune-phase-vs-restarts.jsonl`.
+
+**Result — the two metrics disagree, and both readings are real.**
+
+| | mean %-correct | exact recovery |
+|---|---:|---:|
+| B restarts, full enumeration | **91.0** | 51/80 |
+| A `--tune-phase 2`, `-R 24` | 85.5 | **63/80** |
+
+- **Exact recovery: A wins.** 63 vs 51, on 30 discordant pairs (21 only-A,
+  9 only-B), **McNemar exact p = 0.043**.
+- **Mean %-correct: B is ahead but not established.** Paired difference −5.4 pp,
+  **95% CI [−14.5, +3.7]** — spans zero.
+
+**Why they disagree: the failure SHAPES are opposite.**
+
+| | misses | catastrophic (<20%) | partial | partial mean |
+|---|---:|---:|---:|---:|
+| B restarts | 29 | 6 | 23 | 93% |
+| A tune-phase | 17 | **12** | 5 | 95% |
+
+B always has the true rotor key somewhere in its keyspace, so a miss is a
+*plugboard* miss — the right key with a few plugs wrong, scoring 76–98%. A can
+converge on the wrong **offset**, and no amount of phase tuning recovers from
+that, so its misses collapse to 3–8%. A fails less often and worse.
+
+**Reading.** `--tune-phase` is **not dominated** — it breaks more messages at
+equal compute, which is the metric an operator cares about. But it trades
+graceful degradation for a bimodal outcome, so a run that fails tells you
+nothing at all, where the exhaustive arm usually hands back a nearly-correct
+plaintext and a correct key. The CLAUDE.md guidance to judge search changes on
+mean %-correct assumes the graded signal is the lower-variance view of the same
+thing; here it is not — the two arms have genuinely different loss
+distributions, and the mean is measuring the *shape* of the failures rather than
+how many there are.
+
+**Caveats.** One length (L=200), one wheel order, English prose, plugboard
+hidden but ring0/start0 given to both arms. The budget is length-dependent —
+§7.12 collapses more of arm B's keyspace as `L` falls — so `AB_LEN` and `AB_R`
+must be re-calibrated together before re-running at another length. Whether the
+split persists at operational lengths (~L300+), where the capture radius is wide
+and A's wrong-offset failures should get rarer, is untested.
+
 ---
 
 ## 8. Novel / higher-risk
