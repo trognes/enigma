@@ -1,9 +1,18 @@
 # refinement.md — a derived, staged refinement for `--ring-stride`
 
-**Status: SHIPPED.** `enigma.cc` derives the refinement's offsets; the
-enumerated `±mid_ring_window` band and the constant it used are gone. Measured
-equivalent to the enumerated refinement and ~130× cheaper — see §11 for what the
-build actually does and what measuring it turned up.
+**Status: SHIPPED, verified, and its measurement gaps closed.** `enigma.cc`
+derives the refinement's offsets; the enumerated `±mid_ring_window` band and the
+constant it used are gone. Measured equivalent to the enumerated refinement and
+~130× cheaper.
+
+Read **§11** for what the build turned up (including why the equivalence
+question had the wrong baseline), **§12** for the 1 200-trial machine-variant
+matrix, and **§8** for the case matrix — every check it lists now exists in
+`tests/run_tests.sh`. The three conditions the original runs did not cover —
+K≥8, a hidden plugboard, and messages long enough for the left wheel to step —
+have since been measured too (`eval/ring_stride_scope_probe.py`); §10 records
+the results. Sections written before the build are kept as they were, with the
+correction noted at the point it applies.
 
 The goal was to replace the refinement's `25 × 130 × 26 = 84 500` enumerated
 candidates with `25 × 26 = 650` **derived** ones, at equal recovery.
@@ -303,6 +312,19 @@ measurements this replaces).
 
 ## 8. Verification before shipping
 
+> **DONE — every case below now exists, and the ✅ marks are the pre-build
+> state.** Cases 3–6, 10, 11, 12 and 15 were the new ones; all are checks in
+> `tests/run_tests.sh` today: M4 under `--ring-stride`, a two-notch right wheel
+> at K=2/3/13, a key that both turns over at character 1 and double-steps (so
+> the left-wheel derivation is reached at all), the four-way caller-pin matrix,
+> and an assertion that the derivation *responds to the schedule* rather than
+> emitting a fixed set — the refinement must be strictly larger where the left
+> wheel steps than where it does not, which a banded or pinned build could not
+> produce. Run A and run B were both done; §11 records what they turned up and
+> §12 the 1 200-trial variant matrix. The paragraph below beginning "Cases 3, 4,
+> 5 and 6 do not exist" is therefore **historical** — it is what prompted the
+> work, kept because it names why recovery alone is a weak assertion here.
+
 Same standard the offset band itself was held to — **equivalence, not net
 rate**. A cheaper set is acceptable only if it recovers everything the full one
 recovers; a smaller candidate set can also dodge decoys and post a *higher* net
@@ -412,11 +434,12 @@ the check.
   over the message per `(start1, start2)` pair — 26 pairs per candidate `ring2`,
   computed once and reused.
 
-## 10. Open decisions and gaps — read before coding
+## 10. Decisions and gaps — all settled
 
-Decisions 1 and 2 below were open and are now **settled** — recorded here with
-the reasoning, since both are the kind of choice that looks arbitrary later.
-Decision 3 remains open and needs a measurement.
+**All three decisions below are settled and the gaps are closed**; the section
+is kept because each choice is the kind that looks arbitrary later without the
+reasoning that produced it. (An earlier version of this lead-in said decision 3
+was still open, which item 3 itself already contradicted.)
 
 1. **Caller-pinned `ring1` / `start1` — SETTLED.** Derive `ring1` only when the
    caller left it wildcarded; when it is pinned (including under the tool's own
@@ -461,8 +484,18 @@ the design's claims:
 > kept for the reasoning that led to the design.** The derived set has since
 > shipped and been measured end-to-end (§11) and across machine variants (§12):
 > two-notch right wheels, M4 and the derived shape itself are all covered now.
-> What is still *not* covered is the rest of that list — K≥8, a hidden
-> plugboard, and messages long enough for the left wheel to step.
+>
+> **And the three remaining gaps have since been measured too**
+> (`eval/ring_stride_scope_probe.py`; `archived/PERFORMANCE.md` §7.11). **K≥8**:
+> K=8/10/13 cost the same ~1% stride-specific miss as the documented K=2/3,
+> which closes a real hole: the flat-cost-curve claim above K=13 had been
+> measured on *keys analysed*, never on accuracy. **Left-wheel stepping**:
+> clean, 0.0% at every stride through K=26 on random keys at L=600, with the
+> wheel verified to have stepped in 54 of 60 trials. **Hidden plugboard**: the
+> one place anything moved — 4 losses in 69 trials at K=13 against 0 in 72 for a
+> paired given-board control, consistent in direction across two seeds but
+> **p ≈ 0.13, suggestive rather than established**, and only at a stride already
+> outside the recommended K≤3.
 
 ## 11. What shipping it turned up
 
