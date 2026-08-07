@@ -42,13 +42,25 @@ information floor, so the payoff is small. → `archived/IMPROVEMENTS.md` §2, �
 
 ## Keyspace reductions
 
-**3. Two-notch wheels collapse ring × start by 13 — exact, unexploited.** VI,
-VII and VIII notch at `M` and `Z`, exactly 13 apart, so a shift of 13 is a
-byte-identical decode for such a wheel in the middle or right position —
-unconditionally, at every length. Measured 152/152 and 138/138. Worth 34.8%
-averaged over all wheel triples from I–VIII, and **0% under the default
-`-x 5`**, so it is worth exactly as much as `-x 8` is used. → `CLAUDE.md`
-"Two-notch wheels"; `archived/PERFORMANCE.md`.
+**3. Two-notch wheels collapse ring × start by 13 — ✅ SHIPPED, always-on.**
+VI, VII and VIII notch at `M` and `Z`, exactly 13 apart, so shifting that
+wheel's ring and start together by 13 is a byte-identical decode —
+unconditionally, at every length. `search_worker()` now skips `ring2 ≥ 13`
+whenever the task's right wheel qualifies, gated on ring2 *and* start2 both
+being fully wildcarded.
+
+**Only the right wheel needed building.** §7.12's middle-wheel collapse derives
+its classes by *simulating* the stepping rather than from a formula, so it
+already picked the two-notch case up — measured at L=700, a two-notch middle
+wheel gives 13.0 start1 classes against 26.0 for a single-notch one. The issue
+used to claim 34.8%, which assumed neither half was banked; the increment
+against the real baseline was ~20%.
+
+Measured: exactly **2×** with a two-notch wheel in either position, **4×** with
+one in both, and no length term — 2× at L=40 and at L=900 alike, where §7.12's
+is 7.4× at L=40 and 1.00× past L≈676. **0% under the default `-x 5`**, so it
+pays only for Kriegsmarine traffic; note `-4` also defaults to `-x 5` though M4
+naval used I–VIII. → `CLAUDE.md` "Two-notch wheels".
 
 **4. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
 3–5× at short lengths and the compute is saved; whether spending it on `-R`

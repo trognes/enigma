@@ -1384,6 +1384,103 @@ tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -A 1000)
 check "--tune-phase rejects -A" \
   "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -A')" "1"
 
+# Right-wheel ring x start collapse by 13 (ENHANCEMENTS.md issue 3). VI, VII and
+# VIII notch at M and Z, exactly 13 apart, so their notch SET survives a shift
+# of 13 -- and a stepping wheel's absolute position is read by nothing but that
+# notch test. So for such a wheel on the RIGHT, (ring2, start2) and
+# (ring2+13, start2+13) decode identically and one of the pair is skipped.
+#
+# The equivalence itself is checked FIRST and by encryption alone, because that
+# is the fact the skip rests on: if it were false the skip would drop real keys
+# silently, which no recovery test reliably catches. Single-notch wheels are the
+# control -- without one, a build that shifted nothing would pass.
+tn_pt="ANXPANZXGRUPPEXVIERXSIEGFRIEDXTONIXDIVXSTEHTSEITXEINSZWOXSIEBEN"
+for tn in "126 two-notch same" "123 single-notch differ" "186 two-notch same"
+do
+  # shellcheck disable=SC2086  # intentional word-splitting into params
+  set -- $tn
+  check "right wheel $2 (w$1): ring2/start2 shifted by 13 must $3" \
+    "$(test "$(run "$tn_pt" -i -x 8 -u B -w "$1" -r AAC -g AAF)" \
+          = "$(run "$tn_pt" -i -x 8 -u B -w "$1" -r AAP -g AAS)" \
+       && echo same || echo differ)" \
+    "$3"
+done
+# ...and in the MIDDLE position the shift is equally exact but needs no code
+# here: §7.12 derives its classes by simulating the stepping, so it already
+# picks this up.
+check "middle wheel two-notch (w163): shifted by 13 is identical too" \
+  "$(test "$(run "$tn_pt" -i -x 8 -u B -w 163 -r ACA -g AFA)" \
+        = "$(run "$tn_pt" -i -x 8 -u B -w 163 -r APA -g ASA)" \
+     && echo same || echo differ)" "same"
+
+# The key count. -r AA. -g AA. pins everything but ring2/start2, so the 676 keys
+# isolate this collapse from §7.12's (which needs ring1 AND start1 wildcarded,
+# and is inert here).
+tn_ct=$(run "$tn_pt" -i -x 8 -u B -w 126 -r AAC -g AAF)
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+tn_keys() { printf '%s' "$tn_ct" \
+            | "$ENIGMA" -i -x 8 -u B -w "$1" -r "$2" -g "$3" -T 1 \
+              2>&1 >/dev/null \
+            | grep -oE 'Analysed [0-9]+' | awk '{print $2}'; }
+check "right-wheel collapse halves the keys (two-notch)" \
+  "$(tn_keys 126 "AA." "AA.")" "338"
+check "no collapse with a single-notch right wheel" \
+  "$(tn_keys 123 "AA." "AA.")" "676"
+# The precondition, both halves: with either ring2 or start2 pinned the skipped
+# key's twin may be absent from the sweep, so the collapse must not fire.
+check "right-wheel collapse inert when ring2 is pinned" \
+  "$(tn_keys 126 "AAC" "AA.")" "26"
+check "right-wheel collapse inert when start2 is pinned" \
+  "$(tn_keys 126 "AA." "AAF")" "26"
+
+# Recovery must be unaffected: whichever member of the pair the true key is, its
+# twin decodes identically, so the plaintext still comes out exact. Both ring2
+# values below are in the DROPPED half (>= 13, N..Z), the case that would fail.
+for tn_r in AAP AAZ; do
+  tn_ct2=$(run "$tn_pt" -i -x 8 -u B -w 126 -r "$tn_r" -g AAS)
+  check "crack: right-wheel collapse recovers with true ring2 = $tn_r" \
+    "$(run "$tn_ct2" -f -l wehrmacht -x 8 -u B -w 126 -r "AA." -g "AA." -T 1)" \
+    "$tn_pt"
+done
+check "right-wheel collapse is -T-independent" \
+  "$(run "$tn_ct" -f -l wehrmacht -x 8 -u B -w 126 -r "AA." -g "AA." -T 1)" \
+  "$(run "$tn_ct" -f -l wehrmacht -x 8 -u B -w 126 -r "AA." -g "AA." -T 4)"
+# Analysed must count keys SCORED, the same contract §7.12's accounting carries.
+tn_diag=$(printf '%s' "$tn_ct" \
+          | "$ENIGMA" -f -l wehrmacht -x 8 -u B -w 126 -r "AA." -g "AA." -T 1 \
+            2>&1 >/dev/null \
+          | grep -oE 'Analysed [0-9]+ rotor combinations, scored [0-9]+ plugb')
+check "right-wheel collapse: analysed count matches keys scored" \
+  "$(printf '%s' "$tn_diag" | awk '{print ($2 == $6)}')" "1"
+
+# The echo names which collapses fired, and must not name one that did no work.
+# Here §7.12 is inert (ring1/start1 pinned) so the line must read "right" alone.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+tn_line() { printf '%s' "$tn_ct" \
+            | "$ENIGMA" -i -x 8 -u B -w "$1" -r "$2" -g "$3" -T 1 \
+              2>&1 >/dev/null \
+            | grep -c "^Collapse:   $4"; }
+check "right-wheel collapse is echoed alone when §7.12 is inert" \
+  "$(tn_line 126 "AA." "AA." "right ring x start")" "1"
+check "no collapse line with a single-notch right wheel" \
+  "$(tn_line 123 "AA." "AA." "")" "0"
+
+# M4 and Norway, for the reason every other keyspace check carries them: notch[]
+# and notch_halfperiod[] are indexed by TRANSLATED rotor numbers, so a mode that
+# translates (-n adds norway_rotor_base) is where an index slip hides. Norway's
+# wheels 1-5 are all single-notch, so the collapse must NOT fire there; M4
+# reaches VI-VIII, so it must.
+tn_m4=$(run "$tn_pt" -4 -i -x 8 -u b -w B126 -r AAAC -g AAAF)
+check "M4: right-wheel collapse fires with a two-notch right wheel" \
+  "$(printf '%s' "$tn_m4" \
+     | "$ENIGMA" -4 -i -x 8 -u b -w B126 -r "AAA." -g "AAA." -T 1 \
+       2>&1 >/dev/null \
+     | grep -oE 'Analysed [0-9]+' | awk '{print $2}')" "338"
+tn_nw=$(run "$tn_pt" -n -i -u N -w 123 -r AAC -g AAF)
+check "Norway: no right-wheel collapse (wheels 1-5 are single-notch)" \
+  "$(printf '%s' "$tn_nw" | "$ENIGMA" -n -i -u N -w 123 -r "AA." -g "AA." -T 1 \
+     2>&1 >/dev/null | grep -oE 'Analysed [0-9]+' | awk '{print $2}')" "676"
+
 # Middle-wheel ring x start collapse (archived/PERFORMANCE.md §7.12). Shifting ring1 and start1
 # together only changes the decode through the middle notch, which most start1 values
 # never reach in a short message -- so those start1 values are skipped as duplicates.
