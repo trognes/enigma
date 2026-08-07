@@ -259,14 +259,16 @@ are read from a **data directory** (filenames built as
 > was on this list until its accuracy numbers turned out to be contaminated by a
 > `--polish` guard bug — at `K=2`/`K=3` it costs only ~0.5–2pp of exact recovery
 > for 1.86×/2.61× fewer keys, so it is now **recommended when throughput
-> matters** (K≥5 still is not); see its entry. `--tune-phase` is **new and not
-> yet proven end-to-end**: the mechanism it rests on is measured (a frozen-board
-> phase scan peaks at the true phase in 8/8 trials within the capture radius,
-> and it recovers the true ring from a single starting phase when the offsets
-> are given), but no matched-compute A/B against spending the same time on `-R`
-> exists yet — so treat it as an experiment, not a recipe. **Removed options**
-> (dominated or subsumed; the measurements survive in
-> `archived/PERFORMANCE.md`): `-I` (bare
+> matters** (K≥5 still is not); see its entry. `--tune-phase` is **measured and
+> split**: at matched wall time against spending the same compute on `-R` over
+> the full ring enumeration (80 paired trials, L=200) it **breaks more
+> messages** — 63/80 exact against 51/80, McNemar p = 0.043 — but scores
+> **lower mean %-correct** (85.5 vs 91.0, CI spans 0): its failures are
+> catastrophic where the exhaustive arm's are graceful. Use it when a break is
+> what you want and a partial answer is worth nothing; prefer the exhaustive
+> sweep when you want the run to degrade gracefully. `archived/PERFORMANCE.md`
+> §7.15. **Removed options** (dominated or subsumed; the measurements survive
+> in `archived/PERFORMANCE.md`): `-I` (bare
 > first-improvement — `-J` supersedes it; the internal climb path remains, set
 > by `-J`), `--infl-order`, `--repair3`, `--gainfix-best` (superseded by the
 > finisher), `--dump-restarts` (subsumed by `--dump-all`), `--restart-tt` and
@@ -390,7 +392,10 @@ are read from a **data directory** (filenames built as
   climbed first and only then frozen. An **approximation**, echoed in the
   settings as such: the scan has a capture radius of ~`0.4·L/26`, so it wants
   long messages, and `N` starting phases per wheel exist to put the worst case
-  inside that radius.
+  inside that radius. **Measured against the alternative use of the compute**
+  (§7.15): at matched wall time it breaks more messages than an exhaustive ring
+  sweep does (63/80 vs 51/80 exact, p = 0.043) but scores lower mean %-correct,
+  because a wrong *offset* is unrecoverable — it fails less often and worse.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,

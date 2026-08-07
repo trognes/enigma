@@ -29,6 +29,18 @@ existing command lines can behave differently or stop working.
   positions; rejected with `--ring-stride`, `-F`, `--exhaust`, `--crib` and
   `-A`. Off by default and byte-identical to the previous release when off.
 
+  Measured against the alternative use of the compute — the same wall time spent
+  on `-R` restarts over the full ring enumeration, 80 paired trials at 200
+  letters: `--tune-phase` **breaks more messages** (63/80 exact against 51/80,
+  McNemar p = 0.043) but scores a **lower mean %-correct** (85.5 against 91.0,
+  CI spans zero). The failure shapes are opposite and that is the whole
+  difference: the exhaustive sweep always has the true rotor key in its
+  keyspace, so its misses are plugboard misses that still return 76–98% of the
+  letters, while `--tune-phase` can settle on the wrong offset, which nothing
+  downstream can repair. It fails less often and worse. Prefer it when only a
+  full break is useful; prefer the exhaustive sweep when a partial answer has
+  value.
+
 ### Changed
 
 - **BREAKING: `--crib-file` is now `--crib-rerank`.** It re-ranks *finished*

@@ -4071,6 +4071,109 @@ turnover rate makes a crib more likely to straddle a turnover. None of that requ
 notches to be **antipodal**. Placing them 12 apart instead of 13 would have kept every
 benefit and left no periodicity to exploit.
 
+### 7.15 Tuning the rotor phase vs. spending the compute on restarts
+
+**⚖️ MEASURED, SPLIT.**
+
+`--tune-phase` (§7.14's neighbour in the shipped code; see CLAUDE.md "Tuning the
+rotor phase") removes the middle and right wheels' phase from the enumeration
+and optimises it per key instead. That is a 123× smaller keyspace on the ring
+axis, which raises the obvious question the feature shipped without answering:
+**is the saved compute better spent on the phase search, or on `-R` restarts
+against the full enumeration?**
+
+**Design.** Paired, matched wall time, same instance to both arms.
+
+| arm | keyspace | restarts | wall |
+|---|---:|---:|---:|
+| **B** restarts | full ring1/ring2, 169 676 keys at L=200 after §7.12 | `-R 0` | 28 s |
+| **A** tune-phase | offsets only, `--tune-phase 2` → 2 704 keys | `-R 24` | 28 s |
+
+Everything else identical: `-c -f -l english -J -S m4f10 --polish`, reflector B,
+wheels 231, ring0/start0 pinned to A, `-T 4`. 80 trials, random ring1/ring2,
+start1/start2, 10-pair plugboard and 200-letter English excerpt.
+`eval/tune_phase_vs_restarts.py`; raw data
+`eval/results-tune-phase-vs-restarts.jsonl` (and
+`...-nopolish.jsonl` for the ablation below).
+
+> **The corpus is a PINNED FILE, and that is not incidental.** The first version
+> of the harness built it from `README.md` + `CLAUDE.md` + `IMPROVEMENTS.md` —
+> the very files this write-up edits. Documenting the result grew that text by
+> 654 letters, every excerpt offset shifted, and the follow-up ablation run
+> silently stopped solving the same problems: **38 of 40 trials drew a different
+> plaintext**. The trap is that ring, start and plugboard are drawn from the RNG
+> *without consulting the text*, so they stayed byte-identical — an "are these
+> the same instances?" check on those three fields passes while the actual
+> problems have changed underneath it. A check that compares everything except
+> the thing that moved is worse than no check: it converts a silent mismatch
+> into a confident wrong conclusion (here, an apparent bug in `--polish`). The
+> corpus now lives in `eval/corpus-tune-phase-ab.txt` and each trial records a
+> hash of its plaintext.
+
+**Result — the two metrics disagree, and both readings are real.**
+
+| | mean %-correct | exact recovery |
+|---|---:|---:|
+| B restarts, full enumeration | **91.0** | 51/80 |
+| A `--tune-phase 2`, `-R 24` | 85.5 | **63/80** |
+
+- **Exact recovery: A wins.** 63 vs 51, on 30 discordant pairs (21 only-A,
+  9 only-B), **McNemar exact p = 0.043**.
+- **Mean %-correct: B is ahead but not established.** Paired difference −5.4 pp,
+  **95% CI [−14.5, +3.7]** — spans zero.
+
+**Why they disagree: the failure SHAPES are opposite.**
+
+| | misses | catastrophic (<20%) | partial | partial mean |
+|---|---:|---:|---:|---:|
+| B restarts | 29 | 6 | 23 | 93% |
+| A tune-phase | 17 | **12** | 5 | 95% |
+
+B always has the true rotor key somewhere in its keyspace, so a miss is a
+*plugboard* miss — the right key with a few plugs wrong, scoring 76–98%. A can
+converge on the wrong **offset**, and no amount of phase tuning recovers from
+that, so its misses collapse to 3–8%. A fails less often and worse.
+
+**Reading.** `--tune-phase` is **not dominated** — it breaks more messages at
+equal compute, which is the metric an operator cares about. But it trades
+graceful degradation for a bimodal outcome, so a run that fails tells you
+nothing at all, where the exhaustive arm usually hands back a nearly-correct
+plaintext and a correct key. The CLAUDE.md guidance to judge search changes on
+mean %-correct assumes the graded signal is the lower-variance view of the same
+thing; here it is not — the two arms have genuinely different loss
+distributions, and the mean is measuring the *shape* of the failures rather than
+how many there are.
+
+**`--polish` is irrelevant to this comparison — measured, not assumed.** The
+finisher was on in both arms, and the obvious worry is that it is not neutral
+between them: arm B's characteristic miss is a near-solution board, which is
+exactly what a gain cascade repairs, while arm A's is a wrong offset, which
+nothing downstream can touch. If that were true the shipped split would be
+biased. It is not. Ablating `--polish` from both arms over the same 40 instances
+changes **nothing at all** — 88.1% / 23-40 for B and 85.7% / 32-40 for A, with
+and without, and all 80 runs byte-identical.
+
+That is a *null result, not an inert flag*. A low-budget control — true rotor
+key given, plugboard hidden, a single climb, 30 instances — has `--polish`
+change the output in **21 of 30** (17 better, 4 worse), so the flag works. It
+does nothing here because both arms carry enormous aggregate climb budgets
+(169 676 climbs in B, 2 704 × 24 = 64 896 in A), and the single best board over
+that many climbs is already past what one local repair pass can improve. §4.11
+says as much — the finisher's lift "roughly halves R80→R160 and can vanish by R160", because
+restarts subsume the near-solution boards it targets. Both arms are far past
+R160-equivalent.
+
+The 4-worse cases in the control are worth noting on their own: `--polish` is
+monotone in **score**, not in truth, so at the scoring-failure floor it can
+replace a better plaintext with a higher-scoring one.
+
+**Caveats.** One length (L=200), one wheel order, English prose, plugboard
+hidden but ring0/start0 given to both arms. The budget is length-dependent —
+§7.12 collapses more of arm B's keyspace as `L` falls — so `AB_LEN` and `AB_R`
+must be re-calibrated together before re-running at another length. Whether the
+split persists at operational lengths (~L300+), where the capture radius is wide
+and A's wrong-offset failures should get rarer, is untested.
+
 ---
 
 ## 8. Novel / higher-risk
