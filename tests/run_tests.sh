@@ -1384,7 +1384,8 @@ tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -A 1000)
 check "--tune-phase rejects -A" \
   "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -A')" "1"
 
-# Right-wheel ring x start collapse by 13 (ENHANCEMENTS.md issue 3). VI, VII and
+# Right-wheel ring x start collapse by 13 (CLAUDE.md "Two-notch wheels" -- cited
+# by name, since ENHANCEMENTS.md renumbers as issues close). VI, VII and
 # VIII notch at M and Z, exactly 13 apart, so their notch SET survives a shift
 # of 13 -- and a stepping wheel's absolute position is read by nothing but that
 # notch test. So for such a wheel on the RIGHT, (ring2, start2) and

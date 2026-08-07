@@ -42,32 +42,15 @@ information floor, so the payoff is small. → `archived/IMPROVEMENTS.md` §2, �
 
 ## Keyspace reductions
 
-**3. Two-notch wheels collapse ring × start by 13 — ✅ SHIPPED, always-on.**
-VI, VII and VIII notch at `M` and `Z`, exactly 13 apart, so shifting that
-wheel's ring and start together by 13 is a byte-identical decode —
-unconditionally, at every length. `search_worker()` now skips `ring2 ≥ 13`
-whenever the task's right wheel qualifies, gated on ring2 *and* start2 both
-being fully wildcarded.
+The two-notch collapse that used to head this section has **shipped** and is
+no longer an issue: `CLAUDE.md` "Two-notch wheels" and the CHANGELOG carry it.
 
-**Only the right wheel needed building.** §7.12's middle-wheel collapse derives
-its classes by *simulating* the stepping rather than from a formula, so it
-already picked the two-notch case up — measured at L=700, a two-notch middle
-wheel gives 13.0 start1 classes against 26.0 for a single-notch one. The issue
-used to claim 34.8%, which assumed neither half was banked; the increment
-against the real baseline was ~20%.
-
-Measured: exactly **2×** with a two-notch wheel in either position, **4×** with
-one in both, and no length term — 2× at L=40 and at L=900 alike, where §7.12's
-is 7.4× at L=40 and 1.00× past L≈676. **0% under the default `-x 5`**, so it
-pays only for Kriegsmarine traffic; note `-4` also defaults to `-x 5` though M4
-naval used I–VIII. → `CLAUDE.md` "Two-notch wheels".
-
-**4. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
+**3. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
 3–5× at short lengths and the compute is saved; whether spending it on `-R`
 raises recovery is untested. The same question was asked of `--ring-stride` and
 answered "a wash". → `archived/IMPROVEMENTS.md` §2.
 
-**5. A `--ring-stride` for the middle wheel — premise measured, not built.**
+**4. A `--ring-stride` for the middle wheel — premise measured, not built.**
 Striding `ring1` costs 3.1% (K=2) / 5.1% (K=3) of the true `offset1`, roughly
 competitive with the right-wheel stride, and the two compose multiplicatively.
 **Read the failed attempt first**: striding `ring1` directly measured 2.4×
@@ -78,32 +61,27 @@ produces — which the measured numbers do **not** cover. →
 
 ## Cribs
 
-Detail for all four: `archived/cribs.md` §13.
+Detail for all three: `archived/cribs.md` §13 — which also carries the
+X-separator variant, dropped here for want of confidence in the premise
+that word-boundary positions are any easier to come by than a phrase.
 
-**6. Crib supply at network scale.** The library covers 83% of held-out
+**5. Crib supply at network scale.** The library covers 83% of held-out
 messages, but on a 58-message corpus, and 47 of the 57 hits are 8–11 letters —
 seed-only lengths. Whether a real network yields *long* cribs is the question
 the whole feature rests on, and no larger corpus is available.
 
-**7. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
+**6. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
 would tolerate a slightly-wrong crib — which matters, because garbling is real
 (two of five `SIEGFRIED` messages are corrupted) and exact matching cannot see
 through it.
 
-**8. The X-separator variant.** Knowing only *where* the word separators sit is
-a valid crib and an unusually efficient one: every deduction chains from the
-same letter, so 14 separator positions reject as strongly as a 22-letter phrase.
-The positions have to come from somewhere. **Measurable offline with
-`eval/crib_menu.py` before any C++** — and the only open crib item that attacks
-supply, which is the actual constraint.
-
-**9. Menu reuse across alignments.** Shifting a crib by one position changes
+**7. Menu reuse across alignments.** Shifting a crib by one position changes
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
 ## Measurement gaps
 
-**10. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
+**8. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
 compute it breaks more messages than an exhaustive ring sweep (63/80 vs 51/80,
 p = 0.043) but scores lower mean %-correct, because a wrong *offset* is
 unrecoverable — it fails less often and worse. The capture radius grows as
@@ -111,7 +89,7 @@ unrecoverable — it fails less often and worse. The capture radius grows as
 rarer, and the trade could stop being a trade. Untested. → `CLAUDE.md` "Tuning
 the rotor phase"; `archived/PERFORMANCE.md` §7.15.
 
-**11. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
+**9. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
 control, direction consistent across two seeds but **p ≈ 0.13 — suggestive, not
 established**, and only at a stride already outside the recommended K≤3.
@@ -122,20 +100,20 @@ Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**12. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**10. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**13. No `install` target**, and the n-gram files are not declared as build/run
+**11. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**14. Single-file distribution.** Embedding the tables was declined once, but
+**12. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**15. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**13. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 
