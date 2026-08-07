@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Does an ABSENT crib produce a confident wrong answer?
-(cribs.md 7a caution 3.)
+(archived/cribs.md 7a caution 3.)
 
     python3 eval/crib_absent_probe.py --trials 40
 

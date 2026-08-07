@@ -4,14 +4,22 @@ What is still worth doing, and what to avoid doing again. The evidence behind
 every claim here lives in `archived/` — chiefly `archived/PERFORMANCE.md`
 (measurements), `archived/CODE_REVIEW.md` (the previous issue list) and
 `archived/CRACKQUALITY_TESTS.md` (harness design). Those are history: read them
-to check a number, not to find work.
+to check a number, not to find work — and **never write to them**. `archived/`
+is read-only: no edits, no appended sections, no corrections. New measurements
+belong here (or in `CLAUDE.md`) and may cite an archived section by number,
+which stays exactly as written. See the box in `CLAUDE.md` under "Status &
+remaining work" for why appending there looks deceptively like following the
+convention.
 
 Status in one line: the tool is correct, warning-free under `-std=c++17 -Wall
 -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast` on g++ and clang,
 clean under ASan/UBSan/TSan/valgrind/cppcheck/clang-tidy, multi-threaded, and
 supports standard / Norway / M4 machines. Nothing below is a known bug.
 
-Severity: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low.
+Severity: 🔴 critical · 🟠 high · 🟡 medium · 🟢 low. Entries that are no longer
+open keep their place rather than being deleted, because the reason something
+was closed is the useful part: ✅ shipped or settled · ⚖️ measured, and the
+answer was a genuine trade rather than a win or a loss.
 
 ---
 
@@ -51,7 +59,8 @@ selection contributing −0.0pp, so it does not move the scoring floor. Recipe:
 
 ## 2. Open items
 
-Nothing above 🟢. Ordered by expected payoff within each group.
+Nothing above 🟢. Ordered by expected payoff within each group. ✅ and ⚖️
+entries are closed and kept for their reasoning; the 🟢 ones are what is open.
 
 ### Search
 
@@ -61,13 +70,33 @@ Nothing above 🟢. Ordered by expected payoff within each group.
 
 ### Scoring and new capability
 
-- 🟢 **Crib-driven menu/closure deduction.** Hypothesise a plug, chain-deduce
-  the forced plugs through the machine equation, reject contradictions
-  (Turing/Welchman menu logic). This pins plugs *with certainty before* the
-  climb runs rather than re-ranking after it, which is why it is worth more than
-  the crib re-ranker that shipped and was measured down (`--crib-rerank`, −0.1pp
-  at weight 0.5). Needs a new crib-planting harness tier and is invisible to
-  `make crackquality` as written.
+- ✅ **Crib-driven menu/closure deduction — SHIPPED** (`cribs.md`, all seven
+  steps of its §12). Hypothesise a plug, chain-deduce the forced plugs through
+  the machine equation, reject contradictions (Turing/Welchman menu logic). It
+  pins plugs *with certainty before* the climb runs rather than re-ranking after
+  it, which is why it was worth more than the crib re-ranker that shipped and
+  was measured down (`--crib-rerank`, −0.1pp at weight 0.5). Shipped surface:
+  `--crib`, `--crib-at` (optional — omit it to sweep), `--crib-dump`,
+  `--crib-list`, `--no-crib-reorder`, plus `--no-plug` and `--full-text`.
+  Measured on an 88-letter message with the board hidden and a 12-letter crib:
+  **92% of letters recovered against 8% unseeded** (10% at `-R 64`), swept as
+  well as pinned. **Welchman's diagonal board is what does the work**, not menu
+  loops — a loop-free 12-letter menu rejects 88% of settings against 0% without
+  it, which is the opposite of the pre-build expectation.
+
+  Two things resolved differently from the plan. The **crib-planting harness
+  tier** was not built as a `make` target: the `eval/crib_*.py` probes fill that
+  role and are run by hand, since a per-commit tier would charge every commit
+  for numbers that move only when the crib code does. And **cost-pruning a crib
+  library was built, measured and removed** (§4) — cost is anti-correlated with
+  the chance of a hit, so it prunes the likeliest entries first.
+
+  Still open, none blocking (`cribs.md` §13): crib supply at network scale, a
+  rank-instead-of-reject mode for garbled cribs, the X-separator variant, and
+  menu reuse across alignments. The X-separator one is the only one that
+  attacks the actual constraint — §11 there says supply, not the algorithm, is
+  the bottleneck — and it can be measured offline with `eval/crib_menu.py`
+  before any C++ is written.
 - 🟢 **The narrow L40 scoring re-opening.** The only observed scoring failures
   sit right at the identifiability floor — 5–10% at L40, robust across two
   seeds, 0 elsewhere. That floor is now quantified (§4, the wheel-order gate
@@ -75,7 +104,7 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   Length-sensitive scoring ideas could only help at L ≲ 40, where recovery is
   already near the information floor, so the payoff is small.
 
-### Throughput saved but not yet converted
+### Keyspace reductions: what converted, and what is still unexploited
 
 - ✅ **Does `--ring-stride`'s saving convert into recovery? Measured: no, and no
   loss either.** At matched wall time on authentic telegraphic German (L=100,
@@ -134,6 +163,40 @@ Nothing above 🟢. Ordered by expected payoff within each group.
   recommended K≤3. Settling it needs ~200 trials (~3–4 h) and buys nothing
   operational. The *fully* hidden cell is **vacuous and must not be read as a
   pass** — its K=1 base is 10%, one eligible trial in ten.
+- ⚖️ **`--tune-phase`: does taking the phase out of the enumeration convert?
+  MEASURED, SPLIT** (`archived/PERFORMANCE.md` §7.15,
+  `eval/tune_phase_vs_restarts.py`). The middle and right wheels' *phase* — ring
+  and start shifted together, so the offset and hence the whole substitution is
+  unchanged and only the notch timing moves — is optimised per key instead of
+  enumerated, cutting the sweep to 26³ per wheel order from 26⁵. The order is
+  load-bearing: climb the plugboard first, *then* freeze it and scan all 26 × 26
+  phases, because a rotor key scored without a board is noise.
+
+  At matched wall time against spending the same compute on `-R` over the full
+  ring enumeration (80 paired trials, L=200, 28 s per arm): `--tune-phase`
+  **breaks more messages** — 63/80 exact against 51/80, McNemar p = 0.043 — but
+  scores **lower mean %-correct**, 85.5 against 91.0, CI [−14.5, +3.7] spanning
+  zero. The failure *shapes* are opposite and that is the whole difference: the
+  exhaustive arm always has the true key in its keyspace, so its misses are
+  plugboard misses returning 76–98% of the letters, while `--tune-phase` can
+  settle on the wrong offset, which nothing downstream repairs. **It fails less
+  often and worse.** So it is not dominated, and the recommendation is
+  conditional: use it when only a full break is worth anything, prefer the
+  exhaustive sweep when a partial answer has value.
+
+  **`--polish` is irrelevant to that comparison — ablated, not assumed.**
+  Removing it from both arms changes nothing at all (all 80 runs identical),
+  and a low-budget control confirms the flag is not merely inert: with the true
+  key given and one climb it changes 21 of 30 outcomes. Both arms simply carry
+  climb budgets far past the point where §4.11's "lift vanishes by R160"
+  applies.
+
+  **Untested and the interesting case: operational lengths (~L300+).** The
+  capture radius grows with length (~`0.4·L/26`), so wrong-offset failures — the
+  entire source of the catastrophic misses — should get rarer. That is where the
+  trade could stop being a trade. Also one length, one wheel order, English
+  prose, and ring0/start0 given to both arms; the budget is length-dependent, so
+  the two knobs must be re-calibrated together before re-running elsewhere.
 - 🟢 **Two-notch wheels collapse ring × start by 13 — exact, unexploited.**
   VI, VII and VIII all notch at `M` (12) and `Z` (25), exactly 13 apart, so
   their notch set survives a shift of 13. For such a wheel in the **middle or
@@ -560,6 +623,20 @@ Traps that have already cost real time here. The first group produces wrong
 - **Cheap proxies drift from the thing they proxy.** `score_iter` for wall time,
   proximity for exact recovery, a 240-sample rate for a bound — each has
   produced a confident wrong answer here.
+- **Pin the corpus a harness draws from; never read it from the repo's own
+  docs.** `tune_phase_vs_restarts.py` built its plaintexts from `README.md` +
+  `CLAUDE.md` + `IMPROVEMENTS.md`. Writing up the result edited those files, the
+  corpus grew by 654 letters, every excerpt offset shifted, and a follow-up
+  ablation silently stopped solving the same problems — **38 of 40 trials drew a
+  different plaintext**. The corpus now lives in `eval/corpus-tune-phase-ab.txt`
+  and each trial records a hash of its plaintext.
+- **A "same instances?" check that omits the thing that moved is worse than no
+  check.** In the case above, ring, start and plugboard are drawn from the RNG
+  *without consulting the text*, so all three stayed byte-identical while the
+  plaintexts changed. The assertion written to catch exactly this compared those
+  three fields, passed, and converted a silent mismatch into a confidently
+  reported bug in `--polish` that did not exist. Assert on a hash of the whole
+  problem, not on the parts that are convenient to compare.
 
 ### Reasoning traps
 

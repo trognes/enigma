@@ -702,9 +702,10 @@ are read from a **data directory** (filenames built as
     and because each atomic add owns a disjoint slice, exactly one thread prints
     each 1% step — no races, `-T`-safe.
 - `--crib TEXT` / `--crib-at N` **known-plaintext key filter** (off by default;
-  `cribs.md` §12 step 3). A crib is a guess at part of the plaintext *together
-  with where it sits*. Decryption is `p = steck[core_i[steck[c]]]` and the rotor
-  core is an involution, so it rearranges to `steck[p] = core_i[steck[c]]` — one
+  `archived/cribs.md` §12 step 3). A crib is a guess at part of the plaintext
+  *together with where it sits*. Decryption is `p = steck[core_i[steck[c]]]` and
+  the rotor core is an involution, so it rearranges to `steck[p] =
+  core_i[steck[c]]` — one
   lookup on the `rows[]` table `setup_mapping()` already builds. Guess a single
   plug, chain that along every crib position, and add reciprocity (`steck[x]=y`
   ⇒ `steck[y]=x`, and no two letters share a partner — **Welchman's diagonal
@@ -714,9 +715,9 @@ are read from a **data directory** (filenames built as
   12-letter crib. Runs after `setup_mapping()`, reads only `rows[]`, so it is a
   pure per-key test and `-T`-deterministic; zero cost when the option is off.
   **The diagonal board is what does the work**, not menu loops: a loop-free
-  12-letter menu still rejects 88% of settings against 0% without it (`cribs.md`
-  §4.1). `--crib-at` is **1-based** and optional: given, the crib is pinned
-  there; omitted,
+  12-letter menu still rejects 88% of settings against 0% without it
+  (`archived/cribs.md` §4.1). `--crib-at` is **1-based** and optional: given,
+  the crib is pinned there; omitted,
   every alignment the self-encryption filter leaves is tried and a key is
   rejected only if **every** alignment rejects it. **That compounding sets the
   usable crib length.** Rejections multiply, so what matters is `∏ p_i` over the
@@ -725,9 +726,10 @@ are read from a **data directory** (filenames built as
   either way — and the product of the 70 measured per-alignment rates (63.4% to
   100%) predicts 5.2% against 5.3% observed, so the weakest alignments dominate.
   16 letters is the swept floor; below it a crib can only seed a climb
-  (`cribs.md` §4.2a). The crib mode is rejected against `-F`, `--exhaust`,
-  `--ring-stride` and `-A`. A crib that matches the ciphertext anywhere is fatal
-  — an Enigma never encrypts a letter to itself, so that alignment is
+  (`archived/cribs.md` §4.2a). The crib mode is rejected against `-F`,
+  `--exhaust`, `--ring-stride` and `-A`. A crib that matches the ciphertext
+  anywhere is fatal — an Enigma never encrypts a letter to itself, so that
+  alignment is
   impossible. `--crib-dump` prints each surviving hypothesis, its alignment and
   the plugs it deduces (diagnostic, needs `--crib`); the progress line gains an
   **`A` column** for the alignment, its width taken from the preview so the
@@ -751,9 +753,10 @@ are read from a **data directory** (filenames built as
   deduced — verified by `crib_vectors_check.py` (40/40) and by unchanged
   rejection counts. The order is built once per alignment in `init_crib()`, so
   nothing in the per-key deduction changes shape.
-- **With `-c` the crib also SEEDS the climb** (the hybrid, `cribs.md` §7):
-  instead of starting from an empty board, each surviving hypothesis's deduced
-  plugs are pinned in `PLUG_FIXED_EX` — the same per-worker pin set `--exhaust`
+- **With `-c` the crib also SEEDS the climb** (the hybrid,
+  `archived/cribs.md` §7): instead of starting from an empty board, each
+  surviving hypothesis's deduced plugs are pinned in `PLUG_FIXED_EX` — the same
+  per-worker pin set `--exhaust`
   uses, since `plug_fixed` is a read-only global no worker may touch — and the
   climb finds the rest. Letters the deduction settles as carrying **no** cable
   are pinned too (that is a finding, not an absence of one, and it stops the
@@ -771,9 +774,10 @@ are read from a **data directory** (filenames built as
   most-likely-to-match first and re-sorting would throw away the early exit).
   Runs **one complete rotor sweep per crib** — crib-outer, because the shared
   `setup_mapping`/`precompute` a rotor-outer loop would save is 0.6% of the run
-  while early exit is worth up to 50× (`cribs.md` §6.7) — and keeps the best
-  board across all of them. Three things that are fatal for a single `--crib`
-  merely skip the crib here: longer than the ciphertext, matching the ciphertext
+  while early exit is worth up to 50× (`archived/cribs.md` §6.7) — and keeps
+  the best board across all of them. Three things that are fatal for a single
+  `--crib` merely skip the crib here: longer than the ciphertext, matching the
+  ciphertext
   at every alignment, or rejecting every key. A library is written against a
   network's vocabulary, not one message, so most of its cribs not fitting is the
   normal case. Rejected with `--crib` and with `--crib-at` (which pins *one*
@@ -781,8 +785,8 @@ are read from a **data directory** (filenames built as
   printed once for the run, and the echo high-water mark carries across cribs so
   a later crib cannot re-print boards worse than the best already found.
 - `--no-crib-reorder` **keep a `--crib-list` in file order** (off by default,
-  i.e. cribs run cheapest-measured-cost first). Reverses `cribs.md` §5 step
-  5, which priced cribs with
+  i.e. cribs run cheapest-measured-cost first). Reverses `archived/cribs.md`
+  §5 step 5, which priced cribs with
   `build_cribs.py`'s *modelled* cost — flat-ish by length. The measured curve is
   a **cliff**: relative to a no-crib sweep, 8 letters costs **52×**, 12 costs
   0.67×, 25 costs 0.02× — a ~2 600× spread against the model's 13×, with the
@@ -1142,9 +1146,10 @@ different work depending on an unrelated part of the keyspace, so it was
 removed.
 
 > **SUPERSEDED: the refinement is now DERIVED, not enumerated — see
-> `refinement.md`.** `start2` follows from the coarse winner's offset2, and
-> `ring1`/`ring0` from the step-count difference between the winner's schedule
-> and the candidate's — computable from the two keys, so the `±2` band and its
+> `archived/refinement.md`.** `start2` follows from the coarse winner's
+> offset2, and `ring1`/`ring0` from the step-count difference between the
+> winner's schedule and the candidate's — computable from the two keys, so the
+> `±2` band and its
 > `mid_ring_window` constant are gone. The set went from `25 × 130 × 26` = 84
 > 500 to `25 ×` the start1 range (650–1 300), measured equivalent to the
 > enumerated refinement on the stride-specific miss rate (0 in both, 360 paired
@@ -1161,7 +1166,7 @@ removed.
 > actually ships for the first time — the earlier tables scored only the shapes
 > that *led to* the derivation, so the claim rested on the derived set being a
 > subset of a measured-clean superset, which bounds it the wrong way.
-> `archived/PERFORMANCE.md` §7.11 and `refinement.md` §12. **The three
+> `archived/PERFORMANCE.md` §7.11 and `archived/refinement.md` §12. **The three
 > conditions those runs did not cover are now measured too** — K≥8, a hidden
 > plugboard, and messages long enough for the left wheel to step
 > (`archived/PERFORMANCE.md` §7.11, `eval/ring_stride_scope_probe.py`).
@@ -1176,16 +1181,17 @@ removed.
 > outside the recommended K≤3.
 
 > **The width was re-measured, and then the question was superseded — see
-> `refinement.md`.** A `w=3` cap matches the full sweep at K≤5 but costs 20pp of
-> exact recovery at K=10 and 40pp at K=13, so any cap would have to be
-> `K`-dependent (`⌈K/2⌉+3` is the narrowest measured-clean rule; `⌈K/2⌉+2` is
+> `archived/refinement.md`.** A `w=3` cap matches the full sweep at K≤5 but
+> costs 20pp of exact recovery at K=10 and 40pp at K=13, so any cap would have
+> to be `K`-dependent (`⌈K/2⌉+3` is the narrowest measured-clean rule; `⌈K/2⌉+2`
+> is
 > 2pp light at K=10–11). It is not worth building, because the whole width is
 > only 1–2.4% of a run — and because the refinement's *shape* has far more slack
 > than its width: the coarse winner's `start2` offset can be pinned (0 losses in
 > 600 trials) and its `ring1` **derived** rather than banded, taking the set
-> from 84 500 candidates to 650. `refinement.md` has the algebra, the design and
-> the verification plan; the measurement-only `ENIGMA_REFINE_WINDOW` env
-> override (default off, byte-identical) reproduces the width columns.
+> from 84 500 candidates to 650. `archived/refinement.md` has the algebra, the
+> design and the verification plan; the measurement-only `ENIGMA_REFINE_WINDOW`
+> env override (default off, byte-identical) reproduces the width columns.
 
 **The MIDDLE wheel is banded, and the band is derived rather than enumerated.**
 Shifting ring2 and start2 together leaves the right wheel's substitution
@@ -1573,10 +1579,10 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   - imported and generated files, which are left exactly as they arrive.
 
   **Documentation is now compliant; code is not, and is not being reflowed.**
-  `CLAUDE.md`, `IMPROVEMENTS.md`, `README.md` and `CHANGELOG.md` all hold to 80
-  (bar a handful of unwrappable lines inside fenced blocks). `enigma.cc` is ~21%
-  over and `tests/run_tests.sh` ~36%; reflowing those would touch thousands of
-  lines and make every later diff noisier for no reader benefit, so apply the
+  `CLAUDE.md`, `ENHANCEMENTS.md`, `README.md` and `CHANGELOG.md` all hold to
+  80 (bar a handful of unwrappable lines inside fenced blocks). `enigma.cc` is
+  ~21% over and `tests/run_tests.sh` ~36%; reflowing those would touch thousands
+  of lines and make every later diff noisier for no reader benefit, so apply the
   rule to new and edited code and leave the rest. A source file staying mixed
   for a long time is expected, not a defect to tidy up in bulk. The files under
   `archived/` are frozen history and exempt outright.
@@ -1707,12 +1713,27 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
 
 ## Status & remaining work
 
-The still-open issues, the measurement discipline and the pitfalls list live in
-`IMPROVEMENTS.md`. Everything behind them is history and sits in `archived/`:
+The still-open issues live in `ENHANCEMENTS.md`, which numbers them and points
+at the detail. Everything behind them is history and sits in `archived/` —
+including the documents that used to carry them (`archived/IMPROVEMENTS.md`,
+`archived/cribs.md`, `archived/refinement.md`):
 `archived/PERFORMANCE.md` (every measurement), `archived/CODE_REVIEW.md` (the
 previous issue list), `archived/CRACKQUALITY_TESTS.md` (harness design) and
 `archived/CODE_REVIEW_HISTORY.md` (the original audit, plus the design rationale
 and rejected experiments). Read the archive to check a number, not to find work.
+
+> **`archived/` is READ-ONLY. Never edit a file there, and never append to one
+> — not a new section, not a correction, not a link.** It is the frozen record
+> of what was measured at the time, and its value is that it does not move.
+> New measurements go in `ENHANCEMENTS.md` (or here); they may *cite* an
+> archived section, and the archived section stays exactly as written. The
+> pattern that leads to breaking this is plausible: every past measurement sits
+> in `archived/PERFORMANCE.md`, so adding §7.N+1 beside §7.N looks like
+> following the convention rather than violating it. It is not — the numbering
+> stopped where the archive was frozen. "Read the archive to check a number,
+> not to find work" above is about not *mining* it for tasks; this is the
+> stronger rule about not writing to it at all.
+
 Most findings have been fixed — the stack buffer overflow, the
 index-of-coincidence formula, the `-l`/filename overflow, the
 `fscanf`/read-handling bugs, dead code, the C-style modernization, the
@@ -1782,7 +1803,8 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   converged-board population, so the **only reliable lever is raw compute** —
   more restarts via `-T`, which scales predictably.
 
-Read `IMPROVEMENTS.md` before changing the search or scoring code — in
+Read `ENHANCEMENTS.md` and then `archived/IMPROVEMENTS.md` before changing the
+search or scoring code — in
 particular its "Measured down" table, which lists what has already been built
 and lost. The supporting measurements are in `archived/PERFORMANCE.md` and
 `archived/CODE_REVIEW_HISTORY.md`.

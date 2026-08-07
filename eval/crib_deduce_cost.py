@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""What does the deduction itself cost? (cribs.md §4.1's cost table, the last
+"""What does the deduction itself cost? (archived/cribs.md §4.1's cost table, the last
 piece of it still unmeasured.)
 
     python3 eval/crib_deduce_cost.py
 
-Every cost figure in cribs.md prices the CLIMB.  The deduction was assumed
+Every cost figure in archived/cribs.md prices the CLIMB.  The deduction was assumed
 negligible -- "one table lookup" -- but it runs 26 hypotheses at every viable
 alignment before any climb starts, and a swept short crib has 70 to 90 of them.
 That is up to ~2300 chained propagations per rotor setting, which is not

@@ -11,7 +11,7 @@ Or in one step, which is how the test suite runs it:
 WHAT IS BEING CHECKED, and why it is not circular.  Each vector carries a real
 message, its true key and its true plugboard, so the plugs the deduction must
 produce are known from the ANSWER KEY -- the Python is only the thing that
-writes them down.  Two properties, both from cribs.md §10:
+writes them down.  Two properties, both from archived/cribs.md §10:
 
   §10.2  the true rotor setting must not be rejected: at least one hypothesis
          survives, and the one matching the true board is among the survivors

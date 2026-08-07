@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Menu construction and closure deduction for cribs (cribs.md §6; §12 step 2).
+"""Menu construction and closure deduction for cribs (archived/cribs.md §6; §12 step 2).
 
     python3 eval/crib_menu.py                 # regenerate §4.1's table
     python3 eval/crib_menu.py --selftest      # anchor model, check the logic
@@ -8,7 +8,7 @@
 WHY THIS EXISTS, given that the deduction is going into `enigma.cc` anyway.
 
 §4.1's table -- loops per crib length, and the fraction of rotor settings a crib
-rejects -- is what the cost model in cribs.md rests on, and nothing in the repo
+rejects -- is what the cost model in archived/cribs.md rests on, and nothing in the repo
 regenerated it.  This does.  If the C++ later disagrees with §4.1 there is now a
 second implementation to arbitrate, instead of two suspects and no judge.
 
@@ -113,7 +113,7 @@ class Menu:
     def loops(self):
         """Cycle rank of the LARGEST component: edges - nodes + 1.
 
-        Largest only, per cribs.md §6.3: every component needs its own
+        Largest only, per archived/cribs.md §6.3: every component needs its own
         hypothesis, so a menu that falls into pieces multiplies the work rather
         than dividing it -- and the small pieces carry no loops anyway.
         """
@@ -248,7 +248,7 @@ def trial(rng, texts, L, plugs):
 # ---------------------------------------------------------------- the table ---
 
 def table(args):
-    """Regenerate cribs.md §4.1.
+    """Regenerate archived/cribs.md §4.1.
 
     Per crib length: plant a crib in an authentic plaintext enciphered under a
     random key and plugboard, then

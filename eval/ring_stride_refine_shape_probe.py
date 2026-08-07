@@ -79,7 +79,7 @@ def step_counts(g1, g2, start0, n):
     read off the same positions() the decode uses (each wheel advances by 0 or 1
     per character, so a change in its absolute position IS a step). This is
     enigma.cc's step_counts(); it is what the shipped refinement derives ring1
-    from -- refinement.md section 4."""
+    from -- archived/refinement.md section 4."""
     p = positions([start0, g1, g2], WHEELS, n)
     mid = np.diff(np.concatenate(([g1], p[:, 1]))) != 0
     left = np.diff(np.concatenate(([start0], p[:, 0]))) != 0

@@ -88,7 +88,7 @@ static const int wheels = 3;
 
 /* The --ring-stride refinement's middle-wheel offset window (mid_ring_window = 2) USED to
    live here. It is gone because the refinement now DERIVES that offset from the coarse
-   winner's and the candidate's step schedules instead of banding it (refinement.md): the
+   winner's and the candidate's step schedules instead of banding it (archived/refinement.md): the
    quantity the band was guessing at is computable from the two keys, with no knowledge of
    the truth. The bound the band rested on still holds -- a ring2/start2 shift moves the
    middle wheel's schedule by at most 2, 1 from the ordinary time shift plus 1 when double
@@ -139,8 +139,8 @@ static const char * opt_no_plug;
    sits. Given one that is right, part of the plugboard follows by ARITHMETIC instead of
    search, and rotor settings that cannot produce it are rejected without ever being
    scored -- Turing's menu and Welchman's diagonal board, on the machine equation this
-   file already computes. See cribs.md; the deduction itself is crib_deduce() below.
-     Step 3 of cribs.md 12: one crib at one alignment, used as a KEY FILTER. The
+   file already computes. See archived/cribs.md; the deduction itself is crib_deduce() below.
+     Step 3 of archived/cribs.md 12: one crib at one alignment, used as a KEY FILTER. The
    alignment sweep and the seeded climb are later steps, so --crib-at is required. */
 static const char * opt_crib_text;
 static int opt_crib_at = -1;
@@ -165,7 +165,7 @@ static int crib_aligns = 0;
 static std::vector<unsigned short> crib_order;
 static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossible */
 /* --crib-list FILE: a whole library of cribs, tried in file order, one full rotor
-   sweep each (cribs.md 6.7 -- crib-outer, because early exit is worth up to 50x while
+   sweep each (archived/cribs.md 6.7 -- crib-outer, because early exit is worth up to 50x while
    the shared setup_mapping/precompute a rotor-outer loop would save is 0.6%).
      You rarely know which phrase a message contains; you know the vocabulary of the
    network, which is what eval/build_cribs.py emits. A single --crib is for testing and
@@ -177,7 +177,7 @@ static const size_t crib_sample_keys = 256;
    cheapest-measured-cost first. Reordering is the DEFAULT, so the flag names the
    exception -- and it can safely be a default because ordering discards nothing: the
    worst case is that the winner is found later, never that it is lost. See
-   crib_cheaper() for why cheapest-first, and why it reverses what cribs.md 5 step 5
+   crib_cheaper() for why cheapest-first, and why it reverses what archived/cribs.md 5 step 5
    concluded from a modelled cost. */
 static bool opt_crib_reorder = true;
 /* Keys on which both sides of the choice are actually RUN, to measure the expected
@@ -1181,7 +1181,7 @@ void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_stri
    two letters may share a partner. That second part is Welchman's diagonal board, free
    here because the plugboard is stored as an involution, and measured to supply almost
    all of the rejecting power: a loop-free 12-letter menu still rejects 88% of rotor
-   settings, against 0% without it (cribs.md 4.1).
+   settings, against 0% without it (archived/cribs.md 4.1).
 
    A contradiction kills the guess. Kill all 26 and the rotor setting cannot have produced
    the crib, so the search skips it without scoring anything.
@@ -1193,7 +1193,7 @@ void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_stri
    An alignment is VIABLE only if the crib disagrees with the ciphertext at every position:
    an Enigma never encrypts a letter to itself, so a match there proves the crib cannot sit
    at that offset. That test costs nothing and removes about half the alignments outright
-   (cribs.md 6.6) -- it is pure arithmetic on the ciphertext, done here rather than per key.
+   (archived/cribs.md 6.6) -- it is pure arithmetic on the ciphertext, done here rather than per key.
 
    The anchor is the highest-degree letter of the menu's largest connected component, so
    one guess reaches as far as it can before a second would be needed. It depends on which
@@ -1419,7 +1419,7 @@ static bool crib_try(int anchor, int hyp, int * board,
 }
 
 /* --crib-dump: print every surviving hypothesis, the alignment it survived at, and the
-   plugs it deduces, so a harness can check them against a known board (cribs.md 10.1).
+   plugs it deduces, so a harness can check them against a known board (archived/cribs.md 10.1).
    Display-only and under the same mutex as the progress lines, so it cannot affect which
    candidate wins. Very verbose; off by default.
 
@@ -1766,7 +1766,7 @@ void setup_mapping(machine & m, bool copy_rows)
    that is all the --ring-stride refinement's derivation needs.
 
    The refinement uses these to compute how far a candidate's schedule has
-   drifted from the coarse winner's (refinement.md §4). The substitution consumes
+   drifted from the coarse winner's (archived/refinement.md §4). The substitution consumes
    a_i = o0 + left(i), b_i = o1 + mid(i) and c_i = o2 + i, so a candidate whose
    step counts differ from the winner's by a constant reproduces the winner's
    alignment exactly when its ring offsets absorb that constant. w1/w2 are
@@ -1800,7 +1800,7 @@ static void step_counts(int w1, int w2, int g1, int g2,
    `cap` are stored; the return value is how many. The refinement emits one
    candidate per distinct value rather than reducing them to a mode -- a mode is
    a guess that can be wrong on a short message where the two schedules alternate
-   evenly, while enumerating a handful of values cannot be (refinement.md §4). */
+   evenly, while enumerating a handful of values cannot be (archived/refinement.md §4). */
 static int step_deltas(const unsigned short * a, const unsigned short * b,
                        int * out, int cap)
 {
@@ -1819,7 +1819,7 @@ static int step_deltas(const unsigned short * a, const unsigned short * b,
 
 /* Add every value within `band` of one already in `out[0..n)`, deduplicated, and return
    the new count. The derivation is exact for the step-count term, but the coarse winner's
-   own offset can be off for reasons no schedule explains (refinement.md §7.2), and a small
+   own offset can be off for reasons no schedule explains (archived/refinement.md §7.2), and a small
    band around each derived value covers that at a few times the candidate count -- which
    is still two orders of magnitude below the enumeration it replaced. */
 static int widen_deltas(int * out, int n, int band, int cap)
@@ -1941,7 +1941,7 @@ static void load_cribs(const char * fname)
    other text this tool reads.
      File ORDER is significant and preserved: the generator emits its cribs most-likely-
    to-match first, and a run stops at the first crib that wins, so re-sorting the list
-   would throw away the early exit that makes crib-outer worth doing (cribs.md 5 step 5
+   would throw away the early exit that makes crib-outer worth doing (archived/cribs.md 5 step 5
    measured median time-to-first-hit at 10 h in this order against 82 h ordered by
    tier). Duplicates are dropped -- a repeated crib costs a full rotor sweep to learn
    nothing new -- but the FIRST occurrence keeps its position. */
@@ -3531,7 +3531,7 @@ static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
 /* One parallel exhaustion unit: all combos whose first forced pair is g_exhaust_firsts[fi],
    over all restarts. Leaves m at the unit's best board/plaintext and returns its score, or
    a sentinel below any real score if the first pair leaves no room for E-1 more pairs. */
-/* --- the hybrid: deduce, then climb (cribs.md 7, 12 step 5) --------------------------
+/* --- the hybrid: deduce, then climb (archived/cribs.md 7, 12 step 5) --------------------------
 
    One work item at a key the crib did not reject: climb once from EVERY surviving
    hypothesis, seeded with the plugs that hypothesis deduces, and keep the best.
@@ -3540,16 +3540,16 @@ static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
    pin set --exhaust uses, because plug_fixed is a read-only global that no worker may
    touch. They stay fixed through --polish too: a deduced plug comes from arithmetic on the
    machine equation, while the finisher's cascade is score-driven local repair, so
-   releasing them would let weaker evidence overwrite stronger (cribs.md 7b). A WRONG
+   releasing them would let weaker evidence overwrite stronger (archived/cribs.md 7b). A WRONG
    hypothesis needs no such rescue -- it loses on score to the other 25.
 
    Letters the deduction settles as carrying NO cable are pinned as well: board[x] == x is
    a real finding, not an absence of one, and marking it stops the climb wasting moves on a
-   letter that cannot be plugged. That is the value cribs.md 7 wanted --no-plug for, had
+   letter that cannot be plugged. That is the value archived/cribs.md 7 wanted --no-plug for, had
    here for free.
 
    Cost is one climb per surviving hypothesis. With a long crib that is usually one; with a
-   short one it is the several that cribs.md 7a's seed mode expects and prices. */
+   short one it is the several that archived/cribs.md 7a's seed mode expects and prices. */
 static void dump_all(machine & m, double score);   /* defined with the other diagnostics */
 
 static double crib_unit(machine & m, size_t key_index, int restart)
@@ -3579,7 +3579,7 @@ static double crib_unit(machine & m, size_t key_index, int restart)
             }
         /* The kick is off by default here and should stay off: it can only scatter the
            letters the deduction did NOT settle, and a seeded climb starts near the answer
-           (cribs.md 7b). -R N still asks for N kicked passes if that is wanted. */
+           (archived/cribs.md 7b). -R N still asks for N kicked passes if that is wanted. */
         if (opt_restarts >= 1)
           {
             uint64_t rng = restart_seed(key_index, restart);
@@ -3919,7 +3919,7 @@ static void dump_all(machine & m, double score)
 
 /* --crib-dump: one line per surviving hypothesis at this key -- "cribstop <key> <anchor>
    <letter> <plugs>" -- so a harness can check the deduced plugs against a known board
-   (cribs.md 10.1) and count stops (10.3). The rotor key is rebuilt from the caller's
+   (archived/cribs.md 10.1) and count stops (10.3). The rotor key is rebuilt from the caller's
    ring/start rather than read from the machine, because on the scan path setup_mapping
    has already stepped grundstellung (the documented lazy restore). Under the same mutex
    as --dump-all; display-only, so results stay -T-deterministic. */
@@ -5146,7 +5146,7 @@ static void run_parallel(int nthreads, F per_thread)
     th.join();
 }
 
-/* --- what a crib will COST, measured before paying it (cribs.md 4.2b) ---------------
+/* --- what a crib will COST, measured before paying it (archived/cribs.md 4.2b) ---------------
 
    The unit is surviving HYPOTHESES per key, not rejection rate and not crib length.
    Under -c a surviving key is climbed once per surviving hypothesis, so that count is
@@ -5180,7 +5180,7 @@ struct crib_cost
        > 1 means the crib is expected to save work, < 1 that it costs more than not
      using a crib at all. It measures THROUGHPUT ONLY and says nothing about recovery,
      which is the whole reason it must not be used to prune a library on its own
-     (cribs.md 12 step 6). Zero when there was nothing to measure. */
+     (archived/cribs.md 12 step 6). Zero when there was nothing to measure. */
   double gain;
   /* Plugboards scored per key WITH this crib -- the deduction's surviving hypotheses,
      each climbed once. This is the quantity the default ordering sorts on: it is what
@@ -5261,7 +5261,7 @@ static crib_cost crib_estimate(size_t nsample)
      records for score_iter generally) -- it flatters a crib that rejects nearly
      everything, where the true gain saturates at the deduction's own price.
        Only under -c: without a climb there is nothing to seed, and a crib is measured
-     to lose against a plain scan anyway (cribs.md 4.2b). */
+     to lose against a plain scan anyway (archived/cribs.md 4.2b). */
   if (opt_hillclimb && (c.sampled > 0))
     {
       size_t gstride = stride * ((c.sampled + crib_gain_keys - 1) / crib_gain_keys);
@@ -5630,7 +5630,7 @@ static double bruteforce(char * result, bool allow_empty)
           int fixed_ring0 = m.ringstellung[0];
           int fixed_start0 = m.grundstellung[0];
 
-          /* THE OFFSETS ARE DERIVED, NOT SEARCHED (refinement.md).
+          /* THE OFFSETS ARE DERIVED, NOT SEARCHED (archived/refinement.md).
 
              The substitution consumes a_i = o0 + left(i), b_i = o1 + mid(i) and
              c_i = o2 + i, where o_w = start_w - ring_w and left/mid are the wheels'
@@ -5686,7 +5686,7 @@ static double bruteforce(char * result, bool allow_empty)
           bool derive_ring1 = (rc[1] == asize);
           /* Width of the band placed around each derived offset (see widen_deltas).
              MEASURED TO BUY NOTHING, so the shipped value is 0 -- the pure derivation.
-             The band was built for refinement.md §7.2, the one failure the derivation
+             The band was built for archived/refinement.md §7.2, the one failure the derivation
              cannot correct: a coarse winner whose own o1 is wrong for scoring rather than
              schedule reasons. Over 360 paired end-to-end trials it changed not a single
              recovery, because every key the derived set "lost" against the old enumerated
@@ -6021,7 +6021,7 @@ static double bruteforce(char * result, bool allow_empty)
   return best.score;
 }
 
-/* --- --crib-list: one rotor sweep per crib (cribs.md 6.7, 12 step 6) -----------------
+/* --- --crib-list: one rotor sweep per crib (archived/cribs.md 6.7, 12 step 6) -----------------
 
    Crib-outer, not rotor-outer. The sharing a rotor-outer loop would buy -- one
    setup_mapping and precompute across all the cribs at a given setting -- is 0.6% of
@@ -6058,7 +6058,7 @@ struct crib_plan
    climbed once per surviving hypothesis. The whole long tail of a library therefore
    costs less than a single short crib, and running it first is very nearly free.
 
-   It is worth being explicit that this REVERSES what cribs.md 5 step 5 concluded.
+   It is worth being explicit that this REVERSES what archived/cribs.md 5 step 5 concluded.
    That measurement ordered by a MODELLED cost -- build_cribs.py prices a crib by its
    length on the assumption that sweep cost is roughly flat across lengths (4.1's
    table: 100-117 s for every row) -- and 4.2b showed the model has the wrong unit
@@ -7192,8 +7192,8 @@ int main(int argc, char * * argv)
        strlen(opt_steckerbrett)))
     fatal("Illegal steckerbrett string (must be up to 13 letter pairs)");
 
-  /* --crib TEXT / --crib-at N: cribs.md 12 step 3 is one crib at one alignment, so the
-     position is required -- the sweep is step 4. The combination rules follow cribs.md 8:
+  /* --crib TEXT / --crib-at N: archived/cribs.md 12 step 3 is one crib at one alignment, so the
+     position is required -- the sweep is step 4. The combination rules follow archived/cribs.md 8:
      the crib composes with the climb options, and is rejected against the search modes
      whose key handling it would have to be reconciled with. */
   if (opt_crib_text && opt_crib_list)
@@ -7208,7 +7208,7 @@ int main(int argc, char * * argv)
             fatal("Illegal --crib string (must be at least 2 letters A-Z)");
         }
       if (opt_crib_at == -1)
-        { /* no --crib-at: sweep every alignment (cribs.md 12 step 4) */ }
+        { /* no --crib-at: sweep every alignment (archived/cribs.md 12 step 4) */ }
       /* Negative and zero are rejected at parse time (see OPT_CRIBAT). */
       if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
         fatal("--crib is not supported with -F (tier 1 could filter out the very key "
