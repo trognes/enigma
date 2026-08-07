@@ -1029,11 +1029,13 @@ three:
 |---|---|---|
 | 0 (left) | total, unconditional, exact | 26× |
 | 1 (middle) | **partial, exact** — this section | **3–5× at short lengths** |
-| 2 (right) | none exact; only `--ring-stride`'s approximation | ~1.7×, lossy |
+| 2 (right) | **exact for VI–VIII**, else `--ring-stride` | **2×** / 1.7× |
 
 That table is about *position*. There is a fourth collapse that depends on the
-*wheel* instead — the two-notch VI–VIII, exact and unconditional, **not
-exploited** — see "Two-notch wheels" below.
+*wheel* instead — the two-notch VI–VIII, exact and unconditional — see
+"Two-notch wheels" below. It is now always-on for the right wheel; the middle
+wheel's share of it was already inside row 1, because §7.12 derives its classes
+by simulation.
 
 Shifting `ring1` and `start1` together leaves `mod26(g1-r1)` — the middle
 wheel's entire contribution to the substitution — invariant, so two such pairs
@@ -1075,7 +1077,7 @@ and a collapsed one would simply be absent.
 Full derivation, measurements and the shipped results: `archived/PERFORMANCE.md`
 §7.12.
 
-### Two-notch wheels collapse ring × start by 13 — exact, NOT exploited
+### Two-notch wheels collapse ring × start by 13 — exact, always-on
 
 Wheels **VI, VII and VIII** all carry notches at `M` (12) and `Z` (25) — exactly
 `26/2 = 13` apart, so their notch *set* is invariant under a shift of 13. That
@@ -1111,11 +1113,45 @@ positions. Averaged over all 336 ordered triples from I–VIII this is a **34.8%
 keyspace reduction**; under the default `-x 5` (wheels I–V) it is **0%**, since
 none of I–V has two notches. So it is worth exactly as much as `-x 8` is used.
 
-**Not implemented.** It would slot in beside the §7.10/§7.12 collapses in
-`build_key_space()`, gated on the wheel in that position having a period-13
-notch set — but read the §7.12 warning first: a wrong equivalence class drops
-real keys *silently*, which is why that code derives its masks by simulating the
-stepping rather than from a formula.
+**Shipped, for the RIGHT wheel only — the middle wheel was already covered.**
+§7.12 derives its classes by *simulating* the stepping rather than from a
+formula, so it picks the two-notch case up for free: measured at L=700, a
+two-notch middle wheel gives **13.0 start1 classes against 26.0** for a
+single-notch one, exactly the factor of 2. That is the discipline paying off —
+a formula-based §7.12 would have missed it. The right wheel had no collapse at
+all, and now has this one.
+
+`notch_halfperiod[w]` is derived in `init()` from the notch table (invariant
+under a shift of 13, and the wheel has a notch at all — a *notchless* wheel is
+trivially period-13 but must not count, since its absolute position is unread
+and the equivalence is the whole ring, a different fact). `search_worker()` then
+**skips `ring2 ≥ 13`** when the task's right wheel qualifies: exactly one
+representative per class, because every dropped `(r2, g2)` has its twin
+`(r2−13, g2−13)` still in the sweep.
+
+The precondition is `rc[2] == 26 && gc[2] == 26` — ring2 *and* start2 both fully
+wildcarded, or the twin may be absent and the skip would lose a real key. That
+one test also excludes `--ring-stride` and `--tune-phase` for free, since both
+leave `rc[2]` short of 26, and `--true-key` opts out for the same reason §7.12
+does. Reported ring2/start2 may be either member of the pair — the same
+class-representative contract wheel 0 and §7.12 already carry, and harmless
+because the decode is identical.
+
+**It composes with §7.12 multiplicatively**: measured 2× with a two-notch wheel
+in either position and **4×** with one in both (`-w 176`, L=700, `-r A.. -g
+...`). Against today's baseline the increment is ~20% of the keyspace averaged
+over the 336 ordered triples — the 34.8% above assumed *neither* half was
+banked. Unlike §7.12's, this collapse has **no length term**: 2× at L=40 and 2×
+at L=900 alike, where §7.12's is worth 7.4× at L=40 and 1.00× past L≈676.
+
+**The equivalence itself is tested by encryption, not by recovery.** A wrong
+class drops keys silently, and a recovery test does not reliably catch that —
+so `tests/run_tests.sh` first asserts that shifting ring2/start2 by 13 gives an
+identical ciphertext for VI/VII/VIII and a *different* one for a single-notch
+wheel, then checks the key counts, both halves of the precondition, recovery
+with the true ring2 in the dropped half, `-T` independence, and that Norway
+(single-notch wheels only) and M4 (which reaches VI–VIII) behave correctly —
+the translated-versus-raw rotor index being where this kind of bug hides.
 
 ### Sparse ring sampling for the rightmost wheel — `--ring-stride`
 

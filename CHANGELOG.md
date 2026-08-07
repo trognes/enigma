@@ -6,6 +6,28 @@ existing command lines can behave differently or stop working.
 
 ## Unreleased
 
+### Changed
+
+- **Two-notch wheels (VI, VII, VIII) now collapse the RIGHT wheel's ring ×
+  start by 13** — always on, no flag. Those three notch at `M` and `Z`, exactly
+  13 apart, so their notch *set* survives a shift of 13; and since a stepping
+  wheel's absolute position is read by nothing but that notch test, shifting its
+  ring and start together by 13 gives a byte-identical decode. The search now
+  tests one member of each pair.
+
+  Exact and unconditional — unlike the middle wheel's collapse it has no length
+  term, so it is worth **2× at 40 letters and 2× at 900 alike**. It composes
+  with the middle-wheel collapse, giving **4×** when VI–VIII sit in both
+  positions. Applies only when ring2 and start2 are both wildcarded, and is
+  **0% under the default `-x 5`**, since none of wheels I–V has two notches — so
+  it pays for Kriegsmarine traffic and nothing else.
+
+  The middle wheel needed no work: its collapse derives classes by simulating
+  the stepping rather than from a formula, so it had been picking this up all
+  along. Reported ring2/start2 may now be either member of a pair, the same
+  class-representative contract the other collapses already carry; the decrypt
+  is identical either way, and the settings echo names which collapses fired.
+
 ### Added
 
 - **`--tune-phase N`** (0–26, default 0 = off) — hill-climb the middle and right

@@ -418,6 +418,22 @@ static unsigned char notch[rotor_count][asize];
    Lets setup_mapping() skip straight to the next stepping event instead of
    testing the notch once per character. Built by init(). */
 static unsigned char notch_gap[rotor_count][asize];
+/* notch_halfperiod[w] = "this wheel's notch SET is invariant under a shift of
+   13", which is true of exactly VI, VII and VIII (both notch at M(12) and
+   Z(25), 13 apart). Two things reach the machine from a stepping wheel's (ring,
+   start): the offset diff26(g, r), which a joint shift preserves, and the
+   ABSOLUTE position, which is read only by the notch test -- and that test
+   cannot tell g from g+13 when the notch set has period 13. So for such a
+   wheel, shifting its ring and start together by 13 is a byte-identical decode,
+   unconditionally and at every message length. Derived from the notch table
+   rather than hard-coded, so a wheel added later is picked up automatically;
+   the equivalence itself is checked empirically in tests/run_tests.sh rather
+   than trusted from this comment. Exploited for the RIGHT wheel in
+   search_worker() -- see g_r2_halve. The MIDDLE wheel needs nothing here:
+   §7.12's collapse derives its classes by simulating the stepping, so it
+   already picks this up (measured 13.0 classes against 26.0 for a single-notch
+   middle wheel at L=700). */
+static unsigned char notch_halfperiod[rotor_count];
 static unsigned char reflector[reflector_count][asize];
 
 /* --- per-search state: struct machine ----------------------------------- */
@@ -1101,6 +1117,22 @@ void init()
         /* 26 means the wheel has no notch at all */
         notch_gap[i][j] = static_cast<unsigned char>(k);
       }
+
+  for (int i = 0; i < rotor_count; i++)
+    {
+      bool any = false, period13 = true;
+      for (int j = 0; j < asize; j++)
+        {
+          any = any || notch[i][j];
+          if (notch[i][j] != notch[i][(j + asize / 2) % asize])
+            period13 = false;
+        }
+      /* "no notch at all" is trivially period-13 and must NOT count: a
+         notchless wheel never steps anything, so its absolute position is
+         unread and the equivalence is the whole ring, not a shift of 13 -- a
+         different fact, and one nothing here relies on. */
+      notch_halfperiod[i] = static_cast<unsigned char>(any && period13);
+    }
 
   for (int i=0; i < reflector_count; i++)
     for (int j=0; j < asize; j++)
@@ -4231,6 +4263,35 @@ static best_result * g_progress = nullptr;
 static std::vector<uint32_t> g_mid_rep_store;
 static const uint32_t * g_mid_rep_mask = nullptr;
 
+/* --- right-wheel ring x start collapse by 13 (two-notch wheels) ------------
+   The companion to the collapse above, on the OTHER position and for a
+   different reason. VI, VII and VIII notch at M(12) and Z(25), exactly 13
+   apart, so their notch SET survives a shift of 13 -- and a stepping wheel's
+   absolute position is read by nothing but that notch test (the offset, which
+   is what the substitution consumes, is preserved by shifting ring and start
+   together). So for such a wheel on the right, (ring2, start2) and
+   (ring2+13, start2+13) decode byte-identically.
+
+   Unlike §7.12's, this equivalence is UNCONDITIONAL: it has no length term, so
+   it does not decay as the message grows -- 2x at L=40 and 2x at L=900 alike.
+   §7.12's is the opposite, worth 7.4x at L=40 and 1.00x past L~676.
+
+   Exploited by skipping ring2 >= 13, which is exactly one representative per
+   class: every dropped (r2, g2) has its twin (r2-13, g2-13) still in the sweep,
+   since start2 ranges over all 26. That needs ring2 AND start2 both fully
+   wildcarded -- with either pinned the twin may be absent and the skip would
+   lose a real key -- which is the same no-redundancy precondition wheel 0's
+   collapse and --ring-stride carry. The rc/gc test below also excludes
+   --ring-stride and --tune-phase for free, since both leave rc[2] short of 26.
+
+   Whether it applies is per WHEEL ORDER, not per search, so the flag is only
+   the enable; search_worker() tests notch_halfperiod[] against the task's own
+   right wheel. Reported ring2/start2 may therefore be either member of the
+   pair -- the same class-representative contract §7.12 and wheel 0 already
+   carry, and harmless because the decode, and so the plaintext, is
+   identical. */
+static bool g_r2_halve = false;
+
 /* First middle-notch firing index for (w1, w2, start1, start2), or -1 for "never
    within `limit` characters". Pure stepping: no ring setting, start0, reflector or
    plugboard enters a stepping decision, so those do not index this. */
@@ -4393,7 +4454,10 @@ void search_worker(machine & m,
   int r1 = 0, r2 = 0, r3 = 0, g1 = 0, g2 = 0, g3 = 0;   /* current key's ring/start */
   int crib_stop_at = -1;                /* --crib: alignment that survived at this key */
   const uint32_t * mid_row = nullptr;   /* §7.12 mask row for the current wheel order */
-  bool key_skipped = false;             /* current key collapsed away (§7.12) */
+  /* current key collapsed away (§7.12, or the right-wheel collapse by 13) */
+  bool key_skipped = false;
+  /* this wheel order's right wheel has a period-13 notch set */
+  bool r2_halve_wo = false;
 
   size_t start;
   while ((start = next_key.fetch_add(chunk)) < total)
@@ -4444,6 +4508,12 @@ void search_worker(machine & m,
                     ? g_mid_rep_mask
                       + (static_cast<size_t>(t.w[1]) * rotor_count + t.w[2]) * asize
                     : nullptr;
+                  /* Right-wheel collapse by 13: applies per wheel order, so
+                     it is latched here beside the §7.12 row. m.walzenlage is
+                     the TRANSLATED rotor number, which is how notch[] and
+                     notch_halfperiod[] are indexed. */
+                  r2_halve_wo = g_r2_halve
+                                && notch_halfperiod[m.walzenlage[2]] != 0;
                 }
 
               r1 = range.r_min[0] + static_cast<int>(rflat / rc12);
@@ -4462,8 +4532,11 @@ void search_worker(machine & m,
                  Latched per key rather than `continue`d here, because cur_key has
                  already advanced: a bare continue would let this key's remaining
                  restarts fall through and score against a stale machine. */
-              key_skipped = (mid_row != nullptr)
-                            && (((mid_row[g3] >> g2) & 1u) == 0);
+              key_skipped = ((mid_row != nullptr)
+                             && (((mid_row[g3] >> g2) & 1u) == 0))
+                            /* right-wheel collapse: ring2 >= 13 is the
+                               non-canonical half of its pair (g_r2_halve) */
+                            || (r2_halve_wo && (r3 >= asize / 2));
 
               if (! key_skipped)
                 {
@@ -4630,6 +4703,11 @@ static bool key_to_machine(machine & m, size_t idx,
       if (((row[g3] >> g2) & 1u) == 0)
         return false;                 /* collapsed away (§7.12) */
     }
+  /* ... and the right-wheel collapse by 13, the same way. init_walzen() above
+     has already put the TRANSLATED rotor number in m.walzenlage, which is how
+     notch_halfperiod[] is indexed. */
+  if (g_r2_halve && notch_halfperiod[m.walzenlage[2]] && (r3 >= asize / 2))
+    return false;
 
   init_ring_grund(m, r1, r2, r3, g1, g2, g3);
   init_steckerbrett(m, opt_steckerbrett);
@@ -4823,7 +4901,9 @@ struct key_space
   int rc[wheels], gc[wheels];   /* per-position ring / start counts */
   size_t rsize, gsize;          /* ring-combo and start-combo counts */
   size_t total_keys;            /* tasks.size() * rsize * gsize -- the INDEX space */
-  size_t scored_keys;           /* keys actually scored (< total_keys under §7.12) */
+  size_t scored_keys;           /* keys scored (< total_keys if collapsed) */
+  bool r2_halved = false;       /* right-wheel collapse fired on some task */
+  bool mid_collapsed = false;   /* §7.12 dropped a start1 on some task */
 };
 
 static key_space build_key_space()
@@ -5082,23 +5162,56 @@ static key_space build_key_space()
       g_mid_rep_mask = g_mid_rep_store.data();
     }
 
+  /* Right-wheel collapse by 13 (see g_r2_halve). rc[2] == 26 already implies
+     ring2 was left fully wildcarded -- a pinned ring2 gives rc[2] == 1, and
+     --ring-stride and --tune-phase both leave it short of 26 -- so this one
+     test covers every precondition. --true-key opts out for the same reason
+     §7.12 does: a collapsed key would simply be absent and never get a rank. */
+  g_r2_halve = (ks.rc[2] == asize) && (ks.gc[2] == asize) && ! opt_true_key;
+
   ks.total_keys = ks.tasks.size() * ks.rsize * ks.gsize;
 
   /* Keys actually scored. The flat index space stays total_keys (the collapse skips
      during iteration rather than renumbering), so the diagnostic line would otherwise
      claim to have analysed keys it never touched. */
   ks.scored_keys = ks.total_keys;
-  if (g_mid_rep_mask != nullptr)
+  if ((g_mid_rep_mask != nullptr) || g_r2_halve)
     {
       ks.scored_keys = 0;
       for (const wheel_task & t : ks.tasks)
         {
+          /* ring2 survivors for THIS wheel order: half of them when its right
+             wheel has a period-13 notch set. notch_halfperiod[] is indexed by
+             the TRANSLATED rotor number (as notch[] is), while wheel_task
+             carries raw ones -- the distinction that once made the
+             --ring-stride refinement search the wrong rotors under -n, and
+             invisible in every other mode. */
+          const int w2t = opt_norenigma ? norway_rotor_base + t.w[2] : t.w[2];
+          size_t r2_surv = static_cast<size_t>(ks.rc[2]);
+          if (g_r2_halve && notch_halfperiod[w2t])
+            {
+              r2_surv = asize / 2;
+              ks.r2_halved = true;
+            }
+          const size_t rsurv =
+            static_cast<size_t>(ks.rc[0]) * ks.rc[1] * r2_surv;
+
+          if (g_mid_rep_mask == nullptr)
+            {
+              ks.scored_keys += rsurv * ks.gsize;
+              continue;
+            }
           const uint32_t * row = g_mid_rep_mask
             + (static_cast<size_t>(t.w[1]) * rotor_count + t.w[2]) * asize;
           size_t reps = 0;
           for (int s2 = ks.range.g_min[2]; s2 <= ks.range.g_max[2]; s2++)
             reps += static_cast<size_t>(__builtin_popcount(row[s2]));
-          ks.scored_keys += ks.rsize * static_cast<size_t>(ks.gc[0]) * reps;
+          /* The mask can EXIST and drop nothing -- past L~676 every start1 is
+             its own class -- so the echo must key on what was skipped, not on
+             the mask being built, or it names a collapse that did no work. */
+          if (reps < static_cast<size_t>(ks.gc[1]) * ks.gc[2])
+            ks.mid_collapsed = true;
+          ks.scored_keys += rsurv * static_cast<size_t>(ks.gc[0]) * reps;
         }
     }
   return ks;
@@ -5352,11 +5465,25 @@ static double bruteforce(char * result, bool allow_empty)
      build_key_space() has decided. Unlike --ring-stride this is LOSSLESS, so the wording
      reports a fact rather than a warning -- but it does explain a reported ring/start
      that differs from the key the message was enciphered with. */
-  if ((g_mid_rep_mask != nullptr) && (scored_keys < total_keys))
-    fprintf(stderr, "Collapse:   middle ring x start: %zu duplicate keys skipped "
-            "(%.1fx);\n            reported ring/start may be an equivalent\n",
-            total_keys - scored_keys,
-            static_cast<double>(total_keys) / static_cast<double>(scored_keys));
+  /* Two collapses can be live at once -- the middle wheel's (§7.12) and the
+     right wheel's by 13 -- and they multiply, so the line NAMES the ones that
+     fired and gives the combined reduction rather than attributing the whole of
+     it to either. Splitting the total between them would mean apportioning a
+     product, which is not a fact about any one of them. */
+  if (scored_keys < total_keys)
+    {
+      const char * which =
+        ks.mid_collapsed && ks.r2_halved ? "middle and right ring x start"
+        : ks.r2_halved                   ? "right ring x start"
+                                         : "middle ring x start";
+      fprintf(stderr,
+              "Collapse:   %s: %zu duplicate keys skipped "
+              "(%.1fx);\n            reported ring/start may be an "
+              "equivalent\n",
+              which, total_keys - scored_keys,
+              static_cast<double>(total_keys)
+                / static_cast<double>(scored_keys));
+    }
 
   /* The "--ring-stride is not paying for itself" warning that used to live here is GONE,
      because the case it warned about no longer exists. It fired when the refinement's
