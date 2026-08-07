@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""What does a climb cost when plugs are already known? (cribs.md §7a's cost
+"""What does a climb cost when plugs are already known? (archived/cribs.md §7a's cost
 table, which was arithmetic and never measured.)
 
     python3 eval/crib_seed_cost.py
@@ -18,7 +18,7 @@ problems:
               as the crib's deduced plugs are pinned -- so this isolates the
               CLIMB's cost from the deduction's
   climb rule  steepest ascent (default) against -J first-improvement, on the
-              seeded climb, which cribs.md §7b left unargued
+              seeded climb, which archived/cribs.md §7b left unargued
   deduced     the same question on the REAL path -- plugs deduced by the crib
               rather than handed over -- since `-s` is only a proxy for it: its
               plugs are all correct, and it says nothing about the letters a
@@ -123,7 +123,7 @@ def deduced(ct, args):
     """
     print("\nWith the plugs really deduced, per surviving hypothesis\n")
     # The 8-letter swept arm rejects nothing, so on the full key space it runs
-    # ~2300 climbs per key (cribs.md 4.2b).  Measured on 26 keys instead, with
+    # ~2300 climbs per key (archived/cribs.md 4.2b).  Measured on 26 keys instead, with
     # its own baseline -- the ratio is per-climb, so the key space cancels.
     rows = [(8, "pinned", "..."), (8, "swept", "AA."), (12, "pinned", "..."),
             (12, "swept", "..."), (16, "pinned", "..."), (16, "swept", "..."),

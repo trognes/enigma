@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Does a WRONG crib hypothesis ever out-score the right one? (cribs.md §7a
+"""Does a WRONG crib hypothesis ever out-score the right one? (archived/cribs.md §7a
 caution 1, §12 step 5a.)
 
     python3 eval/crib_seed_probe.py --trials 200 --crib 12

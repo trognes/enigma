@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a crib library from the authentic message corpus (cribs.md section 5,
+"""Build a crib library from the authentic message corpus (archived/cribs.md section 5,
 step 1 of its order of work), and report what it would cover.
 
     python3 eval/build_cribs.py                 # report only, nothing written
@@ -7,14 +7,14 @@ step 1 of its order of work), and report what it would cover.
     python3 eval/build_cribs.py --budget-hours 6
 
 A CRIB is a guess at a fragment of plaintext.  Given one that is exactly right,
-part of the plugboard follows by arithmetic instead of search -- see cribs.md.
+part of the plugboard follows by arithmetic instead of search -- see archived/cribs.md.
 This program produces candidates; it does not use them.
 
 WHAT IT EMITS
 
   observed  a phrase that really recurs in the corpus, found by harvesting
             substrings shared by two or more messages and keeping only the
-            MAXIMAL ones (cribs.md step 4a: every shorter window inside a
+            MAXIMAL ones (archived/cribs.md step 4a: every shorter window inside a
             recurring phrase recurs too, and emitting all of them costs several
             times more for strictly less)
   vocab     a word from the generic telegraphic vocabulary, long enough to be
@@ -61,7 +61,7 @@ FILES = ["enigma-messages.txt", "enigma-army-messages-1941.txt"]
 VOCAB = os.path.join(ROOT, "cribs", "german-hgnord.txt")
 
 # Hours to sweep one message with one crib of each length, against the 24.9 h a
-# no-crib run costs.  MEASURED (cribs.md 4.2b and 12 step 6), not modelled: each
+# no-crib run costs.  MEASURED (archived/cribs.md 4.2b and 12 step 6), not modelled: each
 # length was timed on one message over one key space with -c, the ~0.12 s process
 # startup subtracted, and the ratio to the same sweep without a crib taken.  The
 # 16-letter figure agrees with an independent measurement on a 5x larger key
@@ -84,7 +84,7 @@ COST_HOURS = {8: 1293.0, 10: 167.0, 12: 16.7, 14: 1.8,
 COST = {n: h * 3600.0 for n, h in COST_HOURS.items()}   # seconds, as before
 
 MIN_WORD = 4        # shorter pieces are not words, they are fragments
-MIN_CRIB = 8        # cribs.md tiers stop here: below it a crib rejects nothing
+MIN_CRIB = 8        # archived/cribs.md tiers stop here: below it a crib rejects nothing
 MAX_CRIB = 40       # longer than this is one message's quirk, not a phrase
 
 
@@ -195,7 +195,7 @@ def number_cribs():
 
 def doubling_variants(w):
     """The five ways a repeated word appears, differing only in where the
-    operator put separators.  cribs.md section 4.5: this is exactly the
+    operator put separators.  archived/cribs.md section 4.5: this is exactly the
     variance that breaks exact matching, so all five are emitted."""
     return ["X" + w + "X" + w + "X", "X" + w + w + "X", w + "X" + w,
             w + w, "X" + w + "X"]
@@ -207,7 +207,7 @@ def repeated_phrases(messages):
 
     Maximal means: not contained in a longer kept phrase whose message support
     is a superset.  Such a window adds no coverage its parent does not already
-    have -- it is the sub-window case in cribs.md step 4a, and it goes to the
+    have -- it is the sub-window case in archived/cribs.md step 4a, and it goes to the
     derived tier rather than being emitted beside its parent.
     """
     support = defaultdict(set)
@@ -240,7 +240,7 @@ def spare(crib):
 
 
 def tier(crib, kind):
-    """cribs.md step 5.  Tier is what the crib can DO, so it is set by length
+    """archived/cribs.md step 5.  Tier is what the crib can DO, so it is set by length
     (16+ rejects rotor settings, 8-11 can only seed a climb) -- except that a
     derived window always goes last, however long it is."""
     if kind == "derived":
@@ -380,7 +380,7 @@ def number_families():
 
     number_cribs() ships only the two that survived.  These are what it was
     chosen from, kept so --numbers-sweep can regenerate the comparison rather
-    than the reader having to take cribs.md section 5b on trust.
+    than the reader having to take archived/cribs.md section 5b on trust.
     """
     def n(t):
         return "".join(DIGIT[d] for d in t)
@@ -405,7 +405,7 @@ def number_families():
 
 
 def numbers_sweep(messages, args):
-    """Regenerate cribs.md section 5b's number tables.
+    """Regenerate archived/cribs.md section 5b's number tables.
 
     Three questions, because they have different answers and only the third
     decides anything:
@@ -446,7 +446,7 @@ def numbers_sweep(messages, args):
                                         not args.no_vocab_cribs, False)]
     tmiss = [pt for _, pt in half[1] if not any(occurs(c, pt) for c in tlib)]
 
-    print("Number families (cribs.md §5b). Baseline library: %d of %d messages "
+    print("Number families (archived/cribs.md §5b). Baseline library: %d of %d messages "
           "held out,\n%d within 25h, median %.1fh.\n"
           % (len(covered), n, base_25, base[len(base) // 2]))
     print("  %-22s %6s %7s %9s %8s %8s %9s"
@@ -729,7 +729,7 @@ def main():
                     "clock times); worth it only on traffic this corpus does "
                     "not cover")
     ap.add_argument("--numbers-sweep", action="store_true",
-                    help="regenerate cribs.md §5b's comparison of the number "
+                    help="regenerate archived/cribs.md §5b's comparison of the number "
                     "families, in-corpus, held out and across collections")
     ap.add_argument("--transfer", action="store_true",
                     help="report cross-collection transfer against a "

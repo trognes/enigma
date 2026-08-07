@@ -1096,7 +1096,7 @@ done
 # The stride used to be a NET LOSS on a keyspace with a single wheel order and start0
 # pinned: the refinement re-searched all 25 skipped ring2 values over ring1 x start1 x
 # start2, which outweighed the 26/K the coarse pass saved, and the tool warned about it.
-# Deriving the refinement's offsets instead of enumerating them (refinement.md) shrank it
+# Deriving the refinement's offsets instead of enumerating them (archived/refinement.md) shrank it
 # from 25 x 130 x 26 to 25 x the start1 range, which inverts every one of those cases into
 # a win -- so the warning was removed and these check the inversion instead. Verified
 # against the pre-derivation binary, where the first of these cost MORE than not striding.
@@ -1179,7 +1179,7 @@ check "crack: Norway + --ring-stride 2 matches the unstrided search" \
   "$(run "$nw_ct" -n -f -l danish -u N -w 352 -r "L.." -g "O.." -T 1)"
 
 # The refinement DERIVES ring1/start2/ring0 from the coarse winner's step schedules rather
-# than banding them (refinement.md), so the cases that exercise the STEPPING are the ones
+# than banding them (archived/refinement.md), so the cases that exercise the STEPPING are the ones
 # that exercise the derivation. None of the four below existed before it.
 
 # M4. The refinement reuses tasks[cur_wo] verbatim, and that task carries the Greek wheel
@@ -1196,7 +1196,7 @@ check "crack: M4 + --ring-stride 2 recovers exact key" \
 # derivation computes can reach 2 where a single-notch wheel bounds it at 1, and §7.12's
 # class count changes from ceil(L/26)+1 to ceil(L/13)+1. Nothing else in the suite covers
 # a two-notch wheel under --ring-stride, and neither do the measurements behind
-# refinement.md, which draw wheels from I-V only.
+# archived/refinement.md, which draw wheels from I-V only.
 tn_ct=$(run "$rs_pt" -i -u B -w 126 -r AAZ -g XKP)
 for rs_k in 2 3 13; do
   check "crack: --ring-stride $rs_k with a two-notch right wheel" \
@@ -1207,7 +1207,7 @@ done
 # exists for. Wheels 123: middle II (own notch E), right III (notch V). start2 = V puts the
 # right wheel ON its notch, so the middle wheel steps at character 1: this is the case where
 # a ring2 shift carries a turnover across the START of the message and changes the step
-# count for the WHOLE message rather than for a delta-length window (refinement.md §3).
+# count for the WHOLE message rather than for a delta-length window (archived/refinement.md §3).
 # start1 = C reaches E after two middle steps, so the middle wheel lands on its own notch
 # and the LEFT wheel steps too, exercising the left-wheel derivation that is otherwise
 # never reached. Verified: this key steps wheel 0 once, the XKP key above not at all.
@@ -1592,7 +1592,7 @@ check "--crib: progress lines stay within 80 columns" \
      --crib OBERKOMMANDO 2>&1 >/dev/null | grep -E "$progress_re|^ *Score " \
      | awk '{ if (length($0) > 80) n++ } END { print n+0 }')" "0"
 
-# The hybrid (cribs.md §7): with -c the climb starts from the plugs each surviving
+# The hybrid (archived/cribs.md §7): with -c the climb starts from the plugs each surviving
 # hypothesis deduces, held fixed, instead of from an empty board. The plugboard is
 # HIDDEN here -- only the crib is given -- which is the case the mode exists for.
 cb_pct() { python3 -c 'import sys
@@ -1624,7 +1624,7 @@ cb_self=$(printf '%s' "$cb_ct" | cut -c4-15)
 check "--crib: self-encrypting alignment rejected" \
   "$(cb_err --crib "$cb_self" --crib-at 4 >/dev/null 2>&1; echo $?)" "1"
 
-# The combinations cribs.md §8 rules out, each fatal at option-parsing time.
+# The combinations archived/cribs.md §8 rules out, each fatal at option-parsing time.
 cb_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g ... \
                 "$@" >/dev/null 2>&1; echo $?; }
 check "--crib without --crib-at sweeps (accepted)" \
@@ -1653,7 +1653,7 @@ echo "== Crib libraries: --crib-list =="
 
 # A library is written against a network's vocabulary, not against one message, so most
 # of its cribs do not fit any given message. The list runs one rotor sweep per crib
-# (crib-outer, cribs.md §6.7) and keeps the best board across all of them.
+# (crib-outer, archived/cribs.md §6.7) and keeps the best board across all of them.
 cl_file=$(mktemp)
 printf '# a library\nOBERKOMMANDO\nXSIEGFRIEDXX\n\nNOTINTHISMESSAGE\n' > "$cl_file"
 cl_run() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
@@ -1722,7 +1722,7 @@ check "--crib-list runs the cheapest crib first by default" \
 check "--crib-list result does not depend on the order" \
   "$(cl_run -c 2>/dev/null)" "$(cl_run -c --no-crib-reorder 2>/dev/null)"
 
-# The option combinations, per cribs.md §8. --crib-at pins ONE alignment and the cribs
+# The option combinations, per archived/cribs.md §8. --crib-at pins ONE alignment and the cribs
 # in a list differ in length, so the two cannot be combined.
 cl_reject() { printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
                 "$@" >/dev/null 2>&1; echo $?; }
@@ -1747,7 +1747,7 @@ check "--crib-list with no usable cribs rejected" \
 rm -f "$cl_empty" "$cl_file"
 
 # The old --crib-file name is gone: it re-ranked finished boards and now collides in
-# meaning with --crib-list, so it was renamed (cribs.md §8).
+# meaning with --crib-list, so it was renamed (archived/cribs.md §8).
 check "--crib-file is no longer accepted" \
   "$(printf '%s' "$cb_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
      --crib-file /dev/null >/dev/null 2>&1; echo $?)" "1"

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Does ordering a crib library cheapest-first find the message sooner?
-(cribs.md 5 step 5, re-measured against MEASURED cost.)
+(archived/cribs.md 5 step 5, re-measured against MEASURED cost.)
 
     python3 eval/crib_order_probe.py --trials 6
 
-WHY THIS IS RE-MEASURED.  cribs.md 5 step 5 already compared orderings and
+WHY THIS IS RE-MEASURED.  archived/cribs.md 5 step 5 already compared orderings and
 concluded that ordering by anything except evidence of recurrence loses badly
 (median time-to-first-hit 141 h against 6.7 h).  That measurement priced each
 crib with build_cribs.py's COST model, which charges by LENGTH on the
@@ -20,7 +20,7 @@ can win -- so the conclusion has to be re-derived rather than inherited.
 
 WHAT IS MEASURED.  Time to the FIRST crib that recovers the message, which is
 what a human watching progress lines actually waits for (there is deliberately
-no automatic early exit -- cribs.md 6.7).  Each crib is run alone and timed, so
+no automatic early exit -- archived/cribs.md 6.7).  Each crib is run alone and timed, so
 an ordering's time-to-hit is the sum of the runs before its first hit plus that
 hit.  Measuring per crib once and summing is exact here and far cheaper than
 running the whole library once per ordering.

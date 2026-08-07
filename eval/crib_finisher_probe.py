@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Do --polish and -J help a CRIB-SEEDED climb? (cribs.md 7b and 12 step 5.)
+"""Do --polish and -J help a CRIB-SEEDED climb? (archived/cribs.md 7b and 12 step 5.)
 
     python3 eval/crib_finisher_probe.py --trials 60
 
@@ -10,7 +10,7 @@ rather than forgotten.
             crib-seeded board is already near-solution, but from a different
             direction -- its plugs are arithmetic on the machine equation, not
             a climb that happened to get close -- so the finisher may have
-            nothing left to add. cribs.md 12 step 5 records this as "an A/B to
+            nothing left to add. archived/cribs.md 12 step 5 records this as "an A/B to
             run once step 5 exists and there is something to measure it on".
 
   -J        is measured 1.8x cheaper on a seeded climb (7a), but COST ONLY.

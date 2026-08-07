@@ -177,7 +177,7 @@ deterministic checksum of `(git_sha, cli_options, solver_seed, instance)`.
 
 `build_cribs.py` harvests a **crib library** from the authentic messages —
 phrases guessed to be present in a message, for the planned crib-driven
-plugboard deduction in `cribs.md`. It writes `cribs/wehrmacht.cribs` and reports
+plugboard deduction in `archived/cribs.md`. It writes `cribs/wehrmacht.cribs` and reports
 leave-one-out coverage, which is the number step 1 of that plan exists to
 produce: **83% held out, 0% for a shuffled-letter control** (57% from a
 13-message training set -- `--transfer` measures the curve). Nothing in
@@ -191,7 +191,7 @@ python3 eval/build_cribs.py --numbers-sweep   # the number-family comparison
 python3 eval/build_cribs.py --out cribs/wehrmacht.cribs --budget-hours 25
 ```
 
-Every table in `cribs.md` §5a/§5b comes from one of those four commands. The
+Every table in `archived/cribs.md` §5a/§5b comes from one of those four commands. The
 hours are a model (§4.1's measured per-crib sweep costs, interpolated), good for
 ranking and budgeting, not a prediction; and coverage is *supply* -- whether the
 library holds a phrase the message contains -- not recovery.
@@ -199,7 +199,7 @@ library holds a phrase the message contains -- not recovery.
 ## Crib menus and closure deduction (`crib_menu.py`)
 
 `crib_menu.py` builds the menu for a crib and runs the closure deduction over all
-26 hypotheses -- the Turing/Welchman logic of `cribs.md` §6, in Python, as §12
+26 hypotheses -- the Turing/Welchman logic of `archived/cribs.md` §6, in Python, as §12
 step 2. It regenerates §4.1's table, emits test vectors for the C++ step, and
 checks itself against the answer key (§10.1/§10.2: the true rotor setting must
 survive, and every plug it deduces must match the true board).
@@ -220,7 +220,7 @@ which is what identifies the omission.
 ## Crib deduction in the binary (`crib_vectors_check.py`)
 
 `crib_vectors_check.py` runs `enigma --crib` on the vectors `crib_menu.py` writes and
-compares its deduced plugs against the true board carried in each vector -- cribs.md
+compares its deduced plugs against the true board carried in each vector -- archived/cribs.md
 10.1 and 10.2. It is not a Python-vs-C++ comparison: the vectors carry the answer key,
 and the Python only writes it down.
 
@@ -232,7 +232,7 @@ python3 eval/crib_vectors_check.py --generate --count 40 -v
 
 A crib pins one letter's plug only by guessing it, so the solver tries all 26 guesses and
 keeps the best-scoring board. Exactly one is the truth. `crib_seed_probe.py` measures how
-often a wrong one wins -- cribs.md 7a's caution 1, and the one thing named as able to undo
+often a wrong one wins -- archived/cribs.md 7a's caution 1, and the one thing named as able to undo
 the seeding mode. It needs no new diagnostic: the anchor letter's partner IS the
 hypothesis, so comparing the winner's board against the true board at that letter settles
 it.
@@ -244,11 +244,11 @@ python3 eval/crib_seed_probe.py --trials 150 --crib 12
 **Measured (150 trials per length, 90-letter messages, 10 cables hidden): a wrong
 hypothesis wins 5% of the time at 8 letters and never from 10 up.** When it does win the
 failure is total -- 8.6% mean recovery, nothing in the output to flag it -- so the seed
-mode's floor is 10 letters, set by silent failure rather than by cost. See cribs.md 7c.
+mode's floor is 10 letters, set by silent failure rather than by cost. See archived/cribs.md 7c.
 
 ## What a seeded climb costs (`crib_seed_cost.py`)
 
-cribs.md 7a priced a seeded climb by move-set combinatorics and never timed it.
+archived/cribs.md 7a priced a seeded climb by move-set combinatorics and never timed it.
 `crib_seed_cost.py` does: a fixed 17576-key sweep, one deterministic climb per key, plugs
 given with `-s` so they pin exactly as a deduction's do, min of several reps, single-
 threaded.
@@ -269,11 +269,11 @@ seeded climb), the hypotheses counted with `--crib-dump`. **A deduced seed is 3.
 20x cheaper than a full climb**, and at matched pinned-letter count it lands on the same
 number as the `-s` proxy (3.6x against 3.55x), even though most of those seeds come from
 *wrong* hypotheses -- cost tracks letters pinned, not whether the pins are right. See
-cribs.md 7a.
+archived/cribs.md 7a.
 
 ## What the deduction itself costs (`crib_deduce_cost.py`)
 
-The other half of the same question: cribs.md priced the climb and assumed the
+The other half of the same question: archived/cribs.md priced the climb and assumed the
 deduction was negligible, but it runs 26 hypotheses at every viable alignment
 before any climb starts. `crib_deduce_cost.py` times it on a fixed 17576-key
 space, first as a plain scan (no climb involved, so the arms isolate the
@@ -284,13 +284,13 @@ python3 eval/crib_deduce_cost.py --reps 3
 ```
 
 **A propagation costs ~3 ns** -- about one character-decode, which is the
-assumption cribs.md 9's estimate rests on. Pinned, the deduction is free at
+assumption archived/cribs.md 9's estimate rests on. Pinned, the deduction is free at
 every length. Two results invert the intuition. **Against a plain scan a crib
 cannot pay for itself** (a score is ~7 us, a swept deduction ~70 us), and
 **under `-c` a crib that does not reject costs 66x MORE**, because a surviving
 key is climbed once per surviving hypothesis rather than checked once. Where a
 crib does reject, the surviving hypothesis is essentially unique and the run is
-126x faster. See cribs.md 4.2b.
+126x faster. See archived/cribs.md 4.2b.
 
 ## Authentic message set (real traffic)
 
@@ -320,4 +320,4 @@ either trial before the run was stopped. Coverage is *supply*, not recovery --
 holding a message out removes the long cribs that would have solved it, leaving
 the 8-11 letter ones that can only seed. So the ordering default rests on the
 measured cost cliff rather than on this harness, and the held-out mode is kept
-for a larger corpus. See cribs.md 12 step 6.
+for a larger corpus. See archived/cribs.md 12 step 6.
