@@ -1,9 +1,29 @@
-# cribs.md — a plan for crib-driven plugboard deduction
+# cribs.md — crib-driven plugboard deduction: the plan, and what was built
 
-**Status: a plan, with steps 0 to 3 built** — `--full-text`, `--no-plug` and the
-`--crib` key filter in the tool, plus `eval/build_cribs.py` (§5a) and
-`eval/crib_menu.py` (§4.1). The numbers quoted are from measurements; where a
-figure is an estimate rather than a measurement, it says so.
+**Status: BUILT. All seven steps of §12 (0 through 6) are done**, and the
+document is now a record as much as a plan. Shipped in the tool: `--crib`,
+`--crib-at` (optional — omit it to sweep every alignment), `--crib-dump`,
+`--crib-list`, `--no-crib-reorder`, `--no-plug`, `--full-text`, and the rename
+of the old `--crib-file` to `--crib-rerank`. Shipped in `eval/`:
+`build_cribs.py` (§5a), `crib_menu.py` (§4.1), `crib_vectors_check.py` (§10.1,
+§10.2) and six measurement probes. `tests/run_tests.sh` carries the crib checks
+of §10.
+
+**Read §12 for the step-by-step record and §13 for what is still open.** Four of
+§13's five questions remain (crib supply at scale, reject-vs-rank, the
+X-separator variant, menu reuse across alignments); the fifth is answered in
+§7c. Three items were deliberately **closed or dropped** rather than left
+pending, each because a measurement said so: the §6.7 early-exit score
+threshold, held-out crib ordering, and a `--crib-max-hyps` pruning flag that was
+built, measured and removed.
+
+**Sections written before the build have not been rewritten**, because the
+reasoning that led somewhere is worth keeping even where the destination
+differs. Where the build corrected the plan, the correction is recorded at the
+point it applies — §4.1 (the diagonal board, not menu loops, does the work),
+§8 (proposal against shipped surface), §12 (every step). The numbers quoted are
+from measurements; where a figure is an estimate rather than a measurement, it
+says so.
 
 ---
 
@@ -586,7 +606,21 @@ Length alone cannot express this: a derived 10-letter window and an independent
 10-letter phrase look identical.
 
 **Step 5 — order by how likely a crib is to match, not by what it could do if it
-did.** A tier still says which *mode* a crib is for:
+did.**
+
+> **SUPERSEDED by the shipped tool, in both halves** (§12 step 6). The premise
+> below — "a run stops at the first crib that matches" — is false: there is no
+> early exit (§6.7 is closed), so the run sweeps the whole list and ranks. And
+> the ordering rule below is *modelled* cost, charged by length on the
+> assumption that sweep cost is roughly flat; measured against a real ciphertext
+> it is a cliff spanning ~2 600× where the model spanned 13×. The tool
+> therefore orders by **measured** cost, re-measured against the actual
+> ciphertext every run (`--no-crib-reorder` restores file order). The generator
+> still emits this order and it is still the right *file* order — it encodes
+> evidence of recurrence, which nothing at run time can recover. What changed is
+> that the tool no longer trusts it as a cost estimate.
+
+A tier still says which *mode* a crib is for:
 
 | tier | length | mode | when it applies |
 |---|--:|---|---|
@@ -978,6 +1012,20 @@ Three secondary reasons agree:
 - **`-T` parallelism is untouched** — each crib gets the full parallel keyspace
   sweep the tool already does. The early exit is the one part that does touch
   it; see below.
+
+> **The early exit was NOT built, and the question is CLOSED rather than
+> deferred** (§12 step 6). What shipped is this section's own stated fallback:
+> the run sweeps the whole list and ranks, which costs the worst case but never
+> discards the truth. Stopping is by human inspection — which is what the
+> per-crib gain table, the progress lines and `--full-text` are for, and which
+> needs no threshold. The reason it is closed is that a threshold would need a
+> measured per-length score margin to be trusted, and this corpus cannot supply
+> one: the held-out experiment that would have produced it recovered nothing at
+> all, because holding a message out removes exactly the long cribs that would
+> have solved it. Everything below about the `-T` hazard therefore describes a
+> mechanism that was never needed — kept because the hazard is real and would
+> return with the feature. **The crib-outer decision above stands and shipped**;
+> only the early exit it was partly justified by did not.
 
 **What this needs and the tool lacks: a stop criterion.** Early exit means
 deciding "this crib won" without being told the answer. The tool reports a best
@@ -1477,10 +1525,35 @@ path.
 
 Consistent with existing options; names open to discussion.
 
-**Two of these are built.** `--no-plug` and `--full-text` are in the tool
-already: neither depends on the crib work, both are useful on their own, and
-building them first is step 0 of §12. The rest of this section is still a
-proposal.
+> **BUILT — and this section is the proposal, kept for its reasoning. The
+> shipped surface differs in three places.** What follows below the fence is
+> what was proposed; what the tool actually has is `--crib`, `--crib-at`,
+> `--crib-dump`, `--crib-list`, `--no-crib-reorder`, `--no-plug` and
+> `--full-text`. The deltas:
+>
+> - **`--crib-min-loops` was never built.** It rested on §4.1's pre-build belief
+>   that menu *loops* do the rejecting. They do not — the diagonal board does,
+>   and a loop-free 12-letter menu still rejects 88% of settings against 0%
+>   without it (§4.1). With loops not the lever, filtering alignments by loop
+>   count filters on the wrong quantity.
+> - **`--crib-seed` was never built, because it turned out not to need a flag.**
+>   With `-c`, the deduced plugs seed the climb automatically; without `-c`
+>   there is no climb to seed. A flag would only have offered the choice of
+>   throwing the deduction away.
+> - **File order was reversed.** The paragraph below says the tool "should try
+>   them in file order so a tier-1 hit ends the search". Both halves fell:
+>   cribs run **cheapest-measured-cost first** by default (`--no-crib-reorder`
+>   restores file order), because measured cost spans ~2 600× where the
+>   generator's model spanned 13× (§12 step 6); and there is **no early exit**,
+>   §6.7's threshold having been closed rather than deferred, so nothing "ends
+>   the search" — the run sweeps the whole list and ranks.
+>
+> Also shipped beyond the proposal: `--crib-dump` (§12 step 3) and the per-crib
+> expected-gain table (§12 step 6). **The composition matrix below shipped
+> exactly as proposed**, including the four rejections.
+
+`--no-plug` and `--full-text` were built first, as step 0 of §12: neither
+depends on the crib work and both are useful on their own.
 
 **A list is the normal input, not a single crib.** You rarely know which phrase
 a message contains — you know the vocabulary of the network. §9's budget allows
@@ -1657,6 +1730,25 @@ unique, so wrong candidates cannot masquerade as German.
 ---
 
 ## 10. How to verify it works
+
+> **BUILT — every check below was run, and all of them live in the tree.**
+> §10.1 and §10.2 are `eval/crib_vectors_check.py`, which runs the binary on
+> `crib_menu.py`'s vectors and compares against the true board: **40/40 exact**,
+> crib lengths 8–25. §10.3 was measured and *corrected* §4.1 rather than
+> agreeing with it (99.9% of a keyspace rejected pinned, 5.3% swept on a
+> 12-letter crib — §4.2a). §10.4 and §10.5 are §12 step 5's end-to-end result:
+> **92% of letters recovered from a 12-letter crib against 8% unseeded**.
+> §10.6, §10.7 and §10.8 are checks in `tests/run_tests.sh`, which carries
+> roughly two dozen crib assertions — the true key never rejected, deduced plugs
+> matching the true board, rejection counts `-T`-independent, the alignment
+> column present and the line inside 80 columns, and every rejected flag
+> combination failing at parse time.
+>
+> **The "new test tier" in the last paragraph was not built, and did not need
+> to be.** The role it describes — planting cribs in known plaintext — is filled
+> by the `eval/crib_*.py` probes, which are run by hand for a measurement rather
+> than on every commit. A `make` target would have implied per-commit cost for a
+> feature whose numbers move only when the crib code does.
 
 The repo's standing rule is that a claim of exactness is tested by
 *equivalence*, not by success rate. Applied here:
@@ -1983,6 +2075,13 @@ that matters most on this corpus**, not step 5.
 ---
 
 ## 13. Open questions
+
+**Four of the five are still open; question 4 is answered.** None of them blocks
+the feature — everything in §12 shipped without them. Question 3 is the one that
+attacks the actual constraint (§11: supply, not the algorithm) and it can be
+measured offline with `eval/crib_menu.py` before any C++ is written. Questions 1
+and 5 are respectively blocked on a corpus that does not exist and a throughput
+detail; question 2 is buildable but needs a measurement design first.
 
 1. **How many cribs can we usefully hold?** §9 says several hundred by compute.
    Whether the generator can produce several hundred *good* ones is untested.
