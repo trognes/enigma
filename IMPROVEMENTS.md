@@ -4,7 +4,12 @@ What is still worth doing, and what to avoid doing again. The evidence behind
 every claim here lives in `archived/` — chiefly `archived/PERFORMANCE.md`
 (measurements), `archived/CODE_REVIEW.md` (the previous issue list) and
 `archived/CRACKQUALITY_TESTS.md` (harness design). Those are history: read them
-to check a number, not to find work.
+to check a number, not to find work — and **never write to them**. `archived/`
+is read-only: no edits, no appended sections, no corrections. New measurements
+belong here (or in `CLAUDE.md`) and may cite an archived section by number,
+which stays exactly as written. See the box in `CLAUDE.md` under "Status &
+remaining work" for why appending there looks deceptively like following the
+convention.
 
 Status in one line: the tool is correct, warning-free under `-std=c++17 -Wall
 -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast` on g++ and clang,

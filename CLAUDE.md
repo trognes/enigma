@@ -1713,6 +1713,19 @@ The still-open issues, the measurement discipline and the pitfalls list live in
 previous issue list), `archived/CRACKQUALITY_TESTS.md` (harness design) and
 `archived/CODE_REVIEW_HISTORY.md` (the original audit, plus the design rationale
 and rejected experiments). Read the archive to check a number, not to find work.
+
+> **`archived/` is READ-ONLY. Never edit a file there, and never append to one
+> — not a new section, not a correction, not a link.** It is the frozen record
+> of what was measured at the time, and its value is that it does not move.
+> New measurements go in `IMPROVEMENTS.md` (or here); they may *cite* an
+> archived section, and the archived section stays exactly as written. The
+> pattern that leads to breaking this is plausible: every past measurement sits
+> in `archived/PERFORMANCE.md`, so adding §7.N+1 beside §7.N looks like
+> following the convention rather than violating it. It is not — the numbering
+> stopped where the archive was frozen. "Read the archive to check a number,
+> not to find work" above is about not *mining* it for tasks; this is the
+> stronger rule about not writing to it at all.
+
 Most findings have been fixed — the stack buffer overflow, the
 index-of-coincidence formula, the `-l`/filename overflow, the
 `fscanf`/read-handling bugs, dead code, the C-style modernization, the
