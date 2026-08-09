@@ -330,6 +330,11 @@ static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force
    ~10pp of exact recovery. K=2/K=3 stay the recommendation; K=13 is the largest stride
    that is still a uniform sampling; past it only K=26 changes anything, and it changes
    accuracy more than cost. */
+/* --confidence N (0 = off): sample N keys from the resolved key space, score each
+   exactly as the search does, and report how far the winning score sits above that
+   null -- both on its own and against what the BEST of the analysed keys reaches by
+   chance. See report_confidence(). */
+static int opt_confidence;
 static int opt_ring_stride;
 /* --tune-phase N (0 = off): N starting phases per wheel for tune_phase() below.
    With it on, the sweep enumerates the middle and right wheels' OFFSETS only --
@@ -4734,6 +4739,104 @@ struct keep_worse
   }
 };
 
+/* --- --confidence N: is the winner better than chance? ------------------------
+   A raw score answers nothing on its own. A model's score has a distribution on
+   text with no signal, and a search reports the MAXIMUM over the keys it
+   analysed, which drifts upward as the keyspace grows -- so the same score can
+   be a break at one keyspace size and noise at another.
+
+   This samples N keys uniformly from the resolved key space, scores each exactly
+   as the search scored them (climbing the plugboard too, when -c is on, because
+   a climbed key is drawn from a different and higher distribution than a scanned
+   one), and reports three things: how far the winner sits above that null in
+   standard deviations, where the best of K draws is EXPECTED to sit by chance
+   (mu + sigma*sqrt(2 ln K), the Gumbel location for a Gaussian null), and the
+   margin between them. Only the margin means anything.
+
+   MEASURED: on 12 signal-free ciphertexts swept over K = 17576 keys at L=200,
+   the observed best-of-K matched that prediction to within 0.01 for quad
+   (-7.2355 against -7.2432) and fused (-10.4368 against -10.4351). The index of
+   coincidence does NOT follow it -- 6.1 sigma observed against 4.4 predicted --
+   because its null is a quadratic form in the letter histogram rather than a sum
+   over positions, and so is right-skewed. The p-value is therefore printed as
+   Gaussian-tail and flagged as optimistic under -i.
+
+   Sampling keys rather than random text is deliberate: the null a search actually
+   draws from is "this ciphertext under a wrong key", and key_to_machine() already
+   builds exactly that, in every machine mode, with no separate code path. */
+static void report_confidence(machine & m, double best_score, size_t keys,
+                              const std::vector<wheel_task> & tasks,
+                              const search_range & range,
+                              const int * rc, const int * gc, subst_table all,
+                              size_t rg, size_t gsize, size_t rc12, size_t gc12,
+                              size_t total_keys)
+{
+  const bool save_report = m.report;
+  const long save_scored = m.plugboards_scored;
+  m.report = false;                 /* calibration must not echo progress lines */
+  m.scoring = opt_scoring;
+
+  uint64_t rng = 0x9e3779b97f4a7c15ULL ^ static_cast<uint64_t>(opt_seed);
+  size_t cur_wo = static_cast<size_t>(-1);
+  int rg6[6];
+  std::vector<double> xs;
+  xs.reserve(static_cast<size_t>(opt_confidence));
+
+  /* Draws are with replacement and skip keys the collapses removed; a run of
+     misses cannot loop forever because total_keys is the INDEX space and at least
+     one index in it always survives (the winner did). */
+  size_t guard = static_cast<size_t>(opt_confidence) * 64 + 1024;
+  while ((xs.size() < static_cast<size_t>(opt_confidence)) && (guard-- > 0))
+    {
+      rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+      size_t idx = static_cast<size_t>((rng >> 11) % total_keys);
+      if (! key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
+                           rc12, gc12, cur_wo, rg6))
+        continue;
+      xs.push_back(opt_hillclimb ? hillclimb_one(m, idx, 0) : score_iter(m));
+    }
+
+  m.report = save_report;
+  m.plugboards_scored = save_scored;   /* keep the diagnostic comparable */
+
+  if (xs.size() < 8)
+    {
+      fprintf(stderr, "Confidence: too few sampled keys to calibrate\n");
+      return;
+    }
+  double mu = 0.0;
+  for (double x : xs)
+    mu += x;
+  mu /= static_cast<double>(xs.size());
+  double var = 0.0;
+  for (double x : xs)
+    var += (x - mu) * (x - mu);
+  var /= static_cast<double>(xs.size() - 1);
+  const double sd = sqrt(var);
+
+  if (!(sd > 0.0))
+    {
+      fprintf(stderr, "Confidence: the sampled keys all scored alike; "
+                      "no scale to measure against\n");
+      return;
+    }
+  const double z = (best_score - mu) / sd;
+  /* Expected best of `keys` draws from a Gaussian null. keys >= 1 always here. */
+  const double zk = sqrt(2.0 * log(static_cast<double>(keys < 2 ? 2 : keys)));
+  /* Gaussian upper tail, family-wise over `keys` independent draws. erfc is exact
+     enough far out; the 1-exp form avoids losing the small p to rounding. */
+  const double tail = 0.5 * erfc(z / sqrt(2.0));
+  const double pfam = -expm1(-static_cast<double>(keys) * tail);
+
+  fprintf(stderr,
+          "Confidence: null %.4f +/- %.4f over %zu sampled keys; best is %.1f sd\n"
+          "            above it, chance best of %zu keys is %.1f sd -- margin "
+          "%+.1f sd\n", mu, sd, xs.size(), z, keys, zk, z - zk);
+  fprintf(stderr, "            p ~ %.1e (Gaussian tail%s)\n", pfam,
+          (opt_scoring == SCORE_IC)
+            ? "; IC's null is skewed, so this is optimistic" : "");
+}
+
 /* Tier 1: rank a slice of the flat key space by a cheap IC climb; keep the
    thread-local top-N, then merge into the shared candidate list. When show_progress
    is set (stderr is a terminal) it also updates a live "\r" progress line: the shared
@@ -6114,6 +6217,14 @@ static double bruteforce(char * result, bool allow_empty)
         }
     }
 
+  /* --confidence N: how far above chance is the winner? Done here, where the key
+     space, the shared rotor tables and a machine are all still in scope. */
+  if ((opt_confidence > 0) && best.found)
+    report_confidence(*machines[0], best.score, scored_keys + extra_keys_analysed,
+                      tasks, range, rc, gc, all, rsize * gsize, gsize,
+                      static_cast<size_t>(rc[1]) * rc[2],
+                      static_cast<size_t>(gc[1]) * gc[2], total_keys);
+
   /* diagnostics: every rotor combination is analysed (brute force has no early
      exit), and each worker counted the plugboards it scored -- sum them up */
   g_keys_analysed = scored_keys + extra_keys_analysed;
@@ -6584,6 +6695,20 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "so nothing above 13 pays until K=26, which is 15%");
   fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
   fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
+  fprintf(out, "  %-24s %s\n", "--confidence N",
+          "After the search, sample N keys to measure what");
+  fprintf(out, "  %-24s %s\n", "",
+          "this model scores with NO signal, and report how");
+  fprintf(out, "  %-24s %s\n", "",
+          "far the winner sits above it -- against what the");
+  fprintf(out, "  %-24s %s\n", "",
+          "BEST of the analysed keys reaches by chance, which");
+  fprintf(out, "  %-24s %s\n", "",
+          "grows with the keyspace. Read the MARGIN, not the");
+  fprintf(out, "  %-24s %s\n", "",
+          "raw score. Samples are climbed when -c is on, so");
+  fprintf(out, "  %-24s %s\n", "",
+          "the null matches the search [0 = off, try 256]");
   fprintf(out, "  %-24s %s\n", "--tune-phase N",
           "Hill-climb the rotor PHASE instead of enumerating");
   fprintf(out, "  %-24s %s\n", "",
@@ -6906,6 +7031,7 @@ int main(int argc, char * * argv)
   opt_anneal = 0;
   opt_ring_stride = 1;
   opt_tune_phase = 0;
+  opt_confidence = 0;
 
   /* get arguments */
 
@@ -6915,7 +7041,7 @@ int main(int argc, char * * argv)
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
-         OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE };
+         OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -6963,6 +7089,7 @@ int main(int argc, char * * argv)
       { "crib-weight",    required_argument, nullptr, OPT_CRIBWEIGHT },
       { "ring-stride",    required_argument, nullptr, OPT_RINGSTRIDE },
       { "tune-phase",     required_argument, nullptr, OPT_TUNEPHASE },
+      { "confidence",     required_argument, nullptr, OPT_CONFIDENCE },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
@@ -7077,6 +7204,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_TUNEPHASE:
           opt_tune_phase = atoi(optarg);
+          break;
+        case OPT_CONFIDENCE:
+          opt_confidence = atoi(optarg);
           break;
         case OPT_NOPLUG:
           alltoupper(optarg);
@@ -7294,6 +7424,12 @@ int main(int argc, char * * argv)
      (the phase carries no signal without a recovered board), so it needs -c. */
   if ((opt_tune_phase < 0) || (opt_tune_phase > asize))
     fatal("Illegal phase count (--tune-phase must be 0 to 26)");
+
+  /* --confidence N: N is a sample count, so the only wrong values are negative and
+     absurd. It composes with everything -- it samples fresh key indices rather than
+     re-reading best.idx, so it carries none of --polish's encoding fragility. */
+  if ((opt_confidence < 0) || (opt_confidence > 1000000))
+    fatal("Illegal sample count (--confidence must be 0 to 1000000)");
   if (opt_tune_phase > 0)
     {
       if (! opt_hillclimb)
