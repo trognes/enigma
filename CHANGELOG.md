@@ -66,6 +66,17 @@ existing command lines can behave differently or stop working.
   message. On telegraphic German it measured +15.4σ for `wehrmacht`, +8.6σ for
   `german` and +2.5σ for `english`.
 
+  **Use `N` = 256, and never below 128.** `N` buys precision in the sampled null
+  and nothing else, and too small an `N` makes the flag report the very thing it
+  exists to rule out: measured over 12 seeds per cell, a signal-free ciphertext
+  reports a *positive* margin at `N` ≤ 64 (+1.7σ at 16, +1.2σ at 64), while 128
+  never crosses zero and 256 has real headroom. Past 512 the error left is the
+  null's departure from Gaussian, not the sample size. The spread follows
+  `SE ≈ √((1 + z²/2)/N)`, from which `N` needs no adjustment for keyspace size
+  or message length. Calibration is free without `-c` and costs ~1.5 ms per
+  sample with it — ~1% of a real run, but single-threaded, so its share grows
+  with `-T`.
+
 - **`--tune-phase N`** (0–26, default 0 = off) — hill-climb the middle and right
   wheels' *phase* instead of enumerating it. A wheel's phase is its ring and
   start shifted together, so its offset — and with it the wheel's whole

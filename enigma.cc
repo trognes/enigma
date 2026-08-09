@@ -6773,7 +6773,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
   fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
   fprintf(out, "  %-24s %s\n", "--confidence N",
-          "After the search, sample N keys to measure what");
+          "Sample N keys BEFORE the sweep to measure what");
   fprintf(out, "  %-24s %s\n", "",
           "this model scores with NO signal, and report how");
   fprintf(out, "  %-24s %s\n", "",
@@ -6785,7 +6785,15 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "raw score. Samples are climbed when -c is on, so");
   fprintf(out, "  %-24s %s\n", "",
-          "the null matches the search [0 = off, try 256]");
+          "the null matches the search. N buys precision in");
+  fprintf(out, "  %-24s %s\n", "",
+          "the null and nothing else: below 128 a signal-FREE");
+  fprintf(out, "  %-24s %s\n", "",
+          "ciphertext can report a positive margin, and above");
+  fprintf(out, "  %-24s %s\n", "",
+          "512 there is nothing left to buy. Free without -c;");
+  fprintf(out, "  %-24s %s\n", "",
+          "~1.7ms/sample with it [0 = off, use 256]");
   fprintf(out, "  %-24s %s\n", "--tune-phase N",
           "Hill-climb the rotor PHASE instead of enumerating");
   fprintf(out, "  %-24s %s\n", "",
