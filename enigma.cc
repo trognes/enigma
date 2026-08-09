@@ -2213,6 +2213,30 @@ static const char progress_fmt_4c[] = "%8s %-5s %-4s %-4s %-38s %3s %s\n";
    left alone; nothing here is on a hot path. */
 static thread_local int g_crib_stop_shown = -1;
 
+/* --- --confidence: the calibrated null, shared with the progress line
+   ------------ Set once per process by calibrate_null() before the first sweep,
+   read by progress_line() to turn a raw score into a MARGIN over what the whole
+   search reaches by chance. Zero sd means "not calibrated"; every reader tests
+   that.
+
+   Why the margin and not a bare z: a progress line is a running MAXIMUM over
+   the keys seen so far, so a bare z reads 3-5 sigma on the early lines -- which
+   looks like p < 1e-5 and is exactly what chance delivers over a few thousand
+   keys. The margin subtracts the chance best of the WHOLE key space, so zero is
+   the meaningful line and a positive number means the board beats what the
+   entire sweep would produce by luck.
+
+   g_null_zk uses the TOTAL key count, never keys-so-far. That keeps the margin
+   a constant offset from the score -- monotone, so the merge order and the
+   display high-water mark are untouched -- and keeps the printed number
+   independent of thread timing. A running count would make the number itself
+   -T-dependent, which
+   is a worse thing to print than the existing "which lines appear". */
+static double g_null_mu = 0.0;
+static double g_null_sd = 0.0;
+static double g_null_zk = 0.0;   /* sqrt(2 ln K), the chance best in sigmas */
+static size_t g_null_n = 0;      /* samples behind mu/sd, for the summary */
+
 static inline const char * progress_fmt(void)
 {
   if (opt_crib_text)
@@ -2230,10 +2254,12 @@ static inline int preview_len(void)
 /* Column header, printed once before the first progress line of a search. */
 void showconfig_header(void)
 {
+  /* "Margin" when --confidence recalibrated the first column (showconfig). */
+  const char * col = (g_null_sd > 0.0) ? "Margin" : "Score";
   if (opt_crib_text)
-    fprintf(stderr, progress_fmt(), "Score", "W", "R", "G", "S", "A", "Text");
+    fprintf(stderr, progress_fmt(), col, "W", "R", "G", "S", "A", "Text");
   else
-    fprintf(stderr, progress_fmt(), "Score", "W", "R", "G", "S", "Text");
+    fprintf(stderr, progress_fmt(), col, "W", "R", "G", "S", "Text");
 }
 
 /* Format m's rotor key into w (reflector+wheels), r (ring), g (start) -- the columns
@@ -2345,8 +2371,18 @@ void showconfig(machine & m, double score)
     text[i] = num2char(decode_at(steck, rows, num_ciphertext, i));
   text[n] = 0;
 
+  /* Under --confidence the first column is the MARGIN over the whole search's
+     chance best, not the raw score: a raw score cannot answer "is this good
+     yet?", and a bare z would flatter the early lines (see the g_null_*
+     comment). The header says "Margin" to match, so a saved log stays
+     self-describing. --dump-all keeps raw scores as the machine-readable
+     form. */
   char scorebuf[16];
-  snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
+  if (g_null_sd > 0.0)
+    snprintf(scorebuf, sizeof(scorebuf), "%+.2f",
+             (score - g_null_mu) / g_null_sd - g_null_zk);
+  else
+    snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
   if (opt_crib_text)
     {
       char at[16];   /* wide enough for any int, so no truncation warning */
@@ -4764,15 +4800,29 @@ struct keep_worse
    Sampling keys rather than random text is deliberate: the null a search actually
    draws from is "this ciphertext under a wrong key", and key_to_machine() already
    builds exactly that, in every machine mode, with no separate code path. */
-static void report_confidence(machine & m, double best_score, size_t keys,
-                              const std::vector<wheel_task> & tasks,
-                              const search_range & range,
-                              const int * rc, const int * gc, subst_table all,
-                              size_t rg, size_t gsize, size_t rc12, size_t gc12,
-                              size_t total_keys)
+static void calibrate_null(machine & m, size_t keys,
+                           const std::vector<wheel_task> & tasks,
+                           const search_range & range,
+                           const int * rc, const int * gc, subst_table all,
+                           size_t rg, size_t gsize, size_t rc12, size_t gc12,
+                           size_t total_keys)
 {
+  /* Once per process. The null depends on the ciphertext, the model and
+     whether the climb runs -- all fixed across a --crib-list's per-crib
+     sweeps, so re-sampling for each of a hundred cribs would be a hundred
+     times the cost for the same three numbers. */
+  if (g_null_sd > 0.0)
+    return;
   const bool save_report = m.report;
   const long save_scored = m.plugboards_scored;
+  /* --dump-all's contract is "every converged climb OF THE SEARCH". A
+     calibration climb is not one, and hillclimb_one() dumps unconditionally,
+     so leaving this on put 16 extra rows in the diagnostic at --confidence 16
+     -- silently changing what every harness that parses dumpall measures.
+     Cleared for the sampling only; the workers have not started yet, so no
+     other thread can observe it. */
+  const bool save_dump = opt_dump_all;
+  opt_dump_all = false;
   m.report = false;                 /* calibration must not echo progress lines */
   m.scoring = opt_scoring;
 
@@ -4797,6 +4847,7 @@ static void report_confidence(machine & m, double best_score, size_t keys,
     }
 
   m.report = save_report;
+  opt_dump_all = save_dump;
   m.plugboards_scored = save_scored;   /* keep the diagnostic comparable */
 
   if (xs.size() < 8)
@@ -4820,9 +4871,23 @@ static void report_confidence(machine & m, double best_score, size_t keys,
                       "no scale to measure against\n");
       return;
     }
-  const double z = (best_score - mu) / sd;
+  g_null_mu = mu;
+  g_null_sd = sd;
   /* Expected best of `keys` draws from a Gaussian null. keys >= 1 always here. */
-  const double zk = sqrt(2.0 * log(static_cast<double>(keys < 2 ? 2 : keys)));
+  g_null_zk = sqrt(2.0 * log(static_cast<double>(keys < 2 ? 2 : keys)));
+  g_null_n = xs.size();
+}
+
+/* The summary line, printed after the search. The progress lines already
+   carried the margin; this gives the pieces behind it -- the null itself, the
+   raw distance above it, and a p-value -- so a log records what the margin was
+   measured against
+   rather than only the result. */
+static void report_confidence(double best_score, size_t keys)
+{
+  if (!(g_null_sd > 0.0))
+    return;
+  const double z = (best_score - g_null_mu) / g_null_sd;
   /* Gaussian upper tail, family-wise over `keys` independent draws. erfc is exact
      enough far out; the 1-exp form avoids losing the small p to rounding. */
   const double tail = 0.5 * erfc(z / sqrt(2.0));
@@ -4831,7 +4896,8 @@ static void report_confidence(machine & m, double best_score, size_t keys,
   fprintf(stderr,
           "Confidence: null %.4f +/- %.4f over %zu sampled keys; best is %.1f sd\n"
           "            above it, chance best of %zu keys is %.1f sd -- margin "
-          "%+.1f sd\n", mu, sd, xs.size(), z, keys, zk, z - zk);
+          "%+.1f sd\n", g_null_mu, g_null_sd, g_null_n, z, keys, g_null_zk,
+          z - g_null_zk);
   fprintf(stderr, "            p ~ %.1e (Gaussian tail%s)\n", pfam,
           (opt_scoring == SCORE_IC)
             ? "; IC's null is skewed, so this is optimistic" : "");
@@ -5646,6 +5712,21 @@ static double bruteforce(char * result, bool allow_empty)
   run_parallel(nthreads, [&](int t)
     { precompute_worker(*machines[t], tasks, next_task, all); });
 
+  /* --confidence N: calibrate BEFORE the sweep, because the progress lines
+     report a margin against this null and the first of them can be printed
+     within milliseconds of the search starting. The tables are built by now,
+     which is all the sampling needs. Measured cost at L=200: free in scan mode
+     (4096 samples sat inside the run's noise), ~0.75 ms per sample under -c
+     where a sample is a full climb -- so +0.05 s at N=64, which is already well
+     inside the error that matters (sigma/sqrt(N) ~ 0.13 sigma on mu, against
+     margins measured in whole sigma). It is single-threaded, so its share grows
+     with -T even as the search shrinks. */
+  if (opt_confidence > 0)
+    calibrate_null(*machines[0], scored_keys, tasks, range, rc, gc, all,
+                   rsize * gsize, gsize,
+                   static_cast<size_t>(rc[1]) * rc[2],
+                   static_cast<size_t>(gc[1]) * gc[2], total_keys);
+
   /* phase 2: sweep the flat key space in adaptive chunks (~16 per thread: enough to
      balance the tail, few enough to amortise the atomic). The -F tiers are keyed over
      total_keys; the non-F sweep is over work_items (keys x restarts), so it gets its own
@@ -6217,13 +6298,9 @@ static double bruteforce(char * result, bool allow_empty)
         }
     }
 
-  /* --confidence N: how far above chance is the winner? Done here, where the key
-     space, the shared rotor tables and a machine are all still in scope. */
+  /* --confidence N: the summary behind the margin the lines already carried. */
   if ((opt_confidence > 0) && best.found)
-    report_confidence(*machines[0], best.score, scored_keys + extra_keys_analysed,
-                      tasks, range, rc, gc, all, rsize * gsize, gsize,
-                      static_cast<size_t>(rc[1]) * rc[2],
-                      static_cast<size_t>(gc[1]) * gc[2], total_keys);
+    report_confidence(best.score, scored_keys + extra_keys_analysed);
 
   /* diagnostics: every rotor combination is analysed (brute force has no early
      exit), and each worker counted the plugboards it scored -- sum them up */

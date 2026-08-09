@@ -670,12 +670,29 @@ are read from a **data directory** (filenames built as
   off). A raw score answers nothing on its own: each model has a distribution on
   text with no signal, and a search reports the **maximum** over the keys it
   analysed, which drifts upward as the keyspace grows. This samples `N` keys
-  uniformly from the resolved key space, scores each **exactly as the search
-  did**, and prints the winner's distance above that null in standard
-  deviations, where the best of `K` draws is *expected* to sit by chance
-  (`μ + σ·√(2 ln K)`), and the **margin** between them. Read the margin: the raw
-  score, and even the raw σ-count, mean nothing without `K`. Three things worth
-  knowing:
+  uniformly from the resolved key space **before the sweep**, scores each
+  **exactly as the search will**, and then **replaces the `Score` column of
+  every progress line with a `Margin`** — `(s − μ)/σ − √(2 ln K)`, the distance
+  above the null minus what the best of `K` keys reaches by chance. A summary
+  line after the search gives the pieces behind it (μ, σ, the raw σ-count and a
+  p-value). **Zero is the meaningful line**: negative means the board is no
+  better than luck over the whole sweep. On real English every line before the
+  true key reads negative and the winner jumps to `+17.04`; on signal-free
+  ciphertext the run tops out at `+0.51`.
+  - **`K` is the TOTAL key count, never keys-so-far.** That keeps the margin a
+    constant offset from the score — monotone, so the merge order and the
+    display high-water mark are untouched — and keeps the printed number
+    independent of thread timing. A running count would make the *number* itself
+    `-T`-dependent, which is worse than the existing "which lines appear".
+  - **A bare z would flatter the early lines.** A progress line is a running
+    maximum, so z reads 3–5 σ well before anything is found — which looks like
+    p < 1e-5 and is exactly what chance delivers over a few thousand keys.
+  - **`--dump-all` keeps raw scores**, as the machine-readable form. The
+    calibration suppresses it for its own climbs too: `hillclimb_one()` dumps
+    unconditionally, so the samples landed in the diagnostic until that was
+    fixed (16 spurious rows at `--confidence 16`).
+
+  Three more things worth knowing:
   - **Samples are climbed when `-c` is on.** A climbed key is drawn from a much
     higher distribution than a scanned one (measured −6.84 against −8.01 on
     the same ciphertext), so calibrating a climbed search against a scanned

@@ -110,65 +110,24 @@ established**, and only at a stride already outside the recommended K≤3.
 Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 `archived/PERFORMANCE.md` §7.11; `eval/ring_stride_scope_probe.py`.
 
-**10. Report the confidence MARGIN in the progress lines, under
-`--confidence`.** Today the first column is the raw score, which cannot answer
-"is this good yet?" — every model scores *something* on gibberish, and because a
-progress line is a running maximum, the bar rises with the keys seen so far.
-Replacing the `Score` column with `Margin` when `--confidence` is on would put
-the answer where someone watching a run is already looking, and a renamed header
-keeps a saved log self-describing.
-
-**Show the margin, not a bare z or p, and this is the whole design.** A bare `z`
-would read 3–5 σ on the early lines, which looks like p < 1e-5 and is exactly
-what chance delivers over a few thousand keys — the column would announce
-"significant" for noise, the error the calibration exists to prevent. The margin
-`(s − μ)/σ − √(2 ln K_total)` fixes it, provided `K_total` is the **whole**
-key space rather than keys-so-far: that keeps it a constant offset, hence
-monotone in the score, hence ordering- and `-T`-safe, and it makes **zero** the
-meaningful line — positive means the board beats what the entire sweep would
-produce by chance. Keys-so-far would make a *printed number* thread-timing
-dependent, a worse class of nondeterminism than the existing "which lines
-appear". And `p` is wrong for a column outright: it needs scientific notation,
-it is non-linear, and it saturates — past ~8 σ everything prints as 0, losing
-resolution exactly where the comparisons are (measured margins run past 1e-98).
-
-**Cost, measured** (L=200, this box). In scan mode the calibration is **free** —
-4096 samples were inside the noise of a run. Under `-c` a sample is a full
-climb, ~0.75 ms with the recommended recipe: **+0.05 s at N=64, +0.19 s at
-N=256**. N=64 is already plenty (σ/√N ≈ 0.13 σ of error on μ, against margins
-measured in whole σ). Two caveats: the calibration is **single-threaded**, so
-its share grows with `-T` even as the search shrinks; and it must run **before**
-the sweep rather than after, so a short search pays it visibly — one key at
-`-R 0` goes from 0.10 s to 0.29 s at N=256, while any real sweep will not notice
-it.
-
-Keep `--dump-all` on raw scores as the machine-readable form; `format_key` is
-already shared with it precisely so the two cannot diverge.
-
-**This would give `archived/cribs.md` §6.7's early exit a principled trigger**,
-which is why it is worth more than a cosmetic change. That was closed as
-unbuildable because "a threshold would need a measured per-length score margin
-to be trusted" — a margin column *is* that threshold, and unlike a raw-score
-cutoff it means the same thing at any length, model or keyspace size.
-
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**11. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**10. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**12. No `install` target**, and the n-gram files are not declared as build/run
+**11. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**13. Single-file distribution.** Embedding the tables was declined once, but
+**12. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**14. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**13. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 

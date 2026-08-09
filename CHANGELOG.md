@@ -36,9 +36,21 @@ existing command lines can behave differently or stop working.
   distance above that null, the distance the **best of K keys** is expected to
   reach by chance (`μ + σ·√(2 ln K)`), and the margin between them.
 
+  **The margin replaces the `Score` column in the progress lines**, with the
+  header renamed to match, so the answer is where you are already looking and a
+  saved log still explains itself. Zero is the line that matters: negative means
+  the board is no better than luck over the whole sweep. `--dump-all` keeps raw
+  scores as the machine-readable form.
+
   The margin is the number to read. A raw score means nothing on its own: every
   model scores *something* on gibberish, and because a search reports a maximum,
-  the bar rises with the keyspace. Measured: real English over 17 576 keys gives
+  the bar rises with the keyspace. A bare z-score would not do either — a
+  progress line is a running maximum, so z reads 3–5 σ well before anything is
+  found. The margin subtracts the chance best of the **whole** key space, which
+  also keeps it a constant offset from the score: monotone, so the search order
+  is untouched, and independent of thread timing.
+
+  Measured: real English over 17 576 keys gives
   a margin of +17.0σ; the identical sweep on signal-free ciphertext gives +0.5σ;
   and a hidden plugboard searched without `-c` — which cannot recover it — gives
   −0.8σ, correctly reporting a failure.

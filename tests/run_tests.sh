@@ -1463,6 +1463,58 @@ check "no confidence line when the option is off" \
   "$(printf '%s' "$cf_ct" \
      | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA -g "..." -T 1 \
        2>&1 >/dev/null | grep -c '^Confidence')" "0"
+# The PROGRESS LINES carry the margin, not the raw score, and the header says
+# so -- the point being that zero is the meaningful line: negative means the
+# board is no better than what the whole sweep produces by luck. Both arms
+# again: a column that only behaved on the signal case would be worse than the
+# raw score it replaced.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_lines() { printf '%s' "$1" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+             -g "..." --confidence 64 -T 1 2>&1 >/dev/null; }
+cf_sig_l=$(cf_lines "$cf_ct")
+cf_noise_l=$(cf_lines "$cf_rct")
+check "--confidence renames the score column to Margin" \
+  "$(printf '%s' "$cf_sig_l" | grep -c '^ *Margin W')" "1"
+check "no Margin column when --confidence is off" \
+  "$(printf '%s' "$cf_ct" \
+     | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA -g "..." -T 1 \
+       2>&1 >/dev/null | grep -c '^ *Score W')" "1"
+# The winning line must cross zero on signal and must NOT on noise.
+cf_last() { printf '%s' "$1" | grep -E '^ *[+-][0-9]' | tail -1 \
+            | awk '{print $1}'; }
+check "--confidence: the winning progress line crosses zero on signal" \
+  "$(awk -v m="$(cf_last "$cf_sig_l")" \
+     'BEGIN{print (m > 5) ? "yes" : "no"}')" "yes"
+check "--confidence: no progress line crosses zero far on noise" \
+  "$(awk -v m="$(cf_last "$cf_noise_l")" \
+     'BEGIN{print (m < 2) ? "yes" : "no"}')" "yes"
+# Monotone in the score, so the merge order is untouched: the margins a run
+# prints must be strictly increasing, exactly as the raw scores were.
+check "--confidence: margins increase down the run, as scores did" \
+  "$(printf '%s' "$cf_sig_l" | grep -E '^ *[+-][0-9]' | awk '{print $1}' \
+     | awk 'NR>1 && $1<=p {bad=1} {p=$1} END{print bad ? "no" : "yes"}')" "yes"
+# The 80-column budget holds with the new column and a full 13-pair board.
+check "--confidence: progress lines stay within 80 columns" \
+  "$(printf '%s' "$cf_ct" \
+     | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA -g "..." \
+       -s ABCDEFGHIJKLMNOPQRSTUVWXYZ --confidence 64 -T 1 2>&1 >/dev/null \
+     | awk 'length($0) > 80' | wc -l | tr -d ' ')" "0"
+# --dump-all keeps RAW scores and must be untouched by the calibration in both
+# senses. It is the machine-readable form the harnesses parse, so a margin
+# there -- or an extra row per calibration sample -- would silently change what
+# every probe measures. The row COUNT catches the second: hillclimb_one() dumps
+# unconditionally, so the sampling climbs landed in the diagnostic until it was
+# suppressed for them (16 spurious rows at --confidence 16).
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_dump() { printf '%s' "$cf_ct" | "$ENIGMA" -q -l wehrmacht -c -u B -w 123 \
+            -r AAA -g "AQ." --dump-all "$@" -T 1 2>&1 >/dev/null; }
+check "--dump-all keeps raw scores under --confidence" \
+  "$(cf_dump --confidence 16 | grep -c '^dumpall .* -[0-9]')" \
+  "$(cf_dump --confidence 16 | grep -c '^dumpall ')"
+check "--confidence adds no rows to --dump-all" \
+  "$(cf_dump --confidence 16 | grep -c '^dumpall ')" \
+  "$(cf_dump | grep -c '^dumpall ')"
+
 cf_err=$(printf 'AAAA' | "$ENIGMA" --confidence -1 2>&1 >/dev/null)
 check "--confidence negative rejected" \
   "$(printf '%s' "$cf_err" | grep -c 'Illegal sample count')" "1"
