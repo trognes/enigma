@@ -81,6 +81,20 @@ sweep pays full price each time.
 
 ## Measurement gaps
 
+The **null distribution of every scoring model is now measured**, and
+`--confidence N` reports it per run. Random text scores a well-defined mean with
+sd falling as `1/√L`, so signal separation grows as `√L`; the best of `K` wrong
+keys sits at `μ + σ·√(2 ln K)`, matched to within 0.01 for quad and fused over
+12 signal-free sweeps. Detection needs roughly **`L ≳ 0.92·ln K`** characters —
+~9 for a start-position sweep, ~19 for the full rotor keyspace, ~49 once the
+plugboard is included, which is where the documented scoring-failure floor sits.
+Two things fell out: quad and fused separate signal from noise **equally well**
+(21.4σ against 21.7σ at L=200), independently confirming that `-f`'s gain is a
+better climb rather than better discrimination; and IC's null is right-skewed,
+so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
+
+
+
 **8. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
 compute it breaks more messages than an exhaustive ring sweep (63/80 vs 51/80,
 p = 0.043) but scores lower mean %-correct, because a wrong *offset* is

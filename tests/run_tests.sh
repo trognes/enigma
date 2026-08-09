@@ -1384,6 +1384,89 @@ tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -A 1000)
 check "--tune-phase rejects -A" \
   "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -A')" "1"
 
+# --confidence N: sample the null and report the winner's margin over chance.
+# The property under test is DISCRIMINATION, so every check comes in a pair -- a
+# ciphertext with real plaintext behind it against one with random letters
+# behind it, same key, same keyspace. A line that only fired on the signal case
+# would pass a build that always printed "significant".
+cf_pt="ANXPANZXGRUPPEXVIERXSIEGFRIEDXTONIXDIVXSTEHTSEITXEINSZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAUMXMELDUNGFOLGT"
+cf_rnd="QHZKWMPXDVBNTLFGYRJUACOISEQWNBVXZLKMPTRDYFGHJUAICOESQZXWNMBVKLPTRDYGFHJUAICOESZQXWNVMBKLPRTDYGFHJUIACOESZQXWNVMBKLPRTDYGFHJUI"
+cf_ct=$(run "$cf_pt" -i -u B -w 123 -r AAA -g AQD)
+cf_rct=$(run "$cf_rnd" -i -u B -w 123 -r AAA -g AQD)
+# -l wehrmacht, matching the telegraphic plaintext: the margin measures the
+# model against the text, so a mismatched language understates it (measured
+# +15.4 sd for wehrmacht against +2.5 for english on this very message -- the
+# ranking check below turns that into an assertion rather than a footnote).
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_run() { printf '%s' "$1" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+           -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
+           | grep -A2 '^Confidence'; }
+cf_margin() { printf '%s' "$1" \
+              | sed -n 's/.*margin \([+-][0-9.]*\) sd.*/\1/p'; }
+cf_sig=$(cf_run "$cf_ct")
+cf_noise=$(cf_run "$cf_rct")
+check "--confidence: a real plaintext clears chance by a wide margin" \
+  "$(awk -v m="$(cf_margin "$cf_sig")" \
+     'BEGIN{print (m > 5) ? "yes" : "no"}')" "yes"
+check "--confidence: signal-free ciphertext does NOT clear chance" \
+  "$(awk -v m="$(cf_margin "$cf_noise")" \
+     'BEGIN{print (m < 2) ? "yes" : "no"}')" "yes"
+# The null it measures must be the model's, not something rescaled per run: quad
+# on random text sits near -8.0 whatever the ciphertext (measured -7.99 +/- 0.17
+# over 250 offline samples), so both arms must agree on it.
+cf_null() { printf '%s' "$1" \
+            | sed -n 's/^Confidence: null \(-*[0-9.]*\) .*/\1/p'; }
+check "--confidence: the sampled null is the model's, not the message's" \
+  "$(awk -v a="$(cf_null "$cf_sig")" -v b="$(cf_null "$cf_noise")" \
+     'BEGIN{d=a-b; if (d<0) d=-d; print (d < 0.5) ? "close" : "far"}')" "close"
+
+# The margin ranks the scoring LANGUAGES on one message, which is the flag's
+# second use: this plaintext is telegraphic German, and CLAUDE.md's advice is
+# wehrmacht for real traffic, german for prose, english not at all. The margins
+# must order the same way, or it is not measuring the model against the text.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_lang() { printf '%s' "$cf_ct" | "$ENIGMA" -q -l "$1" -u B -w 123 -r AAA \
+            -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
+            | sed -n 's/.*margin \([+-][0-9.]*\) sd.*/\1/p'; }
+check "--confidence: the margin ranks wehrmacht > german > english here" \
+  "$(awk -v w="$(cf_lang wehrmacht)" -v g="$(cf_lang german)" \
+       -v e="$(cf_lang english)" \
+     'BEGIN{print (w > g && g > e) ? "ordered" : "not-ordered"}')" "ordered"
+
+# Under -c the samples must be CLIMBED, or a climbed search is calibrated
+# against a scanned null and everything looks significant. The climbed null sits
+# well above the scanned one on the same ciphertext, which is what this asserts.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_c_null=$(printf '%s' "$cf_ct" | "$ENIGMA" -q -l wehrmacht -c -u B -w 123 \
+            -r AAA -g "AQ." --confidence 16 -T 1 2>&1 >/dev/null \
+            | grep '^Confidence')
+check "--confidence: -c calibrates against a CLIMBED null" \
+  "$(awk -v a="$(cf_null "$cf_c_null")" -v b="$(cf_null "$cf_sig")" \
+     'BEGIN{print (a > b + 0.3) ? "higher" : "not-higher"}')" "higher"
+
+# IC's null is right-skewed, so the Gaussian tail understates its best-of-K (6.1
+# sigma observed against 4.4 predicted). The p-value must say so under -i, and
+# must not clutter every other model with the caveat.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_skew() { printf '%s' "$cf_ct" | "$ENIGMA" "$@" -u B -w 123 -r AAA -g "..." \
+            --confidence 64 -T 1 2>&1 >/dev/null | grep -c 'skewed'; }
+check "--confidence: -i flags its skewed null" "$(cf_skew -i)" "1"
+check "--confidence: -q does not carry the IC caveat" \
+  "$(cf_skew -q -l wehrmacht)" "0"
+
+check "--confidence is -T-independent" \
+  "$(cf_run "$cf_ct")" \
+  "$(printf '%s' "$cf_ct" \
+     | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA -g "..." \
+       --confidence 64 -T 4 2>&1 >/dev/null | grep -A2 '^Confidence')"
+check "no confidence line when the option is off" \
+  "$(printf '%s' "$cf_ct" \
+     | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA -g "..." -T 1 \
+       2>&1 >/dev/null | grep -c '^Confidence')" "0"
+cf_err=$(printf 'AAAA' | "$ENIGMA" --confidence -1 2>&1 >/dev/null)
+check "--confidence negative rejected" \
+  "$(printf '%s' "$cf_err" | grep -c 'Illegal sample count')" "1"
+
 # Right-wheel ring x start collapse by 13 (CLAUDE.md "Two-notch wheels" -- cited
 # by name, since ENHANCEMENTS.md renumbers as issues close). VI, VII and
 # VIII notch at M and Z, exactly 13 apart, so their notch SET survives a shift

@@ -30,6 +30,30 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--confidence N`** — answers "is this score better than chance?", which the
+  tool could not do before. It samples `N` keys from the resolved key space,
+  scores each exactly as the search scored them, and reports the winner's
+  distance above that null, the distance the **best of K keys** is expected to
+  reach by chance (`μ + σ·√(2 ln K)`), and the margin between them.
+
+  The margin is the number to read. A raw score means nothing on its own: every
+  model scores *something* on gibberish, and because a search reports a maximum,
+  the bar rises with the keyspace. Measured: real English over 17 576 keys gives
+  a margin of +17.0σ; the identical sweep on signal-free ciphertext gives +0.5σ;
+  and a hidden plugboard searched without `-c` — which cannot recover it — gives
+  −0.8σ, correctly reporting a failure.
+
+  Samples are hill-climbed when `-c` is on, because a climbed key is drawn from
+  a much higher distribution than a scanned one and calibrating against the
+  wrong one would make every run look significant. The Gumbel yardstick was
+  checked against 12 signal-free sweeps and matched to within 0.01 for quad and
+  fused; the index of coincidence does not follow it (its null is right-skewed),
+  and the printed p-value says so under `-i`.
+
+  A second use falls out: the margin ranks the scoring **language** on one
+  message. On telegraphic German it measured +15.4σ for `wehrmacht`, +8.6σ for
+  `german` and +2.5σ for `english`.
+
 - **`--tune-phase N`** (0–26, default 0 = off) — hill-climb the middle and right
   wheels' *phase* instead of enumerating it. A wheel's phase is its ring and
   start shifted together, so its offset — and with it the wheel's whole

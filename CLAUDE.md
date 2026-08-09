@@ -666,6 +666,32 @@ are read from a **data directory** (filenames built as
   (+3.4pp) with selection contributing -0.0pp, so it does *not* move the
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
   <lang>`.
+- `--confidence N` **is the winner better than chance?** (N = null samples, 0 =
+  off). A raw score answers nothing on its own: each model has a distribution on
+  text with no signal, and a search reports the **maximum** over the keys it
+  analysed, which drifts upward as the keyspace grows. This samples `N` keys
+  uniformly from the resolved key space, scores each **exactly as the search
+  did**, and prints the winner's distance above that null in standard
+  deviations, where the best of `K` draws is *expected* to sit by chance
+  (`μ + σ·√(2 ln K)`), and the **margin** between them. Read the margin: the raw
+  score, and even the raw σ-count, mean nothing without `K`. Three things worth
+  knowing:
+  - **Samples are climbed when `-c` is on.** A climbed key is drawn from a much
+    higher distribution than a scanned one (measured −6.84 against −8.01 on
+    the same ciphertext), so calibrating a climbed search against a scanned
+    null would make every run look significant.
+  - **Keys are sampled, not random text.** The null a search actually draws
+    from is "this ciphertext under a wrong key", and `key_to_machine()` already
+    builds exactly that in every machine mode.
+  - **IC does not follow the Gaussian tail** — 6.1σ observed against 4.4
+    predicted for its best-of-K, because its null is a quadratic form in the
+    letter histogram rather than a sum over positions, and so right-skewed. The
+    printed p-value says so under `-i`.
+
+  It also **ranks the scoring language on a single message**, which is its
+  second use: on telegraphic German the margin measured +15.4σ for `wehrmacht`,
+  +8.6σ for `german` and +2.5σ for `english` — the order `CLAUDE.md` recommends,
+  recovered from one ciphertext.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a
   long-message throughput tool, unreliable on the short/hard end and
