@@ -666,6 +666,49 @@ are read from a **data directory** (filenames built as
   (+3.4pp) with selection contributing -0.0pp, so it does *not* move the
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
   <lang>`.
+- `--confidence N` **is the winner better than chance?** (N = null samples, 0 =
+  off). A raw score answers nothing on its own: each model has a distribution on
+  text with no signal, and a search reports the **maximum** over the keys it
+  analysed, which drifts upward as the keyspace grows. This samples `N` keys
+  uniformly from the resolved key space **before the sweep**, scores each
+  **exactly as the search will**, and then **replaces the `Score` column of
+  every progress line with a `Margin`** — `(s − μ)/σ − √(2 ln K)`, the distance
+  above the null minus what the best of `K` keys reaches by chance. A summary
+  line after the search gives the pieces behind it (μ, σ, the raw σ-count and a
+  p-value). **Zero is the meaningful line**: negative means the board is no
+  better than luck over the whole sweep. On real English every line before the
+  true key reads negative and the winner jumps to `+17.04`; on signal-free
+  ciphertext the run tops out at `+0.51`.
+  - **`K` is the TOTAL key count, never keys-so-far.** That keeps the margin a
+    constant offset from the score — monotone, so the merge order and the
+    display high-water mark are untouched — and keeps the printed number
+    independent of thread timing. A running count would make the *number* itself
+    `-T`-dependent, which is worse than the existing "which lines appear".
+  - **A bare z would flatter the early lines.** A progress line is a running
+    maximum, so z reads 3–5 σ well before anything is found — which looks like
+    p < 1e-5 and is exactly what chance delivers over a few thousand keys.
+  - **`--dump-all` keeps raw scores**, as the machine-readable form. The
+    calibration suppresses it for its own climbs too: `hillclimb_one()` dumps
+    unconditionally, so the samples landed in the diagnostic until that was
+    fixed (16 spurious rows at `--confidence 16`).
+
+  Three more things worth knowing:
+  - **Samples are climbed when `-c` is on.** A climbed key is drawn from a much
+    higher distribution than a scanned one (measured −6.84 against −8.01 on
+    the same ciphertext), so calibrating a climbed search against a scanned
+    null would make every run look significant.
+  - **Keys are sampled, not random text.** The null a search actually draws
+    from is "this ciphertext under a wrong key", and `key_to_machine()` already
+    builds exactly that in every machine mode.
+  - **IC does not follow the Gaussian tail** — 6.1σ observed against 4.4
+    predicted for its best-of-K, because its null is a quadratic form in the
+    letter histogram rather than a sum over positions, and so right-skewed. The
+    printed p-value says so under `-i`.
+
+  It also **ranks the scoring language on a single message**, which is its
+  second use: on telegraphic German the margin measured +15.4σ for `wehrmacht`,
+  +8.6σ for `german` and +2.5σ for `english` — the order `CLAUDE.md` recommends,
+  recovered from one ciphertext.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a
   long-message throughput tool, unreliable on the short/hard end and

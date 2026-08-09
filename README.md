@@ -318,6 +318,26 @@ English tables.
   exhaustive refinement did, on the standard machine and on M4, with one- and
   two-notch wheels alike. The search is still an *approximation*, so a run says
   so in its echoed settings
+- **`--confidence N`** — After the search, sample `N` keys to measure what this
+  scoring model produces on this ciphertext with **no signal**, and report how
+  far the winner sits above that `[0 = off, try 256]`. A raw score cannot answer
+  "did I find anything?" on its own, because every model scores *something* on
+  gibberish, and a search reports the best of everything it tried — so the bar
+  rises with the size of the keyspace. The line gives three numbers: the
+  winner's distance above the null in standard deviations, the distance the best
+  of that many keys is expected to reach **by chance**, and the margin between
+  them. **Read the margin** — and it is put where you are already looking: with
+  `--confidence` on, the first column of every progress line becomes that margin
+  instead of the raw score, and the header says `Margin` so a saved log still
+  explains itself. **Zero is the line that matters.** Over 17 576 keys, a real
+  message reads negative on every line before the true key and then jumps to
+  **+17.0**; a ciphertext with random letters behind it tops out at **+0.5**;
+  and a hidden plugboard searched without `-c`, which cannot recover it, ends at
+  **−0.8** — correctly reporting that nothing was found. Samples are
+  hill-climbed when `-c` is on, so the comparison is against what the search
+  actually does. It also ranks the scoring **language** on a single message: on
+  telegraphic German the margin measured +15.4 for `-l wehrmacht`, +8.6 for
+  `german` and +2.5 for `english`
 - **`--tune-phase N`** — Stop enumerating the middle and right wheels' *phase*
   and optimise it instead: keep `N` starting phases per wheel, hill-climb the
   plugboard as usual, then scan all 26 × 26 phases with that board **frozen**,
