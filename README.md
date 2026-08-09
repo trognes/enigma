@@ -342,7 +342,11 @@ English tables.
   ciphertext reports a *positive* margin on some seeds — a false "significant",
   which is worse than no answer at all. Bigger is not better either; past 512
   the error left is the null's own shape rather than the sample size. The
-  calibration is free without `-c` and costs 1.5–1.7 ms per sample with it
+  calibration is free without `-c` and costs 1.5–1.7 ms per sample with it —
+  slow enough at a large `N` that the sampling shows a progress line, and
+  reported in the settings echo so a saved log says what its first column means.
+  It needs a key space to sample: with the rotor key fully specified there is no
+  null to measure against, and the run says so and reports raw scores
 - **`--tune-phase N`** — Stop enumerating the middle and right wheels' *phase*
   and optimise it instead: keep `N` starting phases per wheel, hill-climb the
   plugboard as usual, then scan all 26 × 26 phases with that board **frozen**,

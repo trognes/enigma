@@ -691,6 +691,33 @@ are read from a **data directory** (filenames built as
     calibration suppresses it for its own climbs too: `hillclimb_one()` dumps
     unconditionally, so the samples landed in the diagnostic until that was
     fixed (16 spurious rows at `--confidence 16`).
+  - **The settings echo reports `N`**, and says when the samples are climbed.
+    The flag changes what the first column *means*, and the two readings differ
+    by ~20 on the same run, so a log that did not say so up front could not be
+    read at all by someone joining at the progress lines.
+  - **The sampling shows a live `\r` progress line**, TTY-only like `-F`'s
+    tier 1, because under `-c` a sample is a whole plugboard climb and `N` =
+    1024 is a couple of seconds before the search prints anything. It is
+    **erased** rather than left at 100% — the settings echo already gave `N`
+    and the summary gives the result. Single-threaded (the workers have not
+    started), so no atomic or mutex, unlike `-F`'s.
+  - **A one-key space has no null, and that needed a RELATIVE guard.** With the
+    rotor key fully specified every sample climbs the same key to the same
+    score, so σ̂ came out as float noise (~1e-15) rather than 0 — a bare
+    `sd > 0.0` test passed it, the margin became `score/1e-15` ≈ 1e13, and the
+    8-wide first column blew out to **87 characters**. The test is now
+    `sd > 1e-9·(|μ| + 1)`: scores are per-symbol log10 probabilities, so that
+    sits nine orders below any real null (~0.17) and six above the noise. On a
+    degenerate null the run says there is nothing to measure against and falls
+    back to raw scores — `g_null_sd` staying 0 already routes `showconfig` and
+    `showconfig_header` there. `showconfig` additionally falls back to `%+.1e`
+    (exactly 8 characters) if a margin ever fails to fit, so no arithmetic
+    surprise can shift the columns.
+  - **Do not anchor a test on `^Confidence`.** Both the settings echo and the
+    summary carry that label, and the echo's following lines include
+    `Threads: N` — so the pre-existing `-T`-independence check, which captured
+    `grep -A2 '^Confidence'`, started reading a thread count as a thread
+    dependency the moment the echo was added. Anchor on `^Confidence: null`.
 
   Three more things worth knowing:
   - **Samples are climbed when `-c` is on.** A climbed key is drawn from a much

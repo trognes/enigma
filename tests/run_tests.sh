@@ -1398,9 +1398,13 @@ cf_rct=$(run "$cf_rnd" -i -u B -w 123 -r AAA -g AQD)
 # +15.4 sd for wehrmacht against +2.5 for english on this very message -- the
 # ranking check below turns that into an assertion rather than a footnote).
 # shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+# Anchored on "Confidence: null", the SUMMARY, not on the label alone: the
+# settings echo carries the same label, and its two following lines include
+# "Threads: N" -- which made a bare '^Confidence' capture read as a -T
+# difference the moment that echo was added.
 cf_run() { printf '%s' "$1" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
            -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
-           | grep -A2 '^Confidence'; }
+           | grep -A2 '^Confidence: null'; }
 cf_margin() { printf '%s' "$1" \
               | sed -n 's/.*margin \([+-][0-9.]*\) sd.*/\1/p'; }
 cf_sig=$(cf_run "$cf_ct")
@@ -1458,7 +1462,7 @@ check "--confidence is -T-independent" \
   "$(cf_run "$cf_ct")" \
   "$(printf '%s' "$cf_ct" \
      | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA -g "..." \
-       --confidence 64 -T 4 2>&1 >/dev/null | grep -A2 '^Confidence')"
+       --confidence 64 -T 4 2>&1 >/dev/null | grep -A2 '^Confidence: null')"
 check "no confidence line when the option is off" \
   "$(printf '%s' "$cf_ct" \
      | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA -g "..." -T 1 \
@@ -1518,6 +1522,47 @@ check "--confidence adds no rows to --dump-all" \
 cf_err=$(printf 'AAAA' | "$ENIGMA" --confidence -1 2>&1 >/dev/null)
 check "--confidence negative rejected" \
   "$(printf '%s' "$cf_err" | grep -c 'Illegal sample count')" "1"
+
+# --confidence changes what the first column MEANS, so the settings echo has to
+# say so: a reader joining a saved log at the progress lines cannot otherwise
+# tell a margin from a raw score, and on the same run the two differ by ~20.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_set() { printf '%s' "$cf_ct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 \
+           -r AAA -g "AQ." "$@" -T 1 2>&1 >/dev/null; }
+check "--confidence is echoed in the settings" \
+  "$(cf_set --confidence 32 | grep -c '^Confidence: 32 null samples')" "1"
+check "no confidence setting line when the option is off" \
+  "$(cf_set | grep -c '^Confidence:')" "0"
+# Under -c each sample is a whole plugboard climb rather than one score, which
+# is the difference between free and seconds -- so the echo distinguishes them.
+check "--confidence settings line says when samples are climbed" \
+  "$(cf_set -c --confidence 32 | grep -c 'null samples, each climbed')" "1"
+check "--confidence settings line omits 'climbed' without -c" \
+  "$(cf_set --confidence 32 | grep -c 'each climbed')" "0"
+
+# The sampling progress line is a live \r line and must appear ONLY on a TTY,
+# so redirected logs and this harness stay clean (the same rule -F's tier-1
+# line follows). Nothing here runs on a TTY, so it must never be seen.
+check "--confidence sampling progress stays off a redirected stderr" \
+  "$(cf_set -c --confidence 32 | grep -c 'sampling the null')" "0"
+
+# A null needs more than one key to be a null. With the rotor key FULLY
+# specified the key space is one key, every sample climbs it to the identical
+# score, and sd came out as float noise (~1e-15) rather than 0 -- so a bare
+# `sd > 0` guard passed and the margin became score/1e-15, about 1e13, which
+# also blew the 8-wide first column out to 87 characters. The run must instead
+# say there is nothing to calibrate against and fall back to raw scores.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_one=$(printf '%s' "$cf_ct" | "$ENIGMA" -q -l wehrmacht -c -R 1 -u B -w 123 \
+         -r AAA -g AQD --confidence 32 -T 1 2>&1 >/dev/null)
+check "--confidence: a one-key space reports no null rather than a huge margin" \
+  "$(printf '%s' "$cf_one" | grep -c 'sampled keys scored alike')" "1"
+check "--confidence: a degenerate null falls back to the raw Score column" \
+  "$(printf '%s' "$cf_one" | grep -cE '^ *Score +W')" "1"
+check "--confidence: a degenerate null prints no margin summary" \
+  "$(printf '%s' "$cf_one" | grep -c 'margin')" "0"
+check "--confidence: a degenerate null keeps progress lines within 80 columns" \
+  "$(printf '%s' "$cf_one" | awk 'length($0) > 80' | wc -l | tr -d ' ')" "0"
 
 # Right-wheel ring x start collapse by 13 (CLAUDE.md "Two-notch wheels" -- cited
 # by name, since ENHANCEMENTS.md renumbers as issues close). VI, VII and
