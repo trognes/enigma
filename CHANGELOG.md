@@ -66,6 +66,17 @@ existing command lines can behave differently or stop working.
   message. On telegraphic German it measured +15.4σ for `wehrmacht`, +8.6σ for
   `german` and +2.5σ for `english`.
 
+  **Use `N` = 256, and never below 128.** `N` buys precision in the sampled null
+  and nothing else, and too small an `N` makes the flag report the very thing it
+  exists to rule out: measured over 12 seeds per cell, a signal-free ciphertext
+  reports a *positive* margin at `N` ≤ 64 (+1.7σ at 16, +1.2σ at 64), while 128
+  never crosses zero and 256 has real headroom. Past 512 the error left is the
+  null's departure from Gaussian, not the sample size. The spread follows
+  `SE ≈ √((1 + z²/2)/N)`, from which `N` needs no adjustment for keyspace size
+  or message length. Calibration is free without `-c` and costs ~1.5 ms per
+  sample with it — ~1% of a real run, but single-threaded, so its share grows
+  with `-T`.
+
 - **`--tune-phase N`** (0–26, default 0 = off) — hill-climb the middle and right
   wheels' *phase* instead of enumerating it. A wheel's phase is its ring and
   start shifted together, so its offset — and with it the wheel's whole
@@ -99,7 +110,30 @@ existing command lines can behave differently or stop working.
   full break is useful; prefer the exhaustive sweep when a partial answer has
   value.
 
+### Fixed
+
+- **`--confidence` on a fully-specified rotor key printed a margin of ~1e13 and
+  broke the progress-line columns.** With the key given there is exactly one key
+  to sample, so every sample scores the same and σ̂ came out as floating-point
+  noise (~1e-15) rather than 0 — passing the `sd > 0.0` guard and making the
+  margin `score/1e-15`. The 15-digit result overflowed the 8-wide first column
+  and pushed every line to 87 characters. The guard is now relative,
+  `sd > 1e-9·(|μ| + 1)`, which sits nine orders below any real null (~0.17) and
+  six above the noise; a degenerate null now says there is nothing to measure
+  against and the run falls back to raw scores. `showconfig` also falls back to
+  `%+.1e` — exactly 8 characters — if a margin ever fails to fit, so no
+  arithmetic surprise can shift the columns again.
+
 ### Changed
+
+- **`--confidence N` is echoed in the settings** (with whether its samples are
+  climbed), and the sampling shows a live progress line on a TTY. The flag
+  changes what the first column *means* — margin, not score, a difference of
+  ~20 on the same run — so a saved log has to say so up front rather than leave
+  it to be inferred. The progress line matters because under `-c` each sample is
+  a whole plugboard climb: at `N` = 1024 that is a couple of seconds before the
+  search prints anything. It is erased when sampling finishes, since the echo
+  already gave `N` and the summary gives the result.
 
 - **BREAKING: `--crib-file` is now `--crib-rerank`.** It re-ranks *finished*
   boards by known-word content and has nothing to do with the crib deduction;

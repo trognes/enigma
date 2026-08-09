@@ -2379,8 +2379,18 @@ void showconfig(machine & m, double score)
      form. */
   char scorebuf[16];
   if (g_null_sd > 0.0)
-    snprintf(scorebuf, sizeof(scorebuf), "%+.2f",
-             (score - g_null_mu) / g_null_sd - g_null_zk);
+    {
+      snprintf(scorebuf, sizeof(scorebuf), "%+.2f",
+               (score - g_null_mu) / g_null_sd - g_null_zk);
+      /* The column is 8 wide and the whole line is budgeted to land on 80, so a
+         margin that does not fit must not be printed as-is -- it shifts every
+         column after it. A real margin is well under 100 (the widest measured is
+         +21), so this only fires on a null too degenerate for calibrate_null's
+         guard to have caught, and %e keeps it both readable and exactly 8. */
+      if (strlen(scorebuf) > 8)
+        snprintf(scorebuf, sizeof(scorebuf), "%+.1e",
+                 (score - g_null_mu) / g_null_sd - g_null_zk);
+    }
   else
     snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
   if (opt_crib_text)
@@ -4832,11 +4842,20 @@ static void calibrate_null(machine & m, size_t keys,
   std::vector<double> xs;
   xs.reserve(static_cast<size_t>(opt_confidence));
 
+  /* A live \r line, on a TTY only, so redirected logs and the tests stay clean --
+     the same rule the -F tier-1 line follows. It earns its keep under -c, where a
+     sample is a whole plugboard climb (~1.7 ms at L=200, so N=1024 is a couple of
+     seconds of apparent hang before the first progress line of the search itself).
+     Single-threaded -- the workers have not started -- so no atomic or mutex. */
+  const bool show_progress = isatty(fileno(stderr)) != 0;
+  const size_t want = static_cast<size_t>(opt_confidence);
+  const size_t step = (want / 100) + 1;   /* every 1%, and every sample for small N */
+
   /* Draws are with replacement and skip keys the collapses removed; a run of
      misses cannot loop forever because total_keys is the INDEX space and at least
      one index in it always survives (the winner did). */
-  size_t guard = static_cast<size_t>(opt_confidence) * 64 + 1024;
-  while ((xs.size() < static_cast<size_t>(opt_confidence)) && (guard-- > 0))
+  size_t guard = want * 64 + 1024;
+  while ((xs.size() < want) && (guard-- > 0))
     {
       rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
       size_t idx = static_cast<size_t>((rng >> 11) % total_keys);
@@ -4844,7 +4863,18 @@ static void calibrate_null(machine & m, size_t keys,
                            rc12, gc12, cur_wo, rg6))
         continue;
       xs.push_back(opt_hillclimb ? hillclimb_one(m, idx, 0) : score_iter(m));
+      if (show_progress && (((xs.size() % step) == 0) || (xs.size() == want)))
+        {
+          fprintf(stderr, "\rConfidence: sampling the null %3zu%% (%zu / %zu keys)",
+                  (xs.size() * 100) / want, xs.size(), want);
+          fflush(stderr);
+        }
     }
+  /* Erase it rather than leaving the finished line: the settings echo already
+     reported N, and the summary reports the result, so a permanent "100%" row
+     would say nothing the run does not say twice already. */
+  if (show_progress)
+    fprintf(stderr, "\r%79s\r", "");
 
   m.report = save_report;
   opt_dump_all = save_dump;
@@ -4865,10 +4895,23 @@ static void calibrate_null(machine & m, size_t keys,
   var /= static_cast<double>(xs.size() - 1);
   const double sd = sqrt(var);
 
-  if (!(sd > 0.0))
+  /* A DEGENERATE null, tested relatively rather than against literal zero. The
+     obvious `sd > 0.0` is not enough: with the rotor key fully specified the
+     keyspace is ONE key, every sample climbs it to the same score, and sd comes
+     out as float noise (~1e-15) rather than 0 -- so the guard passed and the
+     margin became score/1e-15, i.e. ~1e13, which also blew the 8-wide first
+     column out to 87 characters. Scores here are per-symbol log10 probabilities
+     (order 1), so 1e-9 is nine orders below any real null (measured ~0.17) and
+     six above the noise. Leaving g_null_sd at 0 makes showconfig fall back to
+     raw scores, which is the honest display when there is nothing to calibrate
+     against. */
+  if (!(sd > 1e-9 * (fabs(mu) + 1.0)))
     {
-      fprintf(stderr, "Confidence: the sampled keys all scored alike; "
-                      "no scale to measure against\n");
+      fprintf(stderr, "Confidence: all %zu sampled keys scored alike, so there is "
+                      "no null to\n            measure against -- the key space "
+                      "(%zu key%s) is too small to\n            hold one. "
+                      "Reporting raw scores.\n",
+              xs.size(), total_keys, (total_keys == 1) ? "" : "s");
       return;
     }
   g_null_mu = mu;
@@ -6773,7 +6816,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
   fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
   fprintf(out, "  %-24s %s\n", "--confidence N",
-          "After the search, sample N keys to measure what");
+          "Sample N keys BEFORE the sweep to measure what");
   fprintf(out, "  %-24s %s\n", "",
           "this model scores with NO signal, and report how");
   fprintf(out, "  %-24s %s\n", "",
@@ -6785,7 +6828,21 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "raw score. Samples are climbed when -c is on, so");
   fprintf(out, "  %-24s %s\n", "",
-          "the null matches the search [0 = off, try 256]");
+          "the null matches the search. N buys precision in");
+  fprintf(out, "  %-24s %s\n", "",
+          "the null and nothing else: below 128 a signal-FREE");
+  fprintf(out, "  %-24s %s\n", "",
+          "ciphertext can report a positive margin, and above");
+  fprintf(out, "  %-24s %s\n", "",
+          "512 there is nothing left to buy. Free without -c;");
+  fprintf(out, "  %-24s %s\n", "",
+          "~1.7ms/sample with it. Needs a key space to sample:");
+  fprintf(out, "  %-24s %s\n", "",
+          "with the rotor key fully given there is no null, and");
+  fprintf(out, "  %-24s %s\n", "",
+          "the run says so and reports raw scores instead");
+  fprintf(out, "  %-24s %s\n", "",
+          "[0 = off, use 256]");
   fprintf(out, "  %-24s %s\n", "--tune-phase N",
           "Hill-climb the rotor PHASE instead of enumerating");
   fprintf(out, "  %-24s %s\n", "",
@@ -6963,6 +7020,17 @@ void show_settings()
     fprintf(stderr, "Pre-filter: top %g%% of keys\n", opt_prefilter_frac * 100.0);
   else if (opt_prefilter > 0)
     fprintf(stderr, "Pre-filter: top %d keys\n", opt_prefilter);
+
+  /* --confidence changes what the Score column MEANS, so a saved log has to say
+     so up front: a reader who joins at the progress lines cannot otherwise tell
+     a margin from a raw score, and the two differ by ~20 on the same run. N is
+     echoed with it because the margin's precision is set by N and nothing else
+     (below 128 a signal-free run can read positive -- see --help). */
+  if (opt_confidence > 0)
+    fprintf(stderr, "Confidence: %d null samples%s\n"
+            "            the first column below is the MARGIN over chance, not "
+            "a score\n",
+            opt_confidence, opt_hillclimb ? ", each climbed" : "");
 
   /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
      ~10pp of exact recovery at K=2 on telegraphic German, archived/PERFORMANCE.md §7.11), so a

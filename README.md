@@ -318,9 +318,9 @@ English tables.
   exhaustive refinement did, on the standard machine and on M4, with one- and
   two-notch wheels alike. The search is still an *approximation*, so a run says
   so in its echoed settings
-- **`--confidence N`** — After the search, sample `N` keys to measure what this
+- **`--confidence N`** — Before the sweep, sample `N` keys to measure what this
   scoring model produces on this ciphertext with **no signal**, and report how
-  far the winner sits above that `[0 = off, try 256]`. A raw score cannot answer
+  far the winner sits above that `[0 = off, use 256]`. A raw score cannot answer
   "did I find anything?" on its own, because every model scores *something* on
   gibberish, and a search reports the best of everything it tried — so the bar
   rises with the size of the keyspace. The line gives three numbers: the
@@ -337,7 +337,16 @@ English tables.
   hill-climbed when `-c` is on, so the comparison is against what the search
   actually does. It also ranks the scoring **language** on a single message: on
   telegraphic German the margin measured +15.4 for `-l wehrmacht`, +8.6 for
-  `german` and +2.5 for `english`
+  `german` and +2.5 for `english`. **Use `N` = 256, and never below 128**: `N`
+  buys nothing but precision in the null, and at `N` ≤ 64 a signal-free
+  ciphertext reports a *positive* margin on some seeds — a false "significant",
+  which is worse than no answer at all. Bigger is not better either; past 512
+  the error left is the null's own shape rather than the sample size. The
+  calibration is free without `-c` and costs 1.5–1.7 ms per sample with it —
+  slow enough at a large `N` that the sampling shows a progress line, and
+  reported in the settings echo so a saved log says what its first column means.
+  It needs a key space to sample: with the rotor key fully specified there is no
+  null to measure against, and the run says so and reports raw scores
 - **`--tune-phase N`** — Stop enumerating the middle and right wheels' *phase*
   and optimise it instead: keep `N` starting phases per wheel, hill-climb the
   plugboard as usual, then scan all 26 × 26 phases with that board **frozen**,

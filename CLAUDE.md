@@ -691,6 +691,33 @@ are read from a **data directory** (filenames built as
     calibration suppresses it for its own climbs too: `hillclimb_one()` dumps
     unconditionally, so the samples landed in the diagnostic until that was
     fixed (16 spurious rows at `--confidence 16`).
+  - **The settings echo reports `N`**, and says when the samples are climbed.
+    The flag changes what the first column *means*, and the two readings differ
+    by ~20 on the same run, so a log that did not say so up front could not be
+    read at all by someone joining at the progress lines.
+  - **The sampling shows a live `\r` progress line**, TTY-only like `-F`'s
+    tier 1, because under `-c` a sample is a whole plugboard climb and `N` =
+    1024 is a couple of seconds before the search prints anything. It is
+    **erased** rather than left at 100% — the settings echo already gave `N`
+    and the summary gives the result. Single-threaded (the workers have not
+    started), so no atomic or mutex, unlike `-F`'s.
+  - **A one-key space has no null, and that needed a RELATIVE guard.** With the
+    rotor key fully specified every sample climbs the same key to the same
+    score, so σ̂ came out as float noise (~1e-15) rather than 0 — a bare
+    `sd > 0.0` test passed it, the margin became `score/1e-15` ≈ 1e13, and the
+    8-wide first column blew out to **87 characters**. The test is now
+    `sd > 1e-9·(|μ| + 1)`: scores are per-symbol log10 probabilities, so that
+    sits nine orders below any real null (~0.17) and six above the noise. On a
+    degenerate null the run says there is nothing to measure against and falls
+    back to raw scores — `g_null_sd` staying 0 already routes `showconfig` and
+    `showconfig_header` there. `showconfig` additionally falls back to `%+.1e`
+    (exactly 8 characters) if a margin ever fails to fit, so no arithmetic
+    surprise can shift the columns.
+  - **Do not anchor a test on `^Confidence`.** Both the settings echo and the
+    summary carry that label, and the echo's following lines include
+    `Threads: N` — so the pre-existing `-T`-independence check, which captured
+    `grep -A2 '^Confidence'`, started reading a thread count as a thread
+    dependency the moment the echo was added. Anchor on `^Confidence: null`.
 
   Three more things worth knowing:
   - **Samples are climbed when `-c` is on.** A climbed key is drawn from a much
@@ -709,6 +736,53 @@ are read from a **data directory** (filenames built as
   second use: on telegraphic German the margin measured +15.4σ for `wehrmacht`,
   +8.6σ for `german` and +2.5σ for `english` — the order `CLAUDE.md` recommends,
   recovered from one ciphertext.
+
+  **Recommended `N` = 256; 128 is the floor.** `N` buys precision in μ̂ and σ̂
+  and nothing else, and too small an `N` makes the flag report the one thing it
+  exists to rule out. Measured over 12 seeds per cell on a signal and a
+  signal-free ciphertext (L=200, `-q -l english`, K = 17 576;
+  `eval/confidence_sample_size.py` reproduces it):
+
+  | N | noise-arm sd | worst noise margin | signal-arm sd | cost under `-c` |
+  |---:|---:|---:|---:|---:|
+  | 16 | 0.96σ | **+1.7σ** | 4.23σ | 0.02 s |
+  | 64 | 0.56σ | **+1.2σ** | 1.77σ | 0.10 s |
+  | 128 | 0.27σ | +0.4σ | 1.50σ | 0.19 s |
+  | **256** | **0.17σ** | **+0.1σ** | 1.01σ | **0.38 s** |
+  | 512 | 0.07σ | −0.2σ | 0.75σ | 0.77 s |
+  | 1024 | 0.04σ | −0.3σ | 0.37σ | 1.5 s |
+
+  **The noise column is what decides it**: at `N` ≤ 64 a ciphertext with random
+  letters behind it reports a *positive* margin on some seeds — a false
+  "significant", which is worse than no answer. 128 is the first row that never
+  crosses zero and 256 the first with headroom. Past 512 there is nothing left
+  to buy: the residual is the null's departure from Gaussian (the −0.3σ floor
+  the noise arm settles on, and IC's skew above), not sampling error.
+
+  The spread follows `SE(margin) ≈ √((1 + z²/2)/N)` — `1/N` from μ̂, `z²/2N`
+  from σ̂'s own relative error — which predicted 0.82/0.41/0.21σ at N=16/64/256
+  against the 0.96/0.56/0.17σ observed. Two things fall out of that formula:
+
+  - **`N` does not scale with the keyspace.** `K` enters only through `√(2 ln
+    K)`, which is arithmetic, not sampling. The decision always sits near `z ≈
+    √(2 ln K)`, so `SE ≈ 3.3/√N` whatever the sweep size.
+  - **`N` does not scale with message length** either. A long message inflates
+    the *signal* arm's error (z is large, so σ̂'s error is amplified — 1.0σ at
+    N=256), but +16 ± 1 is no less decisive than +16 ± 0.2.
+
+  **Cost is only ever a question under `-c`.** In scan mode the calibration is
+  free — N=1024 still fits inside the ~0.05 s startup floor, since a scan
+  samples one score per key. Under `-c` each sample is a plugboard climb,
+  measured **1.5–1.7 ms at L=200**; that is ~1% of a real run, but it is
+  **single-threaded**, so its share grows with `-T` — the one case worth
+  trimming `N` for is a short climb on many cores.
+
+  **Measuring that cost needs a pinned rotor key.** The obvious harness — time
+  the same sweep at several `N` — reads *zero* for all of them: 512 calibration
+  climbs disappear under a 31 s `-c` sweep of 676 keys × 4 restarts × 4 threads.
+  The signal is there, it is just 2% of the total. The cost arms therefore fix
+  `-g` so the search itself is one climb and the calibration is nearly the whole
+  run.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a
   long-message throughput tool, unreliable on the short/hard end and
