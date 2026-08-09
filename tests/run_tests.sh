@@ -1564,6 +1564,44 @@ check "--confidence: a degenerate null prints no margin summary" \
 check "--confidence: a degenerate null keeps progress lines within 80 columns" \
   "$(printf '%s' "$cf_one" | awk 'length($0) > 80' | wc -l | tr -d ' ')" "0"
 
+# The key count the summary prints must be the one its own bar was computed
+# from. It used to be passed in separately, and under --ring-stride the caller
+# passed the REFINEMENT's keys too -- so the line read "chance best of 1528334
+# keys is 5.3 sd" with 5.3 built from 1527084. Recomputing sqrt(2 ln K) here
+# from the printed K and comparing it to the printed bar ties the two halves of
+# the line together whatever the cause.
+#
+# It catches drift at the size that would CHANGE THE ANSWER, not the 0.00015 sd
+# of the instance above -- zk grows as sqrt(ln K), so that one was four orders
+# below the printed precision and no output-level check can see it. A K wrong by
+# a factor (work items instead of keys, say) moves the bar by ~0.1 sd and does
+# get caught. The tolerance is the rounding bound of the one decimal printed.
+# (A small key space keeps this quick; the property does not need a big one.)
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+cf_stride() { printf '%s' "$cf_ct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 \
+              -r "AA." -g "AA." --confidence 32 -e 1 --ring-stride "$1" \
+              -T 1 2>&1 >/dev/null; }
+cf_zk_ok() { printf '%s' "$1" | awk '
+  /chance best of/ { k = $6; sd = $9 }
+  END { if (k == "" || sd == "") { print "missing"; exit }
+        d = sqrt(2 * log(k)) - sd
+        print (d < 0.06 && d > -0.06) ? "match" : "drift(" d ")" }'; }
+cf_keys() { printf '%s' "$1" | sed -n 's/.*chance best of \([0-9]*\) keys.*/\1/p'; }
+cf_analysed() { printf '%s' "$1" | sed -n 's/^Analysed \([0-9]*\) rotor.*/\1/p'; }
+cf_s1=$(cf_stride 1)
+cf_s2=$(cf_stride 2)
+check "--confidence: the printed bar matches the printed key count" \
+  "$(cf_zk_ok "$cf_s1")" "match"
+check "--confidence: the bar matches the key count under --ring-stride too" \
+  "$(cf_zk_ok "$cf_s2")" "match"
+# Unstrided there is no refinement, so the two counts coincide; strided the
+# summary must report the COARSE sweep while the diagnostic reports the total.
+check "--confidence: unstrided, the summary counts every analysed key" \
+  "$(cf_keys "$cf_s1")" "$(cf_analysed "$cf_s1")"
+check "--confidence: strided, the summary excludes the refinement's keys" \
+  "$(awk -v c="$(cf_keys "$cf_s2")" -v a="$(cf_analysed "$cf_s2")" \
+     'BEGIN{print (c > 0 && a > c) ? "yes" : "no"}')" "yes"
+
 # Right-wheel ring x start collapse by 13 (CLAUDE.md "Two-notch wheels" -- cited
 # by name, since ENHANCEMENTS.md renumbers as issues close). VI, VII and
 # VIII notch at M and Z, exactly 13 apart, so their notch SET survives a shift

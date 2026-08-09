@@ -112,6 +112,19 @@ existing command lines can behave differently or stop working.
 
 ### Fixed
 
+- **`--confidence`'s summary reported a key count its own chance bar was not
+  built from.** The count was passed to the summary separately from the bar, and
+  under `--ring-stride` the caller passed the refinement's keys too — so the
+  line read "chance best of 1528334 keys is 5.3 sd" with 5.3 computed for
+  1 527 084. The bar now reports the `K` it was built from, and the inclusive
+  total stays with the `Analysed N rotor combinations` diagnostic where it
+  belongs. Worth 0.00015 σ — `√(2 ln K)` barely moves with `K` — so this closes
+  a drift the output could not show rather than a visible error. The refinement
+  cannot be folded into the bar instead: it has to exist before the sweep, which
+  is what keeps the margin a constant offset from the score, and the
+  refinement's keys are chosen conditional on the coarse winner rather than
+  drawn independently.
+
 - **`--confidence` on a fully-specified rotor key printed a margin of ~1e13 and
   broke the progress-line columns.** With the key given there is exactly one key
   to sample, so every sample scores the same and σ̂ came out as floating-point

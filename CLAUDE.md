@@ -684,6 +684,27 @@ are read from a **data directory** (filenames built as
     display high-water mark are untouched — and keeps the printed number
     independent of thread timing. A running count would make the *number* itself
     `-T`-dependent, which is worse than the existing "which lines appear".
+  - **`--ring-stride` is handled, and correctly**: the sampling draws from the
+    coarse space (`range.r2_vals` already holds the strided set), and `K` is the
+    coarse key count — so a strided sweep gets a **lower** bar, measured 5.34σ
+    against 5.53σ unstrided on the same message (1 528 334 keys against
+    4 411 576). The null itself is unchanged, as it must be: stride changes
+    which wrong keys are visited, not what a wrong key scores (measured
+    −7.9994 ± 0.1686 unstrided against −7.9911 ± 0.1770 at K=3).
+  - **The refinement's keys are NOT in the bar, and cannot be.** `g_null_zk` has
+    to exist before the sweep — that is what makes the margin a constant offset
+    — while `extra_keys_analysed` is not known until the refinement finishes.
+    They should not be in it anyway: the refinement's candidates are chosen
+    *conditional on the coarse winner*, so they are not the independent draws
+    `√(2 ln K)` describes. `g_null_keys` records the `K` the bar was built from
+    so the summary reports that rather than being handed a count; passing it in
+    let the two drift, and under `--ring-stride` they did — the line read
+    "chance best of 1528334 keys is 5.3 sd" with 5.3 computed for 1 527 084.
+    Worth **0.00015σ** (zk grows as `√(ln K)`, so it barely moves; even a
+    5 859-key coarse sweep with a full 1 300-key refinement reaches only
+    0.048σ), so this removed a bug class below the printed precision rather than
+    a visible error. The inclusive total is still reported, by the
+    `Analysed N rotor combinations` diagnostic.
   - **A bare z would flatter the early lines.** A progress line is a running
     maximum, so z reads 3–5 σ well before anything is found — which looks like
     p < 1e-5 and is exactly what chance delivers over a few thousand keys.
