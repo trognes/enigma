@@ -30,6 +30,37 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **A live progress line for the main sweep** — percentage, key rate and ETA,
+  rewriting itself in place:
+
+  ```
+  Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left
+  ```
+
+  The score lines report how *well* the search is doing and nothing about how
+  far it has come — and because each one needs a new best, they thin out to
+  nothing exactly when a run is longest, leaving no way to tell a slow sweep
+  from a stuck one.
+
+  No flag: it appears whenever stderr is a terminal, exactly like the `-F`
+  pre-filter's existing line, and vanishes when the sweep ends. Redirect stderr
+  and it is not emitted at all — not the text and not the carriage return — so
+  logs, pipelines and the test suite see byte-for-byte what they saw before. It
+  is also suppressed under `--dump-all`, whose rows are the machine-readable
+  form and print under a different mutex. A sweep finishing in under half a
+  second draws nothing rather than flashing a line up and wiping it.
+
+  Score lines and the progress line share stderr, and the line steps aside for
+  them rather than being written over: every score line in the program is
+  printed by one function, and every caller of it already holds the best-result
+  mutex, so that is where the erase goes.
+
+  Counts are shown in **keys** while the percentage runs over **work items**
+  (`keys × restarts`, what the sweep actually distributes) — the two differ by a
+  constant factor, so the percentage is the same either way, but reporting items
+  would read `8×` high against the `Analysed N rotor combinations` line under
+  `-R 8`.
+
 - **`--confidence N`** — answers "is this score better than chance?", which the
   tool could not do before. It samples `N` keys from the resolved key space,
   scores each exactly as the search scored them, and reports the winner's

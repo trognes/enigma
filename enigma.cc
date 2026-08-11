@@ -4387,10 +4387,130 @@ static bool g_header_shown = false;
    sweeps only (the cribs run in sequence), never on the hot path. */
 static double g_shown_high = score_min;
 
+/* --- live sweep progress -----------------------------------------------------
+   The score lines say how WELL the search is doing and nothing about how far it
+   has come: on a big key space they thin out to nothing precisely when the run
+   is longest, so there is no way to tell a slow sweep from a stuck one. This is
+   the other half -- a single \r line carrying percentage, rate and ETA.
+
+   TTY-only, like the -F tier-1 line, so redirected logs and the tests stay
+   clean. Also suppressed under --dump-all, whose output is the machine-readable
+   form the harnesses parse and must not have a \r line interleaved into it
+   (--dump-all prints under its own mutex, so it could not be sequenced with
+   this one anyway).
+
+   g_sweep_total == 0 means "not armed" and is the only thing the hot path
+   tests. bruteforce() arms it around the main sweep alone: the --ring-stride
+   refinement reuses search_worker over its own small key space, and leaving the
+   counter armed would let it run the percentage past 100. */
+static std::atomic<size_t> g_sweep_done{0};
+static size_t g_sweep_total = 0;        /* work items in the armed sweep */
+static size_t g_sweep_restarts = 1;     /* items per key, so counts read as keys */
+static std::chrono::steady_clock::time_point g_sweep_t0;
+static bool g_sweep_drawn = false;      /* a \r line is on screen; under best.mutex */
+static int g_sweep_width = 0;           /* its length, so the erase matches exactly */
+
+/* Counts span six orders of magnitude between a 676-key sweep and a full M4
+   wildcard, and the line has to stay a fixed width, so they are abbreviated. */
+static void fmt_count(char * buf, size_t n, double v)
+{
+  if (v < 10000.0)
+    snprintf(buf, n, "%.0f", v);
+  else if (v < 1e6)
+    snprintf(buf, n, "%.1fk", v / 1e3);
+  else if (v < 1e9)
+    snprintf(buf, n, "%.2fM", v / 1e6);
+  else
+    snprintf(buf, n, "%.2fG", v / 1e9);
+}
+
+static void fmt_eta(char * buf, size_t n, double secs)
+{
+  if (!(secs >= 0.0) || (secs >= 86400.0 * 99))
+    snprintf(buf, n, "?");
+  else if (secs < 60.0)
+    snprintf(buf, n, "%.0fs", secs);
+  else if (secs < 3600.0)
+    snprintf(buf, n, "%dm%02ds", static_cast<int>(secs) / 60,
+             static_cast<int>(secs) % 60);
+  else if (secs < 86400.0)
+    snprintf(buf, n, "%dh%02dm", static_cast<int>(secs) / 3600,
+             (static_cast<int>(secs) % 3600) / 60);
+  else
+    snprintf(buf, n, "%.0fd%02dh", floor(secs / 86400.0),
+             (static_cast<int>(secs) % 86400) / 3600);
+}
+
+/* Erase the \r line so an ordinary stderr line can be printed over it. The
+   caller holds best.mutex, which is what every score line is already printed
+   under -- so this is the one place the two streams meet. */
+static void sweep_progress_clear(void)
+{
+  if (! g_sweep_drawn)
+    return;
+  /* Exactly as wide as what was drawn, not a blanket 79: on a terminal narrower
+     than the erase the extra spaces wrap, and the \r then returns to the start
+     of the SECOND line, leaving the first one dirty. */
+  fprintf(stderr, "\r%*s\r", g_sweep_width, "");
+  g_sweep_drawn = false;
+}
+
+/* Account for `n` finished work items and redraw on a 1% boundary. One relaxed
+   atomic add per tick_block items, and exactly one thread prints each step
+   (each add owns a disjoint slice, the same argument the -F line rests on). */
+static void sweep_progress_tick(size_t n, best_result & best)
+{
+  const size_t total = g_sweep_total;
+  if (total == 0)
+    return;
+  const size_t step = (total / 100) + 1;
+  const size_t before = g_sweep_done.fetch_add(n, std::memory_order_relaxed);
+  const size_t after = before + n;
+  if (((after / step) == (before / step)) && (after < total))
+    return;
+
+  const double el = std::chrono::duration<double>
+    (std::chrono::steady_clock::now() - g_sweep_t0).count();
+  /* A sweep that finishes in well under a second should not flash a progress
+     line up and wipe it again; and an ETA off the first few milliseconds is
+     noise anyway. */
+  if (el < 0.5)
+    return;
+
+  const double done_keys = static_cast<double>(after)
+                           / static_cast<double>(g_sweep_restarts);
+  const double all_keys = static_cast<double>(total)
+                          / static_cast<double>(g_sweep_restarts);
+  const double rate = done_keys / el;
+  char db[16], tb[16], rb[16], eb[16];
+  fmt_count(db, sizeof(db), done_keys);
+  fmt_count(tb, sizeof(tb), all_keys);
+  fmt_count(rb, sizeof(rb), rate);
+  fmt_eta(eb, sizeof(eb), (rate > 0.0) ? (all_keys - done_keys) / rate : -1.0);
+
+  /* Generous: the four fields are bounded by their own 16-byte buffers, but the
+     compiler cannot see that and warns on the sum. */
+  char line[192];
+  snprintf(line, sizeof(line), "Progress:  %3zu%% (%s / %s keys) %s/s, %s left",
+           (after >= total) ? 100 : (after * 100) / total, db, tb, rb, eb);
+
+  std::lock_guard<std::mutex> lock(best.mutex);
+  /* Padded to the widest line drawn so far, and erased at that width too. The
+     line can SHRINK (999k/s -> 1.0M/s, 10m00s -> 9m59s), and a bare \r plus a
+     shorter string would leave the tail of the previous one on screen. */
+  const int w = static_cast<int>(strlen(line));
+  if (w > g_sweep_width)
+    g_sweep_width = w;
+  fprintf(stderr, "\r%-*s", g_sweep_width, line);
+  fflush(stderr);
+  g_sweep_drawn = true;
+}
+
 /* Print one progress line under the best-result mutex, emitting the column
    header before the first line of the run. */
 static void progress_line(best_result & b, machine & m, double score)
 {
+  sweep_progress_clear();   /* the \r line must not be printed over */
   if (! b.header_shown && ! g_header_shown)
     {
       b.header_shown = true;
@@ -4522,6 +4642,16 @@ void search_worker(machine & m,
   /* this wheel order's right wheel has a period-13 notch set */
   bool r2_halve_wo = false;
 
+  /* Live progress is accounted here rather than per chunk, because a chunk is
+     total/(threads*16) -- at -T 1 that is sixteen updates for the whole run,
+     one every few minutes on the sweeps that need a progress line most. A local
+     counter flushed every tick_block items costs one predictable branch per key
+     when the line is off (g_sweep_total == 0 short-circuits it) and one relaxed
+     atomic add per 4096 items when it is on. */
+  const bool ticking = (g_sweep_total != 0);
+  const size_t tick_block = 4096;
+  size_t since_tick = 0;
+
   size_t start;
   while ((start = next_key.fetch_add(chunk)) < total)
     {
@@ -4531,6 +4661,11 @@ void search_worker(machine & m,
 
       for (size_t idx = start; idx < end; idx++)
         {
+          if (ticking && (++since_tick >= tick_block))
+            {
+              sweep_progress_tick(since_tick, best);
+              since_tick = 0;
+            }
           size_t keyidx = idx / restarts;
           int restart = static_cast<int>(idx % restarts);
 
@@ -4709,6 +4844,10 @@ void search_worker(machine & m,
             }
         }
     }
+  /* The remainder below tick_block, so the last worker to finish takes the line
+     to 100% rather than leaving it short by up to 4095 items per thread. */
+  if (ticking && (since_tick > 0))
+    sweep_progress_tick(since_tick, best);
 }
 
 /* --- key pre-filter (-F) ---------------------------------------------------
@@ -5883,9 +6022,26 @@ static double bruteforce(char * result, bool allow_empty)
       if (schunk < 1)
         schunk = 1;
       std::atomic<size_t> next_key{0};
+      /* Arm the live progress line for THIS sweep only. --dump-all is excluded
+         because its rows are the machine-readable form and print under their own
+         mutex, so a \r line could interleave into them. */
+      if ((isatty(fileno(stderr)) != 0) && ! opt_dump_all)
+        {
+          g_sweep_done.store(0, std::memory_order_relaxed);
+          g_sweep_restarts = (restarts_par > 0) ? restarts_par : 1;
+          g_sweep_t0 = std::chrono::steady_clock::now();
+          g_sweep_total = work_items;
+        }
       run_parallel(nthreads, [&](int t)
         { search_worker(*machines[t], tasks, range, rc, gc, all,
                         rsize, gsize, next_key, schunk, restarts_par, best); });
+      /* Disarm before anything else runs: the --ring-stride refinement reuses
+         search_worker over its own key space and would push this past 100%. */
+      g_sweep_total = 0;
+      {
+        std::lock_guard<std::mutex> lock(best.mutex);
+        sweep_progress_clear();
+      }
     }
 
   /* --polish and --ring-stride's refinement pass both need the winning board's full

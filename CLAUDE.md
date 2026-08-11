@@ -961,6 +961,52 @@ are read from a **data directory** (filenames built as
   off. Not a hot-path concern: a progress line is emitted only when a board
   beats everything echoed so far, so this prints once per improvement, not once
   per board scored. Off by default.
+- **Live sweep progress** — a `\r` line under the main sweep carrying
+  percentage, key rate and ETA, e.g.
+  `Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left`. No flag: on
+  whenever stderr is a terminal, like `-F`'s tier-1 line. The score lines say
+  how *well* the search is doing and nothing about how far it has come — and
+  they thin out to nothing precisely when a run is longest, so without this
+  there is no way to tell a slow sweep from a stuck one.
+  - **Counts are in KEYS, the percentage is over WORK ITEMS.** The counter runs
+    over `keys × restarts` (what the sweep actually hands out), but that unit
+    would read `8×` high against the `Analysed N rotor combinations` diagnostic
+    under `-R 8`, so the display divides it back out. The percentage is
+    identical either way, since the two differ by a constant factor.
+  - **Ticked every 4096 items, not per chunk.** A chunk is
+    `total/(threads·16)`, so per-chunk ticking gives *sixteen* updates for a
+    whole `-T 1` run — one every few minutes on exactly the sweeps that need a
+    progress line most. A worker-local counter flushed every 4096 items costs
+    one relaxed atomic add per 4096 items when the line is on, and when it is
+    off `g_sweep_total == 0` short-circuits it to a single predictable branch
+    per key. `make bench BASE=origin/dev` showed no regression (`search` −3.1%,
+    `hillclimb` +4.2%, `fused` −2.9%, `crib` −5.2%) — **but read the control
+    before reading those**: base-vs-base on the same box in the same session
+    measured `search` **−7.7%** on byte-identical code, so the floor there was
+    ±8% that day and none of the quick-tier numbers resolve a change this size.
+    All the A/B establishes is the absence of a large regression; the argument
+    that the cost is negligible rests on the code shape, not on those figures.
+  - **`progress_line()` is the choke point that makes the two streams safe.**
+    Every score line — the key-level merge and `report_climb_progress` alike —
+    goes through it, and every caller already holds `best.mutex`, so
+    `sweep_progress_clear()` sits at its top and the `\r` line is erased before
+    anything is printed over it. The tick takes the same mutex to draw.
+  - **The line is padded to the widest drawn and erased at that width**, not at
+    a blanket 79. It can *shrink* (`999k/s` → `1.0M/s`, `10m00s` → `9m59s`) and
+    a bare `\r` plus a shorter string leaves the tail of the previous one on
+    screen; and an over-wide erase wraps on a narrow terminal, after which the
+    `\r` returns to the start of the *second* line and leaves the first dirty.
+  - **Armed for the main sweep only.** `bruteforce()` sets `g_sweep_total`
+    around that one `run_parallel` and clears it straight after, because the
+    `--ring-stride` refinement reuses `search_worker` over its own key space and
+    would otherwise push the percentage past 100. `--crib-list` runs one sweep
+    per crib, so each gets its own 0–100%.
+  - **Suppressed under `--dump-all`**, whose rows are the machine-readable form
+    the harnesses parse and which print under a *different* mutex — so a `\r`
+    line could not be sequenced against them even in principle.
+  - **Nothing appears in under 0.5 s of sweeping.** A short run should not flash
+    a line up and wipe it again, and an ETA off the first few milliseconds is
+    noise.
 - `-d dir` directory holding the n-gram files (else `$ENIGMA_DATA`, else
   `ngrams`)
 - `-T N` worker threads for the search (default 1, max 256). Parallelises over

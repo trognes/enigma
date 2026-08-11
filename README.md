@@ -134,6 +134,21 @@ than waiting for a score:
   XXXXXXXXXXXXXXXXXXXX
 ```
 
+Those lines say how *well* the search is doing and nothing about how far it has
+come — and they thin out to nothing exactly when a run is longest, since a new
+line needs a new best. So underneath them sits a **live progress line** that
+rewrites itself in place:
+
+```
+Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left
+```
+
+There is no flag for it: it appears whenever stderr is a terminal, disappears
+when the search ends, and steps aside for each score line rather than being
+written over. Redirect stderr to a file and it is not there at all, so logs and
+scripts see exactly what they saw before. Nothing is drawn for a sweep that
+finishes in under half a second.
+
 ## Options
 
 Defaults are shown in `[brackets]`. A dot `.` is the wildcard for the reflector,
@@ -622,10 +637,13 @@ unknown.
   start, the running best is shown during the search, and two final lines report
   the number of rotor combinations analysed and plugboards scored, then
   wall-clock time, thread count, the precomputed-table memory and peak memory.
-  With `-F`, the pre-filter's ranking phase shows a live progress line
-  (percentage of keys ranked) when stderr is a terminal. **`--full-text`** adds
-  the whole decrypted message under each progress line instead of the
-  19-character preview.
+  When stderr is a terminal the main sweep also shows a **live progress line**
+  (percentage, key rate and ETA) that rewrites itself in place and steps aside
+  for each score line; with `-F`, the pre-filter's ranking phase shows one of
+  its own (percentage of keys ranked). Neither appears when stderr is
+  redirected, so a saved log is unchanged. **`--full-text`** adds the whole
+  decrypted message under each progress line instead of the 19-character
+  preview.
 - A scoring model is needed only when the run actually scores — a wildcard
   search or a plugboard hill-climb (`-c`). Those require `-l` (or `-i`). Pure
   encryption/decryption — a fully specified machine with no `-c` — needs no
