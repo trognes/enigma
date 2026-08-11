@@ -73,7 +73,7 @@ existing command lines can behave differently or stop working.
   never crosses zero and 256 has real headroom. Past 512 the error left is the
   null's departure from Gaussian, not the sample size. The spread follows
   `SE ≈ √((1 + z²/2)/N)`, from which `N` needs no adjustment for keyspace size
-  or message length. Calibration is free without `-c` and costs ~1.5 ms per
+  or message length. Calibration is free without `-c` and costs 1.5–1.7 ms per
   sample with it — ~1% of a real run, but single-threaded, so its share grows
   with `-T`.
 
