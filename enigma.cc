@@ -2236,6 +2236,18 @@ static double g_null_mu = 0.0;
 static double g_null_sd = 0.0;
 static double g_null_zk = 0.0;   /* sqrt(2 ln K), the chance best in sigmas */
 static size_t g_null_n = 0;      /* samples behind mu/sd, for the summary */
+/* The K that g_null_zk was computed from. Kept so the summary reports the count
+   its own bar used rather than being handed one: passing the key count in let
+   the two drift, and under --ring-stride they did -- the caller passed the
+   refinement's keys too, so the line read "chance best of 1528334 keys is
+   5.3 sd" with 5.3 computed for 1527084. The error was 0.00015 sd (zk grows as
+   sqrt(ln K), so it barely moves), but the fix removes the possibility rather
+   than the instance. It cannot go the other way and fold the refinement into
+   zk: the progress lines need this number BEFORE the sweep, so the margin stays
+   a constant offset from the score -- and the refinement's keys are chosen
+   conditional on the coarse winner, so they are not the independent draws
+   sqrt(2 ln K) is about. */
+static size_t g_null_keys = 0;
 
 static inline const char * progress_fmt(void)
 {
@@ -4916,7 +4928,11 @@ static void calibrate_null(machine & m, size_t keys,
     }
   g_null_mu = mu;
   g_null_sd = sd;
-  /* Expected best of `keys` draws from a Gaussian null. keys >= 1 always here. */
+  /* Expected best of `keys` draws from a Gaussian null. The keys < 2 clamp only
+     keeps log() defined; it is unreachable, because a key space that small
+     cannot produce a spread of scores and the degenerate guard above has
+     already returned. */
+  g_null_keys = keys;
   g_null_zk = sqrt(2.0 * log(static_cast<double>(keys < 2 ? 2 : keys)));
   g_null_n = xs.size();
 }
@@ -4926,20 +4942,21 @@ static void calibrate_null(machine & m, size_t keys,
    raw distance above it, and a p-value -- so a log records what the margin was
    measured against
    rather than only the result. */
-static void report_confidence(double best_score, size_t keys)
+static void report_confidence(double best_score)
 {
   if (!(g_null_sd > 0.0))
     return;
   const double z = (best_score - g_null_mu) / g_null_sd;
-  /* Gaussian upper tail, family-wise over `keys` independent draws. erfc is exact
+  /* Gaussian upper tail, family-wise over g_null_keys independent draws -- the
+     same K the bar used, so the two halves of the line agree. erfc is exact
      enough far out; the 1-exp form avoids losing the small p to rounding. */
   const double tail = 0.5 * erfc(z / sqrt(2.0));
-  const double pfam = -expm1(-static_cast<double>(keys) * tail);
+  const double pfam = -expm1(-static_cast<double>(g_null_keys) * tail);
 
   fprintf(stderr,
           "Confidence: null %.4f +/- %.4f over %zu sampled keys; best is %.1f sd\n"
           "            above it, chance best of %zu keys is %.1f sd -- margin "
-          "%+.1f sd\n", g_null_mu, g_null_sd, g_null_n, z, keys, g_null_zk,
+          "%+.1f sd\n", g_null_mu, g_null_sd, g_null_n, z, g_null_keys, g_null_zk,
           z - g_null_zk);
   fprintf(stderr, "            p ~ %.1e (Gaussian tail%s)\n", pfam,
           (opt_scoring == SCORE_IC)
@@ -6341,9 +6358,13 @@ static double bruteforce(char * result, bool allow_empty)
         }
     }
 
-  /* --confidence N: the summary behind the margin the lines already carried. */
+  /* --confidence N: the summary behind the margin the lines already carried. It
+     reports the key count its own bar was built from (see g_null_keys), which
+     under --ring-stride is the coarse sweep and excludes the refinement's few
+     hundred extra keys; the "Analysed N rotor combinations" diagnostic below is
+     where the inclusive total is reported. */
   if ((opt_confidence > 0) && best.found)
-    report_confidence(best.score, scored_keys + extra_keys_analysed);
+    report_confidence(best.score);
 
   /* diagnostics: every rotor combination is analysed (brute force has no early
      exit), and each worker counted the plugboards it scored -- sum them up */
