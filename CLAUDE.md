@@ -100,9 +100,22 @@ regressed. **CI uses the same 10%** — the `Bench` workflow sets no
 `THRESHOLD` override, so there is one number and it cannot drift from this
 sentence. That step is `continue-on-error`, so the bound is non-blocking.
 
+> **Run the bench on an otherwise IDLE box, and re-run before believing any
+> flagged cell.** A build and a test suite left running alongside `make bench
+> LONG=1` produced a **`crib` reading of +1096%** (11.5 s → 137.5 s) that
+> re-measured at **−7.0%** the moment the box was quiet — while `search` and
+> `hillclimb` in the same contaminated run sat at +0.2% and +1.5%, so the
+> damage was *not* spread evenly enough to be obvious from the shape of the
+> table. A single cell blowing up while its neighbours look sane is the
+> signature of interference, not of a regression that happens to be
+> tier-specific.
+>
 > **Measure the noise floor before believing any A/B number.** Check the base
 > revision out into the working tree and run `make bench BASE=<that same ref>`;
-> every non-zero number is then pure measurement noise. The floors are
+> every non-zero number is then pure measurement noise. The floors also move
+> day to day — the ±0.5% `search` figure below is the best case, and a control
+> on a busy container measured **±8%** on the same tier, enough to make a
+> quick-tier `search` number meaningless that session. The floors are
 > **per-tier and differ by an order of magnitude** — measured here as **`search`
 > ±0.5%** but **`hillclimb` ±4.5%** — and they are also **per-compiler**: the
 > ±0.5% `search` figure is g++, while clang's own base-vs-base control swung
@@ -979,13 +992,13 @@ are read from a **data directory** (filenames built as
     progress line most. A worker-local counter flushed every 4096 items costs
     one relaxed atomic add per 4096 items when the line is on, and when it is
     off `g_sweep_total == 0` short-circuits it to a single predictable branch
-    per key. `make bench BASE=origin/dev` showed no regression (`search` −3.1%,
-    `hillclimb` +4.2%, `fused` −2.9%, `crib` −5.2%) — **but read the control
-    before reading those**: base-vs-base on the same box in the same session
-    measured `search` **−7.7%** on byte-identical code, so the floor there was
-    ±8% that day and none of the quick-tier numbers resolve a change this size.
-    All the A/B establishes is the absence of a large regression; the argument
-    that the cost is negligible rests on the code shape, not on those figures.
+    per key. `make bench LONG=1 BASE=origin/dev` on a quiet box: `search`
+    −1.4%, `hillclimb` −0.4%, `fused` +4.7%, `crib` −7.0% — no regression. The
+    quick tier that day had a base-vs-base floor of **±8% on `search`** (−7.7%
+    measured on byte-identical code), so only the long tier says anything at
+    all; what it establishes is the absence of a large regression, and the
+    argument that the cost is negligible rests on the code shape rather than on
+    a number this coarse.
   - **`progress_line()` is the choke point that makes the two streams safe.**
     Every score line — the key-level merge and `report_climb_progress` alike —
     goes through it, and every caller already holds `best.mutex`, so
