@@ -1602,6 +1602,31 @@ check "--confidence: strided, the summary excludes the refinement's keys" \
   "$(awk -v c="$(cf_keys "$cf_s2")" -v a="$(cf_analysed "$cf_s2")" \
      'BEGIN{print (c > 0 && a > c) ? "yes" : "no"}')" "yes"
 
+# Live sweep progress: a \r line carrying percentage, rate and ETA. It is
+# TTY-only, so nothing this harness runs may ever see it -- a redirected log or
+# a parsed stderr stream must be byte-for-byte what it was before the line
+# existed. That is the whole assertion available here; the drawing and the
+# handoff with the score lines need a pty and are checked outside the suite.
+#
+# Checked on THREE shapes because the line is armed for the main sweep only: a
+# plain scan, a climb (where score lines share the stream), and --dump-all,
+# which is excluded outright because its rows are machine-readable and print
+# under a different mutex.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+sp_run() { printf '%s' "$cf_ct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 \
+           -r AAA -g "A.." "$@" -T 2 2>&1 >/dev/null; }
+check "no sweep progress line on a redirected stderr (scan)" \
+  "$(sp_run | grep -c 'Progress:')" "0"
+check "no sweep progress line on a redirected stderr (climb)" \
+  "$(sp_run -c -R 2 | grep -c 'Progress:')" "0"
+check "no sweep progress line on a redirected stderr (--dump-all)" \
+  "$(sp_run -c -R 2 --dump-all | grep -c 'Progress:')" "0"
+# The carriage return is the mechanism, so its ABSENCE is the sharper check:
+# a \r escaping into a redirected stream would corrupt any log or parser
+# downstream even if the word "Progress:" never appeared.
+check "no carriage returns on a redirected stderr" \
+  "$(sp_run -c -R 2 | tr -dc '\r' | wc -c | tr -d ' ')" "0"
+
 # Right-wheel ring x start collapse by 13 (CLAUDE.md "Two-notch wheels" -- cited
 # by name, since ENHANCEMENTS.md renumbers as issues close). VI, VII and
 # VIII notch at M and Z, exactly 13 apart, so their notch SET survives a shift
