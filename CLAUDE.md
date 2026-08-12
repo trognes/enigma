@@ -100,6 +100,55 @@ regressed. **CI uses the same 10%** — the `Bench` workflow sets no
 `THRESHOLD` override, so there is one number and it cannot drift from this
 sentence. That step is `continue-on-error`, so the bound is non-blocking.
 
+**`BASE` can be a release tag, and a per-PR guard cannot see cumulative drift —
+so check against the last release now and then.** `make bench BASE=v2.1.0` at
+`dev` + 160 commits, long tier:
+
+| tier | v2.1.0 | dev | |
+|---|---:|---:|---:|
+| `search` | 21.43 s | 8.11 s | **−62.1%** |
+| `hillclimb` | 13.17 s | 13.32 s | +1.1% |
+| `fused` | 18.00 s | 16.94 s | −5.9% |
+
+No drift — `search` matches the −60.7% the `setup_mapping`/`mod26`/`precompute`
+work claimed, and the climb tiers are flat.
+
+**Also bench against the commit where a big win LANDED, not only against the
+release** — that is the better-conditioned test and answers the more useful
+question. Against `v2.1.0` the −62% on `search` dominates everything, so a 5%
+regression elsewhere would hide inside a large victory; against the
+post-optimisation commit both sides start from the same optimised baseline, the
+expectation is **0% on every tier**, and real drift shows up as a number rather
+than as a slightly smaller win. `make bench LONG=1 BASE=46d4999` (the merge of
+PR #151, the first commit holding all four search optimisations), `dev` 58
+commits later:
+
+| tier | quick | long |
+|---|---:|---:|
+| `search` | −1.9% | **+0.2%** |
+| `hillclimb` | −0.7% | **+0.7%** |
+| `fused` | −7.9% | **−6.0%** |
+| `crib` | −8.1% | **−10.3%** |
+
+`search` and `hillclimb` flat: the −62% has been **fully retained** across the
+two-notch collapse, `--tune-phase`, `--confidence` and the live progress line.
+`fused` and `crib` are genuinely faster, and what makes those look real rather
+than scatter is that **both reproduce across tiers** — an 8-point move that
+holds at a different problem size and repetition count is not noise. The `crib`
+gain is most likely `d6743b9` (BFS-ordered `crib_try` table, claiming −12%).
+No base-vs-base control was run for this pair, so treat anything under ~2% as
+unresolvable; that does not touch the conclusion, since the flat tiers are flat
+and the moving ones moved by four times that.
+
+**A tier whose options postdate the base is reported `n/a`, not as a
+regression.** It used to be timed at 0.00 s and
+printed as `crib +13268.6% REGRESSION`, because `--crib` did not exist in
+v2.1.0; `min_time()` now returns empty on a non-zero exit and the row says
+`base lacks these options`. Skipped tiers are counted and reported at the end,
+so partial coverage is never silent, and a **head** binary that fails is still a
+hard error (`RESULT: the benchmark itself is broken`, exit 1) — that one is a
+broken benchmark, not a skippable row.
+
 > **Run the bench on an otherwise IDLE box, and re-run before believing any
 > flagged cell.** A build and a test suite left running alongside `make bench
 > LONG=1` produced a **`crib` reading of +1096%** (11.5 s → 137.5 s) that

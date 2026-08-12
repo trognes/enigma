@@ -185,6 +185,24 @@ existing command lines can behave differently or stop working.
 
 ### Fixed
 
+- **`make bench BASE=<old tag>` reported a tier the base could not run as an
+  infinite regression.** Comparing `dev` against `v2.1.0` printed
+  `crib +13268.6% REGRESSION` — but `--crib` postdates that tag, so the base
+  binary exited immediately on the unknown option, was timed at 0.00 s, and the
+  ratio blew up. The row now reads `n/a — base lacks these options` and does not
+  count toward the threshold; skipped tiers are counted and reported at the end
+  so partial coverage is never silent. A **head** binary that fails is still a
+  hard error, since that is a broken benchmark rather than a skippable row.
+
+  Two drift checks were run with it. Against `v2.1.0` (160 commits back)
+  `search` is **−60.8%** and the climb tiers flat. Against `46d4999` — the merge
+  of PR #151, the first commit holding all four search optimisations, 58 commits
+  back — `search` is **+0.2%** and `hillclimb` **+0.7%**, so the win has been
+  fully retained, while `fused` (−6.0%) and `crib` (−10.3%) are faster still.
+  The second comparison is the better-conditioned one: against the release a 5%
+  regression would hide inside a −62% victory, whereas both sides of the
+  post-optimisation pair start from the same baseline and the expectation is 0%.
+
 - **`--confidence`'s p-value was optimistic near zero, and said so only under
   `-i`.** It is the Gaussian upper tail, and the statistic it models — the
   maximum over `K` keys — lives at ~4.4 σ, exactly where a central-limit
