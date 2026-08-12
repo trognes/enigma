@@ -74,6 +74,8 @@ QUICK_REPS=3
 LONG_REPS=2
 
 regressed=0
+skipped=0        # tiers the BASE binary could not run at all
+head_failed=0    # the head binary itself failed: a broken benchmark
 
 # --- GitHub Actions job summary (markdown) -----------------------------------
 # When running under Actions, GITHUB_STEP_SUMMARY names a file whose markdown is
@@ -192,7 +194,17 @@ min_time() {
   while [ "$_i" -lt "$_reps" ]; do
     _t0=$(now)
     printf '%s' "$_ct" | ENIGMA_DATA="$_data" "$_bin" "$@" >/dev/null 2>&1
+    _st=$?
     _t1=$(now)
+    # A binary that REJECTS these options exits at once, times at ~0.00s, and
+    # would then be reported as an infinite regression for a tier that never
+    # ran -- which is exactly what a BASE older than a flag does. Comparing dev
+    # against v2.1.0 printed "crib +13268.6% REGRESSION" because --crib
+    # postdates that tag. Return empty so the caller can say n/a instead.
+    if [ "$_st" -ne 0 ]; then
+      printf ''
+      return 0
+    fi
     _dt=$(awk -v a="$_t0" -v b="$_t1" 'BEGIN { printf "%.4f", b - a }')
     if [ -z "$_min" ] || awk -v d="$_dt" -v m="$_min" 'BEGIN { exit !(d < m) }'; then
       _min=$_dt
@@ -217,11 +229,30 @@ bench() {
   if [ "$_tier" = quick ]; then _reps=$QUICK_REPS; _warm=1; else _reps=$LONG_REPS; _warm=0; fi
 
   _ht=$(min_time "$HEAD_BIN" "$_reps" "$_warm" "$_ct" "$@")
+  # The head binary failing is a broken benchmark, not a skippable row.
+  if [ -z "$_ht" ]; then
+    printf '%-10s %-5s HEAD FAILED -- binary rejected these options or crashed\n' \
+      "$_name" "$_tier"
+    head_failed=1
+    return 0
+  fi
   _sol=""
   [ "$_exp" != "-" ] && _sol=$(solved "$HEAD_BIN" "$_ct" "$_exp" "$@")
 
   if [ -n "$BASE_BIN" ]; then
     _bt=$(min_time "$BASE_BIN" "$_reps" "$_warm" "$_ct" "$@")
+    if [ -z "$_bt" ]; then
+      # Not a regression: there is nothing to compare against. Counted and
+      # reported at the end so partial coverage is never silent.
+      skipped=$((skipped + 1))
+      printf '%-10s %-5s base %9s  head %8.2fs  %8s  base lacks these options\n' \
+        "$_name" "$_tier" "n/a" "$_ht" "--"
+      if [ -n "$GH_SUMMARY" ]; then
+        sumln "$(awk -v n="$_name" -v ti="$_tier" -v h="$_ht" \
+          'BEGIN { printf "| `%s` | %s | n/a | %.2fs | -- | base lacks these options |", n, ti, h }')"
+      fi
+      return 0
+    fi
     _delta=$(awk -v b="$_bt" -v h="$_ht" 'BEGIN { printf "%+.1f", (h - b) / b * 100 }')
     _flag=""
     if awk -v b="$_bt" -v h="$_ht" -v t="$THRESHOLD" 'BEGIN { exit !((h - b) / b * 100 > t) }'; then
@@ -345,6 +376,19 @@ fi
 
 echo
 sumln ""
+# Partial coverage is reported, never silent: a run where the base could not
+# execute half the tiers must not read like a clean bill of health.
+if [ "$skipped" -gt 0 ]; then
+  echo "NOTE: $skipped benchmark(s) not compared -- the BASE binary rejected"
+  echo "      their options, so those features postdate \`$BASE\` and there is"
+  echo "      nothing to compare against."
+  sumln "**ℹ️ $skipped benchmark(s) not compared: the base binary rejected their options (feature postdates \`$BASE\`).**"
+fi
+if [ "$head_failed" -eq 1 ]; then
+  echo "RESULT: the benchmark itself is broken -- the head binary failed to run"
+  sumln "**❌ the head binary failed to run at least one benchmark.**"
+  exit 1
+fi
 if [ "$regressed" -eq 1 ]; then
   echo "RESULT: regression detected (> ${THRESHOLD}% slower than BASE)"
   sumln "**⚠️ regression detected — >${THRESHOLD}% slower than base on at least one benchmark (advisory: re-check on quiet hardware; the shared runners are bimodal on the climb tier).**"

@@ -185,6 +185,15 @@ existing command lines can behave differently or stop working.
 
 ### Fixed
 
+- **`make bench BASE=<old tag>` reported a tier the base could not run as an
+  infinite regression.** Comparing `dev` against `v2.1.0` printed
+  `crib +13268.6% REGRESSION` — but `--crib` postdates that tag, so the base
+  binary exited immediately on the unknown option, was timed at 0.00 s, and the
+  ratio blew up. The row now reads `n/a — base lacks these options` and does not
+  count toward the threshold; skipped tiers are counted and reported at the end
+  so partial coverage is never silent. A **head** binary that fails is still a
+  hard error, since that is a broken benchmark rather than a skippable row.
+
 - **`--confidence`'s p-value was optimistic near zero, and said so only under
   `-i`.** It is the Gaussian upper tail, and the statistic it models — the
   maximum over `K` keys — lives at ~4.4 σ, exactly where a central-limit

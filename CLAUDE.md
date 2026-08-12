@@ -100,6 +100,26 @@ regressed. **CI uses the same 10%** — the `Bench` workflow sets no
 `THRESHOLD` override, so there is one number and it cannot drift from this
 sentence. That step is `continue-on-error`, so the bound is non-blocking.
 
+**`BASE` can be a release tag, and a per-PR guard cannot see cumulative drift —
+so check against the last release now and then.** `make bench BASE=v2.1.0` at
+`dev` + 160 commits, long tier:
+
+| tier | v2.1.0 | dev | |
+|---|---:|---:|---:|
+| `search` | 21.43 s | 8.11 s | **−62.1%** |
+| `hillclimb` | 13.17 s | 13.32 s | +1.1% |
+| `fused` | 18.00 s | 16.94 s | −5.9% |
+
+No drift — `search` matches the −60.7% the `setup_mapping`/`mod26`/`precompute`
+work claimed, and the climb tiers are flat. **A tier whose options postdate the
+base is reported `n/a`, not as a regression.** It used to be timed at 0.00 s and
+printed as `crib +13268.6% REGRESSION`, because `--crib` did not exist in
+v2.1.0; `min_time()` now returns empty on a non-zero exit and the row says
+`base lacks these options`. Skipped tiers are counted and reported at the end,
+so partial coverage is never silent, and a **head** binary that fails is still a
+hard error (`RESULT: the benchmark itself is broken`, exit 1) — that one is a
+broken benchmark, not a skippable row.
+
 > **Run the bench on an otherwise IDLE box, and re-run before believing any
 > flagged cell.** A build and a test suite left running alongside `make bench
 > LONG=1` produced a **`crib` reading of +1096%** (11.5 s → 137.5 s) that
