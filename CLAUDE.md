@@ -631,12 +631,20 @@ are read from a **data directory** (filenames built as
   All five seeds favour `i4f10`, heterogeneity is Q = 1.65 on 4 df (so they
   scatter around one effect rather than disagreeing), and `score_iter` matched
   within 2% every run. **Use `-S i4f10` for telegraphic traffic at operational
-  length**; `m4f10` remains the default elsewhere. **Open: whether the flip is
-  the target model or the LENGTH.** A single run at L=60 leaned the other way
-  (+1.77pp for mono, CI spans 0), which fits a length crossover just as well;
-  separating them needs the same A/B across several lengths under both `-a` and
-  `-f`. Note also that this — like every other tuning result here — measures the
-  **plugboard-recovery** sub-problem with the rotor key given. The schedule
+  length**; `m4f10` remains the default elsewhere.
+  **The TARGET matters about twice as much as the pre-pass, and the two
+  INTERACT.** Same setup, `--arms i4f10 i4a10` (pre-pass held constant, target
+  varied), 1000 paired trials in two seeds: the fused target beats the weighted
+  one by **+5.20pp** (95% CI [+3.29, +7.12], z = 5.34; exact 77.4% vs 71.4%,
+  McNemar p = 1.1e-07, Q = 0.78 on 1 df). That is *above* the +3.0…+4.4pp
+  recorded for `-f` over `-a` below, which was measured with each model's **own**
+  recommended staging — so an IC pre-pass suits `-a` less well than mono does,
+  and that interaction, rather than length alone, is why the `m4…` advice did
+  not carry over. **Open:** three cells of the `{m4,i4} × {a,f}` square are
+  measured at L=167; the fourth (`m4a10` vs `m4f10`) is not, and a single L=60
+  run leaned mono under `-f` (+1.77pp, CI spans 0), so a length component may
+  coexist. Note also that this — like every other tuning result here — measures
+  the **plugboard-recovery** sub-problem with the rotor key given. The schedule
   carries **only** model stages: the per-restart kick and the exhaustion are
   their own options (`--random` / `--exhaust`), not schedule tokens (REDESIGN
   Part B moved the old `rN`/`aN` tokens out). Per-`machine` `scoring` field

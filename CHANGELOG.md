@@ -44,10 +44,21 @@ existing command lines can behave differently or stop working.
   trials with logged discordants). All five seeds agree, heterogeneity is
   Q = 1.65 on 4 df, and `score_iter` matched within 2% in every run.
 
-  `m4f10` remains the default elsewhere. **Open:** whether the flip is the
-  target model or the message length — a single run at L=60 leaned the other way
-  (+1.77 pp for mono, CI spans zero), which fits a length crossover equally
-  well. Reproducer: `eval/prepass_ab.py`.
+  `m4f10` remains the default elsewhere.
+
+  **The target matters about twice as much as the pre-pass, and the two
+  interact.** The same harness comparing `i4f10` against `i4a10` — pre-pass held
+  constant, target varied — puts the fused target **+5.20 pp** ahead over 1000
+  paired trials (95% CI [+3.29, +7.12], z = 5.34; exact 77.4% vs 71.4%, McNemar
+  p = 1.1 × 10⁻⁷). That is *above* the +3.0…+4.4 pp recorded for `-f` over `-a`,
+  which was measured with each model's own recommended staging — so an IC
+  pre-pass suits `-a` less well than mono does, and that interaction, rather
+  than message length alone, is why the `m4…` advice did not carry over.
+
+  **Open:** three cells of the `{m4,i4} × {a,f}` square are measured at L=167;
+  the fourth (`m4a10` vs `m4f10`) is not, and a single L=60 run leaned mono
+  under `-f`, so a length component may coexist. Reproducer:
+  `eval/prepass_ab.py`, now with `--arms` for any two schedules.
 
 ### Added
 
