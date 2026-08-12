@@ -28,6 +28,27 @@ existing command lines can behave differently or stop working.
   class-representative contract the other collapses already carry; the decrypt
   is identical either way, and the settings echo names which collapses fired.
 
+### Changed
+
+- **`--score i4f10` is now the measured pick for telegraphic traffic at
+  operational length**, in place of the recommended `m4f10`. The existing advice
+  — a monogram pre-pass beats an index-of-coincidence one on telegraphic German
+  by 2.2 pp — was measured with **`-a`** as the target, and `-f` differs from
+  `-a` precisely by folding IC into the target score, so the recommendation had
+  never been checked against the model the tool actually recommends.
+
+  Against `-f` the ordering **reverses**. On authentic HG Nord decrypts at 167
+  letters, 2000 paired trials across five independent seeds: `i4f10` beats
+  `m4f10` by **2.81 pp** mean %-correct (95% CI [−4.80, −0.82], z = 2.76) and
+  **3.1 pp** of exact recovery (72.2% → 75.2%; McNemar p = 0.021 over the 1800
+  trials with logged discordants). All five seeds agree, heterogeneity is
+  Q = 1.65 on 4 df, and `score_iter` matched within 2% in every run.
+
+  `m4f10` remains the default elsewhere. **Open:** whether the flip is the
+  target model or the message length — a single run at L=60 leaned the other way
+  (+1.77 pp for mono, CI spans zero), which fits a length crossover equally
+  well. Reproducer: `eval/prepass_ab.py`.
+
 ### Added
 
 - **A live progress line for the main sweep** — percentage, key rate and ETA,
