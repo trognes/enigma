@@ -130,6 +130,24 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The unknown-key break rate is now measured**
+  (`eval/unknown_key_headroom.py`) — 55% at 17 576 keys and 53% at 230 million,
+  for a 167-letter message with a
+  10-pair board hidden at `-R 8`. Every other result in this repo measures
+  plugboard recovery with the rotor key *given*, so a negative sweep could not
+  previously be read as evidence about the message.
+
+  **Keyspace size is nearly irrelevant**: four orders of magnitude of `K` cost
+  two points, because the chance bar grows as `√(2 ln K)` (4.42 → 6.21) while
+  the true key's z has a median of 11.5. The limits are climb failure at the
+  true key (27% at `-R 8`) and a ~25% scoring floor — both independent of `K`.
+  So a smaller keyspace at high `-R` beats the full keyspace at low `-R`, which
+  is the opposite of the obvious strategy.
+
+  It avoids sweeping at all: a break needs the climb to work at the true key
+  *and* that key's score to clear the bar, and the second is arithmetic once the
+  z is known — 3 s per trial against the ~10 h a real 80M-key sweep costs.
+
 - **Two-notch wheels (VI, VII, VIII) now collapse the RIGHT wheel's ring ×
   start by 13** — always on, no flag. Those three notch at `M` and `Z`, exactly
   13 apart, so their notch *set* survives a shift of 13; and since a stepping

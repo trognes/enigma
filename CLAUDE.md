@@ -2166,6 +2166,42 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   converged-board population, so the **only reliable lever is raw compute** —
   more restarts via `-T`, which scales predictably.
 
+### The unknown-key break rate — measured, and the keyspace barely matters
+
+Every other tuning result here measures the **plugboard-recovery sub-problem
+with the rotor key given**. The full problem — where the true key must also
+outscore millions of competitors — was unmeasured, so a negative sweep could
+never be read as "this message is probably not breakable".
+`eval/unknown_key_headroom.py` closes that, without sweeping: a break needs the
+climb to work **at the true key** (independent of `K`) *and* the true key's
+score to clear `μ + σ·√(2 ln K)`. The second is arithmetic once you know the
+true key's z, so one pinned climb plus `--confidence`'s sampled null gives every
+keyspace at once — **3 s a trial instead of the ~10 h a real 80M-key sweep
+costs**.
+
+Measured, 60 trials, L=167, 10-pair board hidden, `-R 8`, authentic HG Nord
+plaintext:
+
+| keyspace | bar | z > bar | × climb | = break |
+|---|---:|---:|---:|---:|
+| start only (17 576) | 4.42 | 75% | 73% | **55%** |
+| wheels+ring2 (27.4 M) | 5.85 | 72% | 73% | 53% |
+| `-r A..` exact (230 M) | 6.21 | 72% | 73% | **53%** |
+
+**Four orders of magnitude of `K` cost two points of break rate.** The bar grows
+as `√(2 ln K)` — 4.42 → 6.21 — while the true key's z has a **median of 11.5**.
+Discrimination is not the bottleneck and never was. The two real limits are both
+`K`-independent: **climb failure at the true key** (27% at `-R 8`, which is what
+`-R` moves) and a **~25% scoring floor** (the true key's z is genuinely low for
+some messages — minimum observed **1.1**), which caps the break rate near 75%
+whatever is spent.
+
+**The practical consequence inverts the obvious strategy.** Since `K` is nearly
+free, a *smaller* keyspace at high `-R` beats the full keyspace at low `-R` —
+spend on restarts, not coverage. It also gives a stopping rule: at ~50% per run,
+two independent negatives leave ~25% that a genuine break was missed, three
+leave ~12%.
+
 Read `ENHANCEMENTS.md` and then `archived/IMPROVEMENTS.md` before changing the
 search or scoring code — in
 particular its "Measured down" table, which lists what has already been built
