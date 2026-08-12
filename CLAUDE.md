@@ -986,13 +986,26 @@ are read from a **data directory** (filenames built as
     would read `8×` high against the `Analysed N rotor combinations` diagnostic
     under `-R 8`, so the display divides it back out. The percentage is
     identical either way, since the two differ by a constant factor.
-  - **Ticked every 4096 items, not per chunk.** A chunk is
-    `total/(threads·16)`, so per-chunk ticking gives *sixteen* updates for a
-    whole `-T 1` run — one every few minutes on exactly the sweeps that need a
-    progress line most. A worker-local counter flushed every 4096 items costs
-    one relaxed atomic add per 4096 items when the line is on, and when it is
-    off `g_sweep_total == 0` short-circuits it to a single predictable branch
-    per key. `make bench LONG=1 BASE=origin/dev` on a quiet box: `search`
+  - **Redrawn on a CLOCK — every 5 s — not on a percentage boundary.** A 1%
+    boundary is the wrong clock: 1% of the work takes longer the bigger the
+    sweep, so the line updated most rarely on exactly the runs that need it.
+    Measured at the climb rate of ~1800 keys/s, that was one update every 5.8 s
+    over 1.05M keys but **2.5 minutes** over 27.4M and **21 minutes** over 230M
+    — long enough that the first line looks like a hang. The only draw exempt
+    from the interval is the last, so the line always finishes at 100%. One
+    worker claims each slot by `compare_exchange` on the timestamp, so the
+    others do not queue on the mutex to redraw the same line.
+  - **Ticked per item-block, not per chunk, and the BLOCK FOLLOWS THE REGIME.**
+    A chunk is `total/(threads·16)`, so per-chunk ticking gives *sixteen*
+    updates for a whole `-T 1` run. A worker-local counter fixes that, but its
+    size cannot be a constant: an item costs four orders of magnitude more under
+    `-c` than in a scan. A scanned key is ~0.3 µs, so 4096 of them is ~1 ms;
+    a climbed key is ~1–2 ms, so 4096 of them is **a thread reporting once every
+    nine seconds** — the other half of why the line appeared to hang. Hence
+    `tick_block = opt_hillclimb ? 64 : 4096`: ~100 ms of climb work per tick,
+    which the 5 s gate then paces. When the line is off, `g_sweep_total == 0`
+    short-circuits the whole thing to a single predictable branch per key.
+  - **Throughput.** `make bench LONG=1 BASE=origin/dev` on a quiet box: `search`
     −1.4%, `hillclimb` −0.4%, `fused` +4.7%, `crib` −7.0% — no regression. The
     quick tier that day had a base-vs-base floor of **±8% on `search`** (−7.7%
     measured on byte-identical code), so only the long tier says anything at

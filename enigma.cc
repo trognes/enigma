@@ -4409,6 +4409,10 @@ static size_t g_sweep_restarts = 1;     /* items per key, so counts read as keys
 static std::chrono::steady_clock::time_point g_sweep_t0;
 static bool g_sweep_drawn = false;      /* a \r line is on screen; under best.mutex */
 static int g_sweep_width = 0;           /* its length, so the erase matches exactly */
+/* ms since g_sweep_t0 of the last redraw, so the line can be rate-limited by
+   TIME rather than only by percentage of work done. Atomic because the check
+   runs on every worker outside the mutex. */
+static std::atomic<long long> g_sweep_last_ms{-1000000};
 
 /* Counts span six orders of magnitude between a 676-key sweep and a full M4
    wildcard, and the line has to stay a fixed width, so they are abbreviated. */
@@ -4455,19 +4459,24 @@ static void sweep_progress_clear(void)
   g_sweep_drawn = false;
 }
 
-/* Account for `n` finished work items and redraw on a 1% boundary. One relaxed
-   atomic add per tick_block items, and exactly one thread prints each step
-   (each add owns a disjoint slice, the same argument the -F line rests on). */
+/* Account for `n` finished work items and redraw. One relaxed atomic add per
+   tick_block items.
+
+   REDRAW ON A CLOCK, not on a 1% boundary. A percentage boundary is the wrong
+   clock: 1% of the work takes longer the bigger the sweep, so the line updated
+   most rarely on exactly the runs that need it most. Measured at the climb rate
+   of ~1800 keys/s, that was one update every 5.8 s over 1.05M keys but every
+   2.5 MINUTES over 27.4M and every 21 minutes over 230M -- long enough that the
+   first line looks like a hang. A fixed interval gives one cadence whatever the
+   keyspace, and the only draw exempt from it is the last, so the line always
+   finishes at 100%. */
 static void sweep_progress_tick(size_t n, best_result & best)
 {
   const size_t total = g_sweep_total;
   if (total == 0)
     return;
-  const size_t step = (total / 100) + 1;
-  const size_t before = g_sweep_done.fetch_add(n, std::memory_order_relaxed);
-  const size_t after = before + n;
-  if (((after / step) == (before / step)) && (after < total))
-    return;
+  const size_t after = g_sweep_done.fetch_add(n, std::memory_order_relaxed) + n;
+  const bool final_draw = (after >= total);
 
   const double el = std::chrono::duration<double>
     (std::chrono::steady_clock::now() - g_sweep_t0).count();
@@ -4477,7 +4486,39 @@ static void sweep_progress_tick(size_t n, best_result & best)
   if (el < 0.5)
     return;
 
-  const double done_keys = static_cast<double>(after)
+  /* Checked before taking the mutex, so an ordinary tick costs one relaxed
+     load. Five seconds is slow enough to read and fast enough to show a run is
+     alive; a sub-second cadence just makes the terminal churn. */
+  const long long now_ms = static_cast<long long>(el * 1000.0);
+  const long long redraw_gap = 5000;
+  if (! final_draw
+      && (now_ms - g_sweep_last_ms.load(std::memory_order_relaxed)
+          < redraw_gap))
+    return;
+  /* Claim the slot: whichever thread wins the exchange draws, the others
+     return. Without this, every worker that passed the test above would queue
+     on the mutex and redraw the same line in turn. */
+  if (final_draw)
+    {
+      /* The last item always draws, so the line ends at 100% rather than
+         wherever the clock happened to leave it. */
+      g_sweep_last_ms.store(now_ms, std::memory_order_relaxed);
+    }
+  else
+    {
+      long long prev = g_sweep_last_ms.load(std::memory_order_relaxed);
+      if (now_ms - prev < redraw_gap)
+        return;
+      if (! g_sweep_last_ms.compare_exchange_strong(prev, now_ms,
+                                                    std::memory_order_relaxed))
+        return;   /* another worker claimed this slot; only one draws */
+    }
+
+  /* Reading the shared counter rather than this thread's `after`: other
+     workers have advanced it since, and the displayed percentage should be the
+     sweep's, not this thread's view of it. */
+  const size_t shown = g_sweep_done.load(std::memory_order_relaxed);
+  const double done_keys = static_cast<double>(shown < total ? shown : total)
                            / static_cast<double>(g_sweep_restarts);
   const double all_keys = static_cast<double>(total)
                           / static_cast<double>(g_sweep_restarts);
@@ -4492,7 +4533,7 @@ static void sweep_progress_tick(size_t n, best_result & best)
      compiler cannot see that and warns on the sum. */
   char line[192];
   snprintf(line, sizeof(line), "Progress:  %3zu%% (%s / %s keys) %s/s, %s left",
-           (after >= total) ? 100 : (after * 100) / total, db, tb, rb, eb);
+           (shown >= total) ? 100 : (shown * 100) / total, db, tb, rb, eb);
 
   std::lock_guard<std::mutex> lock(best.mutex);
   /* Padded to the widest line drawn so far, and erased at that width too. The
@@ -4647,9 +4688,17 @@ void search_worker(machine & m,
      one every few minutes on the sweeps that need a progress line most. A local
      counter flushed every tick_block items costs one predictable branch per key
      when the line is off (g_sweep_total == 0 short-circuits it) and one relaxed
-     atomic add per 4096 items when it is on. */
+     atomic add per block when it is on.
+
+     The BLOCK SIZE has to follow the regime, because an item costs four orders
+     of magnitude more under -c than in a scan. A scanned key is ~0.3 us, so
+     4096 of them is ~1 ms -- fine. A climbed key is ~1-2 ms, so 4096 of them is
+     a thread reporting once every NINE SECONDS, which is half of why the line
+     appeared to hang on long runs. 64 climbed items is ~100 ms of work, which
+     the 250 ms redraw gate then paces; the extra atomic adds are ~10/s per
+     thread against a climb rate of ~450/s, so they cost nothing measurable. */
   const bool ticking = (g_sweep_total != 0);
-  const size_t tick_block = 4096;
+  const size_t tick_block = opt_hillclimb ? 64 : 4096;
   size_t since_tick = 0;
 
   size_t start;
@@ -6028,6 +6077,7 @@ static double bruteforce(char * result, bool allow_empty)
       if ((isatty(fileno(stderr)) != 0) && ! opt_dump_all)
         {
           g_sweep_done.store(0, std::memory_order_relaxed);
+          g_sweep_last_ms.store(-1000000, std::memory_order_relaxed);
           g_sweep_restarts = (restarts_par > 0) ? restarts_par : 1;
           g_sweep_t0 = std::chrono::steady_clock::now();
           g_sweep_total = work_items;
