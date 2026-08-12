@@ -6,61 +6,6 @@ existing command lines can behave differently or stop working.
 
 ## Unreleased
 
-### Changed
-
-- **Two-notch wheels (VI, VII, VIII) now collapse the RIGHT wheel's ring ×
-  start by 13** — always on, no flag. Those three notch at `M` and `Z`, exactly
-  13 apart, so their notch *set* survives a shift of 13; and since a stepping
-  wheel's absolute position is read by nothing but that notch test, shifting its
-  ring and start together by 13 gives a byte-identical decode. The search now
-  tests one member of each pair.
-
-  Exact and unconditional — unlike the middle wheel's collapse it has no length
-  term, so it is worth **2× at 40 letters and 2× at 900 alike**. It composes
-  with the middle-wheel collapse, giving **4×** when VI–VIII sit in both
-  positions. Applies only when ring2 and start2 are both wildcarded, and is
-  **0% under the default `-x 5`**, since none of wheels I–V has two notches — so
-  it pays for Kriegsmarine traffic and nothing else.
-
-  The middle wheel needed no work: its collapse derives classes by simulating
-  the stepping rather than from a formula, so it had been picking this up all
-  along. Reported ring2/start2 may now be either member of a pair, the same
-  class-representative contract the other collapses already carry; the decrypt
-  is identical either way, and the settings echo names which collapses fired.
-
-### Changed
-
-- **`--score i4f10` is now the measured pick for telegraphic traffic at
-  operational length**, in place of the recommended `m4f10`. The existing advice
-  — a monogram pre-pass beats an index-of-coincidence one on telegraphic German
-  by 2.2 pp — was measured with **`-a`** as the target, and `-f` differs from
-  `-a` precisely by folding IC into the target score, so the recommendation had
-  never been checked against the model the tool actually recommends.
-
-  Against `-f` the ordering **reverses**. On authentic HG Nord decrypts at 167
-  letters, 2000 paired trials across five independent seeds: `i4f10` beats
-  `m4f10` by **2.81 pp** mean %-correct (95% CI [−4.80, −0.82], z = 2.76) and
-  **3.1 pp** of exact recovery (72.2% → 75.2%; McNemar p = 0.021 over the 1800
-  trials with logged discordants). All five seeds agree, heterogeneity is
-  Q = 1.65 on 4 df, and `score_iter` matched within 2% in every run.
-
-  `m4f10` remains the default elsewhere.
-
-  **The target matters about twice as much as the pre-pass, and the two do NOT
-  interact.** The full `{m4,i4} × {a,f}` square was measured at L=167, 1000
-  paired trials per cell. Fused over weighted is **+6.56 pp** with a mono
-  pre-pass and **+5.20 pp** with an IC one — both above the +3.0…+4.4 pp
-  recorded for `-f` over `-a` — while the difference between those two target
-  effects is +1.35 pp, 95% CI [−1.25, +3.95], **z = 1.02**.
-
-  The IC pre-pass therefore wins under **both** targets at this length,
-  confirmed directly for `-a` as well (−6.40 pp, McNemar p = 0.009). So the
-  documented "mono beats IC by 2.2 pp on telegraphic" does not reproduce at
-  L=167 under either target, and the explanation points back at **message
-  length** rather than an interaction between the two knobs. A single L=60 run
-  did lean mono under `-f`, consistent with a crossover somewhere between.
-  Reproducer: `eval/prepass_ab.py`, with `--arms` for any two schedules.
-
 ### Added
 
 - **A live progress line for the main sweep** — percentage, key rate and ETA,
@@ -183,6 +128,74 @@ existing command lines can behave differently or stop working.
   full break is useful; prefer the exhaustive sweep when a partial answer has
   value.
 
+### Changed
+
+- **Two-notch wheels (VI, VII, VIII) now collapse the RIGHT wheel's ring ×
+  start by 13** — always on, no flag. Those three notch at `M` and `Z`, exactly
+  13 apart, so their notch *set* survives a shift of 13; and since a stepping
+  wheel's absolute position is read by nothing but that notch test, shifting its
+  ring and start together by 13 gives a byte-identical decode. The search now
+  tests one member of each pair.
+
+  Exact and unconditional — unlike the middle wheel's collapse it has no length
+  term, so it is worth **2× at 40 letters and 2× at 900 alike**. It composes
+  with the middle-wheel collapse, giving **4×** when VI–VIII sit in both
+  positions. Applies only when ring2 and start2 are both wildcarded, and is
+  **0% under the default `-x 5`**, since none of wheels I–V has two notches — so
+  it pays for Kriegsmarine traffic and nothing else.
+
+  The middle wheel needed no work: its collapse derives classes by simulating
+  the stepping rather than from a formula, so it had been picking this up all
+  along. Reported ring2/start2 may now be either member of a pair, the same
+  class-representative contract the other collapses already carry; the decrypt
+  is identical either way, and the settings echo names which collapses fired.
+
+- **`--score i4f10` is now the measured pick for telegraphic traffic at
+  operational length**, in place of the recommended `m4f10`. The existing advice
+  — a monogram pre-pass beats an index-of-coincidence one on telegraphic German
+  by 2.2 pp — was measured with **`-a`** as the target, and `-f` differs from
+  `-a` precisely by folding IC into the target score, so the recommendation had
+  never been checked against the model the tool actually recommends.
+
+  Against `-f` the ordering **reverses**. On authentic HG Nord decrypts at 167
+  letters, 2000 paired trials across five independent seeds: `i4f10` beats
+  `m4f10` by **2.81 pp** mean %-correct (95% CI [−4.80, −0.82], z = 2.76) and
+  **3.1 pp** of exact recovery (72.2% → 75.2%; McNemar p = 0.021 over the 1800
+  trials with logged discordants). All five seeds agree, heterogeneity is
+  Q = 1.65 on 4 df, and `score_iter` matched within 2% in every run.
+
+  `m4f10` remains the default elsewhere.
+
+  **The target matters about twice as much as the pre-pass, and the two do NOT
+  interact.** The full `{m4,i4} × {a,f}` square was measured at L=167, 1000
+  paired trials per cell. Fused over weighted is **+6.56 pp** with a mono
+  pre-pass and **+5.20 pp** with an IC one — both above the +3.0…+4.4 pp
+  recorded for `-f` over `-a` — while the difference between those two target
+  effects is +1.35 pp, 95% CI [−1.25, +3.95], **z = 1.02**.
+
+  The IC pre-pass therefore wins under **both** targets at this length,
+  confirmed directly for `-a` as well (−6.40 pp, McNemar p = 0.009). So the
+  documented "mono beats IC by 2.2 pp on telegraphic" does not reproduce at
+  L=167 under either target, and the explanation points back at **message
+  length** rather than an interaction between the two knobs. A single L=60 run
+  did lean mono under `-f`, consistent with a crossover somewhere between.
+  Reproducer: `eval/prepass_ab.py`, with `--arms` for any two schedules.
+
+- **`--confidence N` is echoed in the settings** (with whether its samples are
+  climbed), and the sampling shows a live progress line on a TTY. The flag
+  changes what the first column *means* — margin, not score, a difference of
+  ~20 on the same run — so a saved log has to say so up front rather than leave
+  it to be inferred. The progress line matters because under `-c` each sample is
+  a whole plugboard climb: at `N` = 1024 that is a couple of seconds before the
+  search prints anything. It is erased when sampling finishes, since the echo
+  already gave `N` and the summary gives the result.
+
+- **BREAKING: `--crib-file` is now `--crib-rerank`.** It re-ranks *finished*
+  boards by known-word content and has nothing to do with the crib deduction;
+  beside the new `--crib-list` the two names would have been one letter apart
+  for two unrelated features. The old name is not accepted — **the next release
+  carrying this needs a major version bump.**
+
 ### Fixed
 
 - **`make bench BASE=<old tag>` reported a tier the base could not run as an
@@ -248,23 +261,6 @@ existing command lines can behave differently or stop working.
   against and the run falls back to raw scores. `showconfig` also falls back to
   `%+.1e` — exactly 8 characters — if a margin ever fails to fit, so no
   arithmetic surprise can shift the columns again.
-
-### Changed
-
-- **`--confidence N` is echoed in the settings** (with whether its samples are
-  climbed), and the sampling shows a live progress line on a TTY. The flag
-  changes what the first column *means* — margin, not score, a difference of
-  ~20 on the same run — so a saved log has to say so up front rather than leave
-  it to be inferred. The progress line matters because under `-c` each sample is
-  a whole plugboard climb: at `N` = 1024 that is a couple of seconds before the
-  search prints anything. It is erased when sampling finishes, since the echo
-  already gave `N` and the summary gives the result.
-
-- **BREAKING: `--crib-file` is now `--crib-rerank`.** It re-ranks *finished*
-  boards by known-word content and has nothing to do with the crib deduction;
-  beside the new `--crib-list` the two names would have been one letter apart
-  for two unrelated features. The old name is not accepted — **the next release
-  carrying this needs a major version bump.**
 
 ## 2.1.0
 
