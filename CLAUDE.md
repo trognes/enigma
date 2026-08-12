@@ -637,8 +637,9 @@ are read from a **data directory** (filenames built as
   varied), 1000 paired trials in two seeds: the fused target beats the weighted
   one by **+5.20pp** (95% CI [+3.29, +7.12], z = 5.34; exact 77.4% vs 71.4%,
   McNemar p = 1.1e-07, Q = 0.78 on 1 df). That is *above* the +3.0…+4.4pp
-  recorded for `-f` over `-a` below, which was measured with each model's **own**
-  recommended staging — so an IC pre-pass suits `-a` less well than mono does,
+  recorded for `-f` over `-a` below, which was measured with each model's
+  **own** recommended staging — so an IC pre-pass suits `-a` less well than mono
+  does,
   and that interaction, rather than length alone, is why the `m4…` advice did
   not carry over. **Open:** three cells of the `{m4,i4} × {a,f}` square are
   measured at L=167; the fourth (`m4a10` vs `m4f10`) is not, and a single L=60
