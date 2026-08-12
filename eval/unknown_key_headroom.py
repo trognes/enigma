@@ -36,15 +36,25 @@ points of break rate, because the bar grows as sqrt(2 ln K) -- 4.42 to 6.21 --
 while the true key's z has a median of 11.5.  Discrimination is not the
 bottleneck and never was.
 
-The two real limits are both independent of K:
-  * climb failure at the true key, 27% at -R 8 -- this is what -R moves;
-  * scoring failure, ~25%: the true key's z is genuinely low for some messages
-    (minimum observed 1.1).  No search fixes that; it is the information floor
-    at this length, and it caps the break rate near 75% whatever you spend.
+The two real limits are both independent of K: climb failure at the true key,
+and a scoring floor where the true key's z is simply too low (min observed 1.1).
 
-THE PRACTICAL CONSEQUENCE IS THE OPPOSITE OF THE OBVIOUS ONE.  Since K costs
-almost nothing, a smaller keyspace at high -R beats the full keyspace at low -R.
-Spend on restarts, not on coverage.
+SEPARATING THEM IS CIRCULAR IF DONE AT ONE -R.  A failed climb also produces a
+low z, so "low z" and "climb failed" are the same trials, and reading the split
+off a single -R 8 run gives a "~25% scoring floor" that is WRONG.  Judge
+breakability at a HIGH -R, where the climb nearly always succeeds: at -R 64,
+95% of messages are intrinsically breakable at L=167.  The floor is 5%; the rest
+of the -R 8 residual is climb failure, which -R moves.  Measured climb curve
+over breakable messages: 50/68/79/87/95/100% at R = 2/4/8/16/32/64.
+
+SPEND ON -R UNTIL THE CURVE FLATTENS, THEN BUY COVERAGE.  At matched wall time
+the middle option wins (24 h at ~11k items/s): -r A.. exact affords -R 4 for a
+66% break rate, -r AA. affords -R 34 for 65%, and -r A.. --ring-stride 3 affords
+-R 12 for 80%.  Exact coverage costs 2.89x for the ~1pp the stride gives up;
+-r AA. buys restarts long past the point they help while excluding 28% of keys.
+
+RUNS ARE NOT INDEPENDENT.  The scoring floor is common mode, so repeated
+attempts converge on 95%, not 100%.  Update the posterior instead.
 """
 import argparse
 import math
