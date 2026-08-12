@@ -75,6 +75,15 @@ existing command lines can behave differently or stop working.
   nothing exactly when a run is longest, leaving no way to tell a slow sweep
   from a stuck one.
 
+  It updates **about every 5 seconds**. An earlier version redrew on each 1%
+  boundary, which is the wrong clock — 1% of the work takes longer the bigger
+  the sweep, so the line updated most rarely on exactly the runs that need it:
+  measured, one update every 5.8 s over 1.05M keys but 2.5 minutes over 27.4M
+  and 21 minutes over 230M. The per-thread accounting block is now regime-aware
+  too (64 items under `-c`, 4096 in a scan), since a climbed item costs four
+  orders of magnitude more than a scanned one and a fixed block had a thread
+  reporting only once every nine seconds.
+
   No flag: it appears whenever stderr is a terminal, exactly like the `-F`
   pre-filter's existing line, and vanishes when the sweep ends. Redirect stderr
   and it is not emitted at all — not the text and not the carriage return — so

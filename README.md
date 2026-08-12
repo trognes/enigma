@@ -143,11 +143,11 @@ rewrites itself in place:
 Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left
 ```
 
-There is no flag for it: it appears whenever stderr is a terminal, disappears
-when the search ends, and steps aside for each score line rather than being
-written over. Redirect stderr to a file and it is not there at all, so logs and
-scripts see exactly what they saw before. Nothing is drawn for a sweep that
-finishes in under half a second.
+There is no flag for it: it appears whenever stderr is a terminal, updates
+about every 5 seconds, disappears when the search ends, and steps aside for each
+score line rather than being written over. Redirect stderr to a file and it is
+not there at all, so logs and scripts see exactly what they saw before. Nothing
+is drawn for a sweep that finishes in under half a second.
 
 ## Options
 
