@@ -1448,15 +1448,45 @@ check "--confidence: -c calibrates against a CLIMBED null" \
   "$(awk -v a="$(cf_null "$cf_c_null")" -v b="$(cf_null "$cf_sig")" \
      'BEGIN{print (a > b + 0.3) ? "higher" : "not-higher"}')" "higher"
 
-# IC's null is right-skewed, so the Gaussian tail understates its best-of-K (6.1
-# sigma observed against 4.4 predicted). The p-value must say so under -i, and
-# must not clutter every other model with the caveat.
+# IC's null is right-skewed on top of the tail error every model has, so the
+# Gaussian form understates its best-of-K worst of all (6.1 sigma observed
+# against 4.4 predicted). It earns an EXTRA clause the other models do not get.
+# Asserted as the property -- one caveat for -q, a longer one for -i -- rather
+# than by grepping a particular word, which is what made this check fail when
+# the wording changed while the behaviour did not.
 # shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
-cf_skew() { printf '%s' "$cf_ct" | "$ENIGMA" "$@" -u B -w 123 -r AAA -g "..." \
-            --confidence 64 -T 1 2>&1 >/dev/null | grep -c 'skewed'; }
-check "--confidence: -i flags its skewed null" "$(cf_skew -i)" "1"
-check "--confidence: -q does not carry the IC caveat" \
-  "$(cf_skew -q -l wehrmacht)" "0"
+cf_pline() { printf '%s' "$cf_ct" | "$ENIGMA" "$@" -u B -w 123 -r AAA -g "..." \
+             --confidence 64 -T 1 2>&1 >/dev/null | grep '(Gaussian tail'; }
+check "--confidence: -i's p-value carries a longer caveat than -q's" \
+  "$(awk -v a="$(cf_pline -i)" -v b="$(cf_pline -q -l wehrmacht)" \
+     'BEGIN{print (length(a) > length(b)) ? "yes" : "no"}')" "yes"
+check "--confidence: -i names itself in the caveat" \
+  "$(cf_pline -i | grep -c 'IC')" "1"
+# The Gaussian tail understates the false-positive rate near zero for EVERY
+# model, not only IC: measured on 2000 signal-free ciphertexts at L=200,
+# K=17576, a margin of +0.54 came up 2.35% of the time against the 0.70% the
+# p-value implies (eval/confidence_false_positive.py). So the caveat is
+# unconditional, and IC only earns an extra clause.
+cf_opt() { printf '%s' "$cf_rct" | "$ENIGMA" -u B -w 123 -r AAA \
+           -g "..." --confidence 64 -T 1 "$@" 2>&1 >/dev/null \
+           | grep -c 'optimistic near zero'; }
+check "--confidence: the p-value is flagged optimistic for quad too" \
+  "$(cf_opt -q -l wehrmacht)" "1"
+check "--confidence: the p-value is flagged optimistic for IC" \
+  "$(cf_opt -i)" "1"
+# The "not a find" note is the actionable half, and it has to fire exactly where
+# the p-value misleads and nowhere else. Signal-free text lands near zero and
+# must get it; a real break reads +15 to +17 sd and must not, or the line would
+# be noise on every successful run.
+cf_note() { printf '%s' "$1" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+            -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
+            | grep -c 'below +2 sd is not a find'; }
+check "--confidence: signal-free text gets the 'not a find' note" \
+  "$(cf_note "$cf_rct")" "1"
+check "--confidence: a real break does NOT get the 'not a find' note" \
+  "$(cf_note "$cf_ct")" "0"
+check "--confidence: -q does not carry the IC clause" \
+  "$(cf_pline -q -l wehrmacht | grep -c 'IC')" "0"
 
 check "--confidence is -T-independent" \
   "$(cf_run "$cf_ct")" \
