@@ -176,6 +176,27 @@ existing command lines can behave differently or stop working.
 
 ### Fixed
 
+- **`--confidence`'s p-value was optimistic near zero, and said so only under
+  `-i`.** It is the Gaussian upper tail, and the statistic it models — the
+  maximum over `K` keys — lives at ~4.4 σ, exactly where a central-limit
+  approximation is weakest: the score is a sum over positions, so the CLT gives
+  the centre of the null quickly and the tail slowly. Measured on **2000
+  signal-free ciphertexts** (L=200, K = 17 576, `--confidence 1000`), a margin
+  of **+0.54 came up 2.35% of the time against the 0.70%** the p-value implies,
+  and at K = 3 163 680 it came up **4.83%** — the rate rises with the keyspace.
+  The null's best-of-K sits +0.21 σ above a Gaussian of the same μ/σ, with a
+  95th percentile of +0.40 against +0.11 predicted.
+
+  The caveat is now unconditional rather than IC-only (IC keeps an extra clause,
+  being worse again), and a run whose margin is under +2 σ — the measured 99th
+  percentile of noise — additionally prints *"below +2 sd is not a find"* with
+  the measured rate. Nothing changes far out, where a real break reads +15 to
+  +17 σ and a factor of three on 1e-98 means nothing, so the note fires only
+  where the number actually misleads. Raising `N` does not help: at N=1000 the
+  estimation error is ~0.10 σ and nearly all the spread is the genuine
+  fluctuation of the best of K. Reproducer:
+  `eval/confidence_false_positive.py`.
+
 - **`--confidence`'s summary reported a key count its own chance bar was not
   built from.** The count was passed to the summary separately from the bar, and
   under `--ring-stride` the caller passed the refinement's keys too — so the
