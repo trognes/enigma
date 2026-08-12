@@ -632,20 +632,33 @@ are read from a **data directory** (filenames built as
   scatter around one effect rather than disagreeing), and `score_iter` matched
   within 2% every run. **Use `-S i4f10` for telegraphic traffic at operational
   length**; `m4f10` remains the default elsewhere.
-  **The TARGET matters about twice as much as the pre-pass, and the two
-  INTERACT.** Same setup, `--arms i4f10 i4a10` (pre-pass held constant, target
-  varied), 1000 paired trials in two seeds: the fused target beats the weighted
-  one by **+5.20pp** (95% CI [+3.29, +7.12], z = 5.34; exact 77.4% vs 71.4%,
-  McNemar p = 1.1e-07, Q = 0.78 on 1 df). That is *above* the +3.0…+4.4pp
-  recorded for `-f` over `-a` below, which was measured with each model's
-  **own** recommended staging — so an IC pre-pass suits `-a` less well than mono
-  does,
-  and that interaction, rather than length alone, is why the `m4…` advice did
-  not carry over. **Open:** three cells of the `{m4,i4} × {a,f}` square are
-  measured at L=167; the fourth (`m4a10` vs `m4f10`) is not, and a single L=60
-  run leaned mono under `-f` (+1.77pp, CI spans 0), so a length component may
-  coexist. Note also that this — like every other tuning result here — measures
-  the **plugboard-recovery** sub-problem with the rotor key given. The schedule
+
+  **The full `{m4,i4} × {a,f}` square is measured at L=167** (1000 paired trials
+  per cell, two seeds), and it says two things:
+
+  | | `m4` pre-pass | `i4` pre-pass |
+  |---|---:|---:|
+  | **`-f` target** | 75.6 / 75.1 | **81.5 / 78.1** |
+  | **`-a` target** | 69.0 / 68.5 | 75.4 / 73.7 |
+
+  - **The target matters about twice as much as the pre-pass.** Fused over
+    weighted is **+6.56pp** with a mono pre-pass (95% CI [+4.79, +8.32]) and
+    **+5.20pp** with an IC one ([+3.29, +7.12]) — both above the +3.0…+4.4pp
+    recorded for `-f` over `-a` below.
+  - **There is NO measurable interaction.** The difference between those two
+    target effects is +1.35pp, SE 1.33, 95% CI [−1.25, +3.95], **z = 1.02**. An
+    earlier writeup here claimed an interaction on three cells; the fourth cell
+    refutes it.
+
+  So the IC pre-pass wins under **both** targets at this length — measured
+  directly for `-a` too (`--arms m4a10 i4a10`: −6.40pp, i.e. IC ahead, McNemar
+  p = 0.009). The documented "mono beats IC by 2.2pp on telegraphic" therefore
+  **does not reproduce at L=167 under either target**, which points back at
+  **LENGTH** (or some other difference in that original setup) rather than at an
+  interaction. A single run at L=60 did lean mono under `-f` (+1.77pp, CI spans
+  0), consistent with a crossover somewhere between. Note also that this — like
+  every other tuning result here — measures the **plugboard-recovery**
+  sub-problem with the rotor key given. The schedule
   carries **only** model stages: the per-restart kick and the exhaustion are
   their own options (`--random` / `--exhaust`), not schedule tokens (REDESIGN
   Part B moved the old `rN`/`aN` tokens out). Per-`machine` `scoring` field

@@ -23,19 +23,25 @@ mean %-correct (95% CI [-4.80, -0.82], z=2.76) and 3.1pp of exact recovery
 p=0.021).  All five seeds favour i4f10 and heterogeneity is Q=1.65 on 4 df, so
 the runs scatter around one effect rather than disagreeing.
 
-THE TARGET MATTERS ABOUT TWICE AS MUCH AS THE PRE-PASS.  --arms generalises
-this to any two schedules; run with `--arms i4f10 i4a10` and the same L=167
-telegraphic setup, 1000 paired trials in two seeds, the FUSED target beats the
-weighted one by 5.20pp (95% CI [+3.29, +7.12], z=5.34; exact 77.4% vs 71.4%,
-McNemar p=1.1e-07, Q=0.78 on 1 df).  That is above the +3.0..+4.4pp CLAUDE.md
-records for `-f` over `-a`, which was measured with each model's OWN
-recommended staging -- so pairing `-a` with an IC pre-pass suits it less well
-than mono does, and the two knobs interact rather than being independent.
+THE TARGET MATTERS ABOUT TWICE AS MUCH AS THE PRE-PASS, AND THEY DO NOT
+INTERACT.  --arms generalises this to any two schedules.  The full
+{m4,i4} x {a,f} square at L=167, 1000 paired trials per cell:
 
-STILL OPEN: this is three cells of a 2x2 ({m4,i4} x {a,f}) at L=167; the
-missing one is m4a10 vs m4f10 at this length.  And a single run at L=60 leaned
-mono under `-f` (+1.77pp, CI spans 0), so a length component may coexist with
-the interaction.
+                   m4 pre-pass    i4 pre-pass
+      -f target     75.6 / 75.1    81.5 / 78.1     (mean %correct, seeds
+      -a target     69.0 / 68.5    75.4 / 73.7      4242 / 99)
+
+Fused over weighted is +6.56pp with a mono pre-pass (95% CI [+4.79, +8.32]) and
++5.20pp with an IC one ([+3.29, +7.12]); the difference between those two is
++1.35pp, SE 1.33, z=1.02 -- no measurable interaction.  An earlier version of
+this file claimed one from three cells; the fourth refutes it.
+
+So the IC pre-pass wins under BOTH targets here, measured directly for -a too
+(--arms m4a10 i4a10: -6.40pp, McNemar p=0.009).  The 2.2pp mono win CLAUDE.md
+records for telegraphic traffic therefore does not reproduce at L=167 under
+either target, which points back at LENGTH rather than at an interaction.  A
+single run at L=60 leaned mono under -f (+1.77pp, CI spans 0), consistent with
+a crossover somewhere between.
 
 DESIGN NOTES.
   * PAIRED: each trial's ciphertext goes to both arms, so the excerpt, rotor key

@@ -46,19 +46,20 @@ existing command lines can behave differently or stop working.
 
   `m4f10` remains the default elsewhere.
 
-  **The target matters about twice as much as the pre-pass, and the two
-  interact.** The same harness comparing `i4f10` against `i4a10` — pre-pass held
-  constant, target varied — puts the fused target **+5.20 pp** ahead over 1000
-  paired trials (95% CI [+3.29, +7.12], z = 5.34; exact 77.4% vs 71.4%, McNemar
-  p = 1.1 × 10⁻⁷). That is *above* the +3.0…+4.4 pp recorded for `-f` over `-a`,
-  which was measured with each model's own recommended staging — so an IC
-  pre-pass suits `-a` less well than mono does, and that interaction, rather
-  than message length alone, is why the `m4…` advice did not carry over.
+  **The target matters about twice as much as the pre-pass, and the two do NOT
+  interact.** The full `{m4,i4} × {a,f}` square was measured at L=167, 1000
+  paired trials per cell. Fused over weighted is **+6.56 pp** with a mono
+  pre-pass and **+5.20 pp** with an IC one — both above the +3.0…+4.4 pp
+  recorded for `-f` over `-a` — while the difference between those two target
+  effects is +1.35 pp, 95% CI [−1.25, +3.95], **z = 1.02**.
 
-  **Open:** three cells of the `{m4,i4} × {a,f}` square are measured at L=167;
-  the fourth (`m4a10` vs `m4f10`) is not, and a single L=60 run leaned mono
-  under `-f`, so a length component may coexist. Reproducer:
-  `eval/prepass_ab.py`, now with `--arms` for any two schedules.
+  The IC pre-pass therefore wins under **both** targets at this length,
+  confirmed directly for `-a` as well (−6.40 pp, McNemar p = 0.009). So the
+  documented "mono beats IC by 2.2 pp on telegraphic" does not reproduce at
+  L=167 under either target, and the explanation points back at **message
+  length** rather than an interaction between the two knobs. A single L=60 run
+  did lean mono under `-f`, consistent with a crossover somewhere between.
+  Reproducer: `eval/prepass_ab.py`, with `--arms` for any two schedules.
 
 ### Added
 
