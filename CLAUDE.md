@@ -259,8 +259,10 @@ are read from a **data directory** (filenames built as
 > **`-f` fused scoring model** (`-a`'s weighted all-order mixture plus a
 > weighted index of coincidence — the strongest measured scoring model, and the
 > only one that does not depend on the writing style; see the `-f` entry below),
-> `-S m4f10` staging (mono pre-pass then fused), `-J` (dynamic move order, wins
-> the realistic ~10-plug regime), `-M` (with a tight cap), and the best-board
+> `-S m4f10` staging (mono pre-pass then fused; **`i4f10` on telegraphic
+> traffic at operational length** — measured, see `-S`), `-J` (dynamic move
+> order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the
+> best-board
 > finisher `--polish` (the recommended finisher: one fixed-cost pass after all
 > restarts, so it is negligible at a high `-R`). Several opt-in flags are **not
 > recommended** — they are dominated, ablation/measurement tools, or only
@@ -307,7 +309,8 @@ are read from a **data directory** (filenames built as
 > delivers (the first measured short-message *scoring* gain, +~1–2pp mean
 > %-correct at L40–100 across all four languages; PR #106). Recipe: `-c -J
 > --polish --score m4f10 --random 10 -R <as high as -T affords> -f -l <lang> -T
-> <cores>`.
+> <cores>` — swapping `m4f10` for **`i4f10` on telegraphic traffic at
+> operational length** (+2.8pp, measured; see the `-S` entry).
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -616,7 +619,46 @@ are read from a **data directory** (filenames built as
   n=1800 per corpus): mono wins on telegraphic traffic (−2.2pp for IC), ties on
   English prose (−1.4pp, CI spans 0), and **loses on German prose** (+2.2pp for
   IC). `m4a10` stays the general recommendation — the gap is ~2pp either way —
-  but `i4a10` is the better pick for German prose specifically. The schedule
+  but `i4a10` is the better pick for German prose specifically. **That A/B used
+  `-a` as the TARGET, and against `-f` at operational length the ordering
+  REVERSES**: `-f` differs from `-a` precisely by folding IC into the target
+  score, so the recommendation had never been checked against the model the tool
+  actually recommends. Measured on authentic HG Nord telegraphic German at
+  L=167, 2000 paired trials in five independent seeds
+  (`eval/prepass_ab.py`), **`i4f10` beats `m4f10` by 2.81pp** mean %-correct
+  (95% CI [−4.80, −0.82], z = 2.76) and 3.1pp of exact recovery (72.2% →
+  **75.2%**; McNemar over the 1800 trials with logged discordants p = 0.021).
+  All five seeds favour `i4f10`, heterogeneity is Q = 1.65 on 4 df (so they
+  scatter around one effect rather than disagreeing), and `score_iter` matched
+  within 2% every run. **Use `-S i4f10` for telegraphic traffic at operational
+  length**; `m4f10` remains the default elsewhere.
+
+  **The full `{m4,i4} × {a,f}` square is measured at L=167** (1000 paired trials
+  per cell, two seeds), and it says two things:
+
+  | | `m4` pre-pass | `i4` pre-pass |
+  |---|---:|---:|
+  | **`-f` target** | 75.6 / 75.1 | **81.5 / 78.1** |
+  | **`-a` target** | 69.0 / 68.5 | 75.4 / 73.7 |
+
+  - **The target matters about twice as much as the pre-pass.** Fused over
+    weighted is **+6.56pp** with a mono pre-pass (95% CI [+4.79, +8.32]) and
+    **+5.20pp** with an IC one ([+3.29, +7.12]) — both above the +3.0…+4.4pp
+    recorded for `-f` over `-a` below.
+  - **There is NO measurable interaction.** The difference between those two
+    target effects is +1.35pp, SE 1.33, 95% CI [−1.25, +3.95], **z = 1.02**. An
+    earlier writeup here claimed an interaction on three cells; the fourth cell
+    refutes it.
+
+  So the IC pre-pass wins under **both** targets at this length — measured
+  directly for `-a` too (`--arms m4a10 i4a10`: −6.40pp, i.e. IC ahead, McNemar
+  p = 0.009). The documented "mono beats IC by 2.2pp on telegraphic" therefore
+  **does not reproduce at L=167 under either target**, which points back at
+  **LENGTH** (or some other difference in that original setup) rather than at an
+  interaction. A single run at L=60 did lean mono under `-f` (+1.77pp, CI spans
+  0), consistent with a crossover somewhere between. Note also that this — like
+  every other tuning result here — measures the **plugboard-recovery**
+  sub-problem with the rotor key given. The schedule
   carries **only** model stages: the per-restart kick and the exhaustion are
   their own options (`--random` / `--exhaust`), not schedule tokens (REDESIGN
   Part B moved the old `rN`/`aN` tokens out). Per-`machine` `scoring` field
@@ -678,7 +720,8 @@ are read from a **data directory** (filenames built as
   (`archived/PERFORMANCE.md` 6.4) puts the whole gain in surface reshaping
   (+3.4pp) with selection contributing -0.0pp, so it does *not* move the
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
-  <lang>`.
+  <lang>` — but on **telegraphic traffic at operational length** use `i4f10`
+  instead of `m4f10` (+2.8pp over 2000 paired trials; see `-S`).
 - `--confidence N` **is the winner better than chance?** (N = null samples, 0 =
   off). A raw score answers nothing on its own: each model has a distribution on
   text with no signal, and a search reports the **maximum** over the keys it

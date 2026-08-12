@@ -28,6 +28,39 @@ existing command lines can behave differently or stop working.
   class-representative contract the other collapses already carry; the decrypt
   is identical either way, and the settings echo names which collapses fired.
 
+### Changed
+
+- **`--score i4f10` is now the measured pick for telegraphic traffic at
+  operational length**, in place of the recommended `m4f10`. The existing advice
+  — a monogram pre-pass beats an index-of-coincidence one on telegraphic German
+  by 2.2 pp — was measured with **`-a`** as the target, and `-f` differs from
+  `-a` precisely by folding IC into the target score, so the recommendation had
+  never been checked against the model the tool actually recommends.
+
+  Against `-f` the ordering **reverses**. On authentic HG Nord decrypts at 167
+  letters, 2000 paired trials across five independent seeds: `i4f10` beats
+  `m4f10` by **2.81 pp** mean %-correct (95% CI [−4.80, −0.82], z = 2.76) and
+  **3.1 pp** of exact recovery (72.2% → 75.2%; McNemar p = 0.021 over the 1800
+  trials with logged discordants). All five seeds agree, heterogeneity is
+  Q = 1.65 on 4 df, and `score_iter` matched within 2% in every run.
+
+  `m4f10` remains the default elsewhere.
+
+  **The target matters about twice as much as the pre-pass, and the two do NOT
+  interact.** The full `{m4,i4} × {a,f}` square was measured at L=167, 1000
+  paired trials per cell. Fused over weighted is **+6.56 pp** with a mono
+  pre-pass and **+5.20 pp** with an IC one — both above the +3.0…+4.4 pp
+  recorded for `-f` over `-a` — while the difference between those two target
+  effects is +1.35 pp, 95% CI [−1.25, +3.95], **z = 1.02**.
+
+  The IC pre-pass therefore wins under **both** targets at this length,
+  confirmed directly for `-a` as well (−6.40 pp, McNemar p = 0.009). So the
+  documented "mono beats IC by 2.2 pp on telegraphic" does not reproduce at
+  L=167 under either target, and the explanation points back at **message
+  length** rather than an interaction between the two knobs. A single L=60 run
+  did lean mono under `-f`, consistent with a crossover somewhere between.
+  Reproducer: `eval/prepass_ab.py`, with `--arms` for any two schedules.
+
 ### Added
 
 - **A live progress line for the main sweep** — percentage, key rate and ETA,

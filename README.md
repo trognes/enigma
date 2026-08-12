@@ -484,8 +484,12 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   recommended fused target the staging is a **mono pre-pass**: `--score m4f10`
   climbs monograms (capped at 4 plugs), then refines under the fused model
   (capped at 10). For a plain **quad** target an index-of-coincidence pre-pass
-  measured best instead (`--score i4q10`). (The kick and the exhaustion are
-  their own options, `--random` / `--exhaust`, not schedule tokens.)
+  measured best instead (`--score i4q10`). **On telegraphic traffic at
+  operational length, use `--score i4f10`**: over 2000 paired trials at 167
+  letters on authentic 1941 Army messages it beat `m4f10` by 2.8 pp of letters
+  correct and 3 pp of exact recovery (72.2% → 75.2%). (The kick and the
+  exhaustion are their own options, `--random` / `--exhaust`, not schedule
+  tokens.)
 
   > **Which pre-pass is best depends mildly on the writing style.** `m4a10` is
   > the general recommendation and is what the recipes below use, but a paired
