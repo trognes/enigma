@@ -350,8 +350,13 @@ English tables.
   and a hidden plugboard searched without `-c`, which cannot recover it, ends at
   **−0.8** — correctly reporting that nothing was found. Samples are
   hill-climbed when `-c` is on, so the comparison is against what the search
-  actually does. It also ranks the scoring **language** on a single message: on
-  telegraphic German the margin measured +15.4 for `-l wehrmacht`, +8.6 for
+  actually does. **Do not read a small positive margin as a find**: the printed
+  p-value comes from a Gaussian tail and is optimistic near zero, measured over
+  2000 signal-free runs at **2.35%** for a margin of +0.54 against the 0.70% it
+  implies, and rising to 4.83% on a larger key space. A run under +2 σ says so
+  itself. The gap is unmistakable in practice — a genuine break reads +15 to
+  +17 σ, not +0.5. It also ranks the scoring **language** on a single message:
+  on telegraphic German the margin measured +15.4 for `-l wehrmacht`, +8.6 for
   `german` and +2.5 for `english`. **Use `N` = 256, and never below 128**: `N`
   buys nothing but precision in the null, and at `N` ≤ 64 a signal-free
   ciphertext reports a *positive* margin on some seeds — a false "significant",

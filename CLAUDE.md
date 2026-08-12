@@ -765,6 +765,31 @@ are read from a **data directory** (filenames built as
     predicted for its best-of-K, because its null is a quadratic form in the
     letter histogram rather than a sum over positions, and so right-skewed. The
     printed p-value says so under `-i`.
+  - **The p-value is optimistic near zero for EVERY model, not only IC.**
+    Measured on 2000 signal-free ciphertexts (L=200, K=17 576,
+    `--confidence 1000`, `eval/confidence_false_positive.py`): a margin of
+    **+0.54 came up 2.35% of the time against the 0.70%** the Gaussian tail
+    implies — a factor of 3.4. The real null's best-of-K sits **+0.21σ above** a
+    Gaussian of the same μ/σ and its upper tail is fatter:
+
+    | percentile of the margin on pure noise | measured | Gaussian |
+    |---|---:|---:|
+    | 50th | −0.20 | −0.47 |
+    | 95th | **+0.40** | +0.11 |
+    | 99th | **+0.80** | +0.44 |
+
+    The score is a sum over positions, so the CLT delivers the *centre* of the
+    null quickly and the *tail* slowly — and a best-of-K statistic reads only
+    the tail, at ~4.4σ. **The rate rises with the keyspace**: at K = 3 163 680
+    the same +0.54 came up **4.83%** (29/600). So `--confidence` now flags the
+    p-value as optimistic for every model, and prints an explicit
+    *"below +2 sd is not a find"* note when the margin is under 2σ — the
+    measured 99th percentile of noise, rounded up. **`N` does not fix this**:
+    at N=1000 the estimation error is only ~0.10σ, and nearly all the spread is
+    the genuine fluctuation of the best of K, which no amount of sampling
+    removes. None of it matters far out, where a real break reads +15 to +17σ
+    and a factor of three on 1e-98 changes nothing — which is why the note
+    fires only near zero.
 
   It also **ranks the scoring language on a single message**, which is its
   second use: on telegraphic German the margin measured +15.4σ for `wehrmacht`,
