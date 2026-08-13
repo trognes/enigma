@@ -59,23 +59,56 @@ competitive with the right-wheel stride, and the two compose multiplicatively.
 produces — which the measured numbers do **not** cover. →
 `archived/IMPROVEMENTS.md` §2.
 
+**5. Read the right wheel's phase off one decrypt instead of searching it —
+signal confirmed, does not localise yet.** Shifting the right wheel's phase
+(ring2 and start2 together by `δ`) leaves `offset2` and so the whole
+substitution untouched; only the notch timing moves, displacing the middle wheel
+by exactly one step on a contiguous cyclic block of columns that repeats with
+period 26. The same columns are corrupt in every 26-letter window. So the phase
+could in principle be *derived* — fold the per-position score by `i mod 26`,
+find the low-scoring block, and its boundary is the notch position — in O(1)
+decrypts, where `--tune-phase` spends O(676) scorings on a frozen board.
+
+Probed with the board known and the offsets correct, the best case
+(`eval/turnover_localise_probe.py`):
+
+- **The physics holds exactly.** `δ=1` and `δ=25` both give a 1-column block,
+  `δ=13` gives 13 — so the block width is `min(δ, 26−δ) ∈ [1,13]`.
+- **The signal is real**: corrupt columns score **0.6–0.8 log10/char** below
+  clean ones.
+- **But the fit overfits.** Over 26 starts × 13 lengths against 26 noisy
+  columns, the best-separating block beats the true one — at L=167, **1.02
+  against 0.68** at the truth. Exact block recovery is **0% at L=167**, 8% at
+  L=400, 25% at L=900. ~6 periods is not enough for a two-parameter fit.
+- **A confound the idea does not account for: the left wheel.** Displacing the
+  middle wheel also moves when *it* passes its own notch, so the left wheel
+  steps elsewhere and everything after is corrupt, breaking the mod-26
+  periodicity the method assumes.
+
+**The untested refinement is the interesting one.** Scoring a block only asks
+"is this region bad". In the corrupt block the middle wheel is off by *exactly
+one*, so re-decrypting that stretch with the middle wheel stepped ±1 should turn
+it into clean German — a **verification** rather than a ranking, which cannot
+overfit the way a two-parameter score fit does. That is where this should be
+picked up if it is picked up at all. → `eval/turnover_localise_probe.py`.
+
 ## Cribs
 
 Detail for all three: `archived/cribs.md` §13 — which also carries the
 X-separator variant, dropped here for want of confidence in the premise
 that word-boundary positions are any easier to come by than a phrase.
 
-**5. Crib supply at network scale.** The library covers 83% of held-out
+**6. Crib supply at network scale.** The library covers 83% of held-out
 messages, but on a 58-message corpus, and 47 of the 57 hits are 8–11 letters —
 seed-only lengths. Whether a real network yields *long* cribs is the question
 the whole feature rests on, and no larger corpus is available.
 
-**6. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
+**7. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
 would tolerate a slightly-wrong crib — which matters, because garbling is real
 (two of five `SIEGFRIED` messages are corrupted) and exact matching cannot see
 through it.
 
-**7. Menu reuse across alignments.** Shifting a crib by one position changes
+**8. Menu reuse across alignments.** Shifting a crib by one position changes
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
@@ -95,7 +128,7 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**8. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
+**9. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
 compute it breaks more messages than an exhaustive ring sweep (63/80 vs 51/80,
 p = 0.043) but scores lower mean %-correct, because a wrong *offset* is
 unrecoverable — it fails less often and worse. The capture radius grows as
@@ -103,7 +136,7 @@ unrecoverable — it fails less often and worse. The capture radius grows as
 rarer, and the trade could stop being a trade. Untested. → `CLAUDE.md` "Tuning
 the rotor phase"; `archived/PERFORMANCE.md` §7.15.
 
-**9. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
+**10. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
 control, direction consistent across two seeds but **p ≈ 0.13 — suggestive, not
 established**, and only at a stride already outside the recommended K≤3.
@@ -114,20 +147,20 @@ Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**10. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**11. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**11. No `install` target**, and the n-gram files are not declared as build/run
+**12. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**12. Single-file distribution.** Embedding the tables was declined once, but
+**13. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**13. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**14. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 
