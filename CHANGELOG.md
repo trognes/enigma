@@ -130,6 +130,32 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The unknown-key break rate is now measured**
+  (`eval/unknown_key_headroom.py`) — 55% at 17 576 keys and 53% at 230 million,
+  for a 167-letter message with a
+  10-pair board hidden at `-R 8`. Every other result in this repo measures
+  plugboard recovery with the rotor key *given*, so a negative sweep could not
+  previously be read as evidence about the message.
+
+  **Keyspace size is nearly irrelevant**: four orders of magnitude of `K` cost
+  two points, because the chance bar grows as `√(2 ln K)` (4.42 → 6.21) while
+  the true key's z has a median of 11.5. The limits are climb failure at the
+  true key and a scoring floor, both independent of `K` — and separating them
+  needs a **high** `-R`, since at a single `-R` a failed climb also produces a
+  low z and the two are the same trials. Judged at `-R 64`, **95%** of messages
+  are intrinsically breakable at L=167; the floor is 5%, and the rest of the
+  residual is climb failure.
+
+  **At matched wall time the middle option wins.** Per 24 h: `-r A..` exact
+  affords `-R 4` for a 66% break rate, `-r AA.` affords `-R 34` for 65%, and
+  `-r A.. --ring-stride 3` affords `-R 12` for **80%** — because the climb curve
+  flattens (50/68/79/87/95/100% at R=2…64) before the coverage penalty does.
+  Spend on `-R` until it flattens, then buy coverage.
+
+  It avoids sweeping at all: a break needs the climb to work at the true key
+  *and* that key's score to clear the bar, and the second is arithmetic once the
+  z is known — 3 s per trial against the ~10 h a real 80M-key sweep costs.
+
 - **Two-notch wheels (VI, VII, VIII) now collapse the RIGHT wheel's ring ×
   start by 13** — always on, no flag. Those three notch at `M` and `Z`, exactly
   13 apart, so their notch *set* survives a shift of 13; and since a stepping

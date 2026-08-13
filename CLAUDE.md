@@ -2166,6 +2166,68 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   converged-board population, so the **only reliable lever is raw compute** —
   more restarts via `-T`, which scales predictably.
 
+### The unknown-key break rate — measured, and the keyspace barely matters
+
+Every other tuning result here measures the **plugboard-recovery sub-problem
+with the rotor key given**. The full problem — where the true key must also
+outscore millions of competitors — was unmeasured, so a negative sweep could
+never be read as "this message is probably not breakable".
+`eval/unknown_key_headroom.py` closes that, without sweeping: a break needs the
+climb to work **at the true key** (independent of `K`) *and* the true key's
+score to clear `μ + σ·√(2 ln K)`. The second is arithmetic once you know the
+true key's z, so one pinned climb plus `--confidence`'s sampled null gives every
+keyspace at once — **3 s a trial instead of the ~10 h a real 80M-key sweep
+costs**.
+
+Measured, 60 trials, L=167, 10-pair board hidden, `-R 8`, authentic HG Nord
+plaintext:
+
+| keyspace | bar | z > bar | × climb | = break |
+|---|---:|---:|---:|---:|
+| start only (17 576) | 4.42 | 75% | 73% | **55%** |
+| wheels+ring2 (27.4 M) | 5.85 | 72% | 73% | 53% |
+| `-r A..` exact (230 M) | 6.21 | 72% | 73% | **53%** |
+
+**Four orders of magnitude of `K` cost two points of break rate.** The bar grows
+as `√(2 ln K)` — 4.42 → 6.21 — while the true key's z has a **median of 11.5**.
+Discrimination is not the bottleneck and never was. The two real limits are both
+`K`-independent: **climb failure at the true key**, and a **scoring floor**
+where the true key's z is genuinely too low (minimum observed **1.1**).
+
+**Separating those two needs care, and the obvious reading is circular.** At a
+single `-R` a failed climb also produces a low z, so "low z" and "climb failed"
+are the same trials and the split cannot be read off one run — doing that gave a
+"~25% scoring floor" that is wrong. Judge breakability at a **high** `-R`
+instead, where the climb is nearly always succeeding: at `-R 64`, **95%** of
+messages are intrinsically breakable at L=167. The floor is **5%**, not 25%, and
+almost all of the `-R 8` residual is climb failure — which `-R` moves.
+
+The measured climb curve, over messages that *are* breakable:
+
+| `-R` | 2 | 4 | 8 | 16 | 32 | 64 |
+|---|---:|---:|---:|---:|---:|---:|
+| wins | 50% | 68% | 79% | 87% | 95% | 100% |
+
+**At matched wall time the middle option wins**, because the climb curve
+flattens before the coverage penalty does. Per 24 h at ~11k items/s:
+
+| option | affordable `-R` | coverage | break |
+|---|---:|---:|---:|
+| `-r A..` exact | 4.1 | 100% | 66% |
+| **`-r A.. --ring-stride 3`** | **11.9** | **99%** | **80%** |
+| `-r AA.` | 34.5 | 72% | 65% |
+
+Same ordering at 12 h and 48 h. Exact coverage costs 2.89× for the ~1pp the
+stride gives up; `-r AA.` buys restarts long past the point they help while
+excluding 28% of keys outright. **Spend on `-R` until the curve flattens
+(~`-R 16`), then buy coverage with what is left.**
+
+It also gives a stopping rule, and the runs are **not** independent: the scoring
+floor is common mode, so repeated attempts converge on 95%, not on 100%. Update
+the posterior instead — a failed `-r AA. -R 2` (36% win) and a failed stride-3
+`-R 6` (74%) take a message from a 95% prior to **76%**, and a further stride-3
+`-R 12` would leave 35%.
+
 Read `ENHANCEMENTS.md` and then `archived/IMPROVEMENTS.md` before changing the
 search or scoring code — in
 particular its "Measured down" table, which lists what has already been built
