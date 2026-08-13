@@ -41,6 +41,15 @@ export ENIGMA_SEED=0
 # keys (still contains the true start, so equality / -T-independence / recovery all
 # still hold) -- ~21x faster per check -- cutting the sanitizer suite to seconds.
 if [ -n "${TEST_QUICK:-}" ]; then rg="AA."; else rg="A.."; fi
+# ...and $rgd is the narrow one UNCONDITIONALLY, for the checks that read a code path
+# rather than a cracking result: -T-independence, "-R 0 equals the default", "-F 0 is
+# off", the seed echoes. Those assert that two runs AGREE, which 26 keys establishes
+# exactly as well as 676 -- and TEST_QUICK has always run them at 26 in the sanitizer
+# job, so the wide sweep in the plain job was a 26x more expensive duplicate of an
+# assertion already covered. $rg is kept only where breadth is the point: the recovery
+# checks (the true key must beat decoys) and -F, which needs more keys than it keeps.
+# Splitting the two took the plain suite from 232 s to 64 s with all 437 checks intact.
+rgd="AA."
 
 ENIGMA=./enigma
 if [ ! -x "$ENIGMA" ]; then
@@ -377,23 +386,23 @@ check "climb-strategy without -c: -J names -J" \
 r_pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERS"
 r_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
 check "restarts: -R 8 result is -T-independent" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -T 4)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 -T 4)"
 
 # --crib-rerank (measured-down opt-in): the crib bonus is a deterministic function of the
 # board, so the re-ranked winner must stay -T-independent. Also exercises loading the file.
 crib_file=$(mktemp)
 printf 'ENGLISH 2\nLANGUAGE 2\nANALYSIS 2\n' > "$crib_file"
 check "crib: --crib-rerank result is -T-independent" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-rerank "$crib_file" -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --crib-rerank "$crib_file" -T 4)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 --crib-rerank "$crib_file" -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 --crib-rerank "$crib_file" -T 4)"
 rm -f "$crib_file"
 
 # --dump-all (diagnostic): prints the full setting (rotor key + score + plugboard) of every
 # converged key x restart to stderr. The dumped SET (sorted) must be -T-invariant, and each
 # line carries the rotor key -- so grep for one specific key and check it appears.
-da1=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 --dump-all -T 1 2>&1 >/dev/null | grep '^dumpall' | sort)
-da4=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 --dump-all -T 4 2>&1 >/dev/null | grep '^dumpall' | sort)
+da1=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 --dump-all -T 1 2>&1 >/dev/null | grep '^dumpall' | sort)
+da4=$(printf '%s' "$r_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 --dump-all -T 4 2>&1 >/dev/null | grep '^dumpall' | sort)
 check "dump-all: dumped set is -T-independent" "$da1" "$da4"
 check "dump-all: lines carry the rotor key (B123 ...)" \
   "$(printf '%s' "$da1" | grep -c '^dumpall B123 ')" "$(printf '%s' "$da1" | grep -c '^dumpall ')"
@@ -461,13 +470,13 @@ check "progress: lines stay within 80 columns (M4, 13-pair board)" \
 # The --random default kick is a fixed 10 pairs: a plain kicked -R run must equal an
 # explicit --random 10 run (REDESIGN Part B: default kick 8 -> 10).
 check "restarts: default kick == --random 10" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 --random 10)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 --random 10)"
 # --restarts 0 (the new default) is one deterministic seed climb, no kick: an explicit
 # -R 0 must equal the no-R default, and both must be -T-independent (trivially, one climb).
 check "restarts: -R 0 == default (one deterministic climb)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 0)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 0)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c)"
 # -R is validated: 0 is now legal (the default), the count may be large (well past the
 # old 100000 guard), a negative value is rejected, and an absurd value over the
 # 1000000000 cap is still rejected. The accept cases omit -c so only validation runs.
@@ -552,19 +561,19 @@ check "--true-key rank is -T-independent" "$tk1" "$tk4"
 # with the key index, so a fixed seed is reproducible and stays -T-independent, an
 # explicit -e overrides $ENIGMA_SEED, and the seed is echoed so a run can be repeated.
 check "seed: -e 777 is reproducible and -T-independent" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -e 777 -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -e 777 -T 4)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 -e 777 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 -e 777 -T 4)"
 # Different explicit seeds drive different restart perturbations, so the shown seed
 # tracks -e; and -e overrides the pinned $ENIGMA_SEED=0.
-seed_echo=$(printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -e 424242 2>&1 >/dev/null)
+seed_echo=$(printf 'ABCDE' | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 -e 424242 2>&1 >/dev/null)
 case "$seed_echo" in
   *"seed: 424242"*) check "seed: -e is echoed (overrides ENIGMA_SEED)" "ok" "ok" ;;
   *)                check "seed: -e is echoed (overrides ENIGMA_SEED)" "$seed_echo" "*seed: 424242*" ;;
 esac
 # A run with the harness's pinned ENIGMA_SEED=0 equals an explicit -e 0 (same seed).
 check "seed: pinned ENIGMA_SEED=0 equals -e 0" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 8 -e 0)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 8 -e 0)"
 
 # Staged plugboard climb (--score schedule: a bigram pre-pass, then the quad target as
 # the last stage). It must stay -T-independent, and recover a small plugboard on a
@@ -572,8 +581,8 @@ check "seed: pinned ENIGMA_SEED=0 equals -e 0" \
 # board). The kick here is the --random default (10 pairs).
 s_ct=$(run "$r_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD")
 check "staged: --score bq -R 4 result is -T-independent" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score bq -R 4 -T 1)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score bq -R 4 -T 4)"
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score bq -R 4 -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score bq -R 4 -T 4)"
 check "staged: --score bq recovers plugboard (long message)" \
   "$(run "$s_ct" -l english -u B -w 123 -r AAA -g AAA -c --score bq)" \
   "$r_pt"
@@ -589,17 +598,17 @@ check "staged: --score accepts a (weighted) model token (exit code)" "$?" "0"
 # Per-stage plug-pair caps (the number after a model letter) composed with the kick
 # (--random) and restarts must stay -T-independent.
 check "staged: --score i3q --random 2 -R 4 is -T-independent" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 1)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score i3q --random 2 -R 4 -T 4)"
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score i3q --random 2 -R 4 -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score i3q --random 2 -R 4 -T 4)"
 # The weighted all-order model (a) with its --polish finisher stays -T-independent too.
 check "staged: --score m4a10 (weighted) --polish is -T-independent" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --polish -T 1)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score m4a10 --random 2 -R 4 --polish -T 4)"
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score m4a10 --random 2 -R 4 --polish -T 1)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score m4a10 --random 2 -R 4 --polish -T 4)"
 # --random 0 injects no plugs, so N restarts all repeat the seed climb: --random 0 -R 8
 # equals the deterministic -R 0 (one seed climb).
 check "staged: --random 0 makes restarts a no-op" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score iq --random 0 -R 8)" \
-  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rg" -c --score iq -R 0)"
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score iq --random 0 -R 8)" \
+  "$(run "$s_ct" -l english -u B -w 123 -r AAA -g "$rgd" -c --score iq -R 0)"
 # Schedule grammar is validated: an out-of-range stage cap is rejected.
 printf 'ABCDE' | "$ENIGMA" -l english -u B -w 123 -r AAA -g AAA -c --score q14 >/dev/null 2>&1
 check "staged: --score stage cap over max (q14) rejected (exit code)" "$?" "1"
@@ -643,6 +652,8 @@ check "model: -q selector == --score q (same ranking, no -c)" \
 # must recover the same plaintext as the full crack, and (like every search path)
 # stay independent of -T. Wildcard start positions (-g $rg: 676 keys normally, 26
 # under TEST_QUICK) so the filter has a keyspace to rank; F=50 keeps the top ~7%.
+# The two "-F is a no-op" checks below use the narrow $rgd instead: -F 0 and -F 100%
+# keep every key by construction, so there is nothing for a bigger keyspace to rank.
 f_pt="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSE"
 f_ct=$(run "$f_pt" -i -u B -w 123 -r AAA -g AAA -s "AB CD EF")
 check "pre-filter: -F 50 recovers plaintext like the full crack" \
@@ -658,15 +669,15 @@ check "pre-filter: -F without -c rejected (exit code)" "$?" "1"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -c -F -1 >/dev/null 2>&1
 check "pre-filter: -F negative rejected (exit code)" "$?" "1"
 check "pre-filter: -F 0 is off (matches no -F)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -F 0)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq)"
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 -S iq -F 0)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 -S iq)"
 
 # -F N% keeps the top N% of the resolved keyspace instead of an absolute count. On
 # 676 keys, -F 100% keeps every key, so it must equal a plain run with no -F; a
 # generous percentage must still recover like the full crack and stay -T-independent.
 check "pre-filter: -F 100% keeps all keys (matches no -F)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -F 100%)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq)"
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 -S iq -F 100%)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 -S iq)"
 check "pre-filter: -F 15% recovers plaintext like the full crack" \
   "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -F 15%)" \
   "$f_pt"
@@ -686,8 +697,8 @@ check "dynamic-order -J: recovers plaintext (long msg + restarts)" \
   "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -J -R 8 -S iq)" \
   "$f_pt"
 check "dynamic-order -J: result is -T-independent" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -J -R 8 -S iq -T 1)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -J -R 8 -S iq -T 4)"
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -J -R 8 -S iq -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -J -R 8 -S iq -T 4)"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -J >/dev/null 2>&1
 check "dynamic-order -J: without -c rejected (exit code)" "$?" "1"
 
@@ -698,8 +709,8 @@ check "cap-target -M: recovers plaintext (long msg + capped schedule)" \
   "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -M -R 8 -S i4q10)" \
   "$f_pt"
 check "cap-target -M: result is -T-independent" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -M -R 8 -S i4q10 -T 1)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -M -R 8 -S i4q10 -T 4)"
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -M -R 8 -S i4q10 -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -M -R 8 -S i4q10 -T 4)"
 printf 'ABCDE' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA -M >/dev/null 2>&1
 check "cap-target -M: without -c rejected (exit code)" "$?" "1"
 
@@ -707,12 +718,14 @@ check "cap-target -M: without -c rejected (exit code)" "$?" "1"
 # key, so -T can only speed things up by spreading the -R plugboard restarts across
 # threads. Each restart draws from its own (key,restart) seed, so the result must be
 # identical to -T 1 (a deterministic global best with a lowest-index tie-break) and must
-# still recover the plaintext.
+# still recover the plaintext. -g is therefore PINNED to the true start, not wildcarded:
+# these three checks are about the one-key case, and running them over a 676-key sweep
+# did not exercise it at all while costing 56 s -- a fifth of the whole suite.
 check "restart-parallel: fixed key, -R climb is -T-independent (T1==T8)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 1)" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 8)"
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -R 24 -S i4q10 -T 1)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -R 24 -S i4q10 -T 8)"
 check "restart-parallel: fixed key + restarts recovers plaintext" \
-  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 24 -S i4q10 -T 8)" \
+  "$(run "$f_ct" -q -l english -u B -w 123 -r AAA -g AAA -c -R 24 -S i4q10 -T 8)" \
   "$f_pt"
 
 # Simulated annealing (-A): an alternative plugboard optimiser. All randomness comes
@@ -720,8 +733,8 @@ check "restart-parallel: fixed key + restarts recovers plaintext" \
 # stay independent of -T just like the restart climb. Recover the plugboard on the
 # same wildcard-start key space.
 check "anneal: -A result is -T-independent" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -T 4)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -A 20000 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -A 20000 -T 4)"
 # It must recover the true plugboard on a comfortable (long, fully-specified) message.
 sa_rec=$(run "$pbv_ct" -q -l english -u B -w 241 -r AAA -g QEW -c -A 60000)
 check "anneal: recovers plaintext on a long message" "$sa_rec" "$r_pt"
@@ -741,8 +754,8 @@ check "anneal: negative -A budget rejected (exit code)" "$?" "1"
 # SA honours the -S target-stage plug cap (a known-plug-count prior): -A -S qN caps the
 # whole trajectory (pre-pass, anneal moves, quench) at N pairs. Still -T-independent.
 check "anneal: -A -S q8 result is -T-independent" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -S q8 -T 1)" \
-  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rg" -c -A 20000 -S q8 -T 4)"
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -A 20000 -S q8 -T 1)" \
+  "$(run "$r_ct" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -A 20000 -S q8 -T 4)"
 # The cap is actually enforced: with -S q3 the recovered board must hold <= 3 plug pairs.
 cap_err=$(printf '%s' "$pbv_ct" | "$ENIGMA" -q -l english -u B -w 241 -r AAA -g QEW -c -A 40000 -S q3 2>&1 >/dev/null)
 cap_pairs=$(printf '%s\n' "$cap_err" | last_plugboard | grep -oE '[A-Z][A-Z]' | grep -c .)
@@ -787,8 +800,8 @@ case "$d_one" in
        "*Analysed 1 rotor combination, scored 1 plugboard*" ;;
 esac
 # ...and the plugboard-scored count is the same regardless of thread count (same work).
-d_c1=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -T 1 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
-d_c4=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rg" -c -R 4 -S iq -T 4 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
+d_c1=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 -S iq -T 1 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
+d_c4=$(printf '%s' "$d_ct" | "$ENIGMA" -q -l english -u B -w 123 -r AAA -g "$rgd" -c -R 4 -S iq -T 4 2>&1 >/dev/null | grep -oE 'scored [0-9]+ plugboards')
 check "diagnostic: plugboard-scored count is -T-independent" "$d_c1" "$d_c4"
 
 # Usage/exit conventions: -h prints help to stdout and exits 0; running with no
