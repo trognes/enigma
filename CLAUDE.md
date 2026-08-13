@@ -2039,14 +2039,37 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   about *progress output*, which the refinement produces identically over 338
   keys. Trimming those four — with no loss of coverage; each was re-verified to
   still catch its bug — cut the job to ~162 s, and halving the n-gram load
-  (`archived/PERFORMANCE.md` §7.13) took it to **~139 s** (221 checks under
-  `TEST_QUICK`; the plain g++/clang jobs run the full 264-check matrix in **~247
-  s**). Treat those two as the baselines to watch for drift. Rules of thumb when
-  adding a check:
+  (`archived/PERFORMANCE.md` §7.13) took it to **~139 s**. The suite has since
+  grown to 437 checks, and the **plain g++/clang job was cut 232 s → 64 s** by
+  splitting the shared start-position fixture (below). Current baselines to
+  watch for drift: **~64 s plain** (437 checks) and **~220 s under ASan** (394
+  checks with `TEST_QUICK`; the M4 oversized-allocation probe does not emit
+  there, which is why it is one short). Rules of thumb when adding a check:
   - **Ask what the assertion actually reads.** A settings/echo line is printed
     by `show_settings()` *before* the search, so any legal keyspace works — use
     the smallest one the option accepts. A `-T`-independence or display check
     needs the code path, not a big search.
+  - **A check that asserts two runs AGREE almost never needs a big keyspace,
+    and this was 72% of the plain suite's runtime.** The harness had one shared
+    start-position fixture, `-g $rg` (676 keys, 26 under `TEST_QUICK`), and 48
+    checks used it — but only about eight were *recovery* checks, where breadth
+    is the point because the true key has to beat decoys. The rest were
+    `-T`-independence and equality checks (`-R 0` equals the default, `-F 0` is
+    off, the seed echoes), which establish exactly as much at 26 keys as at 676
+    — and the sanitizer job had always run them at 26 via `TEST_QUICK`, so the
+    plain job was paying 26× for a duplicate of an assertion already covered.
+    Splitting the fixture in two (`$rg` broad for recovery and for `-F`, which
+    needs more keys than it keeps; `$rgd` = `AA.` unconditionally for the rest)
+    took 232 s → 64 s with all 437 checks intact.
+  - **A mis-sized fixture can mean the check does not test its property at
+    all.** The three `restart-parallel` checks are about the *one-key* case —
+    their own comment says "with a fully-specified rotor key the search has
+    exactly ONE key, so `-T` can only speed things up by spreading the `-R`
+    restarts across threads" — yet they passed `-g $rg` and so swept 676. They
+    were **56 s, a fifth of the whole suite**, and never exercised the path they
+    were written for. Pinning `-g AAA` made them both correct and ~500× cheaper.
+    Read a slow check's comment before trimming it: the comment often already
+    says what the fixture should have been.
   - **Wildcard only the positions the property needs.** A gate keyed on "ring1
     and start1 both wildcarded" still fires with ring2/start2 pinned (676 keys,
     not 457k). Pin plugs with `-s` to shrink `--exhaust` (E=2 over 26 letters is

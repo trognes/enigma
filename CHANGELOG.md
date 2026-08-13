@@ -130,6 +130,25 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The test suite runs 3.6× faster — 232 s → 64 s — with all 437 checks
+  intact.** `tests/run_tests.sh` had a single shared start-position fixture
+  `-g $rg` (676 keys, 26 under `TEST_QUICK`) used by 48 checks, but only about
+  eight of them were *recovery* checks, where a wide sweep is the point because
+  the true key has to beat decoys. The rest asserted that two runs **agree**
+  (`-T`-independence, `-R 0` equals the default, `-F 0` is off, the seed
+  echoes), which 26 keys establishes exactly as well as 676 — and the sanitizer
+  job had always run them at 26 via `TEST_QUICK`, so the plain g++/clang job was
+  paying 26× for a duplicate of an assertion already covered. A second narrow
+  fixture `$rgd` now serves those, and `$rg` is kept for recovery and for `-F`,
+  which needs more keys than it keeps.
+
+  Separately, the three `restart-parallel` checks — **56 s, a fifth of the whole
+  suite** — did not test their own property. Their comment says "with a
+  fully-specified rotor key the search has exactly ONE key, so `-T` can only
+  speed things up by spreading the `-R` restarts across threads", yet they
+  passed `-g $rg` and swept 676 keys, never exercising the single-key path.
+  Pinning `-g AAA` made them both correct and ~500× cheaper.
+
 - **The unknown-key break rate is now measured**
   (`eval/unknown_key_headroom.py`) — 55% at 17 576 keys and 53% at 230 million,
   for a 167-letter message with a
