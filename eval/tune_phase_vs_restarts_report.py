@@ -17,8 +17,11 @@ var = sum((x - mean) ** 2 for x in d) / (n - 1) if n > 1 else 0.0
 se = math.sqrt(var / n)
 lo, hi = mean - 1.96 * se, mean + 1.96 * se
 
-print("trials: %d   wall: B %.0fs  A %.0fs (per trial, mean)"
-      % (n, sum(x["sec"] for x in b) / n, sum(x["sec"] for x in a) / n))
+where = ""
+if "len" in rows[0]:
+    where = "   L=%d, arm A -R %d" % (rows[0]["len"], rows[0]["arm_a_restarts"])
+print("trials: %d   wall: B %.0fs  A %.0fs (per trial, mean)%s"
+      % (n, sum(x["sec"] for x in b) / n, sum(x["sec"] for x in a) / n, where))
 print()
 print("                      mean %-correct    exact")
 print("  B  restarts, full     %6.1f          %2d/%d" %

@@ -106,7 +106,14 @@ def main():
         ct = run(["-i"] + WHEELS + ["-r", ring, "-g", start, "-s", board],
                  plain)
 
-        rec = {"trial": i, "ring": ring, "start": start, "board": board,
+        # LEN and the arm-A restart count are recorded per row: the two arms are
+        # only comparable when they were calibrated to the same wall time, and
+        # that calibration is length-dependent, so a results file that does not
+        # carry them cannot be read back without its command line.  (The
+        # L=200/300/450 files predate this field; their parameters are in the
+        # .txt summary beside each one.)
+        rec = {"trial": i, "len": LEN, "arm_a_restarts": int(ARM_A[-1]),
+               "ring": ring, "start": start, "board": board,
                "pt": hashlib.sha1(plain.encode()).hexdigest()[:12]}
         for name, arm in (("B_restarts", ARM_B), ("A_tunephase", ARM_A)):
             t0 = time.time()
