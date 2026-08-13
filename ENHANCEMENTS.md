@@ -40,17 +40,55 @@ at the identifiability floor — 5–10% at L40, 0 elsewhere. Length-sensitive
 scoring could only help at L ≲ 40, where recovery is already near the
 information floor, so the payoff is small. → `archived/IMPROVEMENTS.md` §2, §4.
 
+**3. Attack several messages from ONE DAY jointly.** Every measurement in
+this repo attacks a single message, but real traffic came in **day keys**: every
+message on a net that day shared reflector, wheel order, ring settings and
+plugboard, and differed only in the per-message start position. So `N` messages
+from one day are `N` independent observations of the *same* key over a keyspace
+that does **not** grow — which is the one lever that attacks the limit `-R`
+cannot move.
+
+*Why it should be strong.* `--confidence` already supplies the arithmetic: a
+break needs the true key's `z` to clear `√(2 ln K)`. Score a candidate day key
+against `N` messages and the true key's signal accumulates over `N·L`
+characters while `K` — and so the bar — is unchanged, i.e. `z` grows roughly as
+`√N`. The measured residue at L=167 is a **5% scoring floor** plus climb
+failure (`CLAUDE.md`, "The unknown-key break rate"), and the floor is exactly
+what a `√N` gain erodes: two messages should beat any affordable increase in
+`-R`. The plugboard is where most of it lands, since it is the expensive half
+and is shared across the whole day.
+
+*Why it is affordable.* The obvious objection is that `N` messages carry `N`
+independent start positions, so the joint space looks like `shared × 26^(3N)`.
+It is not: for a **fixed** shared key the best start for message *i* does not
+depend on message *j*, so each message is optimised on its own and the cost is
+`shared × N × 26³` — **additive in `N`, not exponential**. That is the whole
+reason this is worth building.
+
+*The subtlety to get right.* Because each message contributes a **maximum** over
+its own ~17 576 starts, the joint statistic is a sum of maxima rather than a sum
+of scores, and each maximum carries its own `√(2 ln 26³)` chance inflation. The
+correction is a constant `N·√(2 ln 26³)` offset, not a `√(2 ln K)` over the
+joint space — getting this backwards would make a joint sweep look significant
+on noise. `--confidence`'s null machinery is the right place to put it.
+
+*What is unknown.* Whether the 18 unbroken challenge ciphertexts
+(`eval/enigma-challenge-1941.txt`) contain any same-day group large enough to
+matter — if they do not, this is a capability with no target in the bundled
+data. Check that before building anything. → `eval/MODERN_BREAKING_NOTES.md`
+§5; `CLAUDE.md` "The unknown-key break rate", `--confidence`.
+
 ## Keyspace reductions
 
 The two-notch collapse that used to head this section has **shipped** and is
 no longer an issue: `CLAUDE.md` "Two-notch wheels" and the CHANGELOG carry it.
 
-**3. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
+**4. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
 3–5× at short lengths and the compute is saved; whether spending it on `-R`
 raises recovery is untested. The same question was asked of `--ring-stride` and
 answered "a wash". → `archived/IMPROVEMENTS.md` §2.
 
-**4. A `--ring-stride` for the middle wheel — premise measured, not built.**
+**5. A `--ring-stride` for the middle wheel — premise measured, not built.**
 Striding `ring1` costs 3.1% (K=2) / 5.1% (K=3) of the true `offset1`, roughly
 competitive with the right-wheel stride, and the two compose multiplicatively.
 **Read the failed attempt first**: striding `ring1` directly measured 2.4×
@@ -59,7 +97,7 @@ competitive with the right-wheel stride, and the two compose multiplicatively.
 produces — which the measured numbers do **not** cover. →
 `archived/IMPROVEMENTS.md` §2.
 
-**5. Read the right wheel's phase off one decrypt instead of searching it —
+**6. Read the right wheel's phase off one decrypt instead of searching it —
 signal confirmed, does not localise yet.** Shifting the right wheel's phase
 (ring2 and start2 together by `δ`) leaves `offset2` and so the whole
 substitution untouched; only the notch timing moves, displacing the middle wheel
@@ -98,17 +136,17 @@ Detail for all three: `archived/cribs.md` §13 — which also carries the
 X-separator variant, dropped here for want of confidence in the premise
 that word-boundary positions are any easier to come by than a phrase.
 
-**6. Crib supply at network scale.** The library covers 83% of held-out
+**7. Crib supply at network scale.** The library covers 83% of held-out
 messages, but on a 58-message corpus, and 47 of the 57 hits are 8–11 letters —
 seed-only lengths. Whether a real network yields *long* cribs is the question
 the whole feature rests on, and no larger corpus is available.
 
-**7. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
+**8. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
 would tolerate a slightly-wrong crib — which matters, because garbling is real
 (two of five `SIEGFRIED` messages are corrupted) and exact matching cannot see
 through it.
 
-**8. Menu reuse across alignments.** Shifting a crib by one position changes
+**9. Menu reuse across alignments.** Shifting a crib by one position changes
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
@@ -128,7 +166,7 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**9. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
+**10. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
 compute it breaks more messages than an exhaustive ring sweep (63/80 vs 51/80,
 p = 0.043) but scores lower mean %-correct, because a wrong *offset* is
 unrecoverable — it fails less often and worse. The capture radius grows as
@@ -136,7 +174,7 @@ unrecoverable — it fails less often and worse. The capture radius grows as
 rarer, and the trade could stop being a trade. Untested. → `CLAUDE.md` "Tuning
 the rotor phase"; `archived/PERFORMANCE.md` §7.15.
 
-**10. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
+**11. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
 control, direction consistent across two seeds but **p ≈ 0.13 — suggestive, not
 established**, and only at a stride already outside the recommended K≤3.
@@ -147,20 +185,20 @@ Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**11. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**12. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**12. No `install` target**, and the n-gram files are not declared as build/run
+**13. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**13. Single-file distribution.** Embedding the tables was declined once, but
+**14. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**14. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**15. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 

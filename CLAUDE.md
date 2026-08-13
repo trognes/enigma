@@ -29,6 +29,16 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
   last release, which is usually a lot (feature work lands on `dev` for several
   PRs before a release merge), so a stale base shows up as work re-deriving
   something already shipped or as conflicts against files the branch never saw.
+- **Name working branches `claude/claude-dev-N`**, `N` counting up from the
+  highest already on the remote — check with `git branch -r` rather than
+  assuming, since merged branches are removed by hand and the numbering has
+  gaps. One branch per PR, cut fresh from `dev`; do not reuse a branch whose PR
+  has merged. If the harness assigns a different branch name, this convention
+  wins.
+- **Remote branches are deleted by the repository owner, manually.** There is no
+  auto-delete on merge, so a merged branch lingering on the remote means nothing
+  and must not be pruned or reused on that basis. `git fetch --prune` is fine
+  when the owner has already deleted them; deleting them yourself is not.
 
 ## Repository layout
 
