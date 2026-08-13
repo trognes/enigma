@@ -118,6 +118,18 @@ several are short (below the ~23-letter unicity distance), the source flags that
 "July Batch A" messages are **hand cipher** (Doppelkasten), the "Batch C" trio may not be
 Enigma at all, and a few carry a known day-key they demonstrably do **not** break on.
 
+**Pin `-u B`, do not wildcard the reflector.** On the standard account UKW-B
+replaced UKW-A across Wehrmacht service in 1937, and UKW-C appears only rarely
+and later; for 1941 Heer traffic — which is what this whole collection is —
+UKW-B is the overwhelmingly likely setting. `-u .` costs a **3× larger
+keyspace** to cover two reflectors that almost certainly are not there, and that
+3× is far better spent on `-R`, which is the measured bottleneck
+(`CLAUDE.md`, "The unknown-key break rate"). Treat A and C as a fallback to try
+only after a thorough `-u B` sweep comes back negative, not as a hedge to carry
+through the first one. Note this is a *historical* prior, not something measured
+here — it is the one assumption in a challenge attempt that no amount of compute
+will detect if it is wrong.
+
 ## 6. The `wehrmacht` scoring language — the corpus payoff
 
 The domain-matched corpus idea, realised. `eval/build_telegraphic_ngrams.py` bends the
