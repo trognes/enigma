@@ -166,13 +166,26 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**10. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
-compute it breaks more messages than an exhaustive ring sweep (63/80 vs 51/80,
-p = 0.043) but scores lower mean %-correct, because a wrong *offset* is
-unrecoverable — it fails less often and worse. The capture radius grows as
-`~0.4·L/26`, so at operational lengths those catastrophic failures should get
-rarer, and the trade could stop being a trade. Untested. → `CLAUDE.md` "Tuning
-the rotor phase"; `archived/PERFORMANCE.md` §7.15.
+**10. `--tune-phase` below its saturation length — MEASURED, and the question
+has moved.** The open half was whether the L=200 trade (more breaks, lower mean
+%-correct) survives at operational lengths. It does at **L=300** — 74/80 exact
+against 65/80, McNemar p = 0.049, mean −4.2pp with CI [−8.9, +0.6] — and is gone
+by **L=450**, where the two arms are indistinguishable (100.0/100.0 mean, 39/40
+against 38/40, one discordant pair). The catastrophic misses fall 12/80 → 4/80 →
+0/40 as the capture radius predicts, but the exhaustive arm's hit zero *first*
+(at L=300), so the trade dissolves because the problem stops being hard for
+either arm, not because the flag pulls ahead. Bucketing by distance from the
+true ring to the nearest starting phase explains the *rate* but not *which*
+trials fail, so raising `N` is not the indicated fix. → `CLAUDE.md` "How the
+split moves with length".
+
+*What is left of it.* Matched compute stops discriminating once both arms
+saturate, and `--tune-phase` gets there from a keyspace **125× smaller** — so at
+L≥450 the question is how far **below** the exhaustive sweep's cost it can go
+and still break the message, which is where a 125× keyspace reduction would
+actually pay. `eval/tune_phase_budget.py` measures it (sweeps `-R` over the same
+instances a paired results file drew, so the numbers sit directly against that
+file's arm B column). Unanswered as of writing.
 
 **11. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
