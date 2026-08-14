@@ -20,18 +20,19 @@ C = [
  ("81", "28 Aug 1941", "ALQFI", 92,
   "ALQFIGEELUIBOXEINKBYDDHXIFALWDLTINTZIPGMLFMYZKAGJDWGOCBPEZTERTJIAGVINPRJIXTENBUDFXQYIDZMAPLG", ""),
  ("38", "09 Sep 1941", "GEHRG", 79,
-  "GEHRGLGKQIOKNGSMRUXRZCGVNGYIRWNIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINCIVXSYRGIGUWLOE", ""),
+  "GEHRGLGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINCIVXSYRGIGUWLOE",
+  "position 31 corrected N -> V per the German Army Messages page (updated 01 Aug 2026); the old letter is very likely why this failed to break for twenty years"),
  ("8-Oct", "02 Oct 1941", "ALGXZ", 72,
   "ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOMUGPVXXDYWTJG", ""),
  ("8-C",  "30 Sep 1941", "BYQMZ", 172,
   "BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAIKYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUEAZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY",
-  "Batch C but NOT footnote *3; the 01 Aug 2026 list classifies it as unbroken ENIGMA, and its J-rate agrees -- 6 J in 167 letters against 6.4 expected of a 26-letter cipher; 1 dash. Longest unbroken message in the collection"),
+  "Batch C -- the authors are NOT sure this is Enigma at all. Its J-rate is the one point in its favour: 6 J in 167 letters against the 6.4 a 26-letter cipher predicts. 1 dash. Longest unbroken message in the collection"),
  ("11-C", "30 Sep 1941", "FKQLZ", 112,
   "FKQLZDNXLIAGVIQBUWMHYCAMDFBAEQVGXMRCEPGARIHRKRTDLNYVCSWUFHIXLXPUCESNOLNAHZDKPNVBFSOKBPCTGDKOFMTWGSYOUTQRMPWWZORK",
-  "Batch C; the list calls it unbroken ENIGMA but the letter J does NOT occur in its 107 letters (4.1 expected), which is what footnote *3's 25-letter manual cipher predicts -- attack it only after BYQMZ and RXPSB"),
+  "Batch C -- may not be Enigma. The letter J does NOT occur in its 107 letters (4.1 expected), which is exactly what a 25-letter manual alphabet predicts; attack it only after BYQMZ and RXPSB"),
  ("12-C", "30 Sep 1941", "XFEDT", 102,
   "XFEDTZYOQHTSAFRLQCHZURCWOILRXGMCBFZKAPYDUMHVCATDPSEAKYSZEGFKGINXWRNQVOIDFANGLRXNUHGTVFCNEXBPWYMZFBXOAU",
-  "Batch C; same as Nr 11-C -- zero J in 97 letters (3.7 expected); pooled with FKQLZ that is 0 of 7.8, p = 3e-4"),
+  "Batch C -- may not be Enigma. Same as Nr 11-C: zero J in 97 letters (3.7 expected); pooled with FKQLZ that is 0 of an expected 7.8, p = 3e-4"),
  # --- July "Batch A": none of these is marked TS (Truppenschluessel) on the
 # --- 01 Aug 2026 list, so the old blanket hand-cipher warning does not apply ---
  ("87",  "03 Jul 1941", "KLJBO", 55,
@@ -77,18 +78,19 @@ C = [
 # authentic real-traffic scoring-failure instance -- unrecoverable in principle
 # rather than merely hard.
 SOLVED = {
-  "81":  "BROKEN on 14.07.2026 (key not recorded here)",
+  "81":  "BROKEN 14.07.2026. The key IS now in this repo -- but for the Bundesarchiv copy Nr 55 NF in enigma-army-messages-1941.txt, not for this transcription, which is too corrupt to decrypt under it",
   "38":  "BROKEN on 12.07.2026 (key not recorded here)",
   "8-Oct": "BROKEN on 31.07.2026 (key not recorded here)",
   "140": "BROKEN by Michael Craig on 17.07.2007 (key not recorded here)",
   "138": "same message as Nr 140, which is broken -- see Nr 140",
 }
 
-# Unbroken ENIGMA messages on that list whose ciphertext this repo does NOT
-# hold. Both are 29 Sep 1941, Batch C, and neither carries the list's footnote
-# *3 (the manual-cipher suspicion) -- so QTXMA is the second-longest unbroken
-# Enigma message in the collection and is absent from the challenge set purely
-# because it was never transcribed here.
+# Unbroken messages on that list whose ciphertext this repo does NOT hold. Both
+# are 29 Sep 1941 and both are Batch C, so the batch-level caveat above applies
+# to them as much as to BYQMZ: the authors are unsure Batch C is Enigma at all.
+# Neither carries footnote *3 individually. QTXMA is the second-longest unbroken
+# message in the collection and is absent from the challenge set only because it
+# was never transcribed here.
 MISSING = [
   ("6",  "29 Sep 1941", "QTXMA", 160, 155),
   ("7",  "29 Sep 1941", "SZAEJ",  56,  51),
@@ -103,7 +105,7 @@ HEADER = """\
 #         Operation Barbarossa, Jun-Oct 1941. CC BY-NC-SA.
 #
 # Presented as a standing challenge (a companion to the solved sets in
-# enigma-messages.txt (13) and enigma-army-messages-1941.txt (56)). There is no
+# enigma-messages.txt (13) and enigma-army-messages-1941.txt (61)). There is no
 # plaintext or key here to verify against; build_challenge_1941.py only checks that
 # each transcription matches the letter count written on the message form.
 #
@@ -127,14 +129,18 @@ HEADER = """\
 #     superseded by that per-message mark, and was actively misleading: Nr 214
 #     (FTNBK, 101 letters) is the longest message in that batch and it broke as
 #     Enigma.
-#   * "Batch C" is NOT uniformly suspect, and the earlier note here misattributed
-#     the suspicion. The list's footnote *3 -- "possible manual cipher on a
-#     25-letter alphabet, J not used" -- is attached to Batch C Nrs 1-5, 14 and
-#     14a, NOT to BYQMZ, FKQLZ or XFEDT, all three of which the list classifies as
-#     unbroken ENIGMA. Measured against that footnote's own test (see
-#     MODERN_BREAKING_NOTES.md 5): BYQMZ carries 6 J in 167 letters, exactly the
-#     6.4 expected of a 26-letter cipher, so it is Enigma-like; FKQLZ and XFEDT
-#     carry ZERO J in 107 and 97, pooling to 0 of an expected 7.8 (p = 3e-4).
+#   * "Batch C" (BYQMZ, FKQLZ, XFEDT) MAY NOT BE ENIGMA. The authors say so
+#     directly on the German Army Messages page: "We are not quite sure if these
+#     messages are Enigma messages or if they are messages enciphered with another
+#     machine or system." An earlier revision of this file claimed that caveat was
+#     misattributed, on the grounds that the message list's footnote *3 sits on
+#     other Batch C messages; that inference was wrong and is withdrawn -- the
+#     authors' own statement is the authority, not the placement of a footnote.
+#     A test of *3's specific hypothesis (a 25-letter alphabet without J) SPLITS
+#     the three, and is offered as evidence, not as a refutation of the caveat:
+#     BYQMZ carries 6 J in 167 letters against the 6.4 a 26-letter cipher
+#     predicts, while FKQLZ and XFEDT carry ZERO in 107 and 97, pooling to 0 of an
+#     expected 7.8 (p = 3e-4). See MODERN_BREAKING_NOTES.md 5b.
 #   * A few carry a known day-key that they do NOT break on (noted per message) --
 #     evidence of a different key/network or a non-Enigma system.
 #   * Most are short (below the ~23-letter unicity distance for HG Nord traffic),

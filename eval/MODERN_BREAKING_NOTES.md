@@ -91,7 +91,7 @@ to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --polish -l german`
 
 ## 4. Expanded real-traffic set (`eval/enigma-army-messages-1941.txt`)
 
-**57 further authentic HG Nord messages** with keys + verified plaintext, from the older
+**58 further authentic HG Nord messages** with keys + verified plaintext, from the older
 Sullivan & Weierud "Breaking German Army Ciphers" collection (Cryptologia 2005;
 cryptocellar.org/bgac). These are ciphertexts the authors originally **failed to break**
 (2003–04) whose day-keys were **recovered later** (released 04 Aug 2017) — the "messages
@@ -103,10 +103,10 @@ telegraphic German (fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`
 "singular unbroken" message, now broken — and No. 233 XNRLR) are dropped by
 ciphertext-dedup, so the two files are disjoint.
 
-Together the two files hold **70 authentic messages (~6,950 letters)** of real
+Together the two files hold **71 authentic messages (~7,030 letters)** of real
 telegraphic German — the statistical power the original 13 (bimodal, too small to settle
 `-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
-statistics stay the *telegraphic corpus*; these 70 messages are *held-out validation*.
+statistics stay the *telegraphic corpus*; these 71 messages are *held-out validation*.
 
 ## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
 
@@ -381,6 +381,129 @@ come apart. The unknown-key work in `CLAUDE.md` measured a **median true-key z
 of
 11.5 at L=167** with 95% of messages breakable; this message at L=101 sits at
 2.05. Length is doing all the work, exactly as that model predicts.
+
+### 5g. Four more messages recovered from the 01 Aug 2026 source pages
+
+The **German Army Messages** page (`cryptocellar.org/bgac/army-messages.html`,
+updated 01 Aug 2026) carries the message forms themselves, and four messages
+fell out of it. All four are now in `enigma-army-messages-1941.txt`.
+
+**Nr 81 ALQFI, 28 Aug 1941 — the key recovered here, and a second FTNBK.** The
+page reports that Nr 81 was broken on 14.07.2026 only after a *different copy*
+of the same message surfaced in the Bundesarchiv (**Nr 55 NF**, from another
+SS-Totenkopf station), and it prints that copy's plaintext. 86 letters of known
+plaintext is a crib, so the key came out of a 144 293 000-key sweep in **45
+seconds**, 100.0% of keys rejected unscored:
+
+    reflector B, wheels III IV V, ring AVJ, start YAC
+    plugs BH CS DU EI FR GM JO KQ TX VZ            (10 pairs)
+
+    EINS NEUN EINS FUENF X KOLONNEN UEBER X STARAJA RUSSA X STARAJA
+    RUSSA X IN MARSQ GESETZT X HARTJENSTEIN X
+
+Verified by re-encrypting to the published ciphertext. **This is the 28.08.1941
+day key**, which was not previously in the repo.
+
+Running the *old* Nr 81 transcription under that key gives
+`EINSMMLVUSHCMEOKFXKOERPNENUXFERES`**`VARAJARNSSAX`**`...` — fragments of the
+truth through heavy corruption, the same failure as §5d. Its `--confidence`
+margin is **+0.8 sd even with the correct key**, which usefully bounds that
+test: it cannot see through corruption this heavy.
+
+**Nrs 115, 116, 117 — NOT a recovery. They were already here.** The page prints
+their ciphertexts, a Kenngruppe-keyed diff said the repo did not hold them, and
+sweeping the start under the already-known 27.09.1941 day key broke all three at
+once (+9.6, +13.8, +8.8 sd). All of that was real; the conclusion drawn from it
+was not. **The repo already held all three**, stored under the designators as
+*received* — `-----`, `ITF--`, `-AQBH` — with the same ciphertexts and the same
+starts (WAS, WAS, GRA). Matching on Kenngruppe missed them; the ciphertext is
+the identity, and matching on it finds them immediately.
+
+So the sweep re-derived three known starts, which is a decent end-to-end
+consistency check and nothing more. What the page does add for them is their
+**true designators**, AEFXP / ITFPX / MNQBH, now recorded against the existing
+rows in place of the garbled forms.
+
+`build_army_messages_1941.py` deduped only against `enigma-messages.txt`, never
+against itself, so the mistaken additions produced *duplicate records* rather
+than an error. It now self-dedups on ciphertext first and dies on a repeat.
+
+**Readings.** The three, plus Nr 55 NF, now carry `READING` (word-split, with
+the
+telegraphic conventions expanded) and `GLOSS` (English) fields beside the raw
+`DECRYPT`. The doubled words operators used for reliability are an
+error-correcting code that repairs itself — `ZANDEYS`/`ZANDERS`,
+`KOENIGSBCRG`/`COENIGSBNRG`, `LKW`/`EKW` — while a garble sent only once
+(`BRZT`, `ABPANG`) stays marked `[?]`. Those garbles are in the original
+transmission, not the decrypt: the keys are exact and verified by re-encryption.
+
+**The lesson that survives** is about identity, not about cracking: a message's
+identity is its **ciphertext**, and any check keyed on a Kenngruppe — the one
+field most likely to be garbled or missing, since it is the first group off the
+air — will miss exactly the messages whose transcription is damaged. That is the
+same class of error as §5d, arriving from the other direction.
+
+**Nr 38 GEHRG: one letter corrected.** The page's transcription differs from the
+one this repo carried at **position 31** (`N` → `V`). That is very likely why it
+resisted for twenty years and then broke in July 2026 — the third instance in
+this collection of a single-source transcription error making a message
+unbreakable.
+
+### 5h. What a REAL message is worth, by length
+
+Every break-rate number in `CLAUDE.md` comes from **synthetic** trials:
+authentic plaintext, but a random excerpt, a random key and a freshly drawn
+10-pair board. The 71 messages here have real keys, real boards, real garbles
+and real lengths, so the same question can be asked of them directly.
+`eval/real_traffic_z.py` does it without sweeping: climb the true key, climb a
+sample of wrong keys from the same space, and ask whether the true key's `z`
+clears `√(2 ln K)`. For the sweep a real attempt needs (`-u B`, wheels I–V,
+`-r A.. -g ...`, K = 160 293 120) that bar is **6.15 sd**.
+
+Board hidden on both arms, `-R 64`, 96 null samples:
+
+| length | message | true key | null | z | |
+|---:|---|---:|---:|---:|---|
+| 69 | MNQBH | −7.8375 | −8.3462 | **2.20** | short of the bar |
+| 113 | RDNAQ | −8.3500 | −9.5907 | **7.59** | breakable |
+| 174 | AEFXP | −9.1212 | −10.4139 | **9.41** | breakable |
+
+**The crossover sits between 70 and 110 letters**, and it is sharp. That is the
+practical reading for the challenge set: of the twelve unbroken messages this
+repo holds, only BYQMZ (167) and RXPSB (107) are on the right side of it, and
+everything at 97 letters and below is out of reach ciphertext-only regardless of
+compute — §5f showed the gap does not close with restarts, it *widens*, since
+extra restarts help the wrong keys after the true key has reached its ceiling.
+
+**It is also less optimistic than the synthetic model.** `CLAUDE.md` records a
+median true-key z of **11.5 at L=167** with 95% of messages breakable; the real
+174-letter message here reads **9.41**, and the real 69-letter one reads 2.20
+where the synthetic curve is still comfortable. Real traffic carries garbles,
+fixed openings and repeated words that a random excerpt does not, so treat the
+synthetic figures as an upper bound when judging a specific message.
+
+Caveats worth keeping with the numbers: **one message per length**, not a
+distribution; `z` is a ratio whose denominator is the *sampled* sd, so it is
+noisy at small sample counts (the 69-letter cell reads 2.20 at 96 samples and
+1.38 at 32); and the recipe is the recommended one, so a different scoring model
+would move all three cells together.
+
+### 5i. The board is not free even when the rotor key is
+
+A second result fell out of the same probe, and it is the more surprising one.
+At **174 letters with the true rotor key given** and only the plugboard hidden,
+`-R 32` **fails to recover the board**: it converges at −10.1261 against the
+true
+board's −9.1212, and its output is not the plaintext.
+
+That is the plugboard-recovery tier — the tier nearly every tuning number in
+this repo is measured on — failing on real traffic at a length the synthetic
+`crackquality` sweeps treat as easy. It took `-R 64` to recover the same board.
+So the two results point the same way: **a real message is harder than a
+synthetic one of the same length**, on both halves of the problem.
+
+The practical consequence is that `-R` should be sized against real traffic, not
+against the `crackquality` curve, when the target is an actual message.
 
 ### 5c. Attacking
 
