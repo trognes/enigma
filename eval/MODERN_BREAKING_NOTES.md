@@ -230,6 +230,49 @@ rotor key in **0.13 s** at `-R 64` — no crib, 151 999 boards scored — so Nr 
 is now a clean validation instance at 101 letters, a length the repo previously
 had no ground truth at.
 
+### 5e. Are the "does not break on the day key" messages just mis-transcribed?
+
+§5d makes this worth asking: Nrs 100, 138 and 172 carry a *recovered* day key
+that they demonstrably do not decrypt under, which the source reads as a
+different key or network — but a handful of copying errors would look the same,
+and FTNBK proves copying errors happen. Enigma has no diffusion, so a
+mis-transcribed message under its true key still decrypts to readable text with
+one wrong letter per wrong letter, and `--confidence` can see that.
+
+Tested by fixing each day key (already in the repo) and sweeping all 17 576
+start positions, `-f -l wehrmacht --confidence 256`:
+
+| | letters | best margin | verdict |
+|---|---:|---:|---|
+| Nr 100 LXACA, 5 Jul | 20 | +0.8 sd | noise |
+| Nr 138 WEUWY, 9 Jul | 48 | +0.6 sd | noise |
+| Nr 172 MVUEH, 10 Jul | 82 | +0.6 sd | noise |
+
+All three sit under the +2 sd line that "is not a find", and all three decrypt
+to gibberish. **The source's reading stands: these are a different key, network
+or system, not a transcription problem.**
+
+**The negative is only worth as much as the test's power, so that is measured
+too** — using FTNBK's own 13-error ciphertext under its true key, truncated to
+each message's length:
+
+| letters | errors | margin |
+|---:|---:|---:|
+| 101 | 13 | **+5.1 sd** |
+| 82 | 11 | **+4.0 sd** |
+| 48 | 6 | **+2.4 sd** |
+| 20 | 1 | +1.0 sd |
+
+So at Nr 172's length a mis-transcribed message would have read +4.0 against the
++0.6 observed, and at Nr 138's length +2.4 against +0.6 — those two negatives
+are real. **Nr 100 is not a negative at all**: at 20 letters even a correct,
+clean message reads only +1.0, which is below the noise line. It sits under the
+~23-letter unicity distance, so no amount of compute will settle it either way.
+
+The general point is reusable: **when a day key is known, this test separates
+"wrong key" from "right key, bad transcription" in seconds**, and it needs
+nothing but `--confidence` and a start sweep.
+
 ### 5c. Attacking
 
 Attack with care: several are short (below the ~23-letter unicity distance), and
