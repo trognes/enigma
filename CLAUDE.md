@@ -1850,14 +1850,31 @@ catastrophe at either length, but only 3 and 5 trials). So these behave like
 climb failures at the starting phase rather than pure capture failures, and
 raising `N` is not obviously the fix that reading would suggest.
 
-**What this leaves open** is the other direction. Matched compute stops
-discriminating once both arms saturate, and arm A reaches that from a keyspace
-**125× smaller** — so at L≥450 the question is not whether it wins at 170 s but
-how far *below* 170 s it can go and still break the message.
-`eval/tune_phase_budget.py` sweeps `-R` over the same instances a paired results
-file drew (verifying ring, start, board and plaintext hash against each recorded
-row first, for the reason §7.15 gives), which makes its numbers directly
-comparable to that file's arm B column.
+**And below matched compute it pays outright.** Once both arms saturate the
+matched-wall-time question stops discriminating, and the useful one is how far
+*below* the exhaustive sweep's cost `--tune-phase` can go — which is where a
+125× smaller keyspace should show up. Swept over the same 40 instances at L=450
+(`eval/tune_phase_budget.py`, results `...-L450-budget.jsonl`):
+
+| `-R` | mean %-correct | exact | wall/trial |
+|---:|---:|---:|---:|
+| 2 | 95.0 | 36/40 | **5.8 s** |
+| 4 | 98.7 | 37/40 | 11.8 s |
+| **8** | 98.9 | **38/40** | **23.4 s** |
+| 16 | 98.9 | 38/40 | 46.6 s |
+| *exhaustive arm B* | *100.0* | *38/40* | *171.5 s* |
+
+**`-R 8` matches the exhaustive arm's 38/40 for 23.4 s against 171.5 s — 7.3×
+cheaper — and saturates there**, `-R 16` being identical outcome for double the
+time. `-R 4` gives up one break for 14.5×. So at operational lengths the flag is
+not a trade at all: it is the same result for a seventh of the compute, and the
+right operating point is a *low* restart count, nowhere near the `-R 42` matched
+compute forced.
+
+The residual is not budget-limited. Of the three non-exact trials, two sit at
+the same %-correct at every `-R` (58.0% and 99.56%) and so are untouched by more
+restarts; only one moves (5.78% at `-R 2`, exact from `-R 4`). That is what
+saturation looks like from the inside.
 
 Raw data: `eval/results-tune-phase-L300.jsonl` / `-L450.jsonl` with `.txt`
 summaries; `eval/tune_phase_vs_restarts.py` and its report script, which prints

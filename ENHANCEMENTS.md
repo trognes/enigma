@@ -183,8 +183,8 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**10. `--tune-phase` below its saturation length — MEASURED, and the question
-has moved.** The open half was whether the L=200 trade (more breaks, lower mean
+**10. `--tune-phase` — MEASURED at three lengths and below saturation;
+CLOSED.** The open half was whether the L=200 trade (more breaks, lower mean
 %-correct) survives at operational lengths. It does at **L=300** — 74/80 exact
 against 65/80, McNemar p = 0.049, mean −4.2pp with CI [−8.9, +0.6] — and is gone
 by **L=450**, where the two arms are indistinguishable (100.0/100.0 mean, 39/40
@@ -196,13 +196,17 @@ true ring to the nearest starting phase explains the *rate* but not *which*
 trials fail, so raising `N` is not the indicated fix. → `CLAUDE.md` "How the
 split moves with length".
 
-*What is left of it.* Matched compute stops discriminating once both arms
-saturate, and `--tune-phase` gets there from a keyspace **125× smaller** — so at
-L≥450 the question is how far **below** the exhaustive sweep's cost it can go
-and still break the message, which is where a 125× keyspace reduction would
-actually pay. `eval/tune_phase_budget.py` measures it (sweeps `-R` over the same
-instances a paired results file drew, so the numbers sit directly against that
-file's arm B column). Unanswered as of writing.
+*Now answered, and it pays outright.* Matched compute stops discriminating once
+both arms saturate, so the useful question was how far **below** the exhaustive
+sweep's cost `--tune-phase` can go. Swept over the same 40 instances at L=450
+(`eval/tune_phase_budget.py`): `-R 8` matches the exhaustive arm's **38/40 for
+23.4 s against 171.5 s — 7.3× cheaper** — and saturates there, `-R 16` being an
+identical outcome for double the time; `-R 4` gives up one break for 14.5×. So
+at operational lengths the flag is not a trade: it is the same result for a
+seventh of the compute, at a *low* restart count nowhere near the `-R 42`
+matched compute forced. Two of the three residual misses are flat across every
+`-R`, so the residual is not budget-limited either. → `CLAUDE.md` "How the split
+moves with length".
 
 **11. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board

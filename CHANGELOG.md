@@ -128,6 +128,15 @@ existing command lines can behave differently or stop working.
   full break is useful; prefer the exhaustive sweep when a partial answer has
   value.
 
+  **Below matched compute it pays outright.** Once both arms saturate the
+  matched-wall-time question stops discriminating, so `-R` was swept over the
+  same 40 instances at L=450: `-R 8` matches the exhaustive sweep's 38/40 for
+  **23.4 s against 171.5 s, 7.3× cheaper**, and saturates there (`-R 16` is an
+  identical outcome for double the time); `-R 4` gives up one break for 14.5×.
+  At operational lengths the flag is therefore not a trade at all — the same
+  result for a seventh of the compute — and the right operating point is a *low*
+  restart count, nowhere near the `-R 42` that matched compute forced.
+
 ### Changed
 
 - **The test suite runs 3.6× faster — 232 s → 64 s — with all 437 checks
