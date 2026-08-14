@@ -1,0 +1,18 @@
+L=450, 40 paired trials, matched wall time: arm B (full ring1/ring2
+enumeration, 338676 keys, -R 0) 168.1 s vs arm A (--tune-phase 2, 2704 keys)
+-R 42, 165.8 s -- calibrated on this box, 1.4% apart.
+
+trials: 40   wall: B 171s  A 170s (per trial, mean)
+
+                      mean %-correct    exact
+  B  restarts, full      100.0          38/40
+  A  --tune-phase 2      100.0          39/40
+
+paired difference A-B: +0.0 pp   95% CI [-0.0, +0.1]
+exact recovery: both 38   only A 1   only B 0   neither 1
+McNemar exact p = 1.000 (on 1 discordant pairs)
+
+failure shapes (non-exact trials; catastrophic = under 20% correct)
+                      misses   catastrophic   partial   partial mean
+  B  restarts, full       2        0             2        99.1%
+  A  --tune-phase 2       1        0             1        99.6%
