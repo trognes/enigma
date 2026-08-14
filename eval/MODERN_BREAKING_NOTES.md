@@ -264,7 +264,9 @@ ranks below a wrong one. The corrected ciphertext, by contrast, recovers exactly
 With the ciphertext corrected, the tool recovers the whole board from the true
 rotor key in **0.13 s** at `-R 64` — no crib, 151 999 boards scored — so Nr 214
 is now a clean validation instance at 101 letters, a length the repo previously
-had no ground truth at.
+had no ground truth at. **That is the plugboard-recovery tier, not a break**:
+see
+§5f, where the same message is a scoring failure ciphertext-only.
 
 ### 5e. Are the "does not break on the day key" messages just mis-transcribed?
 
@@ -308,6 +310,53 @@ clean message reads only +1.0, which is below the noise line. It sits under the
 The general point is reusable: **when a day key is known, this test separates
 "wrong key" from "right key, bad transcription" in seconds**, and it needs
 nothing but `--confidence` and a start sweep.
+
+### 5f. Even CORRECTED, Nr 214 is a scoring failure ciphertext-only
+
+§5d's 0.13 s recovery is the standard plugboard-recovery measurement — rotor key
+given, board hidden — and it is the tier nearly every number in this repo is
+measured on. It says nothing about a ciphertext-only attack, and on this message
+the two answers differ.
+
+Measured the way `unknown_key_headroom.py` frames it: climb the true key, climb
+a sample of wrong keys drawn from the same space, and ask whether the true key's
+`z` clears `√(2 ln K)` — the score the best of `K` keys reaches by chance. For
+the sweep this message actually needs (`-u B -w ... -r A.. -g ...`,
+K = 160 293 120), that bar is **6.15 sd**.
+
+| schedule | `-R` | null | true key | z | margin |
+|---|---:|---:|---:|---:|---:|
+| `i4f10` | 1 | −9.7810 ± 0.2768 | −9.7153 | 0.24 | **−5.91** |
+| `i4f10` | 8 | −9.5008 ± 0.2236 | −9.3325 | 0.75 | **−5.39** |
+| `i4f10` | 64 | −9.3326 ± 0.1891 | −8.9452 | **2.05** | **−4.10** |
+| `i4f5` | 8 | −9.7111 ± 0.2863 | −9.4178 | 1.02 | −5.12 |
+| `i4f3` | 8 | −9.7052 ± 0.2612 | −9.3325 | 1.43 | −4.72 |
+
+**Every configuration is 4–6 sd short**, and the direct evidence is blunter
+still: among just **256 randomly sampled wrong rotor keys**, the best scored
+−8.7256 — already above the true key's −8.9452. A ciphertext-only sweep would
+not have returned this message, however much of it was run.
+
+**But it is not an information limit.** `z` rises steadily with the restart
+budget — 0.24 → 0.75 → **2.05** at `-R` 1 → 8 → 64 — so the truth does separate
+from the null, just far too slowly to pay for: extrapolating that trend, closing
+the remaining 4.1 sd needs on the order of 10³× more restarts *per key*, across
+160 million keys. That is out of reach for one box and is exactly the kind of
+budget a distributed project can spend, which is consistent with Enigma@Home
+having broken it in 2017 — and Nr 214 is the **only** Enigma message on 16 July
+1941 (the other four that day are Truppenschlüssel), so no sibling message could
+have supplied the day key.
+
+Tightening the plug cap helps a little at fixed budget (z 0.75 → 1.02 → 1.43 as
+the target cap goes 10 → 5 → 3 at `-R 8`), the same effect that makes `-F`'s
+tier-1 climb cap at 5 plugs, but it does not change the verdict.
+
+**The general lesson for reading this repo's numbers**: "recovers in 0.13 s" and
+"breakable" are different claims, and at 101 letters with 10 unknown plugs they
+come apart. The unknown-key work in `CLAUDE.md` measured a **median true-key z
+of
+11.5 at L=167** with 95% of messages breakable; this message at L=101 sits at
+2.05. Length is doing all the work, exactly as that model predicts.
 
 ### 5c. Attacking
 
