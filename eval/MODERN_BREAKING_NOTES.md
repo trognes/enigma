@@ -225,6 +225,42 @@ evidence when both come from the same source.** The check that would have caught
 it is the one applied afterwards: re-encrypt the recovered plaintext under the
 recovered key and compare against an *independently sourced* ciphertext.
 
+**The erroneous transcription is kept here deliberately**, because it is a
+useful artefact in its own right — an *authentic* message on which the true
+plaintext is not the highest-scoring one:
+
+    XNQAEQNZLWFMQGTXOQZVXJKBOJKPCLJQZOVFLSVJBSRIYMRYWNUJVWYKXAKK
+    FMSQFBBARNKNHBRHQSLIUVNEHMJKAZRXLJLWISNZZ
+
+    wrong at 14, 29, 30, 33, 34, 42, 50, 52, 58, 59, 78, 89, 94 (13 of 101)
+
+Give the search the **true rotor key** and hide the board, and it does not come
+back: the climb finds a board scoring **above** the truth whose decrypt is
+gibberish. Measured at `-R 64`, `-S i4<model>10 -J --polish`, board hidden:
+
+| model | true board | climb winner | truth is behind by |
+|---|---:|---:|---:|
+| `-t` trigram | −5.0163 | −4.9645 | **0.052** |
+| `-q` quad | −7.2238 | −6.9817 | 0.242 |
+| `-a` weighted | −11.3156 | −10.9858 | 0.330 |
+| `-f` fused | −9.4800 | −9.1858 | 0.294 |
+
+So the failure is **not specific to `i4f10`** — every model prefers a spurious
+board — but the margin **shrinks monotonically as the model order falls**, and
+trigram is nearly at break-even. That is exactly the trade §1 records from
+Ostwald & Weierud, who chose trigrams over higher orders *because* real traffic
+carries 5–30% garbles, and §3 notes the 13-message set was too small to show.
+Here it is on one authentic message: at 12.9% corruption the higher-order models
+lose the truth by 0.24–0.33 while trigram loses it by 0.05. One instance proves
+nothing on its own, but it is a real-traffic datapoint where the repo previously
+had only synthetic short-message evidence for a scoring floor.
+
+Worth keeping in mind when reading a negative sweep on any of the remaining
+challenge messages: **a mis-transcribed ciphertext is not merely harder, it can
+be unrecoverable in principle** — no amount of `-R` finds a board the scorer
+ranks below a wrong one. The corrected ciphertext, by contrast, recovers exactly
+(§5d), so the whole difference here is 13 letters.
+
 With the ciphertext corrected, the tool recovers the whole board from the true
 rotor key in **0.13 s** at `-R 64` — no crib, 151 999 boards scored — so Nr 214
 is now a clean validation instance at 101 letters, a length the repo previously

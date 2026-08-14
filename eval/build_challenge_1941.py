@@ -71,7 +71,11 @@ C = [
 # now lives in enigma-army-messages-1941.txt with its verified plaintext. Its
 # ciphertext HERE was wrong in 13 of 101 letters and did not decrypt under that
 # key -- see MODERN_BREAKING_NOTES.md 5d, which is the more important half of
-# that finding.
+# that finding. The erroneous transcription is kept there verbatim, and is worth
+# keeping: with those 13 letters wrong the true plaintext is no longer the
+# highest-scoring one under ANY model (trigram through fused), so it is an
+# authentic real-traffic scoring-failure instance -- unrecoverable in principle
+# rather than merely hard.
 SOLVED = {
   "81":  "BROKEN on 14.07.2026 (key not recorded here)",
   "38":  "BROKEN on 12.07.2026 (key not recorded here)",
