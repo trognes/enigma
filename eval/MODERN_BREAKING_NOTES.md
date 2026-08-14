@@ -337,15 +337,39 @@ still: among just **256 randomly sampled wrong rotor keys**, the best scored
 −8.7256 — already above the true key's −8.9452. A ciphertext-only sweep would
 not have returned this message, however much of it was run.
 
-**But it is not an information limit.** `z` rises steadily with the restart
-budget — 0.24 → 0.75 → **2.05** at `-R` 1 → 8 → 64 — so the truth does separate
-from the null, just far too slowly to pay for: extrapolating that trend, closing
-the remaining 4.1 sd needs on the order of 10³× more restarts *per key*, across
-160 million keys. That is out of reach for one box and is exactly the kind of
-budget a distributed project can spend, which is consistent with Enigma@Home
-having broken it in 2017 — and Nr 214 is the **only** Enigma message on 16 July
-1941 (the other four that day are Truppenschlüssel), so no sibling message could
-have supplied the day key.
+**It IS an information limit — a scoring failure in this repo's exact sense: the
+true configuration is not the highest-scoring one.** A concrete witness, one
+letter away from the truth in `start2`:
+
+    -8.8931  B314 AHV FQG  BP DI EQ FH GM LU NV OZ RT WY   DLNUNGKLSENDKERNLEI
+    -8.9452  B314 AHV FQR  AH CN DF EI KY MP OZ RU SW VX   STANDORTDERLNKXLNKX
+
+The gibberish scores **higher**. No search can recover what the scorer ranks
+below a wrong answer, so more compute cannot fix this — and the earlier reading
+here, that `z` rising with `-R` meant the gap could be bought with restarts, was
+wrong. The two sides converge at different rates and the truth converges
+**first**: at `-R 64` it is already pinned at its ceiling (−8.9452, unchanged at
+`-R` 256 and 1024, since it recovers the exact true board), while the null is
+still improving. So `z` peaks and then declines —
+
+| `-R` | null | best of 128 wrong keys | true key | z |
+|---:|---:|---:|---:|---:|
+| 8 | −9.5145 ± 0.2211 | −8.8339 | −9.3325 | 0.82 |
+| 64 | −9.3401 ± 0.1854 | −8.7518 | −8.9452 | **2.13** |
+| 256 | −9.2752 ± 0.1540 | −8.7518 | −8.9452 | 2.14 |
+| 1024 | −9.2271 ± 0.1512 | −8.7216 | −8.9452 | **1.86** |
+
+— and at **every** budget the best of just 128 sampled wrong keys already beats
+the truth. Spending more restarts helps the wrong keys and cannot help the
+right one.
+
+How Enigma@Home broke it in 2017 is therefore *not* explained by budget alone,
+and this measurement does not account for it: their pipeline must differ in
+something that matters (scoring model, staging, or human inspection of ranked
+candidates — a truth at rank 10⁶ is still recoverable by a method that reports
+lists rather than a maximum). Worth noting Nr 214 is the **only** Enigma message
+on 16 July 1941 (the other four that day are Truppenschlüssel), so no sibling
+message could have supplied the day key.
 
 Tightening the plug cap helps a little at fixed budget (z 0.75 → 1.02 → 1.43 as
 the target cap goes 10 → 5 → 3 at `-R 8`), the same effect that makes `-F`'s
