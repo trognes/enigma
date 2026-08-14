@@ -203,15 +203,17 @@ re-optimisation afterwards. That is a third, operationally distinct outcome, and
 it is the population `--polish` exists to convert, so a rate for it would
 measure the finisher's target directly instead of by its effect.
 
-*The threshold barely matters, at least on the rotor-key problem.* Pooling every
-non-exact outcome from the three `--tune-phase` A/B runs (both arms, n=70): 22
-sit at or under 10%, 41 at or above 90%, and **three** in between (59.3, 66.7,
-75.7). Nothing at all lands between 10% and 50%. So any cut from ~20% to ~55%
-classifies this data identically, and 60% moves exactly one trial — the
-bimodality is structural, since a wrong *offset* scrambles everything while a
-right key with a few wrong plugs keeps most letters. Pick ~60% and do not
-agonise; the number to report alongside it is how many outcomes fall in the
-band, since a threshold is only interesting when something is near it.
+*Use **50%** — half the letters — and do not agonise.* Pooling every non-exact
+outcome from the three `--tune-phase` A/B runs (both arms, n=70): 22 sit at or
+under 10%, 41 at or above 90%, and **three** in between (59.3, 66.7, 75.7).
+Nothing at all lands between 10% and 50%, so any cut from ~20% to ~55%
+classifies this data identically. 50% is the round number inside that
+insensitive band; 60% is where trials start to move (it is the first cut that
+clips the 59.3 case). The bimodality is structural on this problem — a wrong
+*offset* scrambles everything, while a right key with a few wrong plugs keeps
+most letters — so the threshold is not where the care is needed. Report how many
+outcomes fall in the band beside the rate: a threshold is only interesting when
+something sits near it.
 
 *Where it should actually bite is the plugboard-recovery tier* — `make
 crackquality`, rotor key given, board hidden — whose failures are partial plug
