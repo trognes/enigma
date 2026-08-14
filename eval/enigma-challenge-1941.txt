@@ -5,20 +5,38 @@
 #         (Cryptologia 29(3):193-232, 2005); cryptocellar.org/bgac. HG Nord,
 #         Operation Barbarossa, Jun-Oct 1941. CC BY-NC-SA.
 #
-# These ciphertexts have NO recovered rotor key -- they remain unbroken. Presented
-# as a standing challenge (this is a companion to the solved sets in
+# Presented as a standing challenge (a companion to the solved sets in
 # enigma-messages.txt (13) and enigma-army-messages-1941.txt (56)). There is no
 # plaintext or key here to verify against; build_challenge_1941.py only checks that
 # each transcription matches the letter count written on the message form.
+#
+# STATUS: checked against the BGAC 1941 Message List, "Status on: 01 August 2026".
+# FIVE of the ciphertexts below are NO LONGER UNBROKEN, and a sixth (Nr 138) is a
+# second transcription of one of them -- all six are marked on their KEY: line.
+# Do not spend compute on them. Their keys are not reproduced here.
 #
 # CAVEATS (read before attacking):
 #   * The 1st 5-letter group is the KENNGRUPPE (discriminant), NOT ciphertext --
 #     remove it before deciphering. LEN below is the form count, which INCLUDES it.
 #   * A dash '-' is an unrecorded-but-real letter (illegible on the form): a real
 #     rotor position -- keep it as a placeholder, never strip it, or stepping desyncs.
-#   * "July Batch A" (Nr 87..285): the source notes MANY messages in this batch are
-#     hand cipher (a Doppelkasten variant), NOT Enigma, and the Enigma ones are short.
-#   * "Batch C" (BYQMZ, FKQLZ, XFEDT): the authors are unsure these are Enigma at all.
+#     NOTE the tool keeps only A-Z, so a dash is SILENTLY DROPPED and the stepping
+#     desyncs from that point on: substitute a letter, do not pass the dash through.
+#   * The manual cipher in this collection is the TRUPPENSCHLUESSEL, and the
+#     message list marks it per message (cipher length shown as "TS"). None of the
+#     messages below is marked TS. The older blanket warning here -- that "July
+#     Batch A" is largely hand cipher "and the Enigma ones are short" -- is
+#     superseded by that per-message mark, and was actively misleading: Nr 214
+#     (FTNBK, 101 letters) is the longest message in that batch and it broke as
+#     Enigma.
+#   * "Batch C" is NOT uniformly suspect, and the earlier note here misattributed
+#     the suspicion. The list's footnote *3 -- "possible manual cipher on a
+#     25-letter alphabet, J not used" -- is attached to Batch C Nrs 1-5, 14 and
+#     14a, NOT to BYQMZ, FKQLZ or XFEDT, all three of which the list classifies as
+#     unbroken ENIGMA. Measured against that footnote's own test (see
+#     MODERN_BREAKING_NOTES.md 5): BYQMZ carries 6 J in 167 letters, exactly the
+#     6.4 expected of a 26-letter cipher, so it is Enigma-like; FKQLZ and XFEDT
+#     carry ZERO J in 107 and 97, pooling to 0 of an expected 7.8 (p = 3e-4).
 #   * A few carry a known day-key that they do NOT break on (noted per message) --
 #     evidence of a different key/network or a non-Enigma system.
 #   * Most are short (below the ~23-letter unicity distance for HG Nord traffic),
@@ -38,12 +56,12 @@ LEN:         104  (form count, incl. Kenngruppe)  <-- transcription 112 != form 
 KEY:         UNKNOWN -- unbroken
 CIPHERTEXT:  RXPSBRDHLUZNUQXTFYJJGX-WEOUBHLKSCGYMUTUPIGYGQGANNMPMQGASEQGT
              MLGHTUAFAMSNRDDXHXRQOQAZLGWTUHJGPDDFJLUCMXXYMUNU-TED
-NOTES:       2 garble dashes; form group-count (104) disagrees with the transcription (112) -- form miscount, cf. Nr 136/153
+NOTES:       2 garble dashes; form group-count (104) disagrees with the transcription (112) -- form miscount, cf. Nr 136/153; the 01 Aug 2026 list still shows 104/99, so the discrepancy is unresolved upstream
 
 ### Message No. 81  --  28 Aug 1941  (ALQFI)
 KENNGRUPPE:  ALQFI   (discriminant; strip before deciphering)
 LEN:         92  (form count, incl. Kenngruppe)
-KEY:         UNKNOWN -- unbroken
+KEY:         BROKEN on 14.07.2026 (key not recorded here)
 CIPHERTEXT:  ALQFIGEELUIBOXEINKBYDDHXIFALWDLTINTZIPGMLFMYZKAGJDWGOCBPEZTE
              RTJIAGVINPRJIXTENBUDFXQYIDZMAPLG
 NOTES:       (none)
@@ -51,7 +69,7 @@ NOTES:       (none)
 ### Message No. 38  --  09 Sep 1941  (GEHRG)
 KENNGRUPPE:  GEHRG   (discriminant; strip before deciphering)
 LEN:         79  (form count, incl. Kenngruppe)
-KEY:         UNKNOWN -- unbroken
+KEY:         BROKEN on 12.07.2026 (key not recorded here)
 CIPHERTEXT:  GEHRGLGKQIOKNGSMRUXRZCGVNGYIRWNIISZXWRUUNDFWYUPWCGWRGFNETXXX
              GXINCIVXSYRGIGUWLOE
 NOTES:       (none)
@@ -59,7 +77,7 @@ NOTES:       (none)
 ### Message No. 8-Oct  --  02 Oct 1941  (ALGXZ)
 KENNGRUPPE:  ALGXZ   (discriminant; strip before deciphering)
 LEN:         72  (form count, incl. Kenngruppe)
-KEY:         UNKNOWN -- unbroken
+KEY:         BROKEN on 31.07.2026 (key not recorded here)
 CIPHERTEXT:  ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOM
              UGPVXXDYWTJG
 NOTES:       (none)
@@ -71,7 +89,7 @@ KEY:         UNKNOWN -- unbroken
 CIPHERTEXT:  BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAI
              KYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUE
              AZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY
-NOTES:       Batch C: authors uncertain whether Enigma or another machine/system; 1 dash
+NOTES:       Batch C but NOT footnote *3; the 01 Aug 2026 list classifies it as unbroken ENIGMA, and its J-rate agrees -- 6 J in 167 letters against 6.4 expected of a 26-letter cipher; 1 dash. Longest unbroken message in the collection
 
 ### Message No. 11-C  --  30 Sep 1941  (FKQLZ)
 KENNGRUPPE:  FKQLZ   (discriminant; strip before deciphering)
@@ -79,7 +97,7 @@ LEN:         112  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
 CIPHERTEXT:  FKQLZDNXLIAGVIQBUWMHYCAMDFBAEQVGXMRCEPGARIHRKRTDLNYVCSWUFHIX
              LXPUCESNOLNAHZDKPNVBFSOKBPCTGDKOFMTWGSYOUTQRMPWWZORK
-NOTES:       Batch C: authors uncertain whether Enigma or another machine/system
+NOTES:       Batch C; the list calls it unbroken ENIGMA but the letter J does NOT occur in its 107 letters (4.1 expected), which is what footnote *3's 25-letter manual cipher predicts -- attack it only after BYQMZ and RXPSB
 
 ### Message No. 12-C  --  30 Sep 1941  (XFEDT)
 KENNGRUPPE:  XFEDT   (discriminant; strip before deciphering)
@@ -87,7 +105,7 @@ LEN:         102  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
 CIPHERTEXT:  XFEDTZYOQHTSAFRLQCHZURCWOILRXGMCBFZKAPYDUMHVCATDPSEAKYSZEGFK
              GINXWRNQVOIDFANGLRXNUHGTVFCNEXBPWYMZFBXOAU
-NOTES:       Batch C: authors uncertain whether Enigma or another machine/system
+NOTES:       Batch C; same as Nr 11-C -- zero J in 97 letters (3.7 expected); pooled with FKQLZ that is 0 of 7.8, p = 3e-4
 
 ### Message No. 87  --  03 Jul 1941  (KLJBO)
 KENNGRUPPE:  KLJBO   (discriminant; strip before deciphering)
@@ -106,14 +124,14 @@ NOTES:       does NOT break on the 5 Jul key; header time suggests it belongs to
 ### Message No. 138  --  09 Jul 1941  (WEUWY)
 KENNGRUPPE:  WEUWY   (discriminant; strip before deciphering)
 LEN:         53  (form count, incl. Kenngruppe)
-KEY:         UNKNOWN -- unbroken
+KEY:         same message as Nr 140, which is broken -- see Nr 140
 CIPHERTEXT:  WEUWYWCZIEDSYTCDXOI-CDSXOXASIMEIORSRKRISSPCCOUIMDZYDM
 NOTES:       does NOT break on the 9 Jul key; 1 dash
 
 ### Message No. 140  --  09 Jul 1941  (WEUWY)
 KENNGRUPPE:  WEUWY   (discriminant; strip before deciphering)
 LEN:         53  (form count, incl. Kenngruppe)
-KEY:         UNKNOWN -- unbroken
+KEY:         BROKEN by Michael Craig on 17.07.2007 (key not recorded here)
 CIPHERTEXT:  WEUWYTCTICBSEYTHDHXOXUSIMIEORHRKVEIXFICQUIMBZIDZMFEQM
 NOTES:       does NOT break on the 9 Jul key
 
@@ -143,7 +161,7 @@ NOTES:       1 dash
 ### Message No. 214  --  16 Jul 1941  (FTNBK)
 KENNGRUPPE:  FTNBK   (discriminant; strip before deciphering)
 LEN:         106  (form count, incl. Kenngruppe)
-KEY:         UNKNOWN -- unbroken
+KEY:         BROKEN by Enigma@Home on 15.09.2017 (key not recorded here)
 CIPHERTEXT:  FTNBKXNQAEQNZLWFMQGTXOQZVXJKBOJKPCLJQZOVFLSVJBSRIYMRYWNUJVWY
              KXAKKFMSQFBBARNKNHBRHQSLIUVNEHMJKAZRXLJLWISNZZ
 NOTES:       (none)
@@ -163,3 +181,12 @@ CIPHERTEXT:  FMNGIFGROVFDIVQMNMNILIFZBQVNQWLGBLJVRLEBXIQEXCSAQPEKFHEKFBIK
              MCF
 NOTES:       (none)
 
+# ----------------------------------------------------------------------------
+# UNBROKEN ENIGMA MESSAGES NOT TRANSCRIBED HERE
+# The 01 Aug 2026 message list carries two unbroken Enigma messages whose
+# ciphertext this repo does not hold. Neither carries footnote *3. QTXMA is the
+# SECOND-LONGEST unbroken Enigma message in the collection, so it is the most
+# valuable missing item here -- transcribe it from the message form (the list
+# links a 'Spruch' scan) to add it.
+#   Nr 6    29 Sep 1941  QTXMA  160 / 155 (form / cipher)
+#   Nr 7    29 Sep 1941  SZAEJ  56 / 51 (form / cipher)

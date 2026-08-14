@@ -110,13 +110,85 @@ statistics stay the *telegraphic corpus*; these 69 messages are *held-out valida
 
 ## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
 
-The same collection's **18 still-unbroken ciphertexts** (no rotor key ever recovered),
-kept as a future challenge. There is no key or plaintext to verify against, so
-`eval/build_challenge_1941.py` only checks each transcription against the letter count on
-the message form (all match bar one known form-miscount, Nr 53). Attack with care:
-several are short (below the ~23-letter unicity distance), the source flags that many
-"July Batch A" messages are **hand cipher** (Doppelkasten), the "Batch C" trio may not be
-Enigma at all, and a few carry a known day-key they demonstrably do **not** break on.
+The same collection's 18 ciphertexts that were unbroken when this file was
+assembled, kept as a future challenge. There is no key or plaintext to verify
+against, so `eval/build_challenge_1941.py` only checks each transcription
+against the letter count on the message form (all match bar one known
+form-miscount, Nr 53).
+
+### 5a. Status re-checked against the message list, 01 Aug 2026
+
+The BGAC **1941 Message List** (`cryptocellar.org/bgac/1941-msg-list.html`)
+carries a live status per message, and it moved a long way after this set was
+captured. **Six of the 18 are no longer a challenge** — five broken, and Nr 138
+is a second transcription of one of them:
+
+| | date | letters | status |
+|---|---|---:|---|
+| Nr 214 FTNBK | 16 Jul | 101 | broken by **Enigma@Home**, 15.09.2017 |
+| Nr 140 WEUWY | 09 Jul | 48 | broken by Michael Craig, 17.07.2007 |
+| Nr 38 GEHRG | 09 Sep | 74 | broken 12.07.2026 |
+| Nr 81 ALQFI | 28 Aug | 87 | broken 14.07.2026 |
+| Nr 8 ALGXZ | 02 Oct | 67 | broken 31.07.2026 |
+| Nr 138 WEUWY | 09 Jul | 48 | same message as Nr 140 |
+
+The recovered keys are not on the list itself, so they are not recorded here.
+**Fetching one moves that message from this file to the validation set**, where
+it is worth more: an authentic instance with ground truth at a length the repo
+has none at (Nr 214 is 101 letters, and the break-rate work stops at L=167).
+
+**Two unbroken Enigma messages are missing from this repo entirely**, both 29
+Sep 1941: **QTXMA, 155 letters** — the *second-longest unbroken message in the
+collection* — and SZAEJ, 51. Neither is transcribed here, which is the only
+reason they are
+absent. Transcribing QTXMA from its message form is the single highest-value
+addition to the challenge set.
+
+**Two blanket caveats in the older text were wrong, and both mattered.**
+
+- *"July Batch A is largely hand cipher, and the Enigma ones are short."* The
+  manual cipher is the **Truppenschlüssel**, and the list marks it per message
+  (cipher length printed as `TS`). None of the 18 is marked TS. The "Enigma ones
+  are short" half was actively misleading: Nr 214 is the **longest** message in
+  that batch and it broke as Enigma.
+- *"The Batch C trio may not be Enigma at all."* The suspicion belongs to
+  footnote **\*3** — "special format, probably tactical, possibly a manual
+  cipher on a 25-letter alphabet, J not used" — and that footnote is attached to
+  Batch C Nrs 1–5, 14 and 14a, **not** to BYQMZ, FKQLZ or XFEDT. The list
+  classifies all three as unbroken **Enigma**.
+
+### 5b. The J test — footnote \*3 is testable, and it splits the trio
+
+Footnote \*3 names a falsifiable property, so it can be checked against the
+ciphertext this repo holds. Under a 26-letter cipher the letter J appears at
+rate 1/26; a 25-letter alphabet without J gives zero. Control first: the **69
+solved authentic messages carry 259 J in 6 498 letters, 3.99%** against the
+3.85% expected — so the test's null is sound.
+
+| | letters | J | expected | reading |
+|---|---:|---:|---:|---|
+| BYQMZ | 167 | **6** | 6.4 | indistinguishable from Enigma |
+| FKQLZ | 107 | **0** | 4.1 | p = 0.015 |
+| XFEDT | 97 | **0** | 3.7 | p = 0.022 |
+| FKQLZ + XFEDT | 204 | **0** | 7.8 | **p = 3e-4** |
+
+So the trio splits: **BYQMZ behaves exactly like a 26-letter cipher** and the
+other two do not. That is the opposite of the note this file used to carry, and
+it bears directly on where compute goes — BYQMZ is both the longest unbroken
+message and the one of the three that looks like Enigma.
+
+**Do not over-read a single zero-J message.** Nine of the 18 contain no J,
+against 1.7 expected if all were Enigma — but most are short, where the test has
+no power, and the decisive counter-example is **Nr 38 GEHRG: zero J in 74
+letters (p = 0.054), and now broken as Enigma**. Only the messages at n ≳ 90
+carry enough power to say anything, which is why the table above holds just
+those. Nr 214 FTNBK, confirmed Enigma, sits at 7 J in 101 as it should.
+
+### 5c. Attacking
+
+Attack with care: several are short (below the ~23-letter unicity distance), and
+a few carry a known day-key they demonstrably do **not** break on (Nrs 100, 138,
+172).
 
 **Pin `-u B`, do not wildcard the reflector.** On the standard account UKW-B
 replaced UKW-A across Wehrmacht service in 1937, and UKW-C appears only rarely

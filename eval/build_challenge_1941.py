@@ -16,7 +16,7 @@ C = [
   "EHSTQJJAPYGERSYFZJSIABYQEKGZMGRNLZCLRDEEFTCUNFGVQYNKIYPIP", ""),
  ("53", "28 Jun 1941", "RXPSB", 104,
   "RXPSBRDHLUZNUQXTFYJJGX-WEOUBHLKSCGYMUTUPIGYGQGANNMPMQGASEQGTMLGHTUAFAMSNRDDXHXRQOQAZLGWTUHJGPDDFJLUCMXXYMUNU-TED",
-  "2 garble dashes; form group-count (104) disagrees with the transcription (112) -- form miscount, cf. Nr 136/153"),
+  "2 garble dashes; form group-count (104) disagrees with the transcription (112) -- form miscount, cf. Nr 136/153; the 01 Aug 2026 list still shows 104/99, so the discrepancy is unresolved upstream"),
  ("81", "28 Aug 1941", "ALQFI", 92,
   "ALQFIGEELUIBOXEINKBYDDHXIFALWDLTINTZIPGMLFMYZKAGJDWGOCBPEZTERTJIAGVINPRJIXTENBUDFXQYIDZMAPLG", ""),
  ("38", "09 Sep 1941", "GEHRG", 79,
@@ -25,14 +25,15 @@ C = [
   "ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOMUGPVXXDYWTJG", ""),
  ("8-C",  "30 Sep 1941", "BYQMZ", 172,
   "BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAIKYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUEAZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY",
-  "Batch C: authors uncertain whether Enigma or another machine/system; 1 dash"),
+  "Batch C but NOT footnote *3; the 01 Aug 2026 list classifies it as unbroken ENIGMA, and its J-rate agrees -- 6 J in 167 letters against 6.4 expected of a 26-letter cipher; 1 dash. Longest unbroken message in the collection"),
  ("11-C", "30 Sep 1941", "FKQLZ", 112,
   "FKQLZDNXLIAGVIQBUWMHYCAMDFBAEQVGXMRCEPGARIHRKRTDLNYVCSWUFHIXLXPUCESNOLNAHZDKPNVBFSOKBPCTGDKOFMTWGSYOUTQRMPWWZORK",
-  "Batch C: authors uncertain whether Enigma or another machine/system"),
+  "Batch C; the list calls it unbroken ENIGMA but the letter J does NOT occur in its 107 letters (4.1 expected), which is what footnote *3's 25-letter manual cipher predicts -- attack it only after BYQMZ and RXPSB"),
  ("12-C", "30 Sep 1941", "XFEDT", 102,
   "XFEDTZYOQHTSAFRLQCHZURCWOILRXGMCBFZKAPYDUMHVCATDPSEAKYSZEGFKGINXWRNQVOIDFANGLRXNUHGTVFCNEXBPWYMZFBXOAU",
-  "Batch C: authors uncertain whether Enigma or another machine/system"),
- # --- July Batch A: unbroken (source notes many in this batch are hand cipher) ---
+  "Batch C; same as Nr 11-C -- zero J in 97 letters (3.7 expected); pooled with FKQLZ that is 0 of 7.8, p = 3e-4"),
+ # --- July "Batch A": none of these is marked TS (Truppenschluessel) on the
+# --- 01 Aug 2026 list, so the old blanket hand-cipher warning does not apply ---
  ("87",  "03 Jul 1941", "KLJBO", 55,
   "KLJBOYNGZOWCIRESGVEVKFGCNXDTLIKINLBOYL-NTNYBD-NWK-A-UVV", "several garble dashes"),
  ("100", "05 Jul 1941", "LXACA", 25,
@@ -56,6 +57,35 @@ C = [
   "FMNGIFGROVFDIVQMNMNILIFZBQVNQWLGBLJVRLEBXIQEXCSAQPEKFHEKFBIKMCF", ""),
 ]
 
+# Status checked against the BGAC 1941 Message List (cryptocellar.org/bgac/
+# 1941-msg-list.html), "Status on: 01 August 2026". FIVE of the ciphertexts
+# above have been broken since this file was first assembled -- four of them in
+# July 2026 -- so a run against one of them is wasted compute. Nr 138 is listed
+# too: it is not itself broken, but the list records it as the same message as
+# Nr 140, which is, so its plaintext is known. The keys are not
+# reproduced here: the list records only that each was broken and by whom, and
+# the recovered keys live on the collection's key pages. Fetch a key and the
+# message can move to the validation set, where it is worth more than it is
+# here (an authentic instance of known length with ground truth).
+SOLVED = {
+  "81":  "BROKEN on 14.07.2026 (key not recorded here)",
+  "38":  "BROKEN on 12.07.2026 (key not recorded here)",
+  "8-Oct": "BROKEN on 31.07.2026 (key not recorded here)",
+  "214": "BROKEN by Enigma@Home on 15.09.2017 (key not recorded here)",
+  "140": "BROKEN by Michael Craig on 17.07.2007 (key not recorded here)",
+  "138": "same message as Nr 140, which is broken -- see Nr 140",
+}
+
+# Unbroken ENIGMA messages on that list whose ciphertext this repo does NOT
+# hold. Both are 29 Sep 1941, Batch C, and neither carries the list's footnote
+# *3 (the manual-cipher suspicion) -- so QTXMA is the second-longest unbroken
+# Enigma message in the collection and is absent from the challenge set purely
+# because it was never transcribed here.
+MISSING = [
+  ("6",  "29 Sep 1941", "QTXMA", 160, 155),
+  ("7",  "29 Sep 1941", "SZAEJ",  56,  51),
+]
+
 HEADER = """\
 # ============================================================================
 # enigma-challenge-1941.txt  --  authentic 1941 German Army ciphertexts, UNBROKEN
@@ -64,20 +94,38 @@ HEADER = """\
 #         (Cryptologia 29(3):193-232, 2005); cryptocellar.org/bgac. HG Nord,
 #         Operation Barbarossa, Jun-Oct 1941. CC BY-NC-SA.
 #
-# These ciphertexts have NO recovered rotor key -- they remain unbroken. Presented
-# as a standing challenge (this is a companion to the solved sets in
+# Presented as a standing challenge (a companion to the solved sets in
 # enigma-messages.txt (13) and enigma-army-messages-1941.txt (56)). There is no
 # plaintext or key here to verify against; build_challenge_1941.py only checks that
 # each transcription matches the letter count written on the message form.
+#
+# STATUS: checked against the BGAC 1941 Message List, "Status on: 01 August 2026".
+# FIVE of the ciphertexts below are NO LONGER UNBROKEN, and a sixth (Nr 138) is a
+# second transcription of one of them -- all six are marked on their KEY: line.
+# Do not spend compute on them. Their keys are not reproduced here.
 #
 # CAVEATS (read before attacking):
 #   * The 1st 5-letter group is the KENNGRUPPE (discriminant), NOT ciphertext --
 #     remove it before deciphering. LEN below is the form count, which INCLUDES it.
 #   * A dash '-' is an unrecorded-but-real letter (illegible on the form): a real
 #     rotor position -- keep it as a placeholder, never strip it, or stepping desyncs.
-#   * "July Batch A" (Nr 87..285): the source notes MANY messages in this batch are
-#     hand cipher (a Doppelkasten variant), NOT Enigma, and the Enigma ones are short.
-#   * "Batch C" (BYQMZ, FKQLZ, XFEDT): the authors are unsure these are Enigma at all.
+#     NOTE the tool keeps only A-Z, so a dash is SILENTLY DROPPED and the stepping
+#     desyncs from that point on: substitute a letter, do not pass the dash through.
+#   * The manual cipher in this collection is the TRUPPENSCHLUESSEL, and the
+#     message list marks it per message (cipher length shown as "TS"). None of the
+#     messages below is marked TS. The older blanket warning here -- that "July
+#     Batch A" is largely hand cipher "and the Enigma ones are short" -- is
+#     superseded by that per-message mark, and was actively misleading: Nr 214
+#     (FTNBK, 101 letters) is the longest message in that batch and it broke as
+#     Enigma.
+#   * "Batch C" is NOT uniformly suspect, and the earlier note here misattributed
+#     the suspicion. The list's footnote *3 -- "possible manual cipher on a
+#     25-letter alphabet, J not used" -- is attached to Batch C Nrs 1-5, 14 and
+#     14a, NOT to BYQMZ, FKQLZ or XFEDT, all three of which the list classifies as
+#     unbroken ENIGMA. Measured against that footnote's own test (see
+#     MODERN_BREAKING_NOTES.md 5): BYQMZ carries 6 J in 167 letters, exactly the
+#     6.4 expected of a 26-letter cipher, so it is Enigma-like; FKQLZ and XFEDT
+#     carry ZERO J in 107 and 97, pooling to 0 of an expected 7.8 (p = 3e-4).
 #   * A few carry a known day-key that they do NOT break on (noted per message) --
 #     evidence of a different key/network or a non-Enigma system.
 #   * Most are short (below the ~23-letter unicity distance for HG Nord traffic),
@@ -102,10 +150,24 @@ def main():
             f.write("### Message No. %s  --  %s  (%s)\n" % (no, date, kenn))
             f.write("KENNGRUPPE:  %s   (discriminant; strip before deciphering)\n" % kenn)
             f.write("LEN:         %d  (form count, incl. Kenngruppe)%s\n" % (slen, flag))
-            f.write("KEY:         UNKNOWN -- unbroken\n")
+            f.write("KEY:         %s\n" % SOLVED.get(no, "UNKNOWN -- unbroken"))
             f.write("CIPHERTEXT:  %s\n" % wrap(ct))
             f.write("NOTES:       %s\n\n" % (caveat if caveat else "(none)"))
-    print("wrote %s  (%d challenge ciphertexts)" % (OUT, len(C)))
+        f.write("# ---------------------------------------------------------"
+                "-------------------\n")
+        f.write("# UNBROKEN ENIGMA MESSAGES NOT TRANSCRIBED HERE\n")
+        f.write("# The 01 Aug 2026 message list carries two unbroken Enigma "
+                "messages whose\n# ciphertext this repo does not hold. Neither "
+                "carries footnote *3. QTXMA is the\n# SECOND-LONGEST unbroken "
+                "Enigma message in the collection, so it is the most\n"
+                "# valuable missing item here -- transcribe it from the message "
+                "form (the list\n# links a 'Spruch' scan) to add it.\n")
+        for no, date, kenn, slen, clen in MISSING:
+            f.write("#   Nr %-4s %s  %s  %d / %d (form / cipher)\n"
+                    % (no, date, kenn, slen, clen))
+    live = len(C) - len(SOLVED)
+    print("wrote %s  (%d ciphertexts: %d still a challenge, %d resolved)"
+          % (OUT, len(C), live, len(SOLVED)))
     if mism:
         print("  transcription != form count (known form miscounts):",
               ", ".join("%s(%d!=%d)" % m for m in mism))
