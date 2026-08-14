@@ -194,24 +194,53 @@ established**, and only at a stride already outside the recommended K≤3.
 Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 `archived/PERFORMANCE.md` §7.11; `eval/ring_stride_scope_probe.py`.
 
+**12. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
+harness here reports two numbers: mean %-of-letters-correct (graded, low
+variance) and exact recovery (coarse, the operator's metric). Neither says how
+often a run lands *recognisably close* — enough of the plaintext to read as
+language, and plausibly resolvable to the exact answer by a local
+re-optimisation afterwards. That is a third, operationally distinct outcome, and
+it is the population `--polish` exists to convert, so a rate for it would
+measure the finisher's target directly instead of by its effect.
+
+*The threshold barely matters, at least on the rotor-key problem.* Pooling every
+non-exact outcome from the three `--tune-phase` A/B runs (both arms, n=70): 22
+sit at or under 10%, 41 at or above 90%, and **three** in between (59.3, 66.7,
+75.7). Nothing at all lands between 10% and 50%. So any cut from ~20% to ~55%
+classifies this data identically, and 60% moves exactly one trial — the
+bimodality is structural, since a wrong *offset* scrambles everything while a
+right key with a few wrong plugs keeps most letters. Pick ~60% and do not
+agonise; the number to report alongside it is how many outcomes fall in the
+band, since a threshold is only interesting when something is near it.
+
+*Where it should actually bite is the plugboard-recovery tier* — `make
+crackquality`, rotor key given, board hidden — whose failures are partial plug
+recoveries rather than all-or-nothing, so intermediate scores are genuinely
+populated there (its documented means run 24.7% to 91.1%). That is where a
+close-match rate would add information the existing two metrics do not already
+carry, and where the "resolve it to exact afterwards" follow-up is testable:
+take the close-but-wrong boards and measure what fraction a finishing pass
+converts. `tests/crack_quality.py` and
+`eval/tune_phase_vs_restarts_report.py` are the two places to add it.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**12. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**13. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**13. No `install` target**, and the n-gram files are not declared as build/run
+**14. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**14. Single-file distribution.** Embedding the tables was declined once, but
+**15. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**15. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**16. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 
