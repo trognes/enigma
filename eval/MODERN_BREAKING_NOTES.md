@@ -91,8 +91,7 @@ to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --polish -l german`
 
 ## 4. Expanded real-traffic set (`eval/enigma-army-messages-1941.txt`)
 
-**58 further authentic HG Nord messages** with keys + verified plaintext, from
-the older
+**58 further authentic HG Nord messages** with keys + verified plaintext, from the older
 Sullivan & Weierud "Breaking German Army Ciphers" collection (Cryptologia 2005;
 cryptocellar.org/bgac). These are ciphertexts the authors originally **failed to break**
 (2003–04) whose day-keys were **recovered later** (released 04 Aug 2017) — the "messages
@@ -107,8 +106,7 @@ ciphertext-dedup, so the two files are disjoint.
 Together the two files hold **71 authentic messages (~7,030 letters)** of real
 telegraphic German — the statistical power the original 13 (bimodal, too small to settle
 `-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
-statistics stay the *telegraphic corpus*; these 71 messages are *held-out
-validation*.
+statistics stay the *telegraphic corpus*; these 71 messages are *held-out validation*.
 
 ## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
 
@@ -450,6 +448,62 @@ one this repo carried at **position 31** (`N` → `V`). That is very likely why 
 resisted for twenty years and then broke in July 2026 — the third instance in
 this collection of a single-source transcription error making a message
 unbreakable.
+
+### 5h. What a REAL message is worth, by length
+
+Every break-rate number in `CLAUDE.md` comes from **synthetic** trials:
+authentic plaintext, but a random excerpt, a random key and a freshly drawn
+10-pair board. The 71 messages here have real keys, real boards, real garbles
+and real lengths, so the same question can be asked of them directly.
+`eval/real_traffic_z.py` does it without sweeping: climb the true key, climb a
+sample of wrong keys from the same space, and ask whether the true key's `z`
+clears `√(2 ln K)`. For the sweep a real attempt needs (`-u B`, wheels I–V,
+`-r A.. -g ...`, K = 160 293 120) that bar is **6.15 sd**.
+
+Board hidden on both arms, `-R 64`, 96 null samples:
+
+| length | message | true key | null | z | |
+|---:|---|---:|---:|---:|---|
+| 69 | MNQBH | −7.8375 | −8.3462 | **2.20** | short of the bar |
+| 113 | RDNAQ | −8.3500 | −9.5907 | **7.59** | breakable |
+| 174 | AEFXP | −9.1212 | −10.4139 | **9.41** | breakable |
+
+**The crossover sits between 70 and 110 letters**, and it is sharp. That is the
+practical reading for the challenge set: of the twelve unbroken messages this
+repo holds, only BYQMZ (167) and RXPSB (107) are on the right side of it, and
+everything at 97 letters and below is out of reach ciphertext-only regardless of
+compute — §5f showed the gap does not close with restarts, it *widens*, since
+extra restarts help the wrong keys after the true key has reached its ceiling.
+
+**It is also less optimistic than the synthetic model.** `CLAUDE.md` records a
+median true-key z of **11.5 at L=167** with 95% of messages breakable; the real
+174-letter message here reads **9.41**, and the real 69-letter one reads 2.20
+where the synthetic curve is still comfortable. Real traffic carries garbles,
+fixed openings and repeated words that a random excerpt does not, so treat the
+synthetic figures as an upper bound when judging a specific message.
+
+Caveats worth keeping with the numbers: **one message per length**, not a
+distribution; `z` is a ratio whose denominator is the *sampled* sd, so it is
+noisy at small sample counts (the 69-letter cell reads 2.20 at 96 samples and
+1.38 at 32); and the recipe is the recommended one, so a different scoring model
+would move all three cells together.
+
+### 5i. The board is not free even when the rotor key is
+
+A second result fell out of the same probe, and it is the more surprising one.
+At **174 letters with the true rotor key given** and only the plugboard hidden,
+`-R 32` **fails to recover the board**: it converges at −10.1261 against the
+true
+board's −9.1212, and its output is not the plaintext.
+
+That is the plugboard-recovery tier — the tier nearly every tuning number in
+this repo is measured on — failing on real traffic at a length the synthetic
+`crackquality` sweeps treat as easy. It took `-R 64` to recover the same board.
+So the two results point the same way: **a real message is harder than a
+synthetic one of the same length**, on both halves of the problem.
+
+The practical consequence is that `-R` should be sized against real traffic, not
+against the `crackquality` curve, when the target is an actual message.
 
 ### 5c. Attacking
 
