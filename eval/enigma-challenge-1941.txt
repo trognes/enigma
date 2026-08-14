@@ -11,9 +11,10 @@
 # each transcription matches the letter count written on the message form.
 #
 # STATUS: checked against the BGAC 1941 Message List, "Status on: 01 August 2026".
-# FIVE of the ciphertexts below are NO LONGER UNBROKEN, and a sixth (Nr 138) is a
-# second transcription of one of them -- all six are marked on their KEY: line.
-# Do not spend compute on them. Their keys are not reproduced here.
+# FOUR of the ciphertexts below are NO LONGER UNBROKEN, and a fifth (Nr 138) is a
+# second transcription of one of them -- all five are marked on their KEY: line.
+# Do not spend compute on them. Their keys are not reproduced here. A sixth,
+# Nr 214 (FTNBK), has been solved and MOVED to enigma-army-messages-1941.txt.
 #
 # CAVEATS (read before attacking):
 #   * The 1st 5-letter group is the KENNGRUPPE (discriminant), NOT ciphertext --
@@ -157,14 +158,6 @@ KEY:         UNKNOWN -- unbroken
 CIPHERTEXT:  ZNLZTKCBDBJDLAVPWLLUTSSHBWEYOWSQNB-
              NORNKDTZJHPQFYAXCQQYFLSSKDZCGLSWYMBQBMF
 NOTES:       1 dash
-
-### Message No. 214  --  16 Jul 1941  (FTNBK)
-KENNGRUPPE:  FTNBK   (discriminant; strip before deciphering)
-LEN:         106  (form count, incl. Kenngruppe)
-KEY:         BROKEN by Enigma@Home on 15.09.2017 (key not recorded here)
-CIPHERTEXT:  FTNBKXNQAEQNZLWFMQGTXOQZVXJKBOJKPCLJQZOVFLSVJBSRIYMRYWNUJVWY
-             KXAKKFMSQFBBARNKNHBRHQSLIUVNEHMJKAZRXLJLWISNZZ
-NOTES:       (none)
 
 ### Message No. 242  --  20 Jul 1941  (JBIYH)
 KENNGRUPPE:  JBIYH   (discriminant; strip before deciphering)

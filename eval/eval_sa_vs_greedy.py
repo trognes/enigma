@@ -59,7 +59,7 @@ TSV = os.environ.get("TSV", "")
 SA_SCHED = os.environ.get("SA_SCHED", "a10")
 SA_STAGES = os.environ.get("SA_STAGES", "0") == "1"
 # CORPUS selects the plaintext substrate and the scoring language:
-#   "wehrmacht" (default) -- the 69 authentic telegraphic decrypts in eval/
+#   "wehrmacht" (default) -- the 70 authentic telegraphic decrypts in eval/
 #   "english" / "german"  -- the PROSE corpora tests/crack_quality.py samples,
 #                            read from that file so the two benchmarks agree.
 # Prose is the control the shipped SA pre-pass was originally tuned on.

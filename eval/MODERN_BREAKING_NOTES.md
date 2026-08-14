@@ -91,7 +91,7 @@ to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --polish -l german`
 
 ## 4. Expanded real-traffic set (`eval/enigma-army-messages-1941.txt`)
 
-**56 further authentic HG Nord messages** with keys + verified plaintext, from the older
+**57 further authentic HG Nord messages** with keys + verified plaintext, from the older
 Sullivan & Weierud "Breaking German Army Ciphers" collection (Cryptologia 2005;
 cryptocellar.org/bgac). These are ciphertexts the authors originally **failed to break**
 (2003–04) whose day-keys were **recovered later** (released 04 Aug 2017) — the "messages
@@ -103,10 +103,10 @@ telegraphic German (fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`
 "singular unbroken" message, now broken — and No. 233 XNRLR) are dropped by
 ciphertext-dedup, so the two files are disjoint.
 
-Together the two files hold **69 authentic messages (~6,850 letters)** of real
+Together the two files hold **70 authentic messages (~6,950 letters)** of real
 telegraphic German — the statistical power the original 13 (bimodal, too small to settle
 `-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
-statistics stay the *telegraphic corpus*; these 69 messages are *held-out validation*.
+statistics stay the *telegraphic corpus*; these 70 messages are *held-out validation*.
 
 ## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
 
@@ -125,7 +125,7 @@ is a second transcription of one of them:
 
 | | date | letters | status |
 |---|---|---:|---|
-| Nr 214 FTNBK | 16 Jul | 101 | broken by **Enigma@Home**, 15.09.2017 |
+| Nr 214 FTNBK | 16 Jul | 101 | broken by **Enigma@Home**, 15.09.2017 — key now known, see §5d |
 | Nr 140 WEUWY | 09 Jul | 48 | broken by Michael Craig, 17.07.2007 |
 | Nr 38 GEHRG | 09 Sep | 74 | broken 12.07.2026 |
 | Nr 81 ALQFI | 28 Aug | 87 | broken 14.07.2026 |
@@ -161,8 +161,8 @@ addition to the challenge set.
 
 Footnote \*3 names a falsifiable property, so it can be checked against the
 ciphertext this repo holds. Under a 26-letter cipher the letter J appears at
-rate 1/26; a 25-letter alphabet without J gives zero. Control first: the **69
-solved authentic messages carry 259 J in 6 498 letters, 3.99%** against the
+rate 1/26; a 25-letter alphabet without J gives zero. Control first: the **70
+solved authentic messages carry 277 J in 6 944 letters, 3.99%** against the
 3.85% expected — so the test's null is sound.
 
 | | letters | J | expected | reading |
@@ -183,6 +183,52 @@ no power, and the decisive counter-example is **Nr 38 GEHRG: zero J in 74
 letters (p = 0.054), and now broken as Enigma**. Only the messages at n ≳ 90
 carry enough power to say anything, which is why the table above holds just
 those. Nr 214 FTNBK, confirmed Enigma, sits at 7 J in 101 as it should.
+
+### 5d. Nr 214 FTNBK — solved, and its ciphertext here was wrong
+
+The key is now in the repo, and Nr 214 has **moved to
+`enigma-army-messages-1941.txt`** (57 records, up from 56):
+
+    reflector B, wheels III I IV, ring AHV, start FQR
+    plugs AH CN DF EI KY MP OZ RU SW VX          (10 pairs)
+
+    STANDORT DER LNK X LNK X IST X KUSOW X KUSOW X SEQS X KM X
+    SUEDWESTLIQ X SAGOSKA X SAGOSKA X KEINE AUSFAELLE X MATHIAT X MATHIAT
+
+The published ring is given as two letters, `HV`: the **left wheel's ring is
+unidentifiable** from ciphertext, since only start-minus-ring reaches the
+machine, so it is written `A` here to pair with the published start `FQR`.
+
+**The transcription in the challenge file was wrong in 13 of its 101 letters**
+(positions 14, 29, 30, 33, 34, 42, 50, 52, 58, 59, 78, 89, 94) and does not
+decrypt under the true key. It has been replaced by the correct one and moved.
+Nothing in the repo could have caught this: the only automatic check on a
+challenge ciphertext is its length against the message form, and the length was
+right.
+
+**The failure mode is worth understanding, because it produced a confident wrong
+answer twice over.** Attacking the corrupted ciphertext with a crib taken from a
+correspondingly corrupted plaintext, the search returned two candidates and
+*both* were one step from the truth:
+
+- the top-scoring board carried the **true rotor key** with a single wrong plug
+  (`BV` for `VX`);
+- the crib-seeded board carried the **true plugboard** with a rotor key in the
+  same §7.12 equivalence class as the truth — the two keys are byte-identical
+  decrypts up to 409 letters, so on a 101-letter message they are the same key.
+
+Reading the second as "solved" was circular: the crib and the ciphertext shared
+their corruption, so reproducing the remaining 78 uncribbed letters proved only
+that the two corrupt artifacts were consistent with each other, not that either
+was right. **A crib and the ciphertext it is matched against are not independent
+evidence when both come from the same source.** The check that would have caught
+it is the one applied afterwards: re-encrypt the recovered plaintext under the
+recovered key and compare against an *independently sourced* ciphertext.
+
+With the ciphertext corrected, the tool recovers the whole board from the true
+rotor key in **0.13 s** at `-R 64` — no crib, 151 999 boards scored — so Nr 214
+is now a clean validation instance at 101 letters, a length the repo previously
+had no ground truth at.
 
 ### 5c. Attacking
 

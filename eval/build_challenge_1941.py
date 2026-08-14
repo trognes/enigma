@@ -49,8 +49,6 @@ C = [
   "AWTZKTBXVAKXKLZIPPCZIPUCCRXHRKQUTDEGMGIKGCWEKLQNUMCWSS", ""),
  ("189", "11 Jul 1941", "ZNLZT", 74,
   "ZNLZTKCBDBJDLAVPWLLUTSSHBWEYOWSQNB-NORNKDTZJHPQFYAXCQQYFLSSKDZCGLSWYMBQBMF", "1 dash"),
- ("214", "16 Jul 1941", "FTNBK", 106,
-  "FTNBKXNQAEQNZLWFMQGTXOQZVXJKBOJKPCLJQZOVFLSVJBSRIYMRYWNUJVWYKXAKKFMSQFBBARNKNHBRHQSLIUVNEHMJKAZRXLJLWISNZZ", ""),
  ("242", "20 Jul 1941", "JBIYH", 60,
   "JBIYHNVYMIVLOGGKTDKKOYXWRDLBHRRZYPILVVXOGBEFXAXCWBNGILRWARXO", ""),
  ("285", "31 Jul 1941", "FMNGI", 63,
@@ -67,11 +65,17 @@ C = [
 # the recovered keys live on the collection's key pages. Fetch a key and the
 # message can move to the validation set, where it is worth more than it is
 # here (an authentic instance of known length with ground truth).
+#
+# Nr 214 (FTNBK) HAS made that move and is no longer in the list below: its key
+# is B / III I IV / ring AHV / start FQR / AH CN DF EI KY MP OZ RU SW VX, and it
+# now lives in enigma-army-messages-1941.txt with its verified plaintext. Its
+# ciphertext HERE was wrong in 13 of 101 letters and did not decrypt under that
+# key -- see MODERN_BREAKING_NOTES.md 5d, which is the more important half of
+# that finding.
 SOLVED = {
   "81":  "BROKEN on 14.07.2026 (key not recorded here)",
   "38":  "BROKEN on 12.07.2026 (key not recorded here)",
   "8-Oct": "BROKEN on 31.07.2026 (key not recorded here)",
-  "214": "BROKEN by Enigma@Home on 15.09.2017 (key not recorded here)",
   "140": "BROKEN by Michael Craig on 17.07.2007 (key not recorded here)",
   "138": "same message as Nr 140, which is broken -- see Nr 140",
 }
@@ -100,9 +104,10 @@ HEADER = """\
 # each transcription matches the letter count written on the message form.
 #
 # STATUS: checked against the BGAC 1941 Message List, "Status on: 01 August 2026".
-# FIVE of the ciphertexts below are NO LONGER UNBROKEN, and a sixth (Nr 138) is a
-# second transcription of one of them -- all six are marked on their KEY: line.
-# Do not spend compute on them. Their keys are not reproduced here.
+# FOUR of the ciphertexts below are NO LONGER UNBROKEN, and a fifth (Nr 138) is a
+# second transcription of one of them -- all five are marked on their KEY: line.
+# Do not spend compute on them. Their keys are not reproduced here. A sixth,
+# Nr 214 (FTNBK), has been solved and MOVED to enigma-army-messages-1941.txt.
 #
 # CAVEATS (read before attacking):
 #   * The 1st 5-letter group is the KENNGRUPPE (discriminant), NOT ciphertext --
