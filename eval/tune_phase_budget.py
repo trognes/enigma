@@ -14,6 +14,9 @@ same LEN and SEED; the draw sequence depends on nothing else, and each instance
 is checked against the recorded row before it is used.
 
   ./eval/tune_phase_budget.py eval/results-tune-phase-L450.jsonl 2,4,8,16
+
+Resumable: each finished trial is appended to <paired>-budget.jsonl (or argv[4])
+before the next starts, so an interrupted run costs one trial, not the sweep.
 """
 import hashlib
 import json
@@ -36,6 +39,7 @@ PAIRED = sys.argv[1] if len(sys.argv) > 1 else \
 BUDGETS = [int(x) for x in (sys.argv[2] if len(sys.argv) > 2
                             else "2,4,8,16").split(",")]
 SEED = int(sys.argv[3]) if len(sys.argv) > 3 else 12345
+OUT = sys.argv[4] if len(sys.argv) > 4 else None
 
 
 def run(args, stdin):
@@ -61,6 +65,19 @@ def main():
     rng = random.Random(SEED)
     A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+    # Resumable, like the paired harness: each finished trial is appended
+    # before the next one starts, so an interrupted run (a killed process, a
+    # reclaimed container) costs one trial rather than the whole sweep.  This
+    # sweep is hours long, which is exactly the length at which "it only
+    # prints" stops being adequate.
+    out_path = OUT or (PAIRED.rsplit(".", 1)[0] + "-budget.jsonl")
+    done = {}
+    if os.path.exists(out_path):
+        for line in open(out_path):
+            rec = json.loads(line)
+            done[rec["trial"]] = rec
+    fh = open(out_path, "a", buffering=1)
+
     got = {r: [] for r in BUDGETS}
     secs = {r: 0.0 for r in BUDGETS}
     for row in rows:
@@ -79,16 +96,31 @@ def main():
                 row["ring"], row["start"], row["board"], row["pt"]):
             sys.exit("trial %d does not match the paired file" % row["trial"])
 
-        ct = run(["-i"] + WHEELS + ["-r", ring, "-g", start, "-s", board],
-                 plain)
+        rec = done.get(row["trial"])
+        if rec is None:
+            ct = run(["-i"] + WHEELS + ["-r", ring, "-g", start, "-s", board],
+                     plain)
+            rec = {"trial": row["trial"], "len": length, "R": {}}
+            for r in BUDGETS:
+                t0 = time.time()
+                out = run(CLIMB + WHEELS + ARM + ["-R", str(r), "-T", THREADS],
+                          ct)
+                rec["R"][str(r)] = {"pct": round(pct_correct(out, plain), 2),
+                                    "exact": out == plain,
+                                    "sec": round(time.time() - t0, 1)}
+            fh.write(json.dumps(rec) + "\n")
+        elif any(str(r) not in rec["R"] for r in BUDGETS):
+            sys.exit("trial %d in %s lacks a requested -R value; use the same "
+                     "budget list or a fresh output file"
+                     % (row["trial"], out_path))
+
         line = "trial %2d " % row["trial"]
         for r in BUDGETS:
-            t0 = time.time()
-            out = run(CLIMB + WHEELS + ARM + ["-R", str(r), "-T", THREADS], ct)
-            secs[r] += time.time() - t0
-            got[r].append((pct_correct(out, plain), out == plain))
-            line += " R%-3d %5.1f%%%s" % (r, got[r][-1][0],
-                                          "*" if got[r][-1][1] else " ")
+            v = rec["R"][str(r)]
+            secs[r] += v["sec"]
+            got[r].append((v["pct"], v["exact"]))
+            line += " R%-3d %5.1f%%%s" % (r, v["pct"], "*" if v["exact"]
+                                          else " ")
         print(line, flush=True)
 
     n = len(rows)
