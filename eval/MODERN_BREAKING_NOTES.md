@@ -91,7 +91,7 @@ to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --polish -l german`
 
 ## 4. Expanded real-traffic set (`eval/enigma-army-messages-1941.txt`)
 
-**57 further authentic HG Nord messages** with keys + verified plaintext, from the older
+**61 further authentic HG Nord messages** with keys + verified plaintext, from the older
 Sullivan & Weierud "Breaking German Army Ciphers" collection (Cryptologia 2005;
 cryptocellar.org/bgac). These are ciphertexts the authors originally **failed to break**
 (2003–04) whose day-keys were **recovered later** (released 04 Aug 2017) — the "messages
@@ -103,10 +103,10 @@ telegraphic German (fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`
 "singular unbroken" message, now broken — and No. 233 XNRLR) are dropped by
 ciphertext-dedup, so the two files are disjoint.
 
-Together the two files hold **70 authentic messages (~6,950 letters)** of real
+Together the two files hold **74 authentic messages (~7,400 letters)** of real
 telegraphic German — the statistical power the original 13 (bimodal, too small to settle
 `-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
-statistics stay the *telegraphic corpus*; these 70 messages are *held-out validation*.
+statistics stay the *telegraphic corpus*; these 74 messages are *held-out validation*.
 
 ## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
 
@@ -381,6 +381,63 @@ come apart. The unknown-key work in `CLAUDE.md` measured a **median true-key z
 of
 11.5 at L=167** with 95% of messages breakable; this message at L=101 sits at
 2.05. Length is doing all the work, exactly as that model predicts.
+
+### 5g. Four more messages recovered from the 01 Aug 2026 source pages
+
+The **German Army Messages** page (`cryptocellar.org/bgac/army-messages.html`,
+updated 01 Aug 2026) carries the message forms themselves, and four messages
+fell out of it. All four are now in `enigma-army-messages-1941.txt`.
+
+**Nr 81 ALQFI, 28 Aug 1941 — the key recovered here, and a second FTNBK.** The
+page reports that Nr 81 was broken on 14.07.2026 only after a *different copy*
+of the same message surfaced in the Bundesarchiv (**Nr 55 NF**, from another
+SS-Totenkopf station), and it prints that copy's plaintext. 86 letters of known
+plaintext is a crib, so the key came out of a 144 293 000-key sweep in **45
+seconds**, 100.0% of keys rejected unscored:
+
+    reflector B, wheels III IV V, ring AVJ, start YAC
+    plugs BH CS DU EI FR GM JO KQ TX VZ            (10 pairs)
+
+    EINS NEUN EINS FUENF X KOLONNEN UEBER X STARAJA RUSSA X STARAJA
+    RUSSA X IN MARSQ GESETZT X HARTJENSTEIN X
+
+Verified by re-encrypting to the published ciphertext. **This is the 28.08.1941
+day key**, which was not previously in the repo.
+
+Running the *old* Nr 81 transcription under that key gives
+`EINSMMLVUSHCMEOKFXKOERPNENUXFERES`**`VARAJARNSSAX`**`...` — fragments of the
+truth through heavy corruption, the same failure as §5d. Its `--confidence`
+margin is **+0.8 sd even with the correct key**, which usefully bounds that
+test: it cannot see through corruption this heavy.
+
+**Nrs 115, 116, 117 — 27 Sep 1941, broken here from a day key already in the
+repo.** Their ciphertexts are on the page but were never transcribed into this
+repo, and the 27.09.1941 day key was already here. Sweeping only the start
+position (17 576 keys) broke all three at once:
+
+| | start | letters | margin | plaintext |
+|---|---|---:|---:|---|
+| Nr 115 AEFXP | WAS | 174 | +9.6 sd | AN STUBAF X SCHUSTER X ZANDERS … |
+| Nr 116 ITFPX | WAS | 117 | +13.8 sd | AN DIV X BRZT X PERSON X VERLUSTE … |
+| Nr 117 MNQBH | GRA | 69 | +8.8 sd | BITTE ANTWORT AQ X ZANDERS … |
+
+Two of the three have a damaged designator group — Nr 115's was never received
+at all, Nrs 116/117 are garbled (`ITF--`, `-AQBH`) — which is why Nr 115 is
+stored with `nostrip`. `HARTJENSTEIN` appears in both Nr 117 and the ALQFI
+plaintext, the same SS-Totenkopf traffic.
+
+**The general lesson is about where the cheap wins are.** Nothing here needed a
+keyspace sweep: one message needed a published plaintext, three needed a day key
+the repo already held. **A day key is worth far more than a message** — it turns
+every ciphertext from that day into a 17 576-key problem that breaks in under a
+second — so transcribing ciphertext from days whose key is already known is the
+highest-yield way to grow this set.
+
+**Nr 38 GEHRG: one letter corrected.** The page's transcription differs from the
+one this repo carried at **position 31** (`N` → `V`). That is very likely why it
+resisted for twenty years and then broke in July 2026 — the third instance in
+this collection of a single-source transcription error making a message
+unbreakable.
 
 ### 5c. Attacking
 
