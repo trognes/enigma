@@ -2332,6 +2332,22 @@ the posterior instead — a failed `-r AA. -R 2` (36% win) and a failed stride-3
 `-R 6` (74%) take a message from a 95% prior to **76%**, and a further stride-3
 `-R 12` would leave 35%.
 
+> **These are SYNTHETIC trials, and real messages come out lower — treat the
+> figures above as an upper bound on a specific message.** Every number in this
+> section draws a random excerpt of authentic plaintext, a random key and a
+> fresh 10-pair board. Run on the actual messages instead — real key, real
+> board, real garbles — the true key's z reads **9.41 at 174 letters** against
+> the median 11.5 recorded here for L=167, and **2.20 at 69 letters**, far below
+> the bar of 6.15 that a 160M-key sweep sets. The crossover between "breakable"
+> and "not" sits between **70 and 110 letters** and is sharp: 113 letters
+> measures 7.59. `eval/real_traffic_z.py`; `eval/MODERN_BREAKING_NOTES.md` §5h.
+>
+> The **plugboard tier is harder on real traffic too**: at 174 letters with the
+> true rotor key *given* and only the board hidden, `-R 32` fails to recover it
+> (−10.1261 against the true board's −9.1212) and needs `-R 64`. So size `-R`
+> against real traffic, not against the `crackquality` curve, when the target is
+> an actual message. §5i.
+
 Read `ENHANCEMENTS.md` and then `archived/IMPROVEMENTS.md` before changing the
 search or scoring code — in
 particular its "Measured down" table, which lists what has already been built
