@@ -72,11 +72,28 @@ correction is a constant `N·√(2 ln 26³)` offset, not a `√(2 ln K)` over th
 joint space — getting this backwards would make a joint sweep look significant
 on noise. `--confidence`'s null machinery is the right place to put it.
 
-*What is unknown.* Whether the 18 unbroken challenge ciphertexts
-(`eval/enigma-challenge-1941.txt`) contain any same-day group large enough to
-matter — if they do not, this is a capability with no target in the bundled
-data. Check that before building anything. → `eval/MODERN_BREAKING_NOTES.md`
-§5; `CLAUDE.md` "The unknown-key break rate", `--confidence`.
+*Is there a target? Checked — yes, but the biggest group is the doubtful one.*
+Six of the 18 challenge ciphertexts are no longer unbroken (§5a), which leaves
+twelve, and among those the same-day groups are:
+
+| day | messages | letters |
+|---|---|---:|
+| **30 Sep 1941** | BYQMZ (167), FKQLZ (107), XFEDT (97) | **371** |
+| 11 Jul 1941 | AWTZK (49), ZNLZT (69) | 118 |
+| 29 Sep 1941 | QTXMA (155), SZAEJ (51) — *not transcribed here* | 206 |
+
+So the capability does have a target, and 30 Sep is a group of three sharing a
+batch as well as a day. **But the J test (§5b) says FKQLZ and XFEDT are probably
+not a 26-letter cipher at all** — zero J in 204 pooled letters against 7.8
+expected — so a joint attack on that group would be pooling one Enigma message
+with two probable non-Enigma ones, which is worse than attacking BYQMZ alone. Do
+not read "three messages, 371 letters" as `√3` of signal without settling that
+first. 11 Jul is clean but short (118 letters total), and the 29 Sep pair needs
+QTXMA transcribed before it is reachable at all — which is independently the
+best thing to add to the challenge set.
+
+→ `eval/MODERN_BREAKING_NOTES.md` §5a/§5b; `CLAUDE.md` "The unknown-key break
+rate", `--confidence`.
 
 ## Keyspace reductions
 

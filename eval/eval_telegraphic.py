@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Held-out evaluation: does the telegraphic table (eval/build_telegraphic_ngrams.py, from
-# Appendix C) recover more of the 69 authentic messages than the prose table? For each
+# Appendix C) recover more of the 70 authentic messages than the prose table? For each
 # message we fix the (known) rotor key, HIDE the plugboard, hill-climb it back with the
 # recommended recipe, and compare the decrypt to the true plaintext -- prose vs telegraphic.
 # Reports mean %-correct by length band and per-message win/loss.

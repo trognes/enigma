@@ -74,6 +74,20 @@ DECRYPT:     MBLDUNGUEBEREGNGNNGDERXGERLHUHNXNFANQUUQENXTORTXAUNTGERBETEF
              PANZMRUVIERAZARTIERSTVQQFMQT
 NOTES:       enciphered on 27 Jun key; several garble dashes
 
+### Message No. 214  --  16 Jul 1941  (FTNBK)
+REFLECTOR:   B
+WHEELS:      III I IV    (-w 314)
+RING:        AHV
+START:       FQR
+PLUGS:       AH CN DF EI KY MP OZ RU SW VX
+KENNGRUPPE:  FTNBK   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 314 -r AHV -g FQR -s "AH CN DF EI KY MP OZ RU SW VX"
+CIPHERTEXT:  XNQAEQNZLWFMQYTXOQZVXJKBOJKPKIJQGMVFLSVJBHRIYMRYWHUIVWYKXKAK
+             FMSQFBBARNKNHBRHQHLIUVNEHMJKOZRXLPLWISNZZ
+DECRYPT:     STANDORTDERLNKXLNKXISTXKUSOWXKUSOWXSEQSXKMXSUEDWESTLIQXSAGOS
+             KAXSAGOSKAXKEINEAUSFAELLEXMATHIATXMATHIAT
+NOTES:       broken by Enigma@Home 15.09.2017, long after the 2017 key release; the transcription in enigma-challenge-1941.txt differed from this one in 13 of 101 letters and did not decrypt
+
 ### Message No. 23  --  08 Jul 1941  (KHLPT)
 REFLECTOR:   B
 WHEELS:      IV III II   (-w 432)
