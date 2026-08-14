@@ -68,12 +68,6 @@ M = [
   "broken by Enigma@Home 15.09.2017, long after the 2017 key release; the transcription in enigma-challenge-1941.txt differed from this one in 13 of 101 letters and did not decrypt"),
  ("55 NF","28.08.1941","28 Aug 1941","YAC","","ALQFI","ALQFIGEELOREBSXEINXZYDHXITUFWDLTURTZSPMMLFMYZMAGJDWOPCBQYZRTJSTGVIJPHJIXTDBKDFXOYILZEUIMMLL",
   "the Bundesarchiv copy of Nr 81, from another SS-Totenkopf station; its plaintext is published, and the key was recovered from it here. Nr 81 is a badly corrupted transcription of the same message and does not decrypt"),
- ("115","27.09.1941","27 Sep 1941","WAS","nostrip","AEFXP","CYLGCHSYSTANCNJIKDNXKIAFLHXEZWGJIUGAQPTZZSSWBMJBYZEVBULUHIOKYYEEYLSNEFKPTBDPVCWFJSYXGFMBGIKPSXWGKBRSMPPBCZRSYXHKIJYUFTCTUWKVDSLHBUGLWWRGOEBWRRVXCIMCQRDDSBXAFIDKBPMXXMTZLYWNZG",
-  "designator group never received, so the whole transcription is body; start recovered here by sweeping the known 27 Sep day key"),
- ("116","27.09.1941","27 Sep 1941","WAS","","ITFPX","ITF--CYAVMVIIBSWTXBUAIDUBXRIGYPWFIOJHGQNWWWAUOIJXPCHGEXUBIDZGGOGDUSIIYLFHYLWRGZQPKTUVKFIXGFMKHUMZCFVQYYUUDZAGYUFSINHJHOBTF",
-  "designator garbled (ITF--); start recovered here"),
- ("117","27.09.1941","27 Sep 1941","GRA","","MNQBH","-AQBHAJFFBFZEEAPCVGMAZDERXCFCLZFVPBBJTAVQGGLPMIFDDAAHYSLHDYTOFFFPMAGMNRKRF",
-  "designator garbled (-AQBH); start recovered here"),
  ("23","08.07.1941","08 Jul 1941","PIK","","KHLPT","KHLPTCWSEBDDIRBZUUBGKJANBVGIVDVDZZIGAKBZCJMMVEMVXLTHNLDYGRVQAKJMRVZIXHMDNOMTAUTPZDWOINNMOLAHCDKCZTPPEORFIBXCMNWQNIDDCHPTXQQBC",""),
  ("7","13.08.1941","13 Aug 1941","BRZ","","KEJNQ","KEJNQSFUGRPVPWGSPYHMNQYJTPPDGHFMROCPMUUBLBBJLSRZCYBXHFXQSWGWOXDNEVRIOCSPWKYCFTLRSAKBNWZJYPLQBSHQYVTCCCEPUYVUKSHHVWHXYOJKPVWQWXQESKIEGMUORWZDJZRAJZCWKFFCLUXLDY",""),
  ("19","19.08.1941","19 Aug 1941","BGO","","ALWOK","ALWOKPBYQVEQEHZFPKFLVJSOGNBZNIMXDMDSZXIAQBEKYAKFCIREEWQCBRPBLHHUHGMTPTXGZGSUISJQEYEVSLFXSCUACFAJBUGWYWPVUADTAGMERMBLWTDDGVHRWXPHW",""),
@@ -83,9 +77,9 @@ M = [
  ("70","16.09.1941","16 Sep 1941","KLO","","NOEGP","NOEGPUKXJRKUWZJHHGPGHLCHAYRLHKFQJZXOKFMUKRZCKKCIASYTBMTFOVWRUDOCZUUFLMFYEBCDRADVTSHYMTKHOEZEVMUEDZBCFZ",""),
  ("71","16.09.1941","16 Sep 1941","AFF","","HOEPG","HOEPGJCKKCIMUJHNGYECEYGTPGKZSKWBFHFYEDYOGOAJLJKAADPWYRJRJHCOZXXSJXHOOGXEEMYNNIFMVUUKTOWEE",""),
  ("114","27.09.1941","27 Sep 1941","WAS","","DAFPX","DAFPXPHHWKBNCDTPEXBVBHBFWSJXGHHIWCMBHNPXDSGSRTMSNHTOSDZNLMLJVLHSYUYGNKYBBPCWTRPSOORTTPCIQLBMCAFVKSWBNXBXZRBPKAUZBELNALIANRWGFOZFFGMFJGWVCLWTWCFXISEJNX",""),
- ("115","27.09.1941","27 Sep 1941","WAS","nostrip","-----","CYLGCHSYSTANCNJIKDNXKIAFLHXEZWGJIUGAQPTZZSSWBMJBYZEVBULUHIOKYYEEYLSNEFKPTBDPVCWFJSYXGFMBGIKPSXWGKBRSMPPBCZRSYXHKIJYUFTCTUWKVDSLHBUGLWWRGOEBWRRVXCIMCQRDDSBXAFIDKBPMXXMTZLYWNZG","designator group not received (nothing to strip)"),
- ("116","27.09.1941","27 Sep 1941","WAS","","ITF--","ITF--CYAVMVIIBSWTXBUAIDUBXRIGYPWFIOJHGQNWWWAUOIJXPCHGEXUBIDZGGOGDUSIIYLFHYLWRGZQPKTUVKFIXGFMKHUMZCFVQYYUUDZAGYUFSINHJHOBTF","designator partly illegible"),
- ("117","27.09.1941","27 Sep 1941","GRA","","-AQBH","-AQBHAJFFBFZEEAPCVGMAZDERXCFCLZFVPBBJTAVQGGLPMIFDDAAHYSLHDYTOFFFPMAGMNRKRF","designator partly illegible"),
+ ("115","27.09.1941","27 Sep 1941","WAS","nostrip","AEFXP","CYLGCHSYSTANCNJIKDNXKIAFLHXEZWGJIUGAQPTZZSSWBMJBYZEVBULUHIOKYYEEYLSNEFKPTBDPVCWFJSYXGFMBGIKPSXWGKBRSMPPBCZRSYXHKIJYUFTCTUWKVDSLHBUGLWWRGOEBWRRVXCIMCQRDDSBXAFIDKBPMXXMTZLYWNZG","designator group not received (nothing to strip); the true designator AEFXP is from the German Army Messages page"),
+ ("116","27.09.1941","27 Sep 1941","WAS","","ITFPX","ITF--CYAVMVIIBSWTXBUAIDUBXRIGYPWFIOJHGQNWWWAUOIJXPCHGEXUBIDZGGOGDUSIIYLFHYLWRGZQPKTUVKFIXGFMKHUMZCFVQYYUUDZAGYUFSINHJHOBTF","designator received garbled; the true designator is from the German Army Messages page"),
+ ("117","27.09.1941","27 Sep 1941","GRA","","MNQBH","-AQBHAJFFBFZEEAPCVGMAZDERXCFCLZFVPBBJTAVQGGLPMIFDDAAHYSLHDYTOFFFPMAGMNRKRF","designator received garbled; the true designator is from the German Army Messages page"),
  ("103","27.09.1941","27 Sep 1941","SPE","","ARPTZ","ARPTZIJDWCCVPRIPSMFVEHCPVSBEEGGHJIVAPHMTIXMRPZALPUKLMWEIFRWMUZFYZXFKAGXGATFBOIGKTYMOTUTMFDWFZEUXUZZOSTLNNSLEPWM",""),
  ("104","27.09.1941","27 Sep 1941","SAU","","ABBHQ","ABBHQVJWDKMVRFCLQWRJBLEREMXEDEBXPNBWZEFEFMKHGIPJJZACGCTYSFJUXYMRYJEWPVHZ",""),
  ("105","27.09.1941","27 Sep 1941","SEE","","ANQIX","ANQIXKQKECZPPDKOERKJZMCVIIBFNSYQSJQCSIXPIVQQIIKYRQZYQECFASFOTDSGXPYLCPEJLYAYNSUNQEINSINMZEGMCXPYYQPNMKSLJDQQZAWQR",""),
@@ -174,6 +168,43 @@ def wrap(s, width=60):
     return "\n             ".join(textwrap.wrap(s, width)) if s else s
 
 
+# Word-split readings for the messages recovered in this repo (5g). DECRYPT above
+# is the raw machine output; READING re-inserts the word breaks the X separators
+# mark and expands the telegraphic conventions (Q = ch, numbers spelled out), and
+# GLOSS is a plain English rendering. Garbles are in the ORIGINAL transmission,
+# not in the decrypt -- the keys are exact and verified by re-encryption.
+#
+# The doubled words are an error-correcting code, and they repair themselves:
+# ZANDEYS/ZANDERS -> Zanders, KOENIGSBCRG/COENIGSBNRG -> Koenigsberg, LKW/EKW ->
+# LKW. Where a garbled word was sent only once (BRZT, ABPANG) the reading marks
+# the expansion as uncertain with [?].
+READINGS = {
+ "55 NF": (
+  "EINS NEUN EINS FUENF X KOLONNEN UEBER X STARAJA RUSSA X STARAJA RUSSA X "
+  "IN MARSQ GESETZT X HARTJENSTEIN X",
+  "1915 hrs: columns set in march via Staraja Russa, Staraja Russa. "
+  "Hartjenstein. (Plaintext as published on the source page.)"),
+ "115": (
+  "AN STUBAF X SCHUSTER X ZANDE[R]S X ZANDERS X BITTET UM TELEGRAFISCHEN "
+  "BESCHEID ZUM X ZEL X ZEN XX WO EINS ZWO X KOENIGSB[E]RG X [K]OENIGSB[E]RG "
+  "X OB X FORD X FORD X VIKTOR X AQT X PKW X PKW X ODER X LKW X [L]KW X "
+  "MOTOR F HAR[T]JENSTEIN",
+  "To SS-Sturmbannfuehrer Schuster, Zanders: requests telegraphic reply ... "
+  "Koenigsberg ... whether Ford, Ford, Viktor eight, cars or trucks, motor ... "
+  "Hartjenstein."),
+ "116": (
+  "AN DIV X [A]RZT X PERSON X VERLUSTE VOM X ZWO SIEBEN X NEUN X "
+  "FEHLANZEIGE X KRANKE X ZUGANG X EINS X AB[G]ANG X ZWO X BESTAND X "
+  "EINS NULL X RENNER X RENNER",
+  "To Division, medical officer, personnel. Casualties of 27.9: nil return. "
+  "Sick: 1 admitted, 2 discharged, 10 on strength. Renner, Renner."),
+ "117": (
+  "BITTE ANTWORT AQ X ZANDERS X ZANDERS VON DORN TELEFONISQ AUFGEBEN X "
+  "HARTJENSTEIN X",
+  "Please reply ...: Zanders, Zanders, to be passed by telephone from Dorn. "
+  "Hartjenstein."),
+}
+
 HEADER = """\
 # ============================================================================
 # enigma-army-messages-1941.txt  --  authentic 1941 German Army (HG Nord) Enigma
@@ -206,6 +237,18 @@ HEADER = """\
 
 
 def main():
+    # Self-dedup FIRST. The old code deduped only against enigma-messages.txt, so
+    # adding a message already present here under a different (garbled) Kenngruppe
+    # silently produced two records -- which is exactly what happened when Nrs
+    # 115-117 were "rediscovered" from the source page and matched on Kenngruppe
+    # rather than on ciphertext. Match on the ciphertext, which is the identity.
+    seen = {}
+    for rec in M:
+        body = body_of("", rec[4], rec[6]).replace("-", "")
+        if body in seen:
+            raise SystemExit("duplicate ciphertext: Nr %s repeats Nr %s"
+                             % (rec[0], seen[body]))
+        seen[body] = rec[0]
     existing = load_existing_bodies()
     records, dropped = [], []
     for no, daykey, label, start, special, kenn, ct, notes in M:
@@ -228,6 +271,10 @@ def main():
             f.write('CMD:         ./enigma -u %s -w %s -r %s -g %s -s "%s"\n' % (u, w, r, start, s))
             f.write("CIPHERTEXT:  %s\n" % wrap(body))
             f.write("DECRYPT:     %s\n" % wrap(pt))
+            if no in READINGS:
+                rd, gl = READINGS[no]
+                f.write("READING:     %s\n" % wrap(rd, 60))
+                f.write("GLOSS:       %s\n" % wrap(gl, 60))
             f.write("NOTES:       %s\n\n" % (notes if notes else "(clean)"))
 
     print("wrote %s" % OUT)
