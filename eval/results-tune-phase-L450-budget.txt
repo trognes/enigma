@@ -1,0 +1,11 @@
+L=450, 40 instances, --tune-phase 2, -R swept over the SAME instances the
+paired file drew (eval/results-tune-phase-L450.jsonl), so the arm B row is
+directly comparable.  eval/tune_phase_budget.py.
+
+L=450, 40 instances, --tune-phase 2
+  -R    mean %-correct   exact    wall/trial
+  2          95.0       36/40        5.8 s
+  4          98.7       37/40       11.8 s
+  8          98.9       38/40       23.4 s
+  16         98.9       38/40       46.6 s
+  (paired file's exhaustive arm B: 100.0  38/40  171.5 s)

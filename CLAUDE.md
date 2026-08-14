@@ -334,15 +334,19 @@ are read from a **data directory** (filenames built as
 > `--polish` guard bug — at `K=2`/`K=3` it costs only ~0.5–2pp of exact recovery
 > for 1.86×/2.61× fewer keys, so it is now **recommended when throughput
 > matters** (K≥5 still is not); see its entry. `--tune-phase` is **measured and
-> split**: at matched wall time against spending the same compute on `-R` over
-> the full ring enumeration (80 paired trials, L=200) it **breaks more
-> messages** — 63/80 exact against 51/80, McNemar p = 0.043 — but scores
-> **lower mean %-correct** (85.5 vs 91.0, CI spans 0): its failures are
-> catastrophic where the exhaustive arm's are graceful. Use it when a break is
-> what you want and a partial answer is worth nothing; prefer the exhaustive
-> sweep when you want the run to degrade gracefully. `archived/PERFORMANCE.md`
-> §7.15. **Removed options** (dominated or subsumed; the measurements survive
-> in `archived/PERFORMANCE.md`): `-I` (bare
+> split, and the split is length-dependent**: at matched wall time against
+> spending the same compute on `-R` over the full ring enumeration it **breaks
+> more messages** — 63/80 exact against 51/80 at L=200 (McNemar p = 0.043) and
+> 74/80 against 65/80 at L=300 (p = 0.049) — but scores **lower mean
+> %-correct** at both (85.5 vs 91.0, then 94.7 vs 98.8; both CIs span 0):
+> its failures are catastrophic where the exhaustive arm's are graceful. By
+> **L=450 the two arms are indistinguishable** (100.0/100.0 mean, 39/40 against
+> 38/40), so the choice only matters below roughly 400 letters. Use it there
+> when a break is what you want and a partial answer is worth nothing; prefer
+> the exhaustive sweep when you want the run to degrade gracefully.
+> `archived/PERFORMANCE.md` §7.15 for L=200, "Tuning the rotor phase" below for
+> the length sweep. **Removed options** (dominated or subsumed; the
+> measurements survive in `archived/PERFORMANCE.md`): `-I` (bare
 > first-improvement — `-J` supersedes it; the internal climb path remains, set
 > by `-J`), `--infl-order`, `--repair3`, `--gainfix-best` (superseded by the
 > finisher), `--dump-restarts` (subsumed by `--dump-all`), `--restart-tt` and
@@ -471,6 +475,8 @@ are read from a **data directory** (filenames built as
   (§7.15): at matched wall time it breaks more messages than an exhaustive ring
   sweep does (63/80 vs 51/80 exact, p = 0.043) but scores lower mean %-correct,
   because a wrong *offset* is unrecoverable — it fails less often and worse.
+  **That holds at L=300 and is gone by L=450** — see "How the split moves with
+  length" below.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,
@@ -1791,6 +1797,88 @@ Implementation notes worth knowing before touching it:
   machine the caller merges describe different things.
 - Rejected with `--ring-stride` (both reparameterise the ring positions), with
   `-F`/`--exhaust` (both re-encode the work index) and with `--crib`/`-A`.
+
+#### How the split moves with length
+
+§7.15 measured the flag at **one** length, and the obvious question it left is
+whether the trade survives at operational lengths, where the capture radius is
+wide and the wrong-offset failures should thin out. Measured at L=300 (80 paired
+trials) and L=450 (40), same design as §7.15 — same corpus, same recipe
+(`-c -f -l english -J -S m4f10 --polish`, reflector B, wheels 231, ring0/start0
+pinned, `-T 4`), 10-pair board hidden, and the budget **re-calibrated at each
+length** as §7.15 requires, since §7.12 collapses more of the exhaustive arm's
+keyspace as `L` falls:
+
+| L | arm B keys | arm A `-R` | wall B / A | B mean / exact | A mean / exact |
+|---:|---:|---:|---|---|---|
+| 200 | 169 676 | 24 | 28 s / 28 s | 91.0, 51/80 | 85.5, **63/80** |
+| 300 | 237 276 | 32 | 78 s / 79 s | **98.8**, 65/80 | 94.7, **74/80** |
+| 450 | 338 676 | 42 | 168 s / 166 s | 100.0, 38/40 | 100.0, 39/40 |
+
+**The split holds at L=300 and dissolves by L=450.** At 300 letters
+`--tune-phase` still breaks more messages (74 against 65, McNemar p = 0.049, 13
+only-A against 4 only-B) and still scores lower on the graded metric (−4.2pp,
+95% CI [−8.9, +0.6]) — the same shape as L=200 with both arms shifted up. At 450
+the arms are **indistinguishable**: identical means, one discordant pair,
+p = 1.0.
+
+**It dissolves because the problem stops being hard, not because the flag pulls
+ahead.** That distinction is the whole result, and it is visible in the failure
+shapes rather than the headline:
+
+| | L=200 | L=300 | L=450 |
+|---|---:|---:|---:|
+| A misses / of which catastrophic | 17 / **12** | 6 / **4** | 1 / **0** |
+| B misses / of which catastrophic | 29 / 6 | 15 / **0** | 2 / 0 |
+
+A's catastrophic rate (a miss under 20% correct — a wrong *offset*) falls
+12/80 → 4/80 → 0/40, which is the direction the capture radius predicts: the
+radius `≈0.4·L/26` passes the largest possible starting-phase distance (6.5,
+since `--tune-phase 2` starts from ring ∈ {A, N}) at about **L=420**. But B's
+catastrophic misses hit zero *first*, at L=300 — past that length the exhaustive
+arm cannot fail badly at all, because the true key is always in its keyspace and
+a plugboard miss still returns ~94% of the letters. So the reason to prefer the
+exhaustive sweep weakens with length at the same time as the reason to prefer
+the flag does.
+
+**The mechanism explains the RATE but not WHICH trials fail.** Bucketing trials
+by the cyclic distance from the true ring to the nearest starting phase — the
+quantity the capture radius is about — does not separate them: the catastrophes
+sit at distances 3, 4 and 5 at both L=200 and L=300, and at L=300 the *worst*
+bucket (distance 5–6) recovers 29/32. Distance 0–1 is the one clean signal (no
+catastrophe at either length, but only 3 and 5 trials). So these behave like
+climb failures at the starting phase rather than pure capture failures, and
+raising `N` is not obviously the fix that reading would suggest.
+
+**And below matched compute it pays outright.** Once both arms saturate the
+matched-wall-time question stops discriminating, and the useful one is how far
+*below* the exhaustive sweep's cost `--tune-phase` can go — which is where a
+125× smaller keyspace should show up. Swept over the same 40 instances at L=450
+(`eval/tune_phase_budget.py`, results `...-L450-budget.jsonl`):
+
+| `-R` | mean %-correct | exact | wall/trial |
+|---:|---:|---:|---:|
+| 2 | 95.0 | 36/40 | **5.8 s** |
+| 4 | 98.7 | 37/40 | 11.8 s |
+| **8** | 98.9 | **38/40** | **23.4 s** |
+| 16 | 98.9 | 38/40 | 46.6 s |
+| *exhaustive arm B* | *100.0* | *38/40* | *171.5 s* |
+
+**`-R 8` matches the exhaustive arm's 38/40 for 23.4 s against 171.5 s — 7.3×
+cheaper — and saturates there**, `-R 16` being identical outcome for double the
+time. `-R 4` gives up one break for 14.5×. So at operational lengths the flag is
+not a trade at all: it is the same result for a seventh of the compute, and the
+right operating point is a *low* restart count, nowhere near the `-R 42` matched
+compute forced.
+
+The residual is not budget-limited. Of the three non-exact trials, two sit at
+the same %-correct at every `-R` (58.0% and 99.56%) and so are untouched by more
+restarts; only one moves (5.78% at `-R 2`, exact from `-R 4`). That is what
+saturation looks like from the inside.
+
+Raw data: `eval/results-tune-phase-L300.jsonl` / `-L450.jsonl` with `.txt`
+summaries; `eval/tune_phase_vs_restarts.py` and its report script, which prints
+the failure-shape table above.
 
 ### Performance notes
 

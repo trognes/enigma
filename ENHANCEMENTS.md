@@ -183,13 +183,30 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**10. `--tune-phase` at operational lengths (~L300+).** At L=200 and matched
-compute it breaks more messages than an exhaustive ring sweep (63/80 vs 51/80,
-p = 0.043) but scores lower mean %-correct, because a wrong *offset* is
-unrecoverable — it fails less often and worse. The capture radius grows as
-`~0.4·L/26`, so at operational lengths those catastrophic failures should get
-rarer, and the trade could stop being a trade. Untested. → `CLAUDE.md` "Tuning
-the rotor phase"; `archived/PERFORMANCE.md` §7.15.
+**10. `--tune-phase` — MEASURED at three lengths and below saturation;
+CLOSED.** The open half was whether the L=200 trade (more breaks, lower mean
+%-correct) survives at operational lengths. It does at **L=300** — 74/80 exact
+against 65/80, McNemar p = 0.049, mean −4.2pp with CI [−8.9, +0.6] — and is gone
+by **L=450**, where the two arms are indistinguishable (100.0/100.0 mean, 39/40
+against 38/40, one discordant pair). The catastrophic misses fall 12/80 → 4/80 →
+0/40 as the capture radius predicts, but the exhaustive arm's hit zero *first*
+(at L=300), so the trade dissolves because the problem stops being hard for
+either arm, not because the flag pulls ahead. Bucketing by distance from the
+true ring to the nearest starting phase explains the *rate* but not *which*
+trials fail, so raising `N` is not the indicated fix. → `CLAUDE.md` "How the
+split moves with length".
+
+*Now answered, and it pays outright.* Matched compute stops discriminating once
+both arms saturate, so the useful question was how far **below** the exhaustive
+sweep's cost `--tune-phase` can go. Swept over the same 40 instances at L=450
+(`eval/tune_phase_budget.py`): `-R 8` matches the exhaustive arm's **38/40 for
+23.4 s against 171.5 s — 7.3× cheaper** — and saturates there, `-R 16` being an
+identical outcome for double the time; `-R 4` gives up one break for 14.5×. So
+at operational lengths the flag is not a trade: it is the same result for a
+seventh of the compute, at a *low* restart count nowhere near the `-R 42`
+matched compute forced. Two of the three residual misses are flat across every
+`-R`, so the residual is not budget-limited either. → `CLAUDE.md` "How the split
+moves with length".
 
 **11. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
@@ -198,24 +215,55 @@ established**, and only at a stride already outside the recommended K≤3.
 Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 `archived/PERFORMANCE.md` §7.11; `eval/ring_stride_scope_probe.py`.
 
+**12. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
+harness here reports two numbers: mean %-of-letters-correct (graded, low
+variance) and exact recovery (coarse, the operator's metric). Neither says how
+often a run lands *recognisably close* — enough of the plaintext to read as
+language, and plausibly resolvable to the exact answer by a local
+re-optimisation afterwards. That is a third, operationally distinct outcome, and
+it is the population `--polish` exists to convert, so a rate for it would
+measure the finisher's target directly instead of by its effect.
+
+*Use **50%** — half the letters — and do not agonise.* Pooling every non-exact
+outcome from the three `--tune-phase` A/B runs (both arms, n=70): 22 sit at or
+under 10%, 41 at or above 90%, and **three** in between (59.3, 66.7, 75.7).
+Nothing at all lands between 10% and 50%, so any cut from ~20% to ~55%
+classifies this data identically. 50% is the round number inside that
+insensitive band; 60% is where trials start to move (it is the first cut that
+clips the 59.3 case). The bimodality is structural on this problem — a wrong
+*offset* scrambles everything, while a right key with a few wrong plugs keeps
+most letters — so the threshold is not where the care is needed. Report how many
+outcomes fall in the band beside the rate: a threshold is only interesting when
+something sits near it.
+
+*Where it should actually bite is the plugboard-recovery tier* — `make
+crackquality`, rotor key given, board hidden — whose failures are partial plug
+recoveries rather than all-or-nothing, so intermediate scores are genuinely
+populated there (its documented means run 24.7% to 91.1%). That is where a
+close-match rate would add information the existing two metrics do not already
+carry, and where the "resolve it to exact afterwards" follow-up is testable:
+take the close-but-wrong boards and measure what fraction a finishing pass
+converts. `tests/crack_quality.py` and
+`eval/tune_phase_vs_restarts_report.py` are the two places to add it.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**12. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**13. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**13. No `install` target**, and the n-gram files are not declared as build/run
+**14. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**14. Single-file distribution.** Embedding the tables was declined once, but
+**15. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**15. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**16. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 

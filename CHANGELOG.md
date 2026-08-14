@@ -128,6 +128,15 @@ existing command lines can behave differently or stop working.
   full break is useful; prefer the exhaustive sweep when a partial answer has
   value.
 
+  **Below matched compute it pays outright.** Once both arms saturate the
+  matched-wall-time question stops discriminating, so `-R` was swept over the
+  same 40 instances at L=450: `-R 8` matches the exhaustive sweep's 38/40 for
+  **23.4 s against 171.5 s, 7.3× cheaper**, and saturates there (`-R 16` is an
+  identical outcome for double the time); `-R 4` gives up one break for 14.5×.
+  At operational lengths the flag is therefore not a trade at all — the same
+  result for a seventh of the compute — and the right operating point is a *low*
+  restart count, nowhere near the `-R 42` that matched compute forced.
+
 ### Changed
 
 - **The test suite runs 3.6× faster — 232 s → 64 s — with all 437 checks
@@ -148,6 +157,41 @@ existing command lines can behave differently or stop working.
   speed things up by spreading the `-R` restarts across threads", yet they
   passed `-g $rg` and swept 676 keys, never exercising the single-key path.
   Pinning `-g AAA` made them both correct and ~500× cheaper.
+
+- **`--tune-phase` is now measured across message length, and the trade it makes
+  dissolves by ~450 letters.** It shipped measured at one length (L=200), where
+  at matched wall time it broke more messages than an exhaustive ring sweep but
+  scored a lower mean %-correct. Re-run at L=300 (80 paired trials) and L=450
+  (40), with the budget re-calibrated at each length as that comparison
+  requires:
+
+  | L | B mean / exact | A mean / exact | McNemar |
+  |---:|---|---|---|
+  | 200 | 91.0, 51/80 | 85.5, **63/80** | p = 0.043 |
+  | 300 | **98.8**, 65/80 | 94.7, **74/80** | p = 0.049 |
+  | 450 | 100.0, 38/40 | 100.0, 39/40 | p = 1.0 |
+
+  The split survives at 300 letters and is gone at 450, where the arms are
+  indistinguishable. **It dissolves because the problem stops being hard, not
+  because the flag pulls ahead** — `--tune-phase`'s catastrophic misses (a wrong
+  offset, under 20% of letters) fall 12/80 → 4/80 → 0/40, which is what the
+  capture radius predicts, but the exhaustive arm's reach zero *first*, at
+  L=300: past that length the true key is always in its keyspace and a plugboard
+  miss still returns ~94% of the letters. So the guidance is unchanged in kind
+  and narrowed in scope: choose between them below roughly 400 letters, and
+  above that it does not matter which you pick.
+
+  The obvious mechanism explains the rate but not which trials fail. Bucketing
+  by the cyclic distance from the true ring to the nearest starting phase — the
+  quantity the capture radius is about — leaves the catastrophes spread over
+  distances 3–5 at both lengths, with the *worst* bucket recovering 29/32 at
+  L=300, so raising `N` is not the fix that reading would suggest.
+
+  The report script now prints the failure-shape table (misses, of which
+  catastrophic, and the partial-miss mean) that made this legible; the headline
+  means and exact counts alone show a shrinking gap and hide the fact that the
+  two arms fail in opposite ways. Raw data `eval/results-tune-phase-L300.jsonl`
+  and `-L450.jsonl`, with `.txt` summaries.
 
 - **The unknown-key break rate is now measured**
   (`eval/unknown_key_headroom.py`) — 55% at 17 576 keys and 53% at 230 million,
