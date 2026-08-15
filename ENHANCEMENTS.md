@@ -169,8 +169,13 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
-**5. Repeated text with an X between — MEASURED, and on its ACTUAL target it
-works: 9 of 9 real scoring failures rescued, 0 false positives in 8496.**
+**5. Repeated text with an X between — NOT IMPLEMENTED; measured in `eval/`
+probes only. On its ACTUAL target it works: 15 of 15 real scoring failures
+rescued, 0 false positives in 8 928.** Nothing below exists in `enigma.cc` —
+there is no flag, no code, and no `make bench` number for any of it. Where this
+entry says "the settled setting" it means the configuration these probes
+standardised on, not a shipped default.
+
 Telegraphic German doubles important words around the X separator:
 `ZANDERSXZANDERS`, `FORDXFORD`, the `LNKXLNKX` in Nr 214. The test is that two
 runs are identical **to each other** — not that either is a word anyone listed
@@ -326,19 +331,19 @@ measures the three predictions this entry used to carry.
 
 *1. Cost is true and does not matter.* The scan is 911 window comparisons per
 message; one plugboard climb on the same 151-letter message scores **18 441
-boards × 151 letters = 2.78 M operations**, and the check runs once per
+boards × 151 letters = 2.78 M operations**, and the check would run once per
 *converged* board. So the scan is **0.36% of a single climb** and anchoring
 takes that to 0.003%. There is nothing on this axis to win.
 
 *2. The null does fall, but the premise was wrong.* Anchoring cuts the chance
 rate ~100× where it can be measured (`L≥3`: 4.765% → 0.045%; `L≥4`: 0.495% →
-0.005%). But `L ≥ 6` was never forced by the null — the shipped `len≥6, mm≤1`
+0.005%). But `L ≥ 6` was never forced by the null — the settled `len≥6, mm≤1`
 already measures **0.000%**, so there was no chance rate to relieve. And under
 anchoring a shorter length adds nothing anyway: 6 → 5 gains **+1** message
 unanchored and **+0** anchored. The binding constraint is the X-enclosure, not
 the length.
 
-*3. Recall is lost, and one-directionally.* At the shipped setting the anchored
+*3. Recall is lost, and one-directionally.* At item 5's setting the anchored
 form finds **21 of 54 against 25**; at `mm≤1` the loss runs −3 to −8 across
 `L = 7…3`. The head-to-head the trade was actually about — spend the
 enclosure to buy a shorter word — is **unanchored `L≥6`: 25 messages, 0.000%
@@ -395,13 +400,14 @@ matching would need edit distance rather than Hamming, which is more expensive;
 one confirmed instance is still not a rate.
 
 **(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
-Rough arithmetic, to be confirmed on wall time: the current check is ~11
+Rough arithmetic, to be confirmed on wall time: the check as designed is ~11
 `score_iter`-equivalents, and one restart is ~1250 `score_iter` (inferred from
 `--polish`'s measured ~6500 being 2.8–3.3% of a run at `-R 160`). So **~0.9% of
 a single restart**, less if run once per key rather than per restart, and under
 one `score_iter`-equivalent in the X-anchored form. Placement is what decides
-it: as a **confirmation signal it runs once per converged climb** and is noise;
-put it inside the climb loop, per scored board, and it becomes ~1% on the hot
+it: as a **confirmation signal it would run once per converged climb** and is
+noise; put it inside the climb loop, per scored board, and it becomes ~1% on
+the hot
 path, which this repo treats as a real regression needing a `make bench` A/B
 under both compilers. Note `score_iter` would **not** count it in either case —
 the same blind spot documented for `--polish`'s gain scan — so judge it on wall

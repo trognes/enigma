@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ENHANCEMENTS.md item 5(a): anchor on the X's, then compare segments.
 
-The shipped matcher (`doubling_probe.py`) scans every (start, length) window
+The reference matcher (`doubling_probe.py`) scans every (start, length) window
 looking for `W X V`.  The pattern telegraphic German is supposed to write is
 `X PARIS X PARIM X` -- the doubled word a WHOLE X-delimited segment on both
 sides -- so the alternative is to split on X first and compare adjacent
@@ -50,7 +50,7 @@ def decrypts():
 
 
 def windows(t, k, maxmm=0):
-    """The shipped rule: every W X V window with |W| = |V| >= k."""
+    """Item 5's rule: every W X V window with |W| = |V| >= k."""
     out = []
     for i in range(len(t)):
         for L in range(k, MAXLEN + 1):
@@ -134,7 +134,8 @@ def main():
     # ...but put that saving beside the thing it would run next to.  One
     # plugboard climb on a 151-letter message scores 18441 boards (measured:
     # -c -f -l wehrmacht -S i4f10 -J --polish -R 1), each touching every
-    # letter.  The doubling check runs once per CONVERGED board, so that is
+    # letter.  The doubling check would run once per CONVERGED board (it is
+    # not implemented in enigma.cc -- item 5 is an open proposal), so that is
     # the honest denominator.
     boards, mlen, avg = 18441, 151, (6 + MAXLEN) / 2.0
     ops = boards * mlen
@@ -157,8 +158,8 @@ def main():
     print("   (resolution is one hit in %d = %.3f%%, so a 0.000%% and a"
           % (NULL_TRIALS, FLOOR))
     print("   %.3f%% differ by a single draw and mean the same thing)" % FLOOR)
-    print("   The reduction is real.  But the premise is not: the SHIPPED")
-    print("   setting len>=6 mm<=1 already measures 0.000% unanchored, so")
+    print("   The reduction is real.  But the premise is not: item 5's")
+    print("   own len>=6 mm<=1 already measures 0.000% unanchored, so")
     print("   there was no chance rate to relieve.  And under anchoring a")
     print("   shorter length adds nothing anyway --")
     print("   %-6s %-12s %s" % ("len>=", "unanchored", "anchored"))

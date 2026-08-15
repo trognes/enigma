@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """How often does the doubling rule fire on text with no doubling in it?
 
-ENHANCEMENTS.md item 5 shipped `len>=6, mm<=1` on a null recorded as "0 of
+ENHANCEMENTS.md item 5 settled on `len>=6, mm<=1` on a null recorded as "0 of
 20000 shuffles".  That is a floor, not a rate -- 20000 trials expect 0.28 hits
 at this rule, so zero was the likely outcome and bounded nothing -- and it was
 measured on the wrong population besides.
@@ -40,7 +40,7 @@ K, MAXLEN, MAXMM = 6, 16, 1
 
 
 def fires(t, k=K, maxlen=MAXLEN, maxmm=MAXMM):
-    """The shipped rule, driven from the X positions rather than every start.
+    """Item 5's rule, driven from the X positions rather than every start.
 
     Identical in what it accepts to doubling_probe.py's `repeats()` -- every
     W X V window has an X at its centre, so enumerating the X's enumerates the

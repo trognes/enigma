@@ -16,8 +16,8 @@ PREDICTION 2 -- does a lower null make short words usable?
    6     1         0.000%      0.000%  n/a
    (resolution is one hit in 20000 = 0.005%, so a 0.000% and a
    0.005% differ by a single draw and mean the same thing)
-   The reduction is real.  But the premise is not: the SHIPPED
-   setting len>=6 mm<=1 already measures 0.000% unanchored, so
+   The reduction is real.  But the premise is not: item 5's
+   own len>=6 mm<=1 already measures 0.000% unanchored, so
    there was no chance rate to relieve.  And under anchoring a
    shorter length adds nothing anyway --
    len>=  unanchored   anchored
