@@ -184,14 +184,16 @@ FORMS = {
          "1420, abgegangen 10.7. 1220. From Xls to Ib (Nachschub); Vermerke "
          "'uebermittelt'. The ciphertext block opens 'Nr (1220) 87', so the "
          "form's own count confirms the 87 letters transcribed here.",
-         "faint pencil; the transcription above was NOT changed -- see "
-         "forms/README.md on why"),
+         "13 letters read differently here than in the transcription "
+         "above, none applied; the form's own 87-letter count arbitrates "
+         "the last group in the transcription's favour -- see "
+         "forms/README.md"),
  "285": ("AFL BSA", "FMNGI-31071941-205-out-nf.pdf",
          "Spruch Nr 205 (a struck-through 442 in red above it), sheet 259. "
          "Befoerdert 31.7.41. Absendende Stelle Nachschub, an Ib. The "
          "ciphertext block opens '2035 - 63', so the form's own count "
          "confirms the 63 letters transcribed here.",
-         "five letters read differently here than in the transcription "
+         "7 letters read differently here than in the transcription "
          "above, none applied -- see forms/README.md"),
 }
 

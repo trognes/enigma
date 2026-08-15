@@ -167,8 +167,10 @@ FORM NOTES:  Spruch Nr 88/61, sheet 389. Befoerdert 10.7.41 1546,
              (Nachschub); Vermerke 'uebermittelt'. The ciphertext block
              opens 'Nr (1220) 87', so the form's own count confirms the
              87 letters transcribed here.
-FORM DIFFS:  faint pencil; the transcription above was NOT changed -- see
-             forms/README.md on why
+FORM DIFFS:  13 letters read differently here than in the transcription
+             above, none applied; the form's own 87-letter count
+             arbitrates the last group in the transcription's favour --
+             see forms/README.md
 CIPHERTEXT:  MVUEHIDEVSARMCCNQTATYEVFCDBZGGSMXWLPSYWZYTCBSWURRTBZCVGODVJU
              SLSOOMJQJZSXSEBZPEYMDNXJFTC
 NOTES:       does NOT break on the 10 Jul key; suspected different network/key. The message form (forms/) supplies the INDICATOR, which makes that testable directly instead of by sweep: at the 10.07 day key GTA/KCI derives start USU, and at the Nr-173 network key (same wheels, ring MRP) start SED -- neither decrypts, and an exhaustive 17576-start sweep on BOTH keys tops out at margin +0.5 sd, i.e. nothing. So the different-network reading stands, and any future candidate key can now be checked in one decrypt
@@ -205,7 +207,7 @@ FORM NOTES:  Spruch Nr 205 (a struck-through 442 in red above it), sheet
              259. Befoerdert 31.7.41. Absendende Stelle Nachschub, an Ib.
              The ciphertext block opens '2035 - 63', so the form's own
              count confirms the 63 letters transcribed here.
-FORM DIFFS:  five letters read differently here than in the transcription
+FORM DIFFS:  7 letters read differently here than in the transcription
              above, none applied -- see forms/README.md
 CIPHERTEXT:  FMNGIFGROVFDIVQMNMNILIFZBQVNQWLGBLJVRLEBXIQEXCSAQPEKFHEKFBIK
              MCF

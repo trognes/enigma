@@ -778,15 +778,22 @@ on the forms themselves), so neither transcription has dropped or added a
 letter.
 
 **Readings that differ were NOT applied.** Reading the scans letter by letter
-disagrees with the stored transcriptions in five places in FMNGI and one in
+disagrees with the stored transcriptions in 7 letters of FMNGI and 13 of
 MVUEH; `forms/README.md` tabulates them. They stay unapplied because neither
 message has a working key, so a proposed correction cannot be arbitrated by
 decryption — the very thing that made the ALVPM corrections safe in §5j. And
-where a check *was* possible the stored text won: on the groups legible beyond
-doubt it matches exactly, and two letters that looked wrong at low
-magnification confirmed the stored reading once enlarged. The candidates are
-recorded rather than applied, as the cheapest thing to try if either message is
-attacked and fails.
+every check that *was* possible went the stored transcription's way. The
+**form's own letter count settles MVUEH's tail**: at low magnification the last
+row reads `DURXJ` + `YTC`, which totals 88 against the form's stated 87;
+enlarged it is `DNXJ?` + `TC`, exactly 87 and `TC` as stored — arithmetic, not
+a judgement about handwriting. More generally **magnification kept overturning
+this reading and never the stored one** — six groups (MVUEH `YTCBS`, `ODVJU`,
+`DNXJ`, `TC`; FMNGI `FDIVQ`, `LGBLJ`) were read wrong here at low resolution
+and confirmed the stored text when enlarged, and not once did enlarging confirm
+a disagreement. The residual disagreements sit almost entirely in the faintest
+pencil, which is exactly where this reading has already been shown to fail. The
+candidates are recorded rather than applied, as the cheapest thing to try if
+either message is attacked and fails.
 
 ## 6. The `wehrmacht` scoring language — the corpus payoff
 
