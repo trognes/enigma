@@ -1,0 +1,63 @@
+54 messages with a clean recorded plaintext
+424 X-delimited segments, mean length 12.4, median 8
+
+PREDICTION 1 -- cost, comparisons per message
+   unanchored scan (k=6)         910.6
+   anchored, adjacent pairs        6.9     133x cheaper
+   in context: one climb = 18441 boards x 151 letters = 2.78M ops
+   so the scan is 0.36% of ONE climb, the anchored form 0.003%.
+   VERDICT: true (133x), and irrelevant -- cost does not bind.
+
+PREDICTION 2 -- does a lower null make short words usable?
+   len   mm   null unanch null anch   reduction
+   3     1         4.765%      0.045%  106x
+   4     1         0.495%      0.005%  99x
+   5     1         0.025%      0.000%  >=5x
+   6     1         0.000%      0.000%  n/a
+   (resolution is one hit in 20000 = 0.005%, so a 0.000% and a
+   0.005% differ by a single draw and mean the same thing)
+   The reduction is real.  But the premise is not: the SHIPPED
+   setting len>=6 mm<=1 already measures 0.000% unanchored, so
+   there was no chance rate to relieve.  And under anchoring a
+   shorter length adds nothing anyway --
+   len>=  unanchored   anchored
+   7      22           19
+   6      25           21
+   5      26           21
+   4      27           22
+   3      30           22
+   6 -> 5 gains +1 unanchored and +0 anchored: the binding
+   constraint is the X-enclosure, not the length.
+   VERDICT: true on the null, with nothing to spend it on.
+
+PREDICTION 3 -- recall
+   len   mm   unanchored     anchored       lost
+   7     0    16 of 54 ( 30%) 14 of 54 ( 26%)  -2
+   7     1    22 of 54 ( 41%) 19 of 54 ( 35%)  -3
+   6     0    18 of 54 ( 33%) 16 of 54 ( 30%)  -2
+   6     1    25 of 54 ( 46%) 21 of 54 ( 39%)  -4
+   5     0    18 of 54 ( 33%) 16 of 54 ( 30%)  -2
+   5     1    26 of 54 ( 48%) 21 of 54 ( 39%)  -5
+   4     0    20 of 54 ( 37%) 18 of 54 ( 33%)  -2
+   4     1    27 of 54 ( 50%) 22 of 54 ( 41%)  -5
+   3     0    20 of 54 ( 37%) 18 of 54 ( 33%)  -2
+   3     1    30 of 54 ( 56%) 22 of 54 ( 41%)  -8
+
+   And the loss is ONE-DIRECTIONAL by construction:
+     len>=4 mm<=1  only-anchored 0   only-unanchored  5
+     len>=5 mm<=1  only-anchored 0   only-unanchored  5
+     len>=6 mm<=1  only-anchored 0   only-unanchored  4
+   Zero only-anchored, always -- an adjacent equal-length segment
+   pair IS a window hit at that (i, L), so anchoring can only
+   remove recall, never add it.
+   VERDICT: false.  Recall is the axis that decides it.
+
+WHY -- the doubled word is NOT always enclosed by X
+   unanchored len>=6 finds 25, anchored len>=5 finds 21; the 4
+   messages between them are all genuine doublings:
+     GEHRG   ...INSSEQSNULLNULLUHRIN[ROMANOVKA]X[ROMANOVKA]GKLAMMXPOLAXPOLAXKIA...
+     MNQBH   ...BITTEANTWORTAQX[ZANDERS]X[ZANDERS]VONDORNTELEFONISQAUF...
+     ABGUX   ...DUNGNAQMUSTERSEQSZUM[SIOBEN]X[SIEBEN]XEIXSZWOCULLNSLLDRIN...
+     ABNAQ   ...LCUNFNTLLNULLGEGJNDX[WASKOWA]X[WASKTWA]EINSZWOKMSUEDWESTLIQ...
+   Operators run the doubled word together with what follows, so
+   the boundary an anchored rule needs is often simply not there.

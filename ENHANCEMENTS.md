@@ -258,32 +258,62 @@ without this factor.
 
 *Two design questions noted, not yet measured.*
 
-**(a) Anchor on the X's first, then compare segments — do not scan (i, L).**
-The pattern to look for is `XPARISXPARIMX`, not `PARISXPARIM`, and finding the
-X positions first is not merely an optimisation: **the segmentation determines
-the candidate lengths, so the length loop disappears entirely.** Split the text
-on X, then compare adjacent segments (and, cheaply, non-adjacent ones — a word
-can repeat later in the message with other words between). Three consequences,
-all reasoned rather than measured:
+**(a) Anchor on the X's first — MEASURED, and DOMINATED. Do not build it.**
+The pattern telegraphic German is supposed to write is `XPARISXPARIMX`, not
+`PARISXPARIM`, so the alternative to scanning every `(i, L)` window is to split
+on X and compare adjacent segments — the segmentation fixes the candidate
+lengths and the length loop disappears. `eval/doubling_anchored_probe.py`
+measures the three predictions this entry used to carry.
 
-- *Cost.* The present scan is ~`N × 11` window comparisons — about 1650 on a
-  150-letter message. Telegraphic German runs ~6% X, so the same message holds
-  ~9 X's and ~9 adjacent segment pairs. Roughly **two orders of magnitude
-  cheaper**.
-- *Shorter words become viable*, which is the real prize. `L ≥ 6` is a threshold
-  forced by the **unanchored** scan's chance rate, not by anything linguistic:
-  the table above shows `len≥4, mm≤1` reaching 48% of messages but at a 0.355%
-  null. Two flanking X's are two extra constraints at ~1/16 each in telegraphic
-  text, so anchoring should cut that null by ~250×, making `L = 4` or `5`
-  affordable. Measure the anchored null before trusting the factor.
-- *Recall is not the obstacle.* The flanking measurement says 71% both sides,
-  25% left only, 4% right only and **0% neither**, and the left-only cases are
-  largely end-of-message — a boundary segmentation gets for free. So an
-  X-anchored form should lose little or no recall.
+| prediction | verdict |
+|---|---|
+| ~100× cheaper | **true** (133×) — and irrelevant |
+| shorter `L` viable | **true on the null** — nothing to spend it on |
+| little or no recall lost | **false** — and this is the axis that decides it |
 
-The one new fragility: anchoring depends on the **X's themselves** decrypting
-correctly. Irrelevant for this feature's target population, where the climb
-recovers ~100% of letters, but it would matter for any partial-recovery use.
+*1. Cost is true and does not matter.* The scan is 911 window comparisons per
+message; one plugboard climb on the same 151-letter message scores **18 441
+boards × 151 letters = 2.78 M operations**, and the check runs once per
+*converged* board. So the scan is **0.36% of a single climb** and anchoring
+takes that to 0.003%. There is nothing on this axis to win.
+
+*2. The null does fall, but the premise was wrong.* Anchoring cuts the chance
+rate ~100× where it can be measured (`L≥3`: 4.765% → 0.045%; `L≥4`: 0.495% →
+0.005%). But `L ≥ 6` was never forced by the null — the shipped `len≥6, mm≤1`
+already measures **0.000%**, so there was no chance rate to relieve. And under
+anchoring a shorter length adds nothing anyway: 6 → 5 gains **+1** message
+unanchored and **+0** anchored. The binding constraint is the X-enclosure, not
+the length.
+
+*3. Recall is lost, and one-directionally.* At the shipped setting the anchored
+form finds **21 of 54 against 25**; at `mm≤1` the loss runs −3 to −8 across
+`L = 7…3`. The head-to-head the trade was actually about — spend the
+enclosure to buy a shorter word — is **unanchored `L≥6`: 25 messages, 0.000%
+null** against **anchored `L≥5`: 21 messages, 0.000% null**. Worse on recall,
+no better on the null. And the anchored hit set is a strict **subset** at every
+setting tried (0 only-anchored against 4–5 only-unanchored), which is
+structural rather than a sample-size accident: an adjacent equal-length segment
+pair *is* a window hit at that `(i, L)`, so anchoring can only ever remove
+recall.
+
+**Why, and it is the informative part: the doubled word is not always enclosed
+by X.** The four messages between unanchored `L≥6` and anchored `L≥5` are all
+genuine doublings, and none is an end-of-message case:
+
+```
+GEHRG  ...NULLNULLUHRIN[ROMANOVKA]X[ROMANOVKA]GKLAMMXPOLA...
+MNQBH  ...BITTEANTWORTAQX[ZANDERS]X[ZANDERS]VONDORNTELEFON...
+ABGUX  ...NAQMUSTERSEQSZUM[SIOBEN]X[SIEBEN]XEIXSZWOCULLNS...
+ABNAQ  ...NTLLNULLGEGJNDX[WASKOWA]X[WASKTWA]EINSZWOKMSUEDWEST...
+```
+
+Operators run the doubled word together with what follows, so the boundary an
+anchored rule needs is often simply not written. Measured on the corpus, a
+doubling is flanked on **both** sides only **71%** of the time (24 of 34
+instances at `len≥6, mm≤1`; 24% left only, 3% right only, 3% neither) — so this
+entry's own summary that "the real pattern is `X W X W X`" holds for about
+seven doublings in ten, and its recorded "0% neither" is stale at 3% since
+GEHRG joined the corpus.
 
 **(c) Let the SEPARATOR be garbled too — ONE instance, after a withdrawal.**
 The rule requires the separator to be a literal `X`. This note originally cited
@@ -405,6 +435,7 @@ to ask one new question of the same data; this one should not. `REUSE=1` re-runs
 the analysis without re-climbing.
 
 → `eval/doubling_probe.py`, `eval/doubling_climb_probe.py`,
+`eval/doubling_anchored_probe.py` (note (a), measured down),
 `eval/results-doubling.txt`, `eval/results-doubling-climb.txt`; item 4 above;
 `archived/cribs.md` §4.2a.
 
