@@ -58,7 +58,13 @@ C = [
   "WEUWYTCTICBSEYTHDHXOXUSIMIEORHRKVEIXFICQUIMBZIDZMFEQM", "does NOT break on the 9 Jul key"),
  ("172", "10 Jul 1941", "MVUEH", 87,
   "MVUEHIDEVSARMCCNQTATYEVFCDBZGGSMXWLPSYWZYTCBSWURRTBZCVGODVJUSLSOOMJQJZSXSEBZPEYMDNXJFTC",
-  "does NOT break on the 10 Jul key; suspected different network/key"),
+  "does NOT break on the 10 Jul key; suspected different network/key. The "
+  "message form (forms/) supplies the INDICATOR, which makes that testable "
+  "directly instead of by sweep: at the 10.07 day key GTA/KCI derives start "
+  "USU, and at the Nr-173 network key (same wheels, ring MRP) start SED -- "
+  "neither decrypts, and an exhaustive 17576-start sweep on BOTH keys tops "
+  "out at margin +0.5 sd, i.e. nothing. So the different-network reading "
+  "stands, and any future candidate key can now be checked in one decrypt"),
  ("187", "11 Jul 1941", "AWTZK", 54,
   "AWTZKTBXVAKXKLZIPPCZIPUCCRXHRKQUTDEGMGIKGCWEKLQNUMCWSS", ""),
  ("189", "11 Jul 1941", "ZNLZT", 74,
@@ -66,7 +72,10 @@ C = [
  ("242", "20 Jul 1941", "JBIYH", 60,
   "JBIYHNVYMIVLOGGKTDKKOYXWRDLBHRRZYPILVVXOGBEFXAXCWBNGILRWARXO", ""),
  ("285", "31 Jul 1941", "FMNGI", 63,
-  "FMNGIFGROVFDIVQMNMNILIFZBQVNQWLGBLJVRLEBXIQEXCSAQPEKFHEKFBIKMCF", ""),
+  "FMNGIFGROVFDIVQMNMNILIFZBQVNQWLGBLJVRLEBXIQEXCSAQPEKFHEKFBIKMCF",
+  "no day key exists for 31.07.1941, so nothing here can be verified by "
+  "decryption. The message form (forms/) confirms the 63-letter count and "
+  "supplies the indicator"),
 ]
 
 # Status checked against the BGAC 1941 Message List (cryptocellar.org/bgac/
@@ -162,6 +171,31 @@ HEADER = """\
 """
 
 
+# Metadata read off the original message forms in forms/.  Held separately
+# from the ciphertext because it comes from a different authority: the scan,
+# not the transcription.  The INDICATOR is the valuable part -- it is the
+# operator's enciphered message key, so a candidate day key can be tested in
+# one decrypt (set the machine to the first group, decipher the second, and
+# that is the start position) instead of a 17576-start sweep.
+# (no, indicator, scan, header details, disputed readings)
+FORMS = {
+ "172": ("GTA KCI", "MVUEH-10071941-088-061-out-nf.pdf",
+         "Spruch Nr 88/61, sheet 389. Befoerdert 10.7.41 1546, aufgenommen "
+         "1420, abgegangen 10.7. 1220. From Xls to Ib (Nachschub); Vermerke "
+         "'uebermittelt'. The ciphertext block opens 'Nr (1220) 87', so the "
+         "form's own count confirms the 87 letters transcribed here.",
+         "faint pencil; the transcription above was NOT changed -- see "
+         "forms/README.md on why"),
+ "285": ("AFL BSA", "FMNGI-31071941-205-out-nf.pdf",
+         "Spruch Nr 205 (a struck-through 442 in red above it), sheet 259. "
+         "Befoerdert 31.7.41. Absendende Stelle Nachschub, an Ib. The "
+         "ciphertext block opens '2035 - 63', so the form's own count "
+         "confirms the 63 letters transcribed here.",
+         "five letters read differently here than in the transcription "
+         "above, none applied -- see forms/README.md"),
+}
+
+
 def wrap(s, width=60):
     return "\n             ".join(textwrap.wrap(s, width))
 
@@ -179,6 +213,13 @@ def main():
             f.write("KENNGRUPPE:  %s   (discriminant; strip before deciphering)\n" % kenn)
             f.write("LEN:         %d  (form count, incl. Kenngruppe)%s\n" % (slen, flag))
             f.write("KEY:         %s\n" % SOLVED.get(no, "UNKNOWN -- unbroken"))
+            if no in FORMS:
+                ind, scan, meta, disp = FORMS[no]
+                f.write("INDICATOR:   %s   (as sent; read off the message "
+                        "form)\n" % ind)
+                f.write("FORM:        forms/%s\n" % scan)
+                f.write("FORM NOTES:  %s\n" % wrap(meta))
+                f.write("FORM DIFFS:  %s\n" % wrap(disp))
             f.write("CIPHERTEXT:  %s\n" % wrap(ct))
             f.write("NOTES:       %s\n\n" % (caveat if caveat else "(none)"))
         f.write("# ---------------------------------------------------------"

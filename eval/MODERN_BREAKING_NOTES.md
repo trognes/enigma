@@ -746,6 +746,48 @@ ALRHG were broken elsewhere before this, and GEHRG on 12.07.2026. What is new
 here is the **key**, which had not been published for any of them, and the
 plaintext of all three.
 
+### 5k. Forms for two UNBROKEN messages — the indicator as a one-decrypt test
+
+The message forms for FMNGI (Nr 285, 31.07.1941) and MVUEH (Nr 172,
+10.07.1941) are held at `forms/`. Both are still unbroken, so unlike §5j these
+scans settle nothing about a plaintext — what they add is the **indicator**,
+which the transcriptions never carried: `AFL BSA` and `GTA KCI`.
+
+**That converts a sweep into a single decrypt.** An indicator is the message
+key enciphered at the day's Grundstellung, so given a candidate day key you set
+the machine to the first group, decipher the second, and the result *is* the
+start position — no 17 576-key search, and the two independent answers (does it
+decrypt, and does the derived start agree) must agree.
+
+Applied to MVUEH, which the records had long described as not breaking on the
+10.07.1941 day key:
+
+| key | start from `GTA KCI` | result |
+|---|---|---|
+| day key `B/521/JQH` | `USU` | no German |
+| Nr-173 network `B/521/MRP` | `SED` | no German |
+
+and an exhaustive sweep over all 17 576 starts on **both** keys tops out at a
+margin of **+0.5 sd** — below the "+2 sd is not a find" line, i.e. nothing. The
+different-network reading therefore stands on a direct test rather than on an
+absence of results, and any future candidate key for this message is now a
+one-command check.
+
+**Both forms also confirm their stated lengths** (63 and 87, the counts written
+on the forms themselves), so neither transcription has dropped or added a
+letter.
+
+**Readings that differ were NOT applied.** Reading the scans letter by letter
+disagrees with the stored transcriptions in five places in FMNGI and one in
+MVUEH; `forms/README.md` tabulates them. They stay unapplied because neither
+message has a working key, so a proposed correction cannot be arbitrated by
+decryption — the very thing that made the ALVPM corrections safe in §5j. And
+where a check *was* possible the stored text won: on the groups legible beyond
+doubt it matches exactly, and two letters that looked wrong at low
+magnification confirmed the stored reading once enlarged. The candidates are
+recorded rather than applied, as the cheapest thing to try if either message is
+attacked and fails.
+
 ## 6. The `wehrmacht` scoring language — the corpus payoff
 
 The domain-matched corpus idea, realised. `eval/build_telegraphic_ngrams.py` bends the
