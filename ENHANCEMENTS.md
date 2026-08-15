@@ -95,17 +95,290 @@ best thing to add to the challenge set.
 → `eval/MODERN_BREAKING_NOTES.md` §5a/§5b; `CLAUDE.md` "The unknown-key break
 rate", `--confidence`.
 
+**4. Known-word and X-segmentation bonuses — MEASURED DOWN; do not add them to
+the score.** The idea: after each rotor setting's climb, score the candidate
+plaintext for whole known words and for the X word-separator rate, and add that
+as a bonus. It is what a human reader does with a decrypt the quadgram model has
+undervalued, and it looked strong — on FTNBK, the message that prompted it, the
+combination lifts the true key from **z = 0.90 to 11.21**, across the 6.15 bar a
+160M-key sweep sets.
+
+*It does not survive the corpus.* Measured over all 46 authentic messages with a
+known key (48 wrong keys each as a per-message null, board hidden on both arms,
+`-R 32`), the median gain is +1.64 z — and that median is the wrong summary.
+Split by whether the message was already breakable on quadgrams alone, it
+inverts:
+
+| | n | median gain | helped |
+|---|---:|---:|---:|
+| already above the bar | 25 | **+7.75** | 20 of 25 |
+| **below** the bar | 21 | **−0.33** | 7 of 21 |
+
+`corr(quad z, gain) = +0.40`. The net effect on breakability is **one message**,
+25 → 26 of 46, with a flip in each direction (up FTNBK, FDTZP; down RDNAQ).
+
+*The mechanism is what closes it, not the size of the effect.* Among the 21
+below-bar messages, **18 have a word-feature z of about −0.2** — the "no words
+found at all" floor. The word bonus only fires once the climb has *already*
+recovered readable plaintext; where the climb fails at the true key, the
+true-key decrypt is as wordless as the wrong-key ones. So this is not a
+weighting problem to be tuned out: no reweighting extracts signal from a feature
+that is flat across the null and the truth alike. The regressions are the
+mirror — an equal-weight sum of standardised features adds two near-noise terms
+to a quad z of 36, inflating the composite's own sd and *lowering* z (−5.38,
+−5.26, −4.51 on the three strongest messages).
+
+*The same denominator caveat as item 5 applies here, and it does NOT overturn
+this entry.* The below-bar population these numbers are computed over is
+overwhelmingly *search* failures, so "the word bonus rarely fires there" is
+partly a statement about that population rather than about the feature. What
+closes item 4 regardless is the **form**: an additive, standardised score term
+*dilutes* a good signal when it contributes noise (the −5.38/−5.26/−4.51
+regressions above), so it can lose outright. A one-sided flag cannot, which is
+why item 5's variant survives in that shape and this one does not.
+
+*FTNBK is real but narrow*, and worth knowing as a class: its climb **does**
+produce readable plaintext at the true key, and the pathology is specifically
+that quadgrams will not reward what it recovered. Across the corpus that shape
+is one clean case plus FDTZP (already at 5.29 and needing only a nudge). A
+bounded opt-in *rescue* — re-rank the top-N converged boards on known words,
+cost capped, failure mode "no change" — is the only form still defensible, and
+it is close to
+`--crib-rerank`, which is already measured down for the same reason.
+
+*The general lesson, worth more than the result:* for anything whose value
+depends on the search having **partly succeeded**, report the split by baseline,
+never the median. Such a feature is necessarily strongest in the half where it
+cannot change the outcome.
+
+→ `eval/word_segment_probe.py` (the reproducer; `summarise()` re-reads the saved
+JSON so the reading can be revisited without repeating the climbs),
+`eval/results-word-segment.txt` / `.json`.
+
+**5. Repeated text with an X between — MEASURED, and on its ACTUAL target it
+works: 9 of 9 real scoring failures rescued, 0 false positives in 8496.**
+Telegraphic German doubles important words around the X separator:
+`ZANDERSXZANDERS`, `FORDXFORD`, the `LNKXLNKX` in Nr 214. The test is that two
+runs are identical **to each other** — not that either is a word anyone listed
+in advance — so unlike item 4 it needs no vocabulary.
+
+*The rule, precisely* — `W` `X` `V` with `|W| = |V| = L`, **6 ≤ L ≤ 16**,
+neither copy containing an X, exactly one X between them, and at most **one
+position-wise substitution** between `W` and `V`. So `BERLINXBERLIM` fires and
+`BERLINXBERLMM` does not. Substitutions only, not indels — which matches the
+physics, since Enigma has no diffusion and a corrupted ciphertext letter
+corrupts exactly one plaintext letter, so transmission garbles *are*
+substitutions; an operator dropping a letter misaligns the copies and is missed.
+**`MAXLEN` was 12 and silently missed the corpus's longest real doubling**
+(`STUERZBAECHER`, 13, in DAFPX): a 13-letter repeat does not decompose into a
+matching 12-letter one, because sliding the window puts the copies out of
+alignment. 16 catches it at no null cost and saturates there.
+
+*The text-level precondition* (`eval/doubling_probe.py`, 50 messages with a
+clean recorded plaintext):
+
+| min len | mismatches | real messages | shuffled-null rate |
+|---:|---:|---:|---:|
+| 4 | 0 | 17 of 50 (34%) | 0.005% |
+| **6** | **≤1** | **22 of 50 (44%)** | **0.000%** |
+
+**`len≥6` with one mismatch dominates `len≥4` exact** — more real messages at a
+null rate no higher — because real traffic is garbled and an exact test discards
+genuine hits (`PLYUSSA`/`PLJUSSA`, `ZANDEYS`/`ZANDERS`, `SIOBEN`/`SIEBEN`).
+Never ship the exact form. The hits are `KUSOW`, `SAGOSKA`, `STARAJARUSSA`,
+`OPOTSCHKA`, `TSCHEDINOVA`, `WASCHBUSCH`, `ROMANOWO`, `ZANDERS` — Russian
+village names and German surnames, the operationally specific material no fixed
+vocabulary carries.
+
+*The result, on the population the feature is FOR*
+(`eval/scoring_failure_probe.py`): 186 trials, short excerpts of authentic
+telegraphic German cut to contain a doubling, random rotor key, random 10-pair
+board, `-R 256`, 48 wrong keys each as a per-trial null. Every trial is
+classified by separating the climb from the score:
+
+| outcome | n | feature fires on the true key |
+|---|---:|---:|
+| break (climb recovers, z > bar) | 66 | 65 of 66 (98%) |
+| **SCORING failure** (climb recovers, z ≤ bar) | **15** | **15 of 15 (100%)** |
+| search failure (climb does not recover) | 105 | 0 of 105 (0%) |
+
+**Rescue rate on scoring failures: 15 of 15**, where "rescue" means it fires on
+the true key and on none of that trial's wrong keys, so the true key is
+identified outright. **False positives: 0 of 8928** climbed wrong-key decrypts,
+consistent with the 0 of 5888 measured separately below.
+
+> **An earlier version of this entry reported "1 of 9" and called the rescue
+> application DEAD. That was the wrong denominator and the conclusion was
+> wrong.** The feature targets *scoring* failures; it was scored against every
+> message below the detection bar, a population that is overwhelmingly *search*
+> failures — 21 of 22 in that corpus. A search failure cannot be rescued by any
+> plaintext-side feature, because there is no plaintext in the decrypt to read,
+> so including them measures nothing about the feature. On the target population
+> it was 1 for 1 there, and 9 for 9 here.
+
+*Shorter messages DO expose scoring failures — measured, and this also corrects
+an earlier claim here.* Conditional on the climb recovering at all:
+
+| L | climb recovers | of those, SCORING failures |
+|---:|---:|---:|
+| **60** | 14 of 84 | **11 (79%)** |
+| 100 | 38 of 69 | 4 (11%) |
+| 140 | 29 of 33 | 0 (0%) |
+
+At 60 letters a recovered message is *usually* a scoring failure, against 11% at
+100 and none at 140 — consistent with a unicity distance of ~23 characters. The
+earlier
+note that shortening "buries scoring failures under search failures rather than
+exposing them" was wrong as stated: search failures do dominate the raw trial
+count (70 of 84 at L=60), which makes harvesting expensive, but the *rate*
+conditional on recovery is an order of magnitude higher, not lower. Sample short
+if you want scoring failures; just expect to pay ~10 trials per usable one.
+
+*The end-to-end number needs the coverage multiplier*, because the trials above
+were **constructed** to contain a doubling. Measured over random windows of
+authentic plaintext, the fraction carrying one at `len≥6, mm≤1` is **25.8% at
+L=60**, 42.1% at L=100, 52.6% at L=140 and 61.4% at L=200. So operationally the
+feature resolves ≈26% of scoring failures at L=60 and ≈42% at L=100 — the 100%
+above is *conditional on the doubling being present*, and must not be quoted
+without this factor.
+
+*Two design questions noted, not yet measured.*
+
+**(a) Anchor on the X's first, then compare segments — do not scan (i, L).**
+The pattern to look for is `XPARISXPARIMX`, not `PARISXPARIM`, and finding the
+X positions first is not merely an optimisation: **the segmentation determines
+the candidate lengths, so the length loop disappears entirely.** Split the text
+on X, then compare adjacent segments (and, cheaply, non-adjacent ones — a word
+can repeat later in the message with other words between). Three consequences,
+all reasoned rather than measured:
+
+- *Cost.* The present scan is ~`N × 11` window comparisons — about 1650 on a
+  150-letter message. Telegraphic German runs ~6% X, so the same message holds
+  ~9 X's and ~9 adjacent segment pairs. Roughly **two orders of magnitude
+  cheaper**.
+- *Shorter words become viable*, which is the real prize. `L ≥ 6` is a threshold
+  forced by the **unanchored** scan's chance rate, not by anything linguistic:
+  the table above shows `len≥4, mm≤1` reaching 48% of messages but at a 0.355%
+  null. Two flanking X's are two extra constraints at ~1/16 each in telegraphic
+  text, so anchoring should cut that null by ~250×, making `L = 4` or `5`
+  affordable. Measure the anchored null before trusting the factor.
+- *Recall is not the obstacle.* The flanking measurement says 71% both sides,
+  25% left only, 4% right only and **0% neither**, and the left-only cases are
+  largely end-of-message — a boundary segmentation gets for free. So an
+  X-anchored form should lose little or no recall.
+
+The one new fragility: anchoring depends on the **X's themselves** decrypting
+correctly. Irrelevant for this feature's target population, where the climb
+recovers ~100% of letters, but it would matter for any partial-recovery use.
+
+**(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
+Rough arithmetic, to be confirmed on wall time: the current check is ~11
+`score_iter`-equivalents, and one restart is ~1250 `score_iter` (inferred from
+`--polish`'s measured ~6500 being 2.8–3.3% of a run at `-R 160`). So **~0.9% of
+a single restart**, less if run once per key rather than per restart, and under
+one `score_iter`-equivalent in the X-anchored form. Placement is what decides
+it: as a **confirmation signal it runs once per converged climb** and is noise;
+put it inside the climb loop, per scored board, and it becomes ~1% on the hot
+path, which this repo treats as a real regression needing a `make bench` A/B
+under both compilers. Note `score_iter` would **not** count it in either case —
+the same blind spot documented for `--polish`'s gain scan — so judge it on wall
+time, not on the counter.
+
+*What it is, precisely:* a **one-sided, zero-false-positive confirmation
+signal**. If it fires the key is right; if it does not, nothing is learned. That
+is exactly the shape item 4 identified as the only defensible one — a non-firing
+cannot dilute a good score the way an additive term does. It is **not** a score
+term, and it cannot help a search failure.
+
+*Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
+sidesteps the failure above entirely, because it works on the **ciphertext** and
+needs no correct decrypt at all.
+
+Decryption is `p_i = steck[core_i[steck[c_i]]]`, with `core_i` the involution
+`setup_mapping()` already tabulates as `rows[i]`. A classic crib knows `p_i` and
+rearranges to `steck[p_i] = core_i[steck[c_i]]`. A self-crib knows only that two
+positions carry the *same* letter, `p_i = p_j`. Substituting and cancelling
+`steck` from both sides (it is an involution):
+
+    core_i[steck[c_i]] = core_j[steck[c_j]]
+
+**The plaintext letter has vanished from the equation** — that is the whole
+idea. Since `core_j` is an involution it rearranges to a propagation rule with
+`σ = core_j ∘ core_i`, computable from the rotor key alone:
+
+    steck[c_j] = σ(steck[c_i])
+
+Guess `steck[c_i]` and `steck[c_j]` follows: two plug assertions, which the
+diagonal board doubles (`steck[x]=y ⟺ steck[y]=x`, no shared partners).
+
+*Why it is weaker than it looks, and this is the part to internalise before
+building anything.* Rejection power comes **only from loops** in the menu. A
+tree is always satisfiable — guess the root, propagate, never contradict — while
+a loop imposes `σ_loop(x) = x`, which fails unless σ_loop has a fixed point. If
+the `2L` ciphertext letters of a length-`L` doubling are distinct, the menu is
+`L` **disjoint edges**: a forest, zero loops, **zero rejection power**. Loops
+appear only when ciphertext letters repeat among those positions or a deduced
+endpoint collides with another menu letter — a birthday trickle, not a designed
+structure. Same lesson as `archived/cribs.md` §4.1 from the other side: the
+diagonal board does the work, not menu length.
+
+*What rescues it: the flanking X is REAL known plaintext.* Measured on the
+corpus (`doubling_probe.py`), the pattern is not `W X W` but **`X W X W X`** —
+**96% carry an X immediately left and 71% on both sides**, 0% neither. Those
+X's are crib letters, and all of them share a left-hand side:
+
+    steck[X] = core_{i-1}[steck[c_{i-1}]]
+             = core_{i+L}[steck[c_{i+L}]]
+             = core_{i+2L+1}[steck[c_{i+2L+1}]]
+
+So guessing `steck[X]` (26 ways) deduces three plugs at once and **anchors** the
+otherwise-floating equality edges. The hypothesis is really a 3-letter crib plus
+`L` equality constraints — a menu with anchors rather than a forest. Two prunes
+come free from self-encryption: any alignment with `c_{i+L} = X` is impossible
+outright, and if `c_{i+t} = c_{j+t}` then `core_i[a] = core_j[a]` must hold,
+satisfiable only at a fixed point of σ.
+
+*The obstacle that decides it — measure this FIRST.* The alignment is unknown,
+so for a 150-letter message with `L` ∈ 6..12 it is ~950 hypotheses, and a key is
+rejected only if **every** one is contradictory. Rejections multiply, so what
+matters is `∏ p_h`: even at a per-hypothesis rejection of 0.99, `0.99^950 ≈
+7e-5`, i.e. essentially nothing rejected. This is not speculation — it is the
+documented compounding that takes a 12-letter crib from 99.9% pinned to **5.3%**
+swept, where the product of the measured per-alignment rates predicted 5.2%
+against 5.3% observed (`archived/cribs.md` §4.2a). **The per-hypothesis
+rejection rate has to be extraordinarily close to 1**, far higher than an
+ordinary crib needs, purely because there are so many alignments. It is
+unmeasured; do not estimate it, measure it.
+
+*If the sweep fails, two fallbacks.* Use it as a **seeder rather than a filter**
+— `--crib`'s hybrid already pins deduced plugs and lets the climb find the rest,
+measured 92% of letters recovered against 8% unseeded; 950 climbs per key is
+impossible, but ranking hypotheses by plugs deduced and seeding from the top few
+is not. And note the **cost regime**: ~950 alignments × 26 guesses is roughly a
+plugboard climb's worth of work per key — negligible beside a `-c` climb, but
+~1000× the cost of a scanned key, so it cannot ride along on a plain scan.
+
+*Reusable artifact:* `eval/results-doubling-climb-texts.json` holds every
+decrypt from the run (46 true-key + 5888 wrong-key, climbed with the board
+hidden). Item 4's probe threw its texts away and had to be re-run from scratch
+to ask one new question of the same data; this one should not. `REUSE=1` re-runs
+the analysis without re-climbing.
+
+→ `eval/doubling_probe.py`, `eval/doubling_climb_probe.py`,
+`eval/results-doubling.txt`, `eval/results-doubling-climb.txt`; item 4 above;
+`archived/cribs.md` §4.2a.
+
 ## Keyspace reductions
 
 The two-notch collapse that used to head this section has **shipped** and is
 no longer an issue: `CLAUDE.md` "Two-notch wheels" and the CHANGELOG carry it.
 
-**4. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
+**6. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
 3–5× at short lengths and the compute is saved; whether spending it on `-R`
 raises recovery is untested. The same question was asked of `--ring-stride` and
 answered "a wash". → `archived/IMPROVEMENTS.md` §2.
 
-**5. A `--ring-stride` for the middle wheel — premise measured, not built.**
+**7. A `--ring-stride` for the middle wheel — premise measured, not built.**
 Striding `ring1` costs 3.1% (K=2) / 5.1% (K=3) of the true `offset1`, roughly
 competitive with the right-wheel stride, and the two compose multiplicatively.
 **Read the failed attempt first**: striding `ring1` directly measured 2.4×
@@ -114,7 +387,7 @@ competitive with the right-wheel stride, and the two compose multiplicatively.
 produces — which the measured numbers do **not** cover. →
 `archived/IMPROVEMENTS.md` §2.
 
-**6. Read the right wheel's phase off one decrypt instead of searching it —
+**8. Read the right wheel's phase off one decrypt instead of searching it —
 signal confirmed, does not localise yet.** Shifting the right wheel's phase
 (ring2 and start2 together by `δ`) leaves `offset2` and so the whole
 substitution untouched; only the notch timing moves, displacing the middle wheel
@@ -153,17 +426,17 @@ Detail for all three: `archived/cribs.md` §13 — which also carries the
 X-separator variant, dropped here for want of confidence in the premise
 that word-boundary positions are any easier to come by than a phrase.
 
-**7. Crib supply at network scale.** The library covers 83% of held-out
+**9. Crib supply at network scale.** The library covers 83% of held-out
 messages, but on a 58-message corpus, and 47 of the 57 hits are 8–11 letters —
 seed-only lengths. Whether a real network yields *long* cribs is the question
 the whole feature rests on, and no larger corpus is available.
 
-**8. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
+**10. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
 would tolerate a slightly-wrong crib — which matters, because garbling is real
 (two of five `SIEGFRIED` messages are corrupted) and exact matching cannot see
 through it.
 
-**9. Menu reuse across alignments.** Shifting a crib by one position changes
+**11. Menu reuse across alignments.** Shifting a crib by one position changes
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
@@ -183,7 +456,7 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**10. `--tune-phase` — MEASURED at three lengths and below saturation;
+**12. `--tune-phase` — MEASURED at three lengths and below saturation;
 CLOSED.** The open half was whether the L=200 trade (more breaks, lower mean
 %-correct) survives at operational lengths. It does at **L=300** — 74/80 exact
 against 65/80, McNemar p = 0.049, mean −4.2pp with CI [−8.9, +0.6] — and is gone
@@ -208,14 +481,14 @@ matched compute forced. Two of the three residual misses are flat across every
 `-R`, so the residual is not budget-limited either. → `CLAUDE.md` "How the split
 moves with length".
 
-**11. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
+**13. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
 control, direction consistent across two seeds but **p ≈ 0.13 — suggestive, not
 established**, and only at a stride already outside the recommended K≤3.
 Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 `archived/PERFORMANCE.md` §7.11; `eval/ring_stride_scope_probe.py`.
 
-**12. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
+**14. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
 harness here reports two numbers: mean %-of-letters-correct (graded, low
 variance) and exact recovery (coarse, the operator's metric). Neither says how
 often a run lands *recognisably close* — enough of the plaintext to read as
@@ -250,20 +523,20 @@ converts. `tests/crack_quality.py` and
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**13. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**15. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**14. No `install` target**, and the n-gram files are not declared as build/run
+**16. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**15. Single-file distribution.** Embedding the tables was declined once, but
+**17. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**16. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**18. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 
