@@ -128,6 +128,15 @@ mirror — an equal-weight sum of standardised features adds two near-noise term
 to a quad z of 36, inflating the composite's own sd and *lowering* z (−5.38,
 −5.26, −4.51 on the three strongest messages).
 
+*The same denominator caveat as item 5 applies here, and it does NOT overturn
+this entry.* The below-bar population these numbers are computed over is
+overwhelmingly *search* failures, so "the word bonus rarely fires there" is
+partly a statement about that population rather than about the feature. What
+closes item 4 regardless is the **form**: an additive, standardised score term
+*dilutes* a good signal when it contributes noise (the −5.38/−5.26/−4.51
+regressions above), so it can lose outright. A one-sided flag cannot, which is
+why item 5's variant survives in that shape and this one does not.
+
 *FTNBK is real but narrow*, and worth knowing as a class: its climb **does**
 produce readable plaintext at the true key, and the pathology is specifically
 that quadgrams will not reward what it recovered. Across the corpus that shape
@@ -146,15 +155,15 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
-**5. Repeated text with an X between — MEASURED. The rescue application is
-DEAD; a narrow confirmation application survives.** Telegraphic German doubles
-important words around the X separator: `ZANDERSXZANDERS`, `FORDXFORD`, the
-`LNKXLNKX` in Nr 214. The test is that two runs are identical **to each other**
-— not that either is a word anyone listed in advance — so unlike item 4 it needs
-no vocabulary, which is why it looked like the variant that might escape.
+**5. Repeated text with an X between — MEASURED, and on its ACTUAL target it
+works: 9 of 9 real scoring failures rescued, 0 false positives in 8496.**
+Telegraphic German doubles important words around the X separator:
+`ZANDERSXZANDERS`, `FORDXFORD`, the `LNKXLNKX` in Nr 214. The test is that two
+runs are identical **to each other** — not that either is a word anyone listed
+in advance — so unlike item 4 it needs no vocabulary.
 
-*The text-level precondition is strong* (`eval/doubling_probe.py`, 50 messages
-with a clean recorded plaintext):
+*The text-level precondition* (`eval/doubling_probe.py`, 50 messages with a
+clean recorded plaintext):
 
 | min len | mismatches | real messages | shuffled-null rate |
 |---:|---:|---:|---:|
@@ -164,65 +173,67 @@ with a clean recorded plaintext):
 **`len≥6` with one mismatch dominates `len≥4` exact** — more real messages at a
 null rate no higher — because real traffic is garbled and an exact test discards
 genuine hits (`PLYUSSA`/`PLJUSSA`, `ZANDEYS`/`ZANDERS`, `SIOBEN`/`SIEBEN`).
-Never ship the exact form. What the hits *are* is the argument for the idea:
-`KUSOW`, `SAGOSKA`, `STARAJARUSSA`, `OPOTSCHKA`, `TSCHEDINOVA`, `WASCHBUSCH`,
-`ROMANOWO`, `ZANDERS` — Russian village names and German surnames, the
-operationally specific material no fixed vocabulary carries.
+Never ship the exact form. The hits are `KUSOW`, `SAGOSKA`, `STARAJARUSSA`,
+`OPOTSCHKA`, `TSCHEDINOVA`, `WASCHBUSCH`, `ROMANOWO`, `ZANDERS` — Russian
+village names and German surnames, the operationally specific material no fixed
+vocabulary carries.
 
-*But the decisive test kills the use that mattered.* Climbing the true key and
-128 wrong keys per message with the board hidden on both arms
-(`eval/doubling_climb_probe.py`, `len≥6, mm≤1`):
+*The result, on the population the feature is FOR*
+(`eval/scoring_failure_probe.py`): 177 trials, short excerpts of authentic
+telegraphic German cut to contain a doubling, random rotor key, random 10-pair
+board, `-R 256`, 48 wrong keys each as a per-trial null. Every trial is
+classified by separating the climb from the score:
 
-| | n | plaintext has it | climb reproduces it |
-|---|---:|---:|---:|
-| quad already above the bar | 24 | 11 of 24 | **11 of 11 (100%)** |
-| quad **below** the bar | 22 | 9 of 18 | **1 of 9 (11%)** |
+| outcome | n | feature fires on the true key |
+|---|---:|---:|
+| break (climb recovers, z > bar) | 61 | 60 of 61 (98%) |
+| **SCORING failure** (climb recovers, z ≤ bar) | **9** | **9 of 9 (100%)** |
+| search failure (climb does not recover) | 107 | 1 of 107 (1%) |
 
-**The ceiling control is what makes this readable, and it rules out the
-innocent explanation.** The pattern is about equally *present* in both
-populations — it is not that the hard messages lack doublings. Nine below-bar
-messages carry `TSCHEDINOVAXTSCHEDINOVA`, `WASCHBUSCHXWASCHBUSCH`,
-`NIKOLAJEWOXNIKOLAJEWO`, `ROMANOWOXROMANOWO` and the rest, and the climb
-recovers **one** of them.
+**Rescue rate on scoring failures: 9 of 9**, where "rescue" means it fires on
+the true key and on none of that trial's wrong keys, so the true key is
+identified outright. **False positives: 0 of 8496** climbed wrong-key decrypts,
+consistent with the 0 of 5888 measured separately below.
 
-*The reason is starker than "harder to keep", and this is the useful form of the
-finding.* Letters recovered at the true key, over those nine: **100%** for FTNBK
-and **1.4–15.5%** for the other eight — at or near the 1/26 ≈ 3.8% chance floor.
-The outcome is **bimodal even with the rotor key given**, so the below-bar
-population is not nine messages where a doubling was fragile; it is **one
-scoring failure plus eight climb failures**:
+> **An earlier version of this entry reported "1 of 9" and called the rescue
+> application DEAD. That was the wrong denominator and the conclusion was
+> wrong.** The feature targets *scoring* failures; it was scored against every
+> message below the detection bar, a population that is overwhelmingly *search*
+> failures — 21 of 22 in that corpus. A search failure cannot be rescued by any
+> plaintext-side feature, because there is no plaintext in the decrypt to read,
+> so including them measures nothing about the feature. On the target population
+> it was 1 for 1 there, and 9 for 9 here.
 
-- FTNBK is a genuine *scoring* failure. Its climb reproduces the plaintext
-  byte-for-byte (`STANDORTDERLNKXLNKXISTXKUSOWXKUSOW…`) and the quadgram model
-  still ranks it below wrong keys at z = 0.90. Every plaintext-side feature
-  fires on it, because the plaintext is *there*.
-- The other eight never produced plaintext at all — `ALWOK` at the true key
-  reads `ARORSQRINRBFLLABHIMLYQKBEEMLOOHIRK…` against a truth of
-  `ANXZWOXSANXKOMPXMITTAGESANBRUQ…`. No feature can read structure out of that,
-  because there is none.
+*Shorter messages DO expose scoring failures — measured, and this also corrects
+an earlier claim here.* Conditional on the climb recovering at all:
 
-So the bound on **any** plaintext-side feature is much tighter than a fragility
-argument suggests: it can only ever address *scoring* failures, and in this
-corpus that is **one message of the 22 below the bar**. The other 21 are search
-failures, which `-R` moves and no scorer does — the same fact this file already
-records as a ~99% search-failure residual, seen from the plaintext side. (An
-earlier version of this entry attributed the 1-of-9 to a doubling needing `2k+1`
-consecutive correct letters against a word's one word. True in principle, but
-not what happens: the failures are total, not marginal.)
+| L | climb recovers | of those, SCORING failures |
+|---:|---:|---:|
+| **60** | 8 of 81 | **7 (88%)** |
+| 100 | 37 of 66 | 1 (3%) |
+| 140 | 25 of 30 | 1 (4%) |
 
-*What survives is precision, and it is excellent.* **0 of 5888** climbed
-wrong-key decrypts fire — a likelihood ratio of **≥512:1** by the rule of three
-(0 of 5888 bounds the false-positive rate at 0.051%). That holds against the
-harder null the shuffled-text measurement could not reach: these are texts a
-hill-climb actively optimised to look like German, and it still manufactures no
-doublings. So a **one-sided confirmation flag** is real — if it fires, the key
-is right — but it fires on only 26% of messages, mostly ones already won, and a
-non-firing means nothing.
+At 60 letters a recovered message is *almost always* a scoring failure, against
+3% at 100 — consistent with a unicity distance of ~23 characters. The earlier
+note that shortening "buries scoring failures under search failures rather than
+exposing them" was wrong as stated: search failures do dominate the raw trial
+count (73 of 81 at L=60), which makes harvesting expensive, but the *rate*
+conditional on recovery is an order of magnitude higher, not lower. Sample short
+if you want scoring failures; just expect to pay ~10 trials per usable one.
 
-*Worth building?* Marginal, and only for unattended sweeps, where a
-zero-false-positive stop signal has value that a margin does not:
-`--confidence`'s p-value is documented as optimistic near zero, and this is
-independent of it. Do **not** build it as a score term or a rescue pass.
+*The end-to-end number needs the coverage multiplier*, because the trials above
+were **constructed** to contain a doubling. Measured over random windows of
+authentic plaintext, the fraction carrying one at `len≥6, mm≤1` is **25.8% at
+L=60**, 42.0% at L=100, 51.5% at L=140 and 61.4% at L=200. So operationally the
+feature resolves ≈26% of scoring failures at L=60 and ≈42% at L=100 — the 100%
+above is *conditional on the doubling being present*, and must not be quoted
+without this factor.
+
+*What it is, precisely:* a **one-sided, zero-false-positive confirmation
+signal**. If it fires the key is right; if it does not, nothing is learned. That
+is exactly the shape item 4 identified as the only defensible one — a non-firing
+cannot dilute a good score the way an additive term does. It is **not** a score
+term, and it cannot help a search failure.
 
 *Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
 sidesteps the failure above entirely, because it works on the **ciphertext** and

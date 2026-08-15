@@ -59,9 +59,17 @@ suggests: it can only address SCORING failures, which here is one message of the
 22 below the bar.  The rest are search failures, which -R moves and no scorer
 does.
 
-So the RESCUE application is dead and the CONFIRMATION application is real but
-narrow: a one-sided flag that fires on 26% of messages, mostly ones already won,
-and never lies.  Non-firing means nothing.
+THAT MAKES THE 1-OF-9 IN THIS FILE THE WRONG DENOMINATOR -- see
+scoring_failure_probe.py, which measures the feature on a manufactured
+population of REAL scoring failures and gets 9 of 9 with 0 false positives in
+8496.  The verdict below ("the rescue application is dead") applied to a
+below-bar population that was 21/22 search failures, and is superseded.
+
+SUPERSEDED VERDICT, kept because the reasoning error is the lesson: this file
+originally concluded the rescue application was dead.  It is not -- it is dead
+for SEARCH failures, trivially, and works on the scoring failures it was aimed
+at.  What stands unchanged is the precision result and the shape: a one-sided
+flag that never lies, where a non-firing means nothing.
 """
 import json
 import math

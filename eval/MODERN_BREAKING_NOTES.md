@@ -397,11 +397,13 @@ Do not generalise from this section to the scorer. → `ENHANCEMENTS.md` item 4;
 `eval/word_segment_probe.py`. The vocabulary-free variant — the `LNKXLNKX`
 doubling itself, detected as *any* repeat around an X rather than as a listed
 word — is item 5. Its text-level precondition is much stronger (42% of real
-messages, 0 of 20 000 nulls), but it has since been measured through the climb
-and **fails the same way**: below-bar messages carry doublings just as often,
-and the climb reproduces 1 of 9 of them against 11 of 11 on messages already
-broken. What survives is precision — 0 of 5888 climbed wrong-key decrypts fire —
-so it is a one-sided confirmation flag, never a rescue.
+messages, 0 of 20 000 nulls), and on the population it is FOR — real scoring
+failures, the shape this section is about — it is **9 of 9 with 0 false
+positives in 8496**. The below-bar corpus it was first scored against was 21/22
+*search* failures, where no plaintext-side feature can work because there is no
+plaintext in the decrypt; that denominator, not the feature, produced the
+earlier "1 of 9". It is a one-sided flag: a firing identifies the key outright,
+a non-firing means nothing.
 
 ### 5g. Four more messages recovered from the 01 Aug 2026 source pages
 
