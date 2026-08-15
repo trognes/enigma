@@ -413,6 +413,77 @@ is exactly the shape item 4 identified as the only defensible one — a non-firi
 cannot dilute a good score the way an additive term does. It is **not** a score
 term, and it cannot help a search failure.
 
+**(e) Fold it into the SCORE as a length-graded bonus behind a z gate —
+DESIGNED AND PARTLY MEASURED; the two constants still need a sweep.** The
+confirmation signal above is one-sided: it identifies the true key when it
+fires and says nothing when it does not. The alternative is to add it to the
+score, so a doubling *helps the true key win* rather than merely flagging it.
+Two parameters:
+
+    gate    apply only to candidates with z > T          (T = 3 tried)
+    bonus   M x [ 5.02 + 1.2*(L-6) ] decades, on the LONGEST doubling
+
+*The slope is determined, not tuned.* Measured Bayes factors over the 54
+authentic decrypts against the closed-form null give a log-likelihood ratio
+**linear in L at +1.2 decades per letter** — which is exactly `log10(B/A) =
+log10(16.4)`, the same factor that sets the null rate. `L = 6` is worth **5.02
+decades** (1e5:1) and `L = 13` worth 13.4. There is nothing to fit in the
+*shape*; only the multiplier `M` and the gate `T` are free.
+
+*Use the longest doubling, not a sum.* Overlapping windows in one doubled word
+are not independent evidence — the `L` and `L-1` hits are the same fact.
+
+*Why a multiplier is needed at all.* At `M = 1` the bonus is correct and
+useless. Against the 15 recorded scoring failures (`results-scoring-failure.
+json`) — of which **only 8 actually lose to a wrong key**, the other 7 being
+classed as failures purely by the `√(2 ln K)` bar — the gaps run **4.8 to 69.4
+decades**, median ~20, while an `L = 6` doubling is worth 5. So the honest
+weight closes the smallest gap in the set and nothing else:
+
+| `M` | scoring failures rescued (of 8) | P(a wrong key steals a win) |
+|---:|---:|---|
+| 1 | 1 | 1 in 1 500 000 |
+| 2 | 3 | 1 in 190 000 |
+| 3 | 4 | 1 in 28 000 |
+| **5** | **7** | **1 in 1 000** |
+| 8 | 7 | 1 in 300 |
+| 14 | 8 | 1 in 35 |
+
+at `T = 3` over a 10⁷-key sweep. **`M = 5` is the knee** — 8 buys no extra
+rescue for 3× the risk, and 14 (the only value that takes HOEPG's 69-decade
+gap) is plainly too hot.
+
+*The gate is what makes any of this affordable.* Without it, `M = 5` puts 11%
+of currently-successful breaks within reach of a wrong key carrying a chance
+doubling. With `z > 3` a wrong key needs **three** things at once: clear the
+gate (13 498 of 10⁷), carry a chance doubling (4.9e-6 of those — 0.067 per
+sweep), and land within 25 decades of the truth, which sits at a median z of
+10.0 with σ_total ≈ 12.6 decades.
+
+*Both constants are single points, not optima — sweep them jointly before
+building anything.* `T` and `M` trade against each other (a higher gate buys a
+bigger multiplier), so a 1-D scan of either is misleading. Four things the
+sweep has to get right, none of which the numbers above do:
+
+- **The risk side needs real high-scoring wrong candidates.** The stored
+  artifact holds 48 **random** wrong keys per message; the keys that can steal
+  a win are the *top-scoring* ones in a large sweep. The table above reaches
+  them by scaling with a Gaussian best-of-N, and `--confidence` has already
+  measured the real upper tail as ~3.4× fatter — so **1 in 1 000 is probably
+  nearer 1 in 300**. Generate the tail, do not extrapolate it.
+- **Do not choose and validate on the same 8 failures.** Eight is enough to
+  rank `M` coarsely and not enough to fit two constants; a held-out split, or a
+  fresh run of `scoring_failure_probe.py` at a different seed, is the minimum.
+- **Operational length is untested.** All 8 losses are L = 60–100 excerpts with
+  deliberately manufactured failures. Gaps should shrink at L = 150+, which
+  would lower the `M` needed — the sweep should span length, and length may
+  matter more than either constant.
+- **The independence assumption is unmeasured.** The risk arithmetic multiplies
+  P(high score) by P(doubling) as if they were independent, but a high-scoring
+  wrong key is more German-like and so plausibly X-richer than the 2.41%
+  population average. Measure the doubling rate *as a function of z* rather
+  than assuming it flat.
+
 *Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
 sidesteps the failure above entirely, because it works on the **ciphertext** and
 needs no correct decrypt at all.
