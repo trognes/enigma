@@ -82,10 +82,26 @@ NOTES:       position 31 corrected N -> V per the German Army Messages page (upd
 ### Message No. 8-Oct  --  02 Oct 1941  (ALGXZ)
 KENNGRUPPE:  ALGXZ   (discriminant; strip before deciphering)
 LEN:         72  (form count, incl. Kenngruppe)
-KEY:         BROKEN on 31.07.2026 (key not recorded here)
+KEY:         BROKEN on 31.07.2026; the KEY IS NOW IN THIS REPO -- B 452 ring DVM start WAS, plugs AP BU CX DH ER FQ IW KO LZ MS, published on Frode Weierud's June-October 1941 key page (01 Aug 2026) and held with the decrypt as Nr 8-Oct in enigma-army-messages-1941.txt. The transcription is heavily garbled: the key is right (ZWISQE[N] ... HARTJ[E]NS[T]EIN) but the middle does not read
 CIPHERTEXT:  ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOM
              UGPVXXDYWTJG
 NOTES:       (none)
+
+### Message No. 6-C  --  29 Sep 1941  (QTXMA)
+KENNGRUPPE:  QTXMA   (discriminant; strip before deciphering)
+LEN:         160  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  QTXMAJVMOYCZAYMRVLCBSOQXYBATSXJBQLAEJKYTYXJOEMYBLOEMYOKSRMTA
+             VLBCXJAMOESRXYTVAOEYAVYXKCJVCMEISHTBAYVXXAJWCZQCYPXMEHABLKYJ
+             YASOEIJYXOQXYTLBASYEESTAQXJVNWCBJZBYQYTM
+NOTES:       Batch C, and the SECOND-LONGEST unbroken message in the collection. From the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only because it had never been transcribed. Same batch caveat as BYQMZ: the authors are not sure Batch C is Enigma at all. Indicator LDP WRX, sent 2240, to 2pn on 323 kHz
+
+### Message No. 7-C  --  29 Sep 1941  (SZAEJ)
+KENNGRUPPE:  SZAEJ   (discriminant; strip before deciphering)
+LEN:         56  (form count, incl. Kenngruppe)
+KEY:         UNKNOWN -- unbroken
+CIPHERTEXT:  SZAEJTOMBYXCZEOJKSAMGEYPWXZWJMEVBZYZAEJVHSEMNWEYTMEOMTCG
+NOTES:       Batch C, same caveat. From the Ultimate Enigma Challenge page. Short (51 cipher letters), around twice the unicity distance, so breakable only if its day key comes from elsewhere. Indicator GAR PLD, sent 2314, to o37 on 716 kHz
 
 ### Message No. 8-C  --  30 Sep 1941  (BYQMZ)
 KENNGRUPPE:  BYQMZ   (discriminant; strip before deciphering)
@@ -185,5 +201,3 @@ NOTES:       (none)
 # SECOND-LONGEST unbroken Enigma message in the collection, so it is the most
 # valuable missing item here -- transcribe it from the message form (the list
 # links a 'Spruch' scan) to add it.
-#   Nr 6    29 Sep 1941  QTXMA  160 / 155 (form / cipher)
-#   Nr 7    29 Sep 1941  SZAEJ  56 / 51 (form / cipher)

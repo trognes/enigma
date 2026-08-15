@@ -709,6 +709,16 @@ separate them, because they only test the internal consistency of (key,
 ciphertext, plaintext). What did work was asking which *ciphertext* letter each
 garble would need, then looking for a systematic pattern among the answers.
 
+**CONFIRMED against Frode's published key.** The June–October 1941 key page
+(updated 01 Aug 2026) gives 09.09.1941 as **B / 342 / rings KFZ**, with Nr 38
+GEHRG at start **ERT** — and `KFZ/ERT` reproduces GEHRG's plaintext
+byte-for-byte identical to the `ALZ/UXT` recovered here, with ALVPM matching
+under `KFZ` at start `FUT`. So the ciphertext-only recovery was right, and the
+ring difference is precisely the equivalence class §7.10/§7.12 predict: the
+published `KFZ` is presumably the true Ringstellung, ours a class
+representative. The same thing happens on 28.08.1941, where the page gives
+`CWJ` against this repo's `AVJ` and `CWJ/ABC` reproduces ALQFI exactly.
+
 **Priority, stated plainly.****Priority, stated plainly.** None of the three is a first break. ALVPM and
 ALRHG were broken elsewhere before this, and GEHRG on 12.07.2026. What is new
 here is the **key**, which had not been published for any of them, and the

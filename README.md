@@ -687,6 +687,18 @@ Tables for `english`, `german`, `danish`, `french`, `swedish`, `finnish`,
 from the [Practical
 Cryptography](http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/)
 website, where additional languages are available in the same format.
+
+The tenth language, **`wehrmacht`** (telegraphic German), is derived instead
+from the published work of Geoff Sullivan and Frode Weierud. Its **monogram**
+table is Figure 17 of Appendix C of *Breaking German Army Ciphers* (Cryptologia
+29(3):193–232, 2005) verbatim — single-letter frequencies over ~20 000 letters
+of 1941 Enigma decrypts — and its **bigram and trigram** tables are the prose
+German tables reweighted toward those statistics together with Figure 18, the
+400 most frequent trigrams from the same corpus. Both figures are transcribed in
+`eval/appendix-c-fig17-monograms.txt` and `eval/appendix-c-fig18-trigrams.txt`,
+and `eval/build_telegraphic_ngrams.py` regenerates the tables from them. These
+are *aggregate published statistics*, not the plaintext of any individual
+message, so the authentic-message sets in `eval/` remain held out.
 Language-specific letters outside plain A-Z are folded to a base A-Z letter when
 a table loads (diacritics stripped: `Ä`/`Å`/`Ö` → `A`/`A`/`O`, `Ñ` → `N`, `Ł` →
 `L`, Icelandic `Þ` → `T` pairing with `Ð` → `D`, etc.) — see `fold_codepoint()`
@@ -708,6 +720,21 @@ measured with `make bench SCALE=1`. Results are independent of the thread count
 
 The hill-climbing strategy is based on the algorithms described in the
 [publications by Frode Weierud et al.](http://cryptocellar.org/Enigma/)
+
+The authentic-message material in `eval/` — ciphertexts, recovered day keys,
+message keys and indicators, and the scanned message forms — comes from **Geoff
+Sullivan and Frode Weierud's *Breaking German Wehrmacht Ciphers* project**:
+
+> **<https://cryptocellar.org/bgac/index.html>**
+
+Specifically: *Breaking German Army Ciphers* (Cryptologia 29(3):193–232, 2005)
+and its Appendix C statistics; the July 1941 message and key pages; the
+June–October 1941 key page; the Ultimate Enigma Challenge page; and Olaf Ostwald
+and Frode Weierud, *Modern breaking of Enigma ciphertexts* (Cryptologia
+41(5):395–421, 2017). The `wehrmacht` scoring language is built from the
+Appendix C figures (see "n-gram data files" above). The material is published by
+its authors under CC BY-NC-SA; it is included here for research and is credited
+to them, not covered by this program's GPL.
 
 The software is available under the GNU GPL version 3 license. Copyright (C)
 2017–2026 Torbjørn Rognes.

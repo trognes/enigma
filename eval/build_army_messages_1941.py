@@ -47,6 +47,8 @@ DAYS = {
  # 28.08.1941 recovered HERE, not published: the Bundesarchiv copy of Nr 81 (Nr
  # 55 NF) carries its plaintext on the source page, and 86 known letters give the
  # key by crib in 45 s over 144 million keys.  Ring is A?? for the usual reason.
+ # Frode's key page gives rings CWJ for this day; CWJ/ABC reproduces this
+ # record's plaintext exactly, so AVJ and CWJ are equivalent (same class).
  "28.08.1941": ("B", "345", "AVJ", "BH CS DU EI FR GM JO KQ TX VZ"),
  "13.07.1941": ("B", "423", "GTO", "AD EH GY IM KN LR OZ QV TX WU"),
  "14.07.1941": ("B", "531", "LWB", "BT CH DR EW FU GK JO LV MS PZ"),
@@ -58,7 +60,15 @@ DAYS = {
  # a bare start-position sweep.  Wheel order 342 appears in none of the 22
  # published day keys above and this stecker shares at most one pair with any
  # of them, chance level for 10 pairs out of 325.  Three messages now share it.
+ # Ring recovered here ciphertext-only.  Frode's key page publishes the
+ # same day as B/342 rings KFZ; KFZ and ALZ are EQUIVALENT -- verified,
+ # KFZ/ERT reproduces GEHRG byte-for-byte and KFZ/FUT reproduces ALVPM.
+ # See MODERN_BREAKING_NOTES 5j on why the ring is not identifiable.
  "09.09.1941": ("B", "342", "ALZ", "AZ DV ET FS GQ JP LX MY NR OW"),
+ # From Frode Weierud's "Enigma Keys - June-October 1941" page (updated
+ # 01 Aug 2026), which post-dates the rest of DAYS above.  It is the key for
+ # Nr 8 / Nr 7 NF, both ALGXZ, previously carried as broken-but-key-unknown.
+ "02.10.1941": ("B", "452", "DVM", "AP BU CX DH ER FQ IW KO LZ MS"),
 }
 # Nr 173 broke on its own ring+stecker (same wheel order) -- special per-message key.
 KEY_OVERRIDE = {"173": ("B", "521", "MRP", "AG BJ CP DS ER FQ HV IU KT LW")}
@@ -109,6 +119,15 @@ M = [
   "Nr 39, 9.9.41, befoerdert 0913, message time (0850), indicator ftjmyc, "
   "to SS-T.Div. This garble is also the single difference across the 73 "
   "letters ALRHG shares with ALVPM"),
+ ("8-Oct","02.10.1941","02 Oct 1941","WAS","","ALGXZ",
+  "ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOMUGPVXXDYWTJG",
+  "Listed as broken on 31.07.2026 with no key published; the key arrived on "
+  "Frode's June-October 1941 key page (updated 01 Aug 2026) and is applied "
+  "here. The transcription is heavily garbled -- ZWISQE[N] and the "
+  "HARTJ[E]NS[T]EIN signature at the end are clear, the middle is not -- so "
+  "this is a correct key over a poor ciphertext, not a clean decrypt. Kept "
+  "because the key is now on record. Nr 7 NF is the same message on the same "
+  "key"),
  ("38","09.09.1941","09 Sep 1941","UXT","nostrip","GEHRG",
   "LGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINCIVXSYRGIGUWLOE",
   "Unbroken for twenty years, broken elsewhere 12.07.2026 with no key "
@@ -268,6 +287,27 @@ INDICATORS = {  # Kenngruppe/Spruchschluessel indicator groups as written on
  "234": "RIT IZG",
  "266": "FQT YSB",
  "282": "VOF ZVZ",
+ "4": "DTI AZZ",
+ "7": "AMQ LKF",
+ "19": "ALY XQE",
+ "38": "BOZ IWD",
+ "45": "SDG EKN",
+ "48": "BPG KGM",
+ "51": "ZKT FLP",
+ "59": "LTB MMF",
+ "60": "AIA XIE",
+ "69": "SDC JKP",
+ "70": "CSW MEK",
+ "71": "KPH YNH",
+ "103": "NWH GGP",
+ "104": "STG YTF",
+ "105": "XFG GSM",
+ "106": "GUR JPC",
+ "114": "ZIP NDT",
+ "115": "SCJ RWT",
+ "116": "XHK FHP",
+ "117": "TJI KPJ",
+ "55 NF": "DIB TCO",
 }
 
 
