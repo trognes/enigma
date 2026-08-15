@@ -242,6 +242,48 @@ feature resolves ≈26% of scoring failures at L=60 and ≈42% at L=100 — the 
 above is *conditional on the doubling being present*, and must not be quoted
 without this factor.
 
+*Two design questions noted, not yet measured.*
+
+**(a) Anchor on the X's first, then compare segments — do not scan (i, L).**
+The pattern to look for is `XPARISXPARIMX`, not `PARISXPARIM`, and finding the
+X positions first is not merely an optimisation: **the segmentation determines
+the candidate lengths, so the length loop disappears entirely.** Split the text
+on X, then compare adjacent segments (and, cheaply, non-adjacent ones — a word
+can repeat later in the message with other words between). Three consequences,
+all reasoned rather than measured:
+
+- *Cost.* The present scan is ~`N × 11` window comparisons — about 1650 on a
+  150-letter message. Telegraphic German runs ~6% X, so the same message holds
+  ~9 X's and ~9 adjacent segment pairs. Roughly **two orders of magnitude
+  cheaper**.
+- *Shorter words become viable*, which is the real prize. `L ≥ 6` is a threshold
+  forced by the **unanchored** scan's chance rate, not by anything linguistic:
+  the table above shows `len≥4, mm≤1` reaching 48% of messages but at a 0.355%
+  null. Two flanking X's are two extra constraints at ~1/16 each in telegraphic
+  text, so anchoring should cut that null by ~250×, making `L = 4` or `5`
+  affordable. Measure the anchored null before trusting the factor.
+- *Recall is not the obstacle.* The flanking measurement says 71% both sides,
+  25% left only, 4% right only and **0% neither**, and the left-only cases are
+  largely end-of-message — a boundary segmentation gets for free. So an
+  X-anchored form should lose little or no recall.
+
+The one new fragility: anchoring depends on the **X's themselves** decrypting
+correctly. Irrelevant for this feature's target population, where the climb
+recovers ~100% of letters, but it would matter for any partial-recovery use.
+
+**(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
+Rough arithmetic, to be confirmed on wall time: the current check is ~11
+`score_iter`-equivalents, and one restart is ~1250 `score_iter` (inferred from
+`--polish`'s measured ~6500 being 2.8–3.3% of a run at `-R 160`). So **~0.9% of
+a single restart**, less if run once per key rather than per restart, and under
+one `score_iter`-equivalent in the X-anchored form. Placement is what decides
+it: as a **confirmation signal it runs once per converged climb** and is noise;
+put it inside the climb loop, per scored board, and it becomes ~1% on the hot
+path, which this repo treats as a real regression needing a `make bench` A/B
+under both compilers. Note `score_iter` would **not** count it in either case —
+the same blind spot documented for `--polish`'s gain scan — so judge it on wall
+time, not on the counter.
+
 *What it is, precisely:* a **one-sided, zero-false-positive confirmation
 signal**. If it fires the key is right; if it does not, nothing is learned. That
 is exactly the shape item 4 identified as the only defensible one — a non-firing
