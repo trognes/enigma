@@ -615,6 +615,41 @@ false positives. But ALVPM also carries **`HENNINGJHENNING`**, where the
 misses that one. Harmless here, since `ENGELMANN` carries the message, but it is
 real-traffic evidence for folding the separator into the mismatch budget.
 
+**Garbles: 9 in 357 letters (2.5%), and the doubling convention caught two of
+them by itself.**
+
+| | letters | garbles | rate |
+|---|---:|---:|---:|
+| ALVPM | 172 | **6** | 3.5% |
+| ALRHG | 111 | **1** | 0.9% |
+| GEHRG | 74 | **2** | 2.7% |
+
+Every doubled word whose two copies **agree** — `ENGELMANN`, `ERB`, `HENNING`,
+`ROMANOVKA`, `POLA` — is clean, and the two places where copies **disagree** are
+two of the nine garbles. That is the convention doing the job it was for: a
+wartime clerk would reconstruct the word from the pair. `SEQS` (*sechs*),
+`ZURUEQ` (*zurück*), the spelled `EINS SEQS NULL NULL` = 1600 and `ZWOTE` are
+convention and must not be "corrected".
+
+Two observations from the garbles bear directly on the doubling signal of
+`ENHANCEMENTS.md` item 5.
+
+**Two of the nine hit the X SEPARATOR itself** — `HENNING(J)HENNING` in ALVPM
+and `ROMANOVKA(G)KLAMM` in GEHRG. Two of nine, against X being ~6% of letters.
+Small numbers, but it is a second independent reason not to require a literal
+`X` in the matcher, alongside the ALVPM case already recorded.
+
+**And one garble is not a substitution at all.** ALVPM's doubled surname reads
+`SCUHNACHER` (10 letters) against `SCHUHMAXHER` (11) — the copies differ in
+*length*. Copy 1 is `SCHUMACHER` with a transposition plus one substitution;
+copy 2 is `SCHUHMACHER` with `X` for `C`; both are real spellings of the name. A
+dropped **ciphertext** letter is ruled out, because it would desync the rotor
+stepping and wreck the remaining 137 letters, which decrypt cleanly. So the
+length difference was **typed that way by the operator**, not introduced in
+transmission. The matcher assumes equal-length copies, so this is a real (if
+rare) miss — and the cause is the keyboard, not the ether, which is the opposite
+of what the no-diffusion argument would lead you to expect.
+
 **Priority, stated plainly.** None of the three is a first break. ALVPM and
 ALRHG were broken elsewhere before this, and GEHRG on 12.07.2026. What is new
 here is the **key**, which had not been published for any of them, and the

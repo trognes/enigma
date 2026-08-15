@@ -285,16 +285,29 @@ The one new fragility: anchoring depends on the **X's themselves** decrypting
 correctly. Irrelevant for this feature's target population, where the climb
 recovers ~100% of letters, but it would matter for any partial-recovery use.
 
-**(c) Let the SEPARATOR be garbled too — now evidenced on real traffic.** The
-rule requires the separator to be a literal `X`, and the ALVPM break (§5j of
-`eval/MODERN_BREAKING_NOTES.md`) contains **`HENNINGJHENNING`** — the X itself
-corrupted to J. The matcher misses it. Harmless in that message, since
-`ENGELMANNXENGELMANN` carries it, but a message whose only doubling has a
-garbled separator is missed entirely. Enigma corrupts one letter per corrupted
-ciphertext letter and the separator is just another letter, so there is no
-reason to privilege it: fold it into the mismatch budget. This is real-traffic
-evidence rather than reasoning, and it is the first refinement here that came
-from an actual break.
+**(c) Let the SEPARATOR be garbled too — evidenced twice on real traffic.** The
+rule requires the separator to be a literal `X`. The 09.09.1941 breaks (§5j of
+`eval/MODERN_BREAKING_NOTES.md`) contain **two** counter-examples in nine
+garbles: `HENNING(J)HENNING` in ALVPM and `ROMANOVKA(G)KLAMM` in GEHRG. The
+matcher misses both. Harmless in those messages, since a second clean doubling
+carries each, but a message whose only doubling has a garbled separator is
+missed entirely. Enigma corrupts one letter per corrupted ciphertext letter and
+the separator is just another letter, so there is no reason to privilege it:
+fold it into the mismatch budget. Two of nine garbles landing on X, against X
+being ~6% of letters, is a small sample but it points the right way.
+
+**(d) Real doublings can differ in LENGTH, and the cause is the keyboard.** The
+matcher takes `|W| = |V|`, which the no-diffusion argument seems to justify —
+one corrupted ciphertext letter corrupts exactly one plaintext letter, so
+transmission garbles are pure substitutions. ALVPM breaks that assumption from
+the other side: its doubled surname is `SCUHNACHER` (10) against `SCHUHMAXHER`
+(11), i.e. `SCHUMACHER` against `SCHUHMACHER` — **the operator spelled the name
+two different ways**. A dropped *ciphertext* letter is ruled out, since it would
+desync the rotor stepping and wreck the remaining 137 letters, which decrypt
+cleanly. So indels do occur in real doublings, just not from the channel. Any
+length-tolerant matching would have to be edit distance rather than Hamming,
+which is more expensive; whether it is worth it depends on how common this is,
+and one instance is not an estimate.
 
 **(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
 Rough arithmetic, to be confirmed on wall time: the current check is ~11

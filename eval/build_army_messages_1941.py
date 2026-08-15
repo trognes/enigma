@@ -84,14 +84,24 @@ M = [
   "IS A CLASS REPRESENTATIVE, not necessarily the true day-key ring: ring0 is "
   "never identifiable from ciphertext (CLAUDE.md 7.10, always reported A) and "
   "at 172 letters ring1/start1 need not be singletons either (7.12). The "
-  "decrypt is exact regardless"),
+  "decrypt is exact regardless. GARBLES: 6 in 172 letters (3.5%), the dirtiest "
+  "of the three -- pos 1 N for S (SS), pos 7 Y for T and pos 11 A for F "
+  "(HAUPTSTUF), pos 31 X for C (SCHUHMACHER), pos 140 K for U (ZUR DIVISION), "
+  "pos 163 J for the X SEPARATOR of the HENNING doubling. The doubled surname "
+  "additionally differs in LENGTH between its copies -- SCUHNACHER (10) against "
+  "SCHUHMAXHER (11), i.e. SCHUMACHER against SCHUHMACHER. That is not a "
+  "transmission garble: a dropped ciphertext letter would desync the stepping "
+  "and wreck the remaining 137 letters, which decrypt cleanly, so the operator "
+  "spelled the name two ways at the keyboard"),
  ("ALRHG","09.09.1941","09 Sep 1941","VAT","nostrip","ALRHG",
   "ZLUNGBFSCEVTWZRPZTLQEPEBWNYBCVCZIHROAPPLOHYATMMCIJWYWJGWGIYTPAWLHBWPMTBMULWLRSEGJGRDQYTHJQJCVTKYUDBJGYQPDDOPIUV",
   "Recovered independently here from ciphertext alone (broken elsewhere "
   "first, key unpublished); the abbreviated re-send of ALVPM, same key and "
   "same start. Its --confidence margin was only +2.29 sd, marginal alone; "
-  "ALVPM "
-  "at +7.54 and the shared plaintext are what settle it"),
+  "ALVPM at +7.54 and the shared plaintext are what settle it. GARBLES: 1 in "
+  "111 letters (0.9%), the cleanest of the three -- pos 56 Z for S in U[S]TUF, "
+  "which is also the single difference across the 73 letters it shares with "
+  "ALVPM"),
  ("38","09.09.1941","09 Sep 1941","UXT","nostrip","GEHRG",
   "LGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINCIVXSYRGIGUWLOE",
   "Unbroken for twenty years, broken elsewhere 12.07.2026 with no key "
@@ -99,7 +109,10 @@ M = [
   "START-POSITION sweep, because ALVPM and ALRHG had already given up the "
   "09.09.1941 day key -- the day-key attack of ENHANCEMENTS item 3, on real "
   "traffic. Margin +6.90 sd. Designator GEHRG stripped by hand here; position "
-  "31 carries the N->V correction from the German Army Messages page"),
+  "31 carries the N->V correction from the German Army Messages page. GARBLES: 2 "
+  "in 74 letters (2.7%) -- pos 52 G for the X separator after the second "
+  "ROMANOVKA, pos 70 I for L in K[L]AMM. SEQS (sechs) and the spelled 1600 are "
+  "convention, not garbles"),
  ("23","08.07.1941","08 Jul 1941","PIK","","KHLPT","KHLPTCWSEBDDIRBZUUBGKJANBVGIVDVDZZIGAKBZCJMMVEMVXLTHNLDYGRVQAKJMRVZIXHMDNOMTAUTPZDWOINNMOLAHCDKCZTPPEORFIBXCMNWQNIDDCHPTXQQBC",""),
  ("7","13.08.1941","13 Aug 1941","BRZ","","KEJNQ","KEJNQSFUGRPVPWGSPYHMNQYJTPPDGHFMROCPMUUBLBBJLSRZCYBXHFXQSWGWOXDNEVRIOCSPWKYCFTLRSAKBNWZJYPLQBSHQYVTCCCEPUYVUKSHHVWHXYOJKPVWQWXQESKIEGMUORWZDJZRAJZCWKFFCLUXLDY",""),
  ("19","19.08.1941","19 Aug 1941","BGO","","ALWOK","ALWOKPBYQVEQEHZFPKFLVJSOGNBZNIMXDMDSZXIAQBEKYAKFCIREEWQCBRPBLHHUHGMTPTXGZGSUISJQEYEVSLFXSCUACFAJBUGWYWPVUADTAGMERMBLWTDDGVHRWXPHW",""),
