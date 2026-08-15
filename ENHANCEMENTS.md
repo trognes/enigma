@@ -420,7 +420,12 @@ cannot dilute a good score the way an additive term does. It is **not** a score
 term, and it cannot help a search failure.
 
 **(e) Fold it into the SCORE as a length-graded bonus behind a z gate —
-DESIGNED AND PARTLY MEASURED; the two constants still need a sweep.** The
+SWEPT AND MEASURED DOWN; do not build it.** The sweep the design asked for has
+been run (140 genuine 17 576-key sweeps): the constants turn out not to be the
+question, because a post-climb bonus needs a trial where the climb recovered
+the plaintext and the score still lost, and there were **zero** of those. See
+the sweep verdict at the end of this note. The design below is kept because
+its reasoning is what the sweep tested. The
 confirmation signal above is one-sided: it identifies the true key when it
 fires and says nothing when it does not. The alternative is to add it to the
 score, so a doubling *helps the true key win* rather than merely flagging it.
@@ -500,29 +505,95 @@ at operational length carry shorter doublings, the multiplier's advantage
 shrinks toward the offset's, which is the same population question the sweep
 has to settle anyway.
 
-*Both constants are single points, not optima — sweep them jointly before
-building anything.* `T` and `M` trade against each other (a higher gate buys a
-bigger multiplier), so a 1-D scan of either is misleading. Four things the
-sweep has to get right, none of which the numbers above do:
+*Both constants were swept jointly, and the sweep says do not build it — the
+population it acts on does not occur.* `eval/doubling_bonus_sweep.py`, 140
+genuine 17 576-key sweeps of authentic telegraphic German cut to contain a
+doubling (100 at `-R 8` over L = 60–140, 40 at `-R 64` over L = 80–120), each
+under `-c -f -l wehrmacht -S i4f10 -J --polish --dump-all`, so the competitors
+are the **top-scoring keys of a real search** rather than the 48 random ones
+the numbers above rest on. Full output in
+`eval/results-doubling-bonus-sweep.txt`.
 
-- **The risk side needs real high-scoring wrong candidates.** The stored
-  artifact holds 48 **random** wrong keys per message; the keys that can steal
-  a win are the *top-scoring* ones in a large sweep. The table above reaches
-  them by scaling with a Gaussian best-of-N, and `--confidence` has already
-  measured the real upper tail as ~3.4× fatter — so **1 in 1 000 is probably
-  nearer 1 in 300**. Generate the tail, do not extrapolate it.
-- **Do not choose and validate on the same 8 failures.** Eight is enough to
-  rank `M` coarsely and not enough to fit two constants; a held-out split, or a
-  fresh run of `scoring_failure_probe.py` at a different seed, is the minimum.
-- **Operational length is untested.** All 8 losses are L = 60–100 excerpts with
-  deliberately manufactured failures. Gaps should shrink at L = 150+, which
-  would lower the `M` needed — the sweep should span length, and length may
-  matter more than either constant.
-- **The independence assumption is unmeasured.** The risk arithmetic multiplies
-  P(high score) by P(doubling) as if they were independent, but a high-scoring
-  wrong key is more German-like and so plausibly X-richer than the 2.41%
-  population average. Measure the doubling rate *as a function of z* rather
-  than assuming it flat.
+**The finding is placement, not calibration.** A bonus applied after the climb
+needs a trial where the climb *recovered the plaintext* and the score still
+lost. In 140 sweeps there were **zero**: 35 trials recovered ≥90% of the
+letters, and in **35 of 35** the true key was already top. Every other failure
+was a search failure.
+
+That is not luck, and the mechanism is the reason the whole idea does not
+work. The climb is steered by the **same score** the bonus would adjust, so a
+true key that does not stand out is also a true key whose plugboard the climb
+cannot find. Scoring failure therefore presents as a *search* failure first:
+
+| oracle outcome (true board vs best wrong) | trials | climb recovered |
+|---|---:|---:|
+| truth wins big (< −100 dec) | 48 | 46% |
+| truth wins (−100…0) | 34 | 35% |
+| truth loses (0…+50) | 23 | **4%** |
+| truth loses big (> +50) | 35 | **0%** |
+
+**0 of 35.** In every trial the feature was built for, the climb never
+delivers a decrypt to read a doubling out of. To help at all the evidence
+would have to **steer the climb** rather than rescore its output — which is
+the ~1% hot-path cost note (b) prices, on a signal that fires on almost no
+board mid-climb.
+
+**And the grid cannot choose the constants, because the cost axis is
+unmeasurable at this scale.** Every cell of every grid read `−0` stolen, so
+the optimiser simply runs to the largest `M` offered: it picked *gate off,
+M = 14* — 45/50 on train and **46/50 held out** against a baseline of 28. That
+looks like a strong validated result and is an artefact of the grid's range.
+A held-out split validates only the side that has data, and here that was the
+rescue side, which was never in doubt.
+
+The risk had to be **decomposed** instead, since the coincidence itself is too
+rare to observe: chance doublings per sweep (0.040 ungated, 0.010 at `z > 3`)
+times the chance the truth's lead is thinner than the bonus (10% under 25
+decades, 17% under 70; minimum observed lead **1.2 decades**):
+
+| gate | M=3 | M=5 | M=8 | M=14 |
+|---|---|---|---|---|
+| z>2 | 1 in 369 | 1 in 246 | 1 in 184 | 1 in 148 |
+| z>3 | 1 in 1475 | **1 in 983** | 1 in 738 | 1 in 590 |
+
+So `z > 3, M = 5` was the defensible cell — close to what was proposed — had
+there been anything for it to rescue.
+
+Three subsidiary results worth keeping:
+
+- **Requirement 4, the independence assumption: mildly violated, not
+  catastrophically.** 5 chance doublings in ~471 000 genuine competitors =
+  1.1e-5, about **2×** the 4.9e-6 operational null. Run A's 4 hits all sat
+  above `z = +2`; run B's single hit did not, so the enrichment is real in
+  direction and weak in size. Extrapolated: roughly **one false positive per
+  2 million keys swept** at `z > 3`, ~130 in a full 230 M-key rotor sweep, and
+  ~94% of them at `L = 6` — so **raising the floor to `L = 7` cuts them ~16×**,
+  a far cheaper lever than tightening the gate, which throws the true key out
+  with them.
+- **`margin > 0` is the wrong shape for a gate.** It subtracts `√(2 ln K)`, so
+  it means `z > 4.42` on a 17 576-key sweep and `z > 5.68` on a 10⁷ one, while
+  the true key's z does not grow with `K` (median 3.76 at L=80, 7.59 at L=100).
+  A keyspace-scaled gate closes hardest exactly where the feature was wanted.
+- **The scoring ceiling gets LOWER as the search gets stronger.** At L = 100
+  the median oracle gap moved from −34.8 decades at `-R 8` to +3.2 at `-R 64`:
+  extra restarts help the true key's climb, but they also let all 17 575 wrong
+  keys overfit their plugboards harder, and there are far more of them. The two
+  runs draw different instances so this is directional, not a paired number.
+
+*A measurement trap this sweep walked into, worth the warning.* Double stepping
+makes two grundstellungen the **same key**: with the middle wheel on its notch
+the first keypress steps the middle *and* left wheels, so `(g₀, N, g₂)` and
+`(g₀+1, N+1, g₂)` agree for the whole message (it fails if the right wheel is
+also on its notch). Such a start is not a competitor — it is the true key under
+another name — and it fires on ~7% of trials. Left in the candidate list it
+ties the true key's score exactly, so a strict `>` test scored a **loss** on
+trials the search got right, and it carried the plaintext's **real** doubling,
+which was then counted as a **chance** doubling among the wrong keys. Three of
+the first seven "chance doublings" were this. Uncorrected, the doubling rate
+appeared to climb steeply with z and peak in the tail — which reads as the gate
+*concentrating* false positives rather than excluding them, the exact opposite
+of the truth. `alias_starts()` in the harness; verified against an exhaustive
+17 576-start search, 0 mismatches.
 
 *Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
 sidesteps the failure above entirely, because it works on the **ciphertext** and

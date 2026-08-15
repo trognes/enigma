@@ -242,7 +242,9 @@ def generate():
                 d = enigma_ref.decrypt(ct, wheels, ring, st, pl)
                 rec["cands"].append({"g": st, "s": s_, "z": (s_ - mu) / sd,
                                      "d": longest_doubling(d)})
-            rec["best_wrong"] = max(c["s"] for c in rec["cands"])
+            # alias-filtered, or the printed gap reads +0.0 on the ~7% of
+            # trials where a double-step twin of the true key is in the list
+            rec["best_wrong"] = max(c["s"] for c in competitors(rec))
             fh.write(json.dumps(rec) + "\n")
             fh.flush()
             print("  %2d L=%-4d dbl=%-3d climb pct=%5.1f z=%+6.2f | "
