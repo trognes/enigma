@@ -146,17 +146,90 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
+**5. Repeated text with an X between — the VOCABULARY-FREE variant of item 4,
+text-level precondition measured and strong; the decisive test not yet run.**
+Telegraphic German doubles important words for error correction, separated by
+the X word separator: `ZANDERSXZANDERS`, `FORDXFORD`, `PKWXPKW`, and the
+`LNKXLNKX` in Nr 214 that started all of this. The test is that two runs are
+identical **to each other** — not that either is a word anyone listed in
+advance — so unlike item 4 it needs no vocabulary at all.
+
+*The precondition is much stronger than item 4's.* Over the 50 messages with a
+clean recorded plaintext (`eval/doubling_probe.py`):
+
+| min len | mismatches | real messages | shuffled-null rate |
+|---:|---:|---:|---:|
+| 4 | 0 | 17 of 50 (34%) | 0.005% |
+| 4 | ≤1 | 24 of 50 (48%) | 0.355% |
+| **6** | **≤1** | **21 of 50 (42%)** | **0.000%** |
+| 7 | ≤1 | 18 of 50 (36%) | 0.000% |
+
+The null shuffles a real decrypt, which preserves the letter frequencies —
+including the high X rate the test could otherwise be fooled by. **`len≥6` with
+one mismatch allowed dominates `len≥4` exact**: more real messages (42% vs 34%)
+at a null rate no higher, because real traffic is garbled and an exact test
+discards genuine hits (`PLYUSSA`/`PLJUSSA`, `ZANDEYS`/`ZANDERS`,
+`SIOBEN`/`SIEBEN`, `KOCHLINQ`/`KOCHLING`). Do not ship the exact form.
+
+*What the hits are is the whole argument:* `KUSOW`, `SAGOSKA`, `MATHIAT`,
+`STARAJARUSSA`, `OPOTSCHKA`, `ISSAKI`, `TSCHEDINOVA`, `WASCHBUSCH`, `PACHE`,
+`ROMANOWO`, `RENNER`, `ZANDERS` — Russian village names and German surnames,
+i.e. exactly the operationally-specific material no fixed vocabulary can carry.
+
+*This is not new to the repo, but the vocabulary-free form is.* `build_cribs.py`
+already exploits doubling — **1062 of the 1181** entries in
+`cribs/wehrmacht.cribs` are synthesised `doubled` forms like
+`XROMANOWOXROMANOWOX` — but vocabulary-*dependently*: it must guess the word
+first, and measured directly, **92 of those 1062 (9%)** actually occur in the
+corpus. Detecting the structure instead of guessing the string is the
+improvement. (Careful with that file's `seen` column: the doubled tier is
+emitted with an empty set by construction — `add(v, "doubled", set())` — so
+`seen 0` means "not computed", **not** "never matched". The 9% above is measured
+against the plaintexts, not read off that column.)
+
+*Three forms, with very different prospects — the third is the one to build.*
+
+1. **As a score bonus.** Item 4's prior applies and is *worse*: a doubling needs
+   `2k+1` consecutive correct letters where a word needed one word, so it will
+   fire even less often on the below-bar messages that matter. Expect it to fail
+   the same way.
+2. **As a self-crib deduction.** Elegant and genuinely vocabulary-free: you need
+   not know *what* the plaintext is, only that two positions share it, and
+   `p_i = p_j` gives `core_i[steck[c_i]] = core_j[steck[c_j]]` — chainable
+   exactly like `--crib`, with the same Welchman diagonal board. The catch is
+   that the alignment is unknown, so it is a sweep over ~1300 (position, length)
+   hypotheses and a key is rejected only if **every** one fails. That is the
+   compounding that already takes a 12-letter crib from 99.9% rejection pinned
+   to **5.3%** swept (`archived/cribs.md` §4.2a), and it is likely fatal here
+   too. Measure the per-hypothesis rejection rate before building anything.
+3. **As a confirmation / re-rank on a shortlist.** The most promising, and it is
+   the exact shape item 4 identifies as the only defensible one: a non-firing
+   costs nothing — no dilution, which is what killed the additive form — while a
+   firing is near-conclusive at better than 2000:1 (bounded by the null sample,
+   0 hits in 20 000 at `len≥6, mm≤1`). Use it to decide between candidate
+   boards, not to find them.
+
+*The decisive test, not yet run:* whether any of this survives a partly-wrong
+plugboard. The text-level rate above says the phenomenon is there; it says
+nothing about whether a failing climb ever produces both copies intact.
+`eval/word_segment_probe.py`'s harness answers it directly — swap the feature,
+keep the per-message null — and that is the measurement to do before writing any
+code in `enigma.cc`.
+
+→ `eval/doubling_probe.py`, `eval/results-doubling.txt`; item 4 above;
+`archived/cribs.md` §4.2a.
+
 ## Keyspace reductions
 
 The two-notch collapse that used to head this section has **shipped** and is
 no longer an issue: `CLAUDE.md` "Two-notch wheels" and the CHANGELOG carry it.
 
-**5. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
+**6. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
 3–5× at short lengths and the compute is saved; whether spending it on `-R`
 raises recovery is untested. The same question was asked of `--ring-stride` and
 answered "a wash". → `archived/IMPROVEMENTS.md` §2.
 
-**6. A `--ring-stride` for the middle wheel — premise measured, not built.**
+**7. A `--ring-stride` for the middle wheel — premise measured, not built.**
 Striding `ring1` costs 3.1% (K=2) / 5.1% (K=3) of the true `offset1`, roughly
 competitive with the right-wheel stride, and the two compose multiplicatively.
 **Read the failed attempt first**: striding `ring1` directly measured 2.4×
@@ -165,7 +238,7 @@ competitive with the right-wheel stride, and the two compose multiplicatively.
 produces — which the measured numbers do **not** cover. →
 `archived/IMPROVEMENTS.md` §2.
 
-**7. Read the right wheel's phase off one decrypt instead of searching it —
+**8. Read the right wheel's phase off one decrypt instead of searching it —
 signal confirmed, does not localise yet.** Shifting the right wheel's phase
 (ring2 and start2 together by `δ`) leaves `offset2` and so the whole
 substitution untouched; only the notch timing moves, displacing the middle wheel
@@ -204,17 +277,17 @@ Detail for all three: `archived/cribs.md` §13 — which also carries the
 X-separator variant, dropped here for want of confidence in the premise
 that word-boundary positions are any easier to come by than a phrase.
 
-**8. Crib supply at network scale.** The library covers 83% of held-out
+**9. Crib supply at network scale.** The library covers 83% of held-out
 messages, but on a 58-message corpus, and 47 of the 57 hits are 8–11 letters —
 seed-only lengths. Whether a real network yields *long* cribs is the question
 the whole feature rests on, and no larger corpus is available.
 
-**9. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
+**10. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
 would tolerate a slightly-wrong crib — which matters, because garbling is real
 (two of five `SIEGFRIED` messages are corrupted) and exact matching cannot see
 through it.
 
-**10. Menu reuse across alignments.** Shifting a crib by one position changes
+**11. Menu reuse across alignments.** Shifting a crib by one position changes
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
@@ -234,7 +307,7 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**11. `--tune-phase` — MEASURED at three lengths and below saturation;
+**12. `--tune-phase` — MEASURED at three lengths and below saturation;
 CLOSED.** The open half was whether the L=200 trade (more breaks, lower mean
 %-correct) survives at operational lengths. It does at **L=300** — 74/80 exact
 against 65/80, McNemar p = 0.049, mean −4.2pp with CI [−8.9, +0.6] — and is gone
@@ -259,14 +332,14 @@ matched compute forced. Two of the three residual misses are flat across every
 `-R`, so the residual is not budget-limited either. → `CLAUDE.md` "How the split
 moves with length".
 
-**12. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
+**13. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
 control, direction consistent across two seeds but **p ≈ 0.13 — suggestive, not
 established**, and only at a stride already outside the recommended K≤3.
 Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 `archived/PERFORMANCE.md` §7.11; `eval/ring_stride_scope_probe.py`.
 
-**13. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
+**14. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
 harness here reports two numbers: mean %-of-letters-correct (graded, low
 variance) and exact recovery (coarse, the operator's metric). Neither says how
 often a run lands *recognisably close* — enough of the plaintext to read as
@@ -301,20 +374,20 @@ converts. `tests/crack_quality.py` and
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**14. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**15. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**15. No `install` target**, and the n-gram files are not declared as build/run
+**16. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**16. Single-file distribution.** Embedding the tables was declined once, but
+**17. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**17. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**18. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 

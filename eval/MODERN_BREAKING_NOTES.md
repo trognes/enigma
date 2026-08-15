@@ -394,7 +394,11 @@ Measured across all 46 authentic messages with a known key, 18 of the 21 that
 sit **below** the bar have no words in the true-key decrypt at all, so the
 feature is flat exactly where it is needed and the net gain is one message.
 Do not generalise from this section to the scorer. → `ENHANCEMENTS.md` item 4;
-`eval/word_segment_probe.py`.
+`eval/word_segment_probe.py`. The vocabulary-free variant — the `LNKXLNKX`
+doubling itself, detected as *any* repeat around an X rather than as a listed
+word — is item 5, and its text-level precondition is much stronger (42% of real
+messages, 0 of 20 000 nulls); whether it survives a partly-wrong plugboard is
+the open question there.
 
 ### 5g. Four more messages recovered from the 01 Aug 2026 source pages
 
