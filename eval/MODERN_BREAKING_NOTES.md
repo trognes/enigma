@@ -91,25 +91,29 @@ to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --polish -l german`
 
 ## 4. Expanded real-traffic set (`eval/enigma-army-messages-1941.txt`)
 
-**61 further authentic HG Nord messages** with keys + verified plaintext, from the older
-Sullivan & Weierud "Breaking German Army Ciphers" collection (Cryptologia 2005;
-cryptocellar.org/bgac). These are ciphertexts the authors originally **failed to break**
-(2003–04) whose day-keys were **recovered later** (released 04 Aug 2017) — the "messages
-we failed to break" and "July Batch A" pages. **Three of the sixty-one are not from
-that release**: ALVPM, ALRHG and GEHRG (Nr 38), all 09.09.1941, whose day key appears
-in no published set and was recovered here from ciphertext (§5j).
-`eval/build_army_messages_1941.py` decrypts
-each at its stated key and reproduces the plaintext exactly; every one is clean
-telegraphic German (fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`,
-`ABENDMELDUNG`, phonetic `LUDWIG/FRIEDRICH/HEINRICH`, spelled numbers, `X` separators,
-`Q`→ch). Two that duplicate the 13-message set (No. 203 CFYZR — the 2005 paper's
-"singular unbroken" message, now broken — and No. 233 XNRLR) are dropped by
-ciphertext-dedup, so the two files are disjoint.
+**62 further authentic HG Nord messages** with keys + verified plaintext, from
+the older Sullivan & Weierud "Breaking German Army Ciphers" collection
+(Cryptologia 2005; cryptocellar.org/bgac). These are ciphertexts the authors
+originally **failed to break** (2003–04) whose day-keys were **recovered later**
+(released 04 Aug 2017) — the "messages we failed to break" and "July Batch A"
+pages. **Four of the sixty-two are not from that release**: ALVPM, ALRHG and
+GEHRG (Nr 38), all 09.09.1941, whose day key appears in no published set and was
+recovered here from ciphertext (§5j); and ALGXZ (Nr 8, 02.10.1941), whose key
+was published later still, on Frode's June–October 1941 key page (updated
+01 Aug 2026). `eval/build_army_messages_1941.py` decrypts each at its stated key
+and reproduces the plaintext exactly; all but one are clean telegraphic German
+(fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`, `ABENDMELDUNG`,
+phonetic `LUDWIG/FRIEDRICH/HEINRICH`, spelled numbers, `X` separators, `Q`→ch).
+The exception is ALGXZ, a correct key over a badly garbled transcription, kept
+because the key is now on record. Two that duplicate the 13-message set (No. 203
+CFYZR — the 2005 paper's "singular unbroken" message, now broken — and No. 233
+XNRLR) are dropped by ciphertext-dedup, so the two files are disjoint.
 
-Together the two files hold **74 authentic messages (~7,390 letters)** of real
-telegraphic German — the statistical power the original 13 (bimodal, too small to settle
-`-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
-statistics stay the *telegraphic corpus*; these 74 messages are *held-out validation*.
+Together the two files hold **75 authentic messages (~7,450 letters)** of real
+telegraphic German — the statistical power the original 13 (bimodal, too small
+to settle `-a` vs `-q` on real traffic) lacked. Intended split: the published
+Appendix-C n-gram statistics stay the *telegraphic corpus*; these 75 messages
+are *held-out validation*.
 
 ## 4a. Cross-check against the Heeresgruppe Nord July 1941 compilation
 
@@ -229,6 +233,24 @@ no power, and the decisive counter-example is **Nr 38 GEHRG: zero J in 74
 letters (p = 0.054), and now broken as Enigma**. Only the messages at n ≳ 90
 carry enough power to say anything, which is why the table above holds just
 those. Nr 214 FTNBK, confirmed Enigma, sits at 7 J in 101 as it should.
+
+### 5c. Attacking
+
+Attack with care: several are short (below the ~23-letter unicity distance), and
+a few carry a known day-key they demonstrably do **not** break on (Nrs 100, 138,
+172).
+
+**Pin `-u B`, do not wildcard the reflector.** On the standard account UKW-B
+replaced UKW-A across Wehrmacht service in 1937, and UKW-C appears only rarely
+and later; for 1941 Heer traffic — which is what this whole collection is —
+UKW-B is the overwhelmingly likely setting. `-u .` costs a **3× larger
+keyspace** to cover two reflectors that almost certainly are not there, and that
+3× is far better spent on `-R`, which is the measured bottleneck
+(`CLAUDE.md`, "The unknown-key break rate"). Treat A and C as a fallback to try
+only after a thorough `-u B` sweep comes back negative, not as a hedge to carry
+through the first one. Note this is a *historical* prior, not something measured
+here — it is the one assumption in a challenge attempt that no amount of compute
+will detect if it is wrong.
 
 ### 5d. Nr 214 FTNBK — solved, and its ciphertext here was wrong
 
@@ -719,28 +741,10 @@ published `KFZ` is presumably the true Ringstellung, ours a class
 representative. The same thing happens on 28.08.1941, where the page gives
 `CWJ` against this repo's `AVJ` and `CWJ/ABC` reproduces ALQFI exactly.
 
-**Priority, stated plainly.****Priority, stated plainly.** None of the three is a first break. ALVPM and
+**Priority, stated plainly.** None of the three is a first break. ALVPM and
 ALRHG were broken elsewhere before this, and GEHRG on 12.07.2026. What is new
 here is the **key**, which had not been published for any of them, and the
 plaintext of all three.
-
-### 5c. Attacking
-
-Attack with care: several are short (below the ~23-letter unicity distance), and
-a few carry a known day-key they demonstrably do **not** break on (Nrs 100, 138,
-172).
-
-**Pin `-u B`, do not wildcard the reflector.** On the standard account UKW-B
-replaced UKW-A across Wehrmacht service in 1937, and UKW-C appears only rarely
-and later; for 1941 Heer traffic — which is what this whole collection is —
-UKW-B is the overwhelmingly likely setting. `-u .` costs a **3× larger
-keyspace** to cover two reflectors that almost certainly are not there, and that
-3× is far better spent on `-R`, which is the measured bottleneck
-(`CLAUDE.md`, "The unknown-key break rate"). Treat A and C as a fallback to try
-only after a thorough `-u B` sweep comes back negative, not as a hedge to carry
-through the first one. Note this is a *historical* prior, not something measured
-here — it is the one assumption in a challenge attempt that no amount of compute
-will detect if it is wrong.
 
 ## 6. The `wehrmacht` scoring language — the corpus payoff
 
