@@ -35,12 +35,12 @@ test rather than an absence of results.
 FMNGI has no 31.07.1941 day key at all, so nothing about it can be checked by
 decryption.
 
-## Readings that differ, and why they were NOT applied
+## Readings that differ, and which one was applied
 
 Reading these two scans letter by letter produced disagreements with the stored
-transcriptions — **7 letters in FMNGI and 13 in MVUEH**, listed in full so a
-later attack can try them. Positions are 1-based over the whole string,
-Kenngruppe included.
+transcriptions — **7 letters in FMNGI and 14 in MVUEH**, of which exactly one
+has been applied (below). The rest are listed in full so a later attack can try
+them. Positions are 1-based over the whole string, Kenngruppe included.
 
 FMNGI (7 letters, 5 groups):
 
@@ -54,8 +54,8 @@ FMNGI (7 letters, 5 groups):
 | 50 | 10 `CSAQP` | `P` | `R` | low |
 | 60 | 12 `KFBIK` | `K` | `X` | medium |
 
-MVUEH (13 letters, 7 groups; faint pencil throughout, so every one is low or
-medium confidence):
+MVUEH, NOT applied (13 letters, 6 groups; faint pencil throughout, so every one
+is low or medium confidence):
 
 | pos | group | stored | read here |
 |---:|---|---|---|
@@ -66,23 +66,33 @@ medium confidence):
 | 29, 30 | 6 `DBZGG` | `G`, `G` | `J`, `F` |
 | 48 | 10 `WURRT` | `R` | `L` |
 | 52, 54, 55 | 11 `BZCVG` | `Z`, `V`, `G` | `R`, `U`, `F` |
-| 85 | 17 `DNXJF` | `F` | `Y` |
+
+**One further difference has been APPLIED**: position 85, group 17, `F` → `Y`,
+so the tail now reads `DNXJY TC`. The repo owner reads the final group as `dnxjy
+tc-` off the scan and the reading here agreed independently, which is two
+readers rather than one — the only disagreement of the twenty where that is
+true. It cannot be confirmed by decryption (the message is unbroken) and the
+length check is silent on it, since any letter in that cell gives 87; it rests
+on the image alone. It does not weaken the tail argument below, which is about
+the *shape* of the last group (`DNXJ?` + `TC` against `DURXJ` + `YTC`) and not
+about which letter fills the fifth cell.
 
 Confirmed identical at high magnification: FMNGI `FGROV FDIVQ QVNQW LGBLJ VRLEB
 EKFHE MCF`, and MVUEH `MVUEH SMXWL PSYWZ YTCBS ODVJU SLSOO MJQJZ SXSEB ZPEYM TC`
 — ten of MVUEH's eighteen groups.
 
-**None is applied**, for a reason worth stating rather than out of caution.
-Neither message has a working key, so a proposed correction cannot be arbitrated
-by decryption — which is exactly what made the ALVPM corrections safe and makes
-these unsafe. And **every check that was available went the stored
-transcription's way**:
+**None of the remaining twenty is applied**, for a reason worth stating rather
+than out of caution. Neither message has a working key, so a proposed correction
+cannot be arbitrated by decryption — which is exactly what made the ALVPM
+corrections safe and makes these unsafe. And **every check that was available
+went the stored transcription's way**:
 
 - **The form's own letter count arbitrates MVUEH's tail, and the stored text
   wins.** Read at low magnification the last row looked like `DURXJ` + `YTC`,
   which totals **88** letters against the form's stated 87. Enlarged, it is
   `DNXJ?` + `TC` — exactly **87**, and `TC` as stored. An arithmetic check, not
-  a judgement about handwriting.
+  a judgement about handwriting. It fixes the *shape* of the group, not the
+  letter in its fifth cell, which is why position 85 could still be corrected.
 - **Magnification kept overturning this reading, never the stored one.** Four
   MVUEH groups read wrong at low resolution — `YTCBS`, `ODVJU`, `DNXJ`, `TC` —
   and two FMNGI ones, `FDIVQ` and `LGBLJ`; enlarging confirmed the stored text

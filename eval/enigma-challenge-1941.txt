@@ -167,13 +167,15 @@ FORM NOTES:  Spruch Nr 88/61, sheet 389. Befoerdert 10.7.41 1546,
              (Nachschub); Vermerke 'uebermittelt'. The ciphertext block
              opens 'Nr (1220) 87', so the form's own count confirms the
              87 letters transcribed here.
-FORM DIFFS:  13 letters read differently here than in the transcription
-             above, none applied; the form's own 87-letter count
-             arbitrates the last group in the transcription's favour --
-             see forms/README.md
+FORM DIFFS:  14 letters read differently here than the transcription
+             first held; ONE applied (position 85, F -> Y) and 13 not.
+             The form's own 87-letter count arbitrates the SHAPE of the
+             last group in the transcription's favour (DNXJ? + TC, not
+             DURXJ + YTC) but says nothing about that letter -- see
+             forms/README.md
 CIPHERTEXT:  MVUEHIDEVSARMCCNQTATYEVFCDBZGGSMXWLPSYWZYTCBSWURRTBZCVGODVJU
-             SLSOOMJQJZSXSEBZPEYMDNXJFTC
-NOTES:       does NOT break on the 10 Jul key; suspected different network/key. The message form (forms/) supplies the INDICATOR, which makes that testable directly instead of by sweep: at the 10.07 day key GTA/KCI derives start USU, and at the Nr-173 network key (same wheels, ring MRP) start SED -- neither decrypts, and an exhaustive 17576-start sweep on BOTH keys tops out at margin +0.5 sd, i.e. nothing. So the different-network reading stands, and any future candidate key can now be checked in one decrypt
+             SLSOOMJQJZSXSEBZPEYMDNXJYTC
+NOTES:       position 85 corrected F -> Y against the message form (forms/), the one disputed letter applied: the repo owner reads the final group as 'dnxjy tc-' from the scan, and the reading here agreed independently. It does not disturb the length -- any letter there gives 87 -- and it cannot be confirmed by decryption, since the message is unbroken. It still does NOT break on the 10 Jul key; suspected different network/key. The message form (forms/) supplies the INDICATOR, which makes that testable directly instead of by sweep: at the 10.07 day key GTA/KCI derives start USU, and at the Nr-173 network key (same wheels, ring MRP) start SED -- neither decrypts, and an exhaustive 17576-start sweep on BOTH keys tops out at margin +0.5 sd, i.e. nothing. So the different-network reading stands, and any future candidate key can now be checked in one decrypt
 
 ### Message No. 187  --  11 Jul 1941  (AWTZK)
 KENNGRUPPE:  AWTZK   (discriminant; strip before deciphering)

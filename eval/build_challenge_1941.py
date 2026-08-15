@@ -57,8 +57,14 @@ C = [
  ("140", "09 Jul 1941", "WEUWY", 53,
   "WEUWYTCTICBSEYTHDHXOXUSIMIEORHRKVEIXFICQUIMBZIDZMFEQM", "does NOT break on the 9 Jul key"),
  ("172", "10 Jul 1941", "MVUEH", 87,
-  "MVUEHIDEVSARMCCNQTATYEVFCDBZGGSMXWLPSYWZYTCBSWURRTBZCVGODVJUSLSOOMJQJZSXSEBZPEYMDNXJFTC",
-  "does NOT break on the 10 Jul key; suspected different network/key. The "
+  "MVUEHIDEVSARMCCNQTATYEVFCDBZGGSMXWLPSYWZYTCBSWURRTBZCVGODVJUSLSOOMJQJZSXSEBZPEYMDNXJYTC",
+  "position 85 corrected F -> Y against the message form (forms/), the one "
+  "disputed letter applied: the repo owner reads the final group as 'dnxjy "
+  "tc-' from the scan, and the reading here agreed independently. It does "
+  "not disturb the length -- any letter there gives 87 -- and it cannot be "
+  "confirmed by decryption, since the message is unbroken. "
+  "It still does NOT break on the 10 Jul key; suspected different "
+  "network/key. The "
   "message form (forms/) supplies the INDICATOR, which makes that testable "
   "directly instead of by sweep: at the 10.07 day key GTA/KCI derives start "
   "USU, and at the Nr-173 network key (same wheels, ring MRP) start SED -- "
@@ -184,10 +190,11 @@ FORMS = {
          "1420, abgegangen 10.7. 1220. From Xls to Ib (Nachschub); Vermerke "
          "'uebermittelt'. The ciphertext block opens 'Nr (1220) 87', so the "
          "form's own count confirms the 87 letters transcribed here.",
-         "13 letters read differently here than in the transcription "
-         "above, none applied; the form's own 87-letter count arbitrates "
-         "the last group in the transcription's favour -- see "
-         "forms/README.md"),
+         "14 letters read differently here than the transcription first "
+         "held; ONE applied (position 85, F -> Y) and 13 not. The form's "
+         "own 87-letter count arbitrates the SHAPE of the last group in "
+         "the transcription's favour (DNXJ? + TC, not DURXJ + YTC) but "
+         "says nothing about that letter -- see forms/README.md"),
  "285": ("AFL BSA", "FMNGI-31071941-205-out-nf.pdf",
          "Spruch Nr 205 (a struck-through 442 in red above it), sheet 259. "
          "Befoerdert 31.7.41. Absendende Stelle Nachschub, an Ib. The "

@@ -777,10 +777,15 @@ one-command check.
 on the forms themselves), so neither transcription has dropped or added a
 letter.
 
-**Readings that differ were NOT applied.** Reading the scans letter by letter
-disagrees with the stored transcriptions in 7 letters of FMNGI and 13 of
-MVUEH; `forms/README.md` tabulates them. They stay unapplied because neither
-message has a working key, so a proposed correction cannot be arbitrated by
+**Readings that differ — one applied, twenty not.** Reading the scans letter by
+letter disagrees with the stored transcriptions in 7 letters of FMNGI and 14 of
+MVUEH; `forms/README.md` tabulates them. **The one applied** is MVUEH position
+85, `F` → `Y`, so the tail reads `DNXJY TC`: the repo owner reads the final
+group as `dnxjy tc-` off the scan and the reading here agreed independently,
+making it the only disagreement of the twenty-one with two readers behind it.
+It rests on the image alone — the length check is silent on that cell, since
+any letter there gives 87. The rest stay unapplied because neither message has
+a working key, so a proposed correction cannot be arbitrated by
 decryption — the very thing that made the ALVPM corrections safe in §5j. And
 every check that *was* possible went the stored transcription's way. The
 **form's own letter count settles MVUEH's tail**: at low magnification the last
