@@ -169,8 +169,13 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
-**5. Repeated text with an X between — MEASURED, and on its ACTUAL target it
-works: 9 of 9 real scoring failures rescued, 0 false positives in 8496.**
+**5. Repeated text with an X between — NOT IMPLEMENTED; measured in `eval/`
+probes only. On its ACTUAL target it works: 15 of 15 real scoring failures
+rescued, 0 false positives in 8 928.** Nothing below exists in `enigma.cc` —
+there is no flag, no code, and no `make bench` number for any of it. Where this
+entry says "the settled setting" it means the configuration these probes
+standardised on, not a shipped default.
+
 Telegraphic German doubles important words around the X separator:
 `ZANDERSXZANDERS`, `FORDXFORD`, the `LNKXLNKX` in Nr 214. The test is that two
 runs are identical **to each other** — not that either is a word anyone listed
@@ -203,6 +208,59 @@ Never ship the exact form. The hits are `KUSOW`, `SAGOSKA`, `STARAJARUSSA`,
 `OPOTSCHKA`, `TSCHEDINOVA`, `WASCHBUSCH`, `ROMANOWO`, `ZANDERS` — Russian
 village names and German surnames, the operationally specific material no fixed
 vocabulary carries.
+
+*That "0.000%" is a floor, not a rate, and it was the wrong population*
+(`eval/doubling_null_probe.py`). 20 000 shuffles expect **0.28** hits at this
+rule, so zero was the likely outcome and bounded nothing — and shuffled real
+decrypts are not what the rule would ever be applied to. **The population that
+matters is decrypts at wrong rotor keys with the plugboard hill-climbed**, and
+its null is:
+
+> **≈ 5e-6 — one false hit per ~200 000 climbed candidates.**
+
+*Where that comes from.* A window needs an X at the centre (probability `p`)
+and `2L` non-X flanking letters with ≤1 mismatch, so with `A` = P(two letters
+equal and neither X) and `B` = P(both non-X),
+
+    E[hits] = Σ_L (n − 2L) · p · [ A^L + L · A^(L−1) · (B − A) ]
+
+Each extra letter costs `B/A ≈ 16`, so the threshold `L = 6` sets the rate
+almost alone, and within it the one-mismatch term dominates. On the climbed
+population (`X` = **2.41%**, `A` = 0.0508) that gives **4.9e-6**.
+
+*Why this population is SAFER than the shuffle null, not worse.* The rate is
+roughly linear in the X-rate, because the rule needs an X separator. A
+plugboard climb maximises an n-gram score and German prose is X-poor, so
+climbing a **wrong** key drives X *down* — **2.41% against 5.58%** in true-key
+decrypts and 6.84% in the shuffles. The one letter the rule depends on moves
+the safe way.
+
+*And the closed form is confirmed, not assumed.* It presumes memoryless
+letters, which real German badly violates — a bigram chain fitted to the corpus
+fires ~9× more often than its letter frequencies predict. That penalty does
+**not** carry over, because climbed wrong-key text is nearly structureless: its
+bigram IC is **1.07×** what independence predicts, against **1.48×** for real
+decrypts. Fitting both an i.i.d. and a bigram-Markov generator to the climbed
+population and running 1.5 M trials each gives **16 hits in 3.0 M = 5.3e-6**,
+95% CI [3.0e-6, 8.7e-6] — the closed form sits inside, and the Markov/i.i.d.
+gap is not significant.
+
+The direct count over the stored climbed decrypts — **0 in 5 888** — expects
+0.03 and so demonstrates nothing on its own. Neither did the "0 false positives
+in 8 928" quoted below, which expects 0.04.
+
+*What the rate allows.* Expected false hits = candidates × 4.9e-6:
+
+| climbed keys | 10 000 | **203 000** | 10⁷ | 10⁸ |
+|---|---:|---:|---:|---:|
+| expected false hits | 0.05 | **1.0** | 49 | 493 |
+
+**So it cannot run across a whole sweep.** A real unknown-key run climbs
+10⁷–10⁸ keys, which is tens to hundreds of spurious hits — against *one* true
+key that carries a qualifying doubling only **28% of the time** (13 of 46
+true-key decrypts). Swamped on both terms. It is sound as a **confirmer on a
+shortlist**, below roughly **200 000 candidates**, which is the regime the
+entry proposes it for.
 
 *The result, on the population the feature is FOR*
 (`eval/scoring_failure_probe.py`): 186 trials, short excerpts of authentic
@@ -258,32 +316,62 @@ without this factor.
 
 *Two design questions noted, not yet measured.*
 
-**(a) Anchor on the X's first, then compare segments — do not scan (i, L).**
-The pattern to look for is `XPARISXPARIMX`, not `PARISXPARIM`, and finding the
-X positions first is not merely an optimisation: **the segmentation determines
-the candidate lengths, so the length loop disappears entirely.** Split the text
-on X, then compare adjacent segments (and, cheaply, non-adjacent ones — a word
-can repeat later in the message with other words between). Three consequences,
-all reasoned rather than measured:
+**(a) Anchor on the X's first — MEASURED, and DOMINATED. Do not build it.**
+The pattern telegraphic German is supposed to write is `XPARISXPARIMX`, not
+`PARISXPARIM`, so the alternative to scanning every `(i, L)` window is to split
+on X and compare adjacent segments — the segmentation fixes the candidate
+lengths and the length loop disappears. `eval/doubling_anchored_probe.py`
+measures the three predictions this entry used to carry.
 
-- *Cost.* The present scan is ~`N × 11` window comparisons — about 1650 on a
-  150-letter message. Telegraphic German runs ~6% X, so the same message holds
-  ~9 X's and ~9 adjacent segment pairs. Roughly **two orders of magnitude
-  cheaper**.
-- *Shorter words become viable*, which is the real prize. `L ≥ 6` is a threshold
-  forced by the **unanchored** scan's chance rate, not by anything linguistic:
-  the table above shows `len≥4, mm≤1` reaching 48% of messages but at a 0.355%
-  null. Two flanking X's are two extra constraints at ~1/16 each in telegraphic
-  text, so anchoring should cut that null by ~250×, making `L = 4` or `5`
-  affordable. Measure the anchored null before trusting the factor.
-- *Recall is not the obstacle.* The flanking measurement says 71% both sides,
-  25% left only, 4% right only and **0% neither**, and the left-only cases are
-  largely end-of-message — a boundary segmentation gets for free. So an
-  X-anchored form should lose little or no recall.
+| prediction | verdict |
+|---|---|
+| ~100× cheaper | **true** (133×) — and irrelevant |
+| shorter `L` viable | **true on the null** — nothing to spend it on |
+| little or no recall lost | **false** — and this is the axis that decides it |
 
-The one new fragility: anchoring depends on the **X's themselves** decrypting
-correctly. Irrelevant for this feature's target population, where the climb
-recovers ~100% of letters, but it would matter for any partial-recovery use.
+*1. Cost is true and does not matter.* The scan is 911 window comparisons per
+message; one plugboard climb on the same 151-letter message scores **18 441
+boards × 151 letters = 2.78 M operations**, and the check would run once per
+*converged* board. So the scan is **0.36% of a single climb** and anchoring
+takes that to 0.003%. There is nothing on this axis to win.
+
+*2. The null does fall, but the premise was wrong.* Anchoring cuts the chance
+rate ~100× where it can be measured (`L≥3`: 4.765% → 0.045%; `L≥4`: 0.495% →
+0.005%). But `L ≥ 6` was never forced by the null — the settled `len≥6, mm≤1`
+already measures **0.000%**, so there was no chance rate to relieve. And under
+anchoring a shorter length adds nothing anyway: 6 → 5 gains **+1** message
+unanchored and **+0** anchored. The binding constraint is the X-enclosure, not
+the length.
+
+*3. Recall is lost, and one-directionally.* At item 5's setting the anchored
+form finds **21 of 54 against 25**; at `mm≤1` the loss runs −3 to −8 across
+`L = 7…3`. The head-to-head the trade was actually about — spend the
+enclosure to buy a shorter word — is **unanchored `L≥6`: 25 messages, 0.000%
+null** against **anchored `L≥5`: 21 messages, 0.000% null**. Worse on recall,
+no better on the null. And the anchored hit set is a strict **subset** at every
+setting tried (0 only-anchored against 4–5 only-unanchored), which is
+structural rather than a sample-size accident: an adjacent equal-length segment
+pair *is* a window hit at that `(i, L)`, so anchoring can only ever remove
+recall.
+
+**Why, and it is the informative part: the doubled word is not always enclosed
+by X.** The four messages between unanchored `L≥6` and anchored `L≥5` are all
+genuine doublings, and none is an end-of-message case:
+
+```
+GEHRG  ...NULLNULLUHRIN[ROMANOVKA]X[ROMANOVKA]GKLAMMXPOLA...
+MNQBH  ...BITTEANTWORTAQX[ZANDERS]X[ZANDERS]VONDORNTELEFON...
+ABGUX  ...NAQMUSTERSEQSZUM[SIOBEN]X[SIEBEN]XEIXSZWOCULLNS...
+ABNAQ  ...NTLLNULLGEGJNDX[WASKOWA]X[WASKTWA]EINSZWOKMSUEDWEST...
+```
+
+Operators run the doubled word together with what follows, so the boundary an
+anchored rule needs is often simply not written. Measured on the corpus, a
+doubling is flanked on **both** sides only **71%** of the time (24 of 34
+instances at `len≥6, mm≤1`; 24% left only, 3% right only, 3% neither) — so this
+entry's own summary that "the real pattern is `X W X W X`" holds for about
+seven doublings in ten, and its recorded "0% neither" is stale at 3% since
+GEHRG joined the corpus.
 
 **(c) Let the SEPARATOR be garbled too — ONE instance, after a withdrawal.**
 The rule requires the separator to be a literal `X`. This note originally cited
@@ -312,13 +400,14 @@ matching would need edit distance rather than Hamming, which is more expensive;
 one confirmed instance is still not a rate.
 
 **(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
-Rough arithmetic, to be confirmed on wall time: the current check is ~11
+Rough arithmetic, to be confirmed on wall time: the check as designed is ~11
 `score_iter`-equivalents, and one restart is ~1250 `score_iter` (inferred from
 `--polish`'s measured ~6500 being 2.8–3.3% of a run at `-R 160`). So **~0.9% of
 a single restart**, less if run once per key rather than per restart, and under
 one `score_iter`-equivalent in the X-anchored form. Placement is what decides
-it: as a **confirmation signal it runs once per converged climb** and is noise;
-put it inside the climb loop, per scored board, and it becomes ~1% on the hot
+it: as a **confirmation signal it would run once per converged climb** and is
+noise; put it inside the climb loop, per scored board, and it becomes ~1% on
+the hot
 path, which this repo treats as a real regression needing a `make bench` A/B
 under both compilers. Note `score_iter` would **not** count it in either case —
 the same blind spot documented for `--polish`'s gain scan — so judge it on wall
@@ -329,6 +418,111 @@ signal**. If it fires the key is right; if it does not, nothing is learned. That
 is exactly the shape item 4 identified as the only defensible one — a non-firing
 cannot dilute a good score the way an additive term does. It is **not** a score
 term, and it cannot help a search failure.
+
+**(e) Fold it into the SCORE as a length-graded bonus behind a z gate —
+DESIGNED AND PARTLY MEASURED; the two constants still need a sweep.** The
+confirmation signal above is one-sided: it identifies the true key when it
+fires and says nothing when it does not. The alternative is to add it to the
+score, so a doubling *helps the true key win* rather than merely flagging it.
+Two parameters:
+
+    gate    apply only to candidates with z > T          (T = 3 tried)
+    bonus   M x [ 5.02 + 1.2*(L-6) ] decades, on the LONGEST doubling
+                 ^ the MULTIPLIER form, not an additive offset -- see below,
+                   that part is settled and does not depend on M
+
+*The slope is determined, not tuned.* Measured Bayes factors over the 54
+authentic decrypts against the closed-form null give a log-likelihood ratio
+**linear in L at +1.2 decades per letter** — which is exactly `log10(B/A) =
+log10(16.4)`, the same factor that sets the null rate. `L = 6` is worth **5.02
+decades** (1e5:1) and `L = 13` worth 13.4. There is nothing to fit in the
+*shape*; only the multiplier `M` and the gate `T` are free.
+
+*Use the longest doubling, not a sum.* Overlapping windows in one doubled word
+are not independent evidence — the `L` and `L-1` hits are the same fact.
+
+*Why a multiplier is needed at all.* At `M = 1` the bonus is correct and
+useless. Against the 15 recorded scoring failures (`results-scoring-failure.
+json`) — of which **only 8 actually lose to a wrong key**, the other 7 being
+classed as failures purely by the `√(2 ln K)` bar — the gaps run **4.8 to 69.4
+decades**, median ~20, while an `L = 6` doubling is worth 5. So the honest
+weight closes the smallest gap in the set and nothing else:
+
+| `M` | scoring failures rescued (of 8) | P(a wrong key steals a win) |
+|---:|---:|---|
+| 1 | 1 | 1 in 1 500 000 |
+| 2 | 3 | 1 in 190 000 |
+| 3 | 4 | 1 in 28 000 |
+| **5** | **7** | **1 in 1 000** |
+| 8 | 7 | 1 in 300 |
+| 14 | 8 | 1 in 35 |
+
+at `T = 3` over a 10⁷-key sweep. **`M = 5` is the knee** — 8 buys no extra
+rescue for 3× the risk, and 14 (the only value that takes HOEPG's 69-decade
+gap) is plainly too hot.
+
+*The gate is what makes any of this affordable.* Without it, `M = 5` puts 11%
+of currently-successful breaks within reach of a wrong key carrying a chance
+doubling. With `z > 3` a wrong key needs **three** things at once: clear the
+gate (13 498 of 10⁷), carry a chance doubling (4.9e-6 of those — 0.067 per
+sweep), and land within 25 decades of the truth, which sits at a median z of
+10.0 with σ_total ≈ 12.6 decades.
+
+*A MULTIPLIER is the right shape, and that is settled independently of its
+value.* The obvious alternative is to keep the honest slope and add a fixed
+offset — `calibrated(L) + C` — or to drop the length term entirely and use a
+flat constant. The three differ only in *which lengths* they over-weight, and
+the null decides between them: it falls by a factor `B/A ≈ 16` per letter, so
+**94% of chance doublings are `L = 6`** and the false-positive exposure is set
+almost entirely by `bonus(6)`. Hold that fixed and the forms separate:
+
+| form | L=6 | L=8 | L=10 | rescued of 8 | risk |
+|---|---:|---:|---:|---:|---|
+| **`M × calibrated`, M = 5** | 25.1 | 37.1 | 49.1 | **7** | 1 in 1 038 |
+| `calibrated + C`, C = 20.1 | 25.1 | 27.5 | 29.9 | 6 | 1 in 1 032 |
+| flat constant 25.1 | 25.1 | 25.1 | 25.1 | 5 | 1 in 1 038 |
+
+**The multiplier wins because its extra weight lands where the null is thin.**
+A chance `L = 10` doubling is ~10⁵ times rarer than a chance `L = 6` one, so
+scaling the whole curve buys a large bonus at long lengths for almost no risk;
+an offset hands long and short doublings the same boost and therefore spends
+its budget at the one length where chance actually competes. It matters here
+because the hard cases *have* long doublings — the two gaps above 27 decades
+are `L = 10` and `L = 8`, which the offset cannot reach without raising
+`bonus(6)` and paying at the crowded end. (A fixed `+25` on top of the
+calibrated curve does rescue 7, but at **1 in 487** — twice the risk of
+`M = 5` for the same result.)
+
+Two qualifications, both pointing the same way. It is **8 cases**, so "7 vs 6
+vs 5" is one or two messages; the *mechanism* is robust and the counts are not.
+And the ordering leans on the length distribution of those 8 — if real failures
+at operational length carry shorter doublings, the multiplier's advantage
+shrinks toward the offset's, which is the same population question the sweep
+has to settle anyway.
+
+*Both constants are single points, not optima — sweep them jointly before
+building anything.* `T` and `M` trade against each other (a higher gate buys a
+bigger multiplier), so a 1-D scan of either is misleading. Four things the
+sweep has to get right, none of which the numbers above do:
+
+- **The risk side needs real high-scoring wrong candidates.** The stored
+  artifact holds 48 **random** wrong keys per message; the keys that can steal
+  a win are the *top-scoring* ones in a large sweep. The table above reaches
+  them by scaling with a Gaussian best-of-N, and `--confidence` has already
+  measured the real upper tail as ~3.4× fatter — so **1 in 1 000 is probably
+  nearer 1 in 300**. Generate the tail, do not extrapolate it.
+- **Do not choose and validate on the same 8 failures.** Eight is enough to
+  rank `M` coarsely and not enough to fit two constants; a held-out split, or a
+  fresh run of `scoring_failure_probe.py` at a different seed, is the minimum.
+- **Operational length is untested.** All 8 losses are L = 60–100 excerpts with
+  deliberately manufactured failures. Gaps should shrink at L = 150+, which
+  would lower the `M` needed — the sweep should span length, and length may
+  matter more than either constant.
+- **The independence assumption is unmeasured.** The risk arithmetic multiplies
+  P(high score) by P(doubling) as if they were independent, but a high-scoring
+  wrong key is more German-like and so plausibly X-richer than the 2.41%
+  population average. Measure the doubling rate *as a function of z* rather
+  than assuming it flat.
 
 *Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
 sidesteps the failure above entirely, because it works on the **ciphertext** and
@@ -405,6 +599,8 @@ to ask one new question of the same data; this one should not. `REUSE=1` re-runs
 the analysis without re-climbing.
 
 → `eval/doubling_probe.py`, `eval/doubling_climb_probe.py`,
+`eval/doubling_null_probe.py` (the null, three ways),
+`eval/doubling_anchored_probe.py` (note (a), measured down),
 `eval/results-doubling.txt`, `eval/results-doubling-climb.txt`; item 4 above;
 `archived/cribs.md` §4.2a.
 
