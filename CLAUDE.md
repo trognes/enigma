@@ -1100,6 +1100,60 @@ are read from a **data directory** (filenames built as
   on the shipped library the cribs actually present in the message are the ones
   scoring ~0.03–0.07×, so the column guides the reader rather than gating a
   crib.
+- `--double-word L` **report a converged climb whose decrypt carries a doubled
+  word** of `L`+ letters around an X — `ENGELMANN X ENGELMANN`, telegraphic
+  German's own error correction (off by default; needs `-c` and `--confidence`,
+  which is what defines z). Fires after each converged climb and once after
+  `--polish`, on any key clearing **z ≥ 3** — the raw sigma count over the null,
+  *not* the margin the lines print. Prints the ordinary progress line with the
+  text preview replaced by `>> <len> <WORD>`, so the columns stay aligned and
+  the marker is greppable in an overnight log.
+  - **A CONFIRMATION SIGNAL, never a score term, and that is the whole point.**
+    It enters no ranking, so a false positive costs a second look and cannot
+    promote a wrong key. The *score-bonus* form of the same evidence
+    (`ENHANCEMENTS.md` 5(e)) was swept over 140 genuine 17 576-key sweeps and
+    **measured down**: a bonus applied after the climb needs a trial where the
+    climb recovered the plaintext and the score still lost, and there were
+    **zero** — in 35 of 35 recovered trials the true key was already top,
+    because the climb is steered by the same score the bonus would adjust.
+    Reporting has no such dependency: it fires on the key that *is* right.
+  - **The z gate comes first, and that is what makes it free.** Computing z is
+    two flops on a value already in hand; only ~0.56% of keys clear z > 3, and
+    only those pay the decode and the scan. Ordering it the other way would
+    decode every converged climb. Measured `make bench BASE=origin/dev`: no
+    regression, and the `crib`/`search` tiers cannot be affected at all since
+    they run without `-c`.
+  - **`L` is the cheap lever; the gate is not.** Chance reports fall ~16× per
+    extra letter (the null falls by `B/A ≈ 16.4`), so a full 230 M-key rotor
+    sweep expects **~6 spurious reports at `L = 7`** against ~90 at `L = 6`.
+    Loosening the gate to z > 2 quadruples them; tightening to z > 4 throws the
+    true key out with the chaff, since a true key whose climb has recovered the
+    plaintext sits at **z = 7…16** — nowhere near the gate — while the keys
+    below z = 3 are the ones whose climb failed, where there is no doubling to
+    find anyway. See `ENHANCEMENTS.md` item 5(e) for the table.
+  - **One mismatched letter is allowed**, because that is what the traffic does
+    rather than as a safety margin: the Nr 173 form carries `SCUHNACHER` against
+    `SCHUHMACHER` (doubled words genuinely differ), and a garble corrupts one
+    copy and not the other — Enigma has no diffusion, so one wrong ciphertext
+    letter damages exactly one plaintext letter.
+  - **A doubling is a TRANSLATION by `len+1`, not a reflection.** `W[i]` sits at
+    `pt[j-len+i]` and `V[i]` at `pt[j+1+i]`, so the pair is `(y, y+len+1)`.
+    Extending *outward* from the separator compares `W` reversed against `V` and
+    matches only palindromes — the first implementation did exactly that and
+    reported nothing on `ENGELMANN X ENGELMANN`. `find_doubling()` slides a
+    window over the shift instead: longest length first, so the first hit is the
+    answer, O(n²) worst case rather than the O(n³) of testing every length at
+    every X. Cross-checked against `eval/`'s Python reference on 4 000 random
+    strings, 0 mismatches, offsets included.
+  - **A report is NOT a new best**, and the settings echo says so: these lines
+    fire on any key past the gate whatever the search's high-water mark, which
+    is exactly the point — the true key can be reported while another board
+    still leads on score. Identical consecutive repeats are collapsed (one call
+    per converged restart plus one after `--polish` would otherwise print the
+    same row `-R`+1 times); display-only, under the progress mutex, so which
+    candidate WINS is untouched.
+  - **A one-key space has no null**, so `--confidence` falls back to raw scores
+    and the report stays silent. Give it a keyspace bigger than the sample.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are

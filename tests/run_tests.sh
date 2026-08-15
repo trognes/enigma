@@ -1397,6 +1397,60 @@ tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -A 1000)
 check "--tune-phase rejects -A" \
   "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -A')" "1"
 
+# --double-word L: report a converged climb whose decrypt carries a doubled word
+# around an X ("ENGELMANN X ENGELMANN"), telegraphic German's own error
+# correction.  A CONFIRMATION signal -- it never enters a ranking -- so the
+# properties are that it fires on a real doubling at the true key, that it
+# respects L, and that it is refused without the two things that define it (-c,
+# because there must be a converged climb, and --confidence, because that is
+# what defines z).
+#
+# The board is PINNED with -s plus --no-plug on every other letter, so the climb
+# has nothing to recover and one small sweep suffices: the property under test is
+# the detector and its gate, not plugboard recovery.  Keeping the key space at
+# 676 rather than 26 is not decoration -- z is measured against a null sampled
+# from that space, and the true key cannot stand 3 sd clear of a space barely
+# bigger than the sample.
+dw_pt="SNXHAUPTSTUFXOBERSCHARFXENGELMANNXENGELMANNXZURUEQXUSTUFXERBXERBXWIRDVONMIREINGEWIESENFAHREHEUTEZURARMEEXKOMMEMORGENZURXDIVISION"
+dw_free="GHIJKLMNOPQRSTUVWXYZ"
+dw_ct=$(run "$dw_pt" -u B -w 231 -r AAA -g QMW -s "AB CD EF")
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+dw_run() { printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 \
+           -r AAA -g "Q.." -R 1 -T "$2" -s "AB CD EF" --no-plug "$dw_free" \
+           --confidence 32 --double-word "$1" 2>&1 >/dev/null; }
+dw_out=$(dw_run 6 1)
+check "--double-word reports the doubled word and its length" \
+  "$(printf '%s' "$dw_out" | grep -c '>> 9 ENGELMANN')" "1"
+check "--double-word report carries the true rotor key" \
+  "$(printf '%s' "$dw_out" | grep '>> 9 ENGELMANN' | awk '{ print $2, $3, $4 }')" \
+  "B231 AAA QMW"
+# L is the whole cheap lever (chance reports fall ~16x per extra letter), so a
+# threshold above the longest real doubling must silence it completely.
+# Anchored on the LINE shape, not on the marker alone: the settings echo says
+# 'marked ">>" below', so a bare '>>' grep counts the echo and can never read 0.
+check "--double-word L above the doubling is silent" \
+  "$(dw_run 10 1 | grep -cE '>> [0-9]+ [A-Z]')" "0"
+# Display-only: -T changes thread timing, not what is found.
+check "--double-word is reported under -T 4 as well" \
+  "$(dw_run 6 4 | grep -c '>> 9 ENGELMANN')" "1"
+# Identical repeats are collapsed (one call per converged restart plus one after
+# --polish would otherwise print the same row R+1 times).
+check "--double-word collapses an identical repeat" \
+  "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
+     -g "Q.." -R 4 -T 1 -s "AB CD EF" --no-plug "$dw_free" --polish \
+     --confidence 32 --double-word 6 2>&1 >/dev/null | grep -c '>> 9 ENGELMANN')" \
+  "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english --double-word 6 2>&1 >/dev/null)
+check "--double-word needs -c" \
+  "$(printf '%s' "$dw_err" | grep -c 'need the plugboard hill-climb')" "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --double-word 6 2>&1 >/dev/null)
+check "--double-word needs --confidence" \
+  "$(printf '%s' "$dw_err" | grep -c 'need a null to gate on')" "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-word 999 2>&1 >/dev/null)
+check "--double-word rejects a length past half the message limit" \
+  "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "1"
+
 # --confidence N: sample the null and report the winner's margin over chance.
 # The property under test is DISCRIMINATION, so every check comes in a pair -- a
 # ciphertext with real plaintext behind it against one with random letters

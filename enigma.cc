@@ -254,6 +254,27 @@ static double opt_cascade_gate;
    cascade found nothing). --polish turns it on for the single best-board finisher. */
 static int opt_cascade3;
 static int opt_polish;
+/* --double-word L: report, on stderr, every converged climb whose score clears
+   the z gate below AND whose decrypt carries a doubled word of at least L
+   letters around an X separator. A CONFIRMATION SIGNAL, not a score term: it
+   never changes a ranking, so nothing it does can promote a wrong key. That is
+   the one shape ENHANCEMENTS.md item 5 found defensible -- the score-bonus form
+   (5(e)) was swept and measured down, because a bonus applied after the climb
+   needs a trial where the climb recovered the plaintext and the score still
+   lost, and in 140 genuine sweeps there were none. Reporting has no such
+   dependency: it fires on the key that IS right and stays silent otherwise.
+   0 = off. */
+static int opt_double_word;
+/* The z the report gates on -- the raw sigma count over the --confidence null,
+   NOT the margin the progress lines print (margin = z - sqrt(2 ln K)). Fixed at
+   3 because that is where it was measured: at z > 3 a full 230M-key rotor sweep
+   is expected to throw up ~6 spurious L>=7 doublings, and loosening to z > 2
+   quadruples that while rescuing nothing extra. Tightening is the wrong lever
+   too -- the true key sits at z = 7..16 once its climb has recovered the
+   plaintext, so the gate is nowhere near it, and the trials below 3 are the ones
+   where the climb failed and there is no doubling to find. The cheap lever is L:
+   the chance rate falls ~16x per extra letter. */
+static const double double_word_z = 3.0;
 /* --crib-rerank / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
@@ -2365,6 +2386,34 @@ static void format_plugboard(machine & m, char (&s)[3 * 13])
   *p = 0;
 }
 
+/* The first column of a progress line, shared by showconfig and the
+   --double-word report so the two can never disagree about what it means.
+
+   Under --confidence it is the MARGIN over the whole search's chance best, not
+   the raw score: a raw score cannot answer "is this good yet?", and a bare z
+   would flatter the early lines (see the g_null_* comment). The header says
+   "Margin" to match, so a saved log stays self-describing. --dump-all keeps raw
+   scores as the machine-readable form.
+
+   The column is 8 wide and the whole line is budgeted to land on 80, so a margin
+   that does not fit must not be printed as-is -- it would shift every column
+   after it. A real margin is well under 100 (the widest measured is +21), so the
+   %e fallback only fires on a null too degenerate for calibrate_null's guard to
+   have caught, and it keeps the field both readable and exactly 8. */
+static void format_score(double score, char (&buf)[16])
+{
+  if (g_null_sd > 0.0)
+    {
+      snprintf(buf, sizeof(buf), "%+.2f",
+               (score - g_null_mu) / g_null_sd - g_null_zk);
+      if (strlen(buf) > 8)
+        snprintf(buf, sizeof(buf), "%+.1e",
+                 (score - g_null_mu) / g_null_sd - g_null_zk);
+    }
+  else
+    snprintf(buf, sizeof(buf), "%.4f", score);
+}
+
 void showconfig(machine & m, double score)
 {
   char w[8], r[8], g[8], s[3 * 13], text[preview_max + 1];
@@ -2383,28 +2432,8 @@ void showconfig(machine & m, double score)
     text[i] = num2char(decode_at(steck, rows, num_ciphertext, i));
   text[n] = 0;
 
-  /* Under --confidence the first column is the MARGIN over the whole search's
-     chance best, not the raw score: a raw score cannot answer "is this good
-     yet?", and a bare z would flatter the early lines (see the g_null_*
-     comment). The header says "Margin" to match, so a saved log stays
-     self-describing. --dump-all keeps raw scores as the machine-readable
-     form. */
-  char scorebuf[16];
-  if (g_null_sd > 0.0)
-    {
-      snprintf(scorebuf, sizeof(scorebuf), "%+.2f",
-               (score - g_null_mu) / g_null_sd - g_null_zk);
-      /* The column is 8 wide and the whole line is budgeted to land on 80, so a
-         margin that does not fit must not be printed as-is -- it shifts every
-         column after it. A real margin is well under 100 (the widest measured is
-         +21), so this only fires on a null too degenerate for calibrate_null's
-         guard to have caught, and %e keeps it both readable and exactly 8. */
-      if (strlen(scorebuf) > 8)
-        snprintf(scorebuf, sizeof(scorebuf), "%+.1e",
-                 (score - g_null_mu) / g_null_sd - g_null_zk);
-    }
-  else
-    snprintf(scorebuf, sizeof(scorebuf), "%.4f", score);
+  char scorebuf[16];   /* margin under --confidence; see format_score */
+  format_score(score, scorebuf);
   if (opt_crib_text)
     {
       char at[16];   /* wide enough for any int, so no truncation warning */
@@ -2568,6 +2597,7 @@ double score_iter(machine & m)
 /* Defined after best_result (below the search structs); climbs call it on every
    accepted move to echo intermediate plugboard improvements. */
 static void report_climb_progress(machine & m, double score);
+static void report_double_word(machine & m, double score);
 
 template<bool EX>
 static bool try_repair(machine & m, double cur_score)
@@ -4166,6 +4196,7 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
     score = tune_phase(m, & rng, score);
   if (opt_dump_all)
     dump_all(m, score);
+  report_double_word(m, score);
   return score;
 }
 
@@ -4559,6 +4590,175 @@ static void progress_line(best_result & b, machine & m, double score)
       showconfig_header();
     }
   showconfig(m, score);
+}
+
+/* --double-word: longest W X V in `pt[0..n)` with |W| = |V| = len >= minlen, no X
+   inside either half, and at most ONE mismatched letter between the halves.
+   Returns len (0 if none) and sets *at to W's offset.
+
+   Telegraphic German doubles an important word around the X separator --
+   "ROMANOWO X ROMANOWO" -- as the operator's own error correction, so its
+   presence in a decrypt is evidence the decrypt is real German rather than a
+   plugboard climb's high-scoring noise.
+
+   ONE mismatch is tolerated because that is what the traffic does, not as a
+   safety margin: the message form for Nr 173 carries SCUHNACHER against
+   SCHUHMACHER (a keyboard slip, doubled words genuinely differ), and a channel
+   garble corrupts one copy and not the other. Enigma has no diffusion, so a
+   single wrong ciphertext letter damages exactly one plaintext letter -- an
+   exact-match rule would throw away hits the operator actually sent.
+
+   The LONGEST match is reported rather than a count: the len and len-1 windows
+   inside one doubled word are the same fact, not independent evidence.
+
+   Linear per X rather than quadratic: extend outward from the separator, one
+   pair at a time, and stop at the second mismatch or the first X. The obvious
+   "try every length at every X" form is O(n^3) and would cost more than the
+   climb it is reporting on. */
+static int find_doubling(const char * pt, int n, int minlen, int * at)
+{
+  /* Longest first, so the first hit is the answer and the scan stops. */
+  for (int len = (n - 1) / 2; len >= minlen; len--)
+    {
+      /* A doubling is a TRANSLATION by len+1, not a reflection: W[i] sits at
+         pt[j-len+i] and V[i] at pt[j+1+i], so the pair is (y, y+len+1) for
+         every y in W. Extending OUTWARD from the separator instead compares W
+         reversed against V, which matches only palindromes -- the first version
+         of this did exactly that and reported nothing on ENGELMANN X
+         ENGELMANN. */
+      const int d = len + 1;
+      int nbad = 0, nmis = 0;   /* over the sliding window of len pairs */
+      for (int y = 0; y + d < n; y++)
+        {
+          if ((pt[y] == 'X') || (pt[y + d] == 'X'))
+            nbad++;
+          if (pt[y] != pt[y + d])
+            nmis++;
+          if (y >= len)
+            {
+              const int z = y - len;
+              if ((pt[z] == 'X') || (pt[z + d] == 'X'))
+                nbad--;
+              if (pt[z] != pt[z + d])
+                nmis--;
+            }
+          /* The window now holds the len pairs ending at y, i.e. W = pt[y-len+1
+             .. y] and V = pt[y+2 .. y+d], with the separator at j = y+1. */
+          if (y >= len - 1)
+            {
+              const int j = y + 1;
+              if ((pt[j] == 'X') && (nbad == 0) && (nmis <= 1))
+                {
+                  * at = j - len;
+                  return len;
+                }
+            }
+        }
+    }
+  return 0;
+}
+
+/* --double-word L: report a converged climb whose score clears the z gate AND
+   whose decrypt carries a doubling of at least L letters.
+
+   A CONFIRMATION SIGNAL, never a score term. It cannot promote a wrong key
+   because it does not enter any ranking -- so unlike the score-bonus form
+   (ENHANCEMENTS.md 5(e), swept and measured down) a false positive costs the
+   reader a second look and nothing else, and a non-firing says nothing.
+
+   THE Z GATE COMES FIRST, and that is what makes it free. Computing z is two
+   flops on a value already in hand; only ~0.56% of keys clear z > 3, and only
+   those pay the decode and the scan. Ordering it the other way would decode
+   every converged climb.
+
+   The line is the ordinary progress line with the text preview replaced by
+   ">> <len> <WORD>", so the columns stay aligned with everything else in the
+   log and the marker makes it greppable. It is NOT a new-best announcement:
+   these fire on any key past the gate, whatever the search's high-water mark,
+   which is the whole point -- the true key can be reported while some other
+   board still leads on score.
+
+   Display-only, under the same mutex as the progress lines, so which lines
+   appear is thread-timing dependent exactly as the existing echo is, and which
+   candidate WINS is untouched. */
+static void report_double_word(machine & m, double score)
+{
+  if (opt_double_word <= 0)
+    return;
+  /* A degenerate null (a one-key space) leaves g_null_sd at 0 and z undefined;
+     calibrate_null already falls back to raw scores there, so there is nothing
+     to gate on and the report stays silent rather than dividing by ~1e-15. */
+  if (g_null_sd <= 0.0)
+    return;
+  if (((score - g_null_mu) / g_null_sd) < double_word_z)
+    return;
+
+  /* Decode in full from the machine's CURRENT board: m.plaintext is stale here
+     on every path but --tune-phase (the scorers fuse the decode and never write
+     it back), the same reason showconfig decodes its preview on the fly. */
+  char pt[maxlen + 1];
+  const unsigned char * steck = m.steckerbrett;
+  const unsigned char * const * rows = m.rows;
+  for (int i = 0; i < textlength; i++)
+    pt[i] = num2char(decode_at(steck, rows, num_ciphertext, i));
+  pt[textlength] = 0;
+
+  int at = 0;
+  const int len = find_doubling(pt, textlength, opt_double_word, & at);
+  if (len <= 0)
+    return;
+
+  char w[8], r[8], g[8], sb[3 * 13], scorebuf[16];
+  format_key(m, w, r, g);
+  format_plugboard(m, sb);
+  format_score(score, scorebuf);
+  /* len <= textlength/2 <= maxlen/2, so the word always fits. */
+  char word[maxlen / 2 + 2];
+  memcpy(word, pt + at, static_cast<size_t>(len));
+  word[len] = 0;
+  char text[maxlen / 2 + 16];
+  snprintf(text, sizeof(text), ">> %d %s", len, word);
+
+  /* Collapse an identical repeat. One rotor key gets a call per converged
+     restart plus one after --polish, and restarts that reach the same board
+     produce the same line, so the true key would otherwise print -R+1 identical
+     rows. Only an EXACT repeat of the PREVIOUS line is dropped -- a different
+     key, board or word always prints -- and the suppression is best-effort: two
+     threads interleaving can still let one through. Display state only, so it
+     cannot affect which candidate wins. */
+  static char last[256];
+
+  char line[256];
+  if (opt_crib_text)
+    {
+      char a[16];
+      snprintf(a, sizeof(a), "%d", g_crib_stop_shown + 1);
+      snprintf(line, sizeof(line), progress_fmt(), scorebuf, w, r, g, sb, a,
+               text);
+    }
+  else
+    snprintf(line, sizeof(line), progress_fmt(), scorebuf, w, r, g, sb, text);
+
+  best_result * bp = g_progress;
+  /* bp is null only outside a search; the --polish call site runs inside one
+     (bruteforce sets g_progress before the workers and clears it at the end),
+     so the lock is taken there too and cannot deadlock -- nothing holds the
+     mutex across either call site. `last` is read and written under it. */
+  std::unique_lock<std::mutex> lock;
+  if (bp != nullptr)
+    lock = std::unique_lock<std::mutex>(bp->mutex);
+  if (strcmp(line, last) == 0)
+    return;
+  snprintf(last, sizeof(last), "%s", line);
+  sweep_progress_clear();   /* the \r line must not be printed over */
+  if (! g_header_shown)
+    {
+      g_header_shown = true;
+      if (bp != nullptr)
+        bp->header_shown = true;
+      showconfig_header();
+    }
+  fputs(line, stderr);
 }
 
 /* Echo an intermediate plugboard improvement from inside a climb: the same
@@ -6554,6 +6754,13 @@ static double bruteforce(char * result, bool allow_empty)
            avenue of the saturation exact-loss, archived/PERFORMANCE.md 4.10). */
         int fin_cap = opt_stages[opt_nstages - 1].cap;
         double s = hillclimb<false>(m, fin_cap);
+        /* "after climb and polish": the per-restart call in hillclimb_one covers
+           the climbs, this covers the one board the finisher touched. Reported
+           on the finished board whether or not it beat the pre-polish best --
+           the finisher's own output is what a reader wants checked, and a board
+           that failed to improve is still a board worth a look if it carries a
+           doubling. */
+        report_double_word(m, s);
         opt_cascade = save_gf;
         opt_cascade3 = save_gf3;
         opt_cascade_gate = save_gate;
@@ -7123,6 +7330,27 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
+  fprintf(out, "  %-24s %s\n", "--double-word L",
+          "Report every converged climb scoring z >= 3 whose");
+  fprintf(out, "  %-24s %s\n", "",
+          "decrypt holds a word of L+ letters doubled around");
+  fprintf(out, "  %-24s %s\n", "",
+          "an X (\"ROMANOWO X ROMANOWO\"), telegraphic German's");
+  fprintf(out, "  %-24s %s\n", "",
+          "own error correction. One mismatched letter is");
+  fprintf(out, "  %-24s %s\n", "",
+          "allowed, since real doublings differ and garbles");
+  fprintf(out, "  %-24s %s\n", "",
+          "hit one copy. Marked \">>\"; a CONFIRMATION only --");
+  fprintf(out, "  %-24s %s\n", "",
+          "it never enters a ranking, so it cannot promote a");
+  fprintf(out, "  %-24s %s\n", "",
+          "wrong key, and a report is not a new best. Chance");
+  fprintf(out, "  %-24s %s\n", "",
+          "reports fall ~16x per extra letter: L=7 expects ~6");
+  fprintf(out, "  %-24s %s\n", "",
+          "in a 230M-key sweep, L=6 about 90. Needs -c and");
+  fprintf(out, "  %-24s %s\n", "", "--confidence (which defines z) [off]");
   fprintf(out, "  %-24s %s\n", "--crib TEXT",
           "Known plaintext: rotor settings that cannot produce");
   fprintf(out, "  %-24s %s\n", "", "it are rejected unscored, and with -c the plugs");
@@ -7277,6 +7505,15 @@ void show_settings()
             "a score\n",
             opt_confidence, opt_hillclimb ? ", each climbed" : "");
 
+  /* The report fires on any key past the gate, not only on a new best, so a
+     reader who does not know it is on would misread its lines as the search
+     having improved. Say what marks them and what the gate was. */
+  if (opt_double_word > 0)
+    fprintf(stderr, "Doubleword: report doublings of %d+ letters at z >= %.0f "
+            "(--double-word)\n"
+            "            marked \">>\" below; a report is NOT a new best\n",
+            opt_double_word, double_word_z);
+
   /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
      ~10pp of exact recovery at K=2 on telegraphic German, archived/PERFORMANCE.md §7.11), so a
      run that used it must say so: otherwise a saved log is indistinguishable from an
@@ -7398,6 +7635,7 @@ int main(int argc, char * * argv)
   opt_cascade_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
   opt_cascade3 = 0;
   opt_polish = 0;
+  opt_double_word = 0;
   opt_crib_rerank = nullptr;
   opt_crib_weight = 0.5;
   opt_crib = 0;
@@ -7431,7 +7669,8 @@ int main(int argc, char * * argv)
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
-         OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE };
+         OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
+         OPT_DOUBLEWORD };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -7487,6 +7726,7 @@ int main(int argc, char * * argv)
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
       { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
+      { "double-word",    required_argument, nullptr, OPT_DOUBLEWORD },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -7597,6 +7837,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_CONFIDENCE:
           opt_confidence = atoi(optarg);
+          break;
+        case OPT_DOUBLEWORD:
+          opt_double_word = atoi(optarg);
           break;
         case OPT_NOPLUG:
           alltoupper(optarg);
@@ -7977,6 +8220,22 @@ int main(int argc, char * * argv)
     fatal("Illegal pre-filter percentage (-F N% must be 0 < N <= 100)");
   if (((opt_prefilter > 0) || (opt_prefilter_frac > 0.0)) && (! opt_hillclimb))
     fatal("The key pre-filter (-F) needs the plugboard hill-climb (-c)");
+
+  /* --double-word reports converged CLIMBS gated on z, so it needs both halves:
+     -c for something to converge, and --confidence for the null that defines z.
+     Neither is defaultable -- a bare rotor scan has no plugboard to recover, and
+     silently sampling a null would spend real time (each sample is a whole climb
+     under -c) on a run that never asked for it. */
+  if (opt_double_word < 0)
+    fatal("Illegal doubling length (--double-word must be >= 1)");
+  if (opt_double_word > maxlen / 2)
+    fatal("Illegal doubling length (--double-word exceeds half the maximum "
+          "message length)");
+  if ((opt_double_word > 0) && (! opt_hillclimb))
+    fatal("Doubling reports (--double-word) need the plugboard hill-climb (-c)");
+  if ((opt_double_word > 0) && (opt_confidence <= 0))
+    fatal("Doubling reports (--double-word) need a null to gate on: add "
+          "--confidence 256");
 
   /* Simulated annealing is an alternative plugboard optimiser, so it needs -c; the
      move budget must be non-negative. */
