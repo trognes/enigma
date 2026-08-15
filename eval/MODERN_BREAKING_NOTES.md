@@ -382,6 +382,20 @@ of
 11.5 at L=167** with 95% of messages breakable; this message at L=101 sits at
 2.05. Length is doing all the work, exactly as that model predicts.
 
+**Can a known-word or X-segmentation bonus rescue it? On THIS message, yes — and
+that turns out to be why the idea fails.** The natural response to a scoring
+failure is to score what a human reader would see: whole words, and the X word
+separators that telegraphic German is full of. On Nr 214 it works spectacularly,
+lifting the true key from z = 0.90 to **11.21**, across the 6.15 bar. But this
+message is an outlier twice over — it is unusually X-rich (0.119 against a
+corpus mean of 0.060), *and* its climb already recovers readable plaintext at
+the true key, which is precisely what makes a word bonus have anything to find.
+Measured across all 46 authentic messages with a known key, 18 of the 21 that
+sit **below** the bar have no words in the true-key decrypt at all, so the
+feature is flat exactly where it is needed and the net gain is one message.
+Do not generalise from this section to the scorer. → `ENHANCEMENTS.md` item 4;
+`eval/word_segment_probe.py`.
+
 ### 5g. Four more messages recovered from the 01 Aug 2026 source pages
 
 The **German Army Messages** page (`cryptocellar.org/bgac/army-messages.html`,

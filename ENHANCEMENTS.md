@@ -95,17 +95,68 @@ best thing to add to the challenge set.
 → `eval/MODERN_BREAKING_NOTES.md` §5a/§5b; `CLAUDE.md` "The unknown-key break
 rate", `--confidence`.
 
+**4. Known-word and X-segmentation bonuses — MEASURED DOWN; do not add them to
+the score.** The idea: after each rotor setting's climb, score the candidate
+plaintext for whole known words and for the X word-separator rate, and add that
+as a bonus. It is what a human reader does with a decrypt the quadgram model has
+undervalued, and it looked strong — on FTNBK, the message that prompted it, the
+combination lifts the true key from **z = 0.90 to 11.21**, across the 6.15 bar a
+160M-key sweep sets.
+
+*It does not survive the corpus.* Measured over all 46 authentic messages with a
+known key (48 wrong keys each as a per-message null, board hidden on both arms,
+`-R 32`), the median gain is +1.64 z — and that median is the wrong summary.
+Split by whether the message was already breakable on quadgrams alone, it
+inverts:
+
+| | n | median gain | helped |
+|---|---:|---:|---:|
+| already above the bar | 25 | **+7.75** | 20 of 25 |
+| **below** the bar | 21 | **−0.33** | 7 of 21 |
+
+`corr(quad z, gain) = +0.40`. The net effect on breakability is **one message**,
+25 → 26 of 46, with a flip in each direction (up FTNBK, FDTZP; down RDNAQ).
+
+*The mechanism is what closes it, not the size of the effect.* Among the 21
+below-bar messages, **18 have a word-feature z of about −0.2** — the "no words
+found at all" floor. The word bonus only fires once the climb has *already*
+recovered readable plaintext; where the climb fails at the true key, the
+true-key decrypt is as wordless as the wrong-key ones. So this is not a
+weighting problem to be tuned out: no reweighting extracts signal from a feature
+that is flat across the null and the truth alike. The regressions are the
+mirror — an equal-weight sum of standardised features adds two near-noise terms
+to a quad z of 36, inflating the composite's own sd and *lowering* z (−5.38,
+−5.26, −4.51 on the three strongest messages).
+
+*FTNBK is real but narrow*, and worth knowing as a class: its climb **does**
+produce readable plaintext at the true key, and the pathology is specifically
+that quadgrams will not reward what it recovered. Across the corpus that shape
+is one clean case plus FDTZP (already at 5.29 and needing only a nudge). A
+bounded opt-in *rescue* — re-rank the top-N converged boards on known words,
+cost capped, failure mode "no change" — is the only form still defensible, and
+it is close to
+`--crib-rerank`, which is already measured down for the same reason.
+
+*The general lesson, worth more than the result:* for anything whose value
+depends on the search having **partly succeeded**, report the split by baseline,
+never the median. Such a feature is necessarily strongest in the half where it
+cannot change the outcome.
+
+→ `eval/word_segment_probe.py` (the reproducer; `summarise()` re-reads the saved
+JSON so the reading can be revisited without repeating the climbs),
+`eval/results-word-segment.txt` / `.json`.
+
 ## Keyspace reductions
 
 The two-notch collapse that used to head this section has **shipped** and is
 no longer an issue: `CLAUDE.md` "Two-notch wheels" and the CHANGELOG carry it.
 
-**4. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
+**5. Does the middle-wheel collapse's saving convert?** The §7.12 reduction is
 3–5× at short lengths and the compute is saved; whether spending it on `-R`
 raises recovery is untested. The same question was asked of `--ring-stride` and
 answered "a wash". → `archived/IMPROVEMENTS.md` §2.
 
-**5. A `--ring-stride` for the middle wheel — premise measured, not built.**
+**6. A `--ring-stride` for the middle wheel — premise measured, not built.**
 Striding `ring1` costs 3.1% (K=2) / 5.1% (K=3) of the true `offset1`, roughly
 competitive with the right-wheel stride, and the two compose multiplicatively.
 **Read the failed attempt first**: striding `ring1` directly measured 2.4×
@@ -114,7 +165,7 @@ competitive with the right-wheel stride, and the two compose multiplicatively.
 produces — which the measured numbers do **not** cover. →
 `archived/IMPROVEMENTS.md` §2.
 
-**6. Read the right wheel's phase off one decrypt instead of searching it —
+**7. Read the right wheel's phase off one decrypt instead of searching it —
 signal confirmed, does not localise yet.** Shifting the right wheel's phase
 (ring2 and start2 together by `δ`) leaves `offset2` and so the whole
 substitution untouched; only the notch timing moves, displacing the middle wheel
@@ -153,17 +204,17 @@ Detail for all three: `archived/cribs.md` §13 — which also carries the
 X-separator variant, dropped here for want of confidence in the premise
 that word-boundary positions are any easier to come by than a phrase.
 
-**7. Crib supply at network scale.** The library covers 83% of held-out
+**8. Crib supply at network scale.** The library covers 83% of held-out
 messages, but on a 58-message corpus, and 47 of the 57 hits are 8–11 letters —
 seed-only lengths. Whether a real network yields *long* cribs is the question
 the whole feature rests on, and no larger corpus is available.
 
-**8. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
+**9. Reject or rank?** The deduction rejects a rotor setting outright. Ranking
 would tolerate a slightly-wrong crib — which matters, because garbling is real
 (two of five `SIEGFRIED` messages are corrupted) and exact matching cannot see
 through it.
 
-**9. Menu reuse across alignments.** Shifting a crib by one position changes
+**10. Menu reuse across alignments.** Shifting a crib by one position changes
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
@@ -183,7 +234,7 @@ so the Gaussian tail understates its best-of-K (6.1σ observed, 4.4 predicted).
 
 
 
-**10. `--tune-phase` — MEASURED at three lengths and below saturation;
+**11. `--tune-phase` — MEASURED at three lengths and below saturation;
 CLOSED.** The open half was whether the L=200 trade (more breaks, lower mean
 %-correct) survives at operational lengths. It does at **L=300** — 74/80 exact
 against 65/80, McNemar p = 0.049, mean −4.2pp with CI [−8.9, +0.6] — and is gone
@@ -208,14 +259,14 @@ matched compute forced. Two of the three residual misses are flat across every
 `-R`, so the residual is not budget-limited either. → `CLAUDE.md` "How the split
 moves with length".
 
-**11. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
+**12. `--ring-stride` with a hidden plugboard at K=13.** The one cell where
 anything moved: 4 losses in 69 trials against 0 in 72 for a paired given-board
 control, direction consistent across two seeds but **p ≈ 0.13 — suggestive, not
 established**, and only at a stride already outside the recommended K≤3.
 Settling it needs ~200 trials (~3–4 h) and buys nothing operational. →
 `archived/PERFORMANCE.md` §7.11; `eval/ring_stride_scope_probe.py`.
 
-**12. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
+**13. Report a CLOSE-MATCH rate beside the mean and the exact rate.** Every
 harness here reports two numbers: mean %-of-letters-correct (graded, low
 variance) and exact recovery (coarse, the operator's metric). Neither says how
 often a run lands *recognisably close* — enough of the plaintext to read as
@@ -250,20 +301,20 @@ converts. `tests/crack_quality.py` and
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
 
-**13. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
+**14. `-Wconversion` (~52 warnings) deliberately deferred.** 43 are `int →
 unsigned char` narrowings in the hottest loops; that many casts clutter the hot
 path for a low-value nit on deliberately C-style code. A future ratchet, not a
 bug.
 
-**14. No `install` target**, and the n-gram files are not declared as build/run
+**15. No `install` target**, and the n-gram files are not declared as build/run
 dependencies. Fine for development; add if the tool is packaged.
 
-**15. Single-file distribution.** Embedding the tables was declined once, but
+**16. Single-file distribution.** Embedding the tables was declined once, but
 the shipped uint8 tables are ~4× smaller than the float tables that analysis
 assumed, so a blob is much cheaper now. Keep `-d` / `$ENIGMA_DATA` as the
 override.
 
-**16. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
+**17. The `Scoring:` line can exceed 79 columns** when the `-d` path is long.
 Path length is unbounded and cannot be shortened without hiding it; every other
 status line is guaranteed to fit.
 

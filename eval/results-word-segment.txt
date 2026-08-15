@@ -1,0 +1,61 @@
+  FTNBK   101  quad   0.90  word  11.15  xrate   5.99  comb  11.21
+  ALQFI    86  quad  13.30  word  38.09  xrate   2.67  comb  31.67
+  KHLPT   120  quad   9.92  word  12.71  xrate   5.89  comb  17.67
+  KEJNQ   153  quad  19.71  word  65.61  xrate  -0.36  comb  51.91
+  ALWOK   124  quad   0.56  word  -0.21  xrate  -1.65  comb  -0.69
+  ADAFU    68  quad   0.41  word  -0.21  xrate   3.42  comb   2.05
+  CHAFU   101  quad   0.65  word  -0.30  xrate  -0.76  comb  -0.24
+  DKAFU    64  quad  -0.83  word  -0.25  xrate  -1.13  comb  -1.34
+  NOEGP    97  quad   2.92  word  -0.34  xrate  -0.20  comb   1.36
+  HOEPG    84  quad  -0.73  word  -0.36  xrate   1.51  comb   0.24
+  DAFPX   145  quad   9.47  word   0.00  xrate   6.65  comb  11.73
+  AEFXP   174  quad   9.31  word  11.30  xrate   7.82  comb  14.74
+  ITFPX   117  quad  15.29  word  19.32  xrate   6.57  comb  23.19
+  MNQBH    69  quad   1.67  word  -0.14  xrate   0.68  comb   1.38
+  ARPTZ   106  quad  13.08  word  46.44  xrate   2.59  comb  35.54
+  ABBHQ    67  quad   0.22  word  -0.28  xrate  -0.16  comb  -0.14
+  ANQIX   108  quad   9.84  word  23.22  xrate   6.68  comb  21.46
+  FDTZP    69  quad   5.29  word   9.91  xrate   0.64  comb   8.41
+  NKMOW   161  quad  21.46  word   0.00  xrate   7.32  comb  23.09
+  LYASO   138  quad  18.59  word  42.34  xrate   1.25  comb  31.06
+  XTMSY   156  quad  11.71  word  17.75  xrate   4.43  comb  19.91
+  DEROP   178  quad  15.64  word  -0.21  xrate   2.63  comb  10.38
+  ABGUX   126  quad  15.44  word   0.00  xrate  -0.18  comb  10.94
+  ABAHP    81  quad   5.19  word  -0.26  xrate   0.07  comb   3.05
+  GLPTL    67  quad   1.55  word  -0.30  xrate  -0.26  comb   0.50
+  ABDJV   212  quad  14.79  word  12.40  xrate   2.10  comb  18.36
+  HBNVE   107  quad   0.33  word  -0.21  xrate  -0.69  comb  -0.30
+  DESGF    63  quad  -0.01  word  -0.21  xrate  -0.37  comb  -0.33
+  ABUNY   134  quad   9.30  word  12.83  xrate   0.25  comb  11.63
+  NEWUY   120  quad  16.99  word  11.18  xrate   1.54  comb  15.94
+  ENIDN   124  quad   8.28  word   8.28  xrate   1.64  comb   9.32
+  ANIJQ   206  quad  20.25  word  36.35  xrate   2.00  comb  39.51
+  ABNAQ   209  quad  18.46  word  53.98  xrate   1.94  comb  37.07
+  RDNAQ   113  quad   7.94  word   0.00  xrate   0.11  comb   5.85
+  SHNQO   114  quad  15.18  word  19.30  xrate   0.17  comb  23.93
+  SIPVX    94  quad   2.11  word  -0.14  xrate  -0.10  comb   1.09
+  RLGRZ   115  quad   8.36  word  16.43  xrate  -0.60  comb  12.23
+  MAKJH    85  quad  11.21  word  41.32  xrate   1.51  comb  28.05
+  GSEAN    82  quad   3.29  word  -0.34  xrate   1.75  comb   3.25
+  EGERF   122  quad   1.28  word  -0.14  xrate   0.03  comb   0.72
+  AJLJD   174  quad  19.72  word  45.27  xrate   0.70  comb  36.39
+  KLDIO    90  quad   0.61  word   3.83  xrate   2.78  comb   4.39
+  outgoing  214  quad  36.47  word   0.00  xrate   7.59  comb  31.09
+  incoming   69  quad  -0.12  word  -0.26  xrate   1.45  comb   0.59
+  outgoing   76  quad  -0.69  word   0.00  xrate   1.23  comb   0.41
+  incoming   72  quad   0.31  word   0.00  xrate  -0.23  comb   0.05
+
+46 messages, 48 wrong keys each, -R 32; bar for a 160M sweep 6.15
+  feature      median z   messages clearing 6.15
+  quad            8.36   25 of 46
+  comb           10.94   26 of 46
+  z gained by adding word+xrate: median +1.64, quartiles -0.63/+8.20
+  messages flipped from below to above the bar: 2 (FTNBK, FDTZP)
+  messages flipped from above to below the bar: 1 (RDNAQ)
+
+  gain split by whether quad alone already cleared the bar
+                            n   median gain    helped
+  already above the bar    25         +7.75     20 of 25
+  BELOW the bar            21         -0.33      7 of 21
+  corr(quad z, gain) = +0.40  (positive = adds z where already won)
+  below-bar messages whose word feature found nothing: 18 of 21
