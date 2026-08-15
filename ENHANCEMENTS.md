@@ -294,9 +294,12 @@ carries each, but a message whose only doubling has a garbled separator is
 missed entirely. Enigma corrupts one letter per corrupted ciphertext letter and
 the separator is just another letter, so there is no reason to privilege it:
 fold it into the mismatch budget. Two of nine garbles landing on X, against X
-being ~6% of letters, is a small sample but it points the right way.
+being ~6% of letters, is a small sample but it points the right way — and the
+GEHRG one is the sounder of the pair, since its ciphertext was not transcribed
+here (§5j).
 
-**(d) Real doublings can differ in LENGTH, and the cause is the keyboard.** The
+**(d) Real doublings can differ in LENGTH — provisional, pending an image
+check.** The
 matcher takes `|W| = |V|`, which the no-diffusion argument seems to justify —
 one corrupted ciphertext letter corrupts exactly one plaintext letter, so
 transmission garbles are pure substitutions. ALVPM breaks that assumption from
@@ -304,10 +307,15 @@ the other side: its doubled surname is `SCUHNACHER` (10) against `SCHUHMAXHER`
 (11), i.e. `SCHUMACHER` against `SCHUHMACHER` — **the operator spelled the name
 two different ways**. A dropped *ciphertext* letter is ruled out, since it would
 desync the rotor stepping and wreck the remaining 137 letters, which decrypt
-cleanly. So indels do occur in real doublings, just not from the channel. Any
-length-tolerant matching would have to be edit distance rather than Hamming,
-which is more expensive; whether it is worth it depends on how common this is,
-and one instance is not an estimate.
+cleanly. So *if the transcription is right*, indels occur in real doublings,
+just not from the channel. **That "if" is doing work**: ALVPM's ciphertext is a
+transcription from a message-form image made here, and several of its garbles
+are probably ours rather than 1941's (§5j) — three of six need the same
+ciphertext letter, and the letter counts corroborate a `B`-read-as-`T`. This
+one is not among those three, but it sits in the same suspect region. Any
+length-tolerant matching would need edit distance rather than Hamming, which is
+more expensive; before spending that, confirm the spelling against the image.
+One instance is not an estimate, and this instance is not yet confirmed.
 
 **(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
 Rough arithmetic, to be confirmed on wall time: the current check is ~11

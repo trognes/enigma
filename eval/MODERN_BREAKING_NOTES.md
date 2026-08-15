@@ -615,8 +615,33 @@ false positives. But ALVPM also carries **`HENNINGJHENNING`**, where the
 misses that one. Harmless here, since `ENGELMANN` carries the message, but it is
 real-traffic evidence for folding the separator into the mismatch budget.
 
-**Garbles: 9 in 357 letters (2.5%), and the doubling convention caught two of
-them by itself.**
+**Garbles: 9 in 357 letters (2.5%) — but that is an UPPER BOUND on real 1941
+garbles, and probably a large overestimate.** ALVPM's and ALRHG's ciphertexts
+are transcriptions from the message-form images made in this repo, so a
+transcription slip and a transmission garble are indistinguishable in the
+plaintext: Enigma has no diffusion, so either corrupts exactly one letter.
+
+**Three of ALVPM's six need the SAME ciphertext letter** — `B`, read as `T`, at
+positions 11, 140 and 163. Random transmission garbles would need random
+letters. **The letter counts corroborate it**: in the transcription `B` is the
+rarest letter at **2** against 6.6 expected for near-uniform Enigma ciphertext,
+while `T` is over-represented at 9; restoring those three gives **B=5, T=6**,
+both at expectation. And **the errors cluster at the edges of the
+transcription** — 4 in lines 1–2, 2 in lines 8–9, with **100 consecutive clean
+letters in lines 3–7** — which is an image-reading pattern, not a radio one. The
+clean middle is corroborated externally: the 73 letters ALVPM shares with ALRHG
+lie inside it and carry no garbles at all.
+
+**Nothing has been corrected.** Editing ciphertext so the German reads better is
+the circular reasoning that produced the bad FTNBK transcription (§5d–e); the
+images are the only authority. **The key is unaffected either way** — 166 of 172
+letters decrypt to clean telegraphic German, and no-diffusion means a corrected
+ciphertext letter changes exactly one plaintext letter.
+
+GEHRG is a different case: its ciphertext came from the source page, not from an
+image read here, and already carries a published position-31 correction.
+
+**The doubling convention caught two of the nine by itself.**
 
 | | letters | garbles | rate |
 |---|---:|---:|---:|
@@ -636,6 +661,9 @@ Two observations from the garbles bear directly on the doubling signal of
 
 **Two of the nine hit the X SEPARATOR itself** — `HENNING(J)HENNING` in ALVPM
 and `ROMANOVKA(G)KLAMM` in GEHRG. Two of nine, against X being ~6% of letters.
+*Read this with the caveat above*: the ALVPM one is at position 163, among the
+suspected transcription errors, so GEHRG's — whose ciphertext is not ours — is
+the sounder of the two.
 Small numbers, but it is a second independent reason not to require a literal
 `X` in the matcher, alongside the ALVPM case already recorded.
 
