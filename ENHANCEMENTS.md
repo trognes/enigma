@@ -428,6 +428,8 @@ Two parameters:
 
     gate    apply only to candidates with z > T          (T = 3 tried)
     bonus   M x [ 5.02 + 1.2*(L-6) ] decades, on the LONGEST doubling
+                 ^ the MULTIPLIER form, not an additive offset -- see below,
+                   that part is settled and does not depend on M
 
 *The slope is determined, not tuned.* Measured Bayes factors over the 54
 authentic decrypts against the closed-form null give a log-likelihood ratio
@@ -465,6 +467,38 @@ doubling. With `z > 3` a wrong key needs **three** things at once: clear the
 gate (13 498 of 10⁷), carry a chance doubling (4.9e-6 of those — 0.067 per
 sweep), and land within 25 decades of the truth, which sits at a median z of
 10.0 with σ_total ≈ 12.6 decades.
+
+*A MULTIPLIER is the right shape, and that is settled independently of its
+value.* The obvious alternative is to keep the honest slope and add a fixed
+offset — `calibrated(L) + C` — or to drop the length term entirely and use a
+flat constant. The three differ only in *which lengths* they over-weight, and
+the null decides between them: it falls by a factor `B/A ≈ 16` per letter, so
+**94% of chance doublings are `L = 6`** and the false-positive exposure is set
+almost entirely by `bonus(6)`. Hold that fixed and the forms separate:
+
+| form | L=6 | L=8 | L=10 | rescued of 8 | risk |
+|---|---:|---:|---:|---:|---|
+| **`M × calibrated`, M = 5** | 25.1 | 37.1 | 49.1 | **7** | 1 in 1 038 |
+| `calibrated + C`, C = 20.1 | 25.1 | 27.5 | 29.9 | 6 | 1 in 1 032 |
+| flat constant 25.1 | 25.1 | 25.1 | 25.1 | 5 | 1 in 1 038 |
+
+**The multiplier wins because its extra weight lands where the null is thin.**
+A chance `L = 10` doubling is ~10⁵ times rarer than a chance `L = 6` one, so
+scaling the whole curve buys a large bonus at long lengths for almost no risk;
+an offset hands long and short doublings the same boost and therefore spends
+its budget at the one length where chance actually competes. It matters here
+because the hard cases *have* long doublings — the two gaps above 27 decades
+are `L = 10` and `L = 8`, which the offset cannot reach without raising
+`bonus(6)` and paying at the crowded end. (A fixed `+25` on top of the
+calibrated curve does rescue 7, but at **1 in 487** — twice the risk of
+`M = 5` for the same result.)
+
+Two qualifications, both pointing the same way. It is **8 cases**, so "7 vs 6
+vs 5" is one or two messages; the *mechanism* is robust and the counts are not.
+And the ordering leans on the length distribution of those 8 — if real failures
+at operational length carry shorter doublings, the multiplier's advantage
+shrinks toward the offset's, which is the same population question the sweep
+has to settle anyway.
 
 *Both constants are single points, not optima — sweep them jointly before
 building anything.* `T` and `M` trade against each other (a higher gate buys a
