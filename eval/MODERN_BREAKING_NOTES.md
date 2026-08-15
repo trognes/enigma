@@ -211,28 +211,97 @@ addition to the challenge set.
 
 Footnote \*3 names a falsifiable property, so it can be checked against the
 ciphertext this repo holds. Under a 26-letter cipher the letter J appears at
-rate 1/26; a 25-letter alphabet without J gives zero. Control first: the **70
-solved authentic messages carry 277 J in 6 944 letters, 3.99%** against the
+rate 1/26; a 25-letter alphabet without J gives zero. Control first: the **75
+solved authentic messages carry 295 J in 7 400 letters, 3.99%** against the
 3.85% expected — so the test's null is sound.
+
+#### The population test, which is the strongest form of it
+
+Per-message J tests are weak (below), but comparing the **whole unbroken set
+against the whole solved set** is not, and it needs no choice of which message
+to test. Count messages with **zero** J against the number Enigma predicts,
+summing `(25/26)^n` over the actual lengths:
+
+| population | records | zero-J observed | expected | ratio |
+|---|---:|---:|---:|---:|
+| solved, verified Enigma | 75 | 5 | 6.04 | **0.8×** |
+| unbroken challenges | 14 | 6 | 1.42 | **4.2×** |
+
+**The verified corpus lands exactly where Enigma says it should; the unbroken
+set runs four times over** — exact Poisson-binomial `P(X ≥ 6) = 0.0005`. (The
+count is Poisson-*binomial*, not Poisson: the per-message probabilities run
+from 0.1% to 45.6%, so the distribution is under-dispersed and a Poisson
+approximation is not merely inelegant but **7× too conservative** here, giving
+0.0034. The exact convolution is a dozen lines and is in the script.) Two
+populations from the same
+collection, the same era and the same transcribers, differing in nothing but
+whether anyone has broken them — and the unbroken one is enriched in a property
+Enigma does not produce. That is population-level evidence that **part of the
+unbroken residue is not Enigma at all**, which is also the simplest explanation
+of why it is unbroken. It does not say *which* messages, and the per-message
+tests below cannot reliably say either.
+
+#### Batch C, now that all five are transcribed
+
+`5b` originally tested the three Batch C messages this repo then held. QTXMA and
+SZAEJ arrived later (PR #183) and had never been tested:
 
 | | letters | J | expected | reading |
 |---|---:|---:|---:|---|
-| BYQMZ | 167 | **6** | 6.4 | indistinguishable from Enigma |
+| BYQMZ | 166 | **6** | 6.4 | indistinguishable from Enigma |
+| **QTXMA** | 155 | **11** | 6.0 | Enigma, J-*rich* (see below) |
+| **SZAEJ** | 51 | **3** | 2.0 | Enigma (p = 0.87 against \*3) |
 | FKQLZ | 107 | **0** | 4.1 | p = 0.015 |
 | XFEDT | 97 | **0** | 3.7 | p = 0.022 |
 | FKQLZ + XFEDT | 204 | **0** | 7.8 | **p = 3e-4** |
 
-So the trio splits: **BYQMZ behaves exactly like a 26-letter cipher** and the
-other two do not. That is the opposite of the note this file used to carry, and
-it bears directly on where compute goes — BYQMZ is both the longest unbroken
-message and the one of the three that looks like Enigma.
+**So Batch C splits 3–2, and the batch-level caveat cannot stand.** The
+authors' "we are not sure Batch C is Enigma at all" is a statement about the
+batch; QTXMA's 11 J and SZAEJ's 3 J are impossible under a 25-letter alphabet,
+so whatever is true of FKQLZ and XFEDT is **specific to those two**, not a
+property of the batch. This matters for where compute goes: QTXMA is the
+second-longest unbroken message and the main reason to doubt it was worth
+attacking has just been removed.
 
-**Do not over-read a single zero-J message.** Nine of the 18 contain no J,
-against 1.7 expected if all were Enigma — but most are short, where the test has
-no power, and the decisive counter-example is **Nr 38 GEHRG: zero J in 74
-letters (p = 0.054), and now broken as Enigma**. Only the messages at n ≳ 90
-carry enough power to say anything, which is why the table above holds just
-those. Nr 214 FTNBK, confirmed Enigma, sits at 7 J in 101 as it should.
+QTXMA's excess is worth a word, since it is the one figure here that could be
+mistaken for a finding: 11 J against 5.96 expected. **The direction is what
+settles it** — footnote \*3 predicts a J *deficit*, so a J-*rich* message is
+evidence for Enigma, not against, and the p-value that matters (`P(X ≤ 11)` =
+0.98) says there is nothing here for \*3 to stand on. A two-sided test would
+report 0.08 and invite exactly the wrong reading, which is why `j_test.py`
+prints the one-sided figure against \*3 and flags J-rich messages explicitly.
+
+#### The other nine open challenges
+
+| Nr | | letters | J | expected |
+|---|---|---:|---:|---:|
+| 53 | RXPSB | 105 | 4 | 4.0 |
+| 172 | MVUEH | 82 | 4 | 3.2 |
+| 189 | ZNLZT | 68 | 2 | 2.6 |
+| 285 | FMNGI | 58 | 1 | 2.2 |
+| 242 | JBIYH | 55 | **0** | 2.1 |
+| 3 | EHSTQ | 52 | 3 | 2.0 |
+| 187 | AWTZK | 49 | **0** | 1.9 |
+| 87 | KLJBO | 46 | **0** | 1.8 |
+| 100 | LXACA | 20 | **0** | 0.8 |
+
+Four more zeros, all at lengths where the test has no power — `(25/26)^n` is
+12–46% for these, i.e. a zero is unremarkable. They contribute to the
+population excess above without any one of them being evidence on its own.
+
+**Do not over-read a single zero-J message**, and the counter-example is now
+much stronger than the one this section used to give. It cited Nr 38 GEHRG,
+zero J in 74 letters — but at that length a zero carries `p = 0.055`, so it
+never proved much. The real counter-example is **Nr 60 CHAFU: zero J in 101
+letters, `p = 0.019`, verified Enigma with a published key** — the same power
+regime as FKQLZ (107, `p = 0.015`). A verified Enigma message does exactly what
+FKQLZ does. The pooled FKQLZ + XFEDT figure survives that (two independent
+zeros, not one), but any argument resting on a *single* zero-J message near 100
+letters does not. Nr 214 FTNBK, confirmed Enigma, sits at 7 J in 101 as it
+should.
+
+Reproduce all of the above with `python3 eval/j_test.py`, which reads the
+emitted corpus files and so stays true after a rebuild.
 
 ### 5c. Attacking
 
