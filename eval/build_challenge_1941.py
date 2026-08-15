@@ -24,6 +24,19 @@ C = [
   "position 31 corrected N -> V per the German Army Messages page (updated 01 Aug 2026); the old letter is very likely why this failed to break for twenty years"),
  ("8-Oct", "02 Oct 1941", "ALGXZ", 72,
   "ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOMUGPVXXDYWTJG", ""),
+ ("6-C",  "29 Sep 1941", "QTXMA", 160,
+  "QTXMAJVMOYCZAYMRVLCBSOQXYBATSXJBQLAEJKYTYXJOEMYBLOEMYOKSRMTAVLBCXJAMOESRXYTVAOEYAVYXKCJVCMEISHTBAYVXXAJWCZQCYPXMEHABLKYJYASOEIJYXOQXYTLBASYEESTAQXJVNWCBJZBYQYTM",
+  "Batch C, and the SECOND-LONGEST unbroken message in the collection. From "
+  "the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only "
+  "because it had never been transcribed. Same batch caveat as BYQMZ: the "
+  "authors are not sure Batch C is Enigma at all. Indicator LDP WRX, sent "
+  "2240, to 2pn on 323 kHz"),
+ ("7-C",  "29 Sep 1941", "SZAEJ", 56,
+  "SZAEJTOMBYXCZEOJKSAMGEYPWXZWJMEVBZYZAEJVHSEMNWEYTMEOMTCG",
+  "Batch C, same caveat. From the Ultimate Enigma Challenge page. Short (51 "
+  "cipher letters), around twice the unicity distance, so breakable only if "
+  "its day key comes from elsewhere. Indicator GAR PLD, sent 2314, to o37 on "
+  "716 kHz"),
  ("8-C",  "30 Sep 1941", "BYQMZ", 172,
   "BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAIKYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUEAZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY",
   "Batch C -- the authors are NOT sure this is Enigma at all. Its J-rate is the one point in its favour: 6 J in 167 letters against the 6.4 a 26-letter cipher predicts. 1 dash. Longest unbroken message in the collection"),
@@ -79,8 +92,8 @@ C = [
 # rather than merely hard.
 SOLVED = {
   "81":  "BROKEN 14.07.2026. The key IS now in this repo -- but for the Bundesarchiv copy Nr 55 NF in enigma-army-messages-1941.txt, not for this transcription, which is too corrupt to decrypt under it",
-  "38":  "BROKEN on 12.07.2026 (key not recorded here)",
-  "8-Oct": "BROKEN on 31.07.2026 (key not recorded here)",
+  "38":  "BROKEN on 12.07.2026 elsewhere with no key published; the KEY IS NOW IN THIS REPO -- B 342 ring ALZ start UXT, plugs AZ DV ET FS GQ JP LX MY NR OW, recovered here from the 09.09.1941 day key that ALVPM and ALRHG gave up, and held with the plaintext as Nr 38 in enigma-army-messages-1941.txt",
+  "8-Oct": "BROKEN on 31.07.2026; the KEY IS NOW IN THIS REPO -- B 452 ring DVM start WAS, plugs AP BU CX DH ER FQ IW KO LZ MS, published on Frode Weierud's June-October 1941 key page (01 Aug 2026) and held with the decrypt as Nr 8-Oct in enigma-army-messages-1941.txt. The transcription is heavily garbled: the key is right (ZWISQE[N] ... HARTJ[E]NS[T]EIN) but the middle does not read",
   "140": "BROKEN by Michael Craig on 17.07.2007 (key not recorded here)",
   "138": "same message as Nr 140, which is broken -- see Nr 140",
 }
@@ -92,8 +105,8 @@ SOLVED = {
 # message in the collection and is absent from the challenge set only because it
 # was never transcribed here.
 MISSING = [
-  ("6",  "29 Sep 1941", "QTXMA", 160, 155),
-  ("7",  "29 Sep 1941", "SZAEJ",  56,  51),
+  # (now empty -- QTXMA and SZAEJ were transcribed on the "Ultimate Enigma
+  # Challenge" page, updated 27 Jul 2026, and are carried as records below.)
 ]
 
 HEADER = """\

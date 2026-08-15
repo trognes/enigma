@@ -47,12 +47,28 @@ DAYS = {
  # 28.08.1941 recovered HERE, not published: the Bundesarchiv copy of Nr 81 (Nr
  # 55 NF) carries its plaintext on the source page, and 86 known letters give the
  # key by crib in 45 s over 144 million keys.  Ring is A?? for the usual reason.
+ # Frode's key page gives rings CWJ for this day; CWJ/ABC reproduces this
+ # record's plaintext exactly, so AVJ and CWJ are equivalent (same class).
  "28.08.1941": ("B", "345", "AVJ", "BH CS DU EI FR GM JO KQ TX VZ"),
  "13.07.1941": ("B", "423", "GTO", "AD EH GY IM KN LR OZ QV TX WU"),
  "14.07.1941": ("B", "531", "LWB", "BT CH DR EW FU GK JO LV MS PZ"),
  "18.07.1941": ("B", "425", "AGM", "DM EP FL HI JR KY NQ OU SW TZ"),
  "25.07.1941": ("B", "325", "RVA", "BE CK DL GM HZ JO NW QU RT SV"),
  "29.07.1941": ("B", "521", "MJW", "AW CS DR EY FO KU LZ NV PX QT"),
+ # Not in the released 2017 key set: recovered ciphertext-only here from ALVPM,
+ # independently confirmed by ALRHG, and then used to break GEHRG in 0.08 s as
+ # a bare start-position sweep.  Wheel order 342 appears in none of the 22
+ # published day keys above and this stecker shares at most one pair with any
+ # of them, chance level for 10 pairs out of 325.  Three messages now share it.
+ # Ring recovered here ciphertext-only.  Frode's key page publishes the
+ # same day as B/342 rings KFZ; KFZ and ALZ are EQUIVALENT -- verified,
+ # KFZ/ERT reproduces GEHRG byte-for-byte and KFZ/FUT reproduces ALVPM.
+ # See MODERN_BREAKING_NOTES 5j on why the ring is not identifiable.
+ "09.09.1941": ("B", "342", "ALZ", "AZ DV ET FS GQ JP LX MY NR OW"),
+ # From Frode Weierud's "Enigma Keys - June-October 1941" page (updated
+ # 01 Aug 2026), which post-dates the rest of DAYS above.  It is the key for
+ # Nr 8 / Nr 7 NF, both ALGXZ, previously carried as broken-but-key-unknown.
+ "02.10.1941": ("B", "452", "DVM", "AP BU CX DH ER FQ IW KO LZ MS"),
 }
 # Nr 173 broke on its own ring+stecker (same wheel order) -- special per-message key.
 KEY_OVERRIDE = {"173": ("B", "521", "MRP", "AG BJ CP DS ER FQ HV IU KT LW")}
@@ -68,6 +84,61 @@ M = [
   "broken by Enigma@Home 15.09.2017, long after the 2017 key release; the transcription in enigma-challenge-1941.txt differed from this one in 13 of 101 letters and did not decrypt"),
  ("55 NF","28.08.1941","28 Aug 1941","YAC","","ALQFI","ALQFIGEELOREBSXEINXZYDHXITUFWDLTURTZSPMMLFMYZMAGJDWOPCBQYZRTJSTGVIJPHJIXTDBKDFXOYILZEUIMMLL",
   "the Bundesarchiv copy of Nr 81, from another SS-Totenkopf station; its plaintext is published, and the key was recovered from it here. Nr 81 is a badly corrupted transcription of the same message and does not decrypt"),
+ ("ALVPM","09.09.1941","09 Sep 1941","VAT","nostrip","ALVPM",
+  "TLNVEZRRWMGBSQOXCMJAQNNEVBQITIHVOKAMXQPTJLMMCALFWSCSPTQCCUWSIHZCSAFFRUCKVGECKMKSMHSUDVZCDDQEEWGOBIUJGYAQJOVSIKRNSWDHMMQTZOOEEJYKUYOUPXXHPGYJBEKNGFZOMRDCFUQVEPYDRWIBTKMYVCKQ",
+  "Recovered INDEPENDENTLY here from ciphertext alone; the message had already "
+  "been broken elsewhere, but no key was published. Spruch Nr 38, 9.9.41, "
+  "befoerdert 0913, message time (0850), 177 letters, indicator kfzjpo, from "
+  "Nachschub to SS-T.Div.; form image at eval/forms/ (p.139). Designator group "
+  "not written on the form, so nothing to strip. Same key AND same start as "
+  "ALRHG, the same order re-sent. RING IS A CLASS REPRESENTATIVE, not "
+  "necessarily the true day-key ring: ring0 is never identifiable from "
+  "ciphertext (CLAUDE.md 7.10, always reported A) and at 172 letters "
+  "ring1/start1 need not be singletons either (7.12); the decrypt is exact "
+  "regardless. CIPHERTEXT CORRECTED AT 5 POSITIONS against the form after an "
+  "earlier transcription from the same image got them wrong -- 7 n->r, 11 t->b, "
+  "31 r->v, 140 t->b, 163 t->b. The form's stated length of 177 matches either "
+  "way, so nothing was inserted or dropped. REMAINING 1941-SIDE ERRORS, 2 in "
+  "172 letters: pos 1 gives SN where SS is meant (the form plainly reads l, and "
+  "l and h are distinct in this hand), and the doubled surname is SCUHNACHER "
+  "(10) against SCHUHMACHER (11) -- SCHUMACHER against SCHUHMACHER, two "
+  "spellings of one name. The short copy would need ciphertext x->j and c->t, "
+  "which are not plausible misreadings, so it was typed that way at the "
+  "Enigma keyboard"),
+ ("ALRHG","09.09.1941","09 Sep 1941","VAT","nostrip","ALRHG",
+  "ZLUNGBFSCEVTWZRPZTLQEPEBWNYBCVCZIHROAPPLOHYATMMCIJWYWJGWGIYTPAWLHBWPMTBMULWLRSEGJGRDQYTHJQJCVTKYUDBJGYQPDDOPIUV",
+  "Recovered independently here from ciphertext alone (broken elsewhere "
+  "first, key unpublished); the abbreviated re-send of ALVPM, same key and "
+  "same start. Its --confidence margin was only +2.29 sd, marginal alone; "
+  "ALVPM at +7.54 and the shared plaintext are what settle it. GARBLES: 1 in "
+  "111 letters (0.9%), and it is REAL -- pos 56 Z for S in U[S]TUF. Verified "
+  "against the form (eval/forms/, p.138): it would need ciphertext g->q, and "
+  "the form shows an unmistakable g (q is written with a BARRED descender in "
+  "this hand, g with an open loop). The transcription of this message is "
+  "letter-perfect, and the form's stated length of 116 confirms it. Spruch "
+  "Nr 39, 9.9.41, befoerdert 0913, message time (0850), indicator ftjmyc, "
+  "to SS-T.Div. This garble is also the single difference across the 73 "
+  "letters ALRHG shares with ALVPM"),
+ ("8-Oct","02.10.1941","02 Oct 1941","WAS","","ALGXZ",
+  "ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOMUGPVXXDYWTJG",
+  "Listed as broken on 31.07.2026 with no key published; the key arrived on "
+  "Frode's June-October 1941 key page (updated 01 Aug 2026) and is applied "
+  "here. The transcription is heavily garbled -- ZWISQE[N] and the "
+  "HARTJ[E]NS[T]EIN signature at the end are clear, the middle is not -- so "
+  "this is a correct key over a poor ciphertext, not a clean decrypt. Kept "
+  "because the key is now on record. Nr 7 NF is the same message on the same "
+  "key"),
+ ("38","09.09.1941","09 Sep 1941","UXT","nostrip","GEHRG",
+  "LGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINCIVXSYRGIGUWLOE",
+  "Unbroken for twenty years, broken elsewhere 12.07.2026 with no key "
+  "published. Recovered here in 0.08 s on one thread as a bare 17576-key "
+  "START-POSITION sweep, because ALVPM and ALRHG had already given up the "
+  "09.09.1941 day key -- the day-key attack of ENHANCEMENTS item 3, on real "
+  "traffic. Margin +6.90 sd. Designator GEHRG stripped by hand here; position "
+  "31 carries the N->V correction from the German Army Messages page. GARBLES: 2 "
+  "in 74 letters (2.7%) -- pos 52 G for the X separator after the second "
+  "ROMANOVKA, pos 70 I for L in K[L]AMM. SEQS (sechs) and the spelled 1600 are "
+  "convention, not garbles"),
  ("23","08.07.1941","08 Jul 1941","PIK","","KHLPT","KHLPTCWSEBDDIRBZUUBGKJANBVGIVDVDZZIGAKBZCJMMVEMVXLTHNLDYGRVQAKJMRVZIXHMDNOMTAUTPZDWOINNMOLAHCDKCZTPPEORFIBXCMNWQNIDDCHPTXQQBC",""),
  ("7","13.08.1941","13 Aug 1941","BRZ","","KEJNQ","KEJNQSFUGRPVPWGSPYHMNQYJTPPDGHFMROCPMUUBLBBJLSRZCYBXHFXQSWGWOXDNEVRIOCSPWKYCFTLRSAKBNWZJYPLQBSHQYVTCCCEPUYVUKSHHVWHXYOJKPVWQWXQESKIEGMUORWZDJZRAJZCWKFFCLUXLDY",""),
  ("19","19.08.1941","19 Aug 1941","BGO","","ALWOK","ALWOKPBYQVEQEHZFPKFLVJSOGNBZNIMXDMDSZXIAQBEKYAKFCIREEWQCBRPBLHHUHGMTPTXGZGSUISJQEYEVSLFXSCUACFAJBUGWYWPVUADTAGMERMBLWTDDGVHRWXPHW",""),
@@ -178,7 +249,93 @@ def wrap(s, width=60):
 # ZANDEYS/ZANDERS -> Zanders, KOENIGSBCRG/COENIGSBNRG -> Koenigsberg, LKW/EKW ->
 # LKW. Where a garbled word was sent only once (BRZT, ABPANG) the reading marks
 # the expansion as uncertain with [?].
+INDICATORS = {  # Kenngruppe/Spruchschluessel indicator groups as written on
+                # the message forms, from the Heeresgruppe Nord July 1941
+                # ciphertext compilation; the repo already held every key and
+                # ciphertext in that document, these were the one new field.
+ "23": "OKF QLV",
+ "73": "TCR IEI",
+ "99": "QCB NSR",
+ "101": "AIK SUD",
+ "108": "RFV ACK",
+ "113": "LMN JGO",
+ "122": "WCK KLW",
+ "126": "ACS GUT",
+ "127": "DRU QBP",
+ "136": "JOL RVH",
+ "139": "MIN MER",
+ "141": "GMD NQZ",
+ "142": "NOV ANZ",
+ "143": "BIW CRF",
+ "153": "HMR ECH",
+ "157": "EUQ MAC",
+ "158": "OPB LAB",
+ "160": "UFZ AGE",
+ "161": "IPG PHA",
+ "168": "VDJ RSJ",
+ "170": "CIJ UWH",
+ "173": "SWV YTE",
+ "176": "BDF PNX",
+ "180": "ALO XGF",
+ "194": "FZK EWR",
+ "197": "QCV MLN",
+ "199": "XIC YUU",
+ "200": "NTO BTU",
+ "201": "OLG ANW",
+ "214": "LMA BJJ",
+ "228": "UKM IUX",
+ "234": "RIT IZG",
+ "266": "FQT YSB",
+ "282": "VOF ZVZ",
+ "4": "DTI AZZ",
+ "7": "AMQ LKF",
+ "19": "ALY XQE",
+ "38": "BOZ IWD",
+ "45": "SDG EKN",
+ "48": "BPG KGM",
+ "51": "ZKT FLP",
+ "59": "LTB MMF",
+ "60": "AIA XIE",
+ "69": "SDC JKP",
+ "70": "CSW MEK",
+ "71": "KPH YNH",
+ "103": "NWH GGP",
+ "104": "STG YTF",
+ "105": "XFG GSM",
+ "106": "GUR JPC",
+ "114": "ZIP NDT",
+ "115": "SCJ RWT",
+ "116": "XHK FHP",
+ "117": "TJI KPJ",
+ "55 NF": "DIB TCO",
+}
+
+
 READINGS = {
+ "38": (
+  "QUELLE X ABT AB EINS SEQS NULL NULL UHR IN ROMANOVKA X ROMANOVKA "
+  "[K]LAMM X POLA X POLA X K[L]AMM",
+  "Source: detachment from 1600 hrs at Romanovka, Romanovka (bracket) Pola, "
+  "Pola (bracket). SEQS is sechs with Q for ch; the K/G and K/I in GKLAMM and "
+  "KIAMM are single-letter garbles of the bracket markers."),
+ "ALVPM": (
+  "S[S] X HAUPTSTUF X SC[H]U[M]ACHER X SCHUHMACHER X OBERSCHARF[UEHRER] X "
+  "ENGELMANN X ENGELMANN X ZURUEQ X USTUF X ERB X ERB X WIRD VON MIR "
+  "EINGEWIESEN [X] FAHRE HEUTE ZUR ARMEE X KOMME MORGEN ZUR X DIVISION X "
+  "GEZ X HENNING X HENNING X",
+  "SS-Hauptsturmfuehrer Schuhmacher, Schuhmacher: Oberscharfuehrer Engelmann, "
+  "Engelmann back; Untersturmfuehrer Erb, Erb will be briefed by me. Travelling "
+  "to the Army today, coming to the Division tomorrow. Signed Henning, Henning. "
+  "Reads cleanly after the five transcription corrections; the two remaining "
+  "oddities (SN for SS, and the short first copy of the surname) are 1941's."),
+ "ALRHG": (
+  "ANF[?] ZWOTE X STAFFEL X OBERSCHARF[UEHRER] X ENGELMANN X ENGELMANN X "
+  "ZURUEQ X U[N]TU[R]F[UEHRER] X ERB X ERB X WIRD VON MIR EINGEWIESEN X "
+  "GEZ X HENNING X HENNING X",
+  "... second echelon: Oberscharfuehrer Engelmann, Engelmann back; "
+  "Untersturmfuehrer Erb, Erb will be briefed by me. Signed Henning, Henning. "
+  "The abbreviated re-send of ALVPM; ANF is an unexpanded abbreviation, and "
+  "U[Z]TUF carries one garble against ALVPM's USTUF."),
  "55 NF": (
   "EINS NEUN EINS FUENF X KOLONNEN UEBER X STARAJA RUSSA X STARAJA RUSSA X "
   "IN MARSQ GESETZT X HARTJENSTEIN X",
@@ -268,6 +425,9 @@ def main():
             f.write("START:       %s\n" % start)
             f.write("PLUGS:       %s\n" % s)
             f.write("KENNGRUPPE:  %s   (discriminant; not enciphered)\n" % kenn)
+            if no in INDICATORS:
+                f.write("INDICATOR:   %s   (as sent; the operator's enciphered "
+                        "message key)\n" % INDICATORS[no])
             f.write('CMD:         ./enigma -u %s -w %s -r %s -g %s -s "%s"\n' % (u, w, r, start, s))
             f.write("CIPHERTEXT:  %s\n" % wrap(body))
             f.write("DECRYPT:     %s\n" % wrap(pt))

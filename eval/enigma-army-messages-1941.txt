@@ -33,6 +33,7 @@ RING:        RGP
 START:       LTA
 PLUGS:       AV BG CH EN FU KO MS PX RY TW
 KENNGRUPPE:  HXZKV   (discriminant; not enciphered)
+INDICATOR:   SDG EKN   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 352 -r RGP -g LTA -s "AV BG CH EN FU KO MS PX RY TW"
 CIPHERTEXT:  KOZQNXUUXYJMFSHGSDUFGUXZMKHMQIZQEHGYLO
 DECRYPT:     SZANDORIQUARNXABTXROJSIENIEXNOSSIENIEX
@@ -45,6 +46,7 @@ RING:        RGP
 START:       CSX
 PLUGS:       AV BG CH EN FU KO MS PX RY TW
 KENNGRUPPE:  WRMKX   (discriminant; not enciphered)
+INDICATOR:   BPG KGM   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 352 -r RGP -g CSX -s "AV BG CH EN FU KO MS PX RY TW"
 CIPHERTEXT:  KSNYPZZDQ-XGLYBUBSUXTPBJVSWRNUHAOUCDUAWENTBLQOKNHSFLIRDNRTAL
              SAFQZNPRQAILXTMTNBIHMALKODKRADTQJTCWVWIJIJFTAMNGQYGJREUGNXIB
@@ -61,6 +63,7 @@ RING:        RGP
 START:       RTZ
 PLUGS:       AV BG CH EN FU KO MS PX RY TW
 KENNGRUPPE:  PLDRV   (discriminant; not enciphered)
+INDICATOR:   ZKT FLP   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 352 -r RGP -g RTZ -s "AV BG CH EN FU KO MS PX RY TW"
 CIPHERTEXT:  ORIZXOIVHEYIGPKKRBMILKCYBFGMZBMSTYEEWHKLSWKLXQWCGDLNMBBKXCTJ
              AYXA-MZAL-LZWIFBQFOJNLHVZQJKWITROKZPFYLUBZJLJYJPVBQJAPYAWL-R
@@ -81,6 +84,7 @@ RING:        AHV
 START:       FQR
 PLUGS:       AH CN DF EI KY MP OZ RU SW VX
 KENNGRUPPE:  FTNBK   (discriminant; not enciphered)
+INDICATOR:   LMA BJJ   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 314 -r AHV -g FQR -s "AH CN DF EI KY MP OZ RU SW VX"
 CIPHERTEXT:  XNQAEQNZLWFMQYTXOQZVXJKBOJKPKIJQGMVFLSVJBHRIYMRYWHUIVWYKXKAK
              FMSQFBBARNKNHBRHQHLIUVNEHMJKOZRXLPLWISNZZ
@@ -95,6 +99,7 @@ RING:        AVJ
 START:       YAC
 PLUGS:       BH CS DU EI FR GM JO KQ TX VZ
 KENNGRUPPE:  ALQFI   (discriminant; not enciphered)
+INDICATOR:   DIB TCO   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 345 -r AVJ -g YAC -s "BH CS DU EI FR GM JO KQ TX VZ"
 CIPHERTEXT:  GEELOREBSXEINXZYDHXITUFWDLTURTZSPMMLFMYZMAGJDWOPCBQYZRTJSTGV
              IJPHJIXTDBKDFXOYILZEUIMMLL
@@ -107,6 +112,91 @@ GLOSS:       1915 hrs: columns set in march via Staraja Russa, Staraja
              page.)
 NOTES:       the Bundesarchiv copy of Nr 81, from another SS-Totenkopf station; its plaintext is published, and the key was recovered from it here. Nr 81 is a badly corrupted transcription of the same message and does not decrypt
 
+### Message No. ALVPM  --  09 Sep 1941  (ALVPM)
+REFLECTOR:   B
+WHEELS:      III IV II   (-w 342)
+RING:        ALZ
+START:       VAT
+PLUGS:       AZ DV ET FS GQ JP LX MY NR OW
+KENNGRUPPE:  ALVPM   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 342 -r ALZ -g VAT -s "AZ DV ET FS GQ JP LX MY NR OW"
+CIPHERTEXT:  TLNVEZRRWMGBSQOXCMJAQNNEVBQITIHVOKAMXQPTJLMMCALFWSCSPTQCCUWS
+             IHZCSAFFRUCKVGECKMKSMHSUDVZCDDQEEWGOBIUJGYAQJOVSIKRNSWDHMMQT
+             ZOOEEJYKUYOUPXXHPGYJBEKNGFZOMRDCFUQVEPYDRWIBTKMYVCKQ
+DECRYPT:     SNXHAUPTSTUFXSCUHNACHERXSCHUHMACHERXOBERSCHARFXENGELMANNXENG
+             ELMANNXZURUEQXUSTUFXERBXERBXWIRDVONMIREINGEWIESENFAHREHEUTEZ
+             URARMEEXKOMMEMORGENZURXDIVISIONXGEZXHENNINGXHENNINGX
+READING:     S[S] X HAUPTSTUF X SC[H]U[M]ACHER X SCHUHMACHER X
+             OBERSCHARF[UEHRER] X ENGELMANN X ENGELMANN X ZURUEQ X USTUF
+             X ERB X ERB X WIRD VON MIR EINGEWIESEN [X] FAHRE HEUTE ZUR
+             ARMEE X KOMME MORGEN ZUR X DIVISION X GEZ X HENNING X
+             HENNING X
+GLOSS:       SS-Hauptsturmfuehrer Schuhmacher, Schuhmacher:
+             Oberscharfuehrer Engelmann, Engelmann back;
+             Untersturmfuehrer Erb, Erb will be briefed by me. Travelling
+             to the Army today, coming to the Division tomorrow. Signed
+             Henning, Henning. Reads cleanly after the five transcription
+             corrections; the two remaining oddities (SN for SS, and the
+             short first copy of the surname) are 1941's.
+NOTES:       Recovered INDEPENDENTLY here from ciphertext alone; the message had already been broken elsewhere, but no key was published. Spruch Nr 38, 9.9.41, befoerdert 0913, message time (0850), 177 letters, indicator kfzjpo, from Nachschub to SS-T.Div.; form image at eval/forms/ (p.139). Designator group not written on the form, so nothing to strip. Same key AND same start as ALRHG, the same order re-sent. RING IS A CLASS REPRESENTATIVE, not necessarily the true day-key ring: ring0 is never identifiable from ciphertext (CLAUDE.md 7.10, always reported A) and at 172 letters ring1/start1 need not be singletons either (7.12); the decrypt is exact regardless. CIPHERTEXT CORRECTED AT 5 POSITIONS against the form after an earlier transcription from the same image got them wrong -- 7 n->r, 11 t->b, 31 r->v, 140 t->b, 163 t->b. The form's stated length of 177 matches either way, so nothing was inserted or dropped. REMAINING 1941-SIDE ERRORS, 2 in 172 letters: pos 1 gives SN where SS is meant (the form plainly reads l, and l and h are distinct in this hand), and the doubled surname is SCUHNACHER (10) against SCHUHMACHER (11) -- SCHUMACHER against SCHUHMACHER, two spellings of one name. The short copy would need ciphertext x->j and c->t, which are not plausible misreadings, so it was typed that way at the Enigma keyboard
+
+### Message No. ALRHG  --  09 Sep 1941  (ALRHG)
+REFLECTOR:   B
+WHEELS:      III IV II   (-w 342)
+RING:        ALZ
+START:       VAT
+PLUGS:       AZ DV ET FS GQ JP LX MY NR OW
+KENNGRUPPE:  ALRHG   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 342 -r ALZ -g VAT -s "AZ DV ET FS GQ JP LX MY NR OW"
+CIPHERTEXT:  ZLUNGBFSCEVTWZRPZTLQEPEBWNYBCVCZIHROAPPLOHYATMMCIJWYWJGWGIYT
+             PAWLHBWPMTBMULWLRSEGJGRDQYTHJQJCVTKYUDBJGYQPDDOPIUV
+DECRYPT:     ANFZWOTEXSTAFFELXOBERSCHARFXENGELMANNXENGELMANNXZURUEQXUZTUF
+             XERBXERBXWIRDVONMIREINGEWIESENXGEZXHENNINGXHENNINGX
+READING:     ANF[?] ZWOTE X STAFFEL X OBERSCHARF[UEHRER] X ENGELMANN X
+             ENGELMANN X ZURUEQ X U[N]TU[R]F[UEHRER] X ERB X ERB X WIRD
+             VON MIR EINGEWIESEN X GEZ X HENNING X HENNING X
+GLOSS:       ... second echelon: Oberscharfuehrer Engelmann, Engelmann
+             back; Untersturmfuehrer Erb, Erb will be briefed by me.
+             Signed Henning, Henning. The abbreviated re-send of ALVPM;
+             ANF is an unexpanded abbreviation, and U[Z]TUF carries one
+             garble against ALVPM's USTUF.
+NOTES:       Recovered independently here from ciphertext alone (broken elsewhere first, key unpublished); the abbreviated re-send of ALVPM, same key and same start. Its --confidence margin was only +2.29 sd, marginal alone; ALVPM at +7.54 and the shared plaintext are what settle it. GARBLES: 1 in 111 letters (0.9%), and it is REAL -- pos 56 Z for S in U[S]TUF. Verified against the form (eval/forms/, p.138): it would need ciphertext g->q, and the form shows an unmistakable g (q is written with a BARRED descender in this hand, g with an open loop). The transcription of this message is letter-perfect, and the form's stated length of 116 confirms it. Spruch Nr 39, 9.9.41, befoerdert 0913, message time (0850), indicator ftjmyc, to SS-T.Div. This garble is also the single difference across the 73 letters ALRHG shares with ALVPM
+
+### Message No. 8-Oct  --  02 Oct 1941  (ALGXZ)
+REFLECTOR:   B
+WHEELS:      IV V II     (-w 452)
+RING:        DVM
+START:       WAS
+PLUGS:       AP BU CX DH ER FQ IW KO LZ MS
+KENNGRUPPE:  ALGXZ   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 452 -r DVM -g WAS -s "AP BU CX DH ER FQ IW KO LZ MS"
+CIPHERTEXT:  BOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOMUGPVX
+             XDYWTJG
+DECRYPT:     ZWISQEAQEFDUJGXNEUENUYDERKUNFWSRAUMBEZOLENXSKYZZWFOLGTXHARTJ
+             UNSZEIN
+NOTES:       Listed as broken on 31.07.2026 with no key published; the key arrived on Frode's June-October 1941 key page (updated 01 Aug 2026) and is applied here. The transcription is heavily garbled -- ZWISQE[N] and the HARTJ[E]NS[T]EIN signature at the end are clear, the middle is not -- so this is a correct key over a poor ciphertext, not a clean decrypt. Kept because the key is now on record. Nr 7 NF is the same message on the same key
+
+### Message No. 38  --  09 Sep 1941  (GEHRG)
+REFLECTOR:   B
+WHEELS:      III IV II   (-w 342)
+RING:        ALZ
+START:       UXT
+PLUGS:       AZ DV ET FS GQ JP LX MY NR OW
+KENNGRUPPE:  GEHRG   (discriminant; not enciphered)
+INDICATOR:   BOZ IWD   (as sent; the operator's enciphered message key)
+CMD:         ./enigma -u B -w 342 -r ALZ -g UXT -s "AZ DV ET FS GQ JP LX MY NR OW"
+CIPHERTEXT:  LGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINC
+             IVXSYRGIGUWLOE
+DECRYPT:     QUELLEXABTABEINSSEQSNULLNULLUHRINROMANOVKAXROMANOVKAGKLAMMXP
+             OLAXPOLAXKIAMM
+READING:     QUELLE X ABT AB EINS SEQS NULL NULL UHR IN ROMANOVKA X
+             ROMANOVKA [K]LAMM X POLA X POLA X K[L]AMM
+GLOSS:       Source: detachment from 1600 hrs at Romanovka, Romanovka
+             (bracket) Pola, Pola (bracket). SEQS is sechs with Q for ch;
+             the K/G and K/I in GKLAMM and KIAMM are single-letter
+             garbles of the bracket markers.
+NOTES:       Unbroken for twenty years, broken elsewhere 12.07.2026 with no key published. Recovered here in 0.08 s on one thread as a bare 17576-key START-POSITION sweep, because ALVPM and ALRHG had already given up the 09.09.1941 day key -- the day-key attack of ENHANCEMENTS item 3, on real traffic. Margin +6.90 sd. Designator GEHRG stripped by hand here; position 31 carries the N->V correction from the German Army Messages page. GARBLES: 2 in 74 letters (2.7%) -- pos 52 G for the X separator after the second ROMANOVKA, pos 70 I for L in K[L]AMM. SEQS (sechs) and the spelled 1600 are convention, not garbles
+
 ### Message No. 23  --  08 Jul 1941  (KHLPT)
 REFLECTOR:   B
 WHEELS:      IV III II   (-w 432)
@@ -114,6 +204,7 @@ RING:        PKF
 START:       PIK
 PLUGS:       CY EL FH GS IJ KQ MW PV RZ TU
 KENNGRUPPE:  KHLPT   (discriminant; not enciphered)
+INDICATOR:   OKF QLV   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 432 -r PKF -g PIK -s "CY EL FH GS IJ KQ MW PV RZ TU"
 CIPHERTEXT:  CWSEBDDIRBZUUBGKJANBVGIVDVDZZIGAKBZCJMMVEMVXLTHNLDYGRVQAKJMR
              VZIXHMDNOMTAUTPZDWOINNMOLAHCDKCZTPPEORFIBXCMNWQNIDDCHPTXQQBC
@@ -128,6 +219,7 @@ RING:        THE
 START:       BRZ
 PLUGS:       AD BH FG IJ KN LZ MR OS PW QV
 KENNGRUPPE:  KEJNQ   (discriminant; not enciphered)
+INDICATOR:   AMQ LKF   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 253 -r THE -g BRZ -s "AD BH FG IJ KN LZ MR OS PW QV"
 CIPHERTEXT:  SFUGRPVPWGSPYHMNQYJTPPDGHFMROCPMUUBLBBJLSRZCYBXHFXQSWGWOXDNE
              VRIOCSPWKYCFTLRSAKBNWZJYPLQBSHQYVTCCCEPUYVUKSHHVWHXYOJKPVWQW
@@ -144,6 +236,7 @@ RING:        YPC
 START:       BGO
 PLUGS:       AK BI DG FN HL JO MT QY RV UW
 KENNGRUPPE:  ALWOK   (discriminant; not enciphered)
+INDICATOR:   ALY XQE   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 213 -r YPC -g BGO -s "AK BI DG FN HL JO MT QY RV UW"
 CIPHERTEXT:  PBYQVEQEHZFPKFLVJSOGNBZNIMXDMDSZXIAQBEKYAKFCIREEWQCBRPBLHHUH
              GMTPTXGZGSUISJQEYEVSLFXSCUACFAJBUGWYWPVUADTAGMERMBLWTDDGVHRW
@@ -160,6 +253,7 @@ RING:        LSB
 START:       SAU
 PLUGS:       AP BO CY DU ES FN GR IV JT LZ
 KENNGRUPPE:  ADAFU   (discriminant; not enciphered)
+INDICATOR:   LTB MMF   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 513 -r LSB -g SAU -s "AP BO CY DU ES FN GR IV JT LZ"
 CIPHERTEXT:  IJDBUPLBYHCHNHLXSJKOMPKLLTZDCHYKNRMZNQFNWMPICJTWAIZSGRRFYZIU
              QBNFTWCO
@@ -174,6 +268,7 @@ RING:        LSB
 START:       FUT
 PLUGS:       AP BO CY DU ES FN GR IV JT LZ
 KENNGRUPPE:  CHAFU   (discriminant; not enciphered)
+INDICATOR:   AIA XIE   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 513 -r LSB -g FUT -s "AP BO CY DU ES FN GR IV JT LZ"
 CIPHERTEXT:  RPONEIAUPRFCDYUTGWENPLABTFVTPBBFYIARMTWYDKOGLVKCWYYTQOEGVDFY
              YIXWBIMSHFGWQCZLIFVLKNSBCQPDFYWRTXMMXXURG
@@ -188,6 +283,7 @@ RING:        LSB
 START:       BOK
 PLUGS:       AP BO CY DU ES FN GR IV JT LZ
 KENNGRUPPE:  DKAFU   (discriminant; not enciphered)
+INDICATOR:   SDC JKP   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 513 -r LSB -g BOK -s "AP BO CY DU ES FN GR IV JT LZ"
 CIPHERTEXT:  GSJKOBKWRVHKRLHNPJXDBAWUUCFJMCIOJZFIYTOZVZNNGTKCEMVWDONFDNQZ
              VGKV
@@ -202,6 +298,7 @@ RING:        LSB
 START:       KLO
 PLUGS:       AP BO CY DU ES FN GR IV JT LZ
 KENNGRUPPE:  NOEGP   (discriminant; not enciphered)
+INDICATOR:   CSW MEK   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 513 -r LSB -g KLO -s "AP BO CY DU ES FN GR IV JT LZ"
 CIPHERTEXT:  UKXJRKUWZJHHGPGHLCHAYRLHKFQJZXOKFMUKRZCKKCIASYTBMTFOVWRUDOCZ
              UUFLMFYEBCDRADVTSHYMTKHOEZEVMUEDZBCFZ
@@ -216,6 +313,7 @@ RING:        LSB
 START:       AFF
 PLUGS:       AP BO CY DU ES FN GR IV JT LZ
 KENNGRUPPE:  HOEPG   (discriminant; not enciphered)
+INDICATOR:   KPH YNH   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 513 -r LSB -g AFF -s "AP BO CY DU ES FN GR IV JT LZ"
 CIPHERTEXT:  JCKKCIMUJHNGYECEYGTPGKZSKWBFHFYEDYOGOAJLJKAADPWYRJRJHCOZXXSJ
              XHOOGXEEMYNNIFMVUUKTOWEE
@@ -230,6 +328,7 @@ RING:        YHO
 START:       WAS
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  DAFPX   (discriminant; not enciphered)
+INDICATOR:   ZIP NDT   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g WAS -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  PHHWKBNCDTPEXBVBHBFWSJXGHHIWCMBHNPXDSGSRTMSNHTOSDZNLMLJVLHSY
              UYGNKYBBPCWTRPSOORTTPCIQLBMCAFVKSWBNXBXZRBPKAUZBELNALIANRWGF
@@ -246,6 +345,7 @@ RING:        YHO
 START:       WAS
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  AEFXP   (discriminant; not enciphered)
+INDICATOR:   SCJ RWT   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g WAS -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  CYLGCHSYSTANCNJIKDNXKIAFLHXEZWGJIUGAQPTZZSSWBMJBYZEVBULUHIOK
              YYEEYLSNEFKPTBDPVCWFJSYXGFMBGIKPSXWGKBRSMPPBCZRSYXHKIJYUFTCT
@@ -270,6 +370,7 @@ RING:        YHO
 START:       WAS
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  ITFPX   (discriminant; not enciphered)
+INDICATOR:   XHK FHP   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g WAS -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  CYAVMVIIBSWTXBUAIDUBXRIGYPWFIOJHGQNWWWAUOIJXPCHGEXUBIDZGGOGD
              USIIYLFHYLWRGZQPKTUVKFIXGFMKHUMZCFVQYYUUDZAGYUFSINHJHOBTF
@@ -290,6 +391,7 @@ RING:        YHO
 START:       GRA
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  MNQBH   (discriminant; not enciphered)
+INDICATOR:   TJI KPJ   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g GRA -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  AJFFBFZEEAPCVGMAZDERXCFCLZFVPBBJTAVQGGLPMIFDDAAHYSLHDYTOFFFP
              MAGMNRKRF
@@ -308,6 +410,7 @@ RING:        YHO
 START:       SPE
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  ARPTZ   (discriminant; not enciphered)
+INDICATOR:   NWH GGP   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g SPE -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  IJDWCCVPRIPSMFVEHCPVSBEEGGHJIVAPHMTIXMRPZALPUKLMWEIFRWMUZFYZ
              XFKAGXGATFBOIGKTYMOTUTMFDWFZEUXUZZOSTLNNSLEPWM
@@ -322,6 +425,7 @@ RING:        YHO
 START:       SAU
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  ABBHQ   (discriminant; not enciphered)
+INDICATOR:   STG YTF   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g SAU -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  VJWDKMVRFCLQWRJBLEREMXEDEBXPNBWZEFEFMKHGIPJJZACGCTYSFJUXYMRY
              JEWPVHZ
@@ -336,6 +440,7 @@ RING:        YHO
 START:       SEE
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  ANQIX   (discriminant; not enciphered)
+INDICATOR:   XFG GSM   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g SEE -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  KQKECZPPDKOERKJZMCVIIBFNSYQSJQCSIXPIVQQIIKYRQZYQECFASFOTDSGX
              PYLCPEJLYAYNSUNQEINSINMZEGMCXPYYQPNMKSLJDQQZAWQR
@@ -350,6 +455,7 @@ RING:        YHO
 START:       HOR
 PLUGS:       AG CP DK EL HQ IT JV MX OY RW
 KENNGRUPPE:  FDTZP   (discriminant; not enciphered)
+INDICATOR:   GUR JPC   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 421 -r YHO -g HOR -s "AG CP DK EL HQ IT JV MX OY RW"
 CIPHERTEXT:  HHCOGJSSROCENABVGLJGCDSAUXTQSYJBTNRNWVHKIPGTSNACIMHTOJNLGMEA
              YHCBXHWQG
@@ -364,6 +470,7 @@ RING:        TIP
 START:       SEE
 PLUGS:       BC DE FG HI JK LX MQ NO ST VZ
 KENNGRUPPE:  NKMOW   (discriminant; not enciphered)
+INDICATOR:   DTI AZZ   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 213 -r TIP -g SEE -s "BC DE FG HI JK LX MQ NO ST VZ"
 CIPHERTEXT:  YXFKKRXYABMLSWEYTJXCTETEFIDLMPJBJOMOZDDAUKQGXFXMZPDWUQUNHAAN
              SRHYTFGKOEQMIVSFYCRKXCUJQHUNBMJSHWZVVKZNWXFLZXEOWDPYAWXZDUMY
@@ -380,6 +487,7 @@ RING:        AAV
 START:       KFU
 PLUGS:       CT EM FI GJ HK NQ OR SW UY VX
 KENNGRUPPE:  LYASO   (discriminant; not enciphered)
+INDICATOR:   TCR IEI   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 423 -r AAV -g KFU -s "CT EM FI GJ HK NQ OR SW UY VX"
 CIPHERTEXT:  CDPSKLDFHVDDPNWBORPSAYUHYLHUJZZGUNOZBVWWHJMNFJYFIKJXRIASGJCV
              GYIBDETWDMDWVHIPJHBYKTMJJSEHJYHUQABFBIGTITWPFGSOMEYLTEMTUWSL
@@ -396,6 +504,7 @@ RING:        WHJ
 START:       SIM
 PLUGS:       BI CW EQ FX HZ JN KY MT OV PR
 KENNGRUPPE:  XTMSY   (discriminant; not enciphered)
+INDICATOR:   QCB NSR   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 354 -r WHJ -g SIM -s "BI CW EQ FX HZ JN KY MT OV PR"
 CIPHERTEXT:  TWDAZYHQMHTJWVBDYLISJUWPLZELISGDPHRHJUYHXLBGHPGWZHWVRYGTGLXP
              EWPHAPGOIIVDBENMGMAGHRHUDDIFHFMLYODVLEBTZTHAKGPUCMQMAENSPNOS
@@ -412,6 +521,7 @@ RING:        WHJ
 START:       WER
 PLUGS:       BI CW EQ FX HZ JN KY MT OV PR
 KENNGRUPPE:  DEROP   (discriminant; not enciphered)
+INDICATOR:   AIK SUD   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 354 -r WHJ -g WER -s "BI CW EQ FX HZ JN KY MT OV PR"
 CIPHERTEXT:  AQDEGMQTRRJYMHBITNRQOXTCSNFSLVNPDLRVDRRPTZXFRCWMIDYQDSEXLJIK
              AKCWGMIQCPNEQEVDNMSLDSSWIOKEIBKPYJDPRNKHKSYNOOMGZENLBCNSLHNX
@@ -444,6 +554,7 @@ RING:        IRD
 START:       MKO
 PLUGS:       AN BM DH EI KQ LS OT PV RU YZ
 KENNGRUPPE:  ABAHP   (discriminant; not enciphered)
+INDICATOR:   RFV ACK   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 513 -r IRD -g MKO -s "AN BM DH EI KQ LS OT PV RU YZ"
 CIPHERTEXT:  DZNURTOLHFSHJMBHMXMUHVKYPGBKGDCBNVNCSDSKENKYKYKLKNUMJHNMCQQY
              NBEDVBJTJUKAJAYGLKISB
@@ -458,6 +569,7 @@ RING:        BUL
 START:       OPQ
 PLUGS:       AV BS CG DL FU HZ IN KM OW RX
 KENNGRUPPE:  XIVFG   (discriminant; not enciphered)
+INDICATOR:   LMN JGO   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 245 -r BUL -g OPQ -s "AV BS CG DL FU HZ IN KM OW RX"
 CIPHERTEXT:  IBAVLEQQLTIUMMJREOCIIYYVOA
 DECRYPT:     WOBLEIBTZAHLENMELDUNGFRAGE
@@ -470,6 +582,7 @@ RING:        PKF
 START:       YXC
 PLUGS:       CY EL FH GS IJ KQ MW PV RZ TU
 KENNGRUPPE:  GLPTL   (discriminant; not enciphered)
+INDICATOR:   WCK KLW   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 432 -r PKF -g YXC -s "CY EL FH GS IJ KQ MW PV RZ TU"
 CIPHERTEXT:  XXNKVVLLFFHJHVFVMTCONRDWPBXWDCJMZYGPCBFNPPRQNZVKXSSQVUUGYSDI
              AGFBXHX
@@ -484,6 +597,7 @@ RING:        PKF
 START:       GUT
 PLUGS:       CY EL FH GS IJ KQ MW PV RZ TU
 KENNGRUPPE:  ABDJV   (discriminant; not enciphered)
+INDICATOR:   ACS GUT   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 432 -r PKF -g GUT -s "CY EL FH GS IJ KQ MW PV RZ TU"
 CIPHERTEXT:  CNIIGFXRCYZHBQPNBSDYFCALGOTAUOTHFKGVZKHWABIGYINNQDKCQIZHXADD
              VWGEWLYYZAERRLSASFPASRACDZCAWBHKKCAHSGDIFRZBABKPAOPXMOTAGDPX
@@ -502,6 +616,7 @@ RING:        PKF
 START:       TRE
 PLUGS:       CY EL FH GS IJ KQ MW PV RZ TU
 KENNGRUPPE:  HBNVE   (discriminant; not enciphered)
+INDICATOR:   DRU QBP   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 432 -r PKF -g TRE -s "CY EL FH GS IJ KQ MW PV RZ TU"
 CIPHERTEXT:  FSAVWYDYSJEFMEKDWOUJWTDUTGDAPKBDZFEBYBTZVFPFWFUPQKPIVTFBJBLP
              WHJATMABXEAPSOYUIMFRSUYATZRYTPKYMGLIUBCKJPFFDNM
@@ -516,6 +631,7 @@ RING:        NAV
 START:       LAU
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  CASBL   (discriminant; not enciphered)
+INDICATOR:   JOL RVH   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g LAU -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  --------------------DUAIKEGNUIZQMUDPILXGUMBCICYCMSQSPQGSSWXK
              UTTNVCWITHMERJUD
@@ -530,6 +646,7 @@ RING:        NAV
 START:       ALA
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  BEYWU   (discriminant; not enciphered)
+INDICATOR:   MIN MER   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g ALA -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  TEMSIYXKLBPSJDWAHLWOFEQKZXMASNZTAVNPZKUFZHKXBE-JFSJFIKFTWDWX
 DECRYPT:     WIELABEAUFNQQSQUBSTRASZEXINSBESONDEKXBEIXOPOTS-HKAXOPOTSCHKA
@@ -542,6 +659,7 @@ RING:        NAV
 START:       HNM
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  DESGF   (discriminant; not enciphered)
+INDICATOR:   GMD NQZ   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g HNM -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  WHGAQOFVWVVKMBSWVNQRUKFKJTLOUXDBPLATLPNFBIUODJRXJMTJNBCSLSEI
              HRH
@@ -556,6 +674,7 @@ RING:        NAV
 START:       HBN
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  TUGFI   (discriminant; not enciphered)
+INDICATOR:   NOV ANZ   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g HBN -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  KQVTGLLPQGNRREHAANTJBORUCNGFLYJYYSXMPQCAMJAO
 DECRYPT:     ZAHLENMELDUNINOQWIQTEINGEGANGENXSOFORTMDLDEN
@@ -568,6 +687,7 @@ RING:        NAV
 START:       RFV
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  WNFGI   (discriminant; not enciphered)
+INDICATOR:   BIW CRF   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g RFV -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  WUELDVARQLEQCDPUGVEBKKMLALTHCVHQPUVUFNJUVOJDKVETEKCJUKUCNZI
 DECRYPT:     ANGEFORDERTEXARTXKUNITIONDRINFENDERLOPDRRAOQXROEMXEINSFNTON
@@ -580,6 +700,7 @@ RING:        NAV
 START:       OFF
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  SOFGI   (discriminant; not enciphered)
+INDICATOR:   HMR ECH   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g OFF -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  SHUDMFUZIMNREYT---------------
              LAKWGQYBTBGECBSKLNCECFPQRZEHSHVGSJKJDFLFPKEFPSDKG-
@@ -594,6 +715,7 @@ RING:        NAV
 START:       SIM
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  ABUNY   (discriminant; not enciphered)
+INDICATOR:   EUQ MAC   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g SIM -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  AKTNFXVLIEZQOTKWIRXUUXSWONIYDOERIKZCIRUMXMDWEGUQVLABWYNULFRT
              YXMICBBFIZQLDARKZYOZHSBPBQDPITVTUYFPQXQGLIYZFFRDYJAHHKHWVYTS
@@ -610,6 +732,7 @@ RING:        NAV
 START:       KFK
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  NEWUY   (discriminant; not enciphered)
+INDICATOR:   OPB LAB   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g KFK -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  BBKEWVFCJEEGMNEBOPKABCCCXUDOXEYEGOYJQOFIYUZZGBNKEIYACIAAHTWM
              GSBUNVYYVFHXJPDBWWDUPZSMWJOHAXROVWUWJIUFRIOMCBCBYZVOLSAASHXC
@@ -624,6 +747,7 @@ RING:        NAV
 START:       WUK
 PLUGS:       AC BN FM GI JL KO PU QX RZ TV
 KENNGRUPPE:  ENIDN   (discriminant; not enciphered)
+INDICATOR:   UFZ AGE   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 315 -r NAV -g WUK -s "AC BN FM GI JL KO PU QX RZ TV"
 CIPHERTEXT:  GLNPOQDUUENYDRKDTQBEIMZMFJJPXJQAPMHLTXEOMBUQXNKPUMADMQCVQBTL
              TDTJOKBVLDIBOHPASEYJYDTLOVRAPKVQWTBSMAHUNLHNUXRTYZSZOAGAAIMS
@@ -640,6 +764,7 @@ RING:        JQH
 START:       DOR
 PLUGS:       AS BG CK DZ IO LR MP QT UW VY
 KENNGRUPPE:  ANIJQ   (discriminant; not enciphered)
+INDICATOR:   IPG PHA   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 521 -r JQH -g DOR -s "AS BG CK DZ IO LR MP QT UW VY"
 CIPHERTEXT:  XQXBCJTGZOTAPDSAFZIFWIJKIQFTDLJDVGPQYDPAIZUIPRMEMXJOGDNUGTZF
              LABHJMAJBTUCVNBGHSAJCMTVDUSRVFMBWYFQXTHKKFGYUVTJHDHMDNVAXWJD
@@ -702,6 +827,7 @@ RING:        JQH
 START:       VFR
 PLUGS:       AS BG CK DZ IO LR MP QT UW VY
 KENNGRUPPE:  SHNQO   (discriminant; not enciphered)
+INDICATOR:   VDJ RSJ   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 521 -r JQH -g VFR -s "AS BG CK DZ IO LR MP QT UW VY"
 CIPHERTEXT:  DMCFWQZKJTKLHGHAGVCYOEATUSCCSJIQNBGQTMRJILEEDLOGARGEVVKKGTZX
              UWNYOTHPIBKPZWLKQWMZAQMHJYYHJBHTUXYAUESGSNVIIQFQGVHWSM
@@ -716,6 +842,7 @@ RING:        JQH
 START:       TGB
 PLUGS:       AS BG CK DZ IO LR MP QT UW VY
 KENNGRUPPE:  TXIJQ   (discriminant; not enciphered)
+INDICATOR:   CIJ UWH   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 521 -r JQH -g TGB -s "AS BG CK DZ IO LR MP QT UW VY"
 CIPHERTEXT:  COPLCIXXYVXLSRTXBCJNYQKGVDCZOZEWJGIZPYJQYLDSHFPAHHOYRVTAVHRJ
              UOJGVAEDTINRTWODIXQW-----
@@ -732,6 +859,7 @@ RING:        MRP
 START:       HEN
 PLUGS:       AG BJ CP DS ER FQ HV IU KT LW
 KENNGRUPPE:  SIPVX   (discriminant; not enciphered)
+INDICATOR:   SWV YTE   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 521 -r MRP -g HEN -s "AG BJ CP DS ER FQ HV IU KT LW"
 CIPHERTEXT:  EGVORBZNYHFGREXDUJIESGLNONUWQHWVUBNDGYQCYUPRFKQFPHYRXHJNHONB
              FDLIIACNGEFUHDCBFDWIWESORVXBQDHJAC
@@ -746,6 +874,7 @@ RING:        JQH
 START:       WER
 PLUGS:       AS BG CK DZ IO LR MP QT UW VY
 KENNGRUPPE:  RLGRZ   (discriminant; not enciphered)
+INDICATOR:   BDF PNX   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 521 -r JQH -g WER -s "AS BG CK DZ IO LR MP QT UW VY"
 CIPHERTEXT:  ZLPJHXFOPNYQSIEGLQSTAEQUSUWQEMCFEQDBGYKYNZCYTFFTCRRMUSQLEQUO
              ATEZUGBMPRRKBEZBWLOSHTAMBHUBTLEMLNAUXCKHWDIKLTAGNCXIKCT
@@ -760,6 +889,7 @@ RING:        JQH
 START:       BOI
 PLUGS:       AS BG CK DZ IO LR MP QT UW VY
 KENNGRUPPE:  NZGRZ   (discriminant; not enciphered)
+INDICATOR:   ALO XGF   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 521 -r JQH -g BOI -s "AS BG CK DZ IO LR MP QT UW VY"
 CIPHERTEXT:  ANRXAHTUWLDZWRZKHBFWBDOMWEOFMPGUOGB
 DECRYPT:     WOBLEIBTTAGESMALDUNGFRAGEQUEULEXABT
@@ -772,6 +902,7 @@ RING:        YCM
 START:       RHL
 PLUGS:       AJ BD CZ EH GU IK LV MQ NX OS
 KENNGRUPPE:  MAKJH   (discriminant; not enciphered)
+INDICATOR:   FZK EWR   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 254 -r YCM -g RHL -s "AJ BD CZ EH GU IK LV MQ NX OS"
 CIPHERTEXT:  GCWUOBSPVJJBEUZRBYZKQUZJLQBUTLIUZKNYNPXEJGHSGGTUJCGKNZMNZVPI
              NVJFEUADCFDPWVGJQCXNIDBAH
@@ -786,6 +917,7 @@ RING:        GTO
 START:       WSX
 PLUGS:       AD EH GY IM KN LR OZ QV TX WU
 KENNGRUPPE:  ANERF   (discriminant; not enciphered)
+INDICATOR:   QCV MLN   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 423 -r GTO -g WSX -s "AD EH GY IM KN LR OZ QV TX WU"
 CIPHERTEXT:  VLGWZLTWCUZKVUIHMFCEHYCFCUPUNQDO
 DECRYPT:     NEUERGEFEQTSTANDXPORCHOWXPORCHOW
@@ -798,6 +930,7 @@ RING:        GTO
 START:       TGB
 PLUGS:       AD EH GY IM KN LR OZ QV TX WU
 KENNGRUPPE:  MYFRE   (discriminant; not enciphered)
+INDICATOR:   XIC YUU   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 423 -r GTO -g TGB -s "AD EH GY IM KN LR OZ QV TX WU"
 CIPHERTEXT:  ROEGPNJEWWZZIXCTLSNRBARNRD
 DECRYPT:     VERSORTUNGSMELDUNGANGRUPPE
@@ -810,6 +943,7 @@ RING:        GTO
 START:       MXK
 PLUGS:       AD EH GY IM KN LR OZ QV TX WU
 KENNGRUPPE:  GSEAN   (discriminant; not enciphered)
+INDICATOR:   NTO BTU   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 423 -r GTO -g MXK -s "AD EH GY IM KN LR OZ QV TX WU"
 CIPHERTEXT:  ROPDKBYJJOXYGDJHIFOHMJDQSTKNQFPTYHMQWDFUIEMSSLEMDGCVUCCZGFCT
              FRICHRMTXJDKBKZWGZTXUN
@@ -824,6 +958,7 @@ RING:        GTO
 START:       IJN
 PLUGS:       AD EH GY IM KN LR OZ QV TX WU
 KENNGRUPPE:  EGERF   (discriminant; not enciphered)
+INDICATOR:   OLG ANW   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 423 -r GTO -g IJN -s "AD EH GY IM KN LR OZ QV TX WU"
 CIPHERTEXT:  LYNFXIEBIBZJXIVPXIFHFYPJILEFFEZPMILONBFQDWZAWNANBBDDHYMNHPDR
              JYHVUKMWAUIFDIRMYHFUCGZXBDLZMIRNKPIMAVAYXKMYHLRJVSGPNKEXXJAW
@@ -840,6 +975,7 @@ RING:        AGM
 START:       AKF
 PLUGS:       DM EP FL HI JR KY NQ OU SW TZ
 KENNGRUPPE:  HJVVS   (discriminant; not enciphered)
+INDICATOR:   UKM IUX   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 425 -r AGM -g AKF -s "DM EP FL HI JR KY NQ OU SW TZ"
 CIPHERTEXT:  YJTHKDRELIGUMTJLEMRNPNFOBITQTATLANMJYPJUGUMDJFNAUFSJLLRCAYOD
              GFSCMHKDNWAQFLSYRHZLWIGQQTBAGUSZHTQWAHJZCFELRHUZEFPTIZQTPWIP
@@ -856,6 +992,7 @@ RING:        AGM
 START:       WAS
 PLUGS:       DM EP FL HI JR KY NQ OU SW TZ
 KENNGRUPPE:  LSEGB   (discriminant; not enciphered)
+INDICATOR:   RIT IZG   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 425 -r AGM -g WAS -s "DM EP FL HI JR KY NQ OU SW TZ"
 CIPHERTEXT:  EZOGZDUVECYMLBRHEMPKKWCCJBRRJFFRV-BDMKQUZICCGRVRRCNQXLKPRXMB
              DFSPZOKZCKECYRTHSBCDNDOEUJYNHDILVZPAAMRZ
@@ -870,6 +1007,7 @@ RING:        RVA
 START:       IDA
 PLUGS:       BE CK DL GM HZ JO NW QU RT SV
 KENNGRUPPE:  AJLJD   (discriminant; not enciphered)
+INDICATOR:   FQT YSB   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 325 -r RVA -g IDA -s "BE CK DL GM HZ JO NW QU RT SV"
 CIPHERTEXT:  HXTNPFODYZBLBUVMSYIGULQUXVQJWPPCNRAWQIWRRMOJTVVHKDPGFIGCPEEA
              LIKADUKRGUKGRSWNWHCAPWQBERWQFNRHWVDSRYWVZQPAPHPQCLFKEUJRYNWP
@@ -886,6 +1024,7 @@ RING:        MJW
 START:       PCL
 PLUGS:       AW CS DR EY FO KU LZ NV PX QT
 KENNGRUPPE:  KLDIO   (discriminant; not enciphered)
+INDICATOR:   VOF ZVZ   (as sent; the operator's enciphered message key)
 CMD:         ./enigma -u B -w 521 -r MJW -g PCL -s "AW CS DR EY FO KU LZ NV PX QT"
 CIPHERTEXT:  JRJDAORKJGEEMOVPDRHBQYISWACJPASAEQZSPAEJQETVYVOWKQZBGVIPPSIG
              SDVFZJNMGLDRUWDSAEWSGTGXBIDAQA

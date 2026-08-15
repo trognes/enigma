@@ -48,6 +48,20 @@ from one day are `N` independent observations of the *same* key over a keyspace
 that does **not** grow — which is the one lever that attacks the limit `-R`
 cannot move.
 
+**DEMONSTRATED ON REAL TRAFFIC — and it beat this writeup.** ALVPM and ALRHG
+(09.09.1941) gave up their shared day key to an ordinary ciphertext-only attack;
+`GEHRG`, unbroken for twenty years and broken elsewhere only in July 2026 with
+no key published, then fell in **0.08 s on one thread** as a bare 17 576-key
+**start-position** sweep, margin +6.90 sd. The argument below is that `N`
+messages from one day are `N` observations of a keyspace that does not *grow*;
+in practice, once the shared key is known the remaining messages collapse to
+their own start position — a reduction of ~1.6e8, not a factor of `√N`. **The
+value of a same-day group is front-loaded**: break one message the hard way and
+the rest of the day is nearly free. That does not remove the work below (the
+joint *statistic* over `N` messages, for when no single message breaks alone),
+but it changes the priority — try the day's easiest message alone first.
+→ `eval/MODERN_BREAKING_NOTES.md` §5j.
+
 *Why it should be strong.* `--confidence` already supplies the arithmetic: a
 break needs the true key's `z` to clear `√(2 ln K)`. Score a candidate day key
 against `N` messages and the true key's signal accumulates over `N·L`
@@ -270,6 +284,32 @@ all reasoned rather than measured:
 The one new fragility: anchoring depends on the **X's themselves** decrypting
 correctly. Irrelevant for this feature's target population, where the climb
 recovers ~100% of letters, but it would matter for any partial-recovery use.
+
+**(c) Let the SEPARATOR be garbled too — ONE instance, after a withdrawal.**
+The rule requires the separator to be a literal `X`. This note originally cited
+two counter-examples; **one has been withdrawn**. `HENNING(J)HENNING` in ALVPM
+turned out to be *our* transcription error — the message form reads
+`HENNINGXHENNING`, and the `J` came from a `b` misread as `t` (§5j of
+`eval/MODERN_BREAKING_NOTES.md`). What survives is `ROMANOVKA(G)KLAMM` in GEHRG,
+whose ciphertext was not transcribed here. The argument still holds on its own
+terms — Enigma corrupts one letter per corrupted ciphertext letter and the
+separator is just another letter, so there is no reason to privilege it — but it
+now rests on **one** observation, not a rate. Get more instances before costing
+the change.
+
+**(d) Real doublings can differ in LENGTH — CONFIRMED against the form.** The
+matcher takes `|W| = |V|`, which the no-diffusion argument appears to justify:
+one corrupted ciphertext letter corrupts exactly one plaintext letter, so
+transmission garbles are pure substitutions. ALVPM breaks that from the other
+side. Its doubled surname is `SCUHNACHER` (10) against `SCHUHMACHER` (11) —
+*Schumacher* against *Schuhmacher*, **the operator spelling the name two ways**.
+Verified against the form: the short copy would need ciphertext `x→j` and `c→t`,
+which are not plausible misreadings, and the form's stated length of 177 matches
+the transcription exactly, so nothing was dropped in the ciphertext either. So
+indels do occur in real doublings — just from the keyboard, not the channel,
+which is the half the no-diffusion argument never covered. Length-tolerant
+matching would need edit distance rather than Hamming, which is more expensive;
+one confirmed instance is still not a rate.
 
 **(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
 Rough arithmetic, to be confirmed on wall time: the current check is ~11
