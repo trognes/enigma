@@ -204,6 +204,59 @@ Never ship the exact form. The hits are `KUSOW`, `SAGOSKA`, `STARAJARUSSA`,
 village names and German surnames, the operationally specific material no fixed
 vocabulary carries.
 
+*That "0.000%" is a floor, not a rate, and it was the wrong population*
+(`eval/doubling_null_probe.py`). 20 000 shuffles expect **0.28** hits at this
+rule, so zero was the likely outcome and bounded nothing — and shuffled real
+decrypts are not what the rule would ever be applied to. **The population that
+matters is decrypts at wrong rotor keys with the plugboard hill-climbed**, and
+its null is:
+
+> **≈ 5e-6 — one false hit per ~200 000 climbed candidates.**
+
+*Where that comes from.* A window needs an X at the centre (probability `p`)
+and `2L` non-X flanking letters with ≤1 mismatch, so with `A` = P(two letters
+equal and neither X) and `B` = P(both non-X),
+
+    E[hits] = Σ_L (n − 2L) · p · [ A^L + L · A^(L−1) · (B − A) ]
+
+Each extra letter costs `B/A ≈ 16`, so the threshold `L = 6` sets the rate
+almost alone, and within it the one-mismatch term dominates. On the climbed
+population (`X` = **2.41%**, `A` = 0.0508) that gives **4.9e-6**.
+
+*Why this population is SAFER than the shuffle null, not worse.* The rate is
+roughly linear in the X-rate, because the rule needs an X separator. A
+plugboard climb maximises an n-gram score and German prose is X-poor, so
+climbing a **wrong** key drives X *down* — **2.41% against 5.58%** in true-key
+decrypts and 6.84% in the shuffles. The one letter the rule depends on moves
+the safe way.
+
+*And the closed form is confirmed, not assumed.* It presumes memoryless
+letters, which real German badly violates — a bigram chain fitted to the corpus
+fires ~9× more often than its letter frequencies predict. That penalty does
+**not** carry over, because climbed wrong-key text is nearly structureless: its
+bigram IC is **1.07×** what independence predicts, against **1.48×** for real
+decrypts. Fitting both an i.i.d. and a bigram-Markov generator to the climbed
+population and running 1.5 M trials each gives **16 hits in 3.0 M = 5.3e-6**,
+95% CI [3.0e-6, 8.7e-6] — the closed form sits inside, and the Markov/i.i.d.
+gap is not significant.
+
+The direct count over the stored climbed decrypts — **0 in 5 888** — expects
+0.03 and so demonstrates nothing on its own. Neither did the "0 false positives
+in 8 928" quoted below, which expects 0.04.
+
+*What the rate allows.* Expected false hits = candidates × 4.9e-6:
+
+| climbed keys | 10 000 | **203 000** | 10⁷ | 10⁸ |
+|---|---:|---:|---:|---:|
+| expected false hits | 0.05 | **1.0** | 49 | 493 |
+
+**So it cannot run across a whole sweep.** A real unknown-key run climbs
+10⁷–10⁸ keys, which is tens to hundreds of spurious hits — against *one* true
+key that carries a qualifying doubling only **28% of the time** (13 of 46
+true-key decrypts). Swamped on both terms. It is sound as a **confirmer on a
+shortlist**, below roughly **200 000 candidates**, which is the regime the
+entry proposes it for.
+
 *The result, on the population the feature is FOR*
 (`eval/scoring_failure_probe.py`): 186 trials, short excerpts of authentic
 telegraphic German cut to contain a doubling, random rotor key, random 10-pair
@@ -435,6 +488,7 @@ to ask one new question of the same data; this one should not. `REUSE=1` re-runs
 the analysis without re-climbing.
 
 → `eval/doubling_probe.py`, `eval/doubling_climb_probe.py`,
+`eval/doubling_null_probe.py` (the null, three ways),
 `eval/doubling_anchored_probe.py` (note (a), measured down),
 `eval/results-doubling.txt`, `eval/results-doubling-climb.txt`; item 4 above;
 `archived/cribs.md` §4.2a.
