@@ -19,13 +19,18 @@
     quad above the bar        24      11/24        11/11  (100%)
     quad BELOW the bar        22       9/18         1/9   ( 11%)
 
-  below-bar messages whose plaintext DOES carry a doubling:
-    FTNBK    z= 0.90  SAGOSKAXSAGOSKA  climb reproduces it: YES
-    ALWOK    z= 0.56  TSCHEDINOVAXTSCHEDINOVA  climb reproduces it: no
-    ADAFU    z= 0.41  SCHNEIDERXSCHNEIDEN  climb reproduces it: no
-    CHAFU    z= 0.65  WASCHBUSCHXWASCHBUSCH  climb reproduces it: no
-    HOEPG    z=-0.73  ROMANOWOXROMANOWO  climb reproduces it: no
-    MNQBH    z= 1.67  ZANDERSXZANDERS  climb reproduces it: no
-    HBNVE    z= 0.33  LUDSENXLUDSEN  climb reproduces it: no
-    EGERF    z= 1.28  KOKOREWOXKCKOREWO  climb reproduces it: no
-    KLDIO    z= 0.61  NIKOLAJEWOXNIKOLAJEWO  climb reproduces it: no
+  below-bar messages whose plaintext DOES carry a doubling.
+  The %-correct column is the point: the outcome is BIMODAL even
+  with the rotor key given, so these are not messages where the
+  doubling was fragile -- they are climb failures, at which no
+  plaintext-side feature can work, plus one true scoring failure.
+    msg      z_quad %correct  doubling
+    FTNBK      0.90   100.0%  SAGOSKAXSAGOSKA  reproduced: YES
+    HOEPG     -0.73    15.5%  ROMANOWOXROMANOWO  reproduced: no
+    ADAFU      0.41    11.8%  SCHNEIDERXSCHNEIDEN  reproduced: no
+    ALWOK      0.56    10.5%  TSCHEDINOVAXTSCHEDINOVA  reproduced: no
+    KLDIO      0.61     8.9%  NIKOLAJEWOXNIKOLAJEWO  reproduced: no
+    HBNVE      0.33     8.4%  LUDSENXLUDSEN  reproduced: no
+    EGERF      1.28     3.3%  KOKOREWOXKCKOREWO  reproduced: no
+    CHAFU      0.65     3.0%  WASCHBUSCHXWASCHBUSCH  reproduced: no
+    MNQBH      1.67     1.4%  ZANDERSXZANDERS  reproduced: no

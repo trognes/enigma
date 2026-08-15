@@ -183,9 +183,32 @@ innocent explanation.** The pattern is about equally *present* in both
 populations — it is not that the hard messages lack doublings. Nine below-bar
 messages carry `TSCHEDINOVAXTSCHEDINOVA`, `WASCHBUSCHXWASCHBUSCH`,
 `NIKOLAJEWOXNIKOLAJEWO`, `ROMANOWOXROMANOWO` and the rest, and the climb
-recovers **one** of them. This is item 4's failure mode, confirmed directly and
-for the reason predicted there: a doubling needs `2k+1` consecutive correct
-letters where a word needed one word, so it is strictly *harder* to keep.
+recovers **one** of them.
+
+*The reason is starker than "harder to keep", and this is the useful form of the
+finding.* Letters recovered at the true key, over those nine: **100%** for FTNBK
+and **1.4–15.5%** for the other eight — at or near the 1/26 ≈ 3.8% chance floor.
+The outcome is **bimodal even with the rotor key given**, so the below-bar
+population is not nine messages where a doubling was fragile; it is **one
+scoring failure plus eight climb failures**:
+
+- FTNBK is a genuine *scoring* failure. Its climb reproduces the plaintext
+  byte-for-byte (`STANDORTDERLNKXLNKXISTXKUSOWXKUSOW…`) and the quadgram model
+  still ranks it below wrong keys at z = 0.90. Every plaintext-side feature
+  fires on it, because the plaintext is *there*.
+- The other eight never produced plaintext at all — `ALWOK` at the true key
+  reads `ARORSQRINRBFLLABHIMLYQKBEEMLOOHIRK…` against a truth of
+  `ANXZWOXSANXKOMPXMITTAGESANBRUQ…`. No feature can read structure out of that,
+  because there is none.
+
+So the bound on **any** plaintext-side feature is much tighter than a fragility
+argument suggests: it can only ever address *scoring* failures, and in this
+corpus that is **one message of the 22 below the bar**. The other 21 are search
+failures, which `-R` moves and no scorer does — the same fact this file already
+records as a ~99% search-failure residual, seen from the plaintext side. (An
+earlier version of this entry attributed the 1-of-9 to a doubling needing `2k+1`
+consecutive correct letters against a word's one word. True in principle, but
+not what happens: the failures are total, not marginal.)
 
 *What survives is precision, and it is excellent.* **0 of 5888** climbed
 wrong-key decrypts fire — a likelihood ratio of **≥512:1** by the rule of three

@@ -41,9 +41,23 @@ is the climb rather than the corpus.  The pattern is about equally PRESENT in
 both populations (ceiling 11/24 above the bar, 9/18 below), but the climb
 reproduces 11 of 11 above and 1 of 9 below.  Nine below-bar messages carry
 TSCHEDINOVAXTSCHEDINOVA, WASCHBUSCHXWASCHBUSCH, NIKOLAJEWOXNIKOLAJEWO and the
-rest; the climb recovers one of them.  This is item 4's failure mode, confirmed
-directly and for the predicted reason: a doubling needs 2k+1 consecutive correct
-letters where a word needed one word, so it is strictly harder to keep.
+rest; the climb recovers one of them.
+
+THE REASON IS STARKER THAN "HARDER TO KEEP", and this is the useful form of it.
+Letters recovered at the true key over those nine: 100% for FTNBK and 1.4-15.5%
+for the other eight, at or near the 1/26 = 3.8% chance floor.  The outcome is
+BIMODAL even with the rotor key given, so these are not messages where the
+doubling was fragile -- they are eight climb failures plus one true scoring
+failure.  FTNBK's climb reproduces the plaintext byte-for-byte and the quadgram
+model still ranks it below wrong keys; ALWOK's produces
+ARORSQRINRBFLLABHIMLYQKBEEMLOOHIRK... against a truth of
+ANXZWOXSANXKOMPXMITTAGESANBRUQ..., and no feature can read structure out of
+that because there is none.
+
+So the bound on ANY plaintext-side feature is tighter than a fragility argument
+suggests: it can only address SCORING failures, which here is one message of the
+22 below the bar.  The rest are search failures, which -R moves and no scorer
+does.
 
 So the RESCUE application is dead and the CONFIRMATION application is real but
 narrow: a one-sided flag that fires on 26% of messages, mostly ones already won,
@@ -110,6 +124,13 @@ def collect():
     return out
 
 
+def pct(a, b):
+    """percent of letters the climb got right -- the control that shows the
+    outcome is bimodal (either ~100% or near the 1/26 chance floor)"""
+    n = min(len(a), len(b))
+    return 100.0 * sum(1 for i in range(n) if a[i] == b[i]) / n if n else 0.0
+
+
 def analyse(recs):
     zq = {}
     if os.path.exists(WSEG):
@@ -164,15 +185,22 @@ def analyse(recs):
     # in the plaintext of a message quadgrams cannot break, and what the climb
     # does with them.
     k, mm = VARIANTS[-1][1], VARIANTS[-1][2]
-    print("\n  below-bar messages whose plaintext DOES carry a doubling:")
-    for r in recs:
+    print("\n  below-bar messages whose plaintext DOES carry a doubling.")
+    print("  The %-correct column is the point: the outcome is BIMODAL even")
+    print("  with the rotor key given, so these are not messages where the")
+    print("  doubling was fragile -- they are climb failures, at which no")
+    print("  plaintext-side feature can work, plus one true scoring failure.")
+    print("    %-8s %6s %8s  %s" % ("msg", "z_quad", "%correct", "doubling"))
+    for r in sorted(recs, key=lambda x: -pct(truth.get(x["kenn"], ""),
+                                             x["true"])):
         if r["kenn"] not in zq or zq[r["kenn"]] > BAR or r["kenn"] not in truth:
             continue
         hit = repeats(truth[r["kenn"]], k, mm)
         if not hit:
             continue
-        print("    %-8s z=%5.2f  %sX%s  climb reproduces it: %s"
-              % (r["kenn"], zq[r["kenn"]], hit[0][0], hit[0][1],
+        print("    %-8s %6.2f %7.1f%%  %sX%s  reproduced: %s"
+              % (r["kenn"], zq[r["kenn"]], pct(truth[r["kenn"]], r["true"]),
+                 hit[0][0], hit[0][1],
                  "YES" if repeats(r["true"], k, mm) else "no"))
 
 
