@@ -114,6 +114,43 @@ def bonus(L, M):
     return 0.0 if L < 6 else M * (5.02 + 1.2 * (L - 6))
 
 
+def alias_starts(wheels, start):
+    """Grundstellungen that decode IDENTICALLY to `start`, itself excluded.
+
+    The double-stepping anomaly makes two starts the same key: with the
+    middle wheel ON its notch the first keypress steps the middle AND the
+    left wheel, so (g0, N, g2) and (g0+1, N+1, g2) reach the same positions
+    after one character and agree for the rest of the message.  It FAILS
+    when the right wheel is also on its notch, where the two branches of
+    the step rule diverge -- hence the guard.
+
+    This matters because such a start is NOT a competitor: it is the true
+    key under another name.  Left in the candidate list it ties the true
+    key's score exactly, which (a) counts as a chance doubling when the
+    plaintext carries a real one, and (b) makes a strict `>` win test
+    report a loss on a trial the search actually got right.  Three of the
+    first seven "chance doublings" seen here were this.
+
+    Verified against an exhaustive 17576-start search: 0 mismatches.
+    """
+    w = [int(c) - 1 for c in wheels]
+    g = [ord(c) - 65 for c in start]
+    if chr(g[2] + 65) in enigma_ref.NOTCH[w[2]]:
+        return []
+    out = []
+    if chr(g[1] + 65) in enigma_ref.NOTCH[w[1]]:
+        out.append(A[(g[0] + 1) % 26] + A[(g[1] + 1) % 26] + start[2])
+    if chr((g[1] - 1) % 26 + 65) in enigma_ref.NOTCH[w[1]]:
+        out.append(A[(g[0] - 1) % 26] + A[(g[1] - 1) % 26] + start[2])
+    return out
+
+
+def competitors(rec):
+    """The candidate list with the true key's double-step aliases removed."""
+    bad = set(alias_starts(rec["wheels"], rec["start"]))
+    return [c for c in rec["cands"] if c["g"] not in bad]
+
+
 def score_of(stderr):
     m = re.findall(r"^\s*(-[0-9.]+) [A-Za-z]", stderr, re.M)
     return float(m[-1]) if m else None
@@ -228,7 +265,7 @@ def adj(c, rec, T, M):
 
 def wins(rec, T, M, arm):
     t = adj(rec[arm], rec, T, M)
-    return t > max(adj(c, rec, T, M) for c in rec["cands"])
+    return t > max(adj(c, rec, T, M) for c in competitors(rec))
 
 
 def steals(rec, T, M, arm):
@@ -291,8 +328,8 @@ def report_arm(recs, arm, label):
           % ("L", "n", "baseline", "with bonus", "median gap (dec)"))
     for L in sorted({r["L"] for r in recs}):
         sub = [r for r in recs if r["L"] == L]
-        gaps = sorted((r["best_wrong"] - r[arm]["s"]) * (r["L"] - 3)
-                      for r in sub)
+        gaps = sorted((max(c["s"] for c in competitors(r)) - r[arm]["s"])
+                      * (r["L"] - 3) for r in sub)
         print("   %-6d %-6d %-11s %-11s %+.1f"
               % (L, len(sub),
                  "%d of %d" % (sum(wins(r, 99, 0, arm) for r in sub), len(sub)),
@@ -327,7 +364,7 @@ def main():
     print("\n4. DOUBLING RATE AS A FUNCTION OF z (the independence check)")
     band = {}
     for r in recs:
-        for c in r["cands"]:
+        for c in competitors(r):
             b = min(int(math.floor(c["z"])), 6)
             n, h = band.get(b, (0, 0))
             band[b] = (n + 1, h + (c["d"] >= 6))
