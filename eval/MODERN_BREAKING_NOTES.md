@@ -91,11 +91,13 @@ to the true-plugboard output (`-a` vs `-q`, `-S m4{a,q}10 -J --polish -l german`
 
 ## 4. Expanded real-traffic set (`eval/enigma-army-messages-1941.txt`)
 
-**58 further authentic HG Nord messages** with keys + verified plaintext, from the older
+**60 further authentic HG Nord messages** with keys + verified plaintext, from the older
 Sullivan & Weierud "Breaking German Army Ciphers" collection (Cryptologia 2005;
 cryptocellar.org/bgac). These are ciphertexts the authors originally **failed to break**
 (2003–04) whose day-keys were **recovered later** (released 04 Aug 2017) — the "messages
-we failed to break" and "July Batch A" pages. `eval/build_army_messages_1941.py` decrypts
+we failed to break" and "July Batch A" pages. **Two of the sixty are not from that
+release**: ALVPM and ALRHG were broken ciphertext-only here, on a day key that
+appears in no published set (§5j). `eval/build_army_messages_1941.py` decrypts
 each at its stated key and reproduces the plaintext exactly; every one is clean
 telegraphic German (fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`,
 `ABENDMELDUNG`, phonetic `LUDWIG/FRIEDRICH/HEINRICH`, spelled numbers, `X` separators,
@@ -103,10 +105,10 @@ telegraphic German (fuel/ammunition/movement traffic: `BETRIEBSTOFF`, `MUNITION`
 "singular unbroken" message, now broken — and No. 233 XNRLR) are dropped by
 ciphertext-dedup, so the two files are disjoint.
 
-Together the two files hold **71 authentic messages (~7,030 letters)** of real
+Together the two files hold **73 authentic messages (~7,310 letters)** of real
 telegraphic German — the statistical power the original 13 (bimodal, too small to settle
 `-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
-statistics stay the *telegraphic corpus*; these 71 messages are *held-out validation*.
+statistics stay the *telegraphic corpus*; these 73 messages are *held-out validation*.
 
 ## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
 
@@ -527,6 +529,69 @@ synthetic one of the same length**, on both halves of the problem.
 
 The practical consequence is that `-R` should be sized against real traffic, not
 against the `crackquality` curve, when the target is an actual message.
+
+### 5j. Two messages broken ciphertext-only, on an unreleased day key
+
+**ALVPM (172 letters) and ALRHG (111 letters) are now broken**, and the key was
+recovered here rather than taken from the 2017 release:
+
+    B  342  ring ALZ  start VAT  AZ DV ET FS GQ JP LX MY NR OW
+
+Both are in `enigma-army-messages-1941.txt`. The commands were
+
+    ./enigma -c -l wehrmacht -S i4f10 -J --polish -u B -r A.. -g ... \
+             --ring-stride 3 -R 19 -T 12 --confidence 256 --full-text
+
+(`-R 5 -T 8` for ALVPM), i.e. the recommended recipe with a strided ring sweep.
+
+**Verification** — decrypt matches, re-encrypting the decrypt reproduces the
+ciphertext exactly, and **zero letters encrypt to themselves** in either
+message, which a wrong key could not manage by accident.
+
+**It is a new day key.** Wheel order 342 appears in none of the 22 published day
+keys in the builder, and the stecker shares at most **one** pair with any of
+them — chance level for 10 pairs drawn from 325.
+
+**The ring is a class representative, not necessarily the true day-key ring.**
+`ring0` is never identifiable from ciphertext (§7.10 — always reported `A`), and
+at 111–172 letters `ring1`/`start1` need not be singletons either (§7.12). The
+decrypt is exact regardless, but a published key for this day could differ in
+those positions without contradicting anything here.
+
+Three things fell out that are worth more than the break itself.
+
+**1. The two messages are in DEPTH — same key *and* same start.** They are
+the same order sent twice, once at length and once abbreviated, and the
+operator reused `VAT` for both. Over the 73 letters they share, the plaintexts
+differ in exactly **one** place — `USTUF` against `UZTUF` — the single-letter
+substitution Enigma's lack of diffusion predicts:
+
+    ALVPM  OBERSCHARFXENGELMANNXENGELMANNXZURUEQXUSTUFXERBXERBXWIRD...
+    ALRHG  OBERSCHARFXENGELMANNXENGELMANNXZURUEQXUZTUFXERBXERBXWIRD...
+
+**2. ALRHG alone would not have been a find.** Its `--confidence` margin is
+**+2.29 sd**, barely over the "below +2 sd is not a find" line this repo prints,
+and the measured false-positive work says a margin near there comes up on pure
+noise a few percent of the time. **ALVPM's +7.54** and the shared plaintext are
+what settle it. Do not cite ALRHG standalone.
+
+**3. `--ring-stride 3` found a ring2 its coarse pass never tested.** The true
+`ring2` is `Z` = 25, and 25 mod 3 = 1, so it is outside the coarse set
+{0, 3, …, 24}: the **derived refinement** recovered it. That is the
+`--ring-stride` machinery validated on a real unknown-key break rather than on
+synthetic trials, which had not happened before.
+
+**And the doubling signal fires on both** — `ENGELMANNXENGELMANN` in each, plus
+`HENNINGXHENNING` in ALRHG. That is exactly the case `ENHANCEMENTS.md` item 5
+describes: a marginal margin confirmed by a structural signal with no measured
+false positives. But ALVPM also carries **`HENNINGJHENNING`**, where the
+**separator itself is garbled**, and the matcher requires a literal `X` — so it
+misses that one. Harmless here, since `ENGELMANN` carries the message, but it is
+real-traffic evidence for folding the separator into the mismatch budget.
+
+**Still open: the date.** The day label reads "date not yet identified"; fill it
+in from the message forms when available, and the `DAYS` entry key
+`unknown.SS.342` with it.
 
 ### 5c. Attacking
 

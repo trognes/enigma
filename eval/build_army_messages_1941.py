@@ -53,6 +53,12 @@ DAYS = {
  "18.07.1941": ("B", "425", "AGM", "DM EP FL HI JR KY NQ OU SW TZ"),
  "25.07.1941": ("B", "325", "RVA", "BE CK DL GM HZ JO NW QU RT SV"),
  "29.07.1941": ("B", "521", "MJW", "AW CS DR EY FO KU LZ NV PX QT"),
+ # NOT from the released 2017 key set -- recovered ciphertext-only here, from
+ # ALVPM and ALRHG (see their notes).  Wheel order 342 appears in none of the
+ # 22 published day keys above, and this stecker shares at most one pair with
+ # any of them, which is chance level for 10 pairs out of 325.
+ # DATE NOT YET IDENTIFIED -- fill in from the message forms when available.
+ "unknown.SS.342": ("B", "342", "ALZ", "AZ DV ET FS GQ JP LX MY NR OW"),
 }
 # Nr 173 broke on its own ring+stecker (same wheel order) -- special per-message key.
 KEY_OVERRIDE = {"173": ("B", "521", "MRP", "AG BJ CP DS ER FQ HV IU KT LW")}
@@ -68,6 +74,22 @@ M = [
   "broken by Enigma@Home 15.09.2017, long after the 2017 key release; the transcription in enigma-challenge-1941.txt differed from this one in 13 of 101 letters and did not decrypt"),
  ("55 NF","28.08.1941","28 Aug 1941","YAC","","ALQFI","ALQFIGEELOREBSXEINXZYDHXITUFWDLTURTZSPMMLFMYZMAGJDWOPCBQYZRTJSTGVIJPHJIXTDBKDFXOYILZEUIMMLL",
   "the Bundesarchiv copy of Nr 81, from another SS-Totenkopf station; its plaintext is published, and the key was recovered from it here. Nr 81 is a badly corrupted transcription of the same message and does not decrypt"),
+ ("ALVPM","unknown.SS.342","date not yet identified","VAT","nostrip","ALVPM",
+  "TLNVEZRNWMGTSQOXCMJAQNNEVBQITIHROKAMXQPTJLMMCALFWSCSPTQCCUWSIHZCSAFFRUCKVGECKMKSMHSUDVZCDDQEEWGOBIUJGYAQJOVSIKRNSWDHMMQTZOOEEJYKUYOUPXXHPGYJTEKNGFZOMRDCFUQVEPYDRWITTKMYVCKQ",
+  "BROKEN CIPHERTEXT-ONLY HERE, not from the released key set. Designator "
+  "group "
+  "not in the transcription (nothing to strip); ALVPM is the source-page "
+  "designator. Same key AND same start as ALRHG, the same order re-sent. RING "
+  "IS A CLASS REPRESENTATIVE, not necessarily the true day-key ring: ring0 is "
+  "never identifiable from ciphertext (CLAUDE.md 7.10, always reported A) and "
+  "at 172 letters ring1/start1 need not be singletons either (7.12). The "
+  "decrypt is exact regardless"),
+ ("ALRHG","unknown.SS.342","date not yet identified","VAT","nostrip","ALRHG",
+  "ZLUNGBFSCEVTWZRPZTLQEPEBWNYBCVCZIHROAPPLOHYATMMCIJWYWJGWGIYTPAWLHBWPMTBMULWLRSEGJGRDQYTHJQJCVTKYUDBJGYQPDDOPIUV",
+  "BROKEN CIPHERTEXT-ONLY HERE; the abbreviated re-send of ALVPM, same key and "
+  "same start. Its --confidence margin was only +2.29 sd, marginal alone; "
+  "ALVPM "
+  "at +7.54 and the shared plaintext are what settle it"),
  ("23","08.07.1941","08 Jul 1941","PIK","","KHLPT","KHLPTCWSEBDDIRBZUUBGKJANBVGIVDVDZZIGAKBZCJMMVEMVXLTHNLDYGRVQAKJMRVZIXHMDNOMTAUTPZDWOINNMOLAHCDKCZTPPEORFIBXCMNWQNIDDCHPTXQQBC",""),
  ("7","13.08.1941","13 Aug 1941","BRZ","","KEJNQ","KEJNQSFUGRPVPWGSPYHMNQYJTPPDGHFMROCPMUUBLBBJLSRZCYBXHFXQSWGWOXDNEVRIOCSPWKYCFTLRSAKBNWZJYPLQBSHQYVTCCCEPUYVUKSHHVWHXYOJKPVWQWXQESKIEGMUORWZDJZRAJZCWKFFCLUXLDY",""),
  ("19","19.08.1941","19 Aug 1941","BGO","","ALWOK","ALWOKPBYQVEQEHZFPKFLVJSOGNBZNIMXDMDSZXIAQBEKYAKFCIREEWQCBRPBLHHUHGMTPTXGZGSUISJQEYEVSLFXSCUACFAJBUGWYWPVUADTAGMERMBLWTDDGVHRWXPHW",""),
@@ -179,6 +201,26 @@ def wrap(s, width=60):
 # LKW. Where a garbled word was sent only once (BRZT, ABPANG) the reading marks
 # the expansion as uncertain with [?].
 READINGS = {
+ "ALVPM": (
+  "S[S] X HAUP[T]ST[URM]F[UEHRER] X SC[H]UH[M]ACHER X SCHUHMA[C]HER X "
+  "OBERSCHARF[UEHRER] X ENGELMANN X ENGELMANN X ZURUEQ X "
+  "U[NTER]STU[RM]F[UEHRER] X ERB X ERB X WIRD VON MIR EINGEWIESEN [X] "
+  "FAHRE HEUTE ZUR ARMEE X KOMME MORGEN Z K R [?] X DIVISION X "
+  "GEZ X HENNING [X] HENNING X",
+  "SS-Hauptsturmfuehrer Schuhmacher, Schuhmacher: Oberscharfuehrer Engelmann, "
+  "Engelmann back; Untersturmfuehrer Erb, Erb will be briefed by me. "
+  "Travelling "
+  "to the Army today, returning tomorrow ... Division. Signed Henning, "
+  "Henning. "
+  "(ZKR unexplained; the separator in HENNING[J]HENNING is itself garbled.)"),
+ "ALRHG": (
+  "ANF[?] ZWOTE X STAFFEL X OBERSCHARF[UEHRER] X ENGELMANN X ENGELMANN X "
+  "ZURUEQ X U[N]TU[R]F[UEHRER] X ERB X ERB X WIRD VON MIR EINGEWIESEN X "
+  "GEZ X HENNING X HENNING X",
+  "... second echelon: Oberscharfuehrer Engelmann, Engelmann back; "
+  "Untersturmfuehrer Erb, Erb will be briefed by me. Signed Henning, Henning. "
+  "The abbreviated re-send of ALVPM; ANF is an unexpanded abbreviation, and "
+  "U[Z]TUF carries one garble against ALVPM's USTUF."),
  "55 NF": (
   "EINS NEUN EINS FUENF X KOLONNEN UEBER X STARAJA RUSSA X STARAJA RUSSA X "
   "IN MARSQ GESETZT X HARTJENSTEIN X",

@@ -271,6 +271,17 @@ The one new fragility: anchoring depends on the **X's themselves** decrypting
 correctly. Irrelevant for this feature's target population, where the climb
 recovers ~100% of letters, but it would matter for any partial-recovery use.
 
+**(c) Let the SEPARATOR be garbled too — now evidenced on real traffic.** The
+rule requires the separator to be a literal `X`, and the ALVPM break (§5j of
+`eval/MODERN_BREAKING_NOTES.md`) contains **`HENNINGJHENNING`** — the X itself
+corrupted to J. The matcher misses it. Harmless in that message, since
+`ENGELMANNXENGELMANN` carries it, but a message whose only doubling has a
+garbled separator is missed entirely. Enigma corrupts one letter per corrupted
+ciphertext letter and the separator is just another letter, so there is no
+reason to privilege it: fold it into the mismatch budget. This is real-traffic
+evidence rather than reasoning, and it is the first refinement here that came
+from an actual break.
+
 **(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
 Rough arithmetic, to be confirmed on wall time: the current check is ~11
 `score_iter`-equivalents, and one restart is ~1250 `score_iter` (inferred from
