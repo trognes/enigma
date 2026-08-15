@@ -162,13 +162,25 @@ Telegraphic German doubles important words around the X separator:
 runs are identical **to each other** — not that either is a word anyone listed
 in advance — so unlike item 4 it needs no vocabulary.
 
+*The rule, precisely* — `W` `X` `V` with `|W| = |V| = L`, **6 ≤ L ≤ 16**,
+neither copy containing an X, exactly one X between them, and at most **one
+position-wise substitution** between `W` and `V`. So `BERLINXBERLIM` fires and
+`BERLINXBERLMM` does not. Substitutions only, not indels — which matches the
+physics, since Enigma has no diffusion and a corrupted ciphertext letter
+corrupts exactly one plaintext letter, so transmission garbles *are*
+substitutions; an operator dropping a letter misaligns the copies and is missed.
+**`MAXLEN` was 12 and silently missed the corpus's longest real doubling**
+(`STUERZBAECHER`, 13, in DAFPX): a 13-letter repeat does not decompose into a
+matching 12-letter one, because sliding the window puts the copies out of
+alignment. 16 catches it at no null cost and saturates there.
+
 *The text-level precondition* (`eval/doubling_probe.py`, 50 messages with a
 clean recorded plaintext):
 
 | min len | mismatches | real messages | shuffled-null rate |
 |---:|---:|---:|---:|
 | 4 | 0 | 17 of 50 (34%) | 0.005% |
-| **6** | **≤1** | **21 of 50 (42%)** | **0.000%** |
+| **6** | **≤1** | **22 of 50 (44%)** | **0.000%** |
 
 **`len≥6` with one mismatch dominates `len≥4` exact** — more real messages at a
 null rate no higher — because real traffic is garbled and an exact test discards
@@ -179,20 +191,20 @@ village names and German surnames, the operationally specific material no fixed
 vocabulary carries.
 
 *The result, on the population the feature is FOR*
-(`eval/scoring_failure_probe.py`): 177 trials, short excerpts of authentic
+(`eval/scoring_failure_probe.py`): 186 trials, short excerpts of authentic
 telegraphic German cut to contain a doubling, random rotor key, random 10-pair
 board, `-R 256`, 48 wrong keys each as a per-trial null. Every trial is
 classified by separating the climb from the score:
 
 | outcome | n | feature fires on the true key |
 |---|---:|---:|
-| break (climb recovers, z > bar) | 61 | 60 of 61 (98%) |
-| **SCORING failure** (climb recovers, z ≤ bar) | **9** | **9 of 9 (100%)** |
-| search failure (climb does not recover) | 107 | 1 of 107 (1%) |
+| break (climb recovers, z > bar) | 66 | 65 of 66 (98%) |
+| **SCORING failure** (climb recovers, z ≤ bar) | **15** | **15 of 15 (100%)** |
+| search failure (climb does not recover) | 105 | 0 of 105 (0%) |
 
-**Rescue rate on scoring failures: 9 of 9**, where "rescue" means it fires on
+**Rescue rate on scoring failures: 15 of 15**, where "rescue" means it fires on
 the true key and on none of that trial's wrong keys, so the true key is
-identified outright. **False positives: 0 of 8496** climbed wrong-key decrypts,
+identified outright. **False positives: 0 of 8928** climbed wrong-key decrypts,
 consistent with the 0 of 5888 measured separately below.
 
 > **An earlier version of this entry reported "1 of 9" and called the rescue
@@ -209,22 +221,23 @@ an earlier claim here.* Conditional on the climb recovering at all:
 
 | L | climb recovers | of those, SCORING failures |
 |---:|---:|---:|
-| **60** | 8 of 81 | **7 (88%)** |
-| 100 | 37 of 66 | 1 (3%) |
-| 140 | 25 of 30 | 1 (4%) |
+| **60** | 14 of 84 | **11 (79%)** |
+| 100 | 38 of 69 | 4 (11%) |
+| 140 | 29 of 33 | 0 (0%) |
 
-At 60 letters a recovered message is *almost always* a scoring failure, against
-3% at 100 — consistent with a unicity distance of ~23 characters. The earlier
+At 60 letters a recovered message is *usually* a scoring failure, against 11% at
+100 and none at 140 — consistent with a unicity distance of ~23 characters. The
+earlier
 note that shortening "buries scoring failures under search failures rather than
 exposing them" was wrong as stated: search failures do dominate the raw trial
-count (73 of 81 at L=60), which makes harvesting expensive, but the *rate*
+count (70 of 84 at L=60), which makes harvesting expensive, but the *rate*
 conditional on recovery is an order of magnitude higher, not lower. Sample short
 if you want scoring failures; just expect to pay ~10 trials per usable one.
 
 *The end-to-end number needs the coverage multiplier*, because the trials above
 were **constructed** to contain a doubling. Measured over random windows of
 authentic plaintext, the fraction carrying one at `len≥6, mm≤1` is **25.8% at
-L=60**, 42.0% at L=100, 51.5% at L=140 and 61.4% at L=200. So operationally the
+L=60**, 42.1% at L=100, 52.6% at L=140 and 61.4% at L=200. So operationally the
 feature resolves ≈26% of scoring failures at L=60 and ≈42% at L=100 — the 100%
 above is *conditional on the doubling being present*, and must not be quoted
 without this factor.

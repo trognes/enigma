@@ -2,10 +2,10 @@
 
   exact repeats  W X W
   min len   messages carrying one  instances
-  3         17 of 50 ( 34%)          35
-  4         17 of 50 ( 34%)          29
-  5         14 of 50 ( 28%)          21
-  6         14 of 50 ( 28%)          19
+  3         17 of 50 ( 34%)          36
+  4         17 of 50 ( 34%)          30
+  5         15 of 50 ( 30%)          22
+  6         15 of 50 ( 30%)          20
 
   with ONE mismatch allowed (len>=4), excluding exact matches:
    9 of 50 ( 18%) -- transmission garbles and spelling variants
@@ -16,16 +16,16 @@
      SIOBEN/SIEBEN
 
   flanking, for the self-crib menu shape (len>=6, mm<=1):
-    both         20 of 28 ( 71%)
-    left only     7 of 28 ( 25%)
-    right only    1 of 28 (  4%)
-    neither       0 of 28 (  0%)
+    both         20 of 29 ( 69%)
+    left only     8 of 29 ( 28%)
+    right only    1 of 29 (  3%)
+    neither       0 of 29 (  0%)
     so the real pattern is X W X W X -- the flanking X is KNOWN
     plaintext, and that is what anchors the self-crib menu.
 
   what the exact hits ARE (the vocabulary-free argument):
      KUSOW, SAGOSKA, MATHIAT, STARAJARUSSA, OPOTSCHKA, ISSAKI, TSCHEDINOVA
-     WASCHBUSCH, PACHE, ROMANOWO, RENNER, ZANDERS
+     WASCHBUSCH, PACHE, ROMANOWO, STUERZBAECHER, RENNER
 
   by chance (20000 trials each):
      len>=3  uniform random  0.015%  shuffled real  0.115%
@@ -36,17 +36,17 @@
   min len mm<=   real messages          null
   4       0      17 of 50 ( 34%)           0.005%
   4       1      24 of 50 ( 48%)           0.355%
-  5       0      14 of 50 ( 28%)           0.000%
-  5       1      22 of 50 ( 44%)           0.030%
-  6       0      14 of 50 ( 28%)           0.000%
-  6       1      21 of 50 ( 42%)           0.000%
-  7       0      12 of 50 ( 24%)           0.000%
-  7       1      18 of 50 ( 36%)           0.000%
+  5       0      15 of 50 ( 30%)           0.000%
+  5       1      23 of 50 ( 46%)           0.030%
+  6       0      15 of 50 ( 30%)           0.000%
+  6       1      22 of 50 ( 44%)           0.000%
+  7       0      13 of 50 ( 26%)           0.000%
+  7       1      19 of 50 ( 38%)           0.000%
 
   A hit is near-conclusive: carried by ~a third to ~half of
   real messages and by ~1 in 20000 of the nulls.  len>=6 with ONE
   mismatch allowed DOMINATES len>=4 exact -- MORE real messages
-  (42% vs 34%) at a null rate no higher -- because real traffic is
+  (44% vs 34%) at a null rate no higher -- because real traffic is
   garbled, so an exact test discards genuine hits.
   What is NOT measured here is whether any of it survives a
   partly-wrong plugboard, which is the question that decides it.

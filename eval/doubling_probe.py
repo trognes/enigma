@@ -20,7 +20,13 @@ import sys
 
 DB = "eval/enigma-army-messages-1941.txt"
 NULL_TRIALS = 20000
-MAXLEN = 12
+# Longest repeated word to look for.  12 silently MISSED the corpus's longest
+# real doubling -- STUERZBAECHER (13) in DAFPX -- because a 13-letter repeat
+# does
+# not decompose into a matching 12-letter one: slide the window and the copies
+# fall out of alignment.  16 catches it at no null cost (measured: real 42% ->
+# 44%, null 0.000% either way) and saturates there.
+MAXLEN = 16
 
 
 def decrypts():
@@ -161,7 +167,7 @@ def main():
     print("\n  A hit is near-conclusive: carried by ~a third to ~half of")
     print("  real messages and by ~1 in 20000 of the nulls.  len>=6 with ONE")
     print("  mismatch allowed DOMINATES len>=4 exact -- MORE real messages")
-    print("  (42% vs 34%) at a null rate no higher -- because real traffic is")
+    print("  (44% vs 34%) at a null rate no higher -- because real traffic is")
     print("  garbled, so an exact test discards genuine hits.")
     print("  What is NOT measured here is whether any of it survives a")
     print("  partly-wrong plugboard, which is the question that decides it.")

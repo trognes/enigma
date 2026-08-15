@@ -1,21 +1,21 @@
 
-177 trials (excerpts chosen to contain a doubling), 48 wrong keys each
-  break         (climb recovers, z > bar)    61 (34.5%)
-  SCORING fail  (climb recovers, z <= bar)    9 ( 5.1%) <-target
-  search fail   (climb does not recover)    107 (60.5%)
+186 trials (excerpts chosen to contain a doubling), 48 wrong keys each
+  break         (climb recovers, z > bar)    66 (35.5%)
+  SCORING fail  (climb recovers, z <= bar)   15 ( 8.1%) <-target
+  search fail   (climb does not recover)    105 (56.5%)
 
   the feature on each population (fires on the true key):
-    break             60 of  61 ( 98%)
-    SCORING failure    9 of   9 (100%)
-    search failure     1 of 107 (  1%)
+    break             65 of  66 ( 98%)
+    SCORING failure   15 of  15 (100%)
+    search failure     0 of 105 (  0%)
 
-  false positives: 0 of 8496 wrong-key decrypts (0.000%)
+  false positives: 0 of 8928 wrong-key decrypts (0.000%)
 
-  RESCUE RATE on scoring failures: 9 of 9 (100%)
+  RESCUE RATE on scoring failures: 15 of 15 (100%)
   (fires on the true key and on none of that trial's wrong keys, so
    the true key is identified outright)
 
   by length      n   break  scoring  search
-    L=60       81       1        7      73
-    L=100      66      36        1      29
-    L=140      30      24        1       5
+    L=60       84       3       11      70
+    L=100      69      34        4      31
+    L=140      33      29        0       4

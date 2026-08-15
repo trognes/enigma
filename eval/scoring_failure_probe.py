@@ -36,7 +36,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from doubling_probe import decrypts, repeats               # noqa: E402
+from doubling_probe import MAXLEN, decrypts, repeats       # noqa: E402
 
 BIN = "./enigma"
 RECIPE = ["-c", "-f", "-l", "wehrmacht", "-S", "i4f10", "-J", "--polish"]
@@ -93,7 +93,7 @@ def windows():
     for kenn, d in decrypts():
         got = set()
         for i in range(len(d)):
-            for L in range(K, 13):
+            for L in range(K, MAXLEN + 1):
                 if i + 2 * L + 1 > len(d):
                     break
                 w, v = d[i:i + L], d[i + L + 1:i + 2 * L + 1]
@@ -151,7 +151,11 @@ def collect():
                 "true_score": st, "max_wrong": max(null),
                 "fires_true": bool(repeats(tt, K, MM)),
                 "fires_wrong": sum(bool(repeats(t, K, MM)) for t in wtexts),
-                "n_wrong": len(wtexts)})
+                "n_wrong": len(wtexts),
+                # Saved so a change to the matching rule can be re-scored
+                # without re-climbing -- the omission that made the MAXLEN=12
+                # blind spot expensive to check.
+                "true_text": tt, "wrong_texts": wtexts})
             t = trials[-1]
             print("  %-7s L=%-3d %-12s %5.1f%% z=%6.2f  %s"
                   % (kenn[:7], ln, w[:12], t["correct"], t["z"],
