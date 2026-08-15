@@ -99,9 +99,11 @@ They are recorded because they are the cheapest thing to try if either message
 is ever attacked and fails — 20 candidate letters, and one of them may be the
 one that matters.
 
-They also settled which "garbles" were 1941's and which were ours — five of
-ALVPM's six were transcription errors, corrected against these images, and one
-`ENHANCEMENTS.md` claim was withdrawn as a result. A transcription slip and a
+## The 09.09.1941 pair
+
+Those two scans settled which "garbles" were 1941's and which were ours — five
+of ALVPM's six were transcription errors, corrected against these images, and
+one `ENHANCEMENTS.md` claim was withdrawn as a result. A transcription slip and a
 transmission garble look identical in the plaintext (Enigma has no diffusion),
 and the round-trip and self-encryption checks cannot separate them, so the image
 is the only authority. Keep it with the data.
