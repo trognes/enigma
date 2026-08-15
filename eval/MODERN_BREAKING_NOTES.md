@@ -615,70 +615,58 @@ false positives. But ALVPM also carries **`HENNINGJHENNING`**, where the
 misses that one. Harmless here, since `ENGELMANN` carries the message, but it is
 real-traffic evidence for folding the separator into the mismatch budget.
 
-**Garbles: 9 in 357 letters (2.5%) — but that is an UPPER BOUND on real 1941
-garbles, and probably a large overestimate.** ALVPM's and ALRHG's ciphertexts
-are transcriptions from the message-form images made in this repo, so a
-transcription slip and a transmission garble are indistinguishable in the
-plaintext: Enigma has no diffusion, so either corrupts exactly one letter.
+**Garbles: RESOLVED against the message forms, now stored at `eval/forms/`.**
+The earlier count of 9 in 357 letters was mostly **our own transcription**, and
+the forms settle every case. Both forms state their length — **177** for ALVPM
+and **116** for ALRHG — matching the transcriptions exactly, so nothing was ever
+inserted or dropped.
 
-**Three of ALVPM's six need the SAME ciphertext letter** — `B`, read as `T`, at
-positions 11, 140 and 163. Random transmission garbles would need random
-letters. **The letter counts corroborate it**: in the transcription `B` is the
-rarest letter at **2** against 6.6 expected for near-uniform Enigma ciphertext,
-while `T` is over-represented at 9; restoring those three gives **B=5, T=6**,
-both at expectation. And **the errors cluster at the edges of the
-transcription** — 4 in lines 1–2, 2 in lines 8–9, with **100 consecutive clean
-letters in lines 3–7** — which is an image-reading pattern, not a radio one. The
-clean middle is corroborated externally: the 73 letters ALVPM shares with ALRHG
-lie inside it and carry no garbles at all.
-
-**Nothing has been corrected.** Editing ciphertext so the German reads better is
-the circular reasoning that produced the bad FTNBK transcription (§5d–e); the
-images are the only authority. **The key is unaffected either way** — 166 of 172
-letters decrypt to clean telegraphic German, and no-diffusion means a corrected
-ciphertext letter changes exactly one plaintext letter.
-
-GEHRG is a different case: its ciphertext came from the source page, not from an
-image read here, and already carries a published position-31 correction.
-
-**The doubling convention caught two of the nine by itself.**
-
-| | letters | garbles | rate |
+| | apparent | ours | genuinely 1941 |
 |---|---:|---:|---:|
-| ALVPM | 172 | **6** | 3.5% |
-| ALRHG | 111 | **1** | 0.9% |
-| GEHRG | 74 | **2** | 2.7% |
+| ALVPM | 6 | **5** | 1 (+ a spelling variant) |
+| ALRHG | 1 | **0** | 1 |
+| GEHRG | 2 | n/a (source-page ciphertext) | 2 |
 
-Every doubled word whose two copies **agree** — `ENGELMANN`, `ERB`, `HENNING`,
-`ROMANOVKA`, `POLA` — is clean, and the two places where copies **disagree** are
-two of the nine garbles. That is the convention doing the job it was for: a
-wartime clerk would reconstruct the word from the pair. `SEQS` (*sechs*),
-`ZURUEQ` (*zurück*), the spelled `EINS SEQS NULL NULL` = 1600 and `ZWOTE` are
-convention and must not be "corrected".
+**The prediction was confirmed letter by letter.** Before seeing the forms, the
+statistics said three of ALVPM's six needed the *same* ciphertext letter, `B`
+read as `T`. The form shows `b` at all three (`g b s q`, `b ε k n g`,
+`r w i b t`). Two further predictions — `n→r` at position 7 and `r→v` at 31 —
+are also confirmed (`z r r w m`, `h v o k a`). The corrected ciphertext now
+decrypts to
 
-Two observations from the garbles bear directly on the doubling signal of
-`ENHANCEMENTS.md` item 5.
+    SNXHAUPTSTUFXSCUHNACHERXSCHUHMACHERXOBERSCHARFXENGELMANNXENGELMANNX
+    ZURUEQXUSTUFXERBXERBXWIRDVONMIREINGEWIESENFAHREHEUTEZURARMEEXKOMME
+    MORGENZURXDIVISIONXGEZXHENNINGXHENNINGX
 
-**Two of the nine hit the X SEPARATOR itself** — `HENNING(J)HENNING` in ALVPM
-and `ROMANOVKA(G)KLAMM` in GEHRG. Two of nine, against X being ~6% of letters.
-*Read this with the caveat above*: the ALVPM one is at position 163, among the
-suspected transcription errors, so GEHRG's — whose ciphertext is not ours — is
-the sounder of the two.
-Small numbers, but it is a second independent reason not to require a literal
-`X` in the matcher, alongside the ALVPM case already recorded.
+repairing `HAUPTSTUF`, `SCHUHMACHER`, `ZUR DIVISION` and `HENNING X HENNING`.
 
-**And one garble is not a substitution at all.** ALVPM's doubled surname reads
-`SCUHNACHER` (10 letters) against `SCHUHMAXHER` (11) — the copies differ in
-*length*. Copy 1 is `SCHUMACHER` with a transposition plus one substitution;
-copy 2 is `SCHUHMACHER` with `X` for `C`; both are real spellings of the name. A
-dropped **ciphertext** letter is ruled out, because it would desync the rotor
-stepping and wreck the remaining 137 letters, which decrypt cleanly. So the
-length difference was **typed that way by the operator**, not introduced in
-transmission. The matcher assumes equal-length copies, so this is a real (if
-rare) miss — and the cause is the keyboard, not the ether, which is the opposite
-of what the no-diffusion argument would lead you to expect.
+**ALRHG's transcription was letter-perfect** and its single garble is real: `pos
+56` would need ciphertext `g→q`, and the form shows an unmistakable `g` — in
+this hand `q` carries a **barred** descender (see `jgrdq`) while `g` has an open
+loop.
 
-**Priority, stated plainly.** None of the three is a first break. ALVPM and
+**Two 1941-side errors survive in ALVPM.** `pos 1` gives `SN` where `SS` is
+meant — the form plainly reads `l`, and `l` (plain loop) and `h` (loop plus
+shoulder) are distinct in this hand. And the doubled surname is `SCUHNACHER`
+(10) against `SCHUHMACHER` (11): *Schumacher* against *Schuhmacher*, two
+spellings of one name. The short copy would need ciphertext `x→j` and `c→t`,
+which are not plausible misreadings, so it was typed that way at the keyboard.
+
+**What this cost, and what it bought.** One claim in `ENHANCEMENTS.md` item 5
+was **withdrawn**: `HENNING(J)HENNING`, cited as evidence that the X separator
+itself gets garbled, was *our* `b`-read-as-`t` at position 163. The form reads
+`HENNINGXHENNING`. Only the GEHRG instance remains, and that ciphertext has its
+own transcription history. The **length-mismatch** observation survives and is
+now confirmed rather than provisional.
+
+**The lesson worth keeping.** A transcription slip and a transmission garble are
+indistinguishable in the plaintext — Enigma has no diffusion, so either corrupts
+exactly one letter — and the round-trip and self-encryption checks do **not**
+separate them, because they only test the internal consistency of (key,
+ciphertext, plaintext). What did work was asking which *ciphertext* letter each
+garble would need, then looking for a systematic pattern among the answers.
+
+**Priority, stated plainly.****Priority, stated plainly.** None of the three is a first break. ALVPM and
 ALRHG were broken elsewhere before this, and GEHRG on 12.07.2026. What is new
 here is the **key**, which had not been published for any of them, and the
 plaintext of all three.

@@ -285,37 +285,31 @@ The one new fragility: anchoring depends on the **X's themselves** decrypting
 correctly. Irrelevant for this feature's target population, where the climb
 recovers ~100% of letters, but it would matter for any partial-recovery use.
 
-**(c) Let the SEPARATOR be garbled too — evidenced twice on real traffic.** The
-rule requires the separator to be a literal `X`. The 09.09.1941 breaks (§5j of
-`eval/MODERN_BREAKING_NOTES.md`) contain **two** counter-examples in nine
-garbles: `HENNING(J)HENNING` in ALVPM and `ROMANOVKA(G)KLAMM` in GEHRG. The
-matcher misses both. Harmless in those messages, since a second clean doubling
-carries each, but a message whose only doubling has a garbled separator is
-missed entirely. Enigma corrupts one letter per corrupted ciphertext letter and
-the separator is just another letter, so there is no reason to privilege it:
-fold it into the mismatch budget. Two of nine garbles landing on X, against X
-being ~6% of letters, is a small sample but it points the right way — and the
-GEHRG one is the sounder of the pair, since its ciphertext was not transcribed
-here (§5j).
+**(c) Let the SEPARATOR be garbled too — ONE instance, after a withdrawal.**
+The rule requires the separator to be a literal `X`. This note originally cited
+two counter-examples; **one has been withdrawn**. `HENNING(J)HENNING` in ALVPM
+turned out to be *our* transcription error — the message form reads
+`HENNINGXHENNING`, and the `J` came from a `b` misread as `t` (§5j of
+`eval/MODERN_BREAKING_NOTES.md`). What survives is `ROMANOVKA(G)KLAMM` in GEHRG,
+whose ciphertext was not transcribed here. The argument still holds on its own
+terms — Enigma corrupts one letter per corrupted ciphertext letter and the
+separator is just another letter, so there is no reason to privilege it — but it
+now rests on **one** observation, not a rate. Get more instances before costing
+the change.
 
-**(d) Real doublings can differ in LENGTH — provisional, pending an image
-check.** The
-matcher takes `|W| = |V|`, which the no-diffusion argument seems to justify —
+**(d) Real doublings can differ in LENGTH — CONFIRMED against the form.** The
+matcher takes `|W| = |V|`, which the no-diffusion argument appears to justify:
 one corrupted ciphertext letter corrupts exactly one plaintext letter, so
-transmission garbles are pure substitutions. ALVPM breaks that assumption from
-the other side: its doubled surname is `SCUHNACHER` (10) against `SCHUHMAXHER`
-(11), i.e. `SCHUMACHER` against `SCHUHMACHER` — **the operator spelled the name
-two different ways**. A dropped *ciphertext* letter is ruled out, since it would
-desync the rotor stepping and wreck the remaining 137 letters, which decrypt
-cleanly. So *if the transcription is right*, indels occur in real doublings,
-just not from the channel. **That "if" is doing work**: ALVPM's ciphertext is a
-transcription from a message-form image made here, and several of its garbles
-are probably ours rather than 1941's (§5j) — three of six need the same
-ciphertext letter, and the letter counts corroborate a `B`-read-as-`T`. This
-one is not among those three, but it sits in the same suspect region. Any
-length-tolerant matching would need edit distance rather than Hamming, which is
-more expensive; before spending that, confirm the spelling against the image.
-One instance is not an estimate, and this instance is not yet confirmed.
+transmission garbles are pure substitutions. ALVPM breaks that from the other
+side. Its doubled surname is `SCUHNACHER` (10) against `SCHUHMACHER` (11) —
+*Schumacher* against *Schuhmacher*, **the operator spelling the name two ways**.
+Verified against the form: the short copy would need ciphertext `x→j` and `c→t`,
+which are not plausible misreadings, and the form's stated length of 177 matches
+the transcription exactly, so nothing was dropped in the ciphertext either. So
+indels do occur in real doublings — just from the keyboard, not the channel,
+which is the half the no-diffusion argument never covered. Length-tolerant
+matching would need edit distance rather than Hamming, which is more expensive;
+one confirmed instance is still not a rate.
 
 **(b) Cost against the hillclimb — negligible, IF it runs in the right place.**
 Rough arithmetic, to be confirmed on wall time: the current check is ~11
