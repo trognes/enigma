@@ -201,15 +201,73 @@ zero-false-positive stop signal has value that a margin does not:
 `--confidence`'s p-value is documented as optimistic near zero, and this is
 independent of it. Do **not** build it as a score term or a rescue pass.
 
-*Not attempted, and now the only live form:* the **self-crib deduction** —
-`p_i = p_j` gives `core_i[steck[c_i]] = core_j[steck[c_j]]`, chainable like
-`--crib` with the same Welchman diagonal board, and it needs no correct decrypt
-at all because it works on the *ciphertext*. That sidesteps the entire failure
-above. The obstacle is different: the alignment is unknown, so it is a sweep
-over ~1300 (position, length) hypotheses and a key is rejected only if **every**
-one fails — the compounding that already takes a 12-letter crib from 99.9%
-rejection pinned to **5.3%** swept (`archived/cribs.md` §4.2a). Measure the
-per-hypothesis rejection rate before writing any code.
+*Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
+sidesteps the failure above entirely, because it works on the **ciphertext** and
+needs no correct decrypt at all.
+
+Decryption is `p_i = steck[core_i[steck[c_i]]]`, with `core_i` the involution
+`setup_mapping()` already tabulates as `rows[i]`. A classic crib knows `p_i` and
+rearranges to `steck[p_i] = core_i[steck[c_i]]`. A self-crib knows only that two
+positions carry the *same* letter, `p_i = p_j`. Substituting and cancelling
+`steck` from both sides (it is an involution):
+
+    core_i[steck[c_i]] = core_j[steck[c_j]]
+
+**The plaintext letter has vanished from the equation** — that is the whole
+idea. Since `core_j` is an involution it rearranges to a propagation rule with
+`σ = core_j ∘ core_i`, computable from the rotor key alone:
+
+    steck[c_j] = σ(steck[c_i])
+
+Guess `steck[c_i]` and `steck[c_j]` follows: two plug assertions, which the
+diagonal board doubles (`steck[x]=y ⟺ steck[y]=x`, no shared partners).
+
+*Why it is weaker than it looks, and this is the part to internalise before
+building anything.* Rejection power comes **only from loops** in the menu. A
+tree is always satisfiable — guess the root, propagate, never contradict — while
+a loop imposes `σ_loop(x) = x`, which fails unless σ_loop has a fixed point. If
+the `2L` ciphertext letters of a length-`L` doubling are distinct, the menu is
+`L` **disjoint edges**: a forest, zero loops, **zero rejection power**. Loops
+appear only when ciphertext letters repeat among those positions or a deduced
+endpoint collides with another menu letter — a birthday trickle, not a designed
+structure. Same lesson as `archived/cribs.md` §4.1 from the other side: the
+diagonal board does the work, not menu length.
+
+*What rescues it: the flanking X is REAL known plaintext.* Measured on the
+corpus (`doubling_probe.py`), the pattern is not `W X W` but **`X W X W X`** —
+**96% carry an X immediately left and 71% on both sides**, 0% neither. Those
+X's are crib letters, and all of them share a left-hand side:
+
+    steck[X] = core_{i-1}[steck[c_{i-1}]]
+             = core_{i+L}[steck[c_{i+L}]]
+             = core_{i+2L+1}[steck[c_{i+2L+1}]]
+
+So guessing `steck[X]` (26 ways) deduces three plugs at once and **anchors** the
+otherwise-floating equality edges. The hypothesis is really a 3-letter crib plus
+`L` equality constraints — a menu with anchors rather than a forest. Two prunes
+come free from self-encryption: any alignment with `c_{i+L} = X` is impossible
+outright, and if `c_{i+t} = c_{j+t}` then `core_i[a] = core_j[a]` must hold,
+satisfiable only at a fixed point of σ.
+
+*The obstacle that decides it — measure this FIRST.* The alignment is unknown,
+so for a 150-letter message with `L` ∈ 6..12 it is ~950 hypotheses, and a key is
+rejected only if **every** one is contradictory. Rejections multiply, so what
+matters is `∏ p_h`: even at a per-hypothesis rejection of 0.99, `0.99^950 ≈
+7e-5`, i.e. essentially nothing rejected. This is not speculation — it is the
+documented compounding that takes a 12-letter crib from 99.9% pinned to **5.3%**
+swept, where the product of the measured per-alignment rates predicted 5.2%
+against 5.3% observed (`archived/cribs.md` §4.2a). **The per-hypothesis
+rejection rate has to be extraordinarily close to 1**, far higher than an
+ordinary crib needs, purely because there are so many alignments. It is
+unmeasured; do not estimate it, measure it.
+
+*If the sweep fails, two fallbacks.* Use it as a **seeder rather than a filter**
+— `--crib`'s hybrid already pins deduced plugs and lets the climb find the rest,
+measured 92% of letters recovered against 8% unseeded; 950 climbs per key is
+impossible, but ranking hypotheses by plugs deduced and seeding from the top few
+is not. And note the **cost regime**: ~950 alignments × 26 guesses is roughly a
+plugboard climb's worth of work per key — negligible beside a `-c` climb, but
+~1000× the cost of a scanned key, so it cannot ride along on a plain scan.
 
 *Reusable artifact:* `eval/results-doubling-climb-texts.json` holds every
 decrypt from the run (46 true-key + 5888 wrong-key, climbed with the board

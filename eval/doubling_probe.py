@@ -80,6 +80,36 @@ def main():
     for kenn, ps in nznear[:5]:
         print("     %s" % ", ".join("%s/%s" % p for p in ps[:3]))
 
+    # Is the pattern  W X W  or  X W X W X ?  It decides the SHAPE of the
+    # self-crib menu (ENHANCEMENTS.md item 5): a bare doubling contributes only
+    # equality edges, which form a forest with no rejection power, while a
+    # flanking X is a genuine KNOWN plaintext letter and anchors the menu.
+    print("\n  flanking, for the self-crib menu shape (len>=6, mm<=1):")
+    flank = {"both": 0, "left only": 0, "right only": 0, "neither": 0}
+    tot = 0
+    for kenn, d in recs:
+        got = set()
+        for i in range(len(d)):
+            for L in range(6, MAXLEN + 1):
+                if i + 2 * L + 1 > len(d):
+                    break
+                w, v = d[i:i + L], d[i + L + 1:i + 2 * L + 1]
+                if d[i + L] != "X" or "X" in w or "X" in v:
+                    continue
+                if sum(1 for a, b in zip(w, v) if a != b) > 1 or w in got:
+                    continue
+                got.add(w)
+                tot += 1
+                lf = i > 0 and d[i - 1] == "X"
+                rt = i + 2 * L + 1 < len(d) and d[i + 2 * L + 1] == "X"
+                flank["both" if lf and rt else "left only" if lf
+                      else "right only" if rt else "neither"] += 1
+    for key in ("both", "left only", "right only", "neither"):
+        print("    %-11s %3d of %d (%3.0f%%)"
+              % (key, flank[key], tot, 100.0 * flank[key] / tot))
+    print("    so the real pattern is X W X W X -- the flanking X is KNOWN")
+    print("    plaintext, and that is what anchors the self-crib menu.")
+
     print("\n  what the exact hits ARE (the vocabulary-free argument):")
     seen = []
     for kenn, d in recs:

@@ -15,6 +15,14 @@
      KOCHLINQ/KOCHLING
      SIOBEN/SIEBEN
 
+  flanking, for the self-crib menu shape (len>=6, mm<=1):
+    both         20 of 28 ( 71%)
+    left only     7 of 28 ( 25%)
+    right only    1 of 28 (  4%)
+    neither       0 of 28 (  0%)
+    so the real pattern is X W X W X -- the flanking X is KNOWN
+    plaintext, and that is what anchors the self-crib menu.
+
   what the exact hits ARE (the vocabulary-free argument):
      KUSOW, SAGOSKA, MATHIAT, STARAJARUSSA, OPOTSCHKA, ISSAKI, TSCHEDINOVA
      WASCHBUSCH, PACHE, ROMANOWO, RENNER, ZANDERS
