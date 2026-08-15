@@ -146,77 +146,79 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
-**5. Repeated text with an X between — the VOCABULARY-FREE variant of item 4,
-text-level precondition measured and strong; the decisive test not yet run.**
-Telegraphic German doubles important words for error correction, separated by
-the X word separator: `ZANDERSXZANDERS`, `FORDXFORD`, `PKWXPKW`, and the
-`LNKXLNKX` in Nr 214 that started all of this. The test is that two runs are
-identical **to each other** — not that either is a word anyone listed in
-advance — so unlike item 4 it needs no vocabulary at all.
+**5. Repeated text with an X between — MEASURED. The rescue application is
+DEAD; a narrow confirmation application survives.** Telegraphic German doubles
+important words around the X separator: `ZANDERSXZANDERS`, `FORDXFORD`, the
+`LNKXLNKX` in Nr 214. The test is that two runs are identical **to each other**
+— not that either is a word anyone listed in advance — so unlike item 4 it needs
+no vocabulary, which is why it looked like the variant that might escape.
 
-*The precondition is much stronger than item 4's.* Over the 50 messages with a
-clean recorded plaintext (`eval/doubling_probe.py`):
+*The text-level precondition is strong* (`eval/doubling_probe.py`, 50 messages
+with a clean recorded plaintext):
 
 | min len | mismatches | real messages | shuffled-null rate |
 |---:|---:|---:|---:|
 | 4 | 0 | 17 of 50 (34%) | 0.005% |
-| 4 | ≤1 | 24 of 50 (48%) | 0.355% |
 | **6** | **≤1** | **21 of 50 (42%)** | **0.000%** |
-| 7 | ≤1 | 18 of 50 (36%) | 0.000% |
 
-The null shuffles a real decrypt, which preserves the letter frequencies —
-including the high X rate the test could otherwise be fooled by. **`len≥6` with
-one mismatch allowed dominates `len≥4` exact**: more real messages (42% vs 34%)
-at a null rate no higher, because real traffic is garbled and an exact test
-discards genuine hits (`PLYUSSA`/`PLJUSSA`, `ZANDEYS`/`ZANDERS`,
-`SIOBEN`/`SIEBEN`, `KOCHLINQ`/`KOCHLING`). Do not ship the exact form.
+**`len≥6` with one mismatch dominates `len≥4` exact** — more real messages at a
+null rate no higher — because real traffic is garbled and an exact test discards
+genuine hits (`PLYUSSA`/`PLJUSSA`, `ZANDEYS`/`ZANDERS`, `SIOBEN`/`SIEBEN`).
+Never ship the exact form. What the hits *are* is the argument for the idea:
+`KUSOW`, `SAGOSKA`, `STARAJARUSSA`, `OPOTSCHKA`, `TSCHEDINOVA`, `WASCHBUSCH`,
+`ROMANOWO`, `ZANDERS` — Russian village names and German surnames, the
+operationally specific material no fixed vocabulary carries.
 
-*What the hits are is the whole argument:* `KUSOW`, `SAGOSKA`, `MATHIAT`,
-`STARAJARUSSA`, `OPOTSCHKA`, `ISSAKI`, `TSCHEDINOVA`, `WASCHBUSCH`, `PACHE`,
-`ROMANOWO`, `RENNER`, `ZANDERS` — Russian village names and German surnames,
-i.e. exactly the operationally-specific material no fixed vocabulary can carry.
+*But the decisive test kills the use that mattered.* Climbing the true key and
+128 wrong keys per message with the board hidden on both arms
+(`eval/doubling_climb_probe.py`, `len≥6, mm≤1`):
 
-*This is not new to the repo, but the vocabulary-free form is.* `build_cribs.py`
-already exploits doubling — **1062 of the 1181** entries in
-`cribs/wehrmacht.cribs` are synthesised `doubled` forms like
-`XROMANOWOXROMANOWOX` — but vocabulary-*dependently*: it must guess the word
-first, and measured directly, **92 of those 1062 (9%)** actually occur in the
-corpus. Detecting the structure instead of guessing the string is the
-improvement. (Careful with that file's `seen` column: the doubled tier is
-emitted with an empty set by construction — `add(v, "doubled", set())` — so
-`seen 0` means "not computed", **not** "never matched". The 9% above is measured
-against the plaintexts, not read off that column.)
+| | n | plaintext has it | climb reproduces it |
+|---|---:|---:|---:|
+| quad already above the bar | 24 | 11 of 24 | **11 of 11 (100%)** |
+| quad **below** the bar | 22 | 9 of 18 | **1 of 9 (11%)** |
 
-*Three forms, with very different prospects — the third is the one to build.*
+**The ceiling control is what makes this readable, and it rules out the
+innocent explanation.** The pattern is about equally *present* in both
+populations — it is not that the hard messages lack doublings. Nine below-bar
+messages carry `TSCHEDINOVAXTSCHEDINOVA`, `WASCHBUSCHXWASCHBUSCH`,
+`NIKOLAJEWOXNIKOLAJEWO`, `ROMANOWOXROMANOWO` and the rest, and the climb
+recovers **one** of them. This is item 4's failure mode, confirmed directly and
+for the reason predicted there: a doubling needs `2k+1` consecutive correct
+letters where a word needed one word, so it is strictly *harder* to keep.
 
-1. **As a score bonus.** Item 4's prior applies and is *worse*: a doubling needs
-   `2k+1` consecutive correct letters where a word needed one word, so it will
-   fire even less often on the below-bar messages that matter. Expect it to fail
-   the same way.
-2. **As a self-crib deduction.** Elegant and genuinely vocabulary-free: you need
-   not know *what* the plaintext is, only that two positions share it, and
-   `p_i = p_j` gives `core_i[steck[c_i]] = core_j[steck[c_j]]` — chainable
-   exactly like `--crib`, with the same Welchman diagonal board. The catch is
-   that the alignment is unknown, so it is a sweep over ~1300 (position, length)
-   hypotheses and a key is rejected only if **every** one fails. That is the
-   compounding that already takes a 12-letter crib from 99.9% rejection pinned
-   to **5.3%** swept (`archived/cribs.md` §4.2a), and it is likely fatal here
-   too. Measure the per-hypothesis rejection rate before building anything.
-3. **As a confirmation / re-rank on a shortlist.** The most promising, and it is
-   the exact shape item 4 identifies as the only defensible one: a non-firing
-   costs nothing — no dilution, which is what killed the additive form — while a
-   firing is near-conclusive at better than 2000:1 (bounded by the null sample,
-   0 hits in 20 000 at `len≥6, mm≤1`). Use it to decide between candidate
-   boards, not to find them.
+*What survives is precision, and it is excellent.* **0 of 5888** climbed
+wrong-key decrypts fire — a likelihood ratio of **≥512:1** by the rule of three
+(0 of 5888 bounds the false-positive rate at 0.051%). That holds against the
+harder null the shuffled-text measurement could not reach: these are texts a
+hill-climb actively optimised to look like German, and it still manufactures no
+doublings. So a **one-sided confirmation flag** is real — if it fires, the key
+is right — but it fires on only 26% of messages, mostly ones already won, and a
+non-firing means nothing.
 
-*The decisive test, not yet run:* whether any of this survives a partly-wrong
-plugboard. The text-level rate above says the phenomenon is there; it says
-nothing about whether a failing climb ever produces both copies intact.
-`eval/word_segment_probe.py`'s harness answers it directly — swap the feature,
-keep the per-message null — and that is the measurement to do before writing any
-code in `enigma.cc`.
+*Worth building?* Marginal, and only for unattended sweeps, where a
+zero-false-positive stop signal has value that a margin does not:
+`--confidence`'s p-value is documented as optimistic near zero, and this is
+independent of it. Do **not** build it as a score term or a rescue pass.
 
-→ `eval/doubling_probe.py`, `eval/results-doubling.txt`; item 4 above;
+*Not attempted, and now the only live form:* the **self-crib deduction** —
+`p_i = p_j` gives `core_i[steck[c_i]] = core_j[steck[c_j]]`, chainable like
+`--crib` with the same Welchman diagonal board, and it needs no correct decrypt
+at all because it works on the *ciphertext*. That sidesteps the entire failure
+above. The obstacle is different: the alignment is unknown, so it is a sweep
+over ~1300 (position, length) hypotheses and a key is rejected only if **every**
+one fails — the compounding that already takes a 12-letter crib from 99.9%
+rejection pinned to **5.3%** swept (`archived/cribs.md` §4.2a). Measure the
+per-hypothesis rejection rate before writing any code.
+
+*Reusable artifact:* `eval/results-doubling-climb-texts.json` holds every
+decrypt from the run (46 true-key + 5888 wrong-key, climbed with the board
+hidden). Item 4's probe threw its texts away and had to be re-run from scratch
+to ask one new question of the same data; this one should not. `REUSE=1` re-runs
+the analysis without re-climbing.
+
+→ `eval/doubling_probe.py`, `eval/doubling_climb_probe.py`,
+`eval/results-doubling.txt`, `eval/results-doubling-climb.txt`; item 4 above;
 `archived/cribs.md` §4.2a.
 
 ## Keyspace reductions

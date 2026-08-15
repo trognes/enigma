@@ -396,9 +396,12 @@ feature is flat exactly where it is needed and the net gain is one message.
 Do not generalise from this section to the scorer. → `ENHANCEMENTS.md` item 4;
 `eval/word_segment_probe.py`. The vocabulary-free variant — the `LNKXLNKX`
 doubling itself, detected as *any* repeat around an X rather than as a listed
-word — is item 5, and its text-level precondition is much stronger (42% of real
-messages, 0 of 20 000 nulls); whether it survives a partly-wrong plugboard is
-the open question there.
+word — is item 5. Its text-level precondition is much stronger (42% of real
+messages, 0 of 20 000 nulls), but it has since been measured through the climb
+and **fails the same way**: below-bar messages carry doublings just as often,
+and the climb reproduces 1 of 9 of them against 11 of 11 on messages already
+broken. What survives is precision — 0 of 5888 climbed wrong-key decrypts fire —
+so it is a one-sided confirmation flag, never a rescue.
 
 ### 5g. Four more messages recovered from the 01 Aug 2026 source pages
 

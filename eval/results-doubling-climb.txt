@@ -1,0 +1,31 @@
+
+46 messages, 128 wrong keys each, -R 32
+
+  len>=4 exact
+    fires on the TRUE key:   9 of 46 messages ( 20%)
+    fires on a WRONG key:   0 of 5888 climbed decrypts (0.000%)
+    likelihood ratio:       >=384 : 1  (95% bound)
+      rule of three: 0 of 5888 gives FP <= 0.0510%
+                               n    ceiling    climb keeps
+    quad above the bar        24       8/24         8/8   (100%)
+    quad BELOW the bar        22       8/18         1/8   ( 12%)
+
+  len>=6 mm<=1
+    fires on the TRUE key:  12 of 46 messages ( 26%)
+    fires on a WRONG key:   0 of 5888 climbed decrypts (0.000%)
+    likelihood ratio:       >=512 : 1  (95% bound)
+      rule of three: 0 of 5888 gives FP <= 0.0510%
+                               n    ceiling    climb keeps
+    quad above the bar        24      11/24        11/11  (100%)
+    quad BELOW the bar        22       9/18         1/9   ( 11%)
+
+  below-bar messages whose plaintext DOES carry a doubling:
+    FTNBK    z= 0.90  SAGOSKAXSAGOSKA  climb reproduces it: YES
+    ALWOK    z= 0.56  TSCHEDINOVAXTSCHEDINOVA  climb reproduces it: no
+    ADAFU    z= 0.41  SCHNEIDERXSCHNEIDEN  climb reproduces it: no
+    CHAFU    z= 0.65  WASCHBUSCHXWASCHBUSCH  climb reproduces it: no
+    HOEPG    z=-0.73  ROMANOWOXROMANOWO  climb reproduces it: no
+    MNQBH    z= 1.67  ZANDERSXZANDERS  climb reproduces it: no
+    HBNVE    z= 0.33  LUDSENXLUDSEN  climb reproduces it: no
+    EGERF    z= 1.28  KOKOREWOXKCKOREWO  climb reproduces it: no
+    KLDIO    z= 0.61  NIKOLAJEWOXNIKOLAJEWO  climb reproduces it: no
