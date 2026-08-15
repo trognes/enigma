@@ -127,12 +127,19 @@ def generate():
                  "--polish", "-u", "B", "-w", wheels, "-r", ring, "-g", "...",
                  "-R", RESTARTS, "-T", THREADS, "--dump-all"],
                 input=ct, capture_output=True, text=True, env=env)
-            cand = []
+            # --dump-all emits one line per (key, RESTART), so the same start
+            # appears -R times.  A search ranks a key by its BEST restart, so
+            # collapse to that -- otherwise mu/sd are over key-restart pairs
+            # and the candidate count is inflated -R-fold.
+            byk = {}
             for line in r.stderr.split("\n") + r.stdout.split("\n"):
                 if not line.startswith("dumpall "):
                     continue
                 f = line.split()
-                cand.append((f[3], float(f[4]), " ".join(f[5:])))
+                st, sc_, pl = f[3], float(f[4]), " ".join(f[5:])
+                if st not in byk or sc_ > byk[st][0]:
+                    byk[st] = (sc_, pl)
+            cand = [(st, v[0], v[1]) for st, v in byk.items()]
             if len(cand) < 17000:
                 continue
             sc = [c[1] for c in cand]
