@@ -91,17 +91,19 @@ NOTES:       (none)
 KENNGRUPPE:  QTXMA   (discriminant; strip before deciphering)
 LEN:         160  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   LDP WRX   (as sent; from the Ultimate Enigma Challenge page)
 CIPHERTEXT:  QTXMAJVMOYCZAYMRVLCBSOQXYBATSXJBQLAEJKYTYXJOEMYBLOEMYOKSRMTA
              VLBCXJAMOESRXYTVAOEYAVYXKCJVCMEISHTBAYVXXAJWCZQCYPXMEHABLKYJ
              YASOEIJYXOQXYTLBASYEESTAQXJVNWCBJZBYQYTM
-NOTES:       Batch C, and the SECOND-LONGEST unbroken message in the collection. From the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only because it had never been transcribed. Same batch caveat as BYQMZ: the authors are not sure Batch C is Enigma at all. Indicator LDP WRX, sent 2240, to 2pn on 323 kHz
+NOTES:       Batch C, and the SECOND-LONGEST unbroken message in the collection. From the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only because it had never been transcribed. Same batch caveat as BYQMZ: the authors are not sure Batch C is Enigma at all. Sent 2240, to 2pn on 323 kHz; the INDICATOR above makes a candidate day key testable in one decrypt (set the machine to LDP, decipher WRX, and that is the start position) instead of a 17576-start sweep
 
 ### Message No. 7-C  --  29 Sep 1941  (SZAEJ)
 KENNGRUPPE:  SZAEJ   (discriminant; strip before deciphering)
 LEN:         56  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   GAR PLD   (as sent; from the Ultimate Enigma Challenge page)
 CIPHERTEXT:  SZAEJTOMBYXCZEOJKSAMGEYPWXZWJMEVBZYZAEJVHSEMNWEYTMEOMTCG
-NOTES:       Batch C, same caveat. From the Ultimate Enigma Challenge page. Short (51 cipher letters), around twice the unicity distance, so breakable only if its day key comes from elsewhere. Indicator GAR PLD, sent 2314, to o37 on 716 kHz
+NOTES:       Batch C, same caveat. From the Ultimate Enigma Challenge page. Short (51 cipher letters), around twice the unicity distance, so breakable only if its day key comes from elsewhere -- and it shares one with QTXMA, being the same date. Sent 2314, to o37 on 716 kHz; see the INDICATOR above
 
 ### Message No. 8-C  --  30 Sep 1941  (BYQMZ)
 KENNGRUPPE:  BYQMZ   (discriminant; strip before deciphering)

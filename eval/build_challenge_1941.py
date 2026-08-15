@@ -29,14 +29,16 @@ C = [
   "Batch C, and the SECOND-LONGEST unbroken message in the collection. From "
   "the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only "
   "because it had never been transcribed. Same batch caveat as BYQMZ: the "
-  "authors are not sure Batch C is Enigma at all. Indicator LDP WRX, sent "
-  "2240, to 2pn on 323 kHz"),
+  "authors are not sure Batch C is Enigma at all. Sent 2240, to 2pn on 323 "
+  "kHz; the INDICATOR above makes a candidate day key testable in one "
+  "decrypt (set the machine to LDP, decipher WRX, and that is the start "
+  "position) instead of a 17576-start sweep"),
  ("7-C",  "29 Sep 1941", "SZAEJ", 56,
   "SZAEJTOMBYXCZEOJKSAMGEYPWXZWJMEVBZYZAEJVHSEMNWEYTMEOMTCG",
   "Batch C, same caveat. From the Ultimate Enigma Challenge page. Short (51 "
   "cipher letters), around twice the unicity distance, so breakable only if "
-  "its day key comes from elsewhere. Indicator GAR PLD, sent 2314, to o37 on "
-  "716 kHz"),
+  "its day key comes from elsewhere -- and it shares one with QTXMA, being "
+  "the same date. Sent 2314, to o37 on 716 kHz; see the INDICATOR above"),
  ("8-C",  "30 Sep 1941", "BYQMZ", 172,
   "BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAIKYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUEAZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY",
   "Batch C -- the authors are NOT sure this is Enigma at all. Its J-rate is the one point in its favour: 6 J in 167 letters against the 6.4 a 26-letter cipher predicts. 1 dash. Longest unbroken message in the collection"),
@@ -204,6 +206,22 @@ FORMS = {
          "above, none applied -- see forms/README.md"),
 }
 
+# Indicators known WITHOUT a message form in forms/ -- a third authority
+# again, the Ultimate Enigma Challenge page rather than a scan, so they are
+# kept apart from FORMS above rather than folded into it.  They carry the
+# same cryptanalytic weight: the start position stops being a free axis and
+# becomes a function of the day key, so a candidate is testable in one
+# decrypt instead of a 17576-start sweep.
+#
+# Both of these are 29 Sep 1941 and therefore share a day key, which makes
+# them the strongest pair in the file: one day key has to satisfy two
+# indicators AND two plaintexts.
+# (no: indicator)
+INDICATORS = {
+    "6-C": "LDP WRX",          # QTXMA, sent 2240, to 2pn on 323 kHz
+    "7-C": "GAR PLD",          # SZAEJ, sent 2314, to o37 on 716 kHz
+}
+
 
 def wrap(s, width=60):
     return "\n             ".join(textwrap.wrap(s, width))
@@ -222,6 +240,9 @@ def main():
             f.write("KENNGRUPPE:  %s   (discriminant; strip before deciphering)\n" % kenn)
             f.write("LEN:         %d  (form count, incl. Kenngruppe)%s\n" % (slen, flag))
             f.write("KEY:         %s\n" % SOLVED.get(no, "UNKNOWN -- unbroken"))
+            if no in INDICATORS:
+                f.write("INDICATOR:   %s   (as sent; from the Ultimate "
+                        "Enigma Challenge page)\n" % INDICATORS[no])
             if no in FORMS:
                 ind, scan, meta, disp = FORMS[no]
                 f.write("INDICATOR:   %s   (as sent; read off the message "
