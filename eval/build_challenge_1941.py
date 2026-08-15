@@ -79,7 +79,7 @@ C = [
 # rather than merely hard.
 SOLVED = {
   "81":  "BROKEN 14.07.2026. The key IS now in this repo -- but for the Bundesarchiv copy Nr 55 NF in enigma-army-messages-1941.txt, not for this transcription, which is too corrupt to decrypt under it",
-  "38":  "BROKEN on 12.07.2026 (key not recorded here)",
+  "38":  "BROKEN on 12.07.2026 elsewhere with no key published; the KEY IS NOW IN THIS REPO -- B 342 ring ALZ start UXT, plugs AZ DV ET FS GQ JP LX MY NR OW, recovered here from the 09.09.1941 day key that ALVPM and ALRHG gave up, and held with the plaintext as Nr 38 in enigma-army-messages-1941.txt",
   "8-Oct": "BROKEN on 31.07.2026 (key not recorded here)",
   "140": "BROKEN by Michael Craig on 17.07.2007 (key not recorded here)",
   "138": "same message as Nr 140, which is broken -- see Nr 140",

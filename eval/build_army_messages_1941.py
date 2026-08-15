@@ -53,12 +53,12 @@ DAYS = {
  "18.07.1941": ("B", "425", "AGM", "DM EP FL HI JR KY NQ OU SW TZ"),
  "25.07.1941": ("B", "325", "RVA", "BE CK DL GM HZ JO NW QU RT SV"),
  "29.07.1941": ("B", "521", "MJW", "AW CS DR EY FO KU LZ NV PX QT"),
- # NOT from the released 2017 key set -- recovered ciphertext-only here, from
- # ALVPM and ALRHG (see their notes).  Wheel order 342 appears in none of the
- # 22 published day keys above, and this stecker shares at most one pair with
- # any of them, which is chance level for 10 pairs out of 325.
- # DATE NOT YET IDENTIFIED -- fill in from the message forms when available.
- "unknown.SS.342": ("B", "342", "ALZ", "AZ DV ET FS GQ JP LX MY NR OW"),
+ # Not in the released 2017 key set: recovered ciphertext-only here from ALVPM,
+ # independently confirmed by ALRHG, and then used to break GEHRG in 0.08 s as
+ # a bare start-position sweep.  Wheel order 342 appears in none of the 22
+ # published day keys above and this stecker shares at most one pair with any
+ # of them, chance level for 10 pairs out of 325.  Three messages now share it.
+ "09.09.1941": ("B", "342", "ALZ", "AZ DV ET FS GQ JP LX MY NR OW"),
 }
 # Nr 173 broke on its own ring+stecker (same wheel order) -- special per-message key.
 KEY_OVERRIDE = {"173": ("B", "521", "MRP", "AG BJ CP DS ER FQ HV IU KT LW")}
@@ -74,9 +74,10 @@ M = [
   "broken by Enigma@Home 15.09.2017, long after the 2017 key release; the transcription in enigma-challenge-1941.txt differed from this one in 13 of 101 letters and did not decrypt"),
  ("55 NF","28.08.1941","28 Aug 1941","YAC","","ALQFI","ALQFIGEELOREBSXEINXZYDHXITUFWDLTURTZSPMMLFMYZMAGJDWOPCBQYZRTJSTGVIJPHJIXTDBKDFXOYILZEUIMMLL",
   "the Bundesarchiv copy of Nr 81, from another SS-Totenkopf station; its plaintext is published, and the key was recovered from it here. Nr 81 is a badly corrupted transcription of the same message and does not decrypt"),
- ("ALVPM","unknown.SS.342","date not yet identified","VAT","nostrip","ALVPM",
+ ("ALVPM","09.09.1941","09 Sep 1941","VAT","nostrip","ALVPM",
   "TLNVEZRNWMGTSQOXCMJAQNNEVBQITIHROKAMXQPTJLMMCALFWSCSPTQCCUWSIHZCSAFFRUCKVGECKMKSMHSUDVZCDDQEEWGOBIUJGYAQJOVSIKRNSWDHMMQTZOOEEJYKUYOUPXXHPGYJTEKNGFZOMRDCFUQVEPYDRWITTKMYVCKQ",
-  "BROKEN CIPHERTEXT-ONLY HERE, not from the released key set. Designator "
+  "Recovered INDEPENDENTLY here from ciphertext alone; the message had "
+  "already been broken elsewhere, but no key was published. Designator "
   "group "
   "not in the transcription (nothing to strip); ALVPM is the source-page "
   "designator. Same key AND same start as ALRHG, the same order re-sent. RING "
@@ -84,12 +85,21 @@ M = [
   "never identifiable from ciphertext (CLAUDE.md 7.10, always reported A) and "
   "at 172 letters ring1/start1 need not be singletons either (7.12). The "
   "decrypt is exact regardless"),
- ("ALRHG","unknown.SS.342","date not yet identified","VAT","nostrip","ALRHG",
+ ("ALRHG","09.09.1941","09 Sep 1941","VAT","nostrip","ALRHG",
   "ZLUNGBFSCEVTWZRPZTLQEPEBWNYBCVCZIHROAPPLOHYATMMCIJWYWJGWGIYTPAWLHBWPMTBMULWLRSEGJGRDQYTHJQJCVTKYUDBJGYQPDDOPIUV",
-  "BROKEN CIPHERTEXT-ONLY HERE; the abbreviated re-send of ALVPM, same key and "
+  "Recovered independently here from ciphertext alone (broken elsewhere "
+  "first, key unpublished); the abbreviated re-send of ALVPM, same key and "
   "same start. Its --confidence margin was only +2.29 sd, marginal alone; "
   "ALVPM "
   "at +7.54 and the shared plaintext are what settle it"),
+ ("38","09.09.1941","09 Sep 1941","UXT","nostrip","GEHRG",
+  "LGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINCIVXSYRGIGUWLOE",
+  "Unbroken for twenty years, broken elsewhere 12.07.2026 with no key "
+  "published. Recovered here in 0.08 s on one thread as a bare 17576-key "
+  "START-POSITION sweep, because ALVPM and ALRHG had already given up the "
+  "09.09.1941 day key -- the day-key attack of ENHANCEMENTS item 3, on real "
+  "traffic. Margin +6.90 sd. Designator GEHRG stripped by hand here; position "
+  "31 carries the N->V correction from the German Army Messages page"),
  ("23","08.07.1941","08 Jul 1941","PIK","","KHLPT","KHLPTCWSEBDDIRBZUUBGKJANBVGIVDVDZZIGAKBZCJMMVEMVXLTHNLDYGRVQAKJMRVZIXHMDNOMTAUTPZDWOINNMOLAHCDKCZTPPEORFIBXCMNWQNIDDCHPTXQQBC",""),
  ("7","13.08.1941","13 Aug 1941","BRZ","","KEJNQ","KEJNQSFUGRPVPWGSPYHMNQYJTPPDGHFMROCPMUUBLBBJLSRZCYBXHFXQSWGWOXDNEVRIOCSPWKYCFTLRSAKBNWZJYPLQBSHQYVTCCCEPUYVUKSHHVWHXYOJKPVWQWXQESKIEGMUORWZDJZRAJZCWKFFCLUXLDY",""),
  ("19","19.08.1941","19 Aug 1941","BGO","","ALWOK","ALWOKPBYQVEQEHZFPKFLVJSOGNBZNIMXDMDSZXIAQBEKYAKFCIREEWQCBRPBLHHUHGMTPTXGZGSUISJQEYEVSLFXSCUACFAJBUGWYWPVUADTAGMERMBLWTDDGVHRWXPHW",""),
@@ -201,6 +211,12 @@ def wrap(s, width=60):
 # LKW. Where a garbled word was sent only once (BRZT, ABPANG) the reading marks
 # the expansion as uncertain with [?].
 READINGS = {
+ "38": (
+  "QUELLE X ABT AB EINS SEQS NULL NULL UHR IN ROMANOVKA X ROMANOVKA "
+  "[K]LAMM X POLA X POLA X K[L]AMM",
+  "Source: detachment from 1600 hrs at Romanovka, Romanovka (bracket) Pola, "
+  "Pola (bracket). SEQS is sechs with Q for ch; the K/G and K/I in GKLAMM and "
+  "KIAMM are single-letter garbles of the bracket markers."),
  "ALVPM": (
   "S[S] X HAUP[T]ST[URM]F[UEHRER] X SC[H]UH[M]ACHER X SCHUHMA[C]HER X "
   "OBERSCHARF[UEHRER] X ENGELMANN X ENGELMANN X ZURUEQ X "

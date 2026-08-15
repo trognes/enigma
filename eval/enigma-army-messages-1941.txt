@@ -107,7 +107,7 @@ GLOSS:       1915 hrs: columns set in march via Staraja Russa, Staraja
              page.)
 NOTES:       the Bundesarchiv copy of Nr 81, from another SS-Totenkopf station; its plaintext is published, and the key was recovered from it here. Nr 81 is a badly corrupted transcription of the same message and does not decrypt
 
-### Message No. ALVPM  --  date not yet identified  (ALVPM)
+### Message No. ALVPM  --  09 Sep 1941  (ALVPM)
 REFLECTOR:   B
 WHEELS:      III IV II   (-w 342)
 RING:        ALZ
@@ -132,9 +132,9 @@ GLOSS:       SS-Hauptsturmfuehrer Schuhmacher, Schuhmacher:
              to the Army today, returning tomorrow ... Division. Signed
              Henning, Henning. (ZKR unexplained; the separator in
              HENNING[J]HENNING is itself garbled.)
-NOTES:       BROKEN CIPHERTEXT-ONLY HERE, not from the released key set. Designator group not in the transcription (nothing to strip); ALVPM is the source-page designator. Same key AND same start as ALRHG, the same order re-sent. RING IS A CLASS REPRESENTATIVE, not necessarily the true day-key ring: ring0 is never identifiable from ciphertext (CLAUDE.md 7.10, always reported A) and at 172 letters ring1/start1 need not be singletons either (7.12). The decrypt is exact regardless
+NOTES:       Recovered INDEPENDENTLY here from ciphertext alone; the message had already been broken elsewhere, but no key was published. Designator group not in the transcription (nothing to strip); ALVPM is the source-page designator. Same key AND same start as ALRHG, the same order re-sent. RING IS A CLASS REPRESENTATIVE, not necessarily the true day-key ring: ring0 is never identifiable from ciphertext (CLAUDE.md 7.10, always reported A) and at 172 letters ring1/start1 need not be singletons either (7.12). The decrypt is exact regardless
 
-### Message No. ALRHG  --  date not yet identified  (ALRHG)
+### Message No. ALRHG  --  09 Sep 1941  (ALRHG)
 REFLECTOR:   B
 WHEELS:      III IV II   (-w 342)
 RING:        ALZ
@@ -154,7 +154,27 @@ GLOSS:       ... second echelon: Oberscharfuehrer Engelmann, Engelmann
              Signed Henning, Henning. The abbreviated re-send of ALVPM;
              ANF is an unexpanded abbreviation, and U[Z]TUF carries one
              garble against ALVPM's USTUF.
-NOTES:       BROKEN CIPHERTEXT-ONLY HERE; the abbreviated re-send of ALVPM, same key and same start. Its --confidence margin was only +2.29 sd, marginal alone; ALVPM at +7.54 and the shared plaintext are what settle it
+NOTES:       Recovered independently here from ciphertext alone (broken elsewhere first, key unpublished); the abbreviated re-send of ALVPM, same key and same start. Its --confidence margin was only +2.29 sd, marginal alone; ALVPM at +7.54 and the shared plaintext are what settle it
+
+### Message No. 38  --  09 Sep 1941  (GEHRG)
+REFLECTOR:   B
+WHEELS:      III IV II   (-w 342)
+RING:        ALZ
+START:       UXT
+PLUGS:       AZ DV ET FS GQ JP LX MY NR OW
+KENNGRUPPE:  GEHRG   (discriminant; not enciphered)
+CMD:         ./enigma -u B -w 342 -r ALZ -g UXT -s "AZ DV ET FS GQ JP LX MY NR OW"
+CIPHERTEXT:  LGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXXGXINC
+             IVXSYRGIGUWLOE
+DECRYPT:     QUELLEXABTABEINSSEQSNULLNULLUHRINROMANOVKAXROMANOVKAGKLAMMXP
+             OLAXPOLAXKIAMM
+READING:     QUELLE X ABT AB EINS SEQS NULL NULL UHR IN ROMANOVKA X
+             ROMANOVKA [K]LAMM X POLA X POLA X K[L]AMM
+GLOSS:       Source: detachment from 1600 hrs at Romanovka, Romanovka
+             (bracket) Pola, Pola (bracket). SEQS is sechs with Q for ch;
+             the K/G and K/I in GKLAMM and KIAMM are single-letter
+             garbles of the bracket markers.
+NOTES:       Unbroken for twenty years, broken elsewhere 12.07.2026 with no key published. Recovered here in 0.08 s on one thread as a bare 17576-key START-POSITION sweep, because ALVPM and ALRHG had already given up the 09.09.1941 day key -- the day-key attack of ENHANCEMENTS item 3, on real traffic. Margin +6.90 sd. Designator GEHRG stripped by hand here; position 31 carries the N->V correction from the German Army Messages page
 
 ### Message No. 23  --  08 Jul 1941  (KHLPT)
 REFLECTOR:   B

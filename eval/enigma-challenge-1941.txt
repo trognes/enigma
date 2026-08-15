@@ -74,7 +74,7 @@ NOTES:       (none)
 ### Message No. 38  --  09 Sep 1941  (GEHRG)
 KENNGRUPPE:  GEHRG   (discriminant; strip before deciphering)
 LEN:         79  (form count, incl. Kenngruppe)
-KEY:         BROKEN on 12.07.2026 (key not recorded here)
+KEY:         BROKEN on 12.07.2026 elsewhere with no key published; the KEY IS NOW IN THIS REPO -- B 342 ring ALZ start UXT, plugs AZ DV ET FS GQ JP LX MY NR OW, recovered here from the 09.09.1941 day key that ALVPM and ALRHG gave up, and held with the plaintext as Nr 38 in enigma-army-messages-1941.txt
 CIPHERTEXT:  GEHRGLGKQIOKNGSMRUXRZCGVNGYIRWVIISZXWRUUNDFWYUPWCGWRGFNETXXX
              GXINCIVXSYRGIGUWLOE
 NOTES:       position 31 corrected N -> V per the German Army Messages page (updated 01 Aug 2026); the old letter is very likely why this failed to break for twenty years

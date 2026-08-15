@@ -48,6 +48,20 @@ from one day are `N` independent observations of the *same* key over a keyspace
 that does **not** grow — which is the one lever that attacks the limit `-R`
 cannot move.
 
+**DEMONSTRATED ON REAL TRAFFIC — and it beat this writeup.** ALVPM and ALRHG
+(09.09.1941) gave up their shared day key to an ordinary ciphertext-only attack;
+`GEHRG`, unbroken for twenty years and broken elsewhere only in July 2026 with
+no key published, then fell in **0.08 s on one thread** as a bare 17 576-key
+**start-position** sweep, margin +6.90 sd. The argument below is that `N`
+messages from one day are `N` observations of a keyspace that does not *grow*;
+in practice, once the shared key is known the remaining messages collapse to
+their own start position — a reduction of ~1.6e8, not a factor of `√N`. **The
+value of a same-day group is front-loaded**: break one message the hard way and
+the rest of the day is nearly free. That does not remove the work below (the
+joint *statistic* over `N` messages, for when no single message breaks alone),
+but it changes the priority — try the day's easiest message alone first.
+→ `eval/MODERN_BREAKING_NOTES.md` §5j.
+
 *Why it should be strong.* `--confidence` already supplies the arithmetic: a
 break needs the true key's `z` to clear `√(2 ln K)`. Score a candidate day key
 against `N` messages and the true key's signal accumulates over `N·L`
