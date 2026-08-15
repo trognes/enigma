@@ -565,11 +565,7 @@ Three subsidiary results worth keeping:
   catastrophically.** 5 chance doublings in ~471 000 genuine competitors =
   1.1e-5, about **2×** the 4.9e-6 operational null. Run A's 4 hits all sat
   above `z = +2`; run B's single hit did not, so the enrichment is real in
-  direction and weak in size. Extrapolated: roughly **one false positive per
-  2 million keys swept** at `z > 3`, ~130 in a full 230 M-key rotor sweep, and
-  ~94% of them at `L = 6` — so **raising the floor to `L = 7` cuts them ~16×**,
-  a far cheaper lever than tightening the gate, which throws the true key out
-  with them.
+  direction and weak in size. See the false-positive table below.
 - **`margin > 0` is the wrong shape for a gate.** It subtracts `√(2 ln K)`, so
   it means `z > 4.42` on a 17 576-key sweep and `z > 5.68` on a 10⁷ one, while
   the true key's z does not grow with `K` (median 3.76 at L=80, 7.59 at L=100).
@@ -579,6 +575,43 @@ Three subsidiary results worth keeping:
   extra restarts help the true key's climb, but they also let all 17 575 wrong
   keys overfit their plugboards harder, and there are far more of them. The two
   runs draw different instances so this is directional, not a paired number.
+
+*Where the false positives would have come from, had it been built.* Two
+knobs move them, and they are not equally priced. Per full 230 M-key rotor
+sweep (`-r A..`, wheels I–V, one reflector), with the measured **0.559%** of
+keys clearing `z > 3` — not the 0.135% a Gaussian gives, since the real upper
+tail is fatter:
+
+| gate | keys above gate | FP at `L ≥ 6` | FP at `L ≥ 7` | rescues at `M = 5` |
+|---|---:|---:|---:|---|
+| `z > 3` | 1.3 M | 93 | **6** | +10 / +6 |
+| `z > 2` | 7.8 M | 370 | 23 | +10 / +6 |
+| `z > 1` | 35.5 M | 470 | 29 | +10 / +6 |
+| `z > 0` | ~100 M | ~800 | ~50 | +10 / +6 |
+| off | 230 M | ~1 100 | ~70 | +10 / +6 |
+
+(rescues are run A of 100 / run B of 40. Counts are exact for `z ≥ 1`, where
+each sweep's complete top-3000 slice covers the whole above-gate population;
+the two loose rows are bounds from the independent 4.9e-6 null.)
+
+**Two things fall out, and both say the proposed settings were already
+right.** The rescue column is **flat at `M ≤ 5`** — `z > 3` recovers exactly
+the same trials as no gate at all, for a fifth of the false positives — so
+loosening buys literally nothing at the multiplier one would want. It pays
+only at `M ≥ 8`, which is also where the bonus is large enough to be stolen;
+gain and risk arrive together, which is why the grid ran to `M = 14`. The
+reason is visible in the true key's z: once the climb has recovered the
+plaintext z is 7–16, nowhere near the gate, and the trials below `z = 3` are
+the ones where the climb failed and there is no doubling to find.
+
+And the growth is concentrated between 3 and 2 (a 4× step); below `z > 2` the
+count barely moves, because all five observed doublings sit between `z = 1.85`
+and `3.57`. So the **length floor is the cheap lever and the gate is not**:
+each extra letter is another **16×** (the null falls by `B/A ≈ 16.4` per
+letter, so ~94% of chance doublings are `L = 6`), and it costs the true key
+almost nothing, since a real doubled word is a whole word — `ROMANOWO` is 8,
+`KOCHLING` 8, `SCHUHMACHER` 11. Tightening the gate throws the true key out
+along with the chaff; raising the floor does not.
 
 *A measurement trap this sweep walked into, worth the warning.* Double stepping
 makes two grundstellungen the **same key**: with the middle wheel on its notch
