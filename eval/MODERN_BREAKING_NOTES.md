@@ -111,6 +111,49 @@ telegraphic German — the statistical power the original 13 (bimodal, too small
 `-a` vs `-q` on real traffic) lacked. Intended split: the published Appendix-C n-gram
 statistics stay the *telegraphic corpus*; these 74 messages are *held-out validation*.
 
+## 4a. Cross-check against the Heeresgruppe Nord July 1941 compilation
+
+An independent compilation — *Ciphertexts from Heeresgruppe Nord in July 1941*,
+a Schlüsseltafel plus 48 reproduced message forms — was checked against this
+repo. **The repo already held every key and every ciphertext in it.**
+
+**Keys.** All 14 July day keys in its table are present here (the repo also has
+an `08b` the table lacks). Three cells differ and none is a real difference:
+13.07 writes a plug pair `UW` where the repo writes `WU`, and 01.07 (`SBV` vs
+`AAV`) and 16.07 (`AIV` vs `AHV`) are **equivalent rings** — each reproduces the
+identical plaintext at a shifted start (LYASO at `CGU`, FTNBK at `GSR`).
+
+That last point is confirmed by the source itself, which is worth recording
+because it is the same identifiability limit §5j runs into. Its note on 01.07
+says the indicator gives no credible Ringstellung and lists **three** candidates
+— `BOV/LTU`, `GAV/QFU`, `SBV/CGU` — choosing the third because *"the
+Spruchschlüssel CGU lays on a keyboard diagonal"*. So the ring is genuinely
+undetermined and the published value is a heuristic pick; the repo's `AAV/KFU`
+is simply a fourth member of the same class.
+
+**Ciphertexts.** Of 46 blocks carrying a self-stated letter count, **41 are
+byte-identical** to the repo. Two more agree once placeholder handling is
+accounted for — the repo keeps `-` positions for unreceived groups (CASBL's 20,
+SOFGI's 16) because they hold the rotor stepping in sync, while the compilation
+simply omits them, so the repo's text is the more useful one.
+
+**The remaining three disagree at equal length, and the repo is right in all
+three.** Decrypting both variants at the known key:
+
+| | repo | compilation |
+|---|---|---|
+| Nr 194 MAKJH | `SIEBEN` | `SIOBEN` |
+| Nr 214 FTNBK | `KUSOWXKUSOW` … `SAGOSKAX…` | `KUSOWNRUSSI` … `SAITSKAX…` |
+| Nr 282 KLDIO | `KLAM`(mer) | `FLAM` |
+
+FTNBK is the clearest: the compilation's version breaks **both** doublings,
+which is the error-detecting convention catching a transcription slip exactly as
+it was meant to — this time in someone else's transcription rather than ours.
+
+**The one field the repo lacked** was the **indicator** (the enciphered message
+key as written on the form, e.g. `TCR IEI`), now recorded as an `INDICATOR:`
+line on the 34 army-file records the compilation covers.
+
 ## 5. Standing challenge — unbroken ciphertexts (`eval/enigma-challenge-1941.txt`)
 
 The same collection's 18 ciphertexts that were unbroken when this file was

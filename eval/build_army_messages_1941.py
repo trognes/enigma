@@ -230,6 +230,47 @@ def wrap(s, width=60):
 # ZANDEYS/ZANDERS -> Zanders, KOENIGSBCRG/COENIGSBNRG -> Koenigsberg, LKW/EKW ->
 # LKW. Where a garbled word was sent only once (BRZT, ABPANG) the reading marks
 # the expansion as uncertain with [?].
+INDICATORS = {  # Kenngruppe/Spruchschluessel indicator groups as written on
+                # the message forms, from the Heeresgruppe Nord July 1941
+                # ciphertext compilation; the repo already held every key and
+                # ciphertext in that document, these were the one new field.
+ "23": "OKF QLV",
+ "73": "TCR IEI",
+ "99": "QCB NSR",
+ "101": "AIK SUD",
+ "108": "RFV ACK",
+ "113": "LMN JGO",
+ "122": "WCK KLW",
+ "126": "ACS GUT",
+ "127": "DRU QBP",
+ "136": "JOL RVH",
+ "139": "MIN MER",
+ "141": "GMD NQZ",
+ "142": "NOV ANZ",
+ "143": "BIW CRF",
+ "153": "HMR ECH",
+ "157": "EUQ MAC",
+ "158": "OPB LAB",
+ "160": "UFZ AGE",
+ "161": "IPG PHA",
+ "168": "VDJ RSJ",
+ "170": "CIJ UWH",
+ "173": "SWV YTE",
+ "176": "BDF PNX",
+ "180": "ALO XGF",
+ "194": "FZK EWR",
+ "197": "QCV MLN",
+ "199": "XIC YUU",
+ "200": "NTO BTU",
+ "201": "OLG ANW",
+ "214": "LMA BJJ",
+ "228": "UKM IUX",
+ "234": "RIT IZG",
+ "266": "FQT YSB",
+ "282": "VOF ZVZ",
+}
+
+
 READINGS = {
  "38": (
   "QUELLE X ABT AB EINS SEQS NULL NULL UHR IN ROMANOVKA X ROMANOVKA "
@@ -344,6 +385,9 @@ def main():
             f.write("START:       %s\n" % start)
             f.write("PLUGS:       %s\n" % s)
             f.write("KENNGRUPPE:  %s   (discriminant; not enciphered)\n" % kenn)
+            if no in INDICATORS:
+                f.write("INDICATOR:   %s   (as sent; the operator's enciphered "
+                        "message key)\n" % INDICATORS[no])
             f.write('CMD:         ./enigma -u %s -w %s -r %s -g %s -s "%s"\n' % (u, w, r, start, s))
             f.write("CIPHERTEXT:  %s\n" % wrap(body))
             f.write("DECRYPT:     %s\n" % wrap(pt))
