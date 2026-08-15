@@ -22,8 +22,8 @@ nothing, and all four match.
 They carry something the transcriptions did not: the **indicator**, the
 operator's enciphered message key. That is worth more than it looks. A candidate
 day key can now be tested in a *single decrypt* — set the machine to the first
-group, decipher the second, and that is the message start — instead of a
-17 576-start sweep, and the two answers must agree.
+group, decipher the second, and that is the message start — instead of sweeping
+all 17 576 starts, and the two answers must agree.
 
 Used immediately on MVUEH, which the records describe as not breaking on the
 10.07.1941 day key. `GTA KCI` derives start `USU` at that key and `SED` at the
@@ -69,8 +69,8 @@ medium confidence):
 | 85 | 17 `DNXJF` | `F` | `Y` |
 
 Confirmed identical at high magnification: FMNGI `FGROV FDIVQ QVNQW LGBLJ VRLEB
-EKFHE MCF`, and MVUEH `MVUEH SMXWL PSYWZ YTCBS ODVJU SLSOO MJQJZ SXSEB ZPEYM
-TC` — ten of MVUEH's eighteen groups.
+EKFHE MCF`, and MVUEH `MVUEH SMXWL PSYWZ YTCBS ODVJU SLSOO MJQJZ SXSEB ZPEYM TC`
+— ten of MVUEH's eighteen groups.
 
 **None is applied**, for a reason worth stating rather than out of caution.
 Neither message has a working key, so a proposed correction cannot be arbitrated
@@ -103,8 +103,8 @@ one that matters.
 
 Those two scans settled which "garbles" were 1941's and which were ours — five
 of ALVPM's six were transcription errors, corrected against these images, and
-one `ENHANCEMENTS.md` claim was withdrawn as a result. A transcription slip and a
-transmission garble look identical in the plaintext (Enigma has no diffusion),
+one `ENHANCEMENTS.md` claim was withdrawn as a result. A transcription slip and
+a transmission garble look identical in the plaintext (Enigma has no diffusion),
 and the round-trip and self-encryption checks cannot separate them, so the image
 is the only authority. Keep it with the data.
 
