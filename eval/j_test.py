@@ -73,10 +73,35 @@ def zero_j(recs):
     return obs, exp
 
 
-def poisson_tail(k, lam):
-    """P(X >= k) for X ~ Poisson(lam)."""
-    return 1.0 - sum(math.exp(-lam) * lam ** i / math.factorial(i)
-                     for i in range(k))
+def binom_cdf(k, n, p):
+    """P(X <= k) for X ~ Binomial(n, p) -- exact.
+
+    A J count IS binomial (n letters, each J with probability 1/26), so this is
+    the exact test rather than the Poisson approximation.  It matters at the
+    only place a number is quoted: for a zero-J message it returns exactly
+    (25/26)^n, which is what the P(0 J) column shows, so the two agree instead
+    of differing in the third decimal.
+    """
+    return sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i)
+               for i in range(k + 1))
+
+
+def poisson_binomial_tail(k, ps):
+    """P(X >= k) where X counts successes with per-trial probabilities ps.
+
+    The zero-J messages have DIFFERENT probabilities (they differ in length),
+    so their count is Poisson-binomial, not Poisson.  Computed exactly by
+    convolution -- cheap at these sizes, and it avoids having to argue that an
+    approximation is good enough for the one p-value the section rests on.
+    """
+    dist = [1.0]
+    for p in ps:
+        nxt = [0.0] * (len(dist) + 1)
+        for i, d in enumerate(dist):
+            nxt[i] += d * (1 - p)
+            nxt[i + 1] += d * p
+        dist = nxt
+    return sum(dist[k:])
 
 
 def main():
@@ -99,16 +124,23 @@ def main():
         print("   %-26s %7d %9d %9.2f %6.1fx"
               % (name, len(recs), obs, exp, obs / exp))
     obs, exp = zero_j(unbroken)
-    print("   unbroken excess: Poisson P(X >= %d | lambda = %.2f) = %.4f\n"
-          % (obs, exp, poisson_tail(obs, exp)))
+    ps = [(25.0 / 26.0) ** len(b) for _, b, _ in unbroken]
+    print("   unbroken excess: exact Poisson-binomial P(X >= %d) = %.4f\n"
+          % (obs, poisson_binomial_tail(obs, ps)))
 
     print("3. PER-MESSAGE -- unbroken challenges, longest first")
-    print("   %-12s %6s %5s %9s %9s" % ("", "letters", "J", "expected",
-                                        "P(0 J)"))
+    print("   %-12s %6s %5s %9s %9s %8s" % ("", "letters", "J", "expected",
+                                            "P(0 J)", "p vs *3"))
     for label, body, _ in sorted(unbroken, key=lambda r: -len(r[1])):
-        print("   %-12s %6d %5d %9.1f %8.1f%%"
-              % (label, len(body), body.count("J"), len(body) / 26.0,
-                 100.0 * (25.0 / 26.0) ** len(body)))
+        n, j, lam = len(body), body.count("J"), len(body) / 26.0
+        # ONE-SIDED, and deliberately so: footnote *3 predicts a J DEFICIT, so
+        # the evidence against Enigma is P(X <= observed).  A two-sided p would
+        # flag a J-RICH message as "significant" when an excess of J is the
+        # opposite of what *3 claims -- evidence FOR Enigma, not against.
+        p = binom_cdf(j, n, 1.0 / 26.0)
+        print("   %-12s %6d %5d %9.1f %8.1f%% %8.3f%s"
+              % (label, n, j, lam, 100.0 * (25.0 / 26.0) ** n, p,
+                 "   J-rich, so *3 is not in play" if j > lam else ""))
 
     print("\n   zero-J records in the VERIFIED corpus (the counter-examples):")
     for label, body, _ in sorted(verified, key=lambda r: -len(r[1])):

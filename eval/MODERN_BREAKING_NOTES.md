@@ -228,7 +228,12 @@ summing `(25/26)^n` over the actual lengths:
 | unbroken challenges | 14 | 6 | 1.42 | **4.2×** |
 
 **The verified corpus lands exactly where Enigma says it should; the unbroken
-set runs four times over** (Poisson p ≈ 0.004). Two populations from the same
+set runs four times over** — exact Poisson-binomial `P(X ≥ 6) = 0.0005`. (The
+count is Poisson-*binomial*, not Poisson: the per-message probabilities run
+from 0.1% to 45.6%, so the distribution is under-dispersed and a Poisson
+approximation is not merely inelegant but **7× too conservative** here, giving
+0.0034. The exact convolution is a dozen lines and is in the script.) Two
+populations from the same
 collection, the same era and the same transcribers, differing in nothing but
 whether anyone has broken them — and the unbroken one is enriched in a property
 Enigma does not produce. That is population-level evidence that **part of the
@@ -244,8 +249,8 @@ SZAEJ arrived later (PR #183) and had never been tested:
 | | letters | J | expected | reading |
 |---|---:|---:|---:|---|
 | BYQMZ | 166 | **6** | 6.4 | indistinguishable from Enigma |
-| **QTXMA** | 155 | **11** | 6.0 | Enigma; if anything J-rich (p ≈ 0.04, noise) |
-| **SZAEJ** | 51 | **3** | 2.0 | Enigma |
+| **QTXMA** | 155 | **11** | 6.0 | Enigma, J-*rich* (see below) |
+| **SZAEJ** | 51 | **3** | 2.0 | Enigma (p = 0.87 against \*3) |
 | FKQLZ | 107 | **0** | 4.1 | p = 0.015 |
 | XFEDT | 97 | **0** | 3.7 | p = 0.022 |
 | FKQLZ + XFEDT | 204 | **0** | 7.8 | **p = 3e-4** |
@@ -257,6 +262,14 @@ so whatever is true of FKQLZ and XFEDT is **specific to those two**, not a
 property of the batch. This matters for where compute goes: QTXMA is the
 second-longest unbroken message and the main reason to doubt it was worth
 attacking has just been removed.
+
+QTXMA's excess is worth a word, since it is the one figure here that could be
+mistaken for a finding: 11 J against 5.96 expected. **The direction is what
+settles it** — footnote \*3 predicts a J *deficit*, so a J-*rich* message is
+evidence for Enigma, not against, and the p-value that matters (`P(X ≤ 11)` =
+0.98) says there is nothing here for \*3 to stand on. A two-sided test would
+report 0.08 and invite exactly the wrong reading, which is why `j_test.py`
+prints the one-sided figure against \*3 and flags J-rich messages explicitly.
 
 #### The other nine open challenges
 
