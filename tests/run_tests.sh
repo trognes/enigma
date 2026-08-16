@@ -1446,10 +1446,20 @@ check "--double-length needs -c" \
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --double-length 6 2>&1 >/dev/null)
 check "--double-length needs --confidence" \
   "$(printf '%s' "$dw_err" | grep -c 'need a null to gate on')" "1"
+# The scan is capped at 30 (no real doubling approaches it, and the cap is what
+# keeps the cost O(30n) rather than O(n^2)).  L is validated against the SAME
+# constant, so a too-large L is refused rather than silently searching nothing.
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         --double-length 999 2>&1 >/dev/null)
-check "--double-length rejects a length past half the message limit" \
+         --double-length 31 2>&1 >/dev/null)
+check "--double-length past the scan's own cap is refused" \
   "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "1"
+# The key is PINNED here: unlike the rejection above, a valid --double-length
+# does not exit at validation, so without it this check would start a full
+# default wildcard search under -c and hang the suite (it did).
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         -u B -w 123 -r AAA -g AAA --double-length 30 2>&1 >/dev/null)
+check "--double-length at the cap is accepted" \
+  "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "0"
 # --double-z moves the gate.  The true key here sits far above it (z = 7..16
 # once the climb has the plaintext), so raising the gate past that silences the
 # report -- which is the assertion that the gate is actually consulted rather

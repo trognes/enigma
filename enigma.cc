@@ -284,6 +284,19 @@ static int opt_double_length;
 static double opt_double_z;
 static int opt_double_z_set;
 static const double double_z_default = 3.0;
+/* Longest doubling the scan looks for. W and V may not contain an X, so each is
+   a single X-delimited token -- a WORD -- and the longest real doubling in the
+   authentic corpus is STUERZBAECHER at 13 (ENHANCEMENTS.md item 5, where the
+   probes' own MAXLEN of 16 was measured to saturate). 30 is over twice that.
+
+   It is a real bound, not a formality: without it the scan runs every length
+   from (n-1)/2 down to L, which is O(n^2) and grows with the message -- 193
+   linear passes at 400 letters against 24 here. A longer doubling is MISSED
+   rather than truncated, because a long repeat does not decompose into a
+   shorter matching one: sliding the window puts the copies out of alignment.
+   --double-length is validated against this, so the two can never disagree and
+   a too-large L cannot silently search nothing. */
+static const int double_maxlen = 30;
 /* --crib-rerank / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
@@ -4632,8 +4645,13 @@ static void progress_line(best_result & b, machine & m, double score)
    climb it is reporting on. */
 static int find_doubling(const char * pt, int n, int minlen, int * at)
 {
-  /* Longest first, so the first hit is the answer and the scan stops. */
-  for (int len = (n - 1) / 2; len >= minlen; len--)
+  /* Longest first, so the first hit is the answer and the scan stops. Capped at
+     double_maxlen: that is what keeps the cost O(maxlen * n) instead of
+     O(n^2), and no real doubling comes close (see the constant). */
+  int start = (n - 1) / 2;
+  if (start > double_maxlen)
+    start = double_maxlen;
+  for (int len = start; len >= minlen; len--)
     {
       /* A doubling is a TRANSLATION by len+1, not a reflection: W[i] sits at
          pt[j-len+i] and V[i] at pt[j+1+i], so the pair is (y, y+len+1) for
@@ -7368,7 +7386,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "about 90 -- so raise L before touching the gate.");
   fprintf(out, "  %-24s %s\n", "",
-          "Needs -c and --confidence (which defines z) [off]");
+          "Lengths above 30 are not searched (no real");
+  fprintf(out, "  %-24s %s\n", "",
+          "doubling is close; the cap is what keeps the scan");
+  fprintf(out, "  %-24s %s\n", "",
+          "cheap). Needs -c and --confidence (defines z) [off]");
   fprintf(out, "  %-24s %s\n", "--double-z Z",
           "Sigma threshold for --double-length. Below it a");
   fprintf(out, "  %-24s %s\n", "",
@@ -8272,9 +8294,9 @@ int main(int argc, char * * argv)
      under -c) on a run that never asked for it. */
   if (opt_double_length < 0)
     fatal("Illegal doubling length (--double-length must be >= 1)");
-  if (opt_double_length > maxlen / 2)
-    fatal("Illegal doubling length (--double-length exceeds half the maximum "
-          "message length)");
+  if (opt_double_length > double_maxlen)
+    fatal("Illegal doubling length (--double-length exceeds the longest "
+          "doubling the scan looks for)");
   if ((opt_double_length > 0) && (! opt_hillclimb))
     fatal("Doubling reports (--double-length) need the plugboard hill-climb (-c)");
   if ((opt_double_length > 0) && (opt_confidence <= 0))
