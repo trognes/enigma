@@ -1503,6 +1503,16 @@ dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
          --double-mismatches 2 2>&1 >/dev/null)
 check "--double-mismatches without --double-length is refused" \
   "$(printf '%s' "$dw_err" | grep -c 'which is not on')" "1"
+# --full-text applies to the doubling report too: the report says a doubling is
+# present and the whole decrypt is what lets the reader judge it, so the option
+# must not skip the one line most worth expanding.  Counted as "more
+# continuation lines with the report than without", which holds whatever the
+# message length makes the block size.
+dw_ft() { printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 \
+  -r AAA -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
+  --full-text "$@" 2>&1 >/dev/null | grep -c '^  [A-Z]*$'; }
+check "--full-text expands the doubling report as well" \
+  "$(test "$(dw_ft --double-length 6)" -gt "$(dw_ft)" && echo more)" "more"
 
 # --confidence N: sample the null and report the winner's margin over chance.
 # The property under test is DISCRIMINATION, so every check comes in a pair -- a
@@ -1529,6 +1539,21 @@ cf_margin() { printf '%s' "$1" \
               | sed -n 's/.*margin \([+-][0-9.]*\) sd.*/\1/p'; }
 cf_sig=$(cf_run "$cf_ct")
 cf_noise=$(cf_run "$cf_rct")
+# The progress lines print a MARGIN; a reader watching them cannot convert it
+# back to the raw sigma count every other account of a result is quoted in
+# unless the offset is stated up front.  Reported BEFORE the sweep (the summary
+# repeats it afterwards), and it must be the same number in both places.
+cf_bar=$(printf '%s' "$cf_ct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+         -g "..." --confidence 64 -T 1 2>&1 >/dev/null)
+check "--confidence states the z that margin 0 corresponds to" \
+  "$(printf '%s' "$cf_bar" | grep -c '^Confidence: margin 0 is z = ')" "1"
+cf_bar_pre=$(printf '%s' "$cf_bar" \
+  | sed -n 's/^Confidence: margin 0 is z = \([0-9.]*\),.*/\1/p')
+cf_bar_post=$(printf '%s' "$cf_bar" \
+  | sed -n 's/.*chance best of [0-9]* keys is \([0-9.]*\) sd.*/\1/p')
+check "the pre-sweep bar matches the one the summary reports" \
+  "$cf_bar_pre" "$cf_bar_post"
+
 check "--confidence: a real plaintext clears chance by a wide margin" \
   "$(awk -v m="$(cf_margin "$cf_sig")" \
      'BEGIN{print (m > 5) ? "yes" : "no"}')" "yes"

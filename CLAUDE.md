@@ -1208,7 +1208,10 @@ are read from a **data directory** (filenames built as
     still leads on score. Identical consecutive repeats are collapsed (one call
     per converged restart plus one after `--polish` would otherwise print the
     same row `-R`+1 times); display-only, under the progress mutex, so which
-    candidate WINS is untouched.
+    candidate WINS is untouched. **`--full-text` expands a report** as it does
+    a progress line: the report says a doubling is present and the whole
+    decrypt is what lets the reader judge it, so skipping the one line most
+    worth expanding would be the wrong default.
   - **A one-key space has no null**, so `--confidence` falls back to raw scores
     and the report stays silent. Give it a keyspace bigger than the sample.
 - `--full-text` print the **whole decrypted message** with each progress line
