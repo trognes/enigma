@@ -1363,13 +1363,43 @@ A single pass through `main()`:
        under `-c`, else 1). The `-R` plugboard restarts of a key are independent
        — each draws from its own `(key,restart)` RNG seed (`restart_seed`)
        rather than one stream advanced sequentially — so they are spread across
-       threads too. Restart is the innermost dimension, so consecutive items
-       share a key and reuse its `setup_mapping`. **This is what lets a
-       *fully-specified rotor key* (one key) still use every thread** — the old
-       key-only scheme left that case single-threaded (`-T` a no-op). The `-F`
-       tiers and the plain scan keep one item per key. Determinism is preserved
-       by a lowest-work-index tie-break in the best-merge (`better_cand`), since
-       parallel restarts of one key often converge to the same score.
+       threads too. **Restart is the OUTER dimension**: the sweep does every key
+       at restart 0, then every key at restart 1, and so on.
+     - **Why restart-major, when restart-innermost is cheaper.** Innermost lets
+       consecutive items share a key and reuse its `setup_mapping`, which is
+       why it was built that way. That saving is **under 1%** — `setup_mapping`
+       is <0.1% of a `-c` run by callgrind, and a direct `-R 1` vs `-R 8`
+       timing cannot resolve it above thread jitter — while the ordering
+       decides **when** an answer appears. There is no early exit, so this does
+       not shorten a run; it front-loads the probability, which is what lets a
+       watcher kill a 28-hour sweep early. On the measured climb curve (87% at
+       `R = 16`, ~11.9% per restart): found by the quarter mark **40% against
+       22%**, by halfway **64% against 44%**, the same 87% at the end.
+     - **`best.idx` decodes as `idx % keys`, NOT `idx / restarts`.** Two sites
+       reconstruct the winning rotor key from the merged work index —
+       `--polish` and the `--ring-stride` refinement — and both go through
+       `work_key()` so they cannot diverge. Getting it wrong prints a key that
+       does not decrypt to the plaintext the run just wrote to stdout, which is
+       the failure the `--tune-phase` notes record; `tests/run_tests.sh`
+       re-encrypts the reported plaintext under the reported key and compares,
+       for `--polish`, `--ring-stride` and both together.
+     - **The live progress line reports per PASS** (`pass 7/16, 8.1M / 17.6M
+       keys`). Dividing the item count by the restarts — what it did while
+       restarts were innermost — would report 6% of keys covered at the point
+       where every key has been visited once, i.e. exactly the fact the reader
+       is watching for. The rate is key-*visits* per second and the ETA runs to
+       the end of the whole sweep, both unchanged in meaning from the
+       single-restart case, where the pass field is omitted entirely.
+     - The ordering changes which of several **exactly-tied** boards wins (the
+       `better_cand` tie-break is on the work index, which now enumerates in a
+       different order). Still deterministic and still `-T`-independent; simply
+       not byte-identical to the pre-change output on a tie.
+     - **This is what lets a *fully-specified rotor key* (one key) still use
+       every thread** — the old key-only scheme left that case single-threaded
+       (`-T` a no-op). The `-F` tiers and the plain scan keep one item per key.
+       Determinism is preserved by a lowest-work-index tie-break in the
+       best-merge (`better_cand`), since parallel restarts of one key often
+       converge to the same score.
    - `setup_mapping()` steps the rotors over the message length and records, per
      position, a pointer `rows[pos]` to that position's rotor-stack substitution
      row (folding in the stepping). The scan points `rows[pos]` straight into
