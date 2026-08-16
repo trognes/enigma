@@ -1480,6 +1480,29 @@ dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
          --double-z 4 2>&1 >/dev/null)
 check "--double-z without --double-length is refused" \
   "$(printf '%s' "$dw_err" | grep -c 'which is not on')" "1"
+# --double-mismatches.  ENGELMANN X ENGELMANN is exact, so N=0 must still find
+# it; the interesting direction is that N is CONSULTED, which the vacuous-value
+# refusal and the echo establish without needing a garbled fixture.
+check "--double-mismatches 0 still finds an exact doubling" \
+  "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
+     -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
+     --double-length 6 --double-mismatches 0 2>&1 >/dev/null \
+     | grep -c '>> 9 ENGELMANN')" "1"
+check "--double-mismatches is echoed in the settings" \
+  "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
+     -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
+     --double-length 6 --double-mismatches 2 2>&1 >/dev/null \
+     | grep -c 'up to 2 mismatches')" "1"
+# At N >= L every pair of equal-length X-free runs matches, so the test stops
+# testing anything.  Refused rather than run.
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-length 6 --double-mismatches 6 2>&1 >/dev/null)
+check "--double-mismatches at or above L is refused as vacuous" \
+  "$(printf '%s' "$dw_err" | grep -c 'must be below')" "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-mismatches 2 2>&1 >/dev/null)
+check "--double-mismatches without --double-length is refused" \
+  "$(printf '%s' "$dw_err" | grep -c 'which is not on')" "1"
 
 # --confidence N: sample the null and report the winner's margin over chance.
 # The property under test is DISCRIMINATION, so every check comes in a pair -- a

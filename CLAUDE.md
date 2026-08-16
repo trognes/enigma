@@ -1100,8 +1100,9 @@ are read from a **data directory** (filenames built as
   on the shipped library the cribs actually present in the message are the ones
   scoring ~0.03–0.07×, so the column guides the reader rather than gating a
   crib.
-- `--double-length L` / `--double-z Z` **report a converged climb whose decrypt
-  carries a doubled word** of `L`+ letters around an X — `ENGELMANN X
+- `--double-length L` / `--double-z Z` / `--double-mismatches N` **report a
+  converged climb whose decrypt carries a doubled word**
+  of `L`+ letters around an X — `ENGELMANN X
   ENGELMANN`, telegraphic German's own error correction (off by default; needs
   `-c` and `--confidence`, which is what defines z). Fires after each converged
   climb and once after `--polish`, on any key clearing **z ≥ `Z`** (default 3)
@@ -1134,8 +1135,32 @@ are read from a **data directory** (filenames built as
     plaintext sits at **z = 7…16** — nowhere near the gate — while the keys
     below z = 3 are the ones whose climb failed, where there is no doubling to
     find anyway. See `ENHANCEMENTS.md` item 5(e) for the table.
-  - **One SUBSTITUTION is allowed, and it buys exactly the error the channel
-    makes.** Enigma has no diffusion, so one corrupted ciphertext letter damages
+  - **`--double-mismatches N` (default 1) is a knob you should almost never
+    turn, and the numbers say why.** Measured on 2 M synthetic texts drawn from
+    the climbed-wrong-key letter statistics (X-rate 2.41%, IC 0.0514 — the
+    generator validates by reading **6.0e-6** at `L=6, N=1` where the
+    operational null is 4.9e-6):
+
+    | L | N | false-positive rate | vs N=1 | real doublings found (of 46) |
+    |---:|---:|---:|---:|---:|
+    | 6 | 0 | 0 | — | 8 |
+    | 6 | **1** | **6.0e-06** | 1× | **13** |
+    | 6 | 2 | 2.9e-04 | **49×** | 13 |
+    | 6 | 3 | 7.3e-03 | 1212× | 14 |
+    | 7 | 2 | 2.0e-05 | ~53× | 11 (same as N=1) |
+    | 8 | 2 | 2.0e-06 | — | 7 (N=1 finds 6) |
+
+    **`N=2` multiplies false reports ~50× and finds nothing extra** at `L`=6 or
+    7, one more at 8 — which matches the corpus, where 18 of the 25 real
+    doublings have no mismatch, 7 have exactly one, and **none has two**. `N`
+    and `L` are not interchangeable: a letter divides the rate by ~16 and a
+    mismatch multiplies it by ~50, so a step in `N` costs what **1.4 letters**
+    buy back. If you want `N=2`, add 2 to `L` and you are back where you
+    started. `N ≥ L` is refused as vacuous (every equal-length X-free pair would
+    match).
+  - **One SUBSTITUTION is allowed by default, and it buys exactly the error
+    the channel makes.** Enigma has no diffusion, so one corrupted ciphertext
+    letter damages
     exactly one plaintext letter — in one copy of the doubling and not the
     other. An **indel is a different matter and is missed by design**: a dropped
     or added letter misaligns the copies, so every position after it differs and

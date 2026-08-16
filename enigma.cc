@@ -283,6 +283,36 @@ static int opt_double_length;
    move it -- but move L first. */
 static double opt_double_z;
 static int opt_double_z_set;
+/* --double-mismatches N: positions where the two copies may differ. Default 1,
+   which is the CHANNEL's error and no more: Enigma has no diffusion, so one
+   corrupted ciphertext letter damages exactly one plaintext letter, in one copy
+   and not the other.
+
+   RAISING IT IS EXPENSIVE AND BUYS ALMOST NOTHING -- measured, not modelled, on
+   2M synthetic texts drawn from the climbed-wrong-key letter statistics (X-rate
+   2.41%, IC 0.0514). The generator validates against the documented operational
+   null: it reads 6.0e-6 at L=6,N=1 where that null is 4.9e-6.
+
+     L   N   false-positive rate   vs N=1   real doublings found (of 46)
+     6   0             0                     8
+     6   1       6.0e-06               1x   13
+     6   2       2.9e-04              49x   13
+     6   3       7.3e-03            1212x   14
+     7   2       2.0e-05             ~53x   11  (same as N=1)
+     8   2       2.0e-06                     7  (N=1 finds 6)
+
+   So N=2 multiplies false reports by ~50x and finds nothing extra at L=6 or 7,
+   one more at L=8. That matches the corpus: of the 25 real doublings 18 have no
+   mismatch and 7 have exactly one, and NONE has two.
+
+   N and L are not interchangeable levers. One extra LETTER divides the rate by
+   ~16, one extra mismatch multiplies it by ~50, so a step in N costs about
+   what 1.4 letters buy back -- if you want N=2, add 2 to L and you are back
+   where you started. Kept as a knob because a heavily garbled message is a
+   real case; the default is where the evidence is. */
+static int opt_double_mismatches;
+static int opt_double_mismatches_set;
+static const int double_mismatches_default = 1;
 static const double double_z_default = 3.0;
 /* Longest doubling the scan looks for. W and V may not contain an X, so each is
    a single X-delimited token -- a WORD -- and the length distribution over the
@@ -4663,7 +4693,8 @@ static void progress_line(best_result & b, machine & m, double score)
    pair at a time, and stop at the second mismatch or the first X. The obvious
    "try every length at every X" form is O(n^3) and would cost more than the
    climb it is reporting on. */
-static int find_doubling(const char * pt, int n, int minlen, int * at)
+static int find_doubling(const char * pt, int n, int minlen, int maxmm,
+                         int * at)
 {
   /* Longest first, so the first hit is the answer and the scan stops. Capped at
      double_maxlen: that is what keeps the cost O(maxlen * n) instead of
@@ -4700,7 +4731,7 @@ static int find_doubling(const char * pt, int n, int minlen, int * at)
           if (y >= len - 1)
             {
               const int j = y + 1;
-              if ((pt[j] == 'X') && (nbad == 0) && (nmis <= 1))
+              if ((pt[j] == 'X') && (nbad == 0) && (nmis <= maxmm))
                 {
                   * at = j - len;
                   return len;
@@ -4757,7 +4788,8 @@ static void report_double_word(machine & m, double score)
   pt[textlength] = 0;
 
   int at = 0;
-  const int len = find_doubling(pt, textlength, opt_double_length, & at);
+  const int len = find_doubling(pt, textlength, opt_double_length,
+                                opt_double_mismatches, & at);
   if (len <= 0)
     return;
 
@@ -7422,6 +7454,22 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "nothing extra (the true key sits at z = 7..16) and");
   fprintf(out, "  %-24s %s\n", "", "multiplies false reports [3]");
+  fprintf(out, "  %-24s %s\n", "--double-mismatches N",
+          "Positions the two copies may differ in. The");
+  fprintf(out, "  %-24s %s\n", "",
+          "default 1 is the channel's error and no more --");
+  fprintf(out, "  %-24s %s\n", "",
+          "Enigma has no diffusion, so one garbled letter");
+  fprintf(out, "  %-24s %s\n", "",
+          "damages one copy. Measured on 2M null texts, N=2");
+  fprintf(out, "  %-24s %s\n", "",
+          "multiplies false reports ~50x and finds nothing");
+  fprintf(out, "  %-24s %s\n", "",
+          "extra (of 25 real doublings, 18 have no mismatch,");
+  fprintf(out, "  %-24s %s\n", "",
+          "7 have one, none has two). A letter of L divides");
+  fprintf(out, "  %-24s %s\n", "",
+          "the rate by 16, so N=2 needs L+2 to break even [1]");
   fprintf(out, "  %-24s %s\n", "--crib TEXT",
           "Known plaintext: rotor settings that cannot produce");
   fprintf(out, "  %-24s %s\n", "", "it are rejected unscored, and with -c the plugs");
@@ -7580,10 +7628,11 @@ void show_settings()
      reader who does not know it is on would misread its lines as the search
      having improved. Say what marks them and what the gate was. */
   if (opt_double_length > 0)
-    fprintf(stderr, "Doubling:   report doublings of %d+ letters at z >= %g "
-            "(--double-length)\n"
+    fprintf(stderr, "Doubling:   report doublings of %d+ letters at z >= %g, "
+            "up to %d mismatch%s\n"
             "            marked \">>\" below; a report is NOT a new best\n",
-            opt_double_length, opt_double_z);
+            opt_double_length, opt_double_z, opt_double_mismatches,
+            (opt_double_mismatches == 1) ? "" : "es");
 
   /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
      ~10pp of exact recovery at K=2 on telegraphic German, archived/PERFORMANCE.md §7.11), so a
@@ -7709,6 +7758,8 @@ int main(int argc, char * * argv)
   opt_double_length = 0;
   opt_double_z = double_z_default;
   opt_double_z_set = 0;
+  opt_double_mismatches = double_mismatches_default;
+  opt_double_mismatches_set = 0;
   opt_crib_rerank = nullptr;
   opt_crib_weight = 0.5;
   opt_crib = 0;
@@ -7743,7 +7794,8 @@ int main(int argc, char * * argv)
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
-         OPT_DOUBLELEN, OPT_DOUBLEZ };
+         OPT_DOUBLELEN, OPT_DOUBLEZ,
+         OPT_DOUBLEMM };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -7801,6 +7853,7 @@ int main(int argc, char * * argv)
       { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
       { "double-length",  required_argument, nullptr, OPT_DOUBLELEN },
       { "double-z",       required_argument, nullptr, OPT_DOUBLEZ },
+      { "double-mismatches", required_argument, nullptr, OPT_DOUBLEMM },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -7914,6 +7967,10 @@ int main(int argc, char * * argv)
           break;
         case OPT_DOUBLELEN:
           opt_double_length = atoi(optarg);
+          break;
+        case OPT_DOUBLEMM:
+          opt_double_mismatches = atoi(optarg);
+          opt_double_mismatches_set = 1;
           break;
         case OPT_DOUBLEZ:
           {
@@ -8326,6 +8383,15 @@ int main(int argc, char * * argv)
      typo on the flag that actually enables the report. */
   if (opt_double_z_set && (opt_double_length <= 0))
     fatal("--double-z sets the gate for --double-length, which is not on");
+  if (opt_double_mismatches_set && (opt_double_length <= 0))
+    fatal("--double-mismatches applies to --double-length, which is not on");
+  if (opt_double_mismatches < 0)
+    fatal("Illegal mismatch budget (--double-mismatches must be >= 0)");
+  /* At N >= L every pair of equal-length X-free runs matches, so the test stops
+     testing anything -- a vacuous setting, refused rather than run. */
+  if ((opt_double_length > 0) && (opt_double_mismatches >= opt_double_length))
+    fatal("Illegal mismatch budget (--double-mismatches must be below "
+          "--double-length, or every pair matches)");
 
   /* Simulated annealing is an alternative plugboard optimiser, so it needs -c; the
      move budget must be non-negative. */
