@@ -309,6 +309,76 @@ def swept(rng, texts, msgs=4, wrong=40, minlen=6):
               % (L, n, len(hyps), surv, wrong, "yes" if tok else "NO (BUG)"))
 
 
+def terminal_hyps(ct):
+    """The TERMINAL-SIGNATURE hypothesis set: the message ends with a doubled
+    word, `... X NAME X NAME [X]`.
+
+    Half of the corpus's doublings are exactly this -- a signed surname closing
+    the message (RENNER, MATHIAT, STEINECKE, STUERZBAECHER, HENNING after GEZ)
+    -- and the position is what makes it worth anything.  The swept self-crib
+    dies on ~2800 hypotheses of which ~1200 always survive; pinning the
+    alignment to the end leaves only the word's LENGTH unknown, so the set is
+    ~20.  The left flank is an X by construction (the name follows a
+    separator), and a trailing X is the right flank when present.
+    """
+    n = len(ct)
+    out = []
+    for tail in (0, 1):
+        for L in range(4, 14):
+            at = n - tail - 2 * L - 1
+            if at < 1:
+                continue
+            m = SelfMenu(ct, at, L,
+                         variant="sep+L+R" if tail else "sep+L")
+            if m.valid:
+                out.append(m)
+    return out
+
+
+def terminal(rng, texts, wrong=300):
+    """Does the terminal-signature crib reject wrong keys -- and what does the
+    assumption cost when the message does NOT end that way?"""
+    print("\nterminal signature: the message ends with a doubled word")
+    ends, others = [], []
+    for t in texts:
+        ds = [(a, L) for a, L in doublings(t, minlen=4, maxlen=20)
+              if len(t) - (a + 2 * L + 1) <= 1]
+        (ends if ds else others).append(t)
+    print("   %d corpus messages end with a doubling, %d do not\n"
+          % (len(ends), len(others)))
+    print("   %-26s %-10s %s" % ("population", "hyps", "outcome"))
+    for name, pool, expect in (("ends with a doubling", ends, "must survive"),
+                               ("does NOT end with one", others, "cost")):
+        surv = tot = h = 0
+        for t in pool[:12]:
+            wheels, refl, ring, start = random_key(rng)
+            plug = plugboard(np.random.default_rng(rng.randrange(1 << 30)), 10)
+            ct = crypt(t, wheels, refl, ring, start, plug)
+            hyps = terminal_hyps(ct)
+            h += len(hyps)
+            rows = core_rows(wheels, refl, ring, start, len(ct))
+            tot += 1
+            surv += any(deduce(m, rows)[0].any() for m in hyps)
+        print("   %-26s %-10.1f true key survives %d/%d   (%s)"
+              % (name, h / max(1, tot), surv, tot, expect))
+
+    # the filter's power, on messages the assumption is TRUE of
+    print()
+    for t in ends[:4]:
+        wheels, refl, ring, start = random_key(rng)
+        plug = plugboard(np.random.default_rng(rng.randrange(1 << 30)), 10)
+        ct = crypt(t, wheels, refl, ring, start, plug)
+        hyps = terminal_hyps(ct)
+        surv = 0
+        for _ in range(wrong):
+            w2 = random_key(rng)
+            rows = core_rows(w2[0], w2[1], w2[2], w2[3], len(ct))
+            if any(deduce(m, rows)[0].any() for m in hyps):
+                surv += 1
+        print("   n=%-4d %2d hypotheses   wrong keys surviving %3d/%-4d"
+              "  = %.3f kept" % (len(ct), len(hyps), surv, wrong, surv / wrong))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--selftest", action="store_true")
@@ -331,6 +401,7 @@ def main():
         return 1
     gate(rng, texts, msgs=a.messages, wrong=a.wrong)
     swept(rng, texts, msgs=a.swept_msgs, wrong=a.swept_wrong)
+    terminal(rng, texts)
     return 0
 
 

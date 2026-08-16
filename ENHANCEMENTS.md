@@ -680,6 +680,39 @@ which multiplies the alignment count — the first version of the probe asserted
 them unconditionally and rejected the true key on 3 of 40 messages
 (`ROMANOVKA` is flanked by `N` and `G`).
 
+*The TERMINAL SIGNATURE variant — measured too, and also down.* Half the
+corpus's doublings are a signed surname closing the message (`RENNER`,
+`MATHIAT`, `STEINECKE`, `STUERZBAECHER`, `HENNING` after `GEZ`): **10 of 66
+decrypts end with one**, always with 0 or 1 trailing letters. That pins the
+alignment, which is the only thing that killed the swept version — the
+hypothesis set falls from ~2 800 to **~19**, the word's length being the only
+unknown.
+
+It still does not work, for a different reason each time you look:
+
+- **The short members are unfalsifiable.** `L = 4` and `L = 5` have 6–7 edges
+  and reject **0.000** of wrong keys, against 1.000 at `L ≥ 8`. A key survives
+  if *any* hypothesis does, so the weakest member sets the floor and it is
+  zero. 12–16 of 18 hypotheses reject on every key; never all 18.
+- **Raising the floor does not fix it, because rejection is
+  message-dependent.** At `minL = 7` the aggregate is still 89% kept, and the
+  spread across messages is enormous — 18%, 38%, 92% on three messages with
+  the same setting. Whether a menu has the collisions that create
+  contradictions is a property of *that ciphertext*, not of `L`: on one message
+  the `L = 9` hypothesis rejects 1.00, on another 0.27, and one weak member
+  admits everything.
+- **The premise costs nothing because it buys nothing.** The true key survives
+  10/10 on messages that do end with a doubling — as it must — and **8/8 on
+  messages that do not**, where the hypothesis is false. A filter too weak to
+  reject the true key on a false premise is too weak to reject wrong keys on a
+  true one.
+
+And the comparison that settles it: if you are willing to assume the message
+ends with a doubled surname, `--crib-list` with a name list is strictly better
+— a 7-letter crib at a *known* position rejects 99.9%. The self-crib's whole
+advantage was needing no vocabulary, and it buys a keyspace reduction between
+1.1× and 5.5× depending on the message. Not worth building.
+
 *What survives: the SEEDER, unmeasured.* Rejection is dead, but seeding does not
 need it — `--crib`'s hybrid pins deduced plugs and lets the climb find the rest
 (92% of letters recovered against 8% unseeded). It needs the true hypothesis to
