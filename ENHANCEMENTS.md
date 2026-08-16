@@ -169,8 +169,9 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
-**5. Repeated text with an X between — the REPORTER is shipped as
-`--double-length L`; the SCORE BONUS was swept and measured down.** The split is
+**5. Repeated text with an X between — CLOSED. The REPORTER is shipped as
+`--double-length L`; the SCORE BONUS, the SELF-CRIB FILTER and the SEEDER were
+each measured down.** The split is
 the whole story of this item. As a *confirmation signal* — report the doubling,
 change no ranking — it works and is now in `enigma.cc` as `--double-length L`
 (gate at `--double-z Z`, default 3): see the entry in `CLAUDE.md`, note (a)/(b)
@@ -713,11 +714,41 @@ ends with a doubled surname, `--crib-list` with a name list is strictly better
 advantage was needing no vocabulary, and it buys a keyspace reduction between
 1.1× and 5.5× depending on the message. Not worth building.
 
-*What survives: the SEEDER, unmeasured.* Rejection is dead, but seeding does not
-need it — `--crib`'s hybrid pins deduced plugs and lets the climb find the rest
-(92% of letters recovered against 8% unseeded). It needs the true hypothesis to
-rank highly among the ~2 800, not to be the only survivor, which is a different
-and much weaker requirement. Unmeasured; the probe has the machinery for it.
+*The SEEDER — measured, and down as well, which closes the item.* Rejection
+being dead does not by itself kill seeding: `--crib`'s hybrid pins deduced plugs
+and lets the climb find the rest (92% of letters recovered against 8%
+unseeded), and that needs only the true hypothesis to *rank highly* among the
+~2 800, not to be the sole survivor. But the requirement is sharper than it
+looks, because **a wrongly pinned plug is worse than no pin at all** — the climb
+cannot undo it, and `--crib`'s pins deliberately survive `--polish`. So the
+number that matters is the *precision* of the top-ranked seeds, not the recall
+of the true one.
+
+Ranking the surviving `(hypothesis, guess)` seeds at the TRUE key by **plugs
+deduced**, which is the ranking this note proposed:
+
+| n | seeds | rank of first correct seed | top-5 plugs (correct) | precision |
+|---:|---:|---:|---|---:|
+| 48 | 2 091 | 12 | 20(0) 18(0) 18(0) 18(0) 18(0) | **0.00** |
+| 101 | 2 946 | 157 | 22(2) 20(1) 20(0) 19(0) 19(0) | 0.03 |
+| 172 | 6 084 | 17 | 21(0) 21(0) 20(0) 20(0) 19(0) | **0.00** |
+| 111 | 2 804 | 3 | 20(2) 20(0) 20(0) 19(19) 19(19) | 0.41 |
+
+The seeds deducing the *most* plugs are the ones deducing them *wrongly* — a
+hypothesis that forces 20 assignments is over-constrained by a false premise,
+not close to the truth. Seeding from the top five would pin ~20 wrong plugs.
+
+A second ranking, **menu selectivity**, fails too and shows why no third one
+will do better. At the true key the true menu survives with exactly 1 guess of
+26 — but the *median false* menu survives with **0**, so 60–87% of false menus
+are more selective than the true one, and ~30–40% still survive, leaving
+thousands of candidates. The deduction's own outputs simply do not identify
+which hypothesis is real.
+
+What is left is to *score* each seed's decrypt, and that is the closing
+argument: ~2 000 seeds × one decrypt each is the same order as a plugboard
+climb, i.e. about what one extra `-R` restart costs — and restarts are measured
+to deliver, while this is not. There is no room between them.
 
 The algebra, for the record. It sidesteps the failure above entirely, because it
 works on the **ciphertext** and needs no correct decrypt at all.
