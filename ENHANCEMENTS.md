@@ -640,9 +640,54 @@ appeared to climb steeply with z and peak in the tail — which reads as the gat
 of the truth. `alias_starts()` in the harness; verified against an exhaustive
 17 576-start search, 0 mismatches.
 
-*Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
-sidesteps the failure above entirely, because it works on the **ciphertext** and
-needs no correct decrypt at all.
+*The SELF-CRIB DEDUCTION — BUILT AS A PROBE AND MEASURED DOWN AS A FILTER.*
+`eval/selfcrib_probe.py`, results in `eval/results-selfcrib.txt`. The algebra
+below is correct and the deduction works; what fails is the sweep, and the
+reason is worth recording because it is the same trap §4.2a describes.
+
+**The measurement.** Per-alignment rejection on wrong keys looks strong — 0.32
+bare, 0.36 with the separator, 0.68 adding the left flank, **0.89** with both
+flanks. Extrapolating `(1-p)^950` over the unknown alignment gives ~0 survivors,
+i.e. a filter that rejects everything wrong. **That extrapolation is worthless
+and the direct measurement says so: 0 of 160 wrong keys were rejected**, on four
+messages with 1 000–2 000 hypotheses each. The true key survived every time, as
+it must.
+
+**Why.** The per-hypothesis rate is strongly length-dependent, and a sweep is
+dominated by its *weakest* hypotheses, not its strongest:
+
+| L | `sep` | `sep+L` | `sep+L+R` |
+|---:|---:|---:|---:|
+| 6 | **0.030** | 0.203 | 0.528 |
+| 9 | 0.253 | 0.672 | 0.930 |
+| 12 | 0.609 | 0.924 | 0.995 |
+
+A key is rejected only if **every** hypothesis contradicts, and ~1 200 of 2 855
+survive per wrong key — consistently ~42%. The 0.89 that looks decisive is only
+available at the true alignment, the true length and the true flanks, which is
+exactly what a sweep does not know. Measuring at the true alignment is a
+selection effect on the measurement itself; that is why the swept number had to
+be taken directly.
+
+**Two things the probe corrected in this note's own reasoning.** The claim that
+a distinct-letter doubling is a rejection-free forest is **wrong** — the bare
+menu rejects 31.6% per alignment, because the diagonal board makes disjoint
+edges interact through the matching constraint, the same mechanism recorded at
+`archived/cribs.md` §4.1 (a loop-free 12-letter menu rejects 88%, against 0%
+without the board). And the flanking X's are a **hypothesis, not a fact**: they
+hold 93% (left) and 63% (both) of the time here, so a sweep must enumerate them,
+which multiplies the alignment count — the first version of the probe asserted
+them unconditionally and rejected the true key on 3 of 40 messages
+(`ROMANOVKA` is flanked by `N` and `G`).
+
+*What survives: the SEEDER, unmeasured.* Rejection is dead, but seeding does not
+need it — `--crib`'s hybrid pins deduced plugs and lets the climb find the rest
+(92% of letters recovered against 8% unseeded). It needs the true hypothesis to
+rank highly among the ~2 800, not to be the only survivor, which is a different
+and much weaker requirement. Unmeasured; the probe has the machinery for it.
+
+The algebra, for the record. It sidesteps the failure above entirely, because it
+works on the **ciphertext** and needs no correct decrypt at all.
 
 Decryption is `p_i = steck[core_i[steck[c_i]]]`, with `core_i` the involution
 `setup_mapping()` already tabulates as `rows[i]`. A classic crib knows `p_i` and

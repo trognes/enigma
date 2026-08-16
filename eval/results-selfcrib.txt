@@ -1,0 +1,28 @@
+# eval/results-selfcrib.txt
+# ENHANCEMENTS.md item 5, the self-crib deduction: MEASURED DOWN as a
+# filter.  Reproduce with: python3 eval/selfcrib_probe.py
+
+18 corpus messages carry an exact doubling of 6+ letters
+
+correctness anchor over 40 messages (true key, true alignment):
+   true hypothesis survives      40/40
+   deduced plugs match the board 40/40
+
+gate: per-alignment rejection on wrong rotor keys
+   30 messages x 200 wrong keys each
+
+   variant   holds   rejected      p_reject    survive 950 algns
+   bare      100%    1894/6000     0.315667    3.19e-157
+   sep       100%    2143/6000     0.357167    4.94e-183
+   sep+L     93%     4085/6000     0.680833    0
+   sep+L+R   63%     5323/6000     0.887167    0
+
+   'survive 950 alignments' is (1-p)^950: the fraction of wrong
+   keys the filter would NOT reject on a 150-letter message, where
+   the alignment is unknown and every one must contradict.
+
+swept: rejection with the alignment UNKNOWN (measured, not extrapolated)
+   L=9   n=120   2045 hypotheses   wrong keys surviving  40/40   true key survives yes
+   L=9   n=74    1033 hypotheses   wrong keys surviving  40/40   true key survives yes
+   L=9   n=120   1913 hypotheses   wrong keys surviving  40/40   true key survives yes
+   L=11  n=124   2043 hypotheses   wrong keys surviving  40/40   true key survives yes
