@@ -1215,9 +1215,15 @@ are read from a **data directory** (filenames built as
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are
   budgeted to land exactly on 80 and must keep lining up whether it is on or
-  off. Not a hot-path concern: a progress line is emitted only when a board
-  beats everything echoed so far, so this prints once per improvement, not once
-  per board scored. Off by default.
+  off. The continuation wraps at **`80 − indent`**, so it reaches the same right
+  margin as the preview it replaces and the two read as one block; it was 2
+  columns short for a long time, from a period when the target was a 79-column
+  terminal, and a one-sided "stays within 80" test could not see it. The test
+  now compares the widest continuation against the progress line itself rather
+  than against a literal.
+    Not a hot-path concern: a progress line is emitted only when a board beats
+  everything echoed so far, so this prints once per improvement, not once per
+  board scored. Off by default.
 - **Live sweep progress** — a `\r` line under the main sweep carrying
   percentage, key rate and ETA, e.g.
   `Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left`. No flag: on
@@ -2188,10 +2194,11 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   lines are fixed-width columns under a one-time header (`Score W R G S Text`,
   printed by `showconfig_header` before the first line —
   `best_result.header_shown`): score, reflector+wheels, ring, start, plugboard
-  (room for all 13 pairs) and the first 15 characters of the decoded text — the
-  preview is decoded on the fly from the machine's *current* board
-  (`m.plaintext` can be stale mid-climb); worst case 78 chars, inside a
-  79-column terminal. With `-c` the echo is per plugboard IMPROVEMENT, not per
+  (room for all 13 pairs) and a preview of the decoded text — 19 characters for
+  3 wheels, 16 under `-4`, 15 and 12 with the crib column, each chosen so the
+  line lands on **exactly 80** whatever the mode. The preview is decoded on the
+  fly from the machine's *current* board (`m.plaintext` can be stale
+  mid-climb). With `-c` the echo is per plugboard IMPROVEMENT, not per
   finished climb: every accepted climb/SA move whose (target-model) score beats
   everything echoed so far prints a progress line (`report_climb_progress`,
   called on accepted moves only — nothing on the 325-move scoring scans, so the

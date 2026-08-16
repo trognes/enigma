@@ -2423,7 +2423,14 @@ static void format_key(machine & m, char (&w)[8], char (&r)[8], char (&g)[8])
    showconfig(), so it inherits the best-result mutex and cannot interleave with another
    thread's output. */
 static const int full_text_indent = 2;
-static const int full_text_width = 76;   /* + indent = 78, inside a 79-column terminal */
+/* Chosen so indent + width == the progress line's own width, which every
+   variant of progress_fmt lands on exactly: 61 + 19 for 3 wheels, 64 + 16 for
+   M4, 65 + 15 and 68 + 12 with the crib column. The full text then wraps
+   against the same right margin as the preview it replaces, so the two read as
+   one block. It was 76 (= 78 with the indent) from a time when the target was a
+   79-column terminal; the progress lines were budgeted to 80 afterwards and the
+   two were never reconciled, leaving the continuation 2 columns short. */
+static const int full_text_width = 78;
 
 static void show_full_text(machine & m)
 {

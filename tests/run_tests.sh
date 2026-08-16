@@ -1965,6 +1965,22 @@ check "--full-text stays within 80 columns" \
   "$(printf '%s' "$ft_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGH --full-text 2>&1 >/dev/null \
      | awk '{ if (length($0) > 80) n++ } END { print n+0 }')" "0"
 
+# ... and it must REACH 80, not merely stay under it: the continuation wraps
+# against the same right margin as the preview it replaces, so the two read as
+# one block.  A one-sided bound missed this for a long time -- the width was 76
+# (78 with the indent) from a time when the target was a 79-column terminal,
+# while every progress_fmt variant lands on exactly 80.  Compare the widest
+# continuation line against the progress line itself rather than against a
+# literal, so the two can never drift apart again.
+ft_widths=$(printf '%s' "$ft_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g QEW \
+            -s ABCDEFGH --full-text 2>&1 >/dev/null \
+            | awk '/^ *[-0-9]+\.[0-9]+ / { if (length($0) > p) p = length($0) }
+                   /^  [A-Z]*$/          { if (length($0) > c) c = length($0) }
+                   END { print p, c }')
+check "--full-text wraps to the progress line's own width" \
+  "$(printf '%s' "$ft_widths" \
+     | awk '{ print ($1 == $2) ? "same" : $1 " vs " $2 }')" "same"
+
 echo
 echo "== Known-unplugged letters: --no-plug =="
 
