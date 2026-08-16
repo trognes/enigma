@@ -1964,6 +1964,54 @@ check "collapse applies on the pinned-ring2 keyspace (control)" \
 check "no collapse line under --true-key" \
   "$(mw_line -r "A.L" -g "A.T" -c -F 5 --true-key B123AQLADT)" "0"
 
+echo "== Work-space ordering: restart-major =="
+
+# Restart is the OUTER dimension: every key at restart 0, then every key at
+# restart 1, and so on.  Restart-innermost would share a key's setup_mapping
+# across its restarts, but that saving is under 1% while the ordering decides
+# WHEN an answer appears -- there is no early exit, so front-loading the
+# probability is what lets a watcher kill a long sweep early.
+#
+# Observable deterministically at -T 1: --dump-all emits one line per work item
+# in work order, so the first items are successive KEYS, not one key repeated.
+wo_ct=$(run "ANXPANZXGRUPPEXVIERXSIEGFRIEDXTONIXDIVXSTEHTSEIT" \
+        -u B -w 123 -r AAA -g QEW -s ABCDEFGH)
+wo_starts=$(printf '%s' "$wo_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA \
+            -g "AA." -R 2 -T 1 --dump-all 2>&1 >/dev/null \
+            | grep '^dumpall' | head -4 | awk '{ print $4 }' | tr '\n' ' ')
+check "restart is the outer dimension of the work space" \
+  "$wo_starts" "AAA AAB AAC AAD "
+
+# The failure this ordering could cause is the one that matters: the echoed
+# rotor key is reconstructed from the merged work index, and --polish and the
+# --ring-stride refinement each decode it independently.  Decode it as
+# idx/restarts instead of idx%keys and the tool prints a key that does not
+# decrypt to the plaintext it just wrote to stdout.  Re-encrypting the reported
+# plaintext under the reported key must give the ciphertext back.
+wo_pt=DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTETXDURCHDENEINSATZ
+wo_c=$(run "$wo_pt" -u B -w 123 -r AAM -g QEW -s "AB CD EF")
+wo_roundtrip() {
+  _o=$(printf '%s' "$wo_c" | "$ENIGMA" -c -f -l wehrmacht -S i4f10 -J -u B -w 123 \
+       -r "AA." -g "..." -R 2 -T 4 "$@" 2>"$TMP_WO")
+  _l=$(grep -E '^ *-?[0-9.]+ [A-Za-z]' "$TMP_WO" | tail -1)
+  [ -n "$_l" ] || { echo "no-progress-line"; return; }
+  _w=$(printf '%s' "$_l" | awk '{ print $2 }')
+  _r=$(printf '%s' "$_l" | awk '{ print $3 }')
+  _g=$(printf '%s' "$_l" | awk '{ print $4 }')
+  _s=$(printf '%s' "$_l" | awk '{ for (i = 5; i < NF; i++) printf "%s ", $i }')
+  printf '%s' "$_o" | "$ENIGMA" -u "$(printf %s "$_w" | cut -c1)" \
+    -w "$(printf %s "$_w" | cut -c2-)" -r "$_r" -g "$_g" -s "$_s" 2>/dev/null
+}
+TMP_WO=/tmp/enigma_wo.$$
+check "the echoed key reproduces the ciphertext (--polish)" \
+  "$(wo_roundtrip --polish)" "$wo_c"
+check "the echoed key reproduces the ciphertext (--ring-stride)" \
+  "$(wo_roundtrip --ring-stride 3)" "$wo_c"
+check "the echoed key reproduces the ciphertext (both)" \
+  "$(wo_roundtrip --polish --ring-stride 3)" "$wo_c"
+rm -f "$TMP_WO"
+
+echo
 echo "== Progress display: --full-text =="
 
 # --full-text prints the whole decrypted message below each progress line, wrapped and

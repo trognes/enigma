@@ -4641,22 +4641,41 @@ static void sweep_progress_tick(size_t n, best_result & best)
      workers have advanced it since, and the displayed percentage should be the
      sweep's, not this thread's view of it. */
   const size_t shown = g_sweep_done.load(std::memory_order_relaxed);
-  const double done_keys = static_cast<double>(shown < total ? shown : total)
-                           / static_cast<double>(g_sweep_restarts);
-  const double all_keys = static_cast<double>(total)
-                          / static_cast<double>(g_sweep_restarts);
-  const double rate = done_keys / el;
+  const size_t did = (shown < total) ? shown : total;
+  /* Restart is the OUTER dimension, so the counts have to be read per PASS.
+     Dividing the item count by the restarts -- which is what this did while
+     restarts were innermost, and is why g_sweep_restarts exists -- would report
+     6% of keys covered at the point where every key has been visited once,
+     i.e. exactly the fact the reader is watching for. Within-pass counts plus
+     the pass number say it directly. The rate is key-VISITS per second (one
+     item = one visit) and the ETA runs to the end of the whole sweep, both
+     unchanged in meaning from the single-restart case. */
+  const size_t per_pass = (g_sweep_restarts > 0) ? (total / g_sweep_restarts)
+                                                 : total;
+  const size_t pass = (per_pass > 0) ? (did / per_pass) : 0;
+  const double done_keys = static_cast<double>((per_pass > 0)
+                                               ? (did % per_pass) : did);
+  const double all_keys = static_cast<double>(per_pass);
+  const double rate = static_cast<double>(did) / el;
   char db[16], tb[16], rb[16], eb[16];
-  fmt_count(db, sizeof(db), done_keys);
+  fmt_count(db, sizeof(db), (did == total) ? all_keys : done_keys);
   fmt_count(tb, sizeof(tb), all_keys);
   fmt_count(rb, sizeof(rb), rate);
-  fmt_eta(eb, sizeof(eb), (rate > 0.0) ? (all_keys - done_keys) / rate : -1.0);
+  fmt_eta(eb, sizeof(eb),
+          (rate > 0.0) ? static_cast<double>(total - did) / rate : -1.0);
 
   /* Generous: the four fields are bounded by their own 16-byte buffers, but the
      compiler cannot see that and warns on the sum. */
   char line[192];
-  snprintf(line, sizeof(line), "Progress:  %3zu%% (%s / %s keys) %s/s, %s left",
-           (shown >= total) ? 100 : (shown * 100) / total, db, tb, rb, eb);
+  /* Two size_t, "pass ", "/" and ", " -- 48 is generous, but the compiler
+     cannot prove the pass number is small and warns on the sum otherwise. */
+  char pb[64] = "";
+  if (g_sweep_restarts > 1)
+    snprintf(pb, sizeof(pb), "pass %zu/%zu, ",
+             ((pass < g_sweep_restarts) ? pass : g_sweep_restarts - 1) + 1,
+             g_sweep_restarts);
+  snprintf(line, sizeof(line), "Progress:  %3zu%% (%s%s / %s keys) %s/s, %s left",
+           (shown >= total) ? 100 : (shown * 100) / total, pb, db, tb, rb, eb);
 
   std::lock_guard<std::mutex> lock(best.mutex);
   /* Padded to the widest line drawn so far, and erased at that width too. The
@@ -4958,6 +4977,18 @@ void precompute_worker(machine & m,
    ranges; the worker points its machine at the already-computed table for that
    wheel order (no recompute) and re-reads the wheel order's settings only when
    it changes from one key to the next. */
+/* Work index -> key index. RESTART IS THE OUTER DIMENSION: idx = restart*keys
+   + key, so the key is the remainder and the restart is the quotient. Every
+   site that recovers a rotor key from a merged best.idx must go through this;
+   getting it wrong prints a key that does not decrypt to the plaintext the run
+   just wrote to stdout, which is the failure the --tune-phase notes record.
+   `keys == 0` cannot happen for a live sweep and is only guarded so the helper
+   is total. */
+static inline size_t work_key(size_t idx, size_t keys)
+{
+  return (keys > 0) ? (idx % keys) : idx;
+}
+
 void search_worker(machine & m,
                    const std::vector<wheel_task> & tasks,
                    const search_range & range,
@@ -4972,9 +5003,20 @@ void search_worker(machine & m,
   const size_t rg = rsize * gsize;
   const size_t nkeys = tasks.size() * rg;
   /* Work items = keys x restarts. With -c the R restarts of a key are independent, so
-     each is its own item (restart innermost, so consecutive items share a key and reuse
-     setup_mapping); this is what lets a fully-specified rotor key still fill every thread.
-     For the plain scan restarts==1, so the space is just the keys, exactly as before. */
+     each is its own item; this is what lets a fully-specified rotor key still fill every
+     thread. For the plain scan restarts==1, so the space is just the keys, exactly as
+     before.
+
+     RESTART IS THE OUTER DIMENSION: the sweep does every key at restart 0, then every
+     key at restart 1, and so on. Restart-innermost would let consecutive items share a
+     key and reuse its setup_mapping, which is why it was built that way -- but that
+     saving is under 1% (setup_mapping is <0.1% of a -c run by callgrind, and a direct
+     -R 1 vs -R 8 timing cannot resolve it above thread jitter), while the ordering
+     decides WHEN an answer appears. There is no early exit, so this does not shorten a
+     run; it front-loads the probability, which is what lets a watcher kill a 28-hour
+     sweep early. Taking the measured climb curve (87% at R=16, ~11.9% per restart):
+     found by the quarter mark 40% against 22%, by halfway 64% against 44%, the same 87%
+     at the end. */
   const size_t total = nkeys * restarts;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
@@ -5026,8 +5068,8 @@ void search_worker(machine & m,
               sweep_progress_tick(since_tick, best);
               since_tick = 0;
             }
-          size_t keyidx = idx / restarts;
-          int restart = static_cast<int>(idx % restarts);
+          size_t keyidx = work_key(idx, nkeys);
+          int restart = static_cast<int>(idx / nkeys);
 
           /* --tune-phase leaves the machine on the phase IT found, not the
              one the work index encodes, so the "reused by its restarts"
@@ -5043,7 +5085,12 @@ void search_worker(machine & m,
               init_ring_grund(m, r1, r2, r3, g1, g2, g3);
             }
 
-          if (keyidx != cur_key)   /* new key: (re)build the rotor stack, reused by its restarts */
+          /* Restart-major means consecutive items are consecutive KEYS, so this fires
+             on every item and the rotor stack is rebuilt each time rather than shared
+             across a key's restarts. That is the whole cost of the ordering, measured
+             at under 1%. The wheel order still changes only every rg items, so the
+             expensive part -- the shared subst_array swap -- is unaffected. */
+          if (keyidx != cur_key)   /* new key: (re)build the rotor stack */
             {
               cur_key = keyidx;
               size_t wo = keyidx / rg;
@@ -6451,8 +6498,9 @@ static double bruteforce(char * result, bool allow_empty)
       size_t gc12b = static_cast<size_t>(gc[1]) * gc[2];
       size_t cur_wo = static_cast<size_t>(-1);
       int rg6[6];
-      key_to_machine(m, best.idx / restarts_par, tasks, range, rc, gc, all, rg, gsize,
-                     rc12b, gc12b, cur_wo, rg6);
+      /* work_key, not idx/restarts: restart is the OUTER dimension. */
+      key_to_machine(m, work_key(best.idx, total_keys), tasks, range, rc, gc, all,
+                     rg, gsize, rc12b, gc12b, cur_wo, rg6);
       /* --tune-phase: the winner sits on a phase key_to_machine cannot derive
          from best.idx (that is the whole point of tuning it), so overwrite the
          reconstructed ring/start with the recorded one. rg6 is corrected too,
@@ -6838,8 +6886,11 @@ static double bruteforce(char * result, bool allow_empty)
               size_t rgc12 = static_cast<size_t>(rgc[1]) * rgc[2];
               size_t rcur_wo = static_cast<size_t>(-1);
               int rrg6[6];
-              key_to_machine(m, rbest.idx / restarts_par, rtasks, rrange, rrc, rgc,
-                             m.subst_array, rrg, rgsize, rrc12, rgc12, rcur_wo, rrg6);
+              /* The refinement's own key space: rrsize == rgsize == 1, so its
+                 key count is just the candidate task count. */
+              key_to_machine(m, work_key(rbest.idx, rtasks.size()), rtasks, rrange,
+                             rrc, rgc, m.subst_array, rrg, rgsize, rrc12, rgc12,
+                             rcur_wo, rrg6);
               for (int i = 0; i < asize; i++)
                 m.steckerbrett[i] = rbest.steckerbrett[i];
               best.score = rbest.score;
