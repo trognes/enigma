@@ -1144,19 +1144,28 @@ are read from a **data directory** (filenames built as
     this rule does **not** catch (`ENHANCEMENTS.md` item 5(d)). Widening to
     indels would mean an edit distance and a null far thinner than the
     16×-per-letter one `L` is priced against.
-  - **The scan is capped at 30 letters, and the cap is load-bearing.** `W` and
+  - **The scan is capped at 20 letters, and the cap is load-bearing.** `W` and
     `V` may not contain an X, so each is a single X-delimited token — a *word* —
-    and the longest real doubling in the corpus is `STUERZBAECHER` at 13 (the
-    probes' own `MAXLEN` of 16 was measured to saturate). Without a cap the scan
-    runs every length from `(n-1)/2` down to `L`, which is **O(n²) and grows
-    with the message**: 193 linear passes at 400 letters against 24. Ungated at
-    L=200 that measured **+7.6%** of a run; with the cap the same measurement
-    falls into the noise floor (0.5–2.7% across repeats), and at the default
-    gate it is unmeasurable at every length. A doubling *longer* than the cap is
-    **missed rather than truncated** — a long repeat does not decompose into a
-    shorter matching one, since sliding the window puts the copies out of
-    alignment — so `--double-length` is validated against the same constant and
-    a larger `L` is refused rather than silently searching nothing.
+    and the length distribution over the 54 authentic decrypts settles it: of
+    the 25 carrying a doubling, the longest per message runs 6–13 and **nothing
+    reaches 14** (the maximum is `STUERZBAECHER`; the probes' own `MAXLEN` of 16
+    was measured to saturate). 20 is 1.5× the observed maximum, the headroom a
+    54-message corpus warrants. A second effect agrees but is weaker: the rule
+    tolerates one mismatch across `2L` letters, so a longer doubling is likelier
+    to be disqualified by a second garble — 18 of the 25 real doublings have no
+    mismatch and 7 have exactly one, putting the per-letter rate near 2%, at
+    which `P(≤1 mismatch)` falls from 90% at `L=13` to 81% at 20 and 66% at 30.
+    Real, but only at lengths that do not occur.
+    Cost is why the cap exists at all: without it the scan runs every length
+    from `(n-1)/2` down to `L`, which is **O(n²) and grows with the message** —
+    193 linear passes at 400 letters against 14. Ungated at L=200 that measured
+    **+7.6%** of a run; with the cap the same measurement falls into the noise
+    floor, and at the default gate it is unmeasurable at every length. A
+    doubling *longer* than the cap is **missed rather than truncated** — a long
+    repeat does not decompose into a shorter matching one, since sliding the
+    window puts the copies out of alignment — so `--double-length` is validated
+    against the same constant and a larger `L` is refused rather than silently
+    searching nothing.
   - **A doubling is a TRANSLATION by `len+1`, not a reflection.** `W[i]` sits at
     `pt[j-len+i]` and `V[i]` at `pt[j+1+i]`, so the pair is `(y, y+len+1)`.
     Extending *outward* from the separator compares `W` reversed against `V` and

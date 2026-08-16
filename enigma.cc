@@ -285,18 +285,28 @@ static double opt_double_z;
 static int opt_double_z_set;
 static const double double_z_default = 3.0;
 /* Longest doubling the scan looks for. W and V may not contain an X, so each is
-   a single X-delimited token -- a WORD -- and the longest real doubling in the
-   authentic corpus is STUERZBAECHER at 13 (ENHANCEMENTS.md item 5, where the
-   probes' own MAXLEN of 16 was measured to saturate). 30 is over twice that.
+   a single X-delimited token -- a WORD -- and the length distribution over the
+   54 authentic decrypts is decisive: of the 25 carrying a doubling at all,
+   the longest per message runs 6..13 and NOTHING reaches 14. The maximum is
+   STUERZBAECHER at 13 (ENHANCEMENTS.md item 5, where the probes' own MAXLEN of
+   16 was measured to saturate). 20 is 1.5x the observed maximum, which is the
+   headroom a 54-message corpus warrants.
 
-   It is a real bound, not a formality: without it the scan runs every length
-   from (n-1)/2 down to L, which is O(n^2) and grows with the message -- 193
-   linear passes at 400 letters against 24 here. A longer doubling is MISSED
-   rather than truncated, because a long repeat does not decompose into a
-   shorter matching one: sliding the window puts the copies out of alignment.
-   --double-length is validated against this, so the two can never disagree and
-   a too-large L cannot silently search nothing. */
-static const int double_maxlen = 30;
+   A second effect points the same way, though it is the weaker argument: the
+   rule tolerates ONE mismatch across 2L letters, so a longer doubling is more
+   likely to be disqualified by a second garble. Of the 25 real doublings 18
+   have no mismatch and 7 have exactly one, putting the effective per-letter
+   rate near 2%; at that rate P(<=1 mismatch) falls from 90% at L=13 to 81% at
+   L=20 and 66% at L=30. Real, but it only bites at lengths that do not occur.
+
+   The cap is load-bearing for COST, which is why it exists at all: without it
+   the scan runs every length from (n-1)/2 down to L, which is O(n^2) and grows
+   with the message -- 193 linear passes at 400 letters against 14 here. A
+   longer doubling is MISSED rather than truncated: a long repeat does not
+   decompose into a shorter matching one: sliding the window puts the copies out
+   of alignment. --double-length is validated against this, so the two can never
+   disagree and a too-large L cannot silently search nothing. */
+static const int double_maxlen = 20;
 /* --crib-rerank / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
@@ -7386,11 +7396,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "about 90 -- so raise L before touching the gate.");
   fprintf(out, "  %-24s %s\n", "",
-          "Lengths above 30 are not searched (no real");
+          "Lengths above 20 are not searched (the longest in");
   fprintf(out, "  %-24s %s\n", "",
-          "doubling is close; the cap is what keeps the scan");
+          "the authentic corpus is 13; the cap is what keeps");
   fprintf(out, "  %-24s %s\n", "",
-          "cheap). Needs -c and --confidence (defines z) [off]");
+          "the scan cheap). Needs -c and --confidence [off]");
   fprintf(out, "  %-24s %s\n", "--double-z Z",
           "Sigma threshold for --double-length. Below it a");
   fprintf(out, "  %-24s %s\n", "",
