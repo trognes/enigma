@@ -170,11 +170,12 @@ JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
 **5. Repeated text with an X between — the REPORTER is shipped as
-`--double-word L`; the SCORE BONUS was swept and measured down.** The split is
+`--double-length L`; the SCORE BONUS was swept and measured down.** The split is
 the whole story of this item. As a *confirmation signal* — report the doubling,
-change no ranking — it works and is now in `enigma.cc`: see the `--double-word`
-entry in `CLAUDE.md`, note (a)/(b) below for why that shape is the defensible
-one, and `tests/run_tests.sh` for the checks. As a *score bonus* (note (e)) it
+change no ranking — it works and is now in `enigma.cc` as `--double-length L`
+(gate at `--double-z Z`, default 3): see the entry in `CLAUDE.md`, note (a)/(b)
+below for why that shape is the defensible one, and `tests/run_tests.sh` for
+the checks. As a *score bonus* (note (e)) it
 is dead: 140 genuine 17 576-key sweeps found **zero** trials where the climb
 recovered the plaintext and the score still lost, so there was nothing for a
 post-climb bonus to act on.

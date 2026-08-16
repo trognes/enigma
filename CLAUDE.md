@@ -1100,14 +1100,16 @@ are read from a **data directory** (filenames built as
   on the shipped library the cribs actually present in the message are the ones
   scoring ~0.03–0.07×, so the column guides the reader rather than gating a
   crib.
-- `--double-word L` **report a converged climb whose decrypt carries a doubled
-  word** of `L`+ letters around an X — `ENGELMANN X ENGELMANN`, telegraphic
-  German's own error correction (off by default; needs `-c` and `--confidence`,
-  which is what defines z). Fires after each converged climb and once after
-  `--polish`, on any key clearing **z ≥ 3** — the raw sigma count over the null,
-  *not* the margin the lines print. Prints the ordinary progress line with the
-  text preview replaced by `>> <len> <WORD>`, so the columns stay aligned and
-  the marker is greppable in an overnight log.
+- `--double-length L` / `--double-z Z` **report a converged climb whose decrypt
+  carries a doubled word** of `L`+ letters around an X — `ENGELMANN X
+  ENGELMANN`, telegraphic German's own error correction (off by default; needs
+  `-c` and `--confidence`, which is what defines z). Fires after each converged
+  climb and once after `--polish`, on any key clearing **z ≥ `Z`** (default 3)
+  — the raw sigma count over the null, *not* the margin the lines print.
+  `--double-z` alone is refused, since it would silently do nothing. Prints
+  the ordinary progress line with the text preview replaced by
+  `>> <len> <WORD>`, so the columns stay aligned and the marker is greppable in
+  an overnight log.
   - **A CONFIRMATION SIGNAL, never a score term, and that is the whole point.**
     It enters no ranking, so a false positive costs a second look and cannot
     promote a wrong key. The *score-bonus* form of the same evidence
@@ -1123,7 +1125,8 @@ are read from a **data directory** (filenames built as
     decode every converged climb. Measured `make bench BASE=origin/dev`: no
     regression, and the `crib`/`search` tiers cannot be affected at all since
     they run without `-c`.
-  - **`L` is the cheap lever; the gate is not.** Chance reports fall ~16× per
+  - **`L` is the cheap lever; `--double-z` is not — raise `L` first.** Chance
+    reports fall ~16× per
     extra letter (the null falls by `B/A ≈ 16.4`), so a full 230 M-key rotor
     sweep expects **~6 spurious reports at `L = 7`** against ~90 at `L = 6`.
     Loosening the gate to z > 2 quadruples them; tightening to z > 4 throws the
@@ -1131,11 +1134,16 @@ are read from a **data directory** (filenames built as
     plaintext sits at **z = 7…16** — nowhere near the gate — while the keys
     below z = 3 are the ones whose climb failed, where there is no doubling to
     find anyway. See `ENHANCEMENTS.md` item 5(e) for the table.
-  - **One mismatched letter is allowed**, because that is what the traffic does
-    rather than as a safety margin: the Nr 173 form carries `SCUHNACHER` against
-    `SCHUHMACHER` (doubled words genuinely differ), and a garble corrupts one
-    copy and not the other — Enigma has no diffusion, so one wrong ciphertext
-    letter damages exactly one plaintext letter.
+  - **One SUBSTITUTION is allowed, and it buys exactly the error the channel
+    makes.** Enigma has no diffusion, so one corrupted ciphertext letter damages
+    exactly one plaintext letter — in one copy of the doubling and not the
+    other. An **indel is a different matter and is missed by design**: a dropped
+    or added letter misaligns the copies, so every position after it differs and
+    `|W| ≠ |V|` besides. Real traffic does contain those — the Nr 173 form
+    doubles a surname as `SCUHNACHER` (10) against `SCHUHMACHER` (11), which
+    this rule does **not** catch (`ENHANCEMENTS.md` item 5(d)). Widening to
+    indels would mean an edit distance and a null far thinner than the
+    16×-per-letter one `L` is priced against.
   - **A doubling is a TRANSLATION by `len+1`, not a reflection.** `W[i]` sits at
     `pt[j-len+i]` and `V[i]` at `pt[j+1+i]`, so the pair is `(y, y+len+1)`.
     Extending *outward* from the separator compares `W` reversed against `V` and
