@@ -1397,6 +1397,113 @@ tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -A 1000)
 check "--tune-phase rejects -A" \
   "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -A')" "1"
 
+# --double-length L: report a converged climb whose decrypt carries a doubled word
+# around an X ("ENGELMANN X ENGELMANN"), telegraphic German's own error
+# correction.  A CONFIRMATION signal -- it never enters a ranking -- so the
+# properties are that it fires on a real doubling at the true key, that it
+# respects L, and that it is refused without the two things that define it (-c,
+# because there must be a converged climb, and --confidence, because that is
+# what defines z).
+#
+# The board is PINNED with -s plus --no-plug on every other letter, so the climb
+# has nothing to recover and one small sweep suffices: the property under test is
+# the detector and its gate, not plugboard recovery.  Keeping the key space at
+# 676 rather than 26 is not decoration -- z is measured against a null sampled
+# from that space, and the true key cannot stand 3 sd clear of a space barely
+# bigger than the sample.
+dw_pt="SNXHAUPTSTUFXOBERSCHARFXENGELMANNXENGELMANNXZURUEQXUSTUFXERBXERBXWIRDVONMIREINGEWIESENFAHREHEUTEZURARMEEXKOMMEMORGENZURXDIVISION"
+dw_free="GHIJKLMNOPQRSTUVWXYZ"
+dw_ct=$(run "$dw_pt" -u B -w 231 -r AAA -g QMW -s "AB CD EF")
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+dw_run() { printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 \
+           -r AAA -g "Q.." -R 1 -T "$2" -s "AB CD EF" --no-plug "$dw_free" \
+           --confidence 32 --double-length "$1" ${3:+--double-z "$3"} 2>&1 >/dev/null; }
+dw_out=$(dw_run 6 1)
+check "--double-length reports the doubled word and its length" \
+  "$(printf '%s' "$dw_out" | grep -c '>> 9 ENGELMANN')" "1"
+check "--double-length report carries the true rotor key" \
+  "$(printf '%s' "$dw_out" | grep '>> 9 ENGELMANN' | awk '{ print $2, $3, $4 }')" \
+  "B231 AAA QMW"
+# L is the whole cheap lever (chance reports fall ~16x per extra letter), so a
+# threshold above the longest real doubling must silence it completely.
+# Anchored on the LINE shape, not on the marker alone: the settings echo says
+# 'marked ">>" below', so a bare '>>' grep counts the echo and can never read 0.
+check "--double-length L above the doubling is silent" \
+  "$(dw_run 10 1 | grep -cE '>> [0-9]+ [A-Z]')" "0"
+# Display-only: -T changes thread timing, not what is found.
+check "--double-length is reported under -T 4 as well" \
+  "$(dw_run 6 4 | grep -c '>> 9 ENGELMANN')" "1"
+# Identical repeats are collapsed (one call per converged restart plus one after
+# --polish would otherwise print the same row R+1 times).
+check "--double-length collapses an identical repeat" \
+  "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
+     -g "Q.." -R 4 -T 1 -s "AB CD EF" --no-plug "$dw_free" --polish \
+     --confidence 32 --double-length 6 2>&1 >/dev/null | grep -c '>> 9 ENGELMANN')" \
+  "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english --double-length 6 2>&1 >/dev/null)
+check "--double-length needs -c" \
+  "$(printf '%s' "$dw_err" | grep -c 'need the plugboard hill-climb')" "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --double-length 6 2>&1 >/dev/null)
+check "--double-length needs --confidence" \
+  "$(printf '%s' "$dw_err" | grep -c 'need a null to gate on')" "1"
+# The scan is capped at 30 -- the longest doubling in the authentic corpus is 13
+# and nothing reaches 14, so this is 2.3x anything observed; the cap exists to
+# keep the cost O(30n) rather than O(n^2), and a tighter 20 was tried and did
+# not resolve against a base-vs-base control.  L is validated against the SAME
+# constant, so a too-large L is refused rather than silently searching nothing.
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-length 31 2>&1 >/dev/null)
+check "--double-length past the scan's own cap is refused" \
+  "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "1"
+# The key is PINNED here: unlike the rejection above, a valid --double-length
+# does not exit at validation, so without it this check would start a full
+# default wildcard search under -c and hang the suite (it did).
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         -u B -w 123 -r AAA -g AAA --double-length 30 2>&1 >/dev/null)
+check "--double-length at the cap is accepted" \
+  "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "0"
+# --double-z moves the gate.  The true key here sits far above it (z = 7..16
+# once the climb has the plaintext), so raising the gate past that silences the
+# report -- which is the assertion that the gate is actually consulted rather
+# than the default being hard-wired.
+check "--double-z above the true key's z silences the report" \
+  "$(dw_run 6 1 99 | grep -cE '>> [0-9]+ [A-Z]')" "0"
+check "--double-z below the default still reports" \
+  "$(dw_run 6 1 1 | grep -c '>> 9 ENGELMANN')" "1"
+check "--double-z is echoed in the settings" \
+  "$(dw_run 6 1 2.5 | grep -c 'at z >= 2.5')" "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-length 6 --double-z junk 2>&1 >/dev/null)
+check "--double-z rejects a non-number (atof would read it as 0)" \
+  "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling gate')" "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-z 4 2>&1 >/dev/null)
+check "--double-z without --double-length is refused" \
+  "$(printf '%s' "$dw_err" | grep -c 'which is not on')" "1"
+# --double-mismatches.  ENGELMANN X ENGELMANN is exact, so N=0 must still find
+# it; the interesting direction is that N is CONSULTED, which the vacuous-value
+# refusal and the echo establish without needing a garbled fixture.
+check "--double-mismatches 0 still finds an exact doubling" \
+  "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
+     -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
+     --double-length 6 --double-mismatches 0 2>&1 >/dev/null \
+     | grep -c '>> 9 ENGELMANN')" "1"
+check "--double-mismatches is echoed in the settings" \
+  "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
+     -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
+     --double-length 6 --double-mismatches 2 2>&1 >/dev/null \
+     | grep -c 'up to 2 mismatches')" "1"
+# At N >= L every pair of equal-length X-free runs matches, so the test stops
+# testing anything.  Refused rather than run.
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-length 6 --double-mismatches 6 2>&1 >/dev/null)
+check "--double-mismatches at or above L is refused as vacuous" \
+  "$(printf '%s' "$dw_err" | grep -c 'must be below')" "1"
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
+         --double-mismatches 2 2>&1 >/dev/null)
+check "--double-mismatches without --double-length is refused" \
+  "$(printf '%s' "$dw_err" | grep -c 'which is not on')" "1"
+
 # --confidence N: sample the null and report the winner's margin over chance.
 # The property under test is DISCRIMINATION, so every check comes in a pair -- a
 # ciphertext with real plaintext behind it against one with random letters
@@ -1857,6 +1964,37 @@ check "--full-text is off by default" "$(ft_lines | wc -l | tr -d ' ')" "0"
 check "--full-text stays within 80 columns" \
   "$(printf '%s' "$ft_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGH --full-text 2>&1 >/dev/null \
      | awk '{ if (length($0) > 80) n++ } END { print n+0 }')" "0"
+
+# ... and it must REACH 80, not merely stay under it: the continuation wraps
+# against the same right margin as the preview it replaces, so the two read as
+# one block.  A one-sided bound missed this for a long time -- the width was 76
+# (78 with the indent) from a time when the target was a 79-column terminal,
+# while every progress_fmt variant lands on exactly 80.  Compare the widest
+# continuation line against the progress line itself rather than against a
+# literal, so the two can never drift apart again.
+ft_widths=$(printf '%s' "$ft_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g QEW \
+            -s ABCDEFGH --full-text 2>&1 >/dev/null \
+            | awk '/^ *[-0-9]+\.[0-9]+ / { if (length($0) > p) p = length($0) }
+                   /^  [A-Z]*$/          { if (length($0) > c) c = length($0) }
+                   END { print p, c }')
+# The score column is 8 wide and BOTH printers must respect it: the margin
+# (--confidence) and the raw score.  Only the margin was guarded, so an
+# oversized raw score shifted every column after it -- reachable with
+# ENIGMA_LOGLIN, which scales the quad table.  The default weights leave zero
+# slack (about -14, exactly 8 characters), so this is the check that keeps the
+# 80-column budget true rather than merely true today.
+sc_ct=$(run "$ft_pt" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGH)
+sc_width() { printf '%s' "$sc_ct" \
+  | ENIGMA_LOGLIN="$1" "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA 2>&1 \
+    >/dev/null | awk '/^ *-?[0-9]/ { print length($0); exit }'; }
+check "score column holds 80 columns at the default weights" \
+  "$(sc_width '1,0.6,0.3,0.15')" "80"
+check "score column holds 80 columns on an oversized raw score" \
+  "$(sc_width '400,240,120,60')" "80"
+
+check "--full-text wraps to the progress line's own width" \
+  "$(printf '%s' "$ft_widths" \
+     | awk '{ print ($1 == $2) ? "same" : $1 " vs " $2 }')" "same"
 
 echo
 echo "== Known-unplugged letters: --no-plug =="

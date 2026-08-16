@@ -1100,13 +1100,130 @@ are read from a **data directory** (filenames built as
   on the shipped library the cribs actually present in the message are the ones
   scoring ~0.03–0.07×, so the column guides the reader rather than gating a
   crib.
+- `--double-length L` / `--double-z Z` / `--double-mismatches N` **report a
+  converged climb whose decrypt carries a doubled word**
+  of `L`+ letters around an X — `ENGELMANN X
+  ENGELMANN`, telegraphic German's own error correction (off by default; needs
+  `-c` and `--confidence`, which is what defines z). Fires after each converged
+  climb and once after `--polish`, on any key clearing **z ≥ `Z`** (default 3)
+  — the raw sigma count over the null, *not* the margin the lines print.
+  `--double-z` alone is refused, since it would silently do nothing. Prints
+  the ordinary progress line with the text preview replaced by
+  `>> <len> <WORD>`, so the columns stay aligned and the marker is greppable in
+  an overnight log.
+  - **A CONFIRMATION SIGNAL, never a score term, and that is the whole point.**
+    It enters no ranking, so a false positive costs a second look and cannot
+    promote a wrong key. The *score-bonus* form of the same evidence
+    (`ENHANCEMENTS.md` 5(e)) was swept over 140 genuine 17 576-key sweeps and
+    **measured down**: a bonus applied after the climb needs a trial where the
+    climb recovered the plaintext and the score still lost, and there were
+    **zero** — in 35 of 35 recovered trials the true key was already top,
+    because the climb is steered by the same score the bonus would adjust.
+    Reporting has no such dependency: it fires on the key that *is* right.
+  - **The z gate comes first, and that is what makes it free.** Computing z is
+    two flops on a value already in hand; only ~0.56% of keys clear z > 3, and
+    only those pay the decode and the scan. Ordering it the other way would
+    decode every converged climb. Measured `make bench BASE=origin/dev`: no
+    regression, and the `crib`/`search` tiers cannot be affected at all since
+    they run without `-c`.
+  - **`L` is the cheap lever; `--double-z` is not — raise `L` first.** Chance
+    reports fall ~16× per
+    extra letter (the null falls by `B/A ≈ 16.4`), so a full 230 M-key rotor
+    sweep expects **~6 spurious reports at `L = 7`** against ~90 at `L = 6`.
+    Loosening the gate to z > 2 quadruples them; tightening to z > 4 throws the
+    true key out with the chaff, since a true key whose climb has recovered the
+    plaintext sits at **z = 7…16** — nowhere near the gate — while the keys
+    below z = 3 are the ones whose climb failed, where there is no doubling to
+    find anyway. See `ENHANCEMENTS.md` item 5(e) for the table.
+  - **`--double-mismatches N` (default 1) is a knob you should almost never
+    turn, and the numbers say why.** Measured on 2 M synthetic texts drawn from
+    the climbed-wrong-key letter statistics (X-rate 2.41%, IC 0.0514 — the
+    generator validates by reading **6.0e-6** at `L=6, N=1` where the
+    operational null is 4.9e-6):
+
+    | L | N | false-positive rate | vs N=1 | real doublings found (of 46) |
+    |---:|---:|---:|---:|---:|
+    | 6 | 0 | 0 | — | 8 |
+    | 6 | **1** | **6.0e-06** | 1× | **13** |
+    | 6 | 2 | 2.9e-04 | **49×** | 13 |
+    | 6 | 3 | 7.3e-03 | 1212× | 14 |
+    | 7 | 2 | 2.0e-05 | ~53× | 11 (same as N=1) |
+    | 8 | 2 | 2.0e-06 | — | 7 (N=1 finds 6) |
+
+    **`N=2` multiplies false reports ~50× and finds nothing extra** at `L`=6 or
+    7, one more at 8 — which matches the corpus, where 18 of the 25 real
+    doublings have no mismatch, 7 have exactly one, and **none has two**. `N`
+    and `L` are not interchangeable: a letter divides the rate by ~16 and a
+    mismatch multiplies it by ~50, so a step in `N` costs what **1.4 letters**
+    buy back. If you want `N=2`, add 2 to `L` and you are back where you
+    started. `N ≥ L` is refused as vacuous (every equal-length X-free pair would
+    match).
+  - **One SUBSTITUTION is allowed by default, and it buys exactly the error
+    the channel makes.** Enigma has no diffusion, so one corrupted ciphertext
+    letter damages
+    exactly one plaintext letter — in one copy of the doubling and not the
+    other. An **indel is a different matter and is missed by design**: a dropped
+    or added letter misaligns the copies, so every position after it differs and
+    `|W| ≠ |V|` besides. Real traffic does contain those — the Nr 173 form
+    doubles a surname as `SCUHNACHER` (10) against `SCHUHMACHER` (11), which
+    this rule does **not** catch (`ENHANCEMENTS.md` item 5(d)). Widening to
+    indels would mean an edit distance and a null far thinner than the
+    16×-per-letter one `L` is priced against.
+  - **The scan is capped at 30 letters, and the cap is load-bearing — but it is
+    set by COST, not coverage.** `W` and `V` may not contain an X, so each is a
+    single X-delimited token — a *word* — and the length distribution over the
+    54 authentic decrypts is known: of the 25 carrying a doubling, the longest
+    per message runs 6–13 and **nothing reaches 14** (the maximum is
+    `STUERZBAECHER`; the probes' own `MAXLEN` of 16 was measured to saturate).
+    So 30 is 2.3× anything observed. **20 was tried and reverted**: 1.7× fewer
+    passes on paper, but at the default gate only ~0.56% of keys reach the scan
+    at all and the difference did not resolve against a base-vs-base control, so
+    the wider cap is free insurance — and 54 messages is a thin basis for ruling
+    out 14–30 outright. What the cap must not be is *absent*: without one the
+    scan runs every length from `(n-1)/2` down to `L`, which is **O(n²) and
+    grows with the message** (193 linear passes at 400 letters against 24, and a
+    measured **+7.6%** of a run ungated at L=200 against noise with the cap in).
+    A doubling *longer* than the cap is **missed rather than truncated** — a
+    long repeat does not decompose into a shorter matching one, since sliding
+    the window puts the copies out of alignment — so `--double-length` is
+    validated against the same constant and a larger `L` is refused rather than
+    silently searching nothing. One effect argues mildly the other way and is
+    recorded for completeness: the rule tolerates one mismatch across `2L`
+    letters, and 18 of the 25 real doublings have none while 7 have exactly one,
+    putting the per-letter rate near 2% — at which `P(≤1 mismatch)` falls from
+    90% at `L=13` to 81% at 20 and 66% at 30. It only bites at lengths that do
+    not occur.
+  - **A doubling is a TRANSLATION by `len+1`, not a reflection.** `W[i]` sits at
+    `pt[j-len+i]` and `V[i]` at `pt[j+1+i]`, so the pair is `(y, y+len+1)`.
+    Extending *outward* from the separator compares `W` reversed against `V` and
+    matches only palindromes — the first implementation did exactly that and
+    reported nothing on `ENGELMANN X ENGELMANN`. `find_doubling()` slides a
+    window over the shift instead: longest length first, so the first hit is the
+    answer, O(n²) worst case rather than the O(n³) of testing every length at
+    every X. Cross-checked against `eval/`'s Python reference on 4 000 random
+    strings, 0 mismatches, offsets included.
+  - **A report is NOT a new best**, and the settings echo says so: these lines
+    fire on any key past the gate whatever the search's high-water mark, which
+    is exactly the point — the true key can be reported while another board
+    still leads on score. Identical consecutive repeats are collapsed (one call
+    per converged restart plus one after `--polish` would otherwise print the
+    same row `-R`+1 times); display-only, under the progress mutex, so which
+    candidate WINS is untouched.
+  - **A one-key space has no null**, so `--confidence` falls back to raw scores
+    and the report stays silent. Give it a keyspace bigger than the sample.
 - `--full-text` print the **whole decrypted message** with each progress line
   instead of the 19-character preview (16 under `-4`), on its own wrapped,
   indented lines *below* the line rather than by widening it — the columns are
   budgeted to land exactly on 80 and must keep lining up whether it is on or
-  off. Not a hot-path concern: a progress line is emitted only when a board
-  beats everything echoed so far, so this prints once per improvement, not once
-  per board scored. Off by default.
+  off. The continuation wraps at **`80 − indent`**, so it reaches the same right
+  margin as the preview it replaces and the two read as one block; it was 2
+  columns short for a long time, from a period when the target was a 79-column
+  terminal, and a one-sided "stays within 80" test could not see it. The test
+  now compares the widest continuation against the progress line itself rather
+  than against a literal.
+    Not a hot-path concern: a progress line is emitted only when a board beats
+  everything echoed so far, so this prints once per improvement, not once per
+  board scored. Off by default.
 - **Live sweep progress** — a `\r` line under the main sweep carrying
   percentage, key rate and ETA, e.g.
   `Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left`. No flag: on
@@ -2077,10 +2194,11 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   lines are fixed-width columns under a one-time header (`Score W R G S Text`,
   printed by `showconfig_header` before the first line —
   `best_result.header_shown`): score, reflector+wheels, ring, start, plugboard
-  (room for all 13 pairs) and the first 15 characters of the decoded text — the
-  preview is decoded on the fly from the machine's *current* board
-  (`m.plaintext` can be stale mid-climb); worst case 78 chars, inside a
-  79-column terminal. With `-c` the echo is per plugboard IMPROVEMENT, not per
+  (room for all 13 pairs) and a preview of the decoded text — 19 characters for
+  3 wheels, 16 under `-4`, 15 and 12 with the crib column, each chosen so the
+  line lands on **exactly 80** whatever the mode. The preview is decoded on the
+  fly from the machine's *current* board (`m.plaintext` can be stale
+  mid-climb). With `-c` the echo is per plugboard IMPROVEMENT, not per
   finished climb: every accepted climb/SA move whose (target-model) score beats
   everything echoed so far prints a progress line (`report_climb_progress`,
   called on accepted moves only — nothing on the 325-move scoring scans, so the

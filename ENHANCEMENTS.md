@@ -169,12 +169,24 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
-**5. Repeated text with an X between — NOT IMPLEMENTED; measured in `eval/`
-probes only. On its ACTUAL target it works: 15 of 15 real scoring failures
-rescued, 0 false positives in 8 928.** Nothing below exists in `enigma.cc` —
-there is no flag, no code, and no `make bench` number for any of it. Where this
-entry says "the settled setting" it means the configuration these probes
-standardised on, not a shipped default.
+**5. Repeated text with an X between — the REPORTER is shipped as
+`--double-length L`; the SCORE BONUS was swept and measured down.** The split is
+the whole story of this item. As a *confirmation signal* — report the doubling,
+change no ranking — it works and is now in `enigma.cc` as `--double-length L`
+(gate at `--double-z Z`, default 3): see the entry in `CLAUDE.md`, note (a)/(b)
+below for why that shape is the defensible one, and `tests/run_tests.sh` for
+the checks. As a *score bonus* (note (e)) it
+is dead: 140 genuine 17 576-key sweeps found **zero** trials where the climb
+recovered the plaintext and the score still lost, so there was nothing for a
+post-climb bonus to act on.
+
+Everything else below is still `eval/` probes only — no flag and no `make bench`
+number for the anchored variant, the self-crib deduction, or the score bonus.
+Where this entry says "the settled setting" it means the configuration those
+probes standardised on. The headline that used to sit here — *15 of 15 real
+scoring failures rescued, 0 false positives in 8 928* — is the probe's number
+for the DETECTOR, and it is the reason the reporter was worth building; it is
+not a claim about the bonus, which the sweep settled separately.
 
 Telegraphic German doubles important words around the X separator:
 `ZANDERSXZANDERS`, `FORDXFORD`, the `LNKXLNKX` in Nr 214. The test is that two
