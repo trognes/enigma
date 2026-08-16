@@ -1977,6 +1977,21 @@ ft_widths=$(printf '%s' "$ft_ct" | "$ENIGMA" -i -u B -w 123 -r AAA -g QEW \
             | awk '/^ *[-0-9]+\.[0-9]+ / { if (length($0) > p) p = length($0) }
                    /^  [A-Z]*$/          { if (length($0) > c) c = length($0) }
                    END { print p, c }')
+# The score column is 8 wide and BOTH printers must respect it: the margin
+# (--confidence) and the raw score.  Only the margin was guarded, so an
+# oversized raw score shifted every column after it -- reachable with
+# ENIGMA_LOGLIN, which scales the quad table.  The default weights leave zero
+# slack (about -14, exactly 8 characters), so this is the check that keeps the
+# 80-column budget true rather than merely true today.
+sc_ct=$(run "$ft_pt" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGH)
+sc_width() { printf '%s' "$sc_ct" \
+  | ENIGMA_LOGLIN="$1" "$ENIGMA" -q -l english -u B -w 123 -r AAA -g AAA 2>&1 \
+    >/dev/null | awk '/^ *-?[0-9]/ { print length($0); exit }'; }
+check "score column holds 80 columns at the default weights" \
+  "$(sc_width '1,0.6,0.3,0.15')" "80"
+check "score column holds 80 columns on an oversized raw score" \
+  "$(sc_width '400,240,120,60')" "80"
+
 check "--full-text wraps to the progress line's own width" \
   "$(printf '%s' "$ft_widths" \
      | awk '{ print ($1 == $2) ? "same" : $1 " vs " $2 }')" "same"

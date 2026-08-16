@@ -2490,7 +2490,20 @@ static void format_score(double score, char (&buf)[16])
                  (score - g_null_mu) / g_null_sd - g_null_zk);
     }
   else
-    snprintf(buf, sizeof(buf), "%.4f", score);
+    {
+      snprintf(buf, sizeof(buf), "%.4f", score);
+      /* The same guard the margin gets, for the same reason. A raw per-symbol
+         score is bounded below by the table's own minimum (ngram_bias), which
+         is about -10 for a single order and about -14 measured for the
+         weighted mixture -- exactly 8 characters, i.e. NO slack. The bundled
+         tables never overflow, but ENIGMA_LOGLIN scales the quad table by
+         arbitrary weights and did: x10 printed -142.3724 and shifted every
+         column after it, while the margin branch held at 80 because it was
+         guarded and this was not. An 8-wide field with two printers must have
+         the same bound in both. */
+      if (strlen(buf) > 8)
+        snprintf(buf, sizeof(buf), "%.1e", score);
+    }
 }
 
 void showconfig(machine & m, double score)
