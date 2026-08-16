@@ -1446,19 +1446,20 @@ check "--double-length needs -c" \
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --double-length 6 2>&1 >/dev/null)
 check "--double-length needs --confidence" \
   "$(printf '%s' "$dw_err" | grep -c 'need a null to gate on')" "1"
-# The scan is capped at 20 -- the longest doubling in the authentic corpus is 13
-# and nothing reaches 14, and the cap is what keeps the cost O(20n) rather than
-# O(n^2).  L is validated against the SAME constant, so a too-large L is refused
-# rather than silently searching nothing.
+# The scan is capped at 30 -- the longest doubling in the authentic corpus is 13
+# and nothing reaches 14, so this is 2.3x anything observed; the cap exists to
+# keep the cost O(30n) rather than O(n^2), and a tighter 20 was tried and did
+# not resolve against a base-vs-base control.  L is validated against the SAME
+# constant, so a too-large L is refused rather than silently searching nothing.
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         --double-length 21 2>&1 >/dev/null)
+         --double-length 31 2>&1 >/dev/null)
 check "--double-length past the scan's own cap is refused" \
   "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "1"
 # The key is PINNED here: unlike the rejection above, a valid --double-length
 # does not exit at validation, so without it this check would start a full
 # default wildcard search under -c and hang the suite (it did).
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         -u B -w 123 -r AAA -g AAA --double-length 20 2>&1 >/dev/null)
+         -u B -w 123 -r AAA -g AAA --double-length 30 2>&1 >/dev/null)
 check "--double-length at the cap is accepted" \
   "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "0"
 # --double-z moves the gate.  The true key here sits far above it (z = 7..16

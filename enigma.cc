@@ -286,27 +286,37 @@ static int opt_double_z_set;
 static const double double_z_default = 3.0;
 /* Longest doubling the scan looks for. W and V may not contain an X, so each is
    a single X-delimited token -- a WORD -- and the length distribution over the
-   54 authentic decrypts is decisive: of the 25 carrying a doubling at all,
-   the longest per message runs 6..13 and NOTHING reaches 14. The maximum is
+   54 authentic decrypts is known: of the 25 carrying a doubling at all, the
+   longest per message runs 6..13 and NOTHING reaches 14. The maximum is
    STUERZBAECHER at 13 (ENHANCEMENTS.md item 5, where the probes' own MAXLEN of
-   16 was measured to saturate). 20 is 1.5x the observed maximum, which is the
-   headroom a 54-message corpus warrants.
+   16 was measured to saturate). So 30 is 2.3x anything observed.
 
-   A second effect points the same way, though it is the weaker argument: the
-   rule tolerates ONE mismatch across 2L letters, so a longer doubling is more
-   likely to be disqualified by a second garble. Of the 25 real doublings 18
-   have no mismatch and 7 have exactly one, putting the effective per-letter
-   rate near 2%; at that rate P(<=1 mismatch) falls from 90% at L=13 to 81% at
-   L=20 and 66% at L=30. Real, but it only bites at lengths that do not occur.
+   IT IS SET BY COST, NOT BY COVERAGE, and the cost difference between a
+   generous cap and a tight one is below the noise floor. 20 was tried and
+   reverted: it is 1.7x fewer passes on paper, but at the default gate only
+   ~0.56% of keys reach the scan at all, and the wall-time difference did not
+   resolve against a base-vs-base control. Given that, the wider cap is free
+   insurance -- a doubling ABOVE the cap is MISSED rather than truncated (a long
+   repeat does not decompose into a shorter matching one; sliding the window
+   puts the copies out of alignment), and 54 messages is a thin basis for
+   ruling out 14..30 entirely.
 
-   The cap is load-bearing for COST, which is why it exists at all: without it
-   the scan runs every length from (n-1)/2 down to L, which is O(n^2) and grows
-   with the message -- 193 linear passes at 400 letters against 14 here. A
-   longer doubling is MISSED rather than truncated: a long repeat does not
-   decompose into a shorter matching one: sliding the window puts the copies out
-   of alignment. --double-length is validated against this, so the two can never
-   disagree and a too-large L cannot silently search nothing. */
-static const int double_maxlen = 20;
+   What the cap must not be is absent: without one the scan runs every length
+   from (n-1)/2 down to L, which is O(n^2) and grows with the message -- 193
+   linear passes at 400 letters against 24 here, and a measured +7.6% of a run
+   ungated at 200 letters against noise with the cap in place.
+
+   A second effect argues mildly for a tighter cap and is recorded for
+   completeness: the rule tolerates ONE mismatch across 2L letters, so a longer
+   doubling is more likely to be disqualified by a second garble. Of the 25 real
+   doublings 18 have no mismatch and 7 have exactly one, putting the effective
+   per-letter rate near 2%; at that rate P(<=1 mismatch) falls from 90% at L=13
+   to 81% at L=20 and 66% at L=30. It only bites at lengths that do not occur,
+   so it does not decide the constant.
+
+   --double-length is validated against this, so the two can never disagree and
+   a too-large L cannot silently search nothing. */
+static const int double_maxlen = 30;
 /* --crib-rerank / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
@@ -7396,11 +7406,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "about 90 -- so raise L before touching the gate.");
   fprintf(out, "  %-24s %s\n", "",
-          "Lengths above 20 are not searched (the longest in");
+          "Lengths above 30 are not searched (the longest in");
   fprintf(out, "  %-24s %s\n", "",
-          "the authentic corpus is 13; the cap is what keeps");
+          "the corpus is 13; the cap is what keeps the scan");
   fprintf(out, "  %-24s %s\n", "",
-          "the scan cheap). Needs -c and --confidence [off]");
+          "cheap). Needs -c and --confidence (defines z) [off]");
   fprintf(out, "  %-24s %s\n", "--double-z Z",
           "Sigma threshold for --double-length. Below it a");
   fprintf(out, "  %-24s %s\n", "",
