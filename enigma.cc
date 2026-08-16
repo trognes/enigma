@@ -4864,6 +4864,12 @@ static void report_double_word(machine & m, double score)
       showconfig_header();
     }
   fputs(line, stderr);
+  /* --full-text applies here for the same reason it applies to a progress line:
+     the report says a doubling is present, and the whole decrypt is what lets
+     the reader judge it. Without this the option silently skipped the one line
+     most worth expanding. */
+  if (opt_full_text)
+    show_full_text(m);
 }
 
 /* Echo an intermediate plugboard improvement from inside a climb: the same
@@ -5428,6 +5434,18 @@ static void calibrate_null(machine & m, size_t keys,
   g_null_keys = keys;
   g_null_zk = sqrt(2.0 * log(static_cast<double>(keys < 2 ? 2 : keys)));
   g_null_n = xs.size();
+  /* Report the bar BEFORE the sweep, not only in the summary after it. The
+     progress lines print a MARGIN, and a reader watching them has no way to
+     convert that back to a raw sigma count -- which is the number every other
+     account of a result is quoted in -- unless the offset is stated up front.
+     The summary repeats it once the search is over; this is the same figure at
+     the point where it is useful. */
+  /* NOT prefixed "Confidence: null" -- that is the summary's anchor, and
+     tests/run_tests.sh matches on it precisely because the bare "^Confidence"
+     already collides with the settings echo. A third line sharing the anchor
+     would break the -T-independence check the same way. */
+  fprintf(stderr, "Confidence: margin 0 is z = %.1f, the best of %zu keys by "
+                  "chance\n", g_null_zk, keys);
 }
 
 /* The summary line, printed after the search. The progress lines already
