@@ -143,6 +143,12 @@ rewrites itself in place:
 Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left
 ```
 
+With `-R` restarts the sweep runs **restart-major** — every key once, then
+every key again with a fresh kick — so the answer tends to appear early rather
+than after each key's full budget, and the line shows which pass it is on
+(`pass 2/16, 8728 / 17.6k keys`). The rate is key-visits per second and the ETA
+runs to the end of the whole sweep.
+
 There is no flag for it: it appears whenever stderr is a terminal, updates
 about every 5 seconds, disappears when the search ends, and steps aside for each
 score line rather than being written over. Redirect stderr to a file and it is
@@ -367,6 +373,22 @@ English tables.
   reported in the settings echo so a saved log says what its first column means.
   It needs a key space to sample: with the rotor key fully specified there is no
   null to measure against, and the run says so and reports raw scores
+- **`--double-length L`** — report any converged climb whose decrypt carries a
+  **doubled word** of `L`+ letters around an X (`ENGELMANN X ENGELMANN` —
+  telegraphic German doubles important words as its own error correction), as
+  a progress line with the preview replaced by `>> <length> <word>`
+  `[0 = off; needs -c and --confidence]`. It is a **confirmation, not a score
+  term**: it enters no ranking, so it cannot promote a wrong key — it simply
+  makes the true key unmistakable in a long log (`grep '>>'`) even while some
+  other board still leads on score. One mismatched letter between the copies
+  is allowed (`--double-mismatches`, default 1) — the error a transmission
+  garble makes — and the z gate (`--double-z`, default 3) keeps the check
+  free by only examining the ~0.5% of keys that score well. Chance reports
+  fall ~16× per extra letter: a full 230 M-key sweep expects ~6 spurious
+  reports at `L = 7` and ~90 at `L = 6`, so raise `L` rather than the gate —
+  a true key whose climb has recovered the plaintext sits at z = 7–16, far
+  above it.
+
 - **`--tune-phase N`** — Stop enumerating the middle and right wheels' *phase*
   and optimise it instead: keep `N` starting phases per wheel, hill-climb the
   plugboard as usual, then scan all 26 × 26 phases with that board **frozen**,

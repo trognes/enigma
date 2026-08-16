@@ -137,7 +137,80 @@ existing command lines can behave differently or stop working.
   result for a seventh of the compute — and the right operating point is a *low*
   restart count, nowhere near the `-R 42` that matched compute forced.
 
+- **`--double-length L`** — report every converged climb whose decrypt carries
+  a **doubled word** of `L`+ letters around an X — `ENGELMANN X ENGELMANN`,
+  telegraphic German's own error correction — printed as the ordinary progress
+  line with the preview replaced by the marker, the length and the word:
+
+  ```
+  +13.97 B231 AAA QMW AB CD EF                               >> 9 ENGELMANN
+  ```
+
+  A **confirmation signal, never a score term**, and that distinction is why it
+  exists in this form: it enters no ranking, so a false positive costs a second
+  look and cannot promote a wrong key. The score-bonus form of the same
+  evidence was swept over 140 genuine 17 576-key sweeps and measured down — a
+  post-climb bonus needs a trial where the climb recovered the plaintext and
+  the score still lost, and there were **zero**; the climb is steered by the
+  same score a bonus would adjust, so scoring failure presents as *search*
+  failure first. Reporting has no such dependency: it fires on the key that
+  *is* right, whatever the search's high-water mark, so the true key can be
+  reported while another board still leads (the settings echo says so).
+
+  Two companion knobs, both documented with the numbers so they cannot be
+  turned in ignorance. **`--double-z Z`** (default 3) gates the check on the
+  raw sigma count over the `--confidence` null — only ~0.56% of keys clear
+  z ≥ 3, which is what makes the check free (measured at the noise floor at
+  every gate down to 0). Chance reports fall ~16× per extra letter of `L`, so
+  a 230 M-key rotor sweep expects ~6 spurious reports at `L = 7` against ~90
+  at `L = 6` — **raise `L` before touching the gate**; a true key whose climb
+  has recovered the plaintext sits at z = 7–16, nowhere near it.
+  **`--double-mismatches N`** (default 1) is the positions the two copies may
+  differ in: 1 is the channel's error and no more (Enigma has no diffusion, so
+  a garble corrupts one letter in one copy), and raising it was measured on
+  2 M null texts — `N = 2` multiplies false reports ~49× and finds nothing the
+  default misses, matching the corpus, where 18 of 25 real doublings have no
+  mismatch, 7 have one and none has two. An indel (`SCUHNACHER` against
+  `SCHUHMACHER`) misaligns the copies and is missed by design. The scan is
+  capped at 30 letters (the longest real doubling is 13; the cap is what keeps
+  the scan O(30·n) instead of O(n²), and `L` above it is refused rather than
+  silently searching nothing). Needs `-c` and `--confidence`; `--full-text`
+  expands a report like any progress line. Verified against an independent
+  Python reference on 4 000 random strings — 0 mismatches.
+
+- **The `--confidence` bar is stated before the sweep, not only after it:**
+
+  ```
+  Confidence: margin 0 is z = 6.0, the best of 75198240 keys by chance
+  ```
+
+  The progress lines print a *margin*, and a reader watching them had no way to
+  convert one back to the raw sigma count — the number every other account of
+  a result is quoted in — until the run finished. Same figure the summary
+  reports; a test asserts the two agree.
+
 ### Changed
+
+- **Restart is now the OUTER dimension of the work space**: the sweep does
+  every key at restart 0, then every key at restart 1, and so on, instead of
+  finishing each key's `-R` restarts before moving on. Throughput is unchanged
+  — the per-key `setup_mapping` reuse the old order bought is under 1%,
+  unresolvable above thread jitter, and `make bench BASE=` reads ±1% on every
+  tier — but *when* the answer appears moves a great deal: there is no early
+  exit, so front-loading is what lets a watcher kill a long sweep early. On
+  the measured climb curve (87% at `R = 16`), found by the quarter mark **40%
+  against 22%**, by halfway **64% against 44%**. The progress line reports per
+  pass (`pass 2/4, 8728 / 17.6k keys`) — dividing items by restarts, as
+  before, would read 6% of keys covered at the moment every key had been
+  visited once. The rate stays key-visits per second and the ETA runs to the
+  end of the whole sweep; with one restart the pass field is omitted and
+  nothing changes. Exactly-tied boards can resolve differently (the tie-break
+  is on the work index, which now enumerates in a different order) — still
+  deterministic, still `-T`-independent, verified across `-T` 1/2/4/8. The
+  winning key is reconstructed from the merged index at two sites (`--polish`
+  and the `--ring-stride` refinement); both now share one `work_key()` helper,
+  and three checks re-encrypt the reported plaintext under the reported key to
+  prove the echoed key still matches the plaintext on stdout.
 
 - **The test suite runs 3.6× faster — 232 s → 64 s — with all 437 checks
   intact.** `tests/run_tests.sh` had a single shared start-position fixture
@@ -286,6 +359,23 @@ existing command lines can behave differently or stop working.
   carrying this needs a major version bump.**
 
 ### Fixed
+
+- **`--full-text` wrapped 2 columns short of the progress line.** The
+  continuation width dated from a 79-column target; the progress lines were
+  later budgeted to land on exactly 80 in every mode (61+19 for 3 wheels,
+  64+16 under `-4`, 65+15 and 68+12 with the crib column) and the two were
+  never reconciled, so the wrapped text stopped short of the right margin of
+  the preview it replaces. The suite's one-sided "stays within 80" check
+  passed 78 as happily as 80 — it now compares the widest continuation against
+  the progress line from the same run, so the two cannot drift apart again.
+
+- **An oversized raw score shifted every column after it.** The score field is
+  8 characters with zero slack — the weighted models bottom out around −14,
+  which fills it exactly — and of the two printers sharing it only the margin
+  (`--confidence`) had a width guard. Reachable via `ENIGMA_LOGLIN`, which
+  scales the quad table: ×10 printed `-142.3724` and broke the 80-column
+  budget. The raw branch now falls back to `%.1e` exactly as the margin does,
+  with one check per printer.
 
 - **`make bench BASE=<old tag>` reported a tier the base could not run as an
   infinite regression.** Comparing `dev` against `v2.1.0` printed
