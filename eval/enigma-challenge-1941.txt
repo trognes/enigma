@@ -109,6 +109,38 @@ NOTES:       Batch C, same caveat. From the Ultimate Enigma Challenge page. Shor
 KENNGRUPPE:  BYQMZ   (discriminant; strip before deciphering)
 LEN:         172  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   MGS TPL   (as sent; read off the message form and confirmed
+             independently by the Cryptocellar documents -- see FORM NOTES)
+FORM:        forms/BYQMZ-30091941-008-out.pdf
+FORM NOTES:  Spruch Nr 8. Befoerdert 30.9.41 0025 Uhr, 'An 568'. The
+             ciphertext block opens '0014 - 172 - <six letters>', so the
+             form's own count confirms the 172 letters transcribed here,
+             and 0014 is the time of origin. Vermerke reads 'Spruch 2352
+             yzl - gjb - Durchgegeben', which is a relay note about a
+             DIFFERENT 2352 message and NOT this one's indicator.
+FORM DIFFS:  none -- the transcription was read again from this scan at up
+             to 1400 dpi and agrees letter for letter, 172 of 172. The
+             hand separates every dangerous pair: z is written with a bar
+             through the descender and y without, q has a straight
+             descender where g loops left, and u carries the German bow
+             above it. THE DASH IS REAL: at row 2 group 3
+             (HIF-Y) the fourth cell is genuinely BLANK on the form, so
+             the letter was never written down and the form's 172 counts
+             it. The INDICATOR, MGS TPL, is new to this file; read off the
+             form and confirmed by the Cryptocellar documents, i.e. two
+             independent readers, the standard forms/README.md already
+             applies. THE PREAMBLE AND THE CIPHERTEXT ARE IN DIFFERENT
+             SCRIPTS, which is the trap: the cells carry careful LATIN
+             letters, because ciphertext must be unambiguous, while the
+             preamble and the Vermerke are in the RUNNING GERMAN hand.
+             Their s and t look nothing alike across the two -- the
+             ciphertext s is a narrow slanted Latin loop against the
+             preamble's flat-topped cursive form, and the ciphertext t is
+             short with a crossbar against the preamble's tall open hook.
+             Reading the indicator at 800 dpi gave MGS TPL; cross-checking
+             those glyphs against ciphertext exemplars at 2200 dpi then
+             argued them AWAY, wrongly. Calibrate a preamble glyph against
+             the Vermerke, never against the cells
 CIPHERTEXT:  BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAI
              KYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUE
              AZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY

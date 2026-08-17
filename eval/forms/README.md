@@ -11,11 +11,72 @@ messages (`../enigma-challenge-1941.txt`).
 | `ALRHG-09091941-039-out-nf.pdf` | 39 | ALRHG | 116 | broken, §5j |
 | `FMNGI-31071941-205-out-nf.pdf` | 205 | FMNGI | 63 | unbroken (Nr 285) |
 | `MVUEH-10071941-088-061-out-nf.pdf` | 88/61 | MVUEH | 87 | unbroken (Nr 172) |
+| `BYQMZ-30091941-008-out.pdf` | 8 | BYQMZ | 172 | unbroken (Nr 8-C) |
 
 The first two are outgoing, dated 9.9.41, *befördert* 0913, message time (0850),
 from Nachschub to SS-T.Div. The **length printed on each form** is the reason
 they are kept: it is an independent check that a transcription dropped or added
 nothing, and all four match.
+
+## BYQMZ — the one that agreed
+
+The newest scan is the only one so far whose transcription needed **no
+correction at all**: read again at up to 1400 dpi, it agrees with the stored
+ciphertext letter for letter, **172 of 172**, and the form's printed count is
+172. That is worth recording precisely because the other four did not — five
+of ALVPM's six "garbles" turned out to be transcription errors, and FMNGI and
+MVUEH produced twenty disagreements between them.
+
+Three details did the work, and they are properties of the *hand* rather than
+of the reader:
+
+- **`z` is barred through the descender and `y` is not**, which settles
+  `NYZKY`, `TWMYC` and `ZXYFT` outright — the single most dangerous confusion
+  in this ciphertext, since it carries 19 of the two combined.
+- **`q` descends straight where `g` loops left**, settling `VGQTW`, `ZUQBL`
+  and `URQES`.
+- **`u` carries the German bow above it**, separating it from `n` in `PSDUH`,
+  `ZVSUA` and `UMOSH`.
+
+**The dash is real.** At row 2 group 3 (`HIF-Y`) the fourth cell is genuinely
+blank on the form: the letter was never written down, and the form's count of
+172 counts it. So the dash records a gap in the 1941 record rather than a
+failure of transcription, and nothing is recoverable there from the image.
+
+**The indicator is new: `MGS TPL`.** The ciphertext block opens `0014 - 172 - `
+followed by six letters, the same run-together form as ALVPM's `kfzjpo` and
+ALRHG's `ftjmyc`. Read off the form here and independently confirmed by the
+Cryptocellar documents — two readers, the same standard that let MVUEH's
+position 85 be corrected.
+
+**And it is the one place a glyph comparison actively misled, for a reason
+worth keeping.** The preamble and the ciphertext cells are written in
+**different scripts**: the cells carry careful *Latin* letters, because
+ciphertext has to be unambiguous, while the preamble and the Vermerke are in
+the *running German* hand. The two disagree on exactly the letters at issue —
+
+| letter | in the ciphertext cells | in the preamble |
+|---|---|---|
+| `s` | narrow slanted Latin loop | flat-topped cursive form |
+| `t` | short, with a crossbar | tall, open hook, no crossbar |
+
+— so a preamble `t` looks far more like the cells' `r` (a tall *looped* stroke,
+as in `QNRAI` and `URQES`) than like their `t`. Reading the indicator at 800
+dpi gave `MGS TPL`; cross-checking those two glyphs against ciphertext
+exemplars at 2200 dpi then argued them away, wrongly. **Calibrate a preamble
+glyph against the Vermerke, never against the cells** — the `l` of the
+Vermerke's `yzl` and the `l` of the indicator are the same closed loop, which
+is how the two running-hand lines are known to match.
+
+This inverts the lesson the FMNGI/MVUEH section draws below. There,
+magnification always confirmed the stored reading and never a disagreement;
+here magnification overturned a *correct* first reading, because the reference
+alphabet it was checked against was the wrong one. Magnification settles the
+shape of a glyph, not which alphabet it belongs to.
+
+Do not confuse it with the **Vermerke** line, which reads `Spruch 2352 yzl -
+gjb - Durchgegeben`. That is a relay note about a different message sent at
+2352; this message was *befördert* 0025 with time of origin 0014.
 
 ## The two unbroken forms
 
