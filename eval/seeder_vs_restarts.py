@@ -16,15 +16,31 @@ THE ARMS, all on the recommended recipe (`-c -f -l wehrmacht -S i4f10 -J
 --polish`) with the true rotor key pinned:
 
   A  baseline     climbing from an empty board, swept over -R
-  B  seeded       -R fixed and low, with the IC-top seed's cables pinned via -s
+  B  seeded HARD  -R fixed and low, with the IC-top seed's cables pinned via -s
                   and its deduced no-cable letters via --no-plug
-  O  oracle       same, seeded with the CORRECT seed whatever the ranking said
+  B3 hedged       best by score of the top three seeds, each run as arm B
+  S  seeded SOFT  the same IC-top cables via --soft-plug: laid on the board each
+                  restart starts from, then left free for the climb to move,
+                  merge or drop
+  O  oracle       arm B seeded with the CORRECT seed whatever the ranking said
+  Bm hard matched arm B at the -R its score_iter needs to match arm S, since
+                  nothing is pinned in S and its climbs are ~3x dearer
+  SO oracle soft  arm S seeded the same way -- the ceiling for the soft form
 
 B is the honest arm -- it uses what the ranking picks, so it pays for the ~25%
 of trials where the ranking is wrong and `-s` then pins plugs the climb cannot
 undo.  O exists to split a null result: if O wins and B does not, the seeder's
 ranking is the problem; if O does not win either, seeding itself is worthless
 and no better ranking would rescue it.
+
+S is what B's failure mode argues for and is why `--soft-plug` was built: a
+wrong hard seed measured WORSE than not seeding at all, because a pin cannot be
+undone, whereas a wrong soft seed costs only the moves the climb spends walking
+back out of it.  The pair (S, SO) answers whether that is true and what it
+costs when the seed is right -- a soft seed can also be climbed AWAY from when
+it was correct all along, which is the risk running the other way.  Note S
+passes no --no-plug: a deduced no-cable letter is an assertion, i.e. a pin, so
+the soft arm asserts nothing at all.
 
 WHY A IS SWEPT RATHER THAN PINNED TO B'S -R.  Equal `-R` is NOT equal compute
 here: pinning k letters removes them from the 325-toggle scan and from the free
@@ -153,6 +169,8 @@ def main():
                     help="fresh keys per corpus message")
     ap.add_argument("--restarts", type=int, default=8,
                     help="-R for the seeded arms")
+    ap.add_argument("--hard-matched", type=int, default=24,
+                    help="-R for the hard-seeded arm matched to the soft arm")
     ap.add_argument("--sweep", default="8,16,32,64,128,256",
                     help="-R levels for the baseline arm")
     ap.add_argument("--threads", type=int, default=4)
@@ -175,7 +193,7 @@ def main():
         log.append(s)
 
     sweep = [int(x) for x in a.sweep.split(",")]
-    tags = ["A%d" % r for r in sweep] + ["B", "B3", "O"]
+    tags = ["A%d" % r for r in sweep] + ["B", "Bm", "B3", "S", "SO", "O"]
 
     say(__doc__.split("\n")[0])
     say("\n%d messages x %d keys, %s, -T %d"
@@ -197,12 +215,22 @@ def main():
                 "-g", "".join(ALPHA[x] for x in start),
                 "-l", a.lang, "-T", str(a.threads),
                 "-e", str(rng.randrange(1 << 30))]
-        def seeded(sel):
-            args = list(RECIPE) + base + ["-R", str(a.restarts)]
+        def seeded(sel, soft=False, restarts=None):
+            args = list(RECIPE) + base
+            args += ["-R", str(restarts or a.restarts)]
+            if soft:
+                # A soft-seeded board starts GOOD, so the default 10-pair kick
+                # is the wrong size for it -- measured 72.7 -> 79.0 mean at
+                # --random 3.  The staged IC pre-pass is dropped for the same
+                # reason (nothing to pre-seed) and measured near-neutral.
+                args += ["--score", "f10", "--random", "3"]
             cables, noplug, _ = ranked[sel]
             if cables:
-                args += ["-s", cables]
-            if noplug:
+                # --soft-plug lays the same pairs down and leaves them free; the
+                # deduced no-cable letters are a --no-plug assertion, i.e. also
+                # a pin, so the soft arm drops them too and asserts nothing.
+                args += ["--soft-plug" if soft else "-s", cables]
+            if noplug and not soft:
                 args += ["--no-plug", noplug]
             return run(a.binary, args, ct)
 
@@ -211,6 +239,12 @@ def main():
             if tag[0] == "A":
                 rec, it, wl, _ = run(a.binary,
                                      list(RECIPE) + base + ["-R", tag[1:]], ct)
+                out[tag] = (pct(rec, pt_text), it, wl)
+            elif tag in ("S", "SO"):
+                rec, it, wl, _ = seeded(0 if tag == "S" else corr, soft=True)
+                out[tag] = (pct(rec, pt_text), it, wl)
+            elif tag == "Bm":
+                rec, it, wl, _ = seeded(0, restarts=a.hard_matched)
                 out[tag] = (pct(rec, pt_text), it, wl)
             elif tag == "B3":
                 # No soft seeding exists, so the only way to hedge a wrong
@@ -252,7 +286,7 @@ def main():
         " %.0f (%.2fx)" % (ref, near, iters[near].mean(),
                            iters[near].mean() / max(1.0, ref)))
     msg = np.array([r[0] for r in rows_out])
-    for t in ("B", "B3", "O"):
+    for t in ("B", "Bm", "B3", "S", "SO", "O"):
         d, lo, hi = paired_ci(means[t] - means[near])
         # The trials repeat over only ~10 distinct messages, so a per-trial
         # interval understates the uncertainty that matters for generalising
@@ -277,13 +311,13 @@ def main():
     hit = np.array([r[1] == 0 for r in rows_out])
     if hit.any() and (~hit).any():
         say("\nsplit by whether the IC ranking picked the correct seed:")
-        say("   %-15s %-7s %-8s %-8s %-8s %s"
-            % ("", "trials", near, "B", "B3", "O"))
+        say("   %-15s %-7s %-8s %-8s %-8s %-8s %s"
+            % ("", "trials", near, "B (-s)", "Bm", "S (soft)", "O"))
         for name, sel in (("ranking right", hit), ("ranking WRONG", ~hit)):
-            say("   %-15s %-7d %-8.1f %-8.1f %-8.1f %.1f"
+            say("   %-15s %-7d %-8.1f %-8.1f %-8.1f %-8.1f %.1f"
                 % (name, sel.sum(), means[near][sel].mean(),
-                   means["B"][sel].mean(), means["B3"][sel].mean(),
-                   means["O"][sel].mean()))
+                   means["B"][sel].mean(), means["Bm"][sel].mean(),
+                   means["S"][sel].mean(), means["O"][sel].mean()))
         top3 = np.array([r[1] is not None and r[1] < 3 for r in rows_out])
         say("   correct seed in the top 3: %d/%d trials"
             % (top3.sum(), len(rows_out)))

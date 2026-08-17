@@ -2110,6 +2110,74 @@ check "--exhaust sees --no-plug letters as unavailable" \
   "$(printf '%s' "$ft_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
        --exhaust 1 --no-plug "$np_many" 2>&1 >/dev/null \
      | grep -oE '\([0-9]+ combinations\)')" "(45 combinations)"
+
+echo
+echo "== Guessed plugs the climb may revise: --soft-plug =="
+
+# --soft-plug lays pairs on the board each restart starts from and then leaves them free,
+# where -s pins them.  The WHOLE point is that difference, so the tests are about it: the
+# same wrong pairs must survive under -s and must not survive under --soft-plug.  One key
+# throughout (-g QEW pins it), so every check below is a single climb's worth of work.
+
+# That the seed is APPLIED needs a problem the unseeded climb cannot already solve, so
+# this uses its own 10-pair fixture -- ft_ct's 4-pair board is recovered by a single
+# unkicked climb, which would let the check pass with the seed silently dropped.
+# Proximity rather than exact recovery, because at 104 letters the true board is not quite
+# the scoring optimum: the seeded climb walks a couple of plugs off it and lands at ~93%.
+# That is the documented scoring floor, not a seeding failure, and 80/20 straddles it with
+# room to spare.
+sp_true=ABCDEFGHIJKLMNOPQRST
+sp_ct=$(run "$ft_pt" -i -u B -w 123 -r AAA -g QEW -s "$sp_true")
+sp_pct() { awk -v a="$1" -v b="$2" 'BEGIN { n = length(b); c = 0;
+             for (i = 1; i <= n; i++) if (substr(a, i, 1) == substr(b, i, 1)) c++;
+             print int(100 * c / n) }'; }
+sp_seeded=$(run "$sp_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 0 \
+              --soft-plug "$sp_true")
+sp_bare=$(run "$sp_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 0)
+check "--soft-plug seeds the climb (correct seed, -R 0 lands on the plaintext)" \
+  "$(test "$(sp_pct "$sp_seeded" "$ft_pt")" -ge 80 && echo near || echo far)" "near"
+check "--soft-plug control: the same unseeded climb does not" \
+  "$(test "$(sp_pct "$sp_bare" "$ft_pt")" -lt 20 && echo far || echo near)" "far"
+
+# The semantic difference from -s, stated as the two halves of one experiment: give both
+# options the same two WRONG pairs and look at the converged boards.  -s must keep both on
+# every board; --soft-plug must not keep them on all of them.  (grep -c counts LINES, so
+# this asks how many converged boards still carry the pair.)
+sp_boards() { printf '%s' "$ft_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+                -c -R 4 --random 10 --dump-all "$@" 2>&1 >/dev/null | grep '^dumpall'; }
+check "-s keeps its (wrong) pairs on every converged board" \
+  "$(sp_boards -s XZYQ | grep -c 'XZ' )" "4"
+check "--soft-plug lets the climb move its (wrong) pairs" \
+  "$(test "$(sp_boards --soft-plug XZYQ | grep -c 'XZ')" -lt 4 && echo moved \
+     || echo stuck)" "moved"
+
+check "--soft-plug is -T-independent" \
+  "$(run "$ft_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 4 \
+       --soft-plug XZYQ -T 1)" \
+  "$(run "$ft_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 4 \
+       --soft-plug XZYQ -T 4)"
+
+# Malformed, contradictory, or pointless: all fatal.  The two contradictions are the
+# interesting ones -- -s asserts a letter's partner is KNOWN and --no-plug asserts it has
+# none, so in each case the command line says two incompatible things about one letter.
+sp_rejects() { printf '%s' "$ft_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+                 "$@" >/dev/null 2>&1; echo $?; }
+check "--soft-plug rejects an odd number of letters" \
+  "$(sp_rejects -c --soft-plug XYZ)" "1"
+check "--soft-plug rejects a repeated letter" "$(sp_rejects -c --soft-plug XYXZ)" "1"
+check "--soft-plug rejects a non-letter" "$(sp_rejects -c --soft-plug X7)" "1"
+check "--soft-plug rejects a letter also pinned by -s" \
+  "$(sp_rejects -c -s XZ --soft-plug XY)" "1"
+check "--soft-plug rejects a letter also marked by --no-plug" \
+  "$(sp_rejects -c --no-plug X --soft-plug XY)" "1"
+check "--soft-plug rejects a run with no climb" "$(sp_rejects --soft-plug XY)" "1"
+# Every other seeding mechanism installs its own board at its own site, so combining them
+# would let one silently overwrite the other.
+check "--soft-plug rejects --exhaust" \
+  "$(sp_rejects -c --soft-plug XY --exhaust 1)" "1"
+check "--soft-plug rejects -A" "$(sp_rejects -c --soft-plug XY -A 100)" "1"
+check "--soft-plug rejects --crib" \
+  "$(sp_rejects -c --soft-plug XY --crib DASOBERKOMMANDO)" "1"
 check "--exhaust E is bounded by the remaining free pairs" \
   "$(np_rejects -c --exhaust 6 --no-plug "$np_many")" "1"
 check "--exhaust E within the remaining free pairs is accepted" \

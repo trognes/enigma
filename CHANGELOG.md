@@ -8,6 +8,30 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--soft-plug AB…` — plugboard pairs that are a GUESS, not knowledge.** Same
+  shape as `-s` and the opposite contract: the pairs are laid on the board each
+  restart starts from and then left free, so the climb may move, merge or remove
+  them. `-s` marks its letters in `plug_fixed[]` and forbids every move that
+  would touch them; `--soft-plug` marks nothing.
+
+  The reason to have both is that their failure modes are not comparable. A
+  wrong `-s` pin cannot be undone by anything downstream — the pins deliberately
+  survive `--polish` — so one bad guess poisons the whole run, whereas a wrong
+  soft guess costs only the moves the climb spends walking back out of it. That
+  is exactly the trade a *deduced* seed needs, one right most of the time but
+  not always.
+
+  The `--random` kick needed no change: it draws only from self-steckered
+  letters, so a soft-seeded pair is invisible to it and the kick adds pairs
+  among the letters the seed left alone. But a soft-seeded board starts *good*,
+  so the default 10-pair kick is the wrong size for it — measured 72.7 →
+  **79.0** mean %-correct at `--random 3`.
+
+  Fatal on an odd number of letters, a repeated letter, a non-letter, no `-c`, a
+  letter that `-s` also pins or `--no-plug` also marks, and on
+  `--exhaust`/`--crib`/`--crib-list`/`-A`, each of which installs its own
+  starting board. `-T`-deterministic.
+
 - **A live progress line for the main sweep** — percentage, key rate and ETA,
   rewriting itself in place:
 

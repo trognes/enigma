@@ -498,6 +498,35 @@ are read from a **data directory** (filenames built as
   removes **25 of the 325** candidate toggles, not one. Fatal on a letter `-s`
   also plugs (the two statements contradict), a repeated letter, a non-letter,
   or no `-c`. `-T`-deterministic.
+- `--soft-plug AB...` plugboard pairs **guessed rather than known** (needs `-c`;
+  off by default). Same shape as `-s`, opposite contract: the pairs are laid on
+  the board each restart starts from and then left **free** — the climb may
+  move, merge or remove them like any other plug. `-s` says *known* and marks
+  `plug_fixed[]`; `--soft-plug` says *good guess* and marks nothing.
+  - **The two failure modes are not comparable, which is the whole reason the
+    option exists.** A wrong `-s` pin cannot be undone by anything downstream
+    (the pins deliberately survive `--polish`), so a bad guess poisons the run;
+    a wrong `--soft-plug` guess costs only the moves the climb spends walking
+    back out of it. That is the trade a **deduced** seed needs — one that is
+    right most of the time but not always, such as the terminal-signature
+    self-crib (`ENHANCEMENTS.md` item 5), where pinning measured **worse than
+    not seeding at all** on the ~28% of messages whose ranking picks the wrong
+    seed.
+  - **The kick needed no change, and that is not luck.**
+    `perturb_steckerbrett()` draws only from *self-steckered* letters, so a
+    soft-seeded pair is invisible to it: the kick adds pairs among the letters
+    the seed left alone rather than scattering the seed. Seeding therefore
+    happens **before** the kick, and every restart starts from seed + its own
+    kick.
+  - **A soft-seeded board starts good, so it wants a SMALLER kick.** The default
+    `--random 10` is sized for an empty board and measurably wrecks a seed:
+    72.7 → **79.0** mean %-correct at `--random 3`. Dropping the staged IC
+    pre-pass (`--score f10`) is near-neutral by comparison, so the kick is the
+    knob, not the schedule.
+  - Fatal on an odd number of letters, a repeated letter, a non-letter, no `-c`,
+    a letter `-s` also pins or `--no-plug` also marks (each a contradiction),
+    and on `--exhaust`/`--crib`/`--crib-list`/`-A`, which all install their own
+    starting board at their own site. `-T`-deterministic.
 - `-c` hill-climb the plugboard. The climb rule is **steepest ascent** by
   default: each step scans the whole 325-pair toggle operator and applies the
   single best improving move, to convergence. `-J` swaps that rule for
