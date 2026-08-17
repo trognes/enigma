@@ -1,6 +1,11 @@
 # ============================================================================
 # enigma-challenge-1941.txt  --  authentic 1941 German Army ciphertexts, UNBROKEN
 # ----------------------------------------------------------------------------
+# GENERATED FILE -- DO NOT EDIT.  Edit eval/build_challenge_1941.py and re-run
+# it; anything typed here is silently discarded the next time it runs.  That
+# is not hypothetical: two rounds of hand edits (a message form's readings,
+# and a whole 'probably not Enigma' analysis) were reverted exactly that way,
+# and were only noticed because the script happened to be run afterwards.
 # Source: Geoff Sullivan & Frode Weierud, "Breaking German Army Ciphers"
 #         (Cryptologia 29(3):193-232, 2005); cryptocellar.org/bgac. HG Nord,
 #         Operation Barbarossa, Jun-Oct 1941. CC BY-NC-SA.
@@ -52,6 +57,7 @@
 KENNGRUPPE:  EHSTQ   (discriminant; strip before deciphering)
 LEN:         57  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   EFT BEU   (as sent; German Army Messages page, 01 Aug 2026)
 CIPHERTEXT:  EHSTQJJAPYGERSYFZJSIABYQEKGZMGRNLZCLRDEEFTCUNFGVQYNKIYPIP
 NOTES:       (none)
 
@@ -59,6 +65,7 @@ NOTES:       (none)
 KENNGRUPPE:  RXPSB   (discriminant; strip before deciphering)
 LEN:         104  (form count, incl. Kenngruppe)  <-- transcription 112 != form 104
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   ZDN QMF   (as sent; German Army Messages page, 01 Aug 2026)
 CIPHERTEXT:  RXPSBRDHLUZNUQXTFYJJGX-WEOUBHLKSCGYMUTUPIGYGQGANNMPMQGASEQGT
              MLGHTUAFAMSNRDDXHXRQOQAZLGWTUHJGPDDFJLUCMXXYMUNU-TED
 NOTES:       2 garble dashes; form group-count (104) disagrees with the transcription (112) -- form miscount, cf. Nr 136/153; the 01 Aug 2026 list still shows 104/99, so the discrepancy is unresolved upstream
@@ -95,7 +102,7 @@ INDICATOR:   LDP WRX   (as sent; from the Ultimate Enigma Challenge page)
 CIPHERTEXT:  QTXMAJVMOYCZAYMRVLCBSOQXYBATSXJBQLAEJKYTYXJOEMYBLOEMYOKSRMTA
              VLBCXJAMOESRXYTVAOEYAVYXKCJVCMEISHTBAYVXXAJWCZQCYPXMEHABLKYJ
              YASOEIJYXOQXYTLBASYEESTAQXJVNWCBJZBYQYTM
-NOTES:       PROBABLY NOT ENIGMA -- measured, not merely the authors' caveat. Its index of coincidence is 0.0577 against the 0.0385 +/- 0.0018 that 3000 simulated Enigma encryptions of German give at this length (z = +10.9; the largest of those 3000 was 0.0468), and FOUR letters of A-Z never occur where 0.06 are expected (P = 8.5e-08; none of the 3000 lacked more than 2). No period flattens the IC either, so it is not Vigenere-like; and its J-rate is 7.1% against the 3.85% a flat 26-letter cipher predicts -- the same test applied to Batch C below, failing in the OPPOSITE direction from FKQLZ and XFEDT, which have zero J. A 28-hour 75.2M-key sweep found nothing (best margin +0.81 sd against a 6.0 bar), which is consistent. This does NOT carry to the rest of Batch C: BYQMZ reads z = +0.6 with 0 unused letters. The tool now runs this test before searching, on by default (--no-preflight turns it off); see MODERN_BREAKING_NOTES 5l and eval/preflight_null.py. Batch C, and the SECOND-LONGEST unbroken message in the collection. From the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only because it had never been transcribed. Same batch caveat as BYQMZ: the authors are not sure Batch C is Enigma at all. Sent 2240, to 2pn on 323 kHz; the INDICATOR above makes a candidate day key testable in one decrypt (set the machine to LDP, decipher WRX, and that is the start position) instead of a 17576-start sweep
+NOTES:       PROBABLY NOT ENIGMA -- measured, not merely the authors' caveat. Its index of coincidence is 0.0577 against the 0.0385 +/- 0.0018 that 3000 simulated Enigma encryptions of German give at this length (z = +10.9; the largest of those 3000 was 0.0468), and FOUR letters of A-Z never occur where 0.06 are expected (P = 8.5e-08; none of the 3000 lacked more than 2). No period flattens the IC either, so it is not Vigenere-like; and its J-rate is 7.1% against the 3.85% a flat 26-letter cipher predicts -- the same test applied to Batch C below, failing in the OPPOSITE direction from FKQLZ and XFEDT, which have zero J. A 28-hour 75.2M-key sweep found nothing (best margin +0.81 sd against a 6.0 bar), which is consistent. This does NOT carry to the rest of Batch C: BYQMZ reads z = +0.6 with 0 unused letters. The tool runs this test before searching, on by default (--no-preflight turns it off); see MODERN_BREAKING_NOTES 5l and eval/preflight_null.py. Batch C, and the SECOND-LONGEST unbroken message in the collection. From the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only because it had never been transcribed. Same batch caveat as BYQMZ: the authors are not sure Batch C is Enigma at all. Sent 2240, to 2pn on 323 kHz; the INDICATOR above makes a candidate day key testable in one decrypt (set the machine to LDP, decipher WRX, and that is the start position) instead of a 17576-start sweep
 
 ### Message No. 7-C  --  29 Sep 1941  (SZAEJ)
 KENNGRUPPE:  SZAEJ   (discriminant; strip before deciphering)
@@ -109,38 +116,26 @@ NOTES:       Batch C, same caveat. From the Ultimate Enigma Challenge page. Shor
 KENNGRUPPE:  BYQMZ   (discriminant; strip before deciphering)
 LEN:         172  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
-INDICATOR:   MGS TPL   (as sent; read off the message form and confirmed
-             independently by the Cryptocellar documents -- see FORM NOTES)
+INDICATOR:   MGS TPL   (as sent; read off the message form)
 FORM:        forms/BYQMZ-30091941-008-out.pdf
 FORM NOTES:  Spruch Nr 8. Befoerdert 30.9.41 0025 Uhr, 'An 568'. The
              ciphertext block opens '0014 - 172 - <six letters>', so the
              form's own count confirms the 172 letters transcribed here,
              and 0014 is the time of origin. Vermerke reads 'Spruch 2352
-             yzl - gjb - Durchgegeben', which is a relay note about a
-             DIFFERENT 2352 message and NOT this one's indicator.
-FORM DIFFS:  none -- the transcription was read again from this scan at up
-             to 1400 dpi and agrees letter for letter, 172 of 172. The
-             hand separates every dangerous pair: z is written with a bar
-             through the descender and y without, q has a straight
-             descender where g loops left, and u carries the German bow
-             above it. THE DASH IS REAL: at row 2 group 3
-             (HIF-Y) the fourth cell is genuinely BLANK on the form, so
-             the letter was never written down and the form's 172 counts
-             it. The INDICATOR, MGS TPL, is new to this file; read off the
-             form and confirmed by the Cryptocellar documents, i.e. two
-             independent readers, the standard forms/README.md already
-             applies. THE PREAMBLE AND THE CIPHERTEXT ARE IN DIFFERENT
-             SCRIPTS, which is the trap: the cells carry careful LATIN
-             letters, because ciphertext must be unambiguous, while the
-             preamble and the Vermerke are in the RUNNING GERMAN hand.
-             Their s and t look nothing alike across the two -- the
-             ciphertext s is a narrow slanted Latin loop against the
-             preamble's flat-topped cursive form, and the ciphertext t is
-             short with a crossbar against the preamble's tall open hook.
-             Reading the indicator at 800 dpi gave MGS TPL; cross-checking
-             those glyphs against ciphertext exemplars at 2200 dpi then
-             argued them AWAY, wrongly. Calibrate a preamble glyph against
-             the Vermerke, never against the cells
+             yzl - gjb - Durchgegeben' (the page reads that pair as 'qsl
+             - qjb'), which is a relay note about a DIFFERENT 2352
+             message and NOT this one's indicator.
+FORM DIFFS:  none -- read again from this scan at up to 1400 dpi, letter
+             for letter, 172 of 172. The hand separates every dangerous
+             pair: z is barred through the descender and y is not, q
+             descends straight where g loops left, and u carries the
+             German bow. THE DASH IS REAL: at row 2 group 3 (HIF-Y) the
+             fourth cell is genuinely BLANK on the form, so the letter
+             was never written down and the form's 172 counts it. On the
+             INDICATOR, and why a glyph comparison misled here, see
+             forms/README.md -- the preamble is in the RUNNING GERMAN
+             hand while the cells are careful LATIN, and calibrating one
+             against the other is what argued a correct reading away.
 CIPHERTEXT:  BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAI
              KYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUE
              AZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY
@@ -150,6 +145,7 @@ NOTES:       Batch C -- the authors are NOT sure this is Enigma at all. Its J-ra
 KENNGRUPPE:  FKQLZ   (discriminant; strip before deciphering)
 LEN:         112  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   RTA SDP   (as sent; German Army Messages page, 01 Aug 2026)
 CIPHERTEXT:  FKQLZDNXLIAGVIQBUWMHYCAMDFBAEQVGXMRCEPGARIHRKRTDLNYVCSWUFHIX
              LXPUCESNOLNAHZDKPNVBFSOKBPCTGDKOFMTWGSYOUTQRMPWWZORK
 NOTES:       Batch C -- may not be Enigma. The letter J does NOT occur in its 107 letters (4.1 expected), which is exactly what a 25-letter manual alphabet predicts; attack it only after BYQMZ and RXPSB
@@ -158,6 +154,22 @@ NOTES:       Batch C -- may not be Enigma. The letter J does NOT occur in its 10
 KENNGRUPPE:  XFEDT   (discriminant; strip before deciphering)
 LEN:         102  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   LMO DSV   (as sent; read off the message form)
+FORM:        forms/XFEDT-30091941-012-out.pdf
+FORM NOTES:  Spruch Nr 12. Befoerdert 30.9.41 0416 Uhr durch Fuhrmann, an
+             6q8, 'An 716 kHz'; Vermerke 'QSA anfragen, Spruchkopf
+             wiederholen'. The ciphertext block opens '0405 - 102 - lmo
+             dsv', so the form's own count confirms the 102 letters
+             transcribed here. NOTE the German Army Messages page heads
+             this message 'Funkspruch Nr.: 11', repeating Nr 11-C's
+             number; the form plainly reads 12 and the message list
+             agrees, so that is a typo upstream.
+FORM DIFFS:  none -- read again from this scan at up to 700 dpi, all 102
+             letters identical to the stored transcription AND to the
+             German Army Messages page. A different clerk from BYQMZ's,
+             but the same three safeguards hold: z barred, q straight
+             against g's loop, u bowed. The indicator agrees letter for
+             letter with the page, i.e. two independent readers.
 CIPHERTEXT:  XFEDTZYOQHTSAFRLQCHZURCWOILRXGMCBFZKAPYDUMHVCATDPSEAKYSZEGFK
              GINXWRNQVOIDFANGLRXNUHGTVFCNEXBPWYMZFBXOAU
 NOTES:       Batch C -- may not be Enigma. Same as Nr 11-C: zero J in 97 letters (3.7 expected); pooled with FKQLZ that is 0 of an expected 7.8, p = 3e-4

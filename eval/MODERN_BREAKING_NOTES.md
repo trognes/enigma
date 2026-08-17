@@ -960,6 +960,53 @@ language-like by definition and would trip both tests. Without the gate the
 warning would fire on every encryption, including the hundreds this repo's own
 test suite performs.
 
+### 5m. Indicators for five of the unbroken messages
+
+The German Army Messages page and the 1941 message list (both archived under
+`eval/sources/`, 01 Aug 2026) carry message **headers**, and those headers hold
+the operator's indicator — which the ciphertext transcriptions alone did not.
+Five of the still-unbroken messages now have one:
+
+| message | letters | indicator | source |
+|---|---:|---|---|
+| BYQMZ (Nr 8-C) | 167 | `MGS TPL` | form + page, two readers |
+| XFEDT (Nr 12-C) | 97 | `LMO DSV` | form + page, two readers |
+| FKQLZ (Nr 11-C) | 107 | `RTA SDP` | page |
+| RXPSB (Nr 53) | 99 | `ZDN QMF` | page |
+| EHSTQ (Nr 3) | 52 | `EFT BEU` | page |
+
+**What that is worth is a 17 576× reduction on one axis, not a break.** The
+indicator is the message key enciphered at the day's *Grundstellung*, so given
+a candidate day key it is testable in a **single decrypt**: set the machine to
+the first group, decipher the second, and that is the message start position.
+The start stops being a search axis. It says nothing about the wheels, the
+rings or the plugboard, which is where the rest of the keyspace lives — and
+nothing at all without a candidate day key to test.
+
+**The catch is that the plugboard sits in the way**, and it is the reason this
+is not simply free. Deciphering the second group needs the *whole* key
+including the board, so an indicator cannot be unwrapped by itself; it can only
+confirm or refute a day key already proposed. That is exactly how it was used
+on MVUEH (§5k): `GTA KCI` derives start `USU` at the published 10.07.1941 key
+and `SED` at the Nr-173 network key, neither decrypts, and the
+different-network reading stands on a direct test rather than on an absence of
+results.
+
+So the operational value is highest where a day key is already known or
+guessable for the date, and lowest where it is not. Of the five, **none has a
+published day key for its date**. What they do change is the cost of *checking*
+a candidate: a hypothesis about the day key can now be rejected in one decrypt
+per message rather than a sweep, and five messages across three dates can be
+checked against a single hypothesis at once.
+
+**Two of these are also flagged as possibly not Enigma at all.** FKQLZ and
+XFEDT carry zero J in 107 and 97 letters against an expected 7.8 pooled
+(p = 3e-4), and the authors' Batch C caveat covers them; QTXMA, the fifth Batch
+C message, is measured not-Enigma outright (§5l). An indicator for a message
+that is not Enigma buys nothing, so BYQMZ, RXPSB and EHSTQ are the three worth
+acting on — and of those, BYQMZ is the only one above the ~70–110 letter
+breakability crossover (§5h).
+
 ## 6. The `wehrmacht` scoring language — the corpus payoff
 
 The domain-matched corpus idea, realised. `eval/build_telegraphic_ngrams.py` bends the

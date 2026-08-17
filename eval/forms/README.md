@@ -2,7 +2,7 @@
 
 Scans of the original *Fern-Funk-Blink-Spruch* forms. The first two are the
 09.09.1941 messages whose day key was recovered from ciphertext here (see
-`../MODERN_BREAKING_NOTES.md` §5j); the other two are **unbroken** challenge
+`../MODERN_BREAKING_NOTES.md` §5j); the other four are **unbroken** challenge
 messages (`../enigma-challenge-1941.txt`).
 
 | file | Spruch Nr | Kenngruppe | letters | status |
@@ -11,12 +11,13 @@ messages (`../enigma-challenge-1941.txt`).
 | `ALRHG-09091941-039-out-nf.pdf` | 39 | ALRHG | 116 | broken, §5j |
 | `FMNGI-31071941-205-out-nf.pdf` | 205 | FMNGI | 63 | unbroken (Nr 285) |
 | `MVUEH-10071941-088-061-out-nf.pdf` | 88/61 | MVUEH | 87 | unbroken (Nr 172) |
+| `XFEDT-30091941-012-out.pdf` | 12 | XFEDT | 102 | unbroken (Nr 12-C) |
 | `BYQMZ-30091941-008-out.pdf` | 8 | BYQMZ | 172 | unbroken (Nr 8-C) |
 
 The first two are outgoing, dated 9.9.41, *befördert* 0913, message time (0850),
 from Nachschub to SS-T.Div. The **length printed on each form** is the reason
 they are kept: it is an independent check that a transcription dropped or added
-nothing, and all four match.
+nothing, and all six match.
 
 ## BYQMZ — the one that agreed
 
@@ -78,7 +79,20 @@ Do not confuse it with the **Vermerke** line, which reads `Spruch 2352 yzl -
 gjb - Durchgegeben`. That is a relay note about a different message sent at
 2352; this message was *befördert* 0025 with time of origin 0014.
 
-## The two unbroken forms
+## XFEDT — the second that agreed
+
+Read at up to 700 dpi, all **102 of 102** letters match the stored
+transcription and the German Army Messages page, and the form's printed count
+is 102. A different clerk from BYQMZ's (this one signs *Fuhrmann*), but the
+same three safeguards hold: `z` barred, `q` straight against `g`'s loop, `u`
+bowed. Its preamble reads `0405 - 102 - lmo dsv`, agreeing letter for letter
+with the page — again two independent readers.
+
+One upstream slip worth noting: the page's header for this message says
+*Funkspruch Nr.: 11*, repeating Nr 11-C's number. The form plainly reads 12
+and the message list agrees, so the page is wrong there.
+
+## The unbroken forms and their indicators
 
 They carry something the transcriptions did not: the **indicator**, the
 operator's enciphered message key. That is worth more than it looks. A candidate
