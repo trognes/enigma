@@ -109,8 +109,8 @@ NOTES:       Batch C, same caveat. From the Ultimate Enigma Challenge page. Shor
 KENNGRUPPE:  BYQMZ   (discriminant; strip before deciphering)
 LEN:         172  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
-INDICATOR:   MG?  ?PL  (read off the message form; 4 of 6 letters certain,
-             glyphs 3 and 4 NOT resolved -- see FORM NOTES)
+INDICATOR:   MGS TPL   (as sent; read off the message form and confirmed
+             independently by the Cryptocellar documents -- see FORM NOTES)
 FORM:        forms/BYQMZ-30091941-008-out.pdf
 FORM NOTES:  Spruch Nr 8. Befoerdert 30.9.41 0025 Uhr, 'An 568'. The
              ciphertext block opens '0014 - 172 - <six letters>', so the
@@ -126,13 +126,21 @@ FORM DIFFS:  none -- the transcription was read again from this scan at up
              above it. THE DASH IS REAL: at row 2 group 3
              (HIF-Y) the fourth cell is genuinely BLANK on the form, so
              the letter was never written down and the form's 172 counts
-             it. The INDICATOR is new here and is only partly readable:
-             m and g then two unresolved glyphs then p and l. Glyph 4
-             resembles the tall narrow loop this hand uses for r in QNRAI
-             and URQES; glyph 3 matches no confirmed exemplar. Left
-             unresolved rather than guessed -- a wrong indicator sends a
-             search to a wrong start position, and unlike a ciphertext
-             letter it cannot be arbitrated by the letter count
+             it. The INDICATOR, MGS TPL, is new to this file; read off the
+             form and confirmed by the Cryptocellar documents, i.e. two
+             independent readers, the standard forms/README.md already
+             applies. THE PREAMBLE AND THE CIPHERTEXT ARE IN DIFFERENT
+             SCRIPTS, which is the trap: the cells carry careful LATIN
+             letters, because ciphertext must be unambiguous, while the
+             preamble and the Vermerke are in the RUNNING GERMAN hand.
+             Their s and t look nothing alike across the two -- the
+             ciphertext s is a narrow slanted Latin loop against the
+             preamble's flat-topped cursive form, and the ciphertext t is
+             short with a crossbar against the preamble's tall open hook.
+             Reading the indicator at 800 dpi gave MGS TPL; cross-checking
+             those glyphs against ciphertext exemplars at 2200 dpi then
+             argued them AWAY, wrongly. Calibrate a preamble glyph against
+             the Vermerke, never against the cells
 CIPHERTEXT:  BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAI
              KYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUE
              AZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY

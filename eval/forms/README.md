@@ -43,15 +43,36 @@ blank on the form: the letter was never written down, and the form's count of
 172 counts it. So the dash records a gap in the 1941 record rather than a
 failure of transcription, and nothing is recoverable there from the image.
 
-**The indicator is new, and only partly readable.** The ciphertext block opens
-`0014 - 172 - ` followed by six letters, the same run-together form as ALVPM's
-`kfzjpo` and ALRHG's `ftjmyc`. Four are certain — `m g ? ? p l`. Glyph 4
-resembles the tall narrow loop this hand uses for `r` in `QNRAI` and `URQES`;
-glyph 3 matches no confirmed exemplar in the message. It is left unresolved
-rather than guessed, for a reason specific to indicators: a ciphertext letter
-can be arbitrated by the length count or by decryption, and an indicator can
-be neither, while a wrong one sends a search to a wrong start position. If it
-is ever completed it is worth a great deal — see below.
+**The indicator is new: `MGS TPL`.** The ciphertext block opens `0014 - 172 - `
+followed by six letters, the same run-together form as ALVPM's `kfzjpo` and
+ALRHG's `ftjmyc`. Read off the form here and independently confirmed by the
+Cryptocellar documents — two readers, the same standard that let MVUEH's
+position 85 be corrected.
+
+**And it is the one place a glyph comparison actively misled, for a reason
+worth keeping.** The preamble and the ciphertext cells are written in
+**different scripts**: the cells carry careful *Latin* letters, because
+ciphertext has to be unambiguous, while the preamble and the Vermerke are in
+the *running German* hand. The two disagree on exactly the letters at issue —
+
+| letter | in the ciphertext cells | in the preamble |
+|---|---|---|
+| `s` | narrow slanted Latin loop | flat-topped cursive form |
+| `t` | short, with a crossbar | tall, open hook, no crossbar |
+
+— so a preamble `t` looks far more like the cells' `r` (a tall *looped* stroke,
+as in `QNRAI` and `URQES`) than like their `t`. Reading the indicator at 800
+dpi gave `MGS TPL`; cross-checking those two glyphs against ciphertext
+exemplars at 2200 dpi then argued them away, wrongly. **Calibrate a preamble
+glyph against the Vermerke, never against the cells** — the `l` of the
+Vermerke's `yzl` and the `l` of the indicator are the same closed loop, which
+is how the two running-hand lines are known to match.
+
+This inverts the lesson the FMNGI/MVUEH section draws below. There,
+magnification always confirmed the stored reading and never a disagreement;
+here magnification overturned a *correct* first reading, because the reference
+alphabet it was checked against was the wrong one. Magnification settles the
+shape of a glyph, not which alphabet it belongs to.
 
 Do not confuse it with the **Vermerke** line, which reads `Spruch 2352 yzl -
 gjb - Durchgegeben`. That is a relay note about a different message sent at
