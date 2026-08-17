@@ -8,6 +8,37 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **Pre-flight: is this ciphertext even Enigma?** (on by default;
+  `--no-preflight` turns it off). Enigma is a permutation
+  cipher, so its output is near-flat; a ciphertext carrying residual language
+  structure was not produced by one and has **no key to find**. The index of
+  coincidence and the number of unused letters are now computed from the
+  ciphertext and compared against a length-dependent null, and the verdict is
+  printed before the sweep. It reports **for a search — a wildcarded key —
+  and only then**: with a full key the tool is encrypting or decrypting, and
+  on encryption the input is plaintext, which is language-like by definition.
+  - Measured the expensive way: a 28-hour, 75.2M-key sweep of the QTXMA
+    challenge message returned nothing, and the reason was visible up front —
+    IC 0.0577 against the 0.0385 ± 0.0018 of 3000 simulated Enigma
+    encryptions at that length (z = +10.9), and 4 letters unused where 0.06
+    are expected
+    (P = 8.5e-08). See `eval/MODERN_BREAKING_NOTES.md` §5l.
+  - **The null is length-dependent**, and it has to be: IC variance goes as
+    `1/C(n,2)`, so two of the four *broken* (genuinely Enigma) 1941 messages
+    sit at z = +4.2, at 47 and 74 letters. A fixed threshold would condemn
+    them. No tables are needed — both statistics have closed forms under a
+    uniform multinomial that match simulated Enigma within 1–2% from n = 40
+    to 600.
+  - Warns at z(IC) > 6.0 or P(unused) < 1e-4, set from the **measured** tail of
+    genuine Enigma rather than a nominal p-value: across one sample of 18 000
+    simulated ciphertexts (authentic 1941 German, random keys and boards — not
+    real traffic) the largest z seen was 5.89 and neither test fired once.
+    `eval/preflight_null.py` reproduces the calibration.
+  - No pre-flight line may look like a progress line: the `--confidence`
+    margin extractor greps stderr for `^ *[+-][0-9]`, and a continuation line
+    reading `  +10.95 sd; …` was read as the run's last margin. The
+    statistics line now opens with `(` and no line begins with a digit.
+
 - **`--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature` —
   self-crib seeding, the first lever measured to beat `-R` at matched compute.**
   A doubled word is a *self*-crib: it says only that two positions carry the

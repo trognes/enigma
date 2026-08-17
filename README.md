@@ -155,6 +155,34 @@ score line rather than being written over. Redirect stderr to a file and it is
 not there at all, so logs and scripts see exactly what they saw before. Nothing
 is drawn for a sweep that finishes in under half a second.
 
+### Before you spend a night on it: is it even Enigma?
+
+Enigma is a permutation cipher, so its output is near-flat. A ciphertext that
+still carries language structure was not produced by one, and there is no key
+to find. The tool checks this before searching and says so:
+
+```
+$ ./enigma -q -l english -u B -w 123 -r AAA -g ... < qtxma.txt
+Pre-flight:  index of coincidence 0.0577 against the 0.0385 Enigma gives,
+             +10.95 sd; 4 of 26 letters unused, P = 8.5e-08
+WARNING: this does not look like Enigma output, so searching for a
+         key may be searching for something that does not exist.
+```
+
+That message cost a 28-hour, 75-million-key sweep to learn the other way. On a
+ciphertext that looks fine you get the same two lines ending in a plain
+"consistent with Enigma output" instead of the warning.
+
+This is on by default, and appears only when the rotor key is wildcarded —
+with a full key you are encrypting or decrypting, and plaintext is
+language-like by definition, so there would be nothing to conclude.
+**`--no-preflight`** turns it off.
+
+The thresholds are deliberately slack: across 18 000 simulated Enigma
+ciphertexts neither test fired once. Short messages are the reason — the
+index of coincidence is far noisier at 50 letters than at 500, so the bar
+moves with length rather than sitting at a fixed value.
+
 ## Options
 
 Defaults are shown in `[brackets]`. A dot `.` is the wildcard for the reflector,

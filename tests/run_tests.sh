@@ -2067,6 +2067,90 @@ check "the echoed key reproduces the ciphertext (both)" \
 rm -f "$TMP_WO"
 
 echo
+echo "== Pre-flight: is this ciphertext even Enigma? =="
+
+# Enigma is a permutation cipher, so its output is near-flat.  A ciphertext
+# carrying residual language structure was not produced by one and has no key
+# to find -- which a 28-hour 75.2M-key sweep of QTXMA established the expensive
+# way.  Two free statistics, both with closed-form nulls that were checked
+# against real Enigma encryptions (eval/preflight_null.py).
+#
+# THE GATE MATTERS AS MUCH AS THE TEST, and it is why the report is not simply
+# unconditional.  With a fully-specified key the tool is encrypting or
+# decrypting, and on encryption the input is PLAINTEXT -- language-like by
+# definition -- so reporting there would print a scary-looking line about a
+# ciphertext that is not one, on every encryption this suite performs.  The
+# report is ON BY DEFAULT for a SEARCH (a wildcarded key), silent otherwise,
+# and --no-preflight turns it off entirely.
+pf_qtxma=JVMOYCZAYMRVLCBSOQXYBATSXJBQLAEJKYTYXJOEMYBLOEMYOKSRMTAVLBCXJAMOESRXYTVAOEYAVYXKCJVCMEISHTBAYVXXAJWCZQCYPXMEHABLKYJYASOEIJYXOQXYTLBASYEESTAQXJVNWCBJZBYQYTM
+pf_byqmz=NYZKYDOEMGPSDUHMLHJATWMYCHIFYMAESTAVLCGCNLGMZIQUSQNRAIKYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUEAZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY
+# stderr only.  The braces make the order explicit: stdout is discarded
+# INSIDE the group, then the group's stderr becomes the pipeline's stdout.
+# 26 keys ("-g AA.") is a search as far as the gate is concerned, and every
+# assertion reads a line printed BEFORE the sweep, so breadth buys nothing.
+pf_run() {
+  _t=$1; shift
+  { printf '%s' "$_t" | "$ENIGMA" -u B -w 123 -r AAA "$@" >/dev/null; } 2>&1
+}
+
+# QTXMA: IC 0.0577 at 155 letters, z = +10.9, and 4 letters of A-Z unused
+# (P = 8.5e-08).  Both tests fire.
+check "pre-flight warns on a non-Enigma ciphertext" \
+  "$(pf_run "$pf_qtxma" -g "AA." \
+     | grep -c '^WARNING: this does not look like Enigma')" "1"
+# BYQMZ is the control that keeps the above from passing for the wrong reason:
+# same length class, genuinely Enigma-like (z = +0.6, no unused letters).  It
+# must still REPORT, the report being on by default, but say it is fine.
+check "pre-flight passes an Enigma-like ciphertext" \
+  "$(pf_run "$pf_byqmz" -g "AA." | grep -c 'consistent with Enigma output')" "1"
+check "pre-flight does not warn on an Enigma-like ciphertext" \
+  "$(pf_run "$pf_byqmz" -g "AA." | grep -c '^WARNING')" "0"
+# The gate: a fully-specified key is an encrypt/decrypt, not a search.  Feeding
+# it the very ciphertext that trips the warning above must stay silent.
+check "pre-flight does not fire when the key is fully specified" \
+  "$(pf_run "$pf_qtxma" -g AAA | grep -c 'Pre-flight\|WARNING')" "0"
+# Encrypting PLAINTEXT is the case the gate exists for.
+check "pre-flight does not fire when encrypting plaintext" \
+  "$(pf_run "DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTET" \
+     -g QEW | grep -c 'Pre-flight\|WARNING')" "0"
+# --no-preflight turns off both halves, warning included.
+check "--no-preflight silences the report" \
+  "$(pf_run "$pf_byqmz" --no-preflight -g "AA." | grep -c '^Pre-flight:')" "0"
+check "--no-preflight silences the warning" \
+  "$(pf_run "$pf_qtxma" --no-preflight -g "AA." \
+     | grep -c 'Pre-flight\|WARNING')" "0"
+# The statistics themselves, to 4 places -- these are the numbers the thresholds
+# are calibrated against, so a change in either is a change in the contract.
+# Anchored on ^Pre-flight: because show_settings() also prints the phrase
+# "index of coincidence" (it is the name of the default scoring model).
+check "pre-flight reports the index of coincidence" \
+  "$(pf_run "$pf_qtxma" -g "AA." \
+     | sed -n 's/^Pre-flight:.*index of coincidence \([0-9.]*\).*/\1/p')" "0.0577"
+check "pre-flight counts the unused letters" \
+  "$(pf_run "$pf_qtxma" -g "AA." \
+     | sed -n 's/.*), and \([0-9]*\) of 26 letters unused.*/\1/p')" "4"
+# NO pre-flight line may look like a progress line.  The margin extractor for
+# --confidence greps stderr for '^ *[+-][0-9]', and a continuation line reading
+# "  +10.95 sd; ..." was picked up as the run's last margin -- breaking a
+# --confidence check in a way that pointed at --confidence rather than here.
+check "pre-flight lines cannot be read as progress lines" \
+  "$(pf_run "$pf_qtxma" -g "AA." \
+     | sed -n '/^Pre-flight:/,/Proceeding anyway/p' \
+     | grep -cE '^ *[+-]?[0-9]')" "0"
+# The null is LENGTH-DEPENDENT, and that is the whole reason it is not a fixed
+# IC threshold: two of the four broken (genuinely Enigma) 1941 messages reach
+# z = +4.2 at 47 and 74 letters.  WEUWY is one of them -- 9 unused letters of
+# 26, which is normal at that length -- and must not be flagged.
+check "pre-flight does not flag a short genuine Enigma message" \
+  "$(pf_run "WCZIEDSYTCDXOICDSXOXASIMEIORSRKRISSPCCOUIMDZYDM" -g "AA." \
+     | grep -c '^WARNING')" "0"
+
+check "pre-flight output stays within 80 columns" \
+  "$(pf_run "$pf_qtxma" -g "AA." \
+     | sed -n '/^Pre-flight:/,/Proceeding anyway/p' | awk '{ print length }' \
+     | sort -rn | head -1 | awk '{ print ($1 <= 80) ? "ok" : $1 }')" "ok"
+
+echo
 echo "== Progress display: --full-text =="
 
 # --full-text prints the whole decrypted message below each progress line, wrapped and
