@@ -1252,6 +1252,50 @@ through it.
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
+**12. IC-rank the surviving hypotheses, as `--self-crib-seeds` does — MEASURED,
+and the useful window is narrow.** `crib_unit()` runs a **full plugboard climb
+on every surviving (alignment, hypothesis) pair** and keeps the best, which is
+what the self-crib path did before ranking. The same lever is available: dedupe,
+rank by the index of coincidence of the decrypt under the deduced partial board,
+climb the top `K`. `eval/crib_ic_rank.py` measures whether it would pay, at the
+true key, 40 trials per length, 10-pair board, alignment swept:
+
+| crib | surviving hyps | rank 1 | top-10 | median rank |
+|---:|---:|---:|---:|---:|
+| 8 | 438.6 | 15/40 | **23/40** | 6 |
+| 10 | 90.7 | 25/40 | **37/40** | 1 |
+| 12 | 8.3 | 40/40 | 40/40 | 1 |
+| 14 | 1.5 | 40/40 | 40/40 | 1 |
+
+**The window is ~10 letters, and it is bounded on both sides.** At 12+ the
+deduction already rejects nearly everything and there is no population left to
+rank — 8 hypotheses, then 1.5. At 8 the population explodes to ~440 and IC
+degrades with it: the top 10 keeps only 57% of correct hypotheses, so a 44×
+cut costs 42% of them. Only at **10 letters** are both true at once — 91
+hypotheses, top-10 keeps 92.5%, a **9× cut for ~7% loss**.
+
+That is worth having, because it is the regime the swept crib is currently
+locked out of ("16 letters is the swept floor"), and short cribs are the ones
+most likely to be *present* (93% of messages carry an 8-letter crib, 3% a
+20-letter one).
+
+Two things to settle before building it, both being where the self-crib work
+sprang surprises. **This measures the true key only**, and a sweep spends its
+time at wrong keys: the per-key cost cap is real regardless, but whether the
+true key still *wins* depends on `K` lifting wrong keys' best-of-`K` too, which
+is exactly why self-crib `K` plateaued at 10 rather than improving with size.
+And **dedupe first**, keyed on the (board, pinned-letter-set) pair as the
+self-crib path is, since two hypotheses can agree on cables while one
+additionally proves a letter carries none.
+
+> A caution on the measurement itself: a 12-trial pilot at a different seed
+> read L=8 as 12/12 in the top 10 with median rank 1, and the 40-trial run
+> above reads 23/40 and median 6. The pilot was not wrong about 10 and 12; it
+> was wrong about the length where the population is largest and the ranking
+> hardest, which is the one the decision turns on. A hypothesis deducing no
+> cable at all is not scored correct — it is consistent with any board and
+> would inflate every figure here.
+
 ## Measurement gaps
 
 The **null distribution of every scoring model is now measured**, and

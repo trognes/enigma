@@ -1,0 +1,21 @@
+Can an ordinary crib's surviving hypotheses be ranked by IC, as self-cribs are?
+
+40 trials per crib length, authentic German, 10-pair board,
+crib taken from the true plaintext, alignment SWEPT (not pinned).
+
+  len     hyps   correct     top-1     top-5    top-10    median
+--------------------------------------------------------------
+    8    438.6     40/40        15        19        23         6
+   10     90.7     40/40        25        33        37         1
+   12      8.3     40/40        40        40        40         1
+   14      1.5     40/40        40        40        40         1
+
+hyps    = surviving (alignment, hypothesis) pairs at the TRUE key,
+          i.e. how many full climbs crib_unit() runs there today
+correct = trials where a hypothesis matching the true board exists
+top-N   = of those, how many rank in the top N by IC
+
+L=8   climbing the top 10 instead of all 439 keeps 23 of 40 correct
+L=10  climbing the top 10 instead of all 91 keeps 37 of 40 correct
+L=12  climbing the top 10 instead of all 8 keeps 40 of 40 correct
+L=14  climbing the top 10 instead of all 2 keeps 40 of 40 correct
