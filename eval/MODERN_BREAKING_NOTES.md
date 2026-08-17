@@ -869,6 +869,90 @@ pencil, which is exactly where this reading has already been shown to fail. The
 candidates are recorded rather than applied, as the cheapest thing to try if
 either message is attacked and fails.
 
+### 5l. QTXMA is probably not Enigma — and that was visible before the sweep
+
+A 28-hour run over QTXMA returned nothing: 75 199 424 rotor combinations,
+2.75e12 plugboards scored, `-c -f -l wehrmacht -S i4f10 -J --polish -u B
+-r A.. -g ... --ring-stride 3 -R 16 -T 8 --confidence 256`, best margin
+**+0.81 sd** against a bar of 6.0. The run behaved correctly — `--confidence`
+declined to call a 75M-key sweep significant and printed its own "below +2 sd
+is not a find" note — but the reason it found nothing was **already in the
+ciphertext**, and cost nothing to check.
+
+**Enigma is a permutation cipher, so its output is near-flat.** QTXMA's is
+not. Against 3000 real Enigma encryptions of authentic German at the same
+length:
+
+| statistic | QTXMA | Enigma null (n=155) | z |
+|---|---:|---|---:|
+| index of coincidence | **0.0577** | 0.0385 ± 0.0018 | **+10.9** |
+| letters of A–Z unused | **4** | 0.06 ± 0.24 | **+16.3** |
+
+In 3000 simulated ciphertexts the largest IC was 0.0468 and no ciphertext
+lacked more than 2 letters. Neither statistic came close. The absent-letter
+tail is exact enough to quote: `P(X ≥ 4) ≈ C(26,4)(22/26)^155 = 8.5e-08`.
+
+Two supporting facts. **No period flattens the IC** — splitting into `k`
+columns for `k` = 1..10 leaves every column average at 0.057 or above, so it
+is not Vigenère-like either; the shape is monoalphabetic over something less
+redundant than German prose. And its **J-rate is 7.1%** (11 in 155) against
+the 3.85% a flat 26-letter cipher predicts — the same test the challenge file
+applies to Batch C, failing in the opposite direction from FKQLZ and XFEDT,
+which have *zero* J.
+
+This turns the challenge authors' "we are not sure Batch C is Enigma at all"
+from a caveat into a measurement, **for this message only**. It does *not*
+carry to the rest of the batch: BYQMZ, the longest unbroken message and also
+Batch C, reads z = +0.6 with **0 unused letters** — impeccably Enigma-like.
+
+#### The null has to be length-dependent, which is the whole difficulty
+
+A fixed IC threshold does not work, and the collection contains its own proof.
+The four **broken** messages are genuine Enigma and are the controls; two of
+them sit at **z = +4.2**, at 47 and 74 letters, because IC variance goes as
+`1/C(n,2)` and short messages reach a high IC routinely. WEUWY (Nr 138) has
+**9 of 26 letters unused** in 47 letters and is a perfectly ordinary Enigma
+message. Judged on raw IC, both would be condemned and QTXMA would sit among
+them rather than 6σ beyond.
+
+`eval/preflight_null.py` establishes the null and reproduces all of this. Its
+useful finding is that **no tables are needed**: both statistics have closed
+forms under a uniform multinomial that match real Enigma encryptions within
+1–2% at every length from 40 to 600.
+
+- `IC = P / C(n,2)`, where `P` counts same-letter position pairs. With uniform
+  `p` those pair indicators are pairwise **uncorrelated** — the shared-index
+  covariance is `Σp³ − (Σp²)² = 1/A² − 1/A² = 0` — so `E[IC] = 1/A` and
+  `Var[IC] = q(1−q)/C(n,2)` with `q = 1/A`, with **no dependence on the
+  plaintext at all**.
+- For the unused-letter count, `E[X] = A(1−1/A)^n` and
+  `Var[X] = A(1−1/A)^n + A(A−1)(1−2/A)^n − A²(1−1/A)^{2n}`. `X` is small and
+  skewed, so a z-score misleads and the tail is quoted instead.
+
+#### The shipped rule, and why its thresholds are generous
+
+The tool now runs this before searching (`--preflight`, and the warning is
+always on when the key is wildcarded). It warns when **z(IC) > 6.0** or
+**P(unused) < 1e-4**. Those are set from the *measured* tail of genuine
+Enigma rather than a nominal p-value — the same discipline `--confidence`
+documents for its own Gaussian tail, and for the same reason: a best-of-many
+statistic reads the tail, which the CLT delivers slowly.
+
+Over **18 000 real Enigma ciphertexts** spanning n = 40…600 the largest z(IC)
+observed was 5.66 and **neither test fired once**. All four broken 1941
+messages pass. QTXMA fires on both. A false positive here is expensive in
+trust — it would tell someone to abandon a breakable message — while a false
+negative only costs what it costs today, so the margin is deliberately wide.
+
+#### The gate is as important as the test
+
+The warning is raised **only when the rotor key is wildcarded**, i.e. when the
+run is actually a search. With a fully-specified key the tool is encrypting or
+decrypting, and its input is then routinely *plaintext* — which is
+language-like by definition and would trip both tests. Without the gate the
+warning would fire on every encryption, including the hundreds this repo's own
+test suite performs.
+
 ## 6. The `wehrmacht` scoring language — the corpus payoff
 
 The domain-matched corpus idea, realised. `eval/build_telegraphic_ngrams.py` bends the

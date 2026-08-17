@@ -2067,6 +2067,71 @@ check "the echoed key reproduces the ciphertext (both)" \
 rm -f "$TMP_WO"
 
 echo
+echo "== Pre-flight: is this ciphertext even Enigma? =="
+
+# Enigma is a permutation cipher, so its output is near-flat.  A ciphertext
+# carrying residual language structure was not produced by one and has no key
+# to find -- which a 28-hour 75.2M-key sweep of QTXMA established the expensive
+# way.  Two free statistics, both with closed-form nulls that were checked
+# against real Enigma encryptions (eval/preflight_null.py).
+#
+# THE GATE MATTERS AS MUCH AS THE TEST.  With a fully-specified key the tool is
+# encrypting, and its input is then routinely PLAINTEXT -- which is
+# language-like by definition.  An always-on warning would fire on every
+# encryption, including the hundreds this suite performs, so it is raised only
+# when the key is wildcarded, i.e. when the run is actually a search.
+pf_qtxma=JVMOYCZAYMRVLCBSOQXYBATSXJBQLAEJKYTYXJOEMYBLOEMYOKSRMTAVLBCXJAMOESRXYTVAOEYAVYXKCJVCMEISHTBAYVXXAJWCZQCYPXMEHABLKYJYASOEIJYXOQXYTLBASYEESTAQXJVNWCBJZBYQYTM
+pf_byqmz=NYZKYDOEMGPSDUHMLHJATWMYCHIFYMAESTAVLCGCNLGMZIQUSQNRAIKYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUEAZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY
+# stderr only.  The braces make the order explicit: stdout is discarded
+# INSIDE the group, then the group's stderr becomes the pipeline's stdout.
+pf_run() { _t=$1; shift; { printf '%s' "$_t" | "$ENIGMA" "$@" >/dev/null; } 2>&1; }
+
+# QTXMA: IC 0.0577 at 155 letters, z = +10.9, and 4 letters of A-Z unused
+# (P = 8.5e-08).  Both tests fire.
+check "pre-flight warns on a non-Enigma ciphertext" \
+  "$(pf_run "$pf_qtxma" -u B -w 123 -r AAA -g "..." \
+     | grep -c '^WARNING: this does not look like Enigma')" "1"
+# BYQMZ is the control that keeps the above from passing for the wrong reason:
+# same length class, genuinely Enigma-like (z = +0.6, no unused letters).
+check "pre-flight is silent on an Enigma-like ciphertext" \
+  "$(pf_run "$pf_byqmz" -u B -w 123 -r AAA -g "..." | grep -c '^WARNING')" "0"
+# The gate: a fully-specified key is an encrypt/decrypt, not a search.  Feeding
+# it the very ciphertext that trips the warning above must stay silent.
+check "pre-flight does not fire when the key is fully specified" \
+  "$(pf_run "$pf_qtxma" -u B -w 123 -r AAA -g AAA | grep -c 'Pre-flight\|WARNING')" "0"
+# Encrypting PLAINTEXT is the case the gate exists for.
+check "pre-flight does not fire when encrypting plaintext" \
+  "$(pf_run "DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTET" \
+     -u B -w 123 -r AAA -g QEW | grep -c 'Pre-flight\|WARNING')" "0"
+# --preflight reports regardless, and says so when nothing is wrong.
+check "--preflight reports on an Enigma-like ciphertext" \
+  "$(pf_run "$pf_byqmz" --preflight -u B -w 123 -r AAA -g AAA \
+     | grep -c 'consistent with Enigma output')" "1"
+check "--preflight reports even with a fully-specified key" \
+  "$(pf_run "$pf_qtxma" --preflight -u B -w 123 -r AAA -g AAA \
+     | grep -c '^Pre-flight:')" "1"
+# The statistics themselves, to 4 places -- these are the numbers the thresholds
+# are calibrated against, so a change in either is a change in the contract.
+check "pre-flight reports the index of coincidence" \
+  "$(pf_run "$pf_qtxma" --preflight -u B -w 123 -r AAA -g AAA \
+     | sed -n 's/^Pre-flight:.*index of coincidence \([0-9.]*\).*/\1/p')" "0.0577"
+check "pre-flight counts the unused letters" \
+  "$(pf_run "$pf_qtxma" --preflight -u B -w 123 -r AAA -g AAA \
+     | sed -n 's/^ *\([0-9]*\) of 26 letters unused.*/\1/p;s/.*sd; \([0-9]*\) of 26 letters unused.*/\1/p')" "4"
+# The null is LENGTH-DEPENDENT, and that is the whole reason it is not a fixed
+# IC threshold: two of the four broken (genuinely Enigma) 1941 messages reach
+# z = +4.2 at 47 and 74 letters.  WEUWY is one of them -- 9 unused letters of
+# 26, which is normal at that length -- and must not be flagged.
+check "pre-flight does not flag a short genuine Enigma message" \
+  "$(pf_run "WCZIEDSYTCDXOICDSXOXASIMEIORSRKRISSPCCOUIMDZYDM" \
+     -u B -w 123 -r AAA -g "..." | grep -c '^WARNING')" "0"
+# Output stays inside the 80-column budget the rest of the tool holds to.
+check "pre-flight output stays within 80 columns" \
+  "$(pf_run "$pf_qtxma" -u B -w 123 -r AAA -g "..." \
+     | sed -n '/^Pre-flight:/,/Proceeding anyway/p' | awk '{ print length }' \
+     | sort -rn | head -1 | awk '{ print ($1 <= 80) ? "ok" : $1 }')" "ok"
+
+echo
 echo "== Progress display: --full-text =="
 
 # --full-text prints the whole decrypted message below each progress line, wrapped and

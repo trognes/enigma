@@ -8,6 +8,32 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--preflight` — is this ciphertext even Enigma?** Enigma is a permutation
+  cipher, so its output is near-flat; a ciphertext carrying residual language
+  structure was not produced by one and has **no key to find**. The index of
+  coincidence and the number of unused letters are now computed from the
+  ciphertext and compared against a length-dependent null. `--preflight`
+  always prints the report; the **warning is always on when the rotor key is
+  wildcarded**, i.e. when the run is a search.
+  - Measured the expensive way: a 28-hour, 75.2M-key sweep of the QTXMA
+    challenge message returned nothing, and the reason was visible up front —
+    IC 0.0577 against the 0.0385 ± 0.0018 of 3000 real Enigma encryptions at
+    that length (z = +10.9), and 4 letters unused where 0.06 are expected
+    (P = 8.5e-08). See `eval/MODERN_BREAKING_NOTES.md` §5l.
+  - **The null is length-dependent**, and it has to be: IC variance goes as
+    `1/C(n,2)`, so two of the four *broken* (genuinely Enigma) 1941 messages
+    sit at z = +4.2, at 47 and 74 letters. A fixed threshold would condemn
+    them. No tables are needed — both statistics have closed forms under a
+    uniform multinomial that match real Enigma within 1–2% from n = 40 to 600.
+  - Warns at z(IC) > 6.0 or P(unused) < 1e-4, set from the **measured** tail of
+    genuine Enigma rather than a nominal p-value: over 18 000 real ciphertexts
+    the largest z seen was 5.66 and neither test fired once.
+    `eval/preflight_null.py` reproduces the calibration.
+  - **The gate is part of the feature**: with a fully-specified key the tool is
+    encrypting, and its input is then routinely plaintext, which is
+    language-like by definition. Restricting the warning to wildcarded keys is
+    what keeps it off every encryption.
+
 - **`--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature` —
   self-crib seeding, the first lever measured to beat `-R` at matched compute.**
   A doubled word is a *self*-crib: it says only that two positions carry the

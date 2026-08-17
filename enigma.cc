@@ -566,6 +566,27 @@ static bool opt_dump_all;
    per board scored. Off by default. */
 static bool opt_full_text;
 
+/* --preflight / the always-on sanity warning: IS THIS CIPHERTEXT EVEN ENIGMA?
+     Enigma is a permutation cipher, so its output is near-flat; a ciphertext
+   carrying residual language structure was not produced by one, and no key
+   exists to be found. That is not hypothetical -- a 28-hour, 75.2M-key sweep of
+   the QTXMA challenge message returned nothing, and the reason was visible in
+   the ciphertext before the search started (see eval/preflight_null.py and
+   MODERN_BREAKING_NOTES 5l).
+     Two statistics, both free: the index of coincidence, and how many letters
+   of the alphabet never occur. THE NULL MUST BE LENGTH-DEPENDENT -- IC variance
+   goes as 1/C(n,2), so short messages reach a high IC routinely; two of the
+   four BROKEN (i.e. genuinely Enigma) 1941 messages sit at z = +4.2, at 47 and
+   74 letters, and a fixed IC threshold would flag them.
+     No tables are needed, because both have closed forms under a uniform
+   multinomial that were checked against real Enigma encryptions and matched
+   within 1-2% at every length from 40 to 600 (preflight_null.py 1). IC =
+   P/C(n,2) where P counts same-letter position pairs; with uniform p those pair
+   indicators are pairwise UNCORRELATED -- the shared-index covariance is
+   sum p^3 - (sum p^2)^2 = 1/A^2 - 1/A^2 = 0 -- so E[IC] = 1/A and Var[IC] =
+   q(1-q)/C(n,2), q = 1/A, with no dependence on the plaintext at all. */
+static bool opt_preflight;
+
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
 static int textlength;
@@ -7612,6 +7633,116 @@ static void warn_filtered(const textfilter * st, const char * what)
             what, st->skipped);
 }
 
+/* Thresholds are set from the MEASURED tail of genuine Enigma, not from a
+   nominal p-value: over 18000 real encryptions spanning n = 40..600 the largest
+   z(IC) seen was 5.66 and NEITHER test fired once (preflight_null.py 2-3). The
+   four broken 1941 messages -- genuine Enigma, and the useful controls, since
+   two of them reach z = +4.2 -- all pass. QTXMA fires on both, at z = +10.9 and
+   P = 8.5e-08. A false positive here is expensive in trust, a false negative
+   only costs what it costs today, hence the wide margin. */
+static const double preflight_z_ic = 6.0;
+static const double preflight_p_absent = 1e-4;
+
+struct preflight_stats
+{
+  double ic;         /* index of coincidence                                  */
+  double z_ic;       /* (ic - 1/26) / sd, sd analytic                         */
+  int absent;        /* letters of A-Z that never occur                       */
+  double p_absent;   /* P(absent >= this many), first Bonferroni term         */
+  bool flag_ic;
+  bool flag_absent;
+};
+
+/* P(X >= k) for the number of unseen letters, first Bonferroni term
+   C(A,k)(1-k/A)^n -- an upper bound, and an excellent approximation once it is
+   small, which is the only regime the threshold cares about. Clamped at 1
+   because the bound exceeds it badly for short messages, where several unseen
+   letters are the norm (E[absent] = 5.4 at n = 40). */
+static double absent_tail(int k, int n)
+{
+  if (k <= 0)
+    return 1.0;
+  if (k > asize)
+    return 0.0;
+  double c = 1.0;
+  for (int i = 0; i < k; i++)
+    c = c * (asize - i) / (i + 1);
+  double p = c * pow(1.0 - static_cast<double>(k) / asize, n);
+  return (p > 1.0) ? 1.0 : p;
+}
+
+static preflight_stats compute_preflight()
+{
+  preflight_stats s = {0.0, 0.0, 0, 1.0, false, false};
+  long counts[asize] = {0};
+  for (int i = 0; i < textlength; i++)
+    counts[char2num(ciphertext[i])]++;
+  for (int i = 0; i < asize; i++)
+    if (counts[i] == 0)
+      s.absent++;
+  if (textlength < 2)
+    return s;                    /* IC is undefined on fewer than two letters */
+  long same = 0;
+  for (int i = 0; i < asize; i++)
+    same += counts[i] * (counts[i] - 1);
+  double n = textlength;
+  s.ic = same / (n * (n - 1));
+  const double q = 1.0 / asize;
+  double sd = sqrt(q * (1.0 - q) / (n * (n - 1) / 2.0));
+  s.z_ic = (s.ic - q) / sd;
+  s.p_absent = absent_tail(s.absent, textlength);
+  s.flag_ic = s.z_ic > preflight_z_ic;
+  s.flag_absent = s.p_absent < preflight_p_absent;
+  return s;
+}
+
+/* Reported only when the run is a SEARCH. With a fully-specified key the tool
+   is encrypting or decrypting, and the input is then routinely plaintext --
+   which has a high IC by definition, so an always-on warning would fire on
+   every encryption, including the ones the test suite makes. */
+static bool key_is_wildcarded()
+{
+  const char * o[4] = { opt_ukw, opt_walzen, opt_ringstellung, opt_grundstellung };
+  for (int i = 0; i < 4; i++)
+    for (const char * p = o[i]; (p != nullptr) && (*p != 0); p++)
+      if (*p == '.')
+        return true;
+  return false;
+}
+
+static void report_preflight()
+{
+  if (textlength < 2)
+    return;
+  preflight_stats s = compute_preflight();
+  bool flagged = s.flag_ic || s.flag_absent;
+  if ((! opt_preflight) && ! (flagged && key_is_wildcarded()))
+    return;
+  fprintf(stderr,
+          "Pre-flight:  index of coincidence %.4f against the %.4f Enigma "
+          "gives,\n"
+          "             %+.2f sd; %d of %d letters unused, P = %.2g\n",
+          s.ic, 1.0 / asize, s.z_ic, s.absent, asize, s.p_absent);
+  if (! flagged)
+    {
+      fprintf(stderr, "             consistent with Enigma output\n");
+      return;
+    }
+  fprintf(stderr,
+          "WARNING: this does not look like Enigma output, so searching for a\n"
+          "         key may be searching for something that does not exist.\n"
+          "         Enigma is a permutation cipher and its output is near-flat;\n"
+          "         this ciphertext has %s.\n"
+          "         The thresholds (%.1f sd, P < %.0e) are set so that none of\n"
+          "         18000 real Enigma ciphertexts trips them -- see\n"
+          "         MODERN_BREAKING_NOTES 5l. Proceeding anyway.\n",
+          (s.flag_ic && s.flag_absent)
+            ? "language-like structure, and\n         too many unused letters"
+            : (s.flag_ic ? "language-like structure"
+                         : "too many unused letters"),
+          preflight_z_ic, preflight_p_absent);
+}
+
 void readciphertext()
 {
   unsigned char buffer[65536];
@@ -7881,6 +8012,12 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
+  fprintf(out, "  %-24s %s\n", "--preflight",
+          "Always report whether the ciphertext looks like");
+  fprintf(out, "  %-24s %s\n", "",
+          "Enigma output (IC and unused letters). The WARNING");
+  fprintf(out, "  %-24s %s\n", "",
+          "is always on when the key is wildcarded [off]");
   fprintf(out, "  %-24s %s\n", "--doubling-report L",
           "Report every converged climb past the z gate whose");
   fprintf(out, "  %-24s %s\n", "",
@@ -8242,6 +8379,7 @@ int main(int argc, char * * argv)
   g_cribs.clear();
   opt_dump_all = false;
   opt_full_text = false;
+  opt_preflight = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -8272,7 +8410,7 @@ int main(int argc, char * * argv)
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
-         OPT_DOUBLINGMM };
+         OPT_DOUBLINGMM, OPT_PREFLIGHT };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -8327,6 +8465,7 @@ int main(int argc, char * * argv)
       { "self-crib-length", required_argument, nullptr, OPT_SCLEN },
       { "self-crib-signature", no_argument,   nullptr, OPT_SCSIG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
+      { "preflight",      no_argument,       nullptr, OPT_PREFLIGHT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
@@ -8484,6 +8623,10 @@ int main(int argc, char * * argv)
           break;
         case OPT_FULLTEXT:
           opt_full_text = true;
+          break;
+
+        case OPT_PREFLIGHT:
+          opt_preflight = true;
           break;
         case OPT_CRIBTEXT:
           alltoupper(optarg);
@@ -9192,6 +9335,10 @@ int main(int argc, char * * argv)
 
   if (textlength < 1)
     fatal("Ciphertext is empty (no A-Z letters on standard input)");
+
+  /* After show_settings() so the resolved configuration is echoed first, and
+     after the empty check so the statistics have something to describe. */
+  report_preflight();
 
   for(int i=0; i< textlength; i++)
     num_ciphertext[i] = char2num(ciphertext[i]);

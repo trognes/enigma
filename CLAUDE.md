@@ -1363,6 +1363,49 @@ are read from a **data directory** (filenames built as
     Not a hot-path concern: a progress line is emitted only when a board beats
   everything echoed so far, so this prints once per improvement, not once per
   board scored. Off by default.
+- `--preflight` **is this ciphertext even Enigma?** Enigma is a permutation
+  cipher, so its output is near-flat; a ciphertext carrying residual language
+  structure was not produced by one and has **no key to find**. Two free
+  statistics — the index of coincidence, and how many letters of A–Z never
+  occur — are computed once from the ciphertext and compared against a
+  length-dependent null. The flag *always* prints the report; the **WARNING is
+  always on** when the rotor key is wildcarded.
+  - **It was measured the expensive way.** A 28-hour, 75.2M-key sweep of the
+    QTXMA challenge message returned nothing (best margin +0.81 sd against a
+    6.0 bar). The reason was in the ciphertext before the search started: IC
+    **0.0577** against the 0.0385 ± 0.0018 that 3000 real Enigma encryptions
+    give at that length (**z = +10.9**, the largest of the 3000 being 0.0468),
+    and **4 letters unused** where 0.06 are expected (P = 8.5e-08; none of the
+    3000 lacked more than 2). `eval/MODERN_BREAKING_NOTES.md` §5l.
+  - **The null MUST be length-dependent, and the collection proves it.** IC
+    variance goes as `1/C(n,2)`, so short messages reach a high IC routinely:
+    two of the four *broken* — i.e. genuinely Enigma — 1941 messages sit at
+    **z = +4.2**, at 47 and 74 letters, and one has **9 of 26 letters unused**
+    in 47. A fixed IC threshold condemns them and leaves QTXMA looking
+    ordinary.
+  - **No tables are needed**, which is what makes it free. Both statistics have
+    closed forms under a uniform multinomial that match real Enigma within
+    1–2% at every length from 40 to 600: `IC = P/C(n,2)` over same-letter
+    position pairs, whose indicators are pairwise **uncorrelated** under
+    uniform `p` (the shared-index covariance is `Σp³ − (Σp²)² = 0`), giving
+    `E[IC] = 1/A` and `Var[IC] = q(1−q)/C(n,2)` with **no dependence on the
+    plaintext**; and `E[X] = A(1−1/A)^n` for the unused count, whose tail is
+    quoted as the first Bonferroni term `C(A,k)(1−k/A)^n` because `X` is small
+    and skewed enough that a z-score misleads.
+  - **Thresholds come from the measured tail, not a nominal p-value** — the
+    same discipline `--confidence` documents for its own Gaussian tail. Warns
+    at **z(IC) > 6.0** or **P(unused) < 1e-4**; over **18 000 real Enigma
+    ciphertexts** at n = 40…600 the largest z seen was 5.66 and neither test
+    fired once. A false positive is expensive in trust (it would tell someone
+    to abandon a breakable message) and a false negative only costs what it
+    costs today, hence the wide margin. `eval/preflight_null.py` reproduces it.
+  - **The gate matters as much as the test.** The warning fires only when the
+    key is wildcarded, i.e. when the run is a *search*. With a fully-specified
+    key the tool is encrypting, and its input is then routinely **plaintext**,
+    which is language-like by definition — an always-on warning would fire on
+    every encryption, including the hundreds `tests/run_tests.sh` performs.
+  - Runs once per process on ≤1024 letters, so it is nowhere near the hot path
+    and far below the n-gram load in the startup budget.
 - **Live sweep progress** — a `\r` line under the main sweep carrying
   percentage, key rate and ETA, e.g.
   `Progress:   50% (5.94M / 11.88M keys) 10.12M/s, 1s left`. No flag: on
