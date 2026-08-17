@@ -169,6 +169,56 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
+**5. Repeated text with an X between — SHIPPED as `--signature-seed`, and it
+beats `-R`.** The seeder is now in `enigma.cc` (see `CLAUDE.md`), which closes
+the item's last open half. Two things came out of building it that the probes
+could not see, and one of them is a correction to the numbers below.
+
+*The measured sweep cost was ~10× too high, against the seeder.*
+`eval/seeded_sweep.py` drove the method from Python, one process per (key,
+seed). `--polish` is a **once-per-run** finisher costing ~10 700 `score_iter`,
+so that rig made every key pay a full finisher, while the baseline arm swept all
+676 keys in one process and paid it once. In the tool both arms pay it once. The
+honest sweep numbers (`-g A..`, 676 keys, 30 trials,
+`eval/signature_seed_ab.py`):
+
+| arm | mean %-correct | exact | `score_iter` | per key |
+|---|---:|---:|---:|---:|
+| `-R 1` | 15.2 | 3/30 | 1 543 131 | 2 283 |
+| `-R 4` | 31.1 | 8/30 | 6 165 494 | 9 121 |
+| `-R 8` | 40.7 | 11/30 | 12 329 190 | 18 238 |
+| `-R 16` | 56.5 | 16/30 | 24 670 103 | 36 494 |
+| **`--signature-seed 1`** | **70.9** | **20/30** | **284 536** | **421** |
+| `--signature-seed 3` | 77.3 | 22/30 | 897 999 | 1 328 |
+| `--signature-seed 5` | 83.7 | 24/30 | 1 549 424 | 2 292 |
+
+`K = 1` beats `-R 16` — 20/30 against 16/30 — at **87× less compute**, and is
+5.4× cheaper than the *cheapest* baseline while recovering 20/30 against 3/30.
+The Python rig had this at 13/20 against 4/20 with the seeded arm merely
+cost-*matched*; correcting the finisher accounting turns a matched-compute win
+into a nearly two-orders-of-magnitude one.
+
+*`--signature-length` is a knob that only loses — the default is 4.* The floor
+drops short hypotheses, and the reasoning that motivated it (an `L = 4` menu
+rejects nothing) does not survive contact: per-key cost is **flat** across the
+whole range (384–454 `score_iter`), because the cost is the `K` climbs and not
+the deduction. Recovery at `K = 1`, 30 trials:
+
+| `L` | 2 | **3** | **4** | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| exact | 18/30 | **20/30** | **20/30** | 18/30 | 17/30 | 14/30 | 7/30 |
+
+3 and 4 tie on a plateau and everything else loses. 4 is the default because it
+is also the shortest signature the corpus contains (`HOCK`); the flag stays so a
+caller who *knows* a network's names are long can say so, not as a tuning knob.
+The weak short hypotheses cost nothing because the IC ranking already discards
+them.
+
+*The C++ closure is checked against the probe, not just against outcomes.* A
+wrong deduction could still recover messages by luck, so the two are compared on
+the **number of distinct surviving seeds per key** — a structural quantity —
+and they agree exactly, 0 mismatches over 6 keys spanning 1 to 43 seeds.
+
 **5. Repeated text with an X between — the REPORTER is shipped as
 `--double-length L`; the SCORE BONUS and the SELF-CRIB FILTER are measured
 down; the SIGNATURE SEEDER beats `-R` at matched compute and is READY TO

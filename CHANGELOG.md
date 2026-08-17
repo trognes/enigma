@@ -8,6 +8,34 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--signature-seed K` / `--signature-length L` — terminal-signature seeding,
+  the first lever measured to beat `-R` at matched compute.** A doubled word is
+  a *self*-crib: it says only that two positions carry the same plaintext
+  letter, which cancels out of `p = steck[core[steck[c]]]` and leaves
+  `steck[c_j] = core_j[core_i[steck[c_i]]]` — computable from the rotor key
+  alone, with no known plaintext anywhere in it.
+
+  As a filter that is worthless (0 of 160 wrong keys rejected). What makes it a
+  seeder is pinning the *alignment*: half the corpus's doublings are a surname
+  closing the message, so only its length is unknown — ~20 hypotheses instead of
+  ~2 800. Per key the tool deduces every board the rule allows under all 26
+  guesses for `steck[X]`, ranks the survivors by the index of coincidence of
+  their decrypt, and climbs the top `K` with those plugs pinned.
+
+  Measured on a 676-key sweep (`-g A..`, 30 trials, board hidden): `-R 1`
+  recovers 3/30 for 1 543 131 `score_iter`, `-R 16` recovers 16/30 for
+  24 670 103 — while **`--signature-seed 1` recovers 20/30 for 284 536**, i.e.
+  more than `-R 16` at 87× less compute, and less compute than the cheapest
+  baseline. `K = 5` reaches 24/30.
+
+  IC is the ranking because it measured as good as the fused model (150/200
+  against 144/200 top-1) and needs no language or n-gram table. Leave
+  `--signature-length` at 4: per-key cost is flat across it, and raising it only
+  loses coverage (20/30 at 4, 14/30 at 7, 7/30 at 8).
+
+  Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
+  and `--tune-phase`. `-T`-deterministic.
+
 - **`--soft-plug AB…` — plugboard pairs that are a GUESS, not knowledge.** Same
   shape as `-s` and the opposite contract: the pairs are laid on the board each
   restart starts from and then left free, so the climb may move, merge or remove

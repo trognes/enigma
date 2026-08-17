@@ -181,6 +181,10 @@ wheels, ring and start positions — any position left as `.` is brute-forced.
 - **`--soft-plug AB…`** — Plugboard pairs *guessed* rather than known: the climb
   starts from them each restart but may move or drop them, unlike `-s`. Needs
   `-c` `[none]`
+- **`--signature-seed K`** — Seed the climb from a doubled word closing the
+  message (a signed surname): deduce candidate boards per key, rank by index of
+  coincidence, climb the top `K`. Needs `-c` `[0 = off]`
+- **`--signature-length L`** — Shortest signature to hypothesise `[4]`
 
 `-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's `start −
 ring` offset is recoverable, so a full M4 wildcard search enumerates the
@@ -282,6 +286,16 @@ English tables.
   guess costs only the moves spent walking back out of it — which is what a
   *deduced* seed needs. A soft-seeded board starts good, so it wants a smaller
   `--random` kick than the default (needs `-c`; off by default)
+- **`--signature-seed K` / `--signature-length L`** — **Terminal-signature
+  seeding**, the one lever measured to beat `-R` at matched compute. Half of
+  authentic traffic's doubled words are a surname signing off the message, and a
+  doubled word is a *self*-crib: it says two positions share an unknown letter,
+  which cancels out of the machine equation and leaves a rule computable from
+  the rotor key alone. Per key the tool deduces the candidate boards that rule
+  allows, ranks them by index of coincidence, and climbs the top `K` with the
+  deduced plugs pinned. On a 676-key sweep `K = 1` recovered 20 of 30 messages
+  against a bare `-R 16`'s 16 — at **87× less** compute (needs `-c`; off by
+  default)
 - **`--crib TEXT` / `--crib-at N`** — **Known plaintext**, and where it sits. A
   rotor setting that cannot have produced the crib is rejected by arithmetic and
   never scored — measured **99.9%** of a start-position keyspace on a 12-letter
