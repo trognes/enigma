@@ -1,0 +1,259 @@
+== --signature-sweep: real per-key cost ==
+
+Measured with the mode IN THE TOOL (eval/ had only extrapolations from hypothesis
+counts, which were 2.4x too pessimistic).  17576 keys (-g ...), n=111, -T 4,
+recipe -c -f -l wehrmacht -S i4f10 -J --polish -u B -w 231 -r AAA.
+
+arm                          wall      score_iter    per key    hypotheses
+-R 1                         3.66 s     40315293      208 us    --
+-R 4                        13.29 s    161607341      756 us    --
+-R 16                       70.43 s    645358805     4007 us    --
+--signature-seed 1           1.14 s      8026136       65 us     20
+--signature-seed 5           4.77 s     44920809      271 us     20
+--sweep L>=9 K=5            12.01 s     39841350      683 us    ~850
+--sweep L>=7 K=1            16.81 s      5212229      956 us    1883
+--sweep L>=7 K=5            19.98 s     30254355     1137 us    1883
+
+Sweeping is 3.5x CHEAPER than -R 16, not dearer: 94x the hypotheses costs only
+14.7x the wall time, because most hypotheses die on the first contradiction.
+
+score_iter is the WRONG AXIS here and says the opposite: --sweep L>=7 K=1 scores
+FEWER plugboards than terminal K=1 (5.2M vs 8.0M) while taking 15x the wall time,
+because its seeds are more constrained so the climbs are cheap and the uncounted
+deduction dominates.
+
+== ranking, at the TRUE key (eval/ probe) ==
+
+                        L>=7        L>=9      terminal
+messages covered        16/66       11/66     7/66
+correct seed exists     45/48       27/33     200/200
+IC top-1                25/45 56%   15/27 56% 150/200 75%
+IC top-5                30/45 67%   19/27 70% ~84% (top-3)
+
+Raising the floor to 9 halves the cost and does NOT improve the ranking, so the
+residual failures are IC failing to separate, not the haystack being large.
+
+Reliability tracks the SIGNATURE LENGTH sharply: on one constructed fixture a
+6-letter mid-message doubling was not recovered even at K=100, while 9 and 13
+letters recovered at K=1.
+
+== closure verification ==
+
+C++ vs eval/selfcrib_probe.py, distinct seeds per key, swept L>=7:
+  n=48 677/677  n=101 2003/2003  n=86 1476/1476  n=172 1651/1651  n=111 2083/2083
+0 mismatches.  (The probe's own dedupe is on the BOARD alone and reports 662 for
+the first of those; the C++ key is the (board, pinned-letter set) PAIR, which is
+the finer and more faithful one -- two hypotheses can agree on the cables while
+one additionally proves a letter carries none.)
+
+== K sweep: cost AND gain, on a real 676-key sweep ==
+
+32 trials over the 16 corpus messages carrying a 7+ doubling anywhere, -g A..,
+10-pair board hidden, -T 4.
+
+arm         mean %   exact     wall/trial  per key   score_iter
+-R 1        17.9     4/32      0.23 s       334 us    1544746
+-R 4        28.8     7/32      0.61 s       897 us    6158178
+-R 16       48.9     13/32     2.26 s      3345 us   24635219
+terminal K5 51.1     13/32     0.25 s       368 us    1428322
+swept K1    60.6     16/32     0.89 s      1319 us     209393
+swept K5    75.3     21/32     0.99 s      1461 us    1164490
+swept K10   81.1     23/32     1.13 s      1675 us    2519731
+swept K20   81.2     23/32     1.44 s      2136 us    5505752
+
+K=10 IS THE OPERATING POINT.  K=20 buys nothing -- same 23/32, same mean -- for
+28% more time.  This refutes the prediction that sweeping wants a high K, which
+came from the probe's top-20 recall (35/45 against top-5's 30/45) measured AT THE
+TRUE KEY.  In a sweep, raising K helps the true key AND all 675 wrong keys, each
+of which also gets K seeds and a better best-of-K score; the extra recall is real
+but does not convert into discrimination.
+
+Marginal cost per climb RISES with K -- 35.5, 42.8, 46.1 us across K=1->5->10->20
+-- because lower-ranked seeds are less constrained, so their climbs are dearer.
+Estimates made before measuring were 1360 us (K=10) and 1810 us (K=20), i.e. low
+by 23% and 15%, in the direction that caveat predicted.
+
+Against the baseline: swept K=10 breaks 23/32 against -R 16's 13/32 in HALF the
+wall time.  Even K=1 beats -R 16 by 3 breaks at 40% of the cost.
+
+score_iter misleads again: swept K1 has the LOWEST count of any arm (0.21M, 7x
+below -R 1) while taking 4x -R 1's wall time.
+
+== K extended to 35 and 50 (same 32 paired trials) ==
+
+arm         mean %   exact     wall/trial  per key   score_iter
+-R 16       48.9     13/32     2.11 s      3118 us   24635219
+swept K5    75.3     21/32     0.99 s      1457 us    1164490
+swept K10   81.1     23/32     1.12 s      1650 us    2519731
+swept K20   81.2     23/32     1.43 s      2113 us    5505752
+swept K35   81.1     23/32     1.92 s      2838 us   10395636
+swept K50   84.3     24/32     2.45 s      3626 us   15613697
+
+The curve is a PLATEAU from K=10 to K=35 -- 23/32 at all three, mean flat at
+81.1-81.2 -- and then one extra recovery at K=50 for +120% time over K=10.  So
+"K=20 saturates" was too strong: the plateau is real but it is a flat stretch
+rather than a ceiling, and pushing 2.5x past it does eventually convert.  What
+the plateau does confirm is the mechanism: raising K lifts the wrong keys'
+best-of-K alongside the true key's, so gains arrive slowly and unevenly instead
+of tracking the true-key recall curve.
+
+23 vs 24 of 32 is ONE TRIAL and is not statistically meaningful on its own.  The
+solid part is the shape -- steep to K=10, flat to K=35, no cliff either way --
+not the single extra break at 50.
+
+Marginal cost is linear and unremarkable across the whole range, ~46 us per extra
+climb.  K=10 remains the operating point: at K=50 you pay -R 16 prices (3626 vs
+3118 us per key) for 24/32 against its 13/32 -- still a large win over the
+baseline, but a poor deal against K=10's 23/32 at 45% of the cost.
+
+== CORRECTION: the swept ranking figures above were measured with a buggy probe ==
+
+The eval probe's swept enumeration used an EXCLUSIVE upper bound on the
+alignment -- `for at in range(1, n-2*L-1)` -- which omits at = n-2L-1.  That is
+exactly the TERMINAL alignment, so every message ending in its doubling lost its
+true hypothesis.  Corrected (`range(1, n-2*L-1+1)`):
+
+                    reported    corrected
+  L>=7 exists       45/48       48/48
+  L>=7 IC top-1     56%         65%
+  L>=7 IC top-5     67%         79%
+  L>=7 IC top-20    78%         92%
+  L>=9 exists       27/33       32/33
+  L>=9 IC top-1     56%         69%
+  L>=9 IC top-5     70%         84%
+
+Recall is PERFECT at L>=7, as it must be: sweeping enumerates a superset of the
+terminal alignments, so it cannot have worse recall than the terminal mode's
+200/200.  That superset argument is what made 45/48 suspicious enough to chase.
+
+The conclusion "raising the floor to 9 does NOT improve the ranking (56% top-1
+either way)" was an artefact of the bug.  It does improve it -- 69% against 65%
+top-1, 84% against 79% top-5 -- though on a smaller and different population
+(11 of 66 messages against 16).
+
+enigma.cc was NEVER affected: its bound is `at + 2*len + 1 <= textlength`, which
+is inclusive.  The closure verification used the corrected enumeration and
+matched exactly, and every end-to-end break number (23/32 at K=10, etc.) comes
+from the binary, so all of those stand.
+
+== CORRECTION 2: "32/33 at L>=9" was the >=1-CABLE FILTER, not a recall failure ==
+
+The probe scored a trial as having no correct seed unless that seed pinned at
+least one CABLE.  Recall of a correct seed is:
+
+                        correct seed exists    ... pinning >=1 cable
+  L>=7                  48/48                  48/48
+  L>=9                  33/33                  32/33
+
+The one trial is ROMANOVKA, which is flanked by N and G rather than X -- the same
+message that broke an early version of this probe.  Its only true variant is
+therefore "sep": the separator alone, ONE anchor edge, the weakest menu in the
+set.  (The two flank variants assert flanks the plaintext does not have and are
+correctly rejected -- 0 survivors each.)
+
+With a single anchor, how far the closure propagates depends on the rotor key.
+The same alignment over the three reps:
+
+  rep 1   11 pins,  4 cables
+  rep 2    4 pins,  0 cables   <-- the "failure"
+  rep 3   12 pins,  5 cables
+
+So it is the expected tail of a weak menu, not a defect in the deduction or the
+enumeration.  A 0-cable seed is not worthless either: pinning a letter as
+carrying no cable is the --no-plug effect, worth 25 of the 325 candidate toggles,
+and the tool pins those findings too.  It is simply much weaker than a seed that
+pins cables, which is why the stricter reading is the more useful one when asking
+whether a seed will carry a climb.
+
+== RENAME: the options changed name and the position flag INVERTED ==
+
+  --double-length L      ->  --doubling-report L
+  --double-z Z           ->  --doubling-z Z
+  --double-mismatches N  ->  --doubling-mismatches N
+  --signature-seed K     ->  --self-crib-seeds K
+  --signature-length L   ->  --self-crib-length L      (default 4 -> 6)
+  --signature-sweep      ->  --self-crib-signature     (INVERTED)
+
+"signature" was only true of a doubled word CLOSING the message, and misleading
+everywhere else -- ROMANOVKA and NIKOLAJEWO are place names, not sign-offs.  The
+observable is a DOUBLING; the deduction that exploits it is a SELF-CRIB.
+
+The position flag now follows --crib/--crib-at: the default assumes nothing
+(hypothesise the doubling anywhere) and --self-crib-signature adds the knowledge
+that it closes the message.  That also puts the word "signature" only where it
+is true.
+
+== the full L grid: signature vs anywhere, against plain restarts ==
+
+Fixed population: all 20 corpus messages carrying a 4+ doubling ANYWHERE, 40
+trials, K=10, 676-key sweeps, 10-pair board hidden, -T 4.
+eval/self_crib_length_grid.py reproduces it.
+
+arm         mean %   exact     wall/trial  per key   hypotheses
+-R 0         18.3     5/40      0.18 s      265 us    --
+-R 1         17.0     5/40      0.20 s      300 us    --
+-R 16        50.5    19/40      1.96 s     2901 us    --
+sig L4       46.6    16/40      0.39 s      570 us      20
+sig L5       42.0    14/40      0.33 s      495 us      18
+sig L6       37.9    12/40      0.30 s      440 us      16
+sig L7       35.3    11/40      0.26 s      379 us      14
+sig L8       20.4     6/40      0.17 s      246 us      12
+sig L9       15.5     4/40      0.14 s      202 us      10
+any L4       76.8    28/40      5.13 s     7595 us    2806
+any L5       72.5    27/40      2.85 s     4212 us    2498
+any L6       70.5    26/40      1.64 s     2428 us    2196
+any L7       65.8    24/40      1.08 s     1597 us    1901
+any L8       58.1    22/40      0.82 s     1213 us    1611
+any L9       50.8    19/40      0.72 s     1065 us    1328
+
+ANYWHERE DOMINATES SIGNATURE AT EVERY LENGTH, and the gap widens as the floor
+rises -- 28/40 against 16/40 at L=4, 19/40 against 4/40 at L=9 -- because a long
+doubling CLOSING the message is rare (only 4 of the 66 corpus messages have an 8+
+terminal one) while long doublings SOMEWHERE stay common.
+
+Every anywhere cell beats -R 16 except L=9, which ties it (19/40) at 2.7x less
+time.  On this population the swept self-crib is never worse than a 16-restart
+baseline.
+
+SIGNATURE-RESTRICTED IS WORSE THAN -R 16 AT EVERY LENGTH here (best 16/40 at
+L=4).  It only wins when the message really does end with its doubling, which on
+a realistic mix it usually does not -- which is why it is the flag and not the
+default, and why "terminal first, it is cheapest" only holds when you have reason
+to believe the message is signed off.
+
+-R 0 and -R 1 are indistinguishable (5/40 both, 18.3 against 17.0 mean, noise on
+40 trials).  Both are a SINGLE climb; the kick only changes which basin it starts
+from.  Both are ~10x worse than -R 16.
+
+Two knees:
+  * cheapest thing that beats -R 16: any L8 -- 22/40 against 19/40 at 1213 us
+    per key against 2901, i.e. 2.4x CHEAPER for 3 more breaks;
+  * best value overall: any L6 (the shipped default) -- 26/40 at 2428 us per key,
+    still under -R 16's cost for 7 more breaks.  L5 and L4 buy 1 and 2 more
+    breaks for 1.7x and 3.1x the time.
+
+== the measurement that set --self-crib-length 6 ==
+
+Fixed population: all 20 corpus messages carrying a 4+ doubling ANYWHERE, 40
+trials, K=10, 676-key sweeps.
+
+arm            mean %   exact     wall/trial  per key   hypotheses
+-R 16          50.5     19/40     1.98 s      2931 us   --
+signature L4   46.6     16/40     0.38 s       569 us     20
+anywhere L4    76.8     28/40     5.12 s      7573 us   2806
+anywhere L5    72.5     27/40     2.86 s      4224 us   2498
+anywhere L6    70.5     26/40     1.65 s      2438 us   2196
+anywhere L7    65.8     24/40     1.07 s      1588 us   1901
+anywhere L9    50.8     19/40     0.71 s      1053 us   1328
+
+Lowering the floor buys breaks MONOTONICALLY (19 -> 28 as L goes 9 -> 4), so the
+earlier worry that L=4 would be imprecise was wrong -- it is the best cell on
+recovery.  But cost rises faster than the gain: L=7 -> L=4 is 4.8x the time for
++4 breaks of 40.  L=6 is the knee -- just under -R 16's own per-key cost while
+breaking 26/40 against its 19/40, and keeping 93% of L=4's breaks for a third of
+the time.
+
+This also revises the terminal figure: on THIS population (any doubling, not
+only terminal ones) the signature restriction breaks 16/40, BELOW a bare -R 16's
+19/40.  Restricting only wins when the message really does end with its
+doubling, which is why it is the flag and not the default.

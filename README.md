@@ -181,10 +181,12 @@ wheels, ring and start positions — any position left as `.` is brute-forced.
 - **`--soft-plug AB…`** — Plugboard pairs *guessed* rather than known: the climb
   starts from them each restart but may move or drop them, unlike `-s`. Needs
   `-c` `[none]`
-- **`--signature-seed K`** — Seed the climb from a doubled word closing the
-  message (a signed surname): deduce candidate boards per key, rank by index of
-  coincidence, climb the top `K`. Needs `-c` `[0 = off]`
-- **`--signature-length L`** — Shortest signature to hypothesise `[4]`
+- **`--self-crib-seeds K`** — Seed the climb from a **doubled word** anywhere in
+  the message (`X RENNER X RENNER`): deduce the boards it allows per key, rank
+  by index of coincidence, climb the top `K`. Needs `-c` `[0 = off]`
+- **`--self-crib-length L`** — Shortest doubled word to hypothesise `[6]`
+- **`--self-crib-signature`** — Assert the doubled word *closes* the message (a
+  signed surname): ~15× cheaper, but only wins when that holds `[off]`
 
 `-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's `start −
 ring` offset is recoverable, so a full M4 wildcard search enumerates the
@@ -286,16 +288,18 @@ English tables.
   guess costs only the moves spent walking back out of it — which is what a
   *deduced* seed needs. A soft-seeded board starts good, so it wants a smaller
   `--random` kick than the default (needs `-c`; off by default)
-- **`--signature-seed K` / `--signature-length L`** — **Terminal-signature
-  seeding**, the one lever measured to beat `-R` at matched compute. Half of
-  authentic traffic's doubled words are a surname signing off the message, and a
-  doubled word is a *self*-crib: it says two positions share an unknown letter,
+- **`--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature`** —
+  **Self-crib seeding**, the one lever measured to beat `-R` at matched compute.
+  A doubled word is a *self*-crib: it says two positions share an unknown
+  letter,
   which cancels out of the machine equation and leaves a rule computable from
-  the rotor key alone. Per key the tool deduces the candidate boards that rule
-  allows, ranks them by index of coincidence, and climbs the top `K` with the
-  deduced plugs pinned. On a 676-key sweep `K = 1` recovered 20 of 30 messages
-  against a bare `-R 16`'s 16 — at **87× less** compute (needs `-c`; off by
-  default)
+  the rotor key alone. Per key the tool deduces the boards that rule allows,
+  ranks them by index of coincidence, and climbs the top `K` with the deduced
+  plugs pinned. On 676-key sweeps `K = 10` broke **23 of 32** messages against a
+  bare `-R 16`'s 13, in half the wall time. The default hypothesises the
+  doubling
+  anywhere; `--self-crib-signature` narrows it to one closing the message, which
+  is ~15× cheaper but only wins when that holds (needs `-c`; off by default)
 - **`--crib TEXT` / `--crib-at N`** — **Known plaintext**, and where it sits. A
   rotor setting that cannot have produced the crib is rejected by arithmetic and
   never scored — measured **99.9%** of a start-position keyspace on a 12-letter
@@ -397,7 +401,7 @@ English tables.
   reported in the settings echo so a saved log says what its first column means.
   It needs a key space to sample: with the rotor key fully specified there is no
   null to measure against, and the run says so and reports raw scores
-- **`--double-length L`** — report any converged climb whose decrypt carries a
+- **`--doubling-report L`** — report any converged climb whose decrypt carries a
   **doubled word** of `L`+ letters around an X (`ENGELMANN X ENGELMANN` —
   telegraphic German doubles important words as its own error correction), as
   a progress line with the preview replaced by `>> <length> <word>`
@@ -405,8 +409,8 @@ English tables.
   term**: it enters no ranking, so it cannot promote a wrong key — it simply
   makes the true key unmistakable in a long log (`grep '>>'`) even while some
   other board still leads on score. One mismatched letter between the copies
-  is allowed (`--double-mismatches`, default 1) — the error a transmission
-  garble makes — and the z gate (`--double-z`, default 3) keeps the check
+  is allowed (`--doubling-mismatches`, default 1) — the error a transmission
+  garble makes — and the z gate (`--doubling-z`, default 3) keeps the check
   free by only examining the ~0.5% of keys that score well. Chance reports
   fall ~16× per extra letter: a full 230 M-key sweep expects ~6 spurious
   reports at `L = 7` and ~90 at `L = 6`, so raise `L` rather than the gate —

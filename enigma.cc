@@ -160,7 +160,7 @@ static const char * opt_soft_plug;
      Step 3 of archived/cribs.md 12: one crib at one alignment, used as a KEY FILTER. The
    alignment sweep and the seeded climb are later steps, so --crib-at is required. */
 static const char * opt_crib_text;
-/* --signature-seed K / --signature-length L: the TERMINAL-SIGNATURE self-crib.
+/* --self-crib-seeds K / --self-crib-length L: the TERMINAL-SIGNATURE self-crib.
 
    A doubled word is a SELF-crib: it does not say what the plaintext letter is, only that
    two positions carry the SAME one. Decryption is p_i = steck[core_i[steck[c_i]]], so
@@ -184,21 +184,29 @@ static const char * opt_crib_text;
    and climb the top K with the deduced plugs pinned. IC ranks them as well as the fused
    model does (150/200 against 144/200 top-1) and needs no language, which is why the
    ranking is free. See ENHANCEMENTS.md item 5. */
-static int opt_signature_seed = 0;        /* K: seeds climbed per key; 0 = off */
-static int opt_signature_length = 4;      /* L: shortest signature hypothesised */
-static const int sig_maxlen = 13;         /* longest -- nothing in the corpus reaches 14 */
-static const int sig_max_hyps = 2 * sig_maxlen;      /* tails x lengths, a safe bound */
-static const int sig_max_seeds = sig_max_hyps * asize;
+static int opt_self_crib_seeds = 0;        /* K: seeds climbed per key; 0 = off */
+static int opt_self_crib_length = 6;   /* L: shortest doubled word hypothesised */
+static const int selfcrib_maxlen = 13;         /* longest -- nothing in the corpus reaches 14 */
+/* Terminal mode needs `tails x lengths` entries; sweeping needs ~3 per (alignment,
+   length) pair, which is message-dependent and runs to thousands -- so both live in a
+   vector, read-only once init_self_crib() returns, like crib_order. */
 /* One hypothesis: the doubled word runs [at, at+len) and [at+len+1, at+2len+1), with an X
    separator between and an X flank on the left (and on the right when the message ends
    with one). `anchor_pos` holds the positions asserted to be plaintext X. */
-struct sig_hyp
+struct selfcrib_hyp
 {
   int at, len, nanchor;
   int anchor_pos[3];
 };
-static sig_hyp g_sig_hyps[sig_max_hyps];
-static int g_sig_nhyps = 0;
+static std::vector<selfcrib_hyp> g_selfcrib_hyps;
+static int g_selfcrib_nhyps = 0;
+/* --self-crib-signature: assert the doubled word CLOSES the message (a signed surname),
+   rather than hypothesising it anywhere.  The default assumes nothing and the flag adds
+   knowledge, which is the same shape as --crib (sweeps every alignment) and --crib-at
+   (pins one).  Restricting is ~15x cheaper -- 20 hypotheses against ~2200 -- but it only
+   wins when the assumption holds: measured over every corpus message carrying a doubling
+   anywhere, terminal breaks 16/40 against a swept 26/40 and a bare -R 16's 19/40. */
+static bool opt_self_crib_signature = false;
 static int opt_crib_at = -1;
 static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
 /* The menu, built once by init_crib(). A menu is a property of the crib AND the place it
@@ -310,7 +318,7 @@ static double opt_cascade_gate;
    cascade found nothing). --polish turns it on for the single best-board finisher. */
 static int opt_cascade3;
 static int opt_polish;
-/* --double-length L: report, on stderr, every converged climb whose score clears
+/* --doubling-report L: report, on stderr, every converged climb whose score clears
    the z gate below AND whose decrypt carries a doubled word of at least L
    letters around an X separator. A CONFIRMATION SIGNAL, not a score term: it
    never changes a ranking, so nothing it does can promote a wrong key. That is
@@ -320,8 +328,8 @@ static int opt_polish;
    lost, and in 140 genuine sweeps there were none. Reporting has no such
    dependency: it fires on the key that IS right and stays silent otherwise.
    0 = off. */
-static int opt_double_length;
-/* --double-z Z: the z the report gates on -- the raw sigma count over the
+static int opt_doubling_report;
+/* --doubling-z Z: the z the report gates on -- the raw sigma count over the
    --confidence null, NOT the margin the progress lines print (margin =
    z - sqrt(2 ln K)).
 
@@ -337,9 +345,9 @@ static int opt_double_length;
    It is a knob rather than a constant because the numbers above are for one
    corpus and one key space, and a much larger or much noisier sweep may want to
    move it -- but move L first. */
-static double opt_double_z;
-static int opt_double_z_set;
-/* --double-mismatches N: positions where the two copies may differ. Default 1,
+static double opt_doubling_z;
+static int opt_doubling_z_set;
+/* --doubling-mismatches N: positions where the two copies may differ. Default 1,
    which is the CHANNEL's error and no more: Enigma has no diffusion, so one
    corrupted ciphertext letter damages exactly one plaintext letter, in one copy
    and not the other.
@@ -366,8 +374,8 @@ static int opt_double_z_set;
    what 1.4 letters buy back -- if you want N=2, add 2 to L and you are back
    where you started. Kept as a knob because a heavily garbled message is a
    real case; the default is where the evidence is. */
-static int opt_double_mismatches;
-static int opt_double_mismatches_set;
+static int opt_doubling_mismatches;
+static int opt_doubling_mismatches_set;
 static const int double_mismatches_default = 1;
 static const double double_z_default = 3.0;
 /* Longest doubling the scan looks for. W and V may not contain an X, so each is
@@ -400,9 +408,9 @@ static const double double_z_default = 3.0;
    to 81% at L=20 and 66% at L=30. It only bites at lengths that do not occur,
    so it does not decide the constant.
 
-   --double-length is validated against this, so the two can never disagree and
+   --doubling-report is validated against this, so the two can never disagree and
    a too-large L cannot silently search nothing. */
-static const int double_maxlen = 30;
+static const int doubling_maxlen = 30;
 /* --crib-rerank / --crib-weight: known-word ("crib") finisher -- Ostwald & Weierud's
    "assessment stage" (NOT RECOMMENDED; measured-down, see below). After each restart climb
    converges, its board is ranked not by the n-gram score alone but by
@@ -1547,35 +1555,58 @@ static inline bool crib_set(int * board, int x, int y)
    `... X NAME X NAME X`; both occur in the corpus, so both are hypothesised. A hypothesis
    whose flank position holds a ciphertext X is impossible -- an Enigma never encrypts a
    letter to itself -- and is dropped here rather than rediscovered per key. */
-static void init_signature()
+/* Add one hypothesis if the ciphertext permits it. `flanks` selects which anchors are
+   asserted to be plaintext X: 1 = separator only, 2 = + left flank, 3 = + right flank.
+   An Enigma never encrypts a letter to itself, so a ciphertext X at an anchor position
+   makes the hypothesis impossible -- dropped here rather than rediscovered per key. */
+static void selfcrib_add(int at, int len, int flanks)
 {
   const int xl = char2num('X');
-  g_sig_nhyps = 0;
-  for (int tail = 0; tail <= 1; tail++)
-    for (int len = opt_signature_length; len <= sig_maxlen; len++)
-      {
-        const int at = textlength - tail - 2*len - 1;
-        if (at < 1)
-          continue;                        /* no room for the left flank */
-        sig_hyp h;
-        h.at = at;
-        h.len = len;
-        h.nanchor = 0;
-        h.anchor_pos[h.nanchor++] = at - 1;        /* left flank */
-        h.anchor_pos[h.nanchor++] = at + len;      /* separator */
-        if (tail)
-          h.anchor_pos[h.nanchor++] = at + 2*len + 1;
-        bool ok = true;
-        for (int k = 0; k < h.nanchor; k++)
+  selfcrib_hyp h;
+  h.at = at;
+  h.len = len;
+  h.nanchor = 0;
+  h.anchor_pos[h.nanchor++] = at + len;                  /* separator */
+  if (flanks >= 2)
+    h.anchor_pos[h.nanchor++] = at - 1;                  /* left flank */
+  if (flanks >= 3)
+    h.anchor_pos[h.nanchor++] = at + 2*len + 1;          /* right flank */
+  for (int k = 0; k < h.nanchor; k++)
+    {
+      const int pos = h.anchor_pos[k];
+      if ((pos < 0) || (pos >= textlength) || (num_ciphertext[pos] == xl))
+        return;
+    }
+  g_selfcrib_hyps.push_back(h);
+}
+
+static void init_self_crib()
+{
+  g_selfcrib_hyps.clear();
+  if (opt_self_crib_signature)
+    {
+      /* The word closes the message, so only its length is unknown and the left flank is
+         always present. `tail` is the trailing X, present or not. */
+      for (int tail = 0; tail <= 1; tail++)
+        for (int len = opt_self_crib_length; len <= selfcrib_maxlen; len++)
           {
-            const int pos = h.anchor_pos[k];
-            if ((pos < 0) || (pos >= textlength) ||
-                (num_ciphertext[pos] == xl))
-              ok = false;
+            const int at = textlength - tail - 2*len - 1;
+            if (at < 1)
+              continue;                    /* no room for the left flank */
+            selfcrib_add(at, len, tail ? 3 : 2);
           }
-        if (ok && (g_sig_nhyps < sig_max_hyps))
-          g_sig_hyps[g_sig_nhyps++] = h;
-      }
+    }
+  else
+    {
+      /* Every alignment, three flank variants each: the flanks are a GUESS (96% left,
+         71% both in the corpus), so this must try asserting neither, the left, or both --
+         asserting one the message does not have rejects the true key. */
+      for (int len = opt_self_crib_length; len <= selfcrib_maxlen; len++)
+        for (int at = 1; at + 2*len + 1 <= textlength; at++)
+          for (int flanks = 1; flanks <= 3; flanks++)
+            selfcrib_add(at, len, flanks);
+    }
+  g_selfcrib_nhyps = static_cast<int>(g_selfcrib_hyps.size());
 }
 
 /* The self-crib closure for one hypothesis under one guess for steck[X].
@@ -1590,7 +1621,7 @@ static void init_signature()
    crib_set() supplies reciprocity and Welchman's diagonal board unchanged: a plugboard is
    an involution, so setting steck[x] = y sets steck[y] = x, and a clash kills the guess.
    Returns false when the guess is contradictory; `board` holds -1 where undeduced. */
-static bool sig_try(const machine & m, const sig_hyp & h, int guess, int * board)
+static bool self_crib_try(const machine & m, const selfcrib_hyp & h, int guess, int * board)
 {
   const int xl = char2num('X');
   for (int i = 0; i < asize; i++)
@@ -2655,7 +2686,7 @@ static void format_plugboard(machine & m, char (&s)[3 * 13])
 }
 
 /* The first column of a progress line, shared by showconfig and the
-   --double-length report so the two can never disagree about what it means.
+   --doubling-report report so the two can never disagree about what it means.
 
    Under --confidence it is the MARGIN over the whole search's chance best, not
    the raw score: a raw score cannot answer "is this good yet?", and a bare z
@@ -2878,7 +2909,7 @@ double score_iter(machine & m)
 /* Defined after best_result (below the search structs); climbs call it on every
    accepted move to echo intermediate plugboard improvements. */
 static void report_climb_progress(machine & m, double score);
-static void report_double_word(machine & m, double score);
+static void report_doubling(machine & m, double score);
 
 template<bool EX>
 static bool try_repair(machine & m, double cur_score)
@@ -4013,7 +4044,7 @@ static double crib_unit(machine & m, size_t key_index, int restart)
   return best;
 }
 
-/* --signature-seed K: one rotor key's worth of terminal-signature seeding.
+/* --self-crib-seeds K: one rotor key's worth of terminal-signature seeding.
 
    Deduce under every (hypothesis, guess) pair, keep the DISTINCT surviving boards, rank
    them by the index of coincidence of their decrypt, and climb the top K with the deduced
@@ -4035,21 +4066,23 @@ static double crib_unit(machine & m, size_t key_index, int restart)
    climb, so K is the cost. Deterministic and -T-independent: the candidate order is
    hypothesis-major then guess, the dedupe keeps the first occurrence, and the sort is
    stable on (IC, index). */
-static double signature_unit(machine & m, size_t key_index, int restart)
+static double self_crib_unit(machine & m, size_t key_index, int restart)
 {
-  static const int xl_unused = 0; (void) xl_unused;
-  unsigned char seed_steck[sig_max_seeds][asize];
-  unsigned char seed_fixed[sig_max_seeds][asize];
-  double seed_ic[sig_max_seeds];
+  /* Per-thread scratch rather than stack arrays: sweeping yields thousands of seeds on a
+     long message, which is far past what a per-call array can hold, and reusing the
+     buffers keeps the allocation out of the per-key path. Cleared at entry, so each key's
+     result depends on nothing but that key -- the -T-independence is unaffected. */
+  static thread_local std::vector<unsigned char> sc_steck, sc_fixed;
+  static thread_local std::vector<double> sc_ic;
+  static thread_local std::vector<int> order;
+  sc_steck.clear(); sc_fixed.clear(); sc_ic.clear(); order.clear();
   int nseed = 0;
   int board[asize];
 
-  for (int hi = 0; hi < g_sig_nhyps; hi++)
+  for (int hi = 0; hi < g_selfcrib_nhyps; hi++)
     for (int g = 0; g < asize; g++)
       {
-        if (nseed >= sig_max_seeds)
-          break;
-        if (! sig_try(m, g_sig_hyps[hi], g, board))
+        if (! self_crib_try(m, g_selfcrib_hyps[hi], g, board))
           continue;
         unsigned char st[asize], fx[asize];
         for (int i = 0; i < asize; i++)
@@ -4059,14 +4092,14 @@ static double signature_unit(machine & m, size_t key_index, int restart)
           }
         bool dup = false;
         for (int k = 0; (k < nseed) && ! dup; k++)
-          dup = (memcmp(seed_steck[k], st, asize) == 0) &&
-                (memcmp(seed_fixed[k], fx, asize) == 0);
+          dup = (memcmp(& sc_steck[static_cast<size_t>(k) * asize], st, asize) == 0) &&
+                (memcmp(& sc_fixed[static_cast<size_t>(k) * asize], fx, asize) == 0);
         if (dup)
           continue;
-        memcpy(seed_steck[nseed], st, asize);
-        memcpy(seed_fixed[nseed], fx, asize);
+        sc_steck.insert(sc_steck.end(), st, st + asize);
+        sc_fixed.insert(sc_fixed.end(), fx, fx + asize);
         memcpy(m.steckerbrett, st, asize);
-        seed_ic[nseed] = ic_score_decode(m);   /* the ranking, one decode each */
+        sc_ic.push_back(ic_score_decode(m));  /* the ranking, one decode each */
         nseed++;
       }
 
@@ -4075,17 +4108,20 @@ static double signature_unit(machine & m, size_t key_index, int restart)
 
   /* Top K by IC, ties broken by the deterministic candidate order. Selection sort: K is
      small and nseed is ~28, so this is cheaper than sorting the whole list. */
-  int order[sig_max_seeds];
+  order.resize(static_cast<size_t>(nseed));
   for (int i = 0; i < nseed; i++)
-    order[i] = i;
-  const int want = (opt_signature_seed < nseed) ? opt_signature_seed : nseed;
+    order[static_cast<size_t>(i)] = i;
+  const int want = (opt_self_crib_seeds < nseed) ? opt_self_crib_seeds : nseed;
   for (int i = 0; i < want; i++)
     {
-      int best_j = i;
-      for (int j = i + 1; j < nseed; j++)
-        if (seed_ic[order[j]] > seed_ic[order[best_j]])
+      size_t best_j = static_cast<size_t>(i);
+      for (size_t j = static_cast<size_t>(i) + 1;
+           j < static_cast<size_t>(nseed); j++)
+        if (sc_ic[static_cast<size_t>(order[j])] >
+            sc_ic[static_cast<size_t>(order[best_j])])
           best_j = j;
-      const int t = order[i]; order[i] = order[best_j]; order[best_j] = t;
+      const size_t ii = static_cast<size_t>(i);
+      const int t = order[ii]; order[ii] = order[best_j]; order[best_j] = t;
     }
 
   double best = 0.0;
@@ -4094,13 +4130,14 @@ static double signature_unit(machine & m, size_t key_index, int restart)
   unsigned char best_steck[asize];
   for (int i = 0; i < want; i++)
     {
-      const int si = order[i];
+      const int si = order[static_cast<size_t>(i)];
       init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
       memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
       for (int x = 0; x < asize; x++)
-        if (seed_fixed[si][x])
+        if (sc_fixed[static_cast<size_t>(si) * asize + static_cast<size_t>(x)])
           {
-            m.steckerbrett[x] = seed_steck[si][x];
+            m.steckerbrett[x] =
+              sc_steck[static_cast<size_t>(si) * asize + static_cast<size_t>(x)];
             PLUG_FIXED_EX[x] = true;               /* ... plus this deduction */
           }
       /* The kick is off by default and should stay off: a seeded climb starts near the
@@ -4594,13 +4631,13 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
     score = tune_phase(m, & rng, score);
   if (opt_dump_all)
     dump_all(m, score);
-  report_double_word(m, score);
+  report_doubling(m, score);
   return score;
 }
 
 /* The per-key climb the search actually runs, in ONE place.
 
-   --crib and --signature-seed replace the plain climb with a deduction-seeded one, and a
+   --crib and --self-crib-seeds replace the plain climb with a deduction-seeded one, and a
    seeded climb is drawn from a completely different score distribution: its board starts
    pinned from a hypothesis, which lifts the true key and depresses wrong ones. So
    --confidence has to calibrate its null against the SAME unit, exactly as it already
@@ -4613,8 +4650,8 @@ static double climb_unit(machine & m, size_t key_index, int restart)
 {
   if (opt_crib_text)
     return crib_unit(m, key_index, restart);
-  if (opt_signature_seed > 0)
-    return signature_unit(m, key_index, restart);
+  if (opt_self_crib_seeds > 0)
+    return self_crib_unit(m, key_index, restart);
   return hillclimb_one(m, key_index, restart);
 }
 
@@ -5029,7 +5066,7 @@ static void progress_line(best_result & b, machine & m, double score)
   showconfig(m, score);
 }
 
-/* --double-length: longest W X V in `pt[0..n)` with |W| = |V| = len >= minlen, no X
+/* --doubling-report: longest W X V in `pt[0..n)` with |W| = |V| = len >= minlen, no X
    inside either half, and at most ONE mismatched letter between the halves.
    Returns len (0 if none) and sets *at to W's offset.
 
@@ -5062,11 +5099,11 @@ static int find_doubling(const char * pt, int n, int minlen, int maxmm,
                          int * at)
 {
   /* Longest first, so the first hit is the answer and the scan stops. Capped at
-     double_maxlen: that is what keeps the cost O(maxlen * n) instead of
+     doubling_maxlen: that is what keeps the cost O(maxlen * n) instead of
      O(n^2), and no real doubling comes close (see the constant). */
   int start = (n - 1) / 2;
-  if (start > double_maxlen)
-    start = double_maxlen;
+  if (start > doubling_maxlen)
+    start = doubling_maxlen;
   for (int len = start; len >= minlen; len--)
     {
       /* A doubling is a TRANSLATION by len+1, not a reflection: W[i] sits at
@@ -5107,7 +5144,7 @@ static int find_doubling(const char * pt, int n, int minlen, int maxmm,
   return 0;
 }
 
-/* --double-length L: report a converged climb whose score clears the z gate AND
+/* --doubling-report L: report a converged climb whose score clears the z gate AND
    whose decrypt carries a doubling of at least L letters.
 
    A CONFIRMATION SIGNAL, never a score term. It cannot promote a wrong key
@@ -5130,16 +5167,16 @@ static int find_doubling(const char * pt, int n, int minlen, int maxmm,
    Display-only, under the same mutex as the progress lines, so which lines
    appear is thread-timing dependent exactly as the existing echo is, and which
    candidate WINS is untouched. */
-static void report_double_word(machine & m, double score)
+static void report_doubling(machine & m, double score)
 {
-  if (opt_double_length <= 0)
+  if (opt_doubling_report <= 0)
     return;
   /* A degenerate null (a one-key space) leaves g_null_sd at 0 and z undefined;
      calibrate_null already falls back to raw scores there, so there is nothing
      to gate on and the report stays silent rather than dividing by ~1e-15. */
   if (g_null_sd <= 0.0)
     return;
-  if (((score - g_null_mu) / g_null_sd) < opt_double_z)
+  if (((score - g_null_mu) / g_null_sd) < opt_doubling_z)
     return;
 
   /* Decode in full from the machine's CURRENT board: m.plaintext is stale here
@@ -5153,8 +5190,8 @@ static void report_double_word(machine & m, double score)
   pt[textlength] = 0;
 
   int at = 0;
-  const int len = find_doubling(pt, textlength, opt_double_length,
-                                opt_double_mismatches, & at);
+  const int len = find_doubling(pt, textlength, opt_doubling_report,
+                                opt_doubling_mismatches, & at);
   if (len <= 0)
     return;
 
@@ -7259,7 +7296,7 @@ static double bruteforce(char * result, bool allow_empty)
            the finisher's own output is what a reader wants checked, and a board
            that failed to improve is still a board worth a look if it carries a
            doubling. */
-        report_double_word(m, s);
+        report_doubling(m, s);
         opt_cascade = save_gf;
         opt_cascade3 = save_gf3;
         opt_cascade_gate = save_gate;
@@ -7687,13 +7724,17 @@ void help(FILE * out)
           "Plugboard pairs GUESSED rather than known: the");
   fprintf(out, "  %-24s %s\n", "", "climb starts from them each restart but may");
   fprintf(out, "  %-24s %s\n", "", "move or drop them, unlike -s (needs -c) [none]");
-  fprintf(out, "  %-24s %s\n", "--signature-seed K",
-          "Seed the climb from a terminal doubled word (a");
-  fprintf(out, "  %-24s %s\n", "", "signed surname): deduce candidate boards per");
-  fprintf(out, "  %-24s %s\n", "", "key, rank by IC, climb the top K");
+  fprintf(out, "  %-24s %s\n", "--self-crib-seeds K",
+          "Seed the climb from a DOUBLED WORD in the message");
+  fprintf(out, "  %-24s %s\n", "", "(X RENNER X RENNER): deduce the boards it");
+  fprintf(out, "  %-24s %s\n", "", "allows per key, rank by IC, climb the top K");
   fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = off) [0]");
-  fprintf(out, "  %-24s %s\n", "--signature-length L",
-          "Shortest signature to hypothesise [4]");
+  fprintf(out, "  %-24s %s\n", "--self-crib-length L",
+          "Shortest doubled word to hypothesise [6]");
+  fprintf(out, "  %-24s %s\n", "--self-crib-signature",
+          "Assert the doubled word CLOSES the message (a");
+  fprintf(out, "  %-24s %s\n", "", "signed surname): ~15x cheaper, but only wins");
+  fprintf(out, "  %-24s %s\n", "", "when that holds [off]");
   fprintf(out, "  %-24s %s\n", "-n, --norway",
           "Norway Enigma: reflector N and wheels (1-5)");
   fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
@@ -7840,7 +7881,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
-  fprintf(out, "  %-24s %s\n", "--double-length L",
+  fprintf(out, "  %-24s %s\n", "--doubling-report L",
           "Report every converged climb past the z gate whose");
   fprintf(out, "  %-24s %s\n", "",
           "decrypt holds a word of L+ letters doubled around");
@@ -7868,8 +7909,8 @@ void help(FILE * out)
           "the corpus is 13; the cap is what keeps the scan");
   fprintf(out, "  %-24s %s\n", "",
           "cheap). Needs -c and --confidence (defines z) [off]");
-  fprintf(out, "  %-24s %s\n", "--double-z Z",
-          "Sigma threshold for --double-length. Below it a");
+  fprintf(out, "  %-24s %s\n", "--doubling-z Z",
+          "Sigma threshold for --doubling-report. Below it a");
   fprintf(out, "  %-24s %s\n", "",
           "climb is not examined at all, which is what keeps");
   fprintf(out, "  %-24s %s\n", "",
@@ -7879,7 +7920,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "nothing extra (the true key sits at z = 7..16) and");
   fprintf(out, "  %-24s %s\n", "", "multiplies false reports [3]");
-  fprintf(out, "  %-24s %s\n", "--double-mismatches N",
+  fprintf(out, "  %-24s %s\n", "--doubling-mismatches N",
           "Positions the two copies may differ in. The");
   fprintf(out, "  %-24s %s\n", "",
           "default 1 is the channel's error and no more --");
@@ -8052,12 +8093,12 @@ void show_settings()
   /* The report fires on any key past the gate, not only on a new best, so a
      reader who does not know it is on would misread its lines as the search
      having improved. Say what marks them and what the gate was. */
-  if (opt_double_length > 0)
+  if (opt_doubling_report > 0)
     fprintf(stderr, "Doubling:   report doublings of %d+ letters at z >= %g, "
             "up to %d mismatch%s\n"
             "            marked \">>\" below; a report is NOT a new best\n",
-            opt_double_length, opt_double_z, opt_double_mismatches,
-            (opt_double_mismatches == 1) ? "" : "es");
+            opt_doubling_report, opt_doubling_z, opt_doubling_mismatches,
+            (opt_doubling_mismatches == 1) ? "" : "es");
 
   /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
      ~10pp of exact recovery at K=2 on telegraphic German, archived/PERFORMANCE.md §7.11), so a
@@ -8127,11 +8168,12 @@ void show_settings()
   if (opt_soft_plug[0])
     fprintf(stderr, "            %s guessed, climb may revise (--soft-plug)\n",
             opt_soft_plug);
-  if (opt_signature_seed > 0)
-    fprintf(stderr, "Signature:  top %d seed%s per key by IC, %d+ letters, "
-            "%d hypotheses\n", opt_signature_seed,
-            (opt_signature_seed == 1) ? "" : "s", opt_signature_length,
-            g_sig_nhyps);
+  if (opt_self_crib_seeds > 0)
+    fprintf(stderr, "Self-crib:  top %d seed%s per key by IC, %d+ letters, "
+            "%d hypotheses (%s)\n", opt_self_crib_seeds,
+            (opt_self_crib_seeds == 1) ? "" : "s", opt_self_crib_length,
+            g_selfcrib_nhyps,
+            opt_self_crib_signature ? "signature" : "anywhere");
   if (opt_crib_text)
     {
       if (opt_crib_at >= 0)
@@ -8189,11 +8231,11 @@ int main(int argc, char * * argv)
   opt_cascade_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
   opt_cascade3 = 0;
   opt_polish = 0;
-  opt_double_length = 0;
-  opt_double_z = double_z_default;
-  opt_double_z_set = 0;
-  opt_double_mismatches = double_mismatches_default;
-  opt_double_mismatches_set = 0;
+  opt_doubling_report = 0;
+  opt_doubling_z = double_z_default;
+  opt_doubling_z_set = 0;
+  opt_doubling_mismatches = double_mismatches_default;
+  opt_doubling_mismatches_set = 0;
   opt_crib_rerank = nullptr;
   opt_crib_weight = 0.5;
   opt_crib = 0;
@@ -8226,11 +8268,11 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
-         OPT_NOPLUG, OPT_SOFTPLUG, OPT_SIGSEED, OPT_SIGLEN,
+         OPT_NOPLUG, OPT_SOFTPLUG, OPT_SCSEEDS, OPT_SCLEN, OPT_SCSIG,
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
-         OPT_DOUBLELEN, OPT_DOUBLEZ,
-         OPT_DOUBLEMM };
+         OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
+         OPT_DOUBLINGMM };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -8281,17 +8323,18 @@ int main(int argc, char * * argv)
       { "confidence",     required_argument, nullptr, OPT_CONFIDENCE },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
       { "soft-plug",      required_argument, nullptr, OPT_SOFTPLUG },
-      { "signature-seed", required_argument, nullptr, OPT_SIGSEED },
-      { "signature-length", required_argument, nullptr, OPT_SIGLEN },
+      { "self-crib-seeds", required_argument, nullptr, OPT_SCSEEDS },
+      { "self-crib-length", required_argument, nullptr, OPT_SCLEN },
+      { "self-crib-signature", no_argument,   nullptr, OPT_SCSIG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
       { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
-      { "double-length",  required_argument, nullptr, OPT_DOUBLELEN },
-      { "double-z",       required_argument, nullptr, OPT_DOUBLEZ },
-      { "double-mismatches", required_argument, nullptr, OPT_DOUBLEMM },
+      { "doubling-report", required_argument, nullptr, OPT_DOUBLINGREPORT },
+      { "doubling-z",     required_argument, nullptr, OPT_DOUBLINGZ },
+      { "doubling-mismatches", required_argument, nullptr, OPT_DOUBLINGMM },
       { nullptr,          0,                 nullptr, 0   }
     };
 
@@ -8403,23 +8446,23 @@ int main(int argc, char * * argv)
         case OPT_CONFIDENCE:
           opt_confidence = atoi(optarg);
           break;
-        case OPT_DOUBLELEN:
-          opt_double_length = atoi(optarg);
+        case OPT_DOUBLINGREPORT:
+          opt_doubling_report = atoi(optarg);
           break;
-        case OPT_DOUBLEMM:
-          opt_double_mismatches = atoi(optarg);
-          opt_double_mismatches_set = 1;
+        case OPT_DOUBLINGMM:
+          opt_doubling_mismatches = atoi(optarg);
+          opt_doubling_mismatches_set = 1;
           break;
-        case OPT_DOUBLEZ:
+        case OPT_DOUBLINGZ:
           {
             /* strtod with the end pointer checked, not atof: atof turns junk
                into 0.0 silently, and 0.0 is a legal (very loose) gate here, so
                a typo would look like a deliberate setting. */
             char * dz_end = nullptr;
-            opt_double_z = strtod(optarg, & dz_end);
+            opt_doubling_z = strtod(optarg, & dz_end);
             if ((dz_end == optarg) || (*dz_end != 0))
-              fatal("Illegal doubling gate (--double-z takes a number)");
-            opt_double_z_set = 1;
+              fatal("Illegal doubling gate (--doubling-z takes a number)");
+            opt_doubling_z_set = 1;
           }
           break;
         case OPT_NOPLUG:
@@ -8430,11 +8473,14 @@ int main(int argc, char * * argv)
           alltoupper(optarg);
           opt_soft_plug = optarg;
           break;
-        case OPT_SIGSEED:
-          opt_signature_seed = atoi(optarg);
+        case OPT_SCSEEDS:
+          opt_self_crib_seeds = atoi(optarg);
           break;
-        case OPT_SIGLEN:
-          opt_signature_length = atoi(optarg);
+        case OPT_SCLEN:
+          opt_self_crib_length = atoi(optarg);
+          break;
+        case OPT_SCSIG:
+          opt_self_crib_signature = true;
           break;
         case OPT_FULLTEXT:
           opt_full_text = true;
@@ -8794,7 +8840,7 @@ int main(int argc, char * * argv)
   if (opt_soft_plug[0] && (opt_anneal > 0))
     fatal("--soft-plug cannot be combined with -A (SA seeds itself with an IC pre-pass)");
 
-  /* --signature-seed K / --signature-length L. K is the number of IC-ranked seeds climbed
+  /* --self-crib-seeds K / --self-crib-length L. K is the number of IC-ranked seeds climbed
      per key, so it is the cost: per-key work is the deduction plus K climbs. L is the
      shortest signature hypothesised -- raising it drops the weak short hypotheses (an
      L=4 menu rejects nothing and deduces almost no plugs) at the price of missing a
@@ -8802,30 +8848,33 @@ int main(int argc, char * * argv)
        Every rejection below is a mode that installs its own starting board at its own
      site, or that re-encodes the work index: letting two of them run would silently have
      one overwrite the other. */
-  if ((opt_signature_seed < 0) || (opt_signature_seed > sig_max_seeds))
-    fatal("Illegal --signature-seed (must be 0 to 676; 0 is off)");
-  if ((opt_signature_length < 2) || (opt_signature_length > sig_maxlen))
-    fatal("Illegal --signature-length (must be 2 to 13)");
-  if (opt_signature_seed > 0)
+  if ((opt_self_crib_seeds < 0) || (opt_self_crib_seeds > 10000))
+    fatal("Illegal --self-crib-seeds (must be 0 to 10000; 0 is off)");
+  if ((opt_self_crib_length < 2) || (opt_self_crib_length > selfcrib_maxlen))
+    fatal("Illegal --self-crib-length (must be 2 to 13)");
+  if (opt_self_crib_signature && (opt_self_crib_seeds == 0))
+    fatal("--self-crib-signature needs --self-crib-seeds (it only narrows where the "
+          "doubled word is hypothesised)");
+  if (opt_self_crib_seeds > 0)
     {
       if (! opt_hillclimb)
-        fatal("--signature-seed needs -c (it seeds the plugboard climb)");
+        fatal("--self-crib-seeds needs -c (it seeds the plugboard climb)");
       if (opt_crib_text || opt_crib_list)
-        fatal("--signature-seed cannot be combined with --crib/--crib-list "
+        fatal("--self-crib-seeds cannot be combined with --crib/--crib-list "
               "(both seed the board from a deduction)");
       if (opt_exhaust)
-        fatal("--signature-seed cannot be combined with --exhaust (both force plugs "
+        fatal("--self-crib-seeds cannot be combined with --exhaust (both force plugs "
               "from outside the climb)");
       if (opt_anneal > 0)
-        fatal("--signature-seed cannot be combined with -A (SA seeds itself)");
+        fatal("--self-crib-seeds cannot be combined with -A (SA seeds itself)");
       if (opt_soft_plug[0])
-        fatal("--signature-seed cannot be combined with --soft-plug (both seed the "
+        fatal("--self-crib-seeds cannot be combined with --soft-plug (both seed the "
               "starting board)");
       if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
-        fatal("--signature-seed is not supported with -F (tier 1 could filter out the "
+        fatal("--self-crib-seeds is not supported with -F (tier 1 could filter out the "
               "very key the deduction settles)");
       if (opt_tune_phase > 0)
-        fatal("--signature-seed cannot be combined with --tune-phase (which moves the "
+        fatal("--self-crib-seeds cannot be combined with --tune-phase (which moves the "
               "key the deduction was computed for)");
     }
 
@@ -8890,34 +8939,34 @@ int main(int argc, char * * argv)
   if (((opt_prefilter > 0) || (opt_prefilter_frac > 0.0)) && (! opt_hillclimb))
     fatal("The key pre-filter (-F) needs the plugboard hill-climb (-c)");
 
-  /* --double-length reports converged CLIMBS gated on z, so it needs both halves:
+  /* --doubling-report reports converged CLIMBS gated on z, so it needs both halves:
      -c for something to converge, and --confidence for the null that defines z.
      Neither is defaultable -- a bare rotor scan has no plugboard to recover, and
      silently sampling a null would spend real time (each sample is a whole climb
      under -c) on a run that never asked for it. */
-  if (opt_double_length < 0)
-    fatal("Illegal doubling length (--double-length must be >= 1)");
-  if (opt_double_length > double_maxlen)
-    fatal("Illegal doubling length (--double-length exceeds the longest "
+  if (opt_doubling_report < 0)
+    fatal("Illegal doubling length (--doubling-report must be >= 1)");
+  if (opt_doubling_report > doubling_maxlen)
+    fatal("Illegal doubling length (--doubling-report exceeds the longest "
           "doubling the scan looks for)");
-  if ((opt_double_length > 0) && (! opt_hillclimb))
-    fatal("Doubling reports (--double-length) need the plugboard hill-climb (-c)");
-  if ((opt_double_length > 0) && (opt_confidence <= 0))
-    fatal("Doubling reports (--double-length) need a null to gate on: add "
+  if ((opt_doubling_report > 0) && (! opt_hillclimb))
+    fatal("Doubling reports (--doubling-report) need the plugboard hill-climb (-c)");
+  if ((opt_doubling_report > 0) && (opt_confidence <= 0))
+    fatal("Doubling reports (--doubling-report) need a null to gate on: add "
           "--confidence 256");
-  /* --double-z alone changes nothing, and silently ignoring it would hide a
+  /* --doubling-z alone changes nothing, and silently ignoring it would hide a
      typo on the flag that actually enables the report. */
-  if (opt_double_z_set && (opt_double_length <= 0))
-    fatal("--double-z sets the gate for --double-length, which is not on");
-  if (opt_double_mismatches_set && (opt_double_length <= 0))
-    fatal("--double-mismatches applies to --double-length, which is not on");
-  if (opt_double_mismatches < 0)
-    fatal("Illegal mismatch budget (--double-mismatches must be >= 0)");
+  if (opt_doubling_z_set && (opt_doubling_report <= 0))
+    fatal("--doubling-z sets the gate for --doubling-report, which is not on");
+  if (opt_doubling_mismatches_set && (opt_doubling_report <= 0))
+    fatal("--doubling-mismatches applies to --doubling-report, which is not on");
+  if (opt_doubling_mismatches < 0)
+    fatal("Illegal mismatch budget (--doubling-mismatches must be >= 0)");
   /* At N >= L every pair of equal-length X-free runs matches, so the test stops
      testing anything -- a vacuous setting, refused rather than run. */
-  if ((opt_double_length > 0) && (opt_double_mismatches >= opt_double_length))
-    fatal("Illegal mismatch budget (--double-mismatches must be below "
-          "--double-length, or every pair matches)");
+  if ((opt_doubling_report > 0) && (opt_doubling_mismatches >= opt_doubling_report))
+    fatal("Illegal mismatch budget (--doubling-mismatches must be below "
+          "--doubling-report, or every pair matches)");
 
   /* Simulated annealing is an alternative plugboard optimiser, so it needs -c; the
      move budget must be non-negative. */
@@ -9136,8 +9185,8 @@ int main(int argc, char * * argv)
 
   /* Before show_settings(), which reports the hypothesis count -- it read 0 for a while
      because the list is built from the ciphertext and the echo ran first. */
-  if (opt_signature_seed > 0)
-    init_signature();
+  if (opt_self_crib_seeds > 0)
+    init_self_crib();
 
   show_settings();
 
@@ -9151,14 +9200,14 @@ int main(int argc, char * * argv)
 
   init_plug_fixed(opt_steckerbrett, opt_no_plug);   /* -s pairs + --no-plug letters */
 
-  /* --signature-seed: like --crib's menu, the hypothesis list depends on the ciphertext
+  /* --self-crib-seeds: like --crib's menu, the hypothesis list depends on the ciphertext
      (its length and which flanks could be a plaintext X), so it is built here. A message
      too short to hold even the shortest hypothesised signature yields none, which would
      make every key return "no seed" -- say so rather than sweeping and finding nothing. */
-  if (opt_signature_seed > 0)
+  if (opt_self_crib_seeds > 0)
     {
-      if (g_sig_nhyps == 0)
-        fatal("--signature-seed: no terminal signature of --signature-length "
+      if (g_selfcrib_nhyps == 0)
+        fatal("--self-crib-seeds: no terminal signature of --self-crib-length "
               "letters or more fits this ciphertext (try a smaller value)");
     }
 

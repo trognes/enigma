@@ -8,30 +8,61 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
-- **`--signature-seed K` / `--signature-length L` — terminal-signature seeding,
-  the first lever measured to beat `-R` at matched compute.** A doubled word is
-  a *self*-crib: it says only that two positions carry the same plaintext
-  letter, which cancels out of `p = steck[core[steck[c]]]` and leaves
-  `steck[c_j] = core_j[core_i[steck[c_i]]]` — computable from the rotor key
-  alone, with no known plaintext anywhere in it.
+- **`--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature` —
+  self-crib seeding, the first lever measured to beat `-R` at matched compute.**
+  A doubled word is a *self*-crib: it says only that two positions carry the
+  same plaintext letter, which cancels out of `p = steck[core[steck[c]]]` and
+  leaves `steck[c_j] = core_j[core_i[steck[c_i]]]` — computable from the rotor
+  key alone, with no known plaintext anywhere in it.
 
-  As a filter that is worthless (0 of 160 wrong keys rejected). What makes it a
-  seeder is pinning the *alignment*: half the corpus's doublings are a surname
-  closing the message, so only its length is unknown — ~20 hypotheses instead of
-  ~2 800. Per key the tool deduces every board the rule allows under all 26
-  guesses for `steck[X]`, ranks the survivors by the index of coincidence of
-  their decrypt, and climbs the top `K` with those plugs pinned.
+  As a filter that is worthless (0 of 160 wrong keys rejected). As a seeder it
+  is decisive. Per key the tool deduces every board the rule allows under all 26
+  guesses for `steck[X]`, ranks the survivors by the **index of coincidence** of
+  their decrypt, and climbs the top `K` with those plugs pinned. IC is the
+  ranking because it measured as good as the fused model (150/200 against
+  144/200 top-1) and needs no language or n-gram table.
 
-  Measured on a 676-key sweep (`-g A..`, 30 trials, board hidden): `-R 1`
-  recovers 3/30 for 1 543 131 `score_iter`, `-R 16` recovers 16/30 for
-  24 670 103 — while **`--signature-seed 1` recovers 20/30 for 284 536**, i.e.
-  more than `-R 16` at 87× less compute, and less compute than the cheapest
-  baseline. `K = 5` reaches 24/30.
+  **The default hypothesises the doubled word anywhere in the message**, and
+  `--self-crib-signature` narrows it to one closing the message — a signed
+  surname. That is the same shape as `--crib` (sweeps every alignment) and
+  `--crib-at` (pins one): the default assumes nothing, the flag adds knowledge.
+  Restricting is ~15× cheaper — 20 hypotheses against ~2 200 — but only wins
+  when the assumption holds. Over every corpus message carrying a doubling
+  anywhere, restricting to the signature breaks **16/40** against the default's
+  **26/40**, with a bare `-R 16` at 19/40.
 
-  IC is the ranking because it measured as good as the fused model (150/200
-  against 144/200 top-1) and needs no language or n-gram table. Leave
-  `--signature-length` at 4: per-key cost is flat across it, and raising it only
-  loses coverage (20/30 at 4, 14/30 at 7, 7/30 at 8).
+  Measured on 676-key sweeps with a 10-pair board hidden. Against the baseline,
+  `K = 10`:
+
+  | arm | mean % | exact | per key |
+  |---|---:|---:|---:|
+  | `-R 1` | 17.9 | 4/32 | 334 µs |
+  | `-R 16` | 48.9 | 13/32 | 3 345 µs |
+  | **`--self-crib-seeds 10`** | **81.1** | **23/32** | 1 650 µs |
+
+  — ten more messages than `-R 16` in half the wall time. `K` = 5/10/20/35/50
+  breaks 21/23/23/23/24 of 32: steep to 10, flat through 35, one more at 50 for
+  +120% time. **Use `K = 10`.** That plateau is the tell — raising `K` lifts the
+  best-of-`K` score of the *wrong* keys too, so extra recall converts into
+  discrimination only slowly.
+
+  **`--self-crib-length` defaults to 6**, and the anywhere default dominates the
+  signature restriction at every length. Fixed population — all 20 corpus
+  messages carrying a 4+ doubling anywhere, 40 trials, `K = 10`, 676-key sweeps
+  — exact recoveries of 40: signature 16/14/12/11/6/4 against anywhere
+  28/27/26/24/22/19 as `L` runs 4→9, at 570→202 µs per key against 7 595→1 065.
+  A bare `-R 16` gets 19/40 at 2 901 µs, and `-R 0`/`-R 1` get 5/40. Every
+  anywhere cell beats `-R 16` except `L=9`, which ties it at 2.7× less time; the
+  signature restriction is worse than `-R 16` at every length, which is why it
+  is the flag and not the default. `L=6` is the best value (26/40 still under
+  `-R 16`'s per-key cost); `L=8` is the cheapest cell that beats it at all
+  (22/40 for 2.4× less).
+
+  `score_iter` is the wrong axis for these flags and says the opposite of the
+  truth: a swept `K=1` run scores *fewer* plugboards than a signature-
+  restricted one while taking 15× the wall time, because its seeds are more
+  constrained so the climbs are cheap and the uncounted deduction dominates.
+  Judge on wall time.
 
   Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
   and `--tune-phase`. `-T`-deterministic.
@@ -189,7 +220,7 @@ existing command lines can behave differently or stop working.
   result for a seventh of the compute — and the right operating point is a *low*
   restart count, nowhere near the `-R 42` that matched compute forced.
 
-- **`--double-length L`** — report every converged climb whose decrypt carries
+- **`--doubling-report L`** — report every converged climb whose decrypt carries
   a **doubled word** of `L`+ letters around an X — `ENGELMANN X ENGELMANN`,
   telegraphic German's own error correction — printed as the ordinary progress
   line with the preview replaced by the marker, the length and the word:
@@ -210,14 +241,14 @@ existing command lines can behave differently or stop working.
   reported while another board still leads (the settings echo says so).
 
   Two companion knobs, both documented with the numbers so they cannot be
-  turned in ignorance. **`--double-z Z`** (default 3) gates the check on the
+  turned in ignorance. **`--doubling-z Z`** (default 3) gates the check on the
   raw sigma count over the `--confidence` null — only ~0.56% of keys clear
   z ≥ 3, which is what makes the check free (measured at the noise floor at
   every gate down to 0). Chance reports fall ~16× per extra letter of `L`, so
   a 230 M-key rotor sweep expects ~6 spurious reports at `L = 7` against ~90
   at `L = 6` — **raise `L` before touching the gate**; a true key whose climb
   has recovered the plaintext sits at z = 7–16, nowhere near it.
-  **`--double-mismatches N`** (default 1) is the positions the two copies may
+  **`--doubling-mismatches N`** (default 1) is the positions the two copies may
   differ in: 1 is the channel's error and no more (Enigma has no diffusion, so
   a garble corrupts one letter in one copy), and raising it was measured on
   2 M null texts — `N = 2` multiplies false reports ~49× and finds nothing the

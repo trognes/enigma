@@ -1397,7 +1397,7 @@ tp_err=$(tp_bad -c -r "A.." -g "..." --tune-phase 2 -A 1000)
 check "--tune-phase rejects -A" \
   "$(printf '%s' "$tp_err" | grep -c 'tune-phase is not supported with -A')" "1"
 
-# --double-length L: report a converged climb whose decrypt carries a doubled word
+# --doubling-report L: report a converged climb whose decrypt carries a doubled word
 # around an X ("ENGELMANN X ENGELMANN"), telegraphic German's own error
 # correction.  A CONFIRMATION signal -- it never enters a ranking -- so the
 # properties are that it fires on a real doubling at the true key, that it
@@ -1417,34 +1417,34 @@ dw_ct=$(run "$dw_pt" -u B -w 231 -r AAA -g QMW -s "AB CD EF")
 # shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
 dw_run() { printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 \
            -r AAA -g "Q.." -R 1 -T "$2" -s "AB CD EF" --no-plug "$dw_free" \
-           --confidence 32 --double-length "$1" ${3:+--double-z "$3"} 2>&1 >/dev/null; }
+           --confidence 32 --doubling-report "$1" ${3:+--doubling-z "$3"} 2>&1 >/dev/null; }
 dw_out=$(dw_run 6 1)
-check "--double-length reports the doubled word and its length" \
+check "--doubling-report reports the doubled word and its length" \
   "$(printf '%s' "$dw_out" | grep -c '>> 9 ENGELMANN')" "1"
-check "--double-length report carries the true rotor key" \
+check "--doubling-report report carries the true rotor key" \
   "$(printf '%s' "$dw_out" | grep '>> 9 ENGELMANN' | awk '{ print $2, $3, $4 }')" \
   "B231 AAA QMW"
 # L is the whole cheap lever (chance reports fall ~16x per extra letter), so a
 # threshold above the longest real doubling must silence it completely.
 # Anchored on the LINE shape, not on the marker alone: the settings echo says
 # 'marked ">>" below', so a bare '>>' grep counts the echo and can never read 0.
-check "--double-length L above the doubling is silent" \
+check "--doubling-report L above the doubling is silent" \
   "$(dw_run 10 1 | grep -cE '>> [0-9]+ [A-Z]')" "0"
 # Display-only: -T changes thread timing, not what is found.
-check "--double-length is reported under -T 4 as well" \
+check "--doubling-report is reported under -T 4 as well" \
   "$(dw_run 6 4 | grep -c '>> 9 ENGELMANN')" "1"
 # Identical repeats are collapsed (one call per converged restart plus one after
 # --polish would otherwise print the same row R+1 times).
-check "--double-length collapses an identical repeat" \
+check "--doubling-report collapses an identical repeat" \
   "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
      -g "Q.." -R 4 -T 1 -s "AB CD EF" --no-plug "$dw_free" --polish \
-     --confidence 32 --double-length 6 2>&1 >/dev/null | grep -c '>> 9 ENGELMANN')" \
+     --confidence 32 --doubling-report 6 2>&1 >/dev/null | grep -c '>> 9 ENGELMANN')" \
   "1"
-dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english --double-length 6 2>&1 >/dev/null)
-check "--double-length needs -c" \
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english --doubling-report 6 2>&1 >/dev/null)
+check "--doubling-report needs -c" \
   "$(printf '%s' "$dw_err" | grep -c 'need the plugboard hill-climb')" "1"
-dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --double-length 6 2>&1 >/dev/null)
-check "--double-length needs --confidence" \
+dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --doubling-report 6 2>&1 >/dev/null)
+check "--doubling-report needs --confidence" \
   "$(printf '%s' "$dw_err" | grep -c 'need a null to gate on')" "1"
 # The scan is capped at 30 -- the longest doubling in the authentic corpus is 13
 # and nothing reaches 14, so this is 2.3x anything observed; the cap exists to
@@ -1452,56 +1452,56 @@ check "--double-length needs --confidence" \
 # not resolve against a base-vs-base control.  L is validated against the SAME
 # constant, so a too-large L is refused rather than silently searching nothing.
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         --double-length 31 2>&1 >/dev/null)
-check "--double-length past the scan's own cap is refused" \
+         --doubling-report 31 2>&1 >/dev/null)
+check "--doubling-report past the scan's own cap is refused" \
   "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "1"
-# The key is PINNED here: unlike the rejection above, a valid --double-length
+# The key is PINNED here: unlike the rejection above, a valid --doubling-report
 # does not exit at validation, so without it this check would start a full
 # default wildcard search under -c and hang the suite (it did).
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         -u B -w 123 -r AAA -g AAA --double-length 30 2>&1 >/dev/null)
-check "--double-length at the cap is accepted" \
+         -u B -w 123 -r AAA -g AAA --doubling-report 30 2>&1 >/dev/null)
+check "--doubling-report at the cap is accepted" \
   "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling length')" "0"
-# --double-z moves the gate.  The true key here sits far above it (z = 7..16
+# --doubling-z moves the gate.  The true key here sits far above it (z = 7..16
 # once the climb has the plaintext), so raising the gate past that silences the
 # report -- which is the assertion that the gate is actually consulted rather
 # than the default being hard-wired.
-check "--double-z above the true key's z silences the report" \
+check "--doubling-z above the true key's z silences the report" \
   "$(dw_run 6 1 99 | grep -cE '>> [0-9]+ [A-Z]')" "0"
-check "--double-z below the default still reports" \
+check "--doubling-z below the default still reports" \
   "$(dw_run 6 1 1 | grep -c '>> 9 ENGELMANN')" "1"
-check "--double-z is echoed in the settings" \
+check "--doubling-z is echoed in the settings" \
   "$(dw_run 6 1 2.5 | grep -c 'at z >= 2.5')" "1"
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         --double-length 6 --double-z junk 2>&1 >/dev/null)
-check "--double-z rejects a non-number (atof would read it as 0)" \
+         --doubling-report 6 --doubling-z junk 2>&1 >/dev/null)
+check "--doubling-z rejects a non-number (atof would read it as 0)" \
   "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling gate')" "1"
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         --double-z 4 2>&1 >/dev/null)
-check "--double-z without --double-length is refused" \
+         --doubling-z 4 2>&1 >/dev/null)
+check "--doubling-z without --doubling-report is refused" \
   "$(printf '%s' "$dw_err" | grep -c 'which is not on')" "1"
-# --double-mismatches.  ENGELMANN X ENGELMANN is exact, so N=0 must still find
+# --doubling-mismatches.  ENGELMANN X ENGELMANN is exact, so N=0 must still find
 # it; the interesting direction is that N is CONSULTED, which the vacuous-value
 # refusal and the echo establish without needing a garbled fixture.
-check "--double-mismatches 0 still finds an exact doubling" \
+check "--doubling-mismatches 0 still finds an exact doubling" \
   "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
      -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
-     --double-length 6 --double-mismatches 0 2>&1 >/dev/null \
+     --doubling-report 6 --doubling-mismatches 0 2>&1 >/dev/null \
      | grep -c '>> 9 ENGELMANN')" "1"
-check "--double-mismatches is echoed in the settings" \
+check "--doubling-mismatches is echoed in the settings" \
   "$(printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 -r AAA \
      -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
-     --double-length 6 --double-mismatches 2 2>&1 >/dev/null \
+     --doubling-report 6 --doubling-mismatches 2 2>&1 >/dev/null \
      | grep -c 'up to 2 mismatches')" "1"
 # At N >= L every pair of equal-length X-free runs matches, so the test stops
 # testing anything.  Refused rather than run.
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         --double-length 6 --double-mismatches 6 2>&1 >/dev/null)
-check "--double-mismatches at or above L is refused as vacuous" \
+         --doubling-report 6 --doubling-mismatches 6 2>&1 >/dev/null)
+check "--doubling-mismatches at or above L is refused as vacuous" \
   "$(printf '%s' "$dw_err" | grep -c 'must be below')" "1"
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
-         --double-mismatches 2 2>&1 >/dev/null)
-check "--double-mismatches without --double-length is refused" \
+         --doubling-mismatches 2 2>&1 >/dev/null)
+check "--doubling-mismatches without --doubling-report is refused" \
   "$(printf '%s' "$dw_err" | grep -c 'which is not on')" "1"
 # --full-text applies to the doubling report too: the report says a doubling is
 # present and the whole decrypt is what lets the reader judge it, so the option
@@ -1512,7 +1512,7 @@ dw_ft() { printf '%s' "$dw_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 231 \
   -r AAA -g "Q.." -R 1 -T 1 -s "AB CD EF" --no-plug "$dw_free" --confidence 32 \
   --full-text "$@" 2>&1 >/dev/null | grep -c '^  [A-Z]*$'; }
 check "--full-text expands the doubling report as well" \
-  "$(test "$(dw_ft --double-length 6)" -gt "$(dw_ft)" && echo more)" "more"
+  "$(test "$(dw_ft --doubling-report 6)" -gt "$(dw_ft)" && echo more)" "more"
 
 # --confidence N: sample the null and report the winner's margin over chance.
 # The property under test is DISCRIMINATION, so every check comes in a pair -- a
@@ -2180,7 +2180,7 @@ check "--soft-plug rejects --crib" \
   "$(sp_rejects -c --soft-plug XY --crib DASOBERKOMMANDO)" "1"
 
 echo
-echo "== Terminal-signature seeding: --signature-seed =="
+echo "== Terminal-signature seeding: --self-crib-seeds =="
 
 # The mode deduces candidate boards per key from a doubled word closing the message,
 # ranks them by IC and climbs the top K with the deduced plugs pinned.  Its own fixture,
@@ -2196,51 +2196,54 @@ sig_run() { run "$sig_ct" -q -l german -u B -w 123 -r AAA -g QEW -c "$@"; }
 # The deduction is arithmetic on the machine equation, so with a 10-pair board hidden it
 # hands the climb most of the answer: one unkicked seeded climb recovers the plaintext
 # where the same unseeded climb returns noise.
-check "--signature-seed recovers a 10-pair board from one climb" \
-  "$(sig_pct "$(sig_run -R 0 --signature-seed 1)" "$sig_pt")" "100"
-check "--signature-seed control: the same unseeded climb does not" \
+check "--self-crib-seeds recovers a 10-pair board from one climb" \
+  "$(sig_pct "$(sig_run -R 0 --self-crib-seeds 1 --self-crib-signature)" \
+       "$sig_pt")" "100"
+check "--self-crib-seeds control: the same unseeded climb does not" \
   "$(test "$(sig_pct "$(sig_run -R 0)" "$sig_pt")" -lt 20 && echo far || echo near)" \
   "far"
 # K is how many ranked seeds get climbed, so a larger K must not lose what K=1 found.
-check "--signature-seed K=5 keeps what K=1 found" \
-  "$(sig_pct "$(sig_run -R 0 --signature-seed 5)" "$sig_pt")" "100"
+check "--self-crib-seeds K=5 keeps what K=1 found" \
+  "$(sig_pct "$(sig_run -R 0 --self-crib-seeds 5 --self-crib-signature)" \
+       "$sig_pt")" "100"
 
 # The hypothesis count is a property of the ciphertext, so the echo must report it AFTER
 # the list is built -- it read 0 while show_settings() ran first.
-check "--signature-seed echoes a non-zero hypothesis count" \
+check "--self-crib-seeds echoes a non-zero hypothesis count" \
   "$(printf '%s' "$sig_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
-       -R 0 --signature-seed 3 2>&1 >/dev/null \
-     | grep -c '^Signature: .* [1-9][0-9]* hypotheses')" "1"
+       -R 0 --self-crib-seeds 3 --self-crib-signature 2>&1 >/dev/null \
+     | grep -c '^Self-crib: .* [1-9][0-9]* hypotheses')" "1"
 # Raising the floor past what the message can hold leaves nothing to deduce, which would
 # make every key return "no seed": that is fatal, not a silent empty search.
-check "--signature-seed rejects a length no signature can fit" \
+check "--self-crib-seeds rejects a length no signature can fit" \
   "$(printf 'ABCDEFGHIJ' | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
-       --signature-seed 1 --signature-length 13 >/dev/null 2>&1; echo $?)" "1"
+       --self-crib-seeds 1 --self-crib-signature --self-crib-length 13 \
+       >/dev/null 2>&1; echo $?)" "1"
 
-check "--signature-seed is -T-independent" \
-  "$(sig_run -R 0 --signature-seed 5 -T 1)" \
-  "$(sig_run -R 0 --signature-seed 5 -T 4)"
+check "--self-crib-seeds is -T-independent" \
+  "$(sig_run -R 0 --self-crib-seeds 5 --self-crib-signature -T 1)" \
+  "$(sig_run -R 0 --self-crib-seeds 5 --self-crib-signature -T 4)"
 
 # Malformed values, and the modes that install their own starting board at their own site
 # -- running two of them would silently let one overwrite the other.
 sig_rejects() { printf '%s' "$sig_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA \
                   -g QEW "$@" >/dev/null 2>&1; echo $?; }
-check "--signature-seed rejects a negative K" \
-  "$(sig_rejects -c --signature-seed -1)" "1"
-check "--signature-seed rejects an out-of-range length" \
-  "$(sig_rejects -c --signature-seed 1 --signature-length 14)" "1"
-check "--signature-seed rejects a run with no climb" \
-  "$(sig_rejects --signature-seed 1)" "1"
-check "--signature-seed rejects --crib" \
-  "$(sig_rejects -c --signature-seed 1 --crib DASOBERKOMMANDO)" "1"
-check "--signature-seed rejects --exhaust" \
-  "$(sig_rejects -c --signature-seed 1 --exhaust 1)" "1"
-check "--signature-seed rejects -A" \
-  "$(sig_rejects -c --signature-seed 1 -A 100)" "1"
-check "--signature-seed rejects --soft-plug" \
-  "$(sig_rejects -c --signature-seed 1 --soft-plug AB)" "1"
-check "--signature-seed rejects -F" \
-  "$(sig_rejects -c --signature-seed 1 -F 10)" "1"
+check "--self-crib-seeds rejects a negative K" \
+  "$(sig_rejects -c --self-crib-seeds -1)" "1"
+check "--self-crib-seeds rejects an out-of-range length" \
+  "$(sig_rejects -c --self-crib-seeds 1 --self-crib-length 14)" "1"
+check "--self-crib-seeds rejects a run with no climb" \
+  "$(sig_rejects --self-crib-seeds 1)" "1"
+check "--self-crib-seeds rejects --crib" \
+  "$(sig_rejects -c --self-crib-seeds 1 --crib DASOBERKOMMANDO)" "1"
+check "--self-crib-seeds rejects --exhaust" \
+  "$(sig_rejects -c --self-crib-seeds 1 --exhaust 1)" "1"
+check "--self-crib-seeds rejects -A" \
+  "$(sig_rejects -c --self-crib-seeds 1 -A 100)" "1"
+check "--self-crib-seeds rejects --soft-plug" \
+  "$(sig_rejects -c --self-crib-seeds 1 --soft-plug AB)" "1"
+check "--self-crib-seeds rejects -F" \
+  "$(sig_rejects -c --self-crib-seeds 1 -F 10)" "1"
 
 # --confidence must calibrate its null against the climb the SEARCH runs, not the plain
 # one: a seeded climb starts from a pinned board and is drawn from a different score
@@ -2253,10 +2256,39 @@ sig_null() { printf '%s' "$sig_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -
                -c -T 1 --confidence 24 "$@" 2>&1 >/dev/null \
              | sed -n 's/^Confidence: null \([^ ]*\) .*/\1/p'; }
 check "--confidence calibrates against the SEEDED climb, not the plain one" \
-  "$(test "$(sig_null --signature-seed 1)" != "$(sig_null -R 1)" \
+  "$(test "$(sig_null --self-crib-seeds 1)" != "$(sig_null -R 1)" \
      && echo differs || echo same)" "differs"
 check "--confidence null is unchanged for an unseeded run" \
   "$(sig_null -R 1)" "$(sig_null -R 1)"
+
+# --self-crib-signature hypothesises the doubled word ANYWHERE, not only closing the message.
+# The property that matters is exactly that: a message whose doubling sits in the MIDDLE
+# is invisible to the terminal mode and recoverable by the swept one.
+# A NINE-letter doubled word, not six: swept reliability tracks the signature length,
+# because that is what sets the number of equality edges.  Measured on this fixture, a
+# 6-letter mid-message doubling is not recovered even at K=100 while 9 and 13 recover at
+# K=1 -- so a 6-letter fixture would assert something the mode does not deliver.
+swp_pt=DASOBERKOMMANDOXGEZXSTEINECKEXSTEINECKEXMELDETXAACHENXISTGERETTETXDURCHDENEINSATZXENDE
+swp_ct=$(run "$swp_pt" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGHIJKLMNOPQRST)
+swp_run() { run "$swp_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 0 "$@"; }
+check "the default (anywhere) recovers a MID-message doubling" \
+  "$(sig_pct "$(swp_run --self-crib-seeds 5 --self-crib-length 7)" "$swp_pt")" "100"
+check "--self-crib-signature control: restricting to the end loses it" \
+  "$(test "$(sig_pct "$(swp_run --self-crib-seeds 5 --self-crib-signature \
+       --self-crib-length 7)" "$swp_pt")" -lt 30 && echo far || echo near)" "far"
+# Sweeping is the whole cost difference, so the hypothesis count must actually grow.
+swp_hyps() { printf '%s' "$swp_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+               -c -R 0 --self-crib-seeds 1 --self-crib-length 7 "$@" 2>&1 >/dev/null \
+             | sed -n 's/^Self-crib:.* \([0-9]*\) hypotheses.*/\1/p'; }
+check "--self-crib-signature enumerates far fewer hypotheses than the default" \
+  "$(test "$(swp_hyps)" -gt "$(( $(swp_hyps --self-crib-signature) * 10 ))" \
+     && echo fewer || echo similar)" "fewer"
+check "the swept default is -T-independent" \
+  "$(swp_run --self-crib-seeds 5 --self-crib-length 7 -T 1)" \
+  "$(swp_run --self-crib-seeds 5 --self-crib-length 7 -T 4)"
+check "--self-crib-signature rejects a run with no --self-crib-seeds" \
+  "$(printf '%s' "$swp_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+       --self-crib-signature >/dev/null 2>&1; echo $?)" "1"
 check "--exhaust E is bounded by the remaining free pairs" \
   "$(np_rejects -c --exhaust 6 --no-plug "$np_many")" "1"
 check "--exhaust E within the remaining free pairs is accepted" \
