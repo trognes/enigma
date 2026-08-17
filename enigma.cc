@@ -160,6 +160,45 @@ static const char * opt_soft_plug;
      Step 3 of archived/cribs.md 12: one crib at one alignment, used as a KEY FILTER. The
    alignment sweep and the seeded climb are later steps, so --crib-at is required. */
 static const char * opt_crib_text;
+/* --signature-seed K / --signature-length L: the TERMINAL-SIGNATURE self-crib.
+
+   A doubled word is a SELF-crib: it does not say what the plaintext letter is, only that
+   two positions carry the SAME one. Decryption is p_i = steck[core_i[steck[c_i]]], so
+   p_i == p_j cancels the unknown letter from both sides and leaves
+
+       steck[c_j] = core_j[core_i[steck[c_i]]]
+
+   -- computable from the rotor key alone, exactly like --crib's rule but with no known
+   plaintext anywhere in it. As a FILTER this is worthless (measured: 0 of 160 wrong keys
+   rejected, because a sweep is dominated by its weakest alignment). As a SEEDER it is the
+   only thing this repo has measured that beats -R at matched compute.
+
+   What makes it work is pinning the ALIGNMENT rather than sweeping it: half the corpus's
+   doublings are a signed surname closing the message (`... X RENNER X RENNER`), so only
+   the word's LENGTH is unknown and the hypothesis set is ~20 rather than ~2800. The
+   separator and the left flank are then real known-plaintext X's -- ordinary anchor edges,
+   the same kind --crib uses -- which is what anchors the otherwise-floating equalities.
+
+   Per key: deduce under all 26 guesses for steck[X] over every hypothesis, keep the
+   distinct surviving boards (~28), rank them by the INDEX OF COINCIDENCE of their decrypt,
+   and climb the top K with the deduced plugs pinned. IC ranks them as well as the fused
+   model does (150/200 against 144/200 top-1) and needs no language, which is why the
+   ranking is free. See ENHANCEMENTS.md item 5. */
+static int opt_signature_seed = 0;        /* K: seeds climbed per key; 0 = off */
+static int opt_signature_length = 4;      /* L: shortest signature hypothesised */
+static const int sig_maxlen = 13;         /* longest -- nothing in the corpus reaches 14 */
+static const int sig_max_hyps = 2 * sig_maxlen;      /* tails x lengths, a safe bound */
+static const int sig_max_seeds = sig_max_hyps * asize;
+/* One hypothesis: the doubled word runs [at, at+len) and [at+len+1, at+2len+1), with an X
+   separator between and an X flank on the left (and on the right when the message ends
+   with one). `anchor_pos` holds the positions asserted to be plaintext X. */
+struct sig_hyp
+{
+  int at, len, nanchor;
+  int anchor_pos[3];
+};
+static sig_hyp g_sig_hyps[sig_max_hyps];
+static int g_sig_nhyps = 0;
 static int opt_crib_at = -1;
 static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
 /* The menu, built once by init_crib(). A menu is a property of the crib AND the place it
@@ -1497,6 +1536,119 @@ static inline bool crib_set(int * board, int x, int y)
     return false;
   board[x] = y;
   board[y] = x;
+  return true;
+}
+
+/* Build the terminal-signature hypothesis list. Depends only on the CIPHERTEXT (its
+   length, and which flank positions could carry a plaintext X), never on the key, so it
+   is built once at startup exactly as init_crib() builds its alignments.
+
+   `tail` distinguishes a message ending `... X NAME X NAME` from one ending
+   `... X NAME X NAME X`; both occur in the corpus, so both are hypothesised. A hypothesis
+   whose flank position holds a ciphertext X is impossible -- an Enigma never encrypts a
+   letter to itself -- and is dropped here rather than rediscovered per key. */
+static void init_signature()
+{
+  const int xl = char2num('X');
+  g_sig_nhyps = 0;
+  for (int tail = 0; tail <= 1; tail++)
+    for (int len = opt_signature_length; len <= sig_maxlen; len++)
+      {
+        const int at = textlength - tail - 2*len - 1;
+        if (at < 1)
+          continue;                        /* no room for the left flank */
+        sig_hyp h;
+        h.at = at;
+        h.len = len;
+        h.nanchor = 0;
+        h.anchor_pos[h.nanchor++] = at - 1;        /* left flank */
+        h.anchor_pos[h.nanchor++] = at + len;      /* separator */
+        if (tail)
+          h.anchor_pos[h.nanchor++] = at + 2*len + 1;
+        bool ok = true;
+        for (int k = 0; k < h.nanchor; k++)
+          {
+            const int pos = h.anchor_pos[k];
+            if ((pos < 0) || (pos >= textlength) ||
+                (num_ciphertext[pos] == xl))
+              ok = false;
+          }
+        if (ok && (g_sig_nhyps < sig_max_hyps))
+          g_sig_hyps[g_sig_nhyps++] = h;
+      }
+}
+
+/* The self-crib closure for one hypothesis under one guess for steck[X].
+
+   Two edge kinds, and the second is the whole difference from crib_try():
+
+     anchor    plaintext X at a known position -- steck[c] = core[steck[X]], the classic
+               rule, since the rotor core is an involution;
+     equality  positions i and j carry the same UNKNOWN letter --
+               steck[c_j] = core_j[core_i[steck[c_i]]], and the mirror image.
+
+   crib_set() supplies reciprocity and Welchman's diagonal board unchanged: a plugboard is
+   an involution, so setting steck[x] = y sets steck[y] = x, and a clash kills the guess.
+   Returns false when the guess is contradictory; `board` holds -1 where undeduced. */
+static bool sig_try(const machine & m, const sig_hyp & h, int guess, int * board)
+{
+  const int xl = char2num('X');
+  for (int i = 0; i < asize; i++)
+    board[i] = -1;
+  if (! crib_set(board, xl, guess))
+    return false;
+
+  bool changed = true;
+  while (changed)
+    {
+      changed = false;
+      for (int k = 0; k < h.nanchor; k++)
+        {
+          const unsigned char * __restrict core = m.rows[h.anchor_pos[k]];
+          const int c = num_ciphertext[h.anchor_pos[k]];
+          if ((board[c] >= 0) && (board[xl] < 0))
+            {
+              if (! crib_set(board, xl, static_cast<int>(core[board[c]])))
+                return false;
+              changed = true;
+            }
+          else if ((board[xl] >= 0) && (board[c] < 0))
+            {
+              if (! crib_set(board, c, static_cast<int>(core[board[xl]])))
+                return false;
+              changed = true;
+            }
+          else if ((board[xl] >= 0) && (board[c] >= 0))
+            {
+              if (static_cast<int>(core[board[c]]) != board[xl])
+                return false;
+            }
+        }
+      for (int t = 0; t < h.len; t++)
+        {
+          const int pi = h.at + t, pj = h.at + h.len + 1 + t;
+          const unsigned char * __restrict ci = m.rows[pi];
+          const unsigned char * __restrict cj = m.rows[pj];
+          const int a = num_ciphertext[pi], b = num_ciphertext[pj];
+          if ((board[a] >= 0) && (board[b] < 0))
+            {
+              if (! crib_set(board, b, static_cast<int>(cj[ci[board[a]]])))
+                return false;
+              changed = true;
+            }
+          else if ((board[b] >= 0) && (board[a] < 0))
+            {
+              if (! crib_set(board, a, static_cast<int>(ci[cj[board[b]]])))
+                return false;
+              changed = true;
+            }
+          else if ((board[a] >= 0) && (board[b] >= 0))
+            {
+              if (ci[board[a]] != cj[board[b]])
+                return false;
+            }
+        }
+    }
   return true;
 }
 
@@ -3861,6 +4013,122 @@ static double crib_unit(machine & m, size_t key_index, int restart)
   return best;
 }
 
+/* --signature-seed K: one rotor key's worth of terminal-signature seeding.
+
+   Deduce under every (hypothesis, guess) pair, keep the DISTINCT surviving boards, rank
+   them by the index of coincidence of their decrypt, and climb the top K with the deduced
+   plugs pinned in PLUG_FIXED_EX -- the same per-worker pin set --exhaust and --crib use,
+   since plug_fixed is a read-only global no worker may touch.
+
+   Letters the deduction settles as carrying NO cable are pinned too: board[x] == x is a
+   finding, not an absence of one, and marking it stops the climb spending moves on a
+   letter that cannot be plugged.
+
+   WHY RANK BEFORE CLIMBING, rather than climbing everything as --crib does. A long crib
+   usually leaves one surviving hypothesis; this leaves ~28, and climbing all of them costs
+   28x. Measured, the correct seed is ranked first by IC in 150 of 200 trials and the
+   recovery curve against K is steeply diminishing -- on a real sweep K=1 already beats a
+   cost-matched -R baseline 13/20 against 4/20, while K=5 buys three more recoveries for
+   5x the compute. Hence a knob with a low default rather than an exhaustive pass.
+
+   Cost is one decode per candidate (the ranking) plus K climbs. The decodes are ~1% of a
+   climb, so K is the cost. Deterministic and -T-independent: the candidate order is
+   hypothesis-major then guess, the dedupe keeps the first occurrence, and the sort is
+   stable on (IC, index). */
+static double signature_unit(machine & m, size_t key_index, int restart)
+{
+  static const int xl_unused = 0; (void) xl_unused;
+  unsigned char seed_steck[sig_max_seeds][asize];
+  unsigned char seed_fixed[sig_max_seeds][asize];
+  double seed_ic[sig_max_seeds];
+  int nseed = 0;
+  int board[asize];
+
+  for (int hi = 0; hi < g_sig_nhyps; hi++)
+    for (int g = 0; g < asize; g++)
+      {
+        if (nseed >= sig_max_seeds)
+          break;
+        if (! sig_try(m, g_sig_hyps[hi], g, board))
+          continue;
+        unsigned char st[asize], fx[asize];
+        for (int i = 0; i < asize; i++)
+          {
+            st[i] = static_cast<unsigned char>((board[i] >= 0) ? board[i] : i);
+            fx[i] = (board[i] >= 0) ? 1 : 0;
+          }
+        bool dup = false;
+        for (int k = 0; (k < nseed) && ! dup; k++)
+          dup = (memcmp(seed_steck[k], st, asize) == 0) &&
+                (memcmp(seed_fixed[k], fx, asize) == 0);
+        if (dup)
+          continue;
+        memcpy(seed_steck[nseed], st, asize);
+        memcpy(seed_fixed[nseed], fx, asize);
+        memcpy(m.steckerbrett, st, asize);
+        seed_ic[nseed] = ic_score_decode(m);   /* the ranking, one decode each */
+        nseed++;
+      }
+
+  if (nseed == 0)
+    return -1e300;      /* nothing survived: never wins the merge */
+
+  /* Top K by IC, ties broken by the deterministic candidate order. Selection sort: K is
+     small and nseed is ~28, so this is cheaper than sorting the whole list. */
+  int order[sig_max_seeds];
+  for (int i = 0; i < nseed; i++)
+    order[i] = i;
+  const int want = (opt_signature_seed < nseed) ? opt_signature_seed : nseed;
+  for (int i = 0; i < want; i++)
+    {
+      int best_j = i;
+      for (int j = i + 1; j < nseed; j++)
+        if (seed_ic[order[j]] > seed_ic[order[best_j]])
+          best_j = j;
+      const int t = order[i]; order[i] = order[best_j]; order[best_j] = t;
+    }
+
+  double best = 0.0;
+  bool have = false;
+  char best_pt[maxlen + 1];
+  unsigned char best_steck[asize];
+  for (int i = 0; i < want; i++)
+    {
+      const int si = order[i];
+      init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
+      memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
+      for (int x = 0; x < asize; x++)
+        if (seed_fixed[si][x])
+          {
+            m.steckerbrett[x] = seed_steck[si][x];
+            PLUG_FIXED_EX[x] = true;               /* ... plus this deduction */
+          }
+      /* The kick is off by default and should stay off: a seeded climb starts near the
+         answer, and -R 0 measured 201 of 204 exact recoveries at half the compute of
+         -R 8. -R N still asks for N kicked passes if that is wanted. */
+      if (opt_restarts >= 1)
+        {
+          uint64_t rng = restart_seed(key_index, restart);
+          perturb_steckerbrett(m, & rng, opt_perturb);
+        }
+      const double sc = run_stages<true>(m);
+      if (opt_dump_all)
+        dump_all(m, sc);
+      if (! have || (sc > best))
+        {
+          best = sc;
+          have = true;
+          memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+          memcpy(best_steck, m.steckerbrett, asize);
+        }
+    }
+  if (! have)
+    return -1e300;
+  memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
+  memcpy(m.steckerbrett, best_steck, asize);
+  return best;
+}
+
 static double exhaust_unit(machine & m, size_t key_index, size_t fi)
 {
   exhaust_ctx c;
@@ -5232,7 +5500,9 @@ void search_worker(machine & m,
             score = opt_exhaust
                       ? exhaust_unit(m, keyidx, static_cast<size_t>(restart))
                       : (opt_crib_text ? crib_unit(m, keyidx, restart)
-                                       : hillclimb_one(m, keyidx, restart));
+                         : (opt_signature_seed > 0
+                              ? signature_unit(m, keyidx, restart)
+                              : hillclimb_one(m, keyidx, restart)));
           else
             {
               init_steckerbrett(m, opt_steckerbrett);
@@ -7400,6 +7670,13 @@ void help(FILE * out)
           "Plugboard pairs GUESSED rather than known: the");
   fprintf(out, "  %-24s %s\n", "", "climb starts from them each restart but may");
   fprintf(out, "  %-24s %s\n", "", "move or drop them, unlike -s (needs -c) [none]");
+  fprintf(out, "  %-24s %s\n", "--signature-seed K",
+          "Seed the climb from a terminal doubled word (a");
+  fprintf(out, "  %-24s %s\n", "", "signed surname): deduce candidate boards per");
+  fprintf(out, "  %-24s %s\n", "", "key, rank by IC, climb the top K");
+  fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = off) [0]");
+  fprintf(out, "  %-24s %s\n", "--signature-length L",
+          "Shortest signature to hypothesise [4]");
   fprintf(out, "  %-24s %s\n", "-n, --norway",
           "Norway Enigma: reflector N and wheels (1-5)");
   fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
@@ -7833,6 +8110,11 @@ void show_settings()
   if (opt_soft_plug[0])
     fprintf(stderr, "            %s guessed, climb may revise (--soft-plug)\n",
             opt_soft_plug);
+  if (opt_signature_seed > 0)
+    fprintf(stderr, "Signature:  top %d seed%s per key by IC, %d+ letters, "
+            "%d hypotheses\n", opt_signature_seed,
+            (opt_signature_seed == 1) ? "" : "s", opt_signature_length,
+            g_sig_nhyps);
   if (opt_crib_text)
     {
       if (opt_crib_at >= 0)
@@ -7927,7 +8209,8 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
-         OPT_NOPLUG, OPT_SOFTPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
+         OPT_NOPLUG, OPT_SOFTPLUG, OPT_SIGSEED, OPT_SIGLEN,
+         OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLELEN, OPT_DOUBLEZ,
          OPT_DOUBLEMM };
@@ -7981,6 +8264,8 @@ int main(int argc, char * * argv)
       { "confidence",     required_argument, nullptr, OPT_CONFIDENCE },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
       { "soft-plug",      required_argument, nullptr, OPT_SOFTPLUG },
+      { "signature-seed", required_argument, nullptr, OPT_SIGSEED },
+      { "signature-length", required_argument, nullptr, OPT_SIGLEN },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
@@ -8127,6 +8412,12 @@ int main(int argc, char * * argv)
         case OPT_SOFTPLUG:
           alltoupper(optarg);
           opt_soft_plug = optarg;
+          break;
+        case OPT_SIGSEED:
+          opt_signature_seed = atoi(optarg);
+          break;
+        case OPT_SIGLEN:
+          opt_signature_length = atoi(optarg);
           break;
         case OPT_FULLTEXT:
           opt_full_text = true;
@@ -8486,6 +8777,41 @@ int main(int argc, char * * argv)
   if (opt_soft_plug[0] && (opt_anneal > 0))
     fatal("--soft-plug cannot be combined with -A (SA seeds itself with an IC pre-pass)");
 
+  /* --signature-seed K / --signature-length L. K is the number of IC-ranked seeds climbed
+     per key, so it is the cost: per-key work is the deduction plus K climbs. L is the
+     shortest signature hypothesised -- raising it drops the weak short hypotheses (an
+     L=4 menu rejects nothing and deduces almost no plugs) at the price of missing a
+     message actually signed with a short name.
+       Every rejection below is a mode that installs its own starting board at its own
+     site, or that re-encodes the work index: letting two of them run would silently have
+     one overwrite the other. */
+  if ((opt_signature_seed < 0) || (opt_signature_seed > sig_max_seeds))
+    fatal("Illegal --signature-seed (must be 0 to 676; 0 is off)");
+  if ((opt_signature_length < 2) || (opt_signature_length > sig_maxlen))
+    fatal("Illegal --signature-length (must be 2 to 13)");
+  if (opt_signature_seed > 0)
+    {
+      if (! opt_hillclimb)
+        fatal("--signature-seed needs -c (it seeds the plugboard climb)");
+      if (opt_crib_text || opt_crib_list)
+        fatal("--signature-seed cannot be combined with --crib/--crib-list "
+              "(both seed the board from a deduction)");
+      if (opt_exhaust)
+        fatal("--signature-seed cannot be combined with --exhaust (both force plugs "
+              "from outside the climb)");
+      if (opt_anneal > 0)
+        fatal("--signature-seed cannot be combined with -A (SA seeds itself)");
+      if (opt_soft_plug[0])
+        fatal("--signature-seed cannot be combined with --soft-plug (both seed the "
+              "starting board)");
+      if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
+        fatal("--signature-seed is not supported with -F (tier 1 could filter out the "
+              "very key the deduction settles)");
+      if (opt_tune_phase > 0)
+        fatal("--signature-seed cannot be combined with --tune-phase (which moves the "
+              "key the deduction was computed for)");
+    }
+
   /* --restarts 0 (the new default) is legal: one deterministic climb from the seed, no
      kick. --restarts N>=1 runs N kicked climbs. */
   if ((opt_restarts < 0) || (opt_restarts > max_restarts))
@@ -8791,6 +9117,11 @@ int main(int argc, char * * argv)
   ic_blend_init();
   readciphertext();
 
+  /* Before show_settings(), which reports the hypothesis count -- it read 0 for a while
+     because the list is built from the ciphertext and the echo ran first. */
+  if (opt_signature_seed > 0)
+    init_signature();
+
   show_settings();
 
   if (textlength < 1)
@@ -8802,6 +9133,17 @@ int main(int argc, char * * argv)
   init();
 
   init_plug_fixed(opt_steckerbrett, opt_no_plug);   /* -s pairs + --no-plug letters */
+
+  /* --signature-seed: like --crib's menu, the hypothesis list depends on the ciphertext
+     (its length and which flanks could be a plaintext X), so it is built here. A message
+     too short to hold even the shortest hypothesised signature yields none, which would
+     make every key return "no seed" -- say so rather than sweeping and finding nothing. */
+  if (opt_signature_seed > 0)
+    {
+      if (g_sig_nhyps == 0)
+        fatal("--signature-seed: no terminal signature of --signature-length "
+              "letters or more fits this ciphertext (try a smaller value)");
+    }
 
   /* --crib: the menu depends on the ciphertext, so it is built here rather than during
      option validation. The checks that need the ciphertext live here too. */

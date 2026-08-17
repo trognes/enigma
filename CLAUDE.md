@@ -534,6 +534,59 @@ are read from a **data directory** (filenames built as
     a letter `-s` also pins or `--no-plug` also marks (each a contradiction),
     and on `--exhaust`/`--crib`/`--crib-list`/`-A`, which all install their own
     starting board at their own site. `-T`-deterministic.
+- `--signature-seed K` / `--signature-length L` **terminal-signature self-crib
+  seeding** (needs `-c`; `K = 0` = off, `L` default 4). The one thing measured
+  in this repo that beats `-R` at matched compute, by a wide margin. A doubled
+  word is a *self*-crib: it says only that two positions carry the **same**
+  plaintext letter, which cancels out of `p_i = steck[core_i[steck[c_i]]]` and
+  leaves `steck[c_j] = core_j[core_i[steck[c_i]]]` — computable from the rotor
+  key alone. As a *filter* this is worthless (0 of 160 wrong keys rejected);
+  as a *seeder* it is decisive.
+  - **Pinning the ALIGNMENT is what makes it work.** Half the corpus's doublings
+    are a signed surname closing the message (`… X RENNER X RENNER`), so only
+    the word's *length* is unknown: ~20 hypotheses rather than ~2 800, and ~28
+    surviving seeds rather than ~2 000. The separator and left flank are real
+    known-plaintext X's — ordinary anchor edges — which anchor the otherwise
+    floating equalities.
+  - **Per key**: deduce under all 26 guesses for `steck[X]` over every
+    hypothesis, keep the distinct surviving boards, rank them by the **index of
+    coincidence** of their decrypt, and climb the top `K` with the deduced plugs
+    pinned in `PLUG_FIXED_EX` (the same per-worker pin set `--crib`/`--exhaust`
+    use). Letters deduced to carry *no* cable are pinned too — a finding, not an
+    absence of one.
+  - **IC is the ranking, and that is measured, not assumed**: it ties the fused
+    model (150/200 against 144/200 top-1) and beats every other model at
+    p ≤ 0.005, while needing no language and no n-gram table.
+  - **Measured on a real sweep** (`-g A..`, 676 keys, wheels/reflector/ring
+    fixed, 30 trials, `eval/signature_seed_ab.py`):
+
+    | arm | mean %-correct | exact | `score_iter` | per key |
+    |---|---:|---:|---:|---:|
+    | `-R 1` | 15.2 | 3/30 | 1 543 131 | 2 283 |
+    | `-R 8` | 40.7 | 11/30 | 12 329 190 | 18 238 |
+    | `-R 16` | 56.5 | 16/30 | 24 670 103 | 36 494 |
+    | **`--signature-seed 1`** | **70.9** | **20/30** | **284 536** | **421** |
+    | `--signature-seed 3` | 77.3 | 22/30 | 897 999 | 1 328 |
+    | `--signature-seed 5` | 83.7 | 24/30 | 1 549 424 | 2 292 |
+
+    **`K = 1` beats `-R 16` at 87× less compute**, and `K = 5` beats it by 8
+    recoveries at 16× less. `K = 1` is even 5.4× cheaper than the *cheapest*
+    baseline while recovering 20/30 against 3/30.
+  - **`--signature-length` costs coverage and saves nothing — leave it at 4.**
+    The floor drops short hypotheses, but per-key cost is **flat** across it
+    (384–454 `score_iter`) because the cost is the `K` climbs, not the
+    deduction. Recovery at `K = 1`: `L`=2 → 18/30, **3 → 20/30**, **4 → 20/30**,
+    5 → 18/30, 6 → 17/30, 7 → 14/30, 8 → 7/30. So 3 and 4 tie on a plateau and
+    everything else loses; 4 is the default because it is also the shortest
+    signature the corpus actually contains (`HOCK`). The flag exists to express
+    real knowledge of a network's naming, not as a tuning knob.
+  - **`-R 0` is right and the kick should stay off**: a seeded climb starts near
+    the answer, and `-R 0` measured 201 of 204 exact recoveries at half the
+    compute of `-R 8`. `-R N` still asks for N kicked passes.
+  - Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
+    and `--tune-phase` — each installs its own starting board or moves the key
+    the deduction was computed for. `-T`-deterministic (candidate order is
+    hypothesis-major then guess, dedupe keeps the first, the sort is stable).
 - `-c` hill-climb the plugboard. The climb rule is **steepest ascent** by
   default: each step scans the whole 325-pair toggle operator and applies the
   single best improving move, to convergence. `-J` swaps that rule for

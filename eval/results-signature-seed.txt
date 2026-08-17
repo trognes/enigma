@@ -1,0 +1,39 @@
+--signature-seed in the tool: the sweep A/B, and the --signature-length default.
+
+676 keys (-g A.., -w 231 -u B -r AAA fixed), 30 trials, -l wehrmacht
+recipe -c -f -J --polish -S i4f10
+
+arm      mean %     exact        score_iter     per key
+R1       15.2       3/30         1543131        2283
+R2       21.2       5/30         3086066        4565
+R4       31.1       8/30         6165494        9121
+R8       40.7       11/30        12329190       18238
+R16      56.5       16/30        24670103       36494
+K1       70.9       20/30        284536         421
+K3       77.3       22/30        897999         1328
+K5       83.7       24/30        1549424        2292
+
+--signature-length sweep (K=1), coverage vs seed quality:
+length   mean %     exact        score_iter     per key
+4        70.9       20/30        284536         421
+5        64.7       18/30        281721         417
+6        61.5       17/30        273131         404
+7        51.9       14/30        280069         414
+8        27.6       7/30         259624         384
+
+written to eval/results-signature-seed.txt
+
+== --signature-length below 4 (K=1, same 30 trials) ==
+
+K1       70.9       20/30        284536         421
+
+--signature-length sweep (K=1), coverage vs seed quality:
+length   mean %     exact        score_iter     per key
+2        65.1       18/30        306734         454
+3        71.3       20/30        288568         427
+4        70.9       20/30        284536         421
+5        64.7       18/30        281721         417
+
+== C++ closure vs eval/selfcrib_probe.py: distinct seeds per key ==
+n=48 35/35  n=101 1/1  n=172 43/43  n=111 18/18  n=124 39/39  n=101 35/35
+0 mismatches over 6 keys.

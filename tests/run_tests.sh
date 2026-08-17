@@ -2178,6 +2178,69 @@ check "--soft-plug rejects --exhaust" \
 check "--soft-plug rejects -A" "$(sp_rejects -c --soft-plug XY -A 100)" "1"
 check "--soft-plug rejects --crib" \
   "$(sp_rejects -c --soft-plug XY --crib DASOBERKOMMANDO)" "1"
+
+echo
+echo "== Terminal-signature seeding: --signature-seed =="
+
+# The mode deduces candidate boards per key from a doubled word closing the message,
+# ranks them by IC and climbs the top K with the deduced plugs pinned.  Its own fixture,
+# because it needs a plaintext that ENDS with a doubled surname; one key throughout
+# (-g QEW pins it), so each check below is a handful of climbs.
+sig_pt=DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTETXDURCHDENEINSATZDERHILFSKRAEFTEXGEZXRENNERXRENNER
+sig_ct=$(run "$sig_pt" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGHIJKLMNOPQRST)
+sig_pct() { awk -v a="$1" -v b="$2" 'BEGIN { n = length(b); c = 0;
+              for (i = 1; i <= n; i++) if (substr(a, i, 1) == substr(b, i, 1)) c++;
+              print int(100 * c / n) }'; }
+sig_run() { run "$sig_ct" -q -l german -u B -w 123 -r AAA -g QEW -c "$@"; }
+
+# The deduction is arithmetic on the machine equation, so with a 10-pair board hidden it
+# hands the climb most of the answer: one unkicked seeded climb recovers the plaintext
+# where the same unseeded climb returns noise.
+check "--signature-seed recovers a 10-pair board from one climb" \
+  "$(sig_pct "$(sig_run -R 0 --signature-seed 1)" "$sig_pt")" "100"
+check "--signature-seed control: the same unseeded climb does not" \
+  "$(test "$(sig_pct "$(sig_run -R 0)" "$sig_pt")" -lt 20 && echo far || echo near)" \
+  "far"
+# K is how many ranked seeds get climbed, so a larger K must not lose what K=1 found.
+check "--signature-seed K=5 keeps what K=1 found" \
+  "$(sig_pct "$(sig_run -R 0 --signature-seed 5)" "$sig_pt")" "100"
+
+# The hypothesis count is a property of the ciphertext, so the echo must report it AFTER
+# the list is built -- it read 0 while show_settings() ran first.
+check "--signature-seed echoes a non-zero hypothesis count" \
+  "$(printf '%s' "$sig_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+       -R 0 --signature-seed 3 2>&1 >/dev/null \
+     | grep -c '^Signature: .* [1-9][0-9]* hypotheses')" "1"
+# Raising the floor past what the message can hold leaves nothing to deduce, which would
+# make every key return "no seed": that is fatal, not a silent empty search.
+check "--signature-seed rejects a length no signature can fit" \
+  "$(printf 'ABCDEFGHIJ' | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+       --signature-seed 1 --signature-length 13 >/dev/null 2>&1; echo $?)" "1"
+
+check "--signature-seed is -T-independent" \
+  "$(sig_run -R 0 --signature-seed 5 -T 1)" \
+  "$(sig_run -R 0 --signature-seed 5 -T 4)"
+
+# Malformed values, and the modes that install their own starting board at their own site
+# -- running two of them would silently let one overwrite the other.
+sig_rejects() { printf '%s' "$sig_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA \
+                  -g QEW "$@" >/dev/null 2>&1; echo $?; }
+check "--signature-seed rejects a negative K" \
+  "$(sig_rejects -c --signature-seed -1)" "1"
+check "--signature-seed rejects an out-of-range length" \
+  "$(sig_rejects -c --signature-seed 1 --signature-length 14)" "1"
+check "--signature-seed rejects a run with no climb" \
+  "$(sig_rejects --signature-seed 1)" "1"
+check "--signature-seed rejects --crib" \
+  "$(sig_rejects -c --signature-seed 1 --crib DASOBERKOMMANDO)" "1"
+check "--signature-seed rejects --exhaust" \
+  "$(sig_rejects -c --signature-seed 1 --exhaust 1)" "1"
+check "--signature-seed rejects -A" \
+  "$(sig_rejects -c --signature-seed 1 -A 100)" "1"
+check "--signature-seed rejects --soft-plug" \
+  "$(sig_rejects -c --signature-seed 1 --soft-plug AB)" "1"
+check "--signature-seed rejects -F" \
+  "$(sig_rejects -c --signature-seed 1 -F 10)" "1"
 check "--exhaust E is bounded by the remaining free pairs" \
   "$(np_rejects -c --exhaust 6 --no-plug "$np_many")" "1"
 check "--exhaust E within the remaining free pairs is accepted" \
