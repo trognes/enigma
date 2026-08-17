@@ -1,4 +1,4 @@
-18 corpus messages carry an exact doubling of 6+ letters
+corpus: 66 messages, of which 18 carry an exact doubling of 6+ letters
 
 correctness anchor over 40 messages (true key, true alignment):
    true hypothesis survives      40/40

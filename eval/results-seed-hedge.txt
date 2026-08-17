@@ -46,3 +46,17 @@ k=2    vs k=3 exact: only it  0, only k3  9, p = 0.0039
 k=5    vs k=3 exact: only it 13, only k3  2, p = 0.0074
 k=10   vs k=3 exact: only it 22, only k3  2, p = 0.0000
 k=all  vs k=3 exact: only it 32, only k3  2, p = 0.0000
+
+== corpus doubling rates (all 66 messages) ==
+
+minlen  carry doubling  END with one     end/corpus
+4       20 (30%)        10 (15%)         15%
+5       18 (27%)        9 (14%)          14%
+6       18 (27%)        8 (12%)          12%
+7       16 (24%)        7 (11%)          11%
+8       13 (20%)        4 (6%)           6%
+
+The trial set is the minlen=4 row.  Nothing is lost to the probe's >=6
+pre-filter: measured directly over all 66, the count ending with a doubling of
+4+ letters is 10, the same 10 the filtered set yields.  18 is the count carrying
+a doubling of 6+ letters ANYWHERE -- the probe's working set, not the corpus.

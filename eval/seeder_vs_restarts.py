@@ -63,8 +63,9 @@ plugboard-recovery tier -- the rotor key is GIVEN -- which is the tier every
 tuning result in this repo is measured on, and it is the seeder's BEST case: at
 a wrong key the deduction pins wrong plugs.  So a loss here is decisive and a
 win still leaves the full-sweep question open.  It also only applies to messages
-that end with a doubled word, which is 10 of the 18 corpus messages carrying a
-doubling and ~15% of the corpus overall.
+that end with a doubled word: 10 of the corpus's 66 messages, i.e. 15%.  (18 is
+the count carrying a doubling of 6+ letters anywhere -- this probe's working set
+-- not the corpus size; do not conflate the two.)
 """
 import argparse
 import math

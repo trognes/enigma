@@ -989,8 +989,25 @@ a wrong key the deduction pins wrong plugs. What a full sweep does is therefore
 open in two respects: the deduction's per-key cost is real and uncounted by
 `score_iter` (~28 whole-message decrypts plus the closure, ~1% of arm B here but
 paid on every key), and whether seeding spuriously *promotes* wrong keys is
-unmeasured. And it applies only to messages ending in a doubled word — 10 of the
-18 corpus messages carrying a doubling, ~15% of the corpus. Wall time is
+unmeasured. And it applies only to messages ending in a doubled word, which is
+**10 of the corpus's 66 messages — 15%**. (An earlier version of this sentence
+said "10 of the 18 corpus messages carrying a doubling", which reads as a
+66-message corpus being 18 messages long. 18 is the count carrying a doubling of
+6+ letters, i.e. the probe's working set, not the corpus. The ~15% was right by
+arithmetic — 10/66 — but the denominator it was attached to was not.) The rates
+in full, over all 66:
+
+| minimum doubling length | carry one | **end with one** |
+|---:|---:|---:|
+| 4 | 20 (30%) | **10 (15%)** |
+| 5 | 18 (27%) | 9 (14%) |
+| 6 | 18 (27%) | 8 (12%) |
+| 7 | 16 (24%) | 7 (11%) |
+| 8 | 13 (20%) | 4 (6%) |
+
+The trial set is the `minlen = 4` row, and nothing is lost to the probe's
+`≥6` pre-filter: measured directly on all 66, the count ending with a doubling
+of 4+ letters is 10, the same 10 the filtered set yields. Wall time is
 reported in the results file but says nothing at this size: a run is ~0.1 s of
 which ~0.05 s is the one-off n-gram load, and B3 pays that three times because
 it is three processes.

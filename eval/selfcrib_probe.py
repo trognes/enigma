@@ -614,9 +614,12 @@ def main():
                     help="anchor the eval scorers against ./enigma first")
     a = ap.parse_args()
     rng = random.Random(a.seed)
-    texts = [t for t in corpus() if doublings(t)]
-    print("%d corpus messages carry an exact doubling of 6+ letters\n"
-          % len(texts))
+    all_msgs = corpus()
+    texts = [t for t in all_msgs if doublings(t)]
+    # Both numbers, because quoting the second alone invites reading it as the
+    # corpus size -- which is a mistake that reached ENHANCEMENTS.md once.
+    print("corpus: %d messages, of which %d carry an exact doubling of 6+"
+          " letters\n" % (len(all_msgs), len(texts)))
     ok = selftest(rng, texts)
     if a.selftest:
         return 0 if ok else 1
