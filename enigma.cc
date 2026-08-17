@@ -579,7 +579,7 @@ static bool opt_full_text;
    four BROKEN (i.e. genuinely Enigma) 1941 messages sit at z = +4.2, at 47 and
    74 letters, and a fixed IC threshold would flag them.
      No tables are needed, because both have closed forms under a uniform
-   multinomial that were checked against real Enigma encryptions and matched
+   multinomial that were checked against simulated Enigma encryptions and matched
    within 1-2% at every length from 40 to 600 (preflight_null.py 1). IC =
    P/C(n,2) where P counts same-letter position pairs; with uniform p those pair
    indicators are pairwise UNCORRELATED -- the shared-index covariance is
@@ -7634,8 +7634,11 @@ static void warn_filtered(const textfilter * st, const char * what)
 }
 
 /* Thresholds are set from the MEASURED tail of genuine Enigma, not from a
-   nominal p-value: over 18000 real encryptions spanning n = 40..600 the largest
-   z(IC) seen was 5.66 and NEITHER test fired once (preflight_null.py 2-3). The
+   nominal p-value: over one sample of 18000 SIMULATED encryptions spanning
+   n = 40..600 -- authentic 1941 German under random keys and boards, not real
+   traffic -- the largest z(IC) seen was 5.89 and NEITHER test fired once
+   (preflight_null.py 2-3, which share a sample set so the two figures
+   describe one population). The
    four broken 1941 messages -- genuine Enigma, and the useful controls, since
    two of them reach z = +4.2 -- all pass. QTXMA fires on both, at z = +10.9 and
    P = 8.5e-08. A false positive here is expensive in trust, a false negative
@@ -7702,7 +7705,8 @@ static preflight_stats compute_preflight()
    every encryption, including the ones the test suite makes. */
 static bool key_is_wildcarded()
 {
-  const char * o[4] = { opt_ukw, opt_walzen, opt_ringstellung, opt_grundstellung };
+  const char * o[4] = { opt_ukw, opt_walzen,
+                        opt_ringstellung, opt_grundstellung };
   for (int i = 0; i < 4; i++)
     for (const char * p = o[i]; (p != nullptr) && (*p != 0); p++)
       if (*p == '.')
@@ -7731,10 +7735,12 @@ static void report_preflight()
   fprintf(stderr,
           "WARNING: this does not look like Enigma output, so searching for a\n"
           "         key may be searching for something that does not exist.\n"
-          "         Enigma is a permutation cipher and its output is near-flat;\n"
+          "         Enigma is a permutation cipher and its output is"
+          " near-flat;\n"
           "         this ciphertext has %s.\n"
-          "         The thresholds (%.1f sd, P < %.0e) are set so that none of\n"
-          "         18000 real Enigma ciphertexts trips them -- see\n"
+          "         The thresholds (%.1f sd, P < %.0e) are set so that none"
+          " of\n"
+          "         18000 simulated Enigma ciphertexts trips them -- see\n"
           "         MODERN_BREAKING_NOTES 5l. Proceeding anyway.\n",
           (s.flag_ic && s.flag_absent)
             ? "language-like structure, and\n         too many unused letters"

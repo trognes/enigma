@@ -1,8 +1,11 @@
 Calibrate the pre-flight statistics: is this ciphertext even Enigma?
 
-3000 Enigma encryptions per length, authentic German, 10-pair board
+3000 simulated Enigma encryptions per length (18000 total), authentic
+1941 German plaintext, random key and random 10-pair board each.
+NOT real traffic: the corpus tops out at 214 letters, so n >= 300 draws
+from the concatenated corpus rather than from one message.
 
-== 1. the analytic null matches real Enigma ==
+== 1. the analytic null matches simulated Enigma ==
 
      n  analytic IC mean/sd      measured IC mean/sd      sd ratio  
     40  0.038462 / 0.006886    0.038438 / 0.007036    1.022
@@ -13,31 +16,33 @@ Calibrate the pre-flight statistics: is this ciphertext even Enigma?
    600  0.038462 / 0.000454    0.038511 / 0.000461    1.017
 
      n  analytic absent mean/sd  measured absent mean/sd 
-    40  5.4155 / 1.5931          5.4420 / 1.5900
-    60  2.4716 / 1.3033          2.4603 / 1.3215
-   100  0.5148 / 0.6833          0.5233 / 0.6739
-   155  0.0595 / 0.2422          0.0580 / 0.2366
-   300  0.0002 / 0.0142          0.0010 / 0.0316
+    40  5.4155 / 1.5931          5.3880 / 1.6141
+    60  2.4716 / 1.3033          2.4393 / 1.2727
+   100  0.5148 / 0.6833          0.5260 / 0.6943
+   155  0.0595 / 0.2422          0.0653 / 0.2525
+   300  0.0002 / 0.0142          0.0000 / 0.0000
    600  0.0000 / 0.0000          0.0000 / 0.0000
 
-== 2. how far genuine Enigma reaches: the tail of z(IC) ==
+== 2. how far simulated Enigma reaches: the tail of z(IC) ==
 
 A threshold must clear this, not a nominal p-value.
 
      n    median      99%    99.9%      max     P(z>6)
-    40     -0.19     2.79     4.47     5.40     0.0000
-    60     -0.01     2.96     3.82     4.69     0.0000
-   100     -0.03     3.00     4.78     4.92     0.0000
-   155     -0.10     2.71     4.33     5.66     0.0000
-   300     -0.05     2.73     3.90     5.25     0.0000
-   600     -0.01     2.88     3.69     5.39     0.0000
+    40     -0.19     2.98     4.65     5.03     0.0000
+    60     -0.13     2.71     3.95     4.93     0.0000
+   100     -0.10     2.63     3.82     4.63     0.0000
+   155     -0.05     2.85     3.62     3.95     0.0000
+   300     -0.07     2.77     3.63     5.89     0.0000
+   600      0.02     2.93     4.21     5.73     0.0000
 
-pooled over 18000 samples: max z = 5.66, P(z>6) = 0.00000, P(z>8) = 0.00000
+pooled over 18000 samples: max z = 5.89, P(z>6) = 0.00000, P(z>8) = 0.00000
 
 == 3. false-positive rate of the SHIPPED rule ==
 
 Rule: warn if z(IC) > 6.0 OR P(absent) < 1e-04.  A false positive is
 expensive in trust; a false negative only costs what it costs now.
+SAME sample set as section 2, so the two figures describe one
+population and can be quoted together.
 
      n   IC fires absent fires     either
     40    0.00000      0.00000    0.00000
@@ -47,7 +52,7 @@ expensive in trust; a false negative only costs what it costs now.
    300    0.00000      0.00000    0.00000
    600    0.00000      0.00000    0.00000
 
-pooled: 0 of 18000 genuine Enigma ciphertexts would be flagged (0.00000)
+pooled: 0 of 18000 simulated Enigma ciphertexts would be flagged (0.00000)
 
 == 4. the 1941 messages, broken ones as controls ==
 

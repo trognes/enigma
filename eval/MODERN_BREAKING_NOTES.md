@@ -880,7 +880,7 @@ is not a find" note — but the reason it found nothing was **already in the
 ciphertext**, and cost nothing to check.
 
 **Enigma is a permutation cipher, so its output is near-flat.** QTXMA's is
-not. Against 3000 real Enigma encryptions of authentic German at the same
+not. Against 3000 simulated Enigma encryptions of authentic German at the same
 length:
 
 | statistic | QTXMA | Enigma null (n=155) | z |
@@ -917,7 +917,7 @@ them rather than 6σ beyond.
 
 `eval/preflight_null.py` establishes the null and reproduces all of this. Its
 useful finding is that **no tables are needed**: both statistics have closed
-forms under a uniform multinomial that match real Enigma encryptions within
+forms under a uniform multinomial that match simulated Enigma encryptions within
 1–2% at every length from 40 to 600.
 
 - `IC = P / C(n,2)`, where `P` counts same-letter position pairs. With uniform
@@ -938,8 +938,13 @@ Enigma rather than a nominal p-value — the same discipline `--confidence`
 documents for its own Gaussian tail, and for the same reason: a best-of-many
 statistic reads the tail, which the CLT delivers slowly.
 
-Over **18 000 real Enigma ciphertexts** spanning n = 40…600 the largest z(IC)
-observed was 5.66 and **neither test fired once**. All four broken 1941
+Across **one sample of 18 000 simulated Enigma ciphertexts** spanning
+n = 40…600 the largest z(IC) observed was 5.89 and **neither test fired
+once** — sections 2 and 3 of the script share that sample set, so the tail
+figure and the false-positive figure describe one population rather than two
+separate draws. *Simulated* is the right word: authentic 1941 German under
+random keys and 10-pair boards, and since the corpus tops out at 214 letters
+the n ≥ 300 cells draw from it concatenated. All four broken 1941
 messages pass. QTXMA fires on both. A false positive here is expensive in
 trust — it would tell someone to abandon a breakable message — while a false
 negative only costs what it costs today, so the margin is deliberately wide.

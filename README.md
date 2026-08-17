@@ -175,10 +175,10 @@ encrypting, and plaintext is language-like by definition. **`--preflight`**
 prints the report either way, including a plain "consistent with Enigma output"
 when nothing is wrong.
 
-The thresholds are deliberately slack: over 18 000 real Enigma ciphertexts
-neither test fired once. Short messages are the reason — the index of
-coincidence is far noisier at 50 letters than at 500, so the bar moves with
-length rather than sitting at a fixed value.
+The thresholds are deliberately slack: across 18 000 simulated Enigma
+ciphertexts neither test fired once. Short messages are the reason — the
+index of coincidence is far noisier at 50 letters than at 500, so the bar
+moves with length rather than sitting at a fixed value.
 
 ## Options
 

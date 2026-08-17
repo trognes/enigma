@@ -1373,8 +1373,9 @@ are read from a **data directory** (filenames built as
   - **It was measured the expensive way.** A 28-hour, 75.2M-key sweep of the
     QTXMA challenge message returned nothing (best margin +0.81 sd against a
     6.0 bar). The reason was in the ciphertext before the search started: IC
-    **0.0577** against the 0.0385 ± 0.0018 that 3000 real Enigma encryptions
-    give at that length (**z = +10.9**, the largest of the 3000 being 0.0468),
+    **0.0577** against the 0.0385 ± 0.0018 that 3000 simulated Enigma
+    encryptions give at that length (**z = +10.9**, the largest of the 3000
+    being 0.0468),
     and **4 letters unused** where 0.06 are expected (P = 8.5e-08; none of the
     3000 lacked more than 2). `eval/MODERN_BREAKING_NOTES.md` §5l.
   - **The null MUST be length-dependent, and the collection proves it.** IC
@@ -1384,7 +1385,7 @@ are read from a **data directory** (filenames built as
     in 47. A fixed IC threshold condemns them and leaves QTXMA looking
     ordinary.
   - **No tables are needed**, which is what makes it free. Both statistics have
-    closed forms under a uniform multinomial that match real Enigma within
+    closed forms under a uniform multinomial that match simulated Enigma within
     1–2% at every length from 40 to 600: `IC = P/C(n,2)` over same-letter
     position pairs, whose indicators are pairwise **uncorrelated** under
     uniform `p` (the shared-index covariance is `Σp³ − (Σp²)² = 0`), giving
@@ -1394,11 +1395,14 @@ are read from a **data directory** (filenames built as
     and skewed enough that a z-score misleads.
   - **Thresholds come from the measured tail, not a nominal p-value** — the
     same discipline `--confidence` documents for its own Gaussian tail. Warns
-    at **z(IC) > 6.0** or **P(unused) < 1e-4**; over **18 000 real Enigma
-    ciphertexts** at n = 40…600 the largest z seen was 5.66 and neither test
-    fired once. A false positive is expensive in trust (it would tell someone
-    to abandon a breakable message) and a false negative only costs what it
-    costs today, hence the wide margin. `eval/preflight_null.py` reproduces it.
+    at **z(IC) > 6.0** or **P(unused) < 1e-4**; across one sample of **18 000
+    simulated Enigma ciphertexts** at n = 40…600 the largest z seen was 5.89
+    and neither test fired once. *Simulated*, not real traffic: authentic
+    1941 German under random keys and 10-pair boards, and the corpus tops out
+    at 214 letters so the n ≥ 300 cells draw from it concatenated. A false
+    positive is expensive in trust (it would tell someone to abandon a
+    breakable message) and a false negative only costs what it costs today,
+    hence the wide margin. `eval/preflight_null.py` reproduces it.
   - **The gate matters as much as the test.** The warning fires only when the
     key is wildcarded, i.e. when the run is a *search*. With a fully-specified
     key the tool is encrypting, and its input is then routinely **plaintext**,

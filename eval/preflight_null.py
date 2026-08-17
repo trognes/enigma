@@ -17,7 +17,7 @@ routinely -- two of the four BROKEN (i.e. genuinely Enigma) challenge messages
 sit above +4 sd, at 47 and 74 letters.  A fixed IC threshold would flag them.
 
 WHY NO TABLES ARE NEEDED.  Both statistics have closed forms under a uniform
-multinomial, and this script checks that against real Enigma encryptions:
+multinomial, and this script checks that against simulated Enigma encryptions:
 
   IC      = P / C(n,2), where P counts same-letter position pairs.  With
             uniform p the pair indicators are pairwise UNCORRELATED -- the
@@ -97,7 +97,12 @@ def flags(ct):
 
 
 def sample_enigma(rng, texts, n, trials):
-    """Real Enigma encryptions of authentic German at length n."""
+    """Enigma encryptions of authentic German at length n.
+
+    The machine model is the real one; the key, the 10-pair board and the
+    excerpt are random, so these are SIMULATED ciphertexts rather than real
+    traffic -- the same distinction the unknown-key section of CLAUDE.md draws.
+    """
     out_ic, out_ab = [], []
     for _ in range(trials):
         pt = rng.choice(texts)
@@ -148,17 +153,29 @@ def main():
         print(s, flush=True)
         log.append(s)
 
-    say(__doc__.split("\n")[0])
-    say("\n%d Enigma encryptions per length, authentic German, 10-pair board\n"
-        % a.trials)
-
-    say("== 1. the analytic null matches real Enigma ==\n")
-    say("%6s  %-24s %-24s %-10s"
-        % ("n", "analytic IC mean/sd", "measured IC mean/sd", "sd ratio"))
     lengths = [40, 60, 100, 155, 300, 600]
+
+    # ONE sample set, reused by every section.  Sampling separately per section
+    # was worse than wasteful: it made "18000 ciphertexts" mean a different
+    # 18000 in each, so the tail figure and the false-positive figure could not
+    # honestly be quoted in the same sentence.
+    say(__doc__.split("\n")[0])
+    say("\n%d simulated Enigma encryptions per length (%d total), authentic"
+        % (a.trials, a.trials * len(lengths)))
+    say("1941 German plaintext, random key and random 10-pair board each.")
+    say("NOT real traffic: the corpus tops out at %d letters, so n >= 300 draws"
+        % max(len(t) for t in base))
+    say("from the concatenated corpus rather than from one message.\n")
+    sample = {}
     for n in lengths:
         texts = [t for t in base if len(t) >= n] or [joined]
-        i_, _ = sample_enigma(rng, texts, n, a.trials)
+        sample[n] = sample_enigma(rng, texts, n, a.trials)
+
+    say("== 1. the analytic null matches simulated Enigma ==\n")
+    say("%6s  %-24s %-24s %-10s"
+        % ("n", "analytic IC mean/sd", "measured IC mean/sd", "sd ratio"))
+    for n in lengths:
+        i_, _ = sample[n]
         sa = ic_sd(n)
         say("%6d  %.6f / %.6f    %.6f / %.6f    %.3f"
             % (n, Q, sa, i_.mean(), i_.std(), i_.std() / sa))
@@ -166,19 +183,17 @@ def main():
     say("\n%6s  %-24s %-24s" % ("n", "analytic absent mean/sd",
                                 "measured absent mean/sd"))
     for n in lengths:
-        texts = [t for t in base if len(t) >= n] or [joined]
-        _, ab = sample_enigma(rng, texts, n, a.trials)
+        _, ab = sample[n]
         m, s = absent_mean_sd(n)
         say("%6d  %.4f / %.4f          %.4f / %.4f" % (n, m, s, ab.mean(), ab.std()))
 
-    say("\n== 2. how far genuine Enigma reaches: the tail of z(IC) ==\n")
+    say("\n== 2. how far simulated Enigma reaches: the tail of z(IC) ==\n")
     say("A threshold must clear this, not a nominal p-value.\n")
     say("%6s  %8s %8s %8s %8s %10s"
         % ("n", "median", "99%", "99.9%", "max", "P(z>6)"))
     allz = []
     for n in lengths:
-        texts = [t for t in base if len(t) >= n] or [joined]
-        i_, _ = sample_enigma(rng, texts, n, a.trials)
+        i_, _ = sample[n]
         z = (i_ - Q) / ic_sd(n)
         allz.append(z)
         say("%6d  %8.2f %8.2f %8.2f %8.2f %10.4f"
@@ -191,19 +206,20 @@ def main():
     say("\n== 3. false-positive rate of the SHIPPED rule ==\n")
     say("Rule: warn if z(IC) > %.1f OR P(absent) < %.0e.  A false positive is"
         % (Z_IC, P_ABSENT))
-    say("expensive in trust; a false negative only costs what it costs now.\n")
+    say("expensive in trust; a false negative only costs what it costs now.")
+    say("SAME sample set as section 2, so the two figures describe one\n"
+        "population and can be quoted together.\n")
     say("%6s %10s %12s %10s" % ("n", "IC fires", "absent fires", "either"))
-    tot_i = tot_a = tot_e = tot_n = 0
+    tot_e = tot_n = 0
     for n in lengths:
-        texts = [t for t in base if len(t) >= n] or [joined]
-        i_, ab = sample_enigma(rng, texts, n, a.trials)
+        i_, ab = sample[n]
         fi = (i_ - Q) / ic_sd(n) > Z_IC
         fa = np.array([absent_tail(int(k), n) < P_ABSENT for k in ab])
         say("%6d %10.5f %12.5f %10.5f"
             % (n, fi.mean(), fa.mean(), (fi | fa).mean()))
-        tot_i += fi.sum(); tot_a += fa.sum(); tot_e += (fi | fa).sum()
+        tot_e += (fi | fa).sum()
         tot_n += fi.size
-    say("\npooled: %d of %d genuine Enigma ciphertexts would be flagged (%.5f)"
+    say("\npooled: %d of %d simulated Enigma ciphertexts would be flagged (%.5f)"
         % (tot_e, tot_n, tot_e / tot_n))
 
     say("\n== 4. the 1941 messages, broken ones as controls ==\n")
