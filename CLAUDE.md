@@ -955,6 +955,18 @@ are read from a **data directory** (filenames built as
     higher distribution than a scanned one (measured −6.84 against −8.01 on
     the same ciphertext), so calibrating a climbed search against a scanned
     null would make every run look significant.
+  - **And they are climbed by the SAME UNIT the search runs**, which is a
+    sharper version of the same rule. `--crib` and `--signature-seed` replace
+    the plain climb with a deduction-seeded one, whose scores sit somewhere else
+    entirely: measured on one ciphertext, the seeded null is −11.7399 ± 0.4244
+    against the plain climb's −10.7938 ± 0.2505 — nearly a point lower and
+    **1.7× wider**. Both the sweep and `calibrate_null()` therefore go through
+    one `climb_unit()` helper so they cannot drift. **The bias this removes was
+    not one-directional**, which is why it mattered: on a score of −10.4908 the
+    plain null read 1.21 σ against the correct 2.94, but the two lines cross at
+    s ≈ −9.43 and **above that — where a real break sits — the plain null
+    overstates**. Near zero it undersold a run; far out it would have oversold
+    one.
   - **Keys are sampled, not random text.** The null a search actually draws
     from is "this ciphertext under a wrong key", and `key_to_machine()` already
     builds exactly that in every machine mode.
