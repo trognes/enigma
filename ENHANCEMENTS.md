@@ -845,11 +845,53 @@ and keeping the best *by score* recovers most of the loss (50.3) while still
 costing less than `-R 8`. Ranking by the converged score is much sharper than
 the IC pre-ranking because by then each seed's climb has actually run.
 
-*The better fix is not available today.* `-s` is the only way to express a seed,
-and it pins. What this wants is a **soft** seed — a starting board the climb may
-modify — where a wrong seed costs one restart rather than the run. That would
-likely land near the oracle without needing three runs, and it needs a new
-option; it is untested.
+*The soft seed was built as the better fix, and it is NOT one — my prediction
+here was wrong.* This entry used to argue that `-s` pinning was the problem and
+that a **soft** seed — a starting board the climb may modify — "would likely
+land near the oracle without needing three runs". `--soft-plug` now exists (see
+`CLAUDE.md`), and measured over the same 300 trials it does not:
+
+| arm | mean %-correct | exact | `score_iter` |
+|---|---:|---:|---:|
+| **B** hard seed, `-R 8` | 74.2 | **204/300** | 5 767 |
+| **Bm** hard seed, `-R 24` | 74.2 | 204/300 | 13 041 |
+| **S** soft seed, `-R 8` | 74.6 | 188/300 | 17 358 |
+| **B3** hedged, top 3 hard | **85.3** | **238/300** | 24 997 |
+| *O* hard oracle seed | *97.3* | *275/300* | *6 152* |
+| *SO* soft oracle seed | *87.7* | *228/300* | *16 143* |
+
+At matched compute the soft seed is **+0.4pp of mean and −16 exact recoveries**
+against the hard seed, for 3× the `score_iter`. The half of the prediction that
+held is the failure mode, and it held strongly — split on whether the ranking
+picked the correct seed, soft is **+21.5pp** where hard collapses (32.4 against
+10.9). What sank it is the other half, which the prediction did not consider at
+all: **soft loses 7.9pp where the seed is RIGHT** (91.3 against 99.2), and the
+seed is right 72% of the time. The oracle pair says the same thing without the
+ranking in the way — a *correct* seed is worth 97.3 pinned and only 87.7 soft.
+
+The mechanism is the thing to keep. **Pinning is not merely a commitment, it is
+a search-space reduction**: `-s` takes 14 letters out of the 325-toggle scan, so
+the climb solves a 12-letter residual instead of a 26-letter one. Unpinned, the
+climb re-searches everything and, at 100–170 letters, the score signal is not
+sharp enough to hold correct plugs in place — so it wanders off them. Two
+corollaries fall out:
+
+- **Hard seeding saturates at `-R 8`.** Arm Bm at `-R 24` is *identical* to arm
+  B at `-R 8` — 74.2 / 204 on both — because the pinned residual is small enough
+  that eight restarts either solve it or nothing will. Extra restarts on a
+  hard-seeded climb buy literally nothing; that compute belongs on more
+  hypotheses instead, which is exactly what B3 does.
+- **The right hedge tests hypotheses, it does not soften one.** B3 beats every
+  soft variant because it spends its budget asking *which* seed is right rather
+  than hedging against a single seed being wrong.
+
+`--soft-plug` is kept: it is a small, tested, off-by-default option, it is the
+natural way to express a guess, and its measured behaviour (graceful when
+wrong, weaker when right) is the useful characterisation of a whole class of
+seeding ideas. It is simply not the recommendation here. One tuning note from
+building it: a soft-seeded board starts good, so the default `--random 10` kick
+is the wrong size for it — 72.7 → **79.0** mean at `--random 3`, while dropping
+the staged IC pre-pass is near-neutral.
 
 **Two things bound the result, and both point the same way.** This is the
 plugboard-recovery tier with the **rotor key given**, which is the tier every
