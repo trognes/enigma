@@ -178,6 +178,9 @@ wheels, ring and start positions — any position left as `.` is brute-forced.
 - **`--no-plug LETTERS`** — Letters known to carry **no** cable, e.g.
   `--no-plug XQZ`; the climb leaves them unplugged, exactly as `-s` holds its
   pairs plugged. Needs `-c` `[none]`
+- **`--soft-plug AB…`** — Plugboard pairs *guessed* rather than known: the climb
+  starts from them each restart but may move or drop them, unlike `-s`. Needs
+  `-c` `[none]`
 
 `-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's `start −
 ring` offset is recoverable, so a full M4 wildcard search enumerates the
@@ -272,6 +275,13 @@ English tables.
   "this one is plugged to nothing" — and worth more than it looks, since a
   cable has two ends: each marked letter removes 25 of the 325 candidate plugs
   (needs `-c`; off by default)
+- **`--soft-plug AB…`** — Plugboard pairs that are a **guess**, not knowledge.
+  The pairs are laid on the board each restart starts from and then left free,
+  so the climb can move, merge or remove them. The point is the failure mode: a
+  wrong `-s` pin cannot be undone by anything downstream, while a wrong soft
+  guess costs only the moves spent walking back out of it — which is what a
+  *deduced* seed needs. A soft-seeded board starts good, so it wants a smaller
+  `--random` kick than the default (needs `-c`; off by default)
 - **`--crib TEXT` / `--crib-at N`** — **Known plaintext**, and where it sits. A
   rotor setting that cannot have produced the crib is rejected by arithmetic and
   never scored — measured **99.9%** of a start-position keyspace on a 12-letter

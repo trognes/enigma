@@ -1,0 +1,62 @@
+Matched-compute A/B: does SIGNATURE SEEDING beat spending the time on -R?
+
+10 messages x 30 keys, -c -f -J --polish -S i4f10 -l wehrmacht, -T 4
+A (baseline) swept over -R 8,64,256; B/O (seeded) at -R 8
+
+
+arm    mean %     exact        score_iter     wall/trial
+A8     53.6       130/300      28156          0.08 s
+A64    74.9       197/300      150954         0.09 s
+A256   83.6       223/300      582450         0.12 s
+B      74.2       204/300      5767           0.08 s
+Bm     74.2       204/300      13041          0.08 s
+B3     85.3       238/300      24997          0.22 s
+S0     72.5       185/300      11409          0.08 s
+S1     74.1       187/300      16623          0.08 s
+S2     74.1       187/300      16934          0.08 s
+S3     74.6       188/300      17358          0.08 s
+SO0    84.4       218/300      9759           0.08 s
+SO1    87.6       226/300      15533          0.08 s
+SO2    87.5       226/300      15869          0.08 s
+SO3    87.7       228/300      16143          0.08 s
+O      97.3       275/300      6152           0.08 s
+
+matched compute: B costs 5767 score_iter, nearest baseline is A8 at 28156 (4.88x)
+   B vs A8: mean +20.55pp, CI [+14.32, +26.78] per trial, [+5.44, +35.29] clustered on 9 messages
+      exact +74 (only B 104, only A8 30), McNemar p = 0.0000
+   Bm vs A8: mean +20.57pp, CI [+14.34, +26.80] per trial, [+5.46, +35.32] clustered on 9 messages
+      exact +74 (only Bm 104, only A8 30), McNemar p = 0.0000
+   B3 vs A8: mean +31.71pp, CI [+26.13, +37.29] per trial, [+15.66, +44.94] clustered on 9 messages
+      exact +108 (only B3 121, only A8 13), McNemar p = 0.0000
+   S0 vs A8: mean +18.88pp, CI [+13.51, +24.25] per trial, [+8.00, +31.96] clustered on 9 messages
+      exact +55 (only S0 70, only A8 15), McNemar p = 0.0000
+   S1 vs A8: mean +20.44pp, CI [+15.01, +25.87] per trial, [+8.77, +32.66] clustered on 9 messages
+      exact +57 (only S1 73, only A8 16), McNemar p = 0.0000
+   S2 vs A8: mean +20.52pp, CI [+15.20, +25.84] per trial, [+8.71, +31.99] clustered on 9 messages
+      exact +57 (only S2 72, only A8 15), McNemar p = 0.0000
+   S3 vs A8: mean +20.96pp, CI [+15.66, +26.25] per trial, [+10.24, +32.52] clustered on 9 messages
+      exact +58 (only S3 72, only A8 14), McNemar p = 0.0000
+   SO0 vs A8: mean +30.77pp, CI [+25.71, +35.84] per trial, [+17.63, +41.29] clustered on 9 messages
+      exact +88 (only SO0 93, only A8 5), McNemar p = 0.0000
+   SO1 vs A8: mean +33.96pp, CI [+29.13, +38.79] per trial, [+19.91, +44.01] clustered on 9 messages
+      exact +96 (only SO1 98, only A8 2), McNemar p = 0.0000
+   SO2 vs A8: mean +33.88pp, CI [+29.03, +38.72] per trial, [+19.82, +44.21] clustered on 9 messages
+      exact +96 (only SO2 98, only A8 2), McNemar p = 0.0000
+   SO3 vs A8: mean +34.08pp, CI [+29.29, +38.88] per trial, [+19.73, +44.65] clustered on 9 messages
+      exact +98 (only SO3 99, only A8 1), McNemar p = 0.0000
+   O vs A8: mean +43.70pp, CI [+38.85, +48.55] per trial, [+26.01, +56.64] clustered on 9 messages
+      exact +145 (only O 145, only A8 0), McNemar p = 0.0000
+   baseline levels reaching B's mean %-correct: A64 (26.2x B's cost), A256 (101.0x B's cost)
+
+split by whether the IC ranking picked the correct seed:
+                   trials  A8       B (-s)   B3       O        
+   ranking right   215     57.2     99.2     99.2     99.2    
+   ranking WRONG   85      44.5     10.9     50.3     92.6    
+
+   soft arm by kick size (S<k> ranked, SO<k> oracle):
+   kick     right     WRONG     mean/exact  oracle    score_iter
+   -R 0     90.0      28.3      72.5 / 185  84.4      11409
+   r1       91.8      29.2      74.1 / 187  87.6      16623
+   r2       91.0      31.5      74.1 / 187  87.5      16934
+   r3       91.3      32.4      74.6 / 188  87.7      17358
+   correct seed in the top 3: 253/300 trials

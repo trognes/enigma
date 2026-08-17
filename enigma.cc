@@ -135,6 +135,23 @@ static const char * opt_steckerbrett;
    quadratically (each marked letter drops 25 of the 325 toggles) and, more to the point,
    stops the climb spending moves on plugs that cannot exist. */
 static const char * opt_no_plug;
+/* --soft-plug PAIRS: the same shape as -s, and the opposite contract. -s says "these
+   plugs are KNOWN", marks their letters in plug_fixed[] and forbids every move that would
+   touch them; --soft-plug says "these plugs are a good GUESS" -- it lays them on the board
+   each restart starts from and then gets out of the way, so the climb may move, merge or
+   remove them like any other plug.
+     The distinction is worth an option because the two failure modes are not comparable.
+   A wrong -s pin cannot be undone by anything downstream (the pins deliberately survive
+   --polish), so a bad guess poisons the whole run; a wrong --soft-plug guess costs only
+   whatever the climb spends walking back out of it. That is exactly the trade a DEDUCED
+   seed needs -- a deduction that is right most of the time but not always, such as the
+   terminal-signature self-crib (ENHANCEMENTS.md item 5), where pinning measured WORSE than
+   not seeding at all on the ~28% of messages where the ranking picks the wrong seed.
+     The kick needs no change and that is not luck: perturb_steckerbrett() draws only from
+   SELF-STECKERED letters, so a soft-seeded pair is invisible to it -- the kick adds pairs
+   among the letters the seed left alone instead of scattering the seed itself. Seeding
+   therefore happens BEFORE the kick, and every restart starts from seed + its own kick. */
+static const char * opt_soft_plug;
 /* --crib TEXT / --crib-at N: a guess at part of the plaintext, together with where it
    sits. Given one that is right, part of the plugboard follows by ARITHMETIC instead of
    search, and rotor settings that cannot produce it are rejected without ever being
@@ -1250,6 +1267,26 @@ void init_steckerbrett(machine & m, const char * steckerbrett_string)
     {
       int a = char2num(steckerbrett_string[2*i+0]);
       int b = char2num(steckerbrett_string[2*i+1]);
+      m.steckerbrett[a] = static_cast<unsigned char>(b);
+      m.steckerbrett[b] = static_cast<unsigned char>(a);
+    }
+}
+
+/* --soft-plug: lay the guessed pairs on the board init_steckerbrett() has just built.
+   Deliberately does NOT touch plug_fixed[] -- that is the whole difference from -s. Called
+   once per climb (per work item), never per scoring, so the loop is off the hot path; with
+   the option unset the first test exits immediately.
+     Walks the string two characters at a time rather than indexing by 2*i: an int
+   multiplication used as a pointer offset is a clang-tidy error
+   (bugprone-implicit-widening-of-multiplication-result), and this is the same pointer
+   idiom --no-plug already uses. p[1] is always in range because validation has already
+   rejected an odd number of letters. */
+void apply_soft_plug(machine & m)
+{
+  for (const char * p = opt_soft_plug; *p != 0; p += 2)
+    {
+      int a = char2num(p[0]);
+      int b = char2num(p[1]);
       m.steckerbrett[a] = static_cast<unsigned char>(b);
       m.steckerbrett[b] = static_cast<unsigned char>(a);
     }
@@ -4280,6 +4317,7 @@ static double tune_phase(machine & m, uint64_t * rng, double score)
 static double hillclimb_one(machine & m, size_t key_index, int restart)
 {
   init_steckerbrett(m, opt_steckerbrett);
+  apply_soft_plug(m);            /* before the kick -- see the opt_soft_plug note */
   uint64_t rng = restart_seed(key_index, restart);
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
@@ -7358,6 +7396,10 @@ void help(FILE * out)
           "Letters known to carry NO cable: the climb leaves");
   fprintf(out, "  %-24s %s\n", "", "them unplugged, as -s holds its pairs plugged");
   fprintf(out, "  %-24s %s\n", "", "(needs -c) [none]");
+  fprintf(out, "  %-24s %s\n", "--soft-plug AB...",
+          "Plugboard pairs GUESSED rather than known: the");
+  fprintf(out, "  %-24s %s\n", "", "climb starts from them each restart but may");
+  fprintf(out, "  %-24s %s\n", "", "move or drop them, unlike -s (needs -c) [none]");
   fprintf(out, "  %-24s %s\n", "-n, --norway",
           "Norway Enigma: reflector N and wheels (1-5)");
   fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
@@ -7788,6 +7830,9 @@ void show_settings()
     fprintf(stderr, "(none)\n");
   if (opt_no_plug[0])
     fprintf(stderr, "            %s known unplugged (--no-plug)\n", opt_no_plug);
+  if (opt_soft_plug[0])
+    fprintf(stderr, "            %s guessed, climb may revise (--soft-plug)\n",
+            opt_soft_plug);
   if (opt_crib_text)
     {
       if (opt_crib_at >= 0)
@@ -7825,6 +7870,7 @@ int main(int argc, char * * argv)
   opt_grundstellung = 0;
   opt_steckerbrett = "";
   opt_no_plug = "";
+  opt_soft_plug = "";
   opt_crib_text = nullptr;
   opt_crib_list = nullptr;
   g_crib_list.clear();
@@ -7881,7 +7927,7 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
-         OPT_NOPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
+         OPT_NOPLUG, OPT_SOFTPLUG, OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLELEN, OPT_DOUBLEZ,
          OPT_DOUBLEMM };
@@ -7934,6 +7980,7 @@ int main(int argc, char * * argv)
       { "tune-phase",     required_argument, nullptr, OPT_TUNEPHASE },
       { "confidence",     required_argument, nullptr, OPT_CONFIDENCE },
       { "no-plug",        required_argument, nullptr, OPT_NOPLUG },
+      { "soft-plug",      required_argument, nullptr, OPT_SOFTPLUG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
@@ -8076,6 +8123,10 @@ int main(int argc, char * * argv)
         case OPT_NOPLUG:
           alltoupper(optarg);
           opt_no_plug = optarg;
+          break;
+        case OPT_SOFTPLUG:
+          alltoupper(optarg);
+          opt_soft_plug = optarg;
           break;
         case OPT_FULLTEXT:
           opt_full_text = true;
@@ -8391,6 +8442,49 @@ int main(int argc, char * * argv)
   if (opt_no_plug[0] && (! opt_hillclimb))
     fatal("--no-plug needs -c (it constrains the plugboard climb; without one the "
           "plugboard is fixed anyway)");
+
+  /* --soft-plug PAIRS: a GUESS at part of the board, laid on each restart's starting
+     position and then left free. Same well-formedness rules as -s, plus the two
+     contradictions: a letter -s already pins (that letter's partner is asserted KNOWN, so
+     starting it somewhere else is incoherent) and a letter --no-plug marks as carrying no
+     cable (which the guess would immediately plug). Without -c there is no climb to start,
+     so the "soft" half is meaningless and the caller wants -s. */
+  if ((strlen(opt_soft_plug) > asize) ||
+      (strspn(opt_soft_plug, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") < strlen(opt_soft_plug)))
+    fatal("Illegal --soft-plug string (must be letters A-Z)");
+  if (strlen(opt_soft_plug) & 1)
+    fatal("Illegal --soft-plug string (needs an even number of letters -- it is pairs)");
+  {
+    bool seen[asize];
+    for (int j = 0; j < asize; j++)
+      seen[j] = false;
+    for (const char * p = opt_soft_plug; *p != 0; p++)
+      {
+        if (seen[char2num(*p)])
+          fatal("Illegal --soft-plug string (a letter is repeated)");
+        seen[char2num(*p)] = true;
+      }
+    size_t nplugged = strlen(opt_steckerbrett);   /* letters, not pairs */
+    for (size_t i = 0; i < nplugged; i++)
+      if (seen[char2num(opt_steckerbrett[i])])
+        fatal("A letter is both pinned by -s and guessed by --soft-plug");
+    for (const char * p = opt_no_plug; *p != 0; p++)
+      if (seen[char2num(*p)])
+        fatal("A letter is both marked unplugged by --no-plug and guessed by "
+              "--soft-plug");
+  }
+  if (opt_soft_plug[0] && (! opt_hillclimb))
+    fatal("--soft-plug needs -c (it seeds the plugboard climb; without one the "
+          "plugboard is fixed, which is what -s is for)");
+  /* Every other seeding mechanism installs its own starting board at its own site, so
+     combining them would silently let one overwrite the other: --exhaust pins its forced
+     pairs, --crib pins what it deduces, and -A seeds itself with an IC pre-pass. */
+  if (opt_soft_plug[0] && (opt_exhaust > 0))
+    fatal("--soft-plug cannot be combined with --exhaust (both seed the board)");
+  if (opt_soft_plug[0] && (opt_crib_text || opt_crib_list))
+    fatal("--soft-plug cannot be combined with --crib/--crib-list (both seed the board)");
+  if (opt_soft_plug[0] && (opt_anneal > 0))
+    fatal("--soft-plug cannot be combined with -A (SA seeds itself with an IC pre-pass)");
 
   /* --restarts 0 (the new default) is legal: one deterministic climb from the seed, no
      kick. --restarts N>=1 runs N kicked climbs. */

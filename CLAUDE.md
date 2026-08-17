@@ -498,6 +498,42 @@ are read from a **data directory** (filenames built as
   removes **25 of the 325** candidate toggles, not one. Fatal on a letter `-s`
   also plugs (the two statements contradict), a repeated letter, a non-letter,
   or no `-c`. `-T`-deterministic.
+- `--soft-plug AB...` plugboard pairs **guessed rather than known** (needs `-c`;
+  off by default). Same shape as `-s`, opposite contract: the pairs are laid on
+  the board each restart starts from and then left **free** — the climb may
+  move, merge or remove them like any other plug. `-s` says *known* and marks
+  `plug_fixed[]`; `--soft-plug` says *good guess* and marks nothing.
+  - **The two failure modes are not comparable, which is the whole reason the
+    option exists.** A wrong `-s` pin cannot be undone by anything downstream
+    (the pins deliberately survive `--polish`), so a bad guess poisons the run;
+    a wrong `--soft-plug` guess costs only the moves the climb spends walking
+    back out of it. That is the trade a **deduced** seed needs — one that is
+    right most of the time but not always, such as the terminal-signature
+    self-crib (`ENHANCEMENTS.md` item 5), where pinning measured **worse than
+    not seeding at all** on the ~28% of messages whose ranking picks the wrong
+    seed.
+  - **The kick needed no change, and that is not luck.**
+    `perturb_steckerbrett()` draws only from *self-steckered* letters, so a
+    soft-seeded pair is invisible to it: the kick adds pairs among the letters
+    the seed left alone rather than scattering the seed. Seeding therefore
+    happens **before** the kick, and every restart starts from seed + its own
+    kick.
+  - **The kick size barely matters, and an earlier claim here was WRONG.** This
+    entry used to say a soft-seeded board wants a much smaller kick than the
+    default, citing 72.7 → **79.0** mean %-correct at `--random 3`. That was
+    measured on 60 trials and does not survive 300: the real spread across
+    `--random` 10/5/3/2/1 is 73.0 / 74.3 / 74.6 / 74.1 / 74.1, i.e. ~1.6pp
+    end to end, and on exact recovery `r3` against `r10` is 188 against 183
+    of 300 (McNemar p = 0.40 — nothing). **No kick at all** (`-R 0`, one climb
+    straight from the seed, since `--random 0` would make every restart
+    identical) costs ~2pp of mean for **35% less compute** — 11 409
+    `score_iter` against ~17 000 — so it is the cheapest sensible setting.
+    Dropping the staged IC pre-pass (`--score f10`) is near-neutral too. None
+    of these knobs rescues the option; see below.
+  - Fatal on an odd number of letters, a repeated letter, a non-letter, no `-c`,
+    a letter `-s` also pins or `--no-plug` also marks (each a contradiction),
+    and on `--exhaust`/`--crib`/`--crib-list`/`-A`, which all install their own
+    starting board at their own site. `-T`-deterministic.
 - `-c` hill-climb the plugboard. The climb rule is **steepest ascent** by
   default: each step scans the whole 325-pair toggle operator and applies the
   single best improving move, to convergence. `-J` swaps that rule for
@@ -2262,9 +2298,15 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   `clang-tidy enigma.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
   tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`
   installs the binary). Run them before pushing, and grep clang-tidy's output
-  for `error:` rather than for the names you touched — it prints one file-scope
-  error and suppresses ~24 000 warnings from system headers, so a name-filtered
-  grep looks clean when it is not. A `Bench` workflow
+  for `error:` rather than for the names you touched: it suppresses ~24 000
+  warnings from system headers and reports its own findings at file scope, so a
+  name-filtered grep looks clean when it is not. **A clean tree reports ZERO
+  `error:` lines, so any count above zero is a red CI job** — an earlier version
+  of this sentence said clang-tidy "prints one file-scope error", which reads as
+  a standing benign one; it is not, and a `bugprone-implicit-widening-of-
+  multiplication-result` error was pushed on the strength of that reading
+  (`2*i` used as a pointer offset — index with a `const char *` walked two at a
+  time instead). Do not stop at the count; read the line. A `Bench` workflow
   (`.github/workflows/bench.yml`) additionally runs `make bench LONG=1` on a
   {g++, clang++} × {x86_64, arm64-Linux} matrix — on PRs as a same-machine A/B
   vs the PR base at the script's default **10%**, and **advisory only**

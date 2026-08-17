@@ -170,7 +170,10 @@ JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
 **5. Repeated text with an X between — the REPORTER is shipped as
-`--double-length L`; the SCORE BONUS was swept and measured down.** The split is
+`--double-length L`; the SCORE BONUS and the SELF-CRIB FILTER are measured
+down; the SIGNATURE SEEDER beats `-R` at matched compute and is READY TO
+BUILD.** The split
+is
 the whole story of this item. As a *confirmation signal* — report the doubling,
 change no ranking — it works and is now in `enigma.cc` as `--double-length L`
 (gate at `--double-z Z`, default 3): see the entry in `CLAUDE.md`, note (a)/(b)
@@ -640,9 +643,415 @@ appeared to climb steeply with z and peak in the tail — which reads as the gat
 of the truth. `alias_starts()` in the harness; verified against an exhaustive
 17 576-start search, 0 mismatches.
 
-*Not attempted, and now the only live form: the SELF-CRIB DEDUCTION.* It
-sidesteps the failure above entirely, because it works on the **ciphertext** and
-needs no correct decrypt at all.
+*The SELF-CRIB DEDUCTION — BUILT AS A PROBE AND MEASURED DOWN AS A FILTER.*
+`eval/selfcrib_probe.py`, results in `eval/results-selfcrib.txt`. The algebra
+below is correct and the deduction works; what fails is the sweep, and the
+reason is worth recording because it is the same trap §4.2a describes.
+
+**The measurement.** Per-alignment rejection on wrong keys looks strong — 0.32
+bare, 0.36 with the separator, 0.68 adding the left flank, **0.89** with both
+flanks. Extrapolating `(1-p)^950` over the unknown alignment gives ~0 survivors,
+i.e. a filter that rejects everything wrong. **That extrapolation is worthless
+and the direct measurement says so: 0 of 160 wrong keys were rejected**, on four
+messages with 1 000–2 000 hypotheses each. The true key survived every time, as
+it must.
+
+**Why.** The per-hypothesis rate is strongly length-dependent, and a sweep is
+dominated by its *weakest* hypotheses, not its strongest:
+
+| L | `sep` | `sep+L` | `sep+L+R` |
+|---:|---:|---:|---:|
+| 6 | **0.030** | 0.203 | 0.528 |
+| 9 | 0.253 | 0.672 | 0.930 |
+| 12 | 0.609 | 0.924 | 0.995 |
+
+A key is rejected only if **every** hypothesis contradicts, and ~1 200 of 2 855
+survive per wrong key — consistently ~42%. The 0.89 that looks decisive is only
+available at the true alignment, the true length and the true flanks, which is
+exactly what a sweep does not know. Measuring at the true alignment is a
+selection effect on the measurement itself; that is why the swept number had to
+be taken directly.
+
+**Two things the probe corrected in this note's own reasoning.** The claim that
+a distinct-letter doubling is a rejection-free forest is **wrong** — the bare
+menu rejects 31.6% per alignment, because the diagonal board makes disjoint
+edges interact through the matching constraint, the same mechanism recorded at
+`archived/cribs.md` §4.1 (a loop-free 12-letter menu rejects 88%, against 0%
+without the board). And the flanking X's are a **hypothesis, not a fact**: they
+hold 93% (left) and 63% (both) of the time here, so a sweep must enumerate them,
+which multiplies the alignment count — the first version of the probe asserted
+them unconditionally and rejected the true key on 3 of 40 messages
+(`ROMANOVKA` is flanked by `N` and `G`).
+
+*The TERMINAL SIGNATURE variant — measured too, and also down.* Half the
+corpus's doublings are a signed surname closing the message (`RENNER`,
+`MATHIAT`, `STEINECKE`, `STUERZBAECHER`, `HENNING` after `GEZ`): **10 of 66
+decrypts end with one**, always with 0 or 1 trailing letters. That pins the
+alignment, which is the only thing that killed the swept version — the
+hypothesis set falls from ~2 800 to **~19**, the word's length being the only
+unknown.
+
+It still does not work, for a different reason each time you look:
+
+- **The short members are unfalsifiable.** `L = 4` and `L = 5` have 6–7 edges
+  and reject **0.000** of wrong keys, against 1.000 at `L ≥ 8`. A key survives
+  if *any* hypothesis does, so the weakest member sets the floor and it is
+  zero. 12–16 of 18 hypotheses reject on every key; never all 18.
+- **Raising the floor does not fix it, because rejection is
+  message-dependent.** At `minL = 7` the aggregate is still 89% kept, and the
+  spread across messages is enormous — 18%, 38%, 92% on three messages with
+  the same setting. Whether a menu has the collisions that create
+  contradictions is a property of *that ciphertext*, not of `L`: on one message
+  the `L = 9` hypothesis rejects 1.00, on another 0.27, and one weak member
+  admits everything.
+- **The premise costs nothing because it buys nothing.** The true key survives
+  10/10 on messages that do end with a doubling — as it must — and **8/8 on
+  messages that do not**, where the hypothesis is false. A filter too weak to
+  reject the true key on a false premise is too weak to reject wrong keys on a
+  true one.
+
+And the comparison that settles it: if you are willing to assume the message
+ends with a doubled surname, `--crib-list` with a name list is strictly better
+— a 7-letter crib at a *known* position rejects 99.9%. The self-crib's whole
+advantage was needing no vocabulary, and it buys a keyspace reduction between
+1.1× and 5.5× depending on the message. Not worth building.
+
+*The SWEPT SEEDER — measured, and down.* Rejection
+being dead does not by itself kill seeding: `--crib`'s hybrid pins deduced plugs
+and lets the climb find the rest (92% of letters recovered against 8%
+unseeded), and that needs only the true hypothesis to *rank highly* among the
+~2 800, not to be the sole survivor. But the requirement is sharper than it
+looks, because **a wrongly pinned plug is worse than no pin at all** — the climb
+cannot undo it, and `--crib`'s pins deliberately survive `--polish`. So the
+number that matters is the *precision* of the top-ranked seeds, not the recall
+of the true one.
+
+Ranking the surviving `(hypothesis, guess)` seeds at the TRUE key by **plugs
+deduced**, which is the ranking this note proposed:
+
+| n | seeds | rank of first correct seed | top-5 plugs (correct) | precision |
+|---:|---:|---:|---|---:|
+| 48 | 2 091 | 12 | 20(0) 18(0) 18(0) 18(0) 18(0) | **0.00** |
+| 101 | 2 946 | 157 | 22(2) 20(1) 20(0) 19(0) 19(0) | 0.03 |
+| 172 | 6 084 | 17 | 21(0) 21(0) 20(0) 20(0) 19(0) | **0.00** |
+| 111 | 2 804 | 3 | 20(2) 20(0) 20(0) 19(19) 19(19) | 0.41 |
+
+The seeds deducing the *most* plugs are the ones deducing them *wrongly* — a
+hypothesis that forces 20 assignments is over-constrained by a false premise,
+not close to the truth. Seeding from the top five would pin ~20 wrong plugs.
+
+A second ranking, **menu selectivity**, fails too. At the true key the true menu
+survives with exactly 1 guess of 26 — but the *median false* menu survives with
+**0**, so 60–87% of false menus are more selective than the true one, and
+~30–40% still survive, leaving thousands of candidates. The deduction's own
+outputs do not identify which hypothesis is real.
+
+*The SIGNATURE SEEDER — measured UP, and this is the open half of item 5.* The
+paragraph above used to end by closing the item, on the argument that scoring
+~2 000 seeds costs about what one extra `-R` restart costs, and restarts are
+measured to deliver. That argument is right about the *swept* seeder and wrong
+about this one, because **pinning the alignment to the end of the message
+changes the seed count by two orders of magnitude**. Half the corpus's doublings
+are a signed surname closing the message (`… X RENNER X RENNER`), so the
+alignment is not unknown — only the name's *length* is, which leaves ~19
+hypotheses rather than ~2 800, and ~28 surviving seeds rather than ~2 000.
+Scoring 28 decrypts is not one restart; it is a rounding error.
+
+Measured over 200 trials (the 10 corpus messages that end with a doubling × 20
+fresh keys and 10-pair boards, `eval/selfcrib_probe.py`):
+
+- **Recall is perfect: 200/200 trials have exactly one fully correct seed** —
+  every assignment it makes agrees with the true board. It pins 12.7
+  assignments on average (4–24), of which 5.4 (1–10) are actual cables; the
+  rest are deduced *no*-cable findings, which `--crib`'s hybrid pins too.
+- **It can be found without knowing the truth.** Ranking the ~28 seeds by their
+  decrypt's score puts the correct one **first in 150 of 200 trials** under the
+  index of coincidence, and in the top three 168 times.
+
+Ranking by every scoring model, paired over the same 200 trials (`vs -i` counts
+trials where only IC ranked it first / only that model did):
+
+| signal | top-1 | top-3 | mean rank | vs `-i` | McNemar |
+|---|---:|---:|---:|---:|---:|
+| **`-i`** | **150/200** | **168/200** | **2.0** | — | — |
+| `-m` | 138/200 | 162/200 | 2.5 | 28 / 16 | p = 0.096 |
+| `-b` | 118/200 | 143/200 | 3.9 | 47 / 15 | p = 0.0001 |
+| `-t` | 128/200 | 150/200 | 3.2 | 37 / 15 | p = 0.003 |
+| `-q` | 129/200 | 154/200 | 3.1 | 36 / 15 | p = 0.005 |
+| `-a` | 128/200 | 153/200 | 3.0 | 38 / 16 | p = 0.004 |
+| `-f` | 144/200 | 165/200 | 2.2 | 22 / 16 | p = 0.42 |
+
+**The index of coincidence ties the fused model and beats every other one** —
+significantly for bi/tri/quad/weighted, marginally for mono. That is worth more
+than the small margin suggests, because IC is the one model that needs no
+language and no n-gram table at all: the seed ranking can be free and
+language-independent even when the search's target model is not. The mechanism
+is the same one that makes `-F`'s tier 1 an IC climb rather than an n-gram scan
+— a partially-correct board yields a *partially* unscrambled decrypt, where
+"the letter distribution is no longer flat" is answerable and "does this read as
+German" is not yet.
+
+The `eval/` scorers used for the table are anchored against the binary
+(`--check-scorers`): all seven agree to ≤0.04, the size of the uint8
+quantisation (`ngram_scale = 32`, ±0.016 per gram), and IC — which is not
+quantised — to 4 decimals.
+
+*The matched-compute A/B against `-R` — the seeder WINS, and it is the first
+thing in this repo to do so.* `-R` has beaten every challenger it has been put
+against (`--cascade`, `--polish`, `-F`, SA, the GA precondition), so this was
+the measurement that decided the item. 300 paired trials (the 10 corpus messages
+that end with a doubling × 30 fresh keys and 10-pair boards), recommended recipe
+`-c -f -l wehrmacht -S i4f10 -J --polish`, true rotor key pinned, board hidden
+(`eval/seeder_vs_restarts.py`, `eval/results-seeder-vs-restarts.txt`):
+
+| arm | mean %-correct | exact | `score_iter` | cost vs B |
+|---|---:|---:|---:|---:|
+| baseline `-R 8` | 53.6 | 130/300 | 28 156 | 4.9× |
+| baseline `-R 32` | 68.9 | 178/300 | 79 883 | 13.9× |
+| baseline `-R 64` | 74.9 | 197/300 | 150 954 | 26.2× |
+| baseline `-R 128` | 78.3 | 207/300 | 294 592 | 51.1× |
+| baseline `-R 256` | 83.6 | 223/300 | 582 450 | 101× |
+| **B** seeded, IC-top, `-R 8` | 74.2 | 204/300 | **5 767** | 1× |
+| **B3** best-by-score, top 3 seeds | **85.3** | **238/300** | 24 997 | 4.3× |
+| *O* oracle-correct seed | *97.3* | *275/300* | *6 152* | *1.1×* |
+
+- **B3 beats the `-R 256` baseline on both metrics at 1/23 of its
+  `score_iter`** — 85.3 against 83.6 mean, 238 against 223 exact — and it costs
+  *less than the `-R 8` baseline*. Against that baseline it is +31.7pp (95% CI
+  [+26.1, +37.3] per trial, [+15.7, +44.9] clustered on the messages) and +108
+  exact recoveries, McNemar p < 0.0001. (B3 here runs each of its three seeds at
+  `-R 8`; the hedge-curve section below drops that to `-R 0` and raises `k`,
+  which is strictly better — read the recommendation from there.)
+- **B alone matches `-R 64`'s mean at 26× less compute** and beats its exact
+  rate (204 against 197). So even the single-seed form is worth ~26× of `-R`.
+- **Equal `-R` is NOT equal compute here, which is why the baseline is swept.**
+  Pinning k letters removes them from the 325-toggle scan and from the set the
+  climb must converge, so a seeded restart is ~5× cheaper than a bare one.
+  Matching on `-R` would have handed the seeded arm most of the budget.
+
+**Where the remaining gap is, and it is not the seeding.** The oracle arm —
+the same thing seeded with the *correct* seed whatever the ranking said — scores
+97.3 / 275, beating the 101×-cost baseline by 13.7pp and 52 recoveries. The
+whole distance between B and O is the ranking, and splitting on it is stark:
+
+| | trials | baseline `-R 8` | B | B3 | O |
+|---|---:|---:|---:|---:|---:|
+| ranking right | 215 | 57.2 | **99.2** | 99.2 | 99.2 |
+| ranking WRONG | 85 | 44.5 | **10.9** | 50.3 | 92.6 |
+
+**A wrong seed is worse than no seed** — 10.9 against the baseline's 44.5 —
+because `-s` pins and the climb cannot undo a pin. That is the single most
+important practical fact here, and it is what B3 exists to hedge: the correct
+seed is in the top three in **253/300** trials, so running three seeded climbs
+and keeping the best *by score* recovers most of the loss (50.3) while still
+costing less than `-R 8`. Ranking by the converged score is much sharper than
+the IC pre-ranking because by then each seed's climb has actually run.
+
+*The soft seed was built as the better fix, and it is NOT one — my prediction
+here was wrong.* This entry used to argue that `-s` pinning was the problem and
+that a **soft** seed — a starting board the climb may modify — "would likely
+land near the oracle without needing three runs". `--soft-plug` now exists (see
+`CLAUDE.md`), and measured over the same 300 trials it does not:
+
+| arm | mean %-correct | exact | `score_iter` |
+|---|---:|---:|---:|
+| **B** hard seed, `-R 8` | 74.2 | **204/300** | 5 767 |
+| **Bm** hard seed, `-R 24` | 74.2 | 204/300 | 13 041 |
+| **S** soft seed, `-R 8` | 74.6 | 188/300 | 17 358 |
+| **B3** hedged, top 3 hard | **85.3** | **238/300** | 24 997 |
+| *O* hard oracle seed | *97.3* | *275/300* | *6 152* |
+| *SO* soft oracle seed | *87.7* | *228/300* | *16 143* |
+
+At matched compute the soft seed is **+0.4pp of mean and −16 exact recoveries**
+against the hard seed, for 3× the `score_iter`. The half of the prediction that
+held is the failure mode, and it held strongly — split on whether the ranking
+picked the correct seed, soft is **+21.5pp** where hard collapses (32.4 against
+10.9). What sank it is the other half, which the prediction did not consider at
+all: **soft loses 7.9pp where the seed is RIGHT** (91.3 against 99.2), and the
+seed is right 72% of the time. The oracle pair says the same thing without the
+ranking in the way — a *correct* seed is worth 97.3 pinned and only 87.7 soft.
+
+The mechanism is the thing to keep. **Pinning is not merely a commitment, it is
+a search-space reduction**: `-s` takes 14 letters out of the 325-toggle scan, so
+the climb solves a 12-letter residual instead of a 26-letter one. Unpinned, the
+climb re-searches everything and, at 100–170 letters, the score signal is not
+sharp enough to hold correct plugs in place — so it wanders off them. Two
+corollaries fall out:
+
+- **Hard seeding saturates at essentially ZERO restarts.** Arm Bm at `-R 24` is
+  *identical* to arm B at `-R 8` — 74.2 / 204 on both — and sweeping downward
+  shows the plateau reaches all the way to a single unkicked climb. The hard arm
+  had run at the recipe's defaults throughout while only the soft arm was ever
+  tuned, so this is the grid it should have had (300 trials, same set):
+
+  | restarts × kick | mean %-correct | exact | `score_iter` |
+  |---|---:|---:|---:|
+  | **`-R 0`, no kick** | 73.6 | **201/300** | **2 734** |
+  | `-R 1 --random 3` | 73.2 | 200/300 | 2 866 |
+  | `-R 2 --random 10` | 74.0 | 203/300 | 3 317 |
+  | `-R 4 --random 3` | 74.1 | **204/300** | 3 690 |
+  | `-R 8 --random 3` | 74.1 | 204/300 | 5 157 |
+  | `-R 8 --random 10` | 74.2 | 204/300 | 5 767 |
+
+  **One unkicked climb gets 201 of the 204 exact recoveries at 2.1× less
+  compute** (McNemar p = 0.25), and `-R 4 --random 3` matches 204 at 1.56× less.
+  Kick size is worth nothing on this arm either — and structurally so, because
+  the pins leave only ~8 free letters, so `--random 10` is clamped to ~4 pairs
+  and is barely distinguishable from `--random 3` to begin with. Every
+  difference in the grid is nested (no cell ever recovers a trial `-R 8
+  --random 10` misses), which is what a plateau looks like from below.
+
+  Extra restarts on a hard-seeded climb therefore buy almost nothing; that
+  compute belongs on more hypotheses instead. **Following that through is what
+  produced the recommendation below**, since a `-R 0` climb makes the hedge
+  ~2× cheaper and testing more than three hypotheses affordable.
+
+*The hedge curve, and the recommendation.* With each seed costing one unkicked
+climb, run the top `k` and keep the best **by converged score** (a far sharper
+judge than the IC pre-ranking, since by then each climb has run). Every `k` is
+read off the same runs — 300 trials, the whole seed list climbed once:
+
+| k | mean %-correct | exact | right / WRONG | `score_iter` |
+|---:|---:|---:|---|---:|
+| 1 | 73.6 | 201/300 | 98.4 / 11.1 | 2 734 |
+| 2 | 81.3 | 225/300 | 98.4 / 38.1 | 7 797 |
+| 3 | 84.4 | 234/300 | 98.4 / 49.1 | 13 161 |
+| **5** | **88.4** | **245/300** | 97.7 / 64.9 | **23 983** |
+| 10 | 91.3 | 254/300 | 97.7 / 75.2 | 50 587 |
+| all (~27) | 93.8 | 264/300 | 97.7 / 83.9 | 169 371 |
+
+Against the baselines (`-R 8` = 53.6 / 130 at 28 156; `-R 64` = 74.9 / 197 at
+150 954; `-R 256` = 83.6 / 223 at 582 450):
+
+- **`k = 5` is the recommendation: 245/300 for 23 983 `score_iter`** — *less*
+  than a bare `-R 8`, which recovers 130. It also beats a bare `-R 256` by 22
+  recoveries at **1/24 of its compute**.
+- **`k = 10` (254/300 at 50 587) beats `-R 256` by 31 at 1/11.5**, and climbing
+  *every* seed (264/300 at 169 371) beats it by 41 at 1/3.4. There is no `k` in
+  the range where more hypotheses stop paying, which is the opposite of what
+  `-R` does on this problem.
+- **The gain is entirely in the failure mode `k` is aimed at.** The `right`
+  column barely moves (98.4 → 97.7) while `WRONG` goes 11.1 → 83.9: raising `k`
+  does nothing for messages the ranking already got right and almost everything
+  for the ones it did not.
+
+**The residual is the scoring floor, not the ranking.** A correct seed exists in
+**300/300** trials and is in the top 5 in 268 and the top 10 in 281, yet
+climbing *all* of them still recovers only 264 — so in ~36 trials the correct
+seed's converged board does not score highest. That is the same information
+limit `-a`/`-f` were measured against and no amount of seeding or searching
+crosses it; the oracle arm's 275/300 is the same statement from the other side.
+- **The right hedge tests hypotheses, it does not soften one.** B3 beats every
+  soft variant because it spends its budget asking *which* seed is right rather
+  than hedging against a single seed being wrong.
+
+*Tuning the kick does not rescue it, and an earlier claim here was wrong.* The
+obvious suspicion is that the soft arm is handicapped by the default
+`--random 10`, which is sized for an empty board and would scatter a good seed.
+A 60-trial exploration said exactly that — 72.7 → **79.0** at `--random 3` — and
+that number went into `CLAUDE.md` and `CHANGELOG.md`. **It does not survive 300
+trials.** The full sweep, same trial set as the table above:
+
+| kick | mean %-correct | exact | right / WRONG | `score_iter` |
+|---|---:|---:|---|---:|
+| `--random 10` | 73.0 | 183/300 | 90.4 / 29.1 | 18 010 |
+| `--random 5` | 74.3 | 186/300 | 91.5 / 30.7 | 17 821 |
+| `--random 3` | 74.6 | 188/300 | 91.3 / 32.4 | 17 358 |
+| `--random 2` | 74.1 | 187/300 | 91.0 / 31.5 | 16 934 |
+| `--random 1` | 74.1 | 187/300 | 91.8 / 29.2 | 16 623 |
+| **no kick (`-R 0`)** | 72.5 | 185/300 | 90.0 / 28.3 | **11 409** |
+
+The whole range spans **1.6pp** end to end, and `r3` against `r10` is 188
+against 183 exact — McNemar p = 0.40, nothing. So the kick was never the
+soft arm's problem; the 6.3pp was small-sample noise. Two things the sweep does
+establish:
+
+- **No kick at all is the cheapest sensible setting**: `-R 0` (one climb
+  straight from the seed — `--random 0` would make every restart identical,
+  since the kick is the only per-restart randomness) costs ~2pp of mean for
+  **35% less compute**, 11 409 `score_iter` against ~17 000.
+- **The kick is not what separates soft from hard.** Even the best soft cell
+  (74.6 / 188 at 17 358) loses to the hard seed's 74.2 / **204** at **5 767** —
+  the same mean, 16 more exact recoveries, at a third of the compute. Nothing in
+  the `--random` range closes a gap that comes from the search-space reduction
+  pinning provides.
+
+`--soft-plug` is kept: it is a small, tested, off-by-default option, it is the
+natural way to express a guess, and its measured behaviour (graceful when
+wrong, weaker when right, insensitive to the kick) is the useful
+characterisation of a whole class of seeding ideas. It is simply not the
+recommendation here.
+
+*The unknown-rotor-key sweep — measured, and the seeder wins there too.* Every
+table above hides only the plugboard, which is the tier this repo tunes on and
+the seeder's *best* case: a sweep pays the deduction and `k` climbs at **every**
+key, multiplying across the keyspace in the opposite direction from the win. The
+smallest honest test is `-g A..` with wheels, reflector and ring fixed — 676
+start positions, so the true key must outscore 675 competitors. 20 trials, same
+10 messages, `eval/seeded_sweep.py`:
+
+| arm | mean % | exact | `score_iter` | per key | true-key rank |
+|---|---:|---:|---:|---:|---|
+| baseline `-R 1` | 20.0 | 2/20 | 1 548 342 | 2 290 | — |
+| baseline `-R 2` | 29.2 | 4/20 | 3 091 517 | 4 573 | — |
+| baseline `-R 4` | 43.2 | 7/20 | 6 168 615 | 9 125 | — |
+| baseline `-R 8` | 43.8 | 8/20 | 12 318 051 | 18 222 | — |
+| **seeded k=1** | **71.8** | **13/20** | 3 316 286 | 4 906 | 1st in 14/20 |
+| seeded k=3 | 81.3 | 15/20 | 10 423 853 | 15 420 | 1st in 16/20 |
+| seeded k=5 | **85.6** | **16/20** | 17 655 464 | 26 118 | 1st in 17/20 |
+
+- **At genuinely matched compute, `k = 1` more than triples exact recovery**:
+  3 316 286 `score_iter` against `-R 2`'s 3 091 517 (0.93×, so the seeded arm is
+  the *cheaper* one) for **13/20 against 4/20** and +42.6pp mean, McNemar
+  p = 0.012.
+- **It also beats `-R 8` at 3.7× less compute** — 13 against 8 recoveries for
+  3.3M against 12.3M — and the baseline has already saturated by then (`-R 4` →
+  `-R 8` buys one recovery for double the compute, while `k` 1 → 3 → 5 buys
+  13 → 15 → 16).
+- **The per-key cost multiplier is real but small: 2.14×** (4 906 against
+  2 290 `score_iter`). That is the number the worry was about, and it is
+  keyspace-independent, so the trade should not change shape as `K` grows.
+
+**The discrimination worry was the right one to have, and it resolved the good
+way.** A wrong key's deduction pins *wrong* plugs, which could either depress
+its score (helping) or flatter it (fatal, and invisible at a pinned key). It
+depresses: the true key's rank under seeding is **median 1**, first outright in
+14/20, 16/20 and 17/20 as `k` rises. Seeding is acting as a weak filter as well
+as a seed — which is what the self-crib *filter* failed to do on its own, and it
+arrives here for free.
+
+Two caveats on this table. `K` = 676 is small, and the bar a true key must clear
+grows as `√(2 ln K)`, so discrimination at 10⁵–10⁸ keys is extrapolation rather
+than measurement; the per-key *cost* ratio is not, since it is a property of one
+key. And the CI is per-trial over 20 trials drawn from 10 distinct messages, so
+it is optimistic in the same way the pinned-key tables' per-trial intervals are.
+
+**What still bounds the result.** It applies only to messages ending in a
+doubled word, which is
+**10 of the corpus's 66 messages — 15%**. (An earlier version of this sentence
+said "10 of the 18 corpus messages carrying a doubling", which reads as a
+66-message corpus being 18 messages long. 18 is the count carrying a doubling of
+6+ letters, i.e. the probe's working set, not the corpus. The ~15% was right by
+arithmetic — 10/66 — but the denominator it was attached to was not.) The rates
+in full, over all 66:
+
+| minimum doubling length | carry one | **end with one** |
+|---:|---:|---:|
+| 4 | 20 (30%) | **10 (15%)** |
+| 5 | 18 (27%) | 9 (14%) |
+| 6 | 18 (27%) | 8 (12%) |
+| 7 | 16 (24%) | 7 (11%) |
+| 8 | 13 (20%) | 4 (6%) |
+
+The trial set is the `minlen = 4` row, and nothing is lost to the probe's
+`≥6` pre-filter: measured directly on all 66, the count ending with a doubling
+of 4+ letters is 10, the same 10 the filtered set yields. Wall time is
+reported in the results file but says nothing at this size: a run is ~0.1 s of
+which ~0.05 s is the one-off n-gram load, and B3 pays that three times because
+it is three processes.
+
+The algebra, for the record. It sidesteps the failure above entirely, because it
+works on the **ciphertext** and needs no correct decrypt at all.
 
 Decryption is `p_i = steck[core_i[steck[c_i]]]`, with `core_i` the involution
 `setup_mapping()` already tabulates as `rows[i]`. A classic crib knows `p_i` and
