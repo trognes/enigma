@@ -1275,13 +1275,18 @@ void init_steckerbrett(machine & m, const char * steckerbrett_string)
 /* --soft-plug: lay the guessed pairs on the board init_steckerbrett() has just built.
    Deliberately does NOT touch plug_fixed[] -- that is the whole difference from -s. Called
    once per climb (per work item), never per scoring, so the loop is off the hot path; with
-   the option unset the first test exits immediately. */
+   the option unset the first test exits immediately.
+     Walks the string two characters at a time rather than indexing by 2*i: an int
+   multiplication used as a pointer offset is a clang-tidy error
+   (bugprone-implicit-widening-of-multiplication-result), and this is the same pointer
+   idiom --no-plug already uses. p[1] is always in range because validation has already
+   rejected an odd number of letters. */
 void apply_soft_plug(machine & m)
 {
-  for (int i = 0; opt_soft_plug[2*i] != 0; i++)
+  for (const char * p = opt_soft_plug; *p != 0; p += 2)
     {
-      int a = char2num(opt_soft_plug[2*i+0]);
-      int b = char2num(opt_soft_plug[2*i+1]);
+      int a = char2num(p[0]);
+      int b = char2num(p[1]);
       m.steckerbrett[a] = static_cast<unsigned char>(b);
       m.steckerbrett[b] = static_cast<unsigned char>(a);
     }
