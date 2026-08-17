@@ -982,14 +982,52 @@ wrong, weaker when right, insensitive to the kick) is the useful
 characterisation of a whole class of seeding ideas. It is simply not the
 recommendation here.
 
-**Two things bound the result, and both point the same way.** This is the
-plugboard-recovery tier with the **rotor key given**, which is the tier every
-tuning result in this repo is measured on and is the seeder's *best* case — at
-a wrong key the deduction pins wrong plugs. What a full sweep does is therefore
-open in two respects: the deduction's per-key cost is real and uncounted by
-`score_iter` (~28 whole-message decrypts plus the closure, ~1% of arm B here but
-paid on every key), and whether seeding spuriously *promotes* wrong keys is
-unmeasured. And it applies only to messages ending in a doubled word, which is
+*The unknown-rotor-key sweep — measured, and the seeder wins there too.* Every
+table above hides only the plugboard, which is the tier this repo tunes on and
+the seeder's *best* case: a sweep pays the deduction and `k` climbs at **every**
+key, multiplying across the keyspace in the opposite direction from the win. The
+smallest honest test is `-g A..` with wheels, reflector and ring fixed — 676
+start positions, so the true key must outscore 675 competitors. 20 trials, same
+10 messages, `eval/seeded_sweep.py`:
+
+| arm | mean % | exact | `score_iter` | per key | true-key rank |
+|---|---:|---:|---:|---:|---|
+| baseline `-R 1` | 20.0 | 2/20 | 1 548 342 | 2 290 | — |
+| baseline `-R 2` | 29.2 | 4/20 | 3 091 517 | 4 573 | — |
+| baseline `-R 4` | 43.2 | 7/20 | 6 168 615 | 9 125 | — |
+| baseline `-R 8` | 43.8 | 8/20 | 12 318 051 | 18 222 | — |
+| **seeded k=1** | **71.8** | **13/20** | 3 316 286 | 4 906 | 1st in 14/20 |
+| seeded k=3 | 81.3 | 15/20 | 10 423 853 | 15 420 | 1st in 16/20 |
+| seeded k=5 | **85.6** | **16/20** | 17 655 464 | 26 118 | 1st in 17/20 |
+
+- **At genuinely matched compute, `k = 1` more than triples exact recovery**:
+  3 316 286 `score_iter` against `-R 2`'s 3 091 517 (0.93×, so the seeded arm is
+  the *cheaper* one) for **13/20 against 4/20** and +42.6pp mean, McNemar
+  p = 0.012.
+- **It also beats `-R 8` at 3.7× less compute** — 13 against 8 recoveries for
+  3.3M against 12.3M — and the baseline has already saturated by then (`-R 4` →
+  `-R 8` buys one recovery for double the compute, while `k` 1 → 3 → 5 buys
+  13 → 15 → 16).
+- **The per-key cost multiplier is real but small: 2.14×** (4 906 against
+  2 290 `score_iter`). That is the number the worry was about, and it is
+  keyspace-independent, so the trade should not change shape as `K` grows.
+
+**The discrimination worry was the right one to have, and it resolved the good
+way.** A wrong key's deduction pins *wrong* plugs, which could either depress
+its score (helping) or flatter it (fatal, and invisible at a pinned key). It
+depresses: the true key's rank under seeding is **median 1**, first outright in
+14/20, 16/20 and 17/20 as `k` rises. Seeding is acting as a weak filter as well
+as a seed — which is what the self-crib *filter* failed to do on its own, and it
+arrives here for free.
+
+Two caveats on this table. `K` = 676 is small, and the bar a true key must clear
+grows as `√(2 ln K)`, so discrimination at 10⁵–10⁸ keys is extrapolation rather
+than measurement; the per-key *cost* ratio is not, since it is a property of one
+key. And the CI is per-trial over 20 trials drawn from 10 distinct messages, so
+it is optimistic in the same way the pinned-key tables' per-trial intervals are.
+
+**What still bounds the result.** It applies only to messages ending in a
+doubled word, which is
 **10 of the corpus's 66 messages — 15%**. (An earlier version of this sentence
 said "10 of the 18 corpus messages carrying a doubling", which reads as a
 66-message corpus being 18 messages long. 18 is the count carrying a doubling of

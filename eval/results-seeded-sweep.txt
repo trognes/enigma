@@ -1,0 +1,41 @@
+Does signature seeding still win when the ROTOR KEY IS UNKNOWN?
+
+676 keys (-g A.., -w 231 -u B -r AAA fixed), 20 trials, -l wehrmacht
+baseline -R 1,2,4,8; seeded top-k 1,3,5 at -R 0, cables pinned
+
+  trial  1  n=48   A1  12.5  A2   8.3  A4   6.2  A8  12.5  S1   8.3  S3   8.3  S5   8.3   [118 s]
+  trial  2  n=101  A1  92.1  A2  92.1  A4  92.1  A8   9.9  S1  92.1  S3  92.1  S5  92.1   [122 s]
+  trial  3  n=172  A1   4.7  A2   4.7  A4 100.0  A8 100.0  S1 100.0  S3 100.0  S5 100.0   [122 s]
+  trial  4  n=111  A1   3.6  A2   3.6  A4   3.6  A8   3.6  S1 100.0  S3 100.0  S5 100.0   [97 s]
+  trial  5  n=124  A1   4.8  A2   4.8  A4   4.8  A8   4.8  S1   8.1  S3   4.0  S5 100.0   [122 s]
+  trial  6  n=101  A1   5.0  A2   4.0  A4   4.0  A8   4.0  S1   5.9  S3   9.9  S5   9.9   [122 s]
+  trial  7  n=145  A1   4.8  A2   4.8  A4 100.0  A8 100.0  S1 100.0  S3 100.0  S5 100.0   [122 s]
+  trial  8  n=117  A1   6.0  A2 100.0  A4 100.0  A8 100.0  S1   3.4  S3 100.0  S5 100.0   [111 s]
+  trial  9  n=108  A1   8.3  A2   8.3  A4   8.3  A8   4.6  S1 100.0  S3 100.0  S5 100.0   [83 s]
+  trial 10  n=90   A1   6.7  A2   6.7  A4   4.4  A8   4.4  S1 100.0  S3 100.0  S5 100.0   [117 s]
+  trial 11  n=48   A1  10.4  A2  10.4  A4   8.3  A8   8.3  S1  10.4  S3  12.5  S5   2.1   [122 s]
+  trial 12  n=101  A1   4.0  A2   4.0  A4   4.0  A8   4.0  S1   7.9  S3 100.0  S5 100.0   [115 s]
+  trial 13  n=172  A1 100.0  A2 100.0  A4 100.0  A8 100.0  S1 100.0  S3 100.0  S5 100.0   [112 s]
+  trial 14  n=111  A1 100.0  A2 100.0  A4 100.0  A8 100.0  S1 100.0  S3 100.0  S5 100.0   [118 s]
+  trial 15  n=124  A1   6.5  A2 100.0  A4 100.0  A8 100.0  S1 100.0  S3 100.0  S5 100.0   [126 s]
+  trial 16  n=101  A1   9.9  A2   7.9  A4   7.9  A8   7.9  S1 100.0  S3 100.0  S5 100.0   [118 s]
+  trial 17  n=145  A1   2.8  A2   6.2  A4   5.5  A8   5.5  S1 100.0  S3 100.0  S5 100.0   [127 s]
+  trial 18  n=117  A1   4.3  A2   6.0  A4 100.0  A8 100.0  S1 100.0  S3 100.0  S5 100.0   [126 s]
+  trial 19  n=108  A1   8.3  A2   6.5  A4   6.5  A8   6.5  S1 100.0  S3 100.0  S5 100.0   [132 s]
+  trial 20  n=90   A1   5.6  A2   5.6  A4   8.9  A8 100.0  S1 100.0  S3 100.0  S5 100.0   [126 s]
+
+arm    mean %     exact        score_iter     true-key rank
+A1     20.0       2/20         1548342        -
+A2     29.2       4/20         3091517        -
+A4     43.2       7/20         6168615        -
+A8     43.8       8/20         12318051       -
+S1     71.8       13/20        3316286        median 1, top-1 14/20
+S3     81.3       15/20        10423853       median 1, top-1 16/20
+S5     85.6       16/20        17655464       median 1, top-1 17/20
+
+S1 (3316286 iters) vs A2 (3091517, 0.93x): mean +42.6pp CI [+17.7, +67.5]
+   exact +9 (only S1 10, only A2 1), McNemar p = 0.0117
+S3 (10423853 iters) vs A8 (12318051, 1.18x): mean +37.5pp CI [+17.0, +58.0]
+   exact +7 (only S3 7, only A8 0), McNemar p = 0.0156
+S5 (17655464 iters) vs A8 (12318051, 0.70x): mean +41.8pp CI [+20.8, +62.9]
+   exact +8 (only S5 8, only A8 0), McNemar p = 0.0078
