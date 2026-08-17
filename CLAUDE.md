@@ -1232,13 +1232,6 @@ are read from a **data directory** (filenames built as
     **pair**, as in `--self-crib-seeds`, since two hypotheses can agree on
     every cable
     while one additionally proves a letter carries none.
-- `--crib-length L` **ignore `--crib-list` entries shorter than `L` letters**
-  (default 2, the existing floor — a 1-letter crib has no menu edge to chain
-  along). The library is dominated by short cribs (93% of messages carry an
-  8-letter one against 3% for a 20-letter one) and those are the ones that
-  explode into hundreds of climbs per key, so a floor is the one length control
-  worth having. Rejected on a bare `--crib`, which is already the length you
-  typed.
 - `--no-crib-reorder` **keep a `--crib-list` in file order** (off by default,
   i.e. cribs run cheapest-measured-cost first). Reverses `archived/cribs.md`
   §5 step 5, which priced cribs with

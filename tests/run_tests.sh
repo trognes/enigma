@@ -2564,8 +2564,8 @@ check "--crib-seeds rejects a run with no crib" \
   "$(cs_rejects -c --crib-seeds 3)" "1"
 check "--crib-seeds rejects a negative count" \
   "$(cs_rejects -c --crib OBERKOMMANDO --crib-seeds -1)" "1"
-check "--crib-length rejects a bare --crib" \
-  "$(cs_rejects -c --crib OBERKOMMANDO --crib-length 8)" "1"
+check "--crib-seeds rejects an absurd count" \
+  "$(cs_rejects -c --crib OBERKOMMANDO --crib-seeds 99999)" "1"
 
 # The alignment the crib survived at goes in its own progress-line column, since a swept
 # run produces lines from many alignments and they are otherwise indistinguishable. The

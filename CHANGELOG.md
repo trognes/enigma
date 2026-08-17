@@ -28,11 +28,6 @@ existing command lines can behave differently or stop working.
   - `0` = off and leaves the historical path byte-identical, including the count
     of plugboards scored. `-T`-deterministic.
 
-- **`--crib-length L` — ignore `--crib-list` entries shorter than L letters.**
-  The library is dominated by short cribs (93% of messages carry an 8-letter one
-  against 3% for a 20-letter one) and those are the ones that explode into
-  hundreds of climbs per key.
-
 - **Pre-flight: is this ciphertext even Enigma?** (on by default;
   `--no-preflight` turns it off). Enigma is a permutation
   cipher, so its output is near-flat; a ciphertext carrying residual language

@@ -1257,8 +1257,9 @@ as `--crib-seeds K`.** `crib_unit()` used to run a **full plugboard climb on
 every surviving (alignment, hypothesis) pair**, which is what the self-crib path
 did before ranking. It now dedupes, ranks by the index of coincidence of the
 decrypt under the deduced partial board, and climbs the top `K`; `0` is off and
-leaves the old path byte-identical. `--crib-length L` additionally floors a
-`--crib-list` by length.
+leaves the old path byte-identical. It is length-agnostic: any crib the tool
+already accepts (2 letters and up) can be seeded, and nothing filters by
+length — the table below is what to expect at each, not a restriction.
 
 **On the sweep — the number that decides it** (`eval/crib_seeds_ab.py`, 20
 trials, 10-letter crib, board hidden, 676-key sweep): `K=10` recovers **19/20

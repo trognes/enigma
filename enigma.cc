@@ -236,13 +236,6 @@ static bool opt_crib_dump;              /* print each surviving hypothesis (diag
    speed-up; it is a way into the short-crib regime, and K should be raised when the crib
    is short. ENHANCEMENTS.md, Cribs item 12. */
 static int opt_crib_seeds = 0;
-/* --crib-length L: ignore --crib-list entries shorter than L letters. The library is
-   dominated by short cribs (93% of messages carry an 8-letter one against 3% for a
-   20-letter one) and those are precisely the ones that explode into hundreds of climbs
-   per key, so a floor is the one length control worth having. Default 2, the existing
-   minimum -- a 1-letter crib has no menu edge to chain along. Applies to --crib-list
-   only: a bare --crib is whatever length the caller typed. */
-static int opt_crib_length = 2;
 /* The menu, built once by init_crib(). A menu is a property of the crib AND the place it
    sits, so everything except the crib letters themselves is per ALIGNMENT: the ciphertext
    letters it pairs with, and therefore the anchor letter the 26 hypotheses are about.
@@ -2397,21 +2390,13 @@ static void load_crib_list(const char * fname)
             crib += static_cast<char>(u);
           p++;
         }
-      /* A 1-letter crib has no menu edge to chain along, matching --crib's own limit;
-         --crib-length raises that floor. Deduplication happens BEFORE the length test so
-         the two are independent -- raising the floor can only remove cribs, never change
-         which of the survivors is a duplicate of which. */
-      if ((crib.size() >= 2) && seen.insert(crib).second
-          && (crib.size() >= static_cast<size_t>(opt_crib_length)))
+      /* A 1-letter crib has no menu edge to chain along, matching --crib's own limit. */
+      if ((crib.size() >= 2) && seen.insert(crib).second)
         g_crib_list.push_back(crib);
     }
   fclose(f);
   if (g_crib_list.empty())
-    {
-      if (opt_crib_length > 2)
-        fatal("--crib-list file holds no cribs of --crib-length letters or more");
-      fatal("--crib-list file holds no usable cribs (need at least 2 letters A-Z each)");
-    }
+    fatal("--crib-list file holds no usable cribs (need at least 2 letters A-Z each)");
 }
 
 /* --- plaintext scoring models ------------------------------------------- */
@@ -8288,9 +8273,6 @@ void help(FILE * out)
           "survivor. For SHORT swept cribs, where a key can");
   fprintf(out, "  %-24s %s\n", "",
           "leave hundreds (needs -c; 0 = off) [0]");
-  fprintf(out, "  %-24s %s\n", "--crib-length L",
-          "Ignore --crib-list entries shorter than L letters");
-  fprintf(out, "  %-24s %s\n", "", "[2]");
   fprintf(out, "  %-24s %s\n", "--crib-list F",
           "Crib library, one per line ('#' comments); one rotor");
   fprintf(out, "  %-24s %s\n", "", "sweep each, best board kept [off]");
@@ -8532,8 +8514,6 @@ void show_settings()
       fprintf(stderr, "Crib order: %s\n",
               opt_crib_reorder ? "cheapest measured cost first"
                                : "file order (--no-crib-reorder)");
-      if (opt_crib_length > 2)
-        fprintf(stderr, "Crib length: %d letters or more\n", opt_crib_length);
     }
   /* Reported for --crib and --crib-list alike: it changes how many climbs each key
      costs, which is the first thing to check when a crib run is slower or worse than
@@ -8595,7 +8575,6 @@ int main(int argc, char * * argv)
   opt_full_text = false;
   opt_no_preflight = false;
   opt_crib_seeds = 0;
-  opt_crib_length = 2;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -8626,7 +8605,7 @@ int main(int argc, char * * argv)
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
-         OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_CRIBLENGTH };
+         OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -8686,7 +8665,6 @@ int main(int argc, char * * argv)
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
       { "crib-seeds",     required_argument, nullptr, OPT_CRIBSEEDS },
-      { "crib-length",    required_argument, nullptr, OPT_CRIBLENGTH },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
       { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
       { "doubling-report", required_argument, nullptr, OPT_DOUBLINGREPORT },
@@ -8864,10 +8842,6 @@ int main(int argc, char * * argv)
           break;
         case OPT_CRIBSEEDS:
           opt_crib_seeds = atoi(optarg);
-          break;
-
-        case OPT_CRIBLENGTH:
-          opt_crib_length = atoi(optarg);
           break;
 
         case OPT_CRIBDUMP:
@@ -9137,22 +9111,13 @@ int main(int argc, char * * argv)
         fatal("--crib-seeds needs -c (it chooses which plugboard climbs to run)");
       if ((opt_crib_seeds < 0) || (opt_crib_seeds > 10000))
         fatal("--crib-seeds must be 0 (off) to 10000");
-      /* A --crib-length floor applies to a library; a bare --crib is whatever
-         length the caller typed, so asking for one there is a mistake worth naming. */
-      if ((opt_crib_length != 2) && (opt_crib_list == nullptr))
-        fatal("--crib-length filters a --crib-list; a single --crib is already "
-              "the length you typed");
     }
   else if ((opt_crib_at >= 0) || opt_crib_dump)
     fatal("--crib-at and --crib-dump need --crib");
   else if (opt_crib_seeds > 0)
     fatal("--crib-seeds needs --crib or --crib-list");
-  else if (opt_crib_length != 2)
-    fatal("--crib-length needs --crib-list");
   else if (! opt_crib_reorder)
     fatal("--no-crib-reorder needs --crib-list (there is nothing to order)");
-  if ((opt_crib_length < 2) || (opt_crib_length > maxlen))
-    fatal("--crib-length must be at least 2 (a 1-letter crib has no menu edge)");
 
   /* --no-plug LETTERS: letters known to carry no cable. Three ways to get it wrong, all
      fatal because each means the command line says something the search cannot honour:

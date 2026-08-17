@@ -366,9 +366,6 @@ English tables.
   against 19/20 for climbing everything, with no trial lost, at 12× fewer
   plugboards**. `K=3` gives up 3 breaks for 43×, `K=1` gives up 4 for 138×.
   Use 10. `0` is off.
-- **`--crib-length L`** — Ignore `--crib-list` entries shorter than `L` letters.
-  Short cribs are both the most likely to be *present* and the most expensive,
-  so a floor is the knob worth having.
 - **`--no-crib-reorder`** — Keep a `--crib-list` in the library's own order.
   By default it is run **cheapest measured cost first**. The cost of a crib
   against its length is a *cliff*: relative to a sweep with no crib, 8 letters
