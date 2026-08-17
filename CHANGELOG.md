@@ -26,12 +26,16 @@ existing command lines can behave differently or stop working.
   while taking 15× the wall time, because its seeds are more constrained so the
   climbs are cheap and the uncounted deduction dominates.
 
-  Reliability tracks the signature length: at the true key IC puts a correct
-  seed in the top 5 in 79% of trials at `L≥7` and 84% at `L≥9`, and a correct
-  seed exists in 48/48 — sweeping enumerates a superset of the terminal
-  alignments, so its recall cannot be worse. On one fixture a 6-letter
-  mid-message doubling was not recovered even at `K=100` while 9 and 13 letters
-  recovered at `K=1`.
+  Reliability tracks the signature length: at the true key a correct seed exists
+  in 48/48 trials at `L≥7` and 33/33 at `L≥9` — sweeping enumerates a superset
+  of the terminal alignments, so its recall cannot be worse — and IC puts one in
+  the top 5 in 79% of trials at `L≥7`, 84% at `L≥9`. Requiring the seed to pin
+  at least one *cable* drops `L≥9` to 32/33: that one trial is a doubled word
+  flanked by letters other than `X`, so its only true variant is the separator
+  alone — one anchor edge, and on that key the closure proved four letters
+  unplugged without forcing a pair. On one fixture a 6-letter mid-message
+  doubling was not recovered even at `K=100` while 9 and 13 letters recovered at
+  `K=1`.
 
   **Use `--signature-seed 10` when sweeping.** Over 32 paired 676-key sweeps,
   swept `K` = 5/10/20/35/50 breaks 21/23/23/23/24 of 32 at 1 457 / 1 650 /

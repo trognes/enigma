@@ -620,21 +620,37 @@ are read from a **data directory** (filenames built as
     true key*, but in a sweep raising `K` lifts the best-of-`K` score of all 675
     **wrong** keys too, so extra recall converts into discrimination slowly and
     unevenly. Marginal cost is linear at ~46 µs per extra climb throughout.
-  - **Swept reliability tracks the SIGNATURE LENGTH.** At the true key, IC puts
-    a correct seed in the top 5 in **79% of trials at `L≥7` and 84% at `L≥9`**
-    (against ~84% top-3 for terminal), and a correct seed exists in **48/48** —
-    sweeping enumerates a superset of the terminal alignments, so its recall
-    cannot be worse. On a single message the length still decides it: a 6-letter
+  - **Swept reliability tracks the SIGNATURE LENGTH.** At the true key a correct
+    seed exists in **48/48** trials at `L≥7` and **33/33** at `L≥9` — sweeping
+    enumerates a superset of the terminal alignments, so its recall cannot be
+    worse than the terminal mode's 200/200 — and IC puts one in the top 5 in
+    **79%** of trials at `L≥7`, **84%** at `L≥9`, against ~84% top-3 for
+    terminal. On a single message the length still decides it: a 6-letter
     mid-message doubling was not recovered even at `K=100`, while 9 and 13
     letters recovered at `K=1`. The number of equality edges is what carries the
-    deduction. **Two earlier figures here were wrong** and are corrected above:
-    the probe's swept enumeration used an exclusive upper bound on the alignment
-    (`range(1, n-2L-1)`), omitting `at = n-2L-1` — which is exactly the TERMINAL
-    alignment, so every message ending in its doubling lost its true hypothesis.
-    That reported recall as 45/48 and top-5 as 67%, and made a tighter floor
-    look like it bought nothing (56% top-1 at both `L≥7` and `L≥9`). It does
-    help. `enigma.cc` was never affected — its bound is `at + 2*len + 1 <=
-    textlength`, inclusive — so every end-to-end break number above stands.
+    deduction.
+  - **A correct seed can pin NO cables, and that is a weak menu rather than a
+    failure.** Requiring a seed to pin at least one cable drops `L≥9` to 32/33.
+    The one trial is `ROMANOVKA`, which is flanked by `N` and `G` rather than
+    `X`, so its only true variant is `sep` — the separator alone, **one anchor
+    edge**, the weakest menu in the set (the two flank variants assert flanks
+    the plaintext does not have and are correctly rejected, 0 survivors). With a
+    single anchor, how far the closure propagates depends on the rotor key: the
+    same alignment over three keys settled 11 pins / 4 cables, **4 pins / 0
+    cables**, and 12 pins / 5 cables. A 0-cable seed is not worthless — pinning
+    a letter as carrying no cable is the `--no-plug` effect, worth 25 of the 325
+    toggles — but it will not carry a climb the way pinned cables do.
+  - **Two figures published here were artefacts of the probe, not the method**,
+    and both were found by asking why a number was not what the structure
+    demands. The swept enumeration used an exclusive upper bound on the
+    alignment (`range(1, n-2L-1)`), omitting `at = n-2L-1` — exactly the
+    TERMINAL alignment — so every message ending in its doubling lost its true
+    hypothesis: that reported recall as 45/48, top-5 as 67%, and made a tighter
+    floor look worthless (56% top-1 at both `L≥7` and `L≥9`; it is really 65%
+    and 69%). Separately, the ≥1-cable filter above turned a weak-menu trial
+    into a phantom recall failure. `enigma.cc` was never affected — its bound is
+    `at + 2*len + 1 <= textlength`, inclusive — so every end-to-end break number
+    stands.
   - Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
     and `--tune-phase` — each installs its own starting board or moves the key
     the deduction was computed for. `-T`-deterministic (candidate order is

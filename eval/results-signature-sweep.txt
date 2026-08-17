@@ -135,3 +135,32 @@ enigma.cc was NEVER affected: its bound is `at + 2*len + 1 <= textlength`, which
 is inclusive.  The closure verification used the corrected enumeration and
 matched exactly, and every end-to-end break number (23/32 at K=10, etc.) comes
 from the binary, so all of those stand.
+
+== CORRECTION 2: "32/33 at L>=9" was the >=1-CABLE FILTER, not a recall failure ==
+
+The probe scored a trial as having no correct seed unless that seed pinned at
+least one CABLE.  Recall of a correct seed is:
+
+                        correct seed exists    ... pinning >=1 cable
+  L>=7                  48/48                  48/48
+  L>=9                  33/33                  32/33
+
+The one trial is ROMANOVKA, which is flanked by N and G rather than X -- the same
+message that broke an early version of this probe.  Its only true variant is
+therefore "sep": the separator alone, ONE anchor edge, the weakest menu in the
+set.  (The two flank variants assert flanks the plaintext does not have and are
+correctly rejected -- 0 survivors each.)
+
+With a single anchor, how far the closure propagates depends on the rotor key.
+The same alignment over the three reps:
+
+  rep 1   11 pins,  4 cables
+  rep 2    4 pins,  0 cables   <-- the "failure"
+  rep 3   12 pins,  5 cables
+
+So it is the expected tail of a weak menu, not a defect in the deduction or the
+enumeration.  A 0-cable seed is not worthless either: pinning a letter as
+carrying no cable is the --no-plug effect, worth 25 of the 325 candidate toggles,
+and the tool pins those findings too.  It is simply much weaker than a seed that
+pins cables, which is why the stricter reading is the more useful one when asking
+whether a seed will carry a climb.
