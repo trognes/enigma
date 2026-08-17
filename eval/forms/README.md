@@ -11,11 +11,51 @@ messages (`../enigma-challenge-1941.txt`).
 | `ALRHG-09091941-039-out-nf.pdf` | 39 | ALRHG | 116 | broken, §5j |
 | `FMNGI-31071941-205-out-nf.pdf` | 205 | FMNGI | 63 | unbroken (Nr 285) |
 | `MVUEH-10071941-088-061-out-nf.pdf` | 88/61 | MVUEH | 87 | unbroken (Nr 172) |
+| `BYQMZ-30091941-008-out.pdf` | 8 | BYQMZ | 172 | unbroken (Nr 8-C) |
 
 The first two are outgoing, dated 9.9.41, *befördert* 0913, message time (0850),
 from Nachschub to SS-T.Div. The **length printed on each form** is the reason
 they are kept: it is an independent check that a transcription dropped or added
 nothing, and all four match.
+
+## BYQMZ — the one that agreed
+
+The newest scan is the only one so far whose transcription needed **no
+correction at all**: read again at up to 1400 dpi, it agrees with the stored
+ciphertext letter for letter, **172 of 172**, and the form's printed count is
+172. That is worth recording precisely because the other four did not — five
+of ALVPM's six "garbles" turned out to be transcription errors, and FMNGI and
+MVUEH produced twenty disagreements between them.
+
+Three details did the work, and they are properties of the *hand* rather than
+of the reader:
+
+- **`z` is barred through the descender and `y` is not**, which settles
+  `NYZKY`, `TWMYC` and `ZXYFT` outright — the single most dangerous confusion
+  in this ciphertext, since it carries 19 of the two combined.
+- **`q` descends straight where `g` loops left**, settling `VGQTW`, `ZUQBL`
+  and `URQES`.
+- **`u` carries the German bow above it**, separating it from `n` in `PSDUH`,
+  `ZVSUA` and `UMOSH`.
+
+**The dash is real.** At row 2 group 3 (`HIF-Y`) the fourth cell is genuinely
+blank on the form: the letter was never written down, and the form's count of
+172 counts it. So the dash records a gap in the 1941 record rather than a
+failure of transcription, and nothing is recoverable there from the image.
+
+**The indicator is new, and only partly readable.** The ciphertext block opens
+`0014 - 172 - ` followed by six letters, the same run-together form as ALVPM's
+`kfzjpo` and ALRHG's `ftjmyc`. Four are certain — `m g ? ? p l`. Glyph 4
+resembles the tall narrow loop this hand uses for `r` in `QNRAI` and `URQES`;
+glyph 3 matches no confirmed exemplar in the message. It is left unresolved
+rather than guessed, for a reason specific to indicators: a ciphertext letter
+can be arbitrated by the length count or by decryption, and an indicator can
+be neither, while a wrong one sends a search to a wrong start position. If it
+is ever completed it is worth a great deal — see below.
+
+Do not confuse it with the **Vermerke** line, which reads `Spruch 2352 yzl -
+gjb - Durchgegeben`. That is a relay note about a different message sent at
+2352; this message was *befördert* 0025 with time of origin 0014.
 
 ## The two unbroken forms
 

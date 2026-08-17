@@ -109,6 +109,30 @@ NOTES:       Batch C, same caveat. From the Ultimate Enigma Challenge page. Shor
 KENNGRUPPE:  BYQMZ   (discriminant; strip before deciphering)
 LEN:         172  (form count, incl. Kenngruppe)
 KEY:         UNKNOWN -- unbroken
+INDICATOR:   MG?  ?PL  (read off the message form; 4 of 6 letters certain,
+             glyphs 3 and 4 NOT resolved -- see FORM NOTES)
+FORM:        forms/BYQMZ-30091941-008-out.pdf
+FORM NOTES:  Spruch Nr 8. Befoerdert 30.9.41 0025 Uhr, 'An 568'. The
+             ciphertext block opens '0014 - 172 - <six letters>', so the
+             form's own count confirms the 172 letters transcribed here,
+             and 0014 is the time of origin. Vermerke reads 'Spruch 2352
+             yzl - gjb - Durchgegeben', which is a relay note about a
+             DIFFERENT 2352 message and NOT this one's indicator.
+FORM DIFFS:  none -- the transcription was read again from this scan at up
+             to 1400 dpi and agrees letter for letter, 172 of 172. The
+             hand separates every dangerous pair: z is written with a bar
+             through the descender and y without, q has a straight
+             descender where g loops left, and u carries the German bow
+             above it. THE DASH IS REAL: at row 2 group 3
+             (HIF-Y) the fourth cell is genuinely BLANK on the form, so
+             the letter was never written down and the form's 172 counts
+             it. The INDICATOR is new here and is only partly readable:
+             m and g then two unresolved glyphs then p and l. Glyph 4
+             resembles the tall narrow loop this hand uses for r in QNRAI
+             and URQES; glyph 3 matches no confirmed exemplar. Left
+             unresolved rather than guessed -- a wrong indicator sends a
+             search to a wrong start position, and unlike a ciphertext
+             letter it cannot be arbitrated by the letter count
 CIPHERTEXT:  BYQMZNYZKYDOEMGPSDUHMLHJATWMYCHIF-YMAESTAVLCGCNLGMZIQUSQNRAI
              KYJDETUEXOJQPGXQSCEXENOSFASJVTGBHXTVGQTWKEWPPRIVYJEHEWNGPFUE
              AZTUWZUQBLNBYETZVSUAJSEASZXYFTUMOSHURQESSTQMPAOPBFTY
