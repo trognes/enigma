@@ -2432,10 +2432,19 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   still catch its bug — cut the job to ~162 s, and halving the n-gram load
   (`archived/PERFORMANCE.md` §7.13) took it to **~139 s**. The suite has since
   grown to 437 checks, and the **plain g++/clang job was cut 232 s → 64 s** by
-  splitting the shared start-position fixture (below). Current baselines to
-  watch for drift: **~64 s plain** (437 checks) and **~220 s under ASan** (394
-  checks with `TEST_QUICK`; the M4 oversized-allocation probe does not emit
-  there, which is why it is one short). Rules of thumb when adding a check:
+  splitting the shared start-position fixture (below). It then drifted straight
+  back to **245 s**: three checks added with the restart-major work space swept
+  456 976 keys through a `-c` climb — 189 s, **75% of the whole suite** — to
+  assert that the echoed key re-encrypts to the ciphertext, and were cut to
+  1.3 s once measurement showed they caught nothing (see "a check that cannot
+  fail" below). They were **full price under `TEST_QUICK` too**, since they
+  spelled their own keyspace out rather than using `$rg`, so they cost ~6× as
+  much again under ASan — which is how that job reached **24 minutes** while
+  still passing. Current baselines to watch for drift: **~65 s plain** (502
+  checks) and **~190 s under ASan** (459 checks with `TEST_QUICK`).
+  **Re-measure these when a PR adds checks** — nothing compares against them
+  automatically, which is why the drift above went unnoticed for a day.
+  Rules of thumb when adding a check:
   - **Ask what the assertion actually reads.** A settings/echo line is printed
     by `show_settings()` *before* the search, so any legal keyspace works — use
     the smallest one the option accepts. A `-T`-independence or display check
@@ -2452,6 +2461,28 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
     Splitting the fixture in two (`$rg` broad for recovery and for `-F`, which
     needs more keys than it keeps; `$rgd` = `AA.` unconditionally for the rest)
     took 232 s → 64 s with all 437 checks intact.
+  - **A check that cannot fail is worse than no check, and size is not what
+    makes it fail — INJECT THE BUG AND SEE.** Three checks re-encrypted the
+    reported plaintext under the reported key to catch a `best.idx` misdecode,
+    and swept 456 976 keys to do it. Injecting the historical bug at the two
+    reconstruction sites (`best.idx / 2` in place of `work_key(best.idx,
+    total_keys)`, at `-R 2` so the two decodes differ) left all three
+    **passing, byte-identical, at 676 keys and at 456 976 alike**. The reason
+    is structural rather than statistical: the assertion is
+    *self-consistency*, and the line it reads is the last progress line, which
+    the ordinary climb emits — both finishers re-echo only when they
+    **improve** on the climb's best, so a wrong reconstruction scores worse,
+    never echoes, and the climb's own correct line stands. No keyspace fixes
+    that. What does is a fixture where the finisher's reconstruction
+    **determines the result**: 10 plugs so `--polish` has something to complete
+    (asserted as a strict score gain over the same run without it), and a true
+    ring2 inside the half `K=3` skips so only the refinement can reach it. Both
+    then fail under injection, at 676 keys, for 1.3 s. **The injection also
+    tells you which half was really uncovered**, and it was not the expected
+    one: 21 of the 23 checks that fail are pre-existing `crack: --ring-stride
+    N` recovery checks, so the refinement was already covered — while
+    `--polish`'s reconstruction had **no coverage at all** until the new
+    improvement check.
   - **A mis-sized fixture can mean the check does not test its property at
     all.** The three `restart-parallel` checks are about the *one-key* case —
     their own comment says "with a fully-specified rotor key the search has

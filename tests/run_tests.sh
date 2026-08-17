@@ -1986,13 +1986,58 @@ check "restart is the outer dimension of the work space" \
 # rotor key is reconstructed from the merged work index, and --polish and the
 # --ring-stride refinement each decode it independently.  Decode it as
 # idx/restarts instead of idx%keys and the tool prints a key that does not
-# decrypt to the plaintext it just wrote to stdout.  Re-encrypting the reported
-# plaintext under the reported key must give the ciphertext back.
+# decrypt to the plaintext it just wrote to stdout.
+#
+# THE ROUND-TRIP ASSERTION ALONE DOES NOT CATCH THAT, and for a while these
+# three checks swept 456 976 keys through a -c climb (189 s, 75% of the whole
+# suite) to establish nothing.  Re-encrypting the reported plaintext under the
+# reported key tests SELF-CONSISTENCY, and the line it reads is the last
+# progress line -- which the ordinary climb emits.  Both finishers re-echo only
+# when they IMPROVE on the climb's best, so with a wrong reconstruction they
+# simply score worse, never echo, and the climb's own (correct, consistent) line
+# stands.  Verified by injecting the historical bug at the two reconstruction
+# sites: all three passed, at 676 keys AND at 456 976, byte-identical output.
+#
+# So each finisher needs a fixture where its reconstruction DETERMINES the
+# result, and then the assertion is that the finisher still delivers:
+#
+#   --polish       10 plugs, so the climb converges near-but-incomplete and the
+#                  finisher completes it.  Asserted as a strict score
+#                  improvement over the same run without --polish.  (The 3-plug
+#                  fixture used here reaches the true key unaided -- -6.9317 at
+#                  every -R and seed tried -- so polish can never bite on it.)
+#   --ring-stride  true ring2 = N (13), which K=3's coarse set {0,3,6,...}
+#                  SKIPS, so only the refinement can find it.  Asserted as
+#                  recovery of the plaintext.
+#
+# Both discriminate against the injected build -- --polish's gain vanishes
+# exactly (score identical to no-polish) and --ring-stride's recovery is lost --
+# and both run on 676 keys, so all five checks here cost ~1.3 s rather than 189.
+#
+# Which half was actually uncovered is worth recording, because it is not the
+# half the expensive checks were aimed at.  Under the injection 23 of the 502
+# checks fail, and 21 of those are the pre-existing "crack: --ring-stride N ..."
+# recovery checks: the REFINEMENT's reconstruction was already well covered
+# elsewhere, and the check below mainly anchors that property where the bug
+# lives.  --polish's reconstruction had NO coverage at all -- the improvement
+# check below is the only one in the suite that catches it.
 wo_pt=DASOBERKOMMANDODERWEHRMACHTGIBTBEKANNTXAACHENXISTGERETTETXDURCHDENEINSATZ
-wo_c=$(run "$wo_pt" -u B -w 123 -r AAM -g QEW -s "AB CD EF")
+wo_c=$(run "$wo_pt" -u B -w 123 -r AAN -g AAW -s "AB CD EF")
+wo_c10=$(run "$wo_pt" -u B -w 123 -r AAN -g AAW -s "AB CD EF GH IJ KL MN OP QR ST")
+TMP_WO=/tmp/enigma_wo.$$
+# Runs the sweep over the 676 keys around the true one and leaves stderr in
+# $TMP_WO; echoes the recovered plaintext.
+wo_run() {
+  _c=$1; shift
+  printf '%s' "$_c" | "$ENIGMA" -c -f -l wehrmacht -S i4f10 -J -u B -w 123 \
+    -r "AA." -g "AA." -R 2 -T 4 "$@" 2>"$TMP_WO"
+}
+wo_score() { grep -E '^ *-?[0-9.]+ [A-Za-z]' "$TMP_WO" | tail -1 | awk '{ print $1 }'; }
+# Re-encrypt the recovered plaintext under the REPORTED key: it must give the
+# ciphertext back.  Cheap, and still worth keeping -- it catches an echoed key
+# that is simply garbage, which the improvement assertions would not notice.
 wo_roundtrip() {
-  _o=$(printf '%s' "$wo_c" | "$ENIGMA" -c -f -l wehrmacht -S i4f10 -J -u B -w 123 \
-       -r "AA." -g "..." -R 2 -T 4 "$@" 2>"$TMP_WO")
+  _o=$(wo_run "$@")
   _l=$(grep -E '^ *-?[0-9.]+ [A-Za-z]' "$TMP_WO" | tail -1)
   [ -n "$_l" ] || { echo "no-progress-line"; return; }
   _w=$(printf '%s' "$_l" | awk '{ print $2 }')
@@ -2002,13 +2047,23 @@ wo_roundtrip() {
   printf '%s' "$_o" | "$ENIGMA" -u "$(printf %s "$_w" | cut -c1)" \
     -w "$(printf %s "$_w" | cut -c2-)" -r "$_r" -g "$_g" -s "$_s" 2>/dev/null
 }
-TMP_WO=/tmp/enigma_wo.$$
+# The finisher's reconstruction is load-bearing: --polish must beat the same
+# run without it.  A wrong key makes the finisher inert, not merely worse.
+wo_run "$wo_c10" >/dev/null; wo_np=$(wo_score)
+wo_run "$wo_c10" --polish >/dev/null; wo_p=$(wo_score)
+check "--polish improves on the converged best (its key is reconstructed)" \
+  "$(awk -v a="$wo_np" -v b="$wo_p" 'BEGIN { print (b > a) ? "better" : "no-gain" }')" \
+  "better"
 check "the echoed key reproduces the ciphertext (--polish)" \
-  "$(wo_roundtrip --polish)" "$wo_c"
+  "$(wo_roundtrip "$wo_c10" --polish)" "$wo_c10"
+# The refinement's reconstruction is load-bearing: the true ring2 is in the half
+# K=3 skips, so the coarse pass cannot reach it and only the refinement can.
+check "--ring-stride refinement recovers a ring2 the coarse pass skipped" \
+  "$(wo_run "$wo_c" --ring-stride 3)" "$wo_pt"
 check "the echoed key reproduces the ciphertext (--ring-stride)" \
-  "$(wo_roundtrip --ring-stride 3)" "$wo_c"
+  "$(wo_roundtrip "$wo_c" --ring-stride 3)" "$wo_c"
 check "the echoed key reproduces the ciphertext (both)" \
-  "$(wo_roundtrip --polish --ring-stride 3)" "$wo_c"
+  "$(wo_roundtrip "$wo_c" --polish --ring-stride 3)" "$wo_c"
 rm -f "$TMP_WO"
 
 echo
