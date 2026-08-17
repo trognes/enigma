@@ -169,9 +169,10 @@ cannot change the outcome.
 JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
-**5. Repeated text with an X between — CLOSED. The REPORTER is shipped as
-`--double-length L`; the SCORE BONUS, the SELF-CRIB FILTER and the SEEDER were
-each measured down.** The split is
+**5. Repeated text with an X between — the REPORTER is shipped as
+`--double-length L`; the SCORE BONUS and the SELF-CRIB FILTER are measured
+down; the SIGNATURE SEEDER is measured UP and is the one open half.** The split
+is
 the whole story of this item. As a *confirmation signal* — report the doubling,
 change no ranking — it works and is now in `enigma.cc` as `--double-length L`
 (gate at `--double-z Z`, default 3): see the entry in `CLAUDE.md`, note (a)/(b)
@@ -714,7 +715,7 @@ ends with a doubled surname, `--crib-list` with a name list is strictly better
 advantage was needing no vocabulary, and it buys a keyspace reduction between
 1.1× and 5.5× depending on the message. Not worth building.
 
-*The SEEDER — measured, and down as well, which closes the item.* Rejection
+*The SWEPT SEEDER — measured, and down.* Rejection
 being dead does not by itself kill seeding: `--crib`'s hybrid pins deduced plugs
 and lets the climb find the rest (92% of letters recovered against 8%
 unseeded), and that needs only the true hypothesis to *rank highly* among the
@@ -738,17 +739,69 @@ The seeds deducing the *most* plugs are the ones deducing them *wrongly* — a
 hypothesis that forces 20 assignments is over-constrained by a false premise,
 not close to the truth. Seeding from the top five would pin ~20 wrong plugs.
 
-A second ranking, **menu selectivity**, fails too and shows why no third one
-will do better. At the true key the true menu survives with exactly 1 guess of
-26 — but the *median false* menu survives with **0**, so 60–87% of false menus
-are more selective than the true one, and ~30–40% still survive, leaving
-thousands of candidates. The deduction's own outputs simply do not identify
-which hypothesis is real.
+A second ranking, **menu selectivity**, fails too. At the true key the true menu
+survives with exactly 1 guess of 26 — but the *median false* menu survives with
+**0**, so 60–87% of false menus are more selective than the true one, and
+~30–40% still survive, leaving thousands of candidates. The deduction's own
+outputs do not identify which hypothesis is real.
 
-What is left is to *score* each seed's decrypt, and that is the closing
-argument: ~2 000 seeds × one decrypt each is the same order as a plugboard
-climb, i.e. about what one extra `-R` restart costs — and restarts are measured
-to deliver, while this is not. There is no room between them.
+*The SIGNATURE SEEDER — measured UP, and this is the open half of item 5.* The
+paragraph above used to end by closing the item, on the argument that scoring
+~2 000 seeds costs about what one extra `-R` restart costs, and restarts are
+measured to deliver. That argument is right about the *swept* seeder and wrong
+about this one, because **pinning the alignment to the end of the message
+changes the seed count by two orders of magnitude**. Half the corpus's doublings
+are a signed surname closing the message (`… X RENNER X RENNER`), so the
+alignment is not unknown — only the name's *length* is, which leaves ~19
+hypotheses rather than ~2 800, and ~28 surviving seeds rather than ~2 000.
+Scoring 28 decrypts is not one restart; it is a rounding error.
+
+Measured over 200 trials (the 10 corpus messages that end with a doubling × 20
+fresh keys and 10-pair boards, `eval/selfcrib_probe.py`):
+
+- **Recall is perfect: 200/200 trials have exactly one fully correct seed** —
+  every assignment it makes agrees with the true board. It pins 12.7
+  assignments on average (4–24), of which 5.4 (1–10) are actual cables; the
+  rest are deduced *no*-cable findings, which `--crib`'s hybrid pins too.
+- **It can be found without knowing the truth.** Ranking the ~28 seeds by their
+  decrypt's score puts the correct one **first in 150 of 200 trials** under the
+  index of coincidence, and in the top three 168 times.
+
+Ranking by every scoring model, paired over the same 200 trials (`vs -i` counts
+trials where only IC ranked it first / only that model did):
+
+| signal | top-1 | top-3 | mean rank | vs `-i` | McNemar |
+|---|---:|---:|---:|---:|---:|
+| **`-i`** | **150/200** | **168/200** | **2.0** | — | — |
+| `-m` | 138/200 | 162/200 | 2.5 | 28 / 16 | p = 0.096 |
+| `-b` | 118/200 | 143/200 | 3.9 | 47 / 15 | p = 0.0001 |
+| `-t` | 128/200 | 150/200 | 3.2 | 37 / 15 | p = 0.003 |
+| `-q` | 129/200 | 154/200 | 3.1 | 36 / 15 | p = 0.005 |
+| `-a` | 128/200 | 153/200 | 3.0 | 38 / 16 | p = 0.004 |
+| `-f` | 144/200 | 165/200 | 2.2 | 22 / 16 | p = 0.42 |
+
+**The index of coincidence ties the fused model and beats every other one** —
+significantly for bi/tri/quad/weighted, marginally for mono. That is worth more
+than the small margin suggests, because IC is the one model that needs no
+language and no n-gram table at all: the seed ranking can be free and
+language-independent even when the search's target model is not. The mechanism
+is the same one that makes `-F`'s tier 1 an IC climb rather than an n-gram scan
+— a partially-correct board yields a *partially* unscrambled decrypt, where
+"the letter distribution is no longer flat" is answerable and "does this read as
+German" is not yet.
+
+Note that the ranking is over the ~28 seeds *at one rotor key*, so this measures
+the seeder, not a search. **What is NOT yet measured is the only question that
+decides whether it ships:** at matched compute, does the ~28 extra decrypts per
+key plus a seeded climb beat spending the same time on `-R`? The seeder's cost
+is negligible per key but it is paid on *every* key of a sweep, and `-R` is the
+lever this repo has repeatedly measured to dominate its challengers. Until that
+A/B exists this is a probe result, not a feature.
+
+The `eval/` scorers used for the table are anchored against the binary
+(`--check-scorers`): all seven agree to ≤0.04, the size of the uint8
+quantisation (`ngram_scale = 32`, ±0.016 per gram), and IC — which is not
+quantised — to 4 decimals.
 
 The algebra, for the record. It sidesteps the failure above entirely, because it
 works on the **ciphertext** and needs no correct decrypt at all.

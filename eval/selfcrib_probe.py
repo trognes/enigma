@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
 """The SELF-CRIB deduction: does a doubled word reject wrong rotor settings?
 
-    python3 eval/selfcrib_probe.py --selftest   # correctness anchor only
-    python3 eval/selfcrib_probe.py              # the gate measurement
+    python3 eval/selfcrib_probe.py --selftest        # correctness anchor only
+    python3 eval/selfcrib_probe.py                   # every measurement
+    python3 eval/selfcrib_probe.py --check-scorers   # anchor eval/ vs ./enigma
+
+Two questions, and they came out opposite ways.  As a FILTER the deduction is
+dead -- measured here, and the last section below has the numbers.  As a SEEDER
+it is alive, but only in the TERMINAL-SIGNATURE form, where the alignment is
+pinned to the end of the message (`... X RENNER X RENNER`) and the hypothesis
+set collapses from ~2 800 to ~19: 200/200 trials then have exactly one fully
+correct seed, and ranking the ~28 survivors by their decrypt's index of
+coincidence puts it first 150 times.  `signature_seeder()`.
 
 ENHANCEMENTS.md item 5's surviving idea.  A classic crib knows the plaintext
 letter at a position; a SELF-crib knows only that two positions carry the SAME
@@ -43,6 +52,7 @@ has to be extraordinarily close to 1, far closer than an ordinary crib needs.
 Measure it; do not estimate it.
 """
 import argparse
+import math
 import os
 import random
 import sys
@@ -52,7 +62,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from crib_menu import UNSET, core_rows, corpus, random_key   # noqa: E402
 from ring_stride_geometry_probe import (                     # noqa: E402
-    crypt, num, plugboard)
+    crypt, jlog, load_counts, num, plugboard, score_table)
 
 X = ord("X") - ord("A")
 
@@ -379,6 +389,216 @@ def terminal(rng, texts, wrong=300):
               "  = %.3f kept" % (len(ct), len(hyps), surv, wrong, surv / wrong))
 
 
+MODELS = ("i", "m", "b", "t", "q", "a", "f")
+
+
+def binom_two(x, y):
+    """Exact two-sided McNemar over the discordant pairs (x, y)."""
+    n = x + y
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, k) for k in range(min(x, y) + 1))
+    return min(1.0, tail / 2 ** (n - 1))
+
+
+def ngram_tables(lang):
+    """log10 tables for every n-gram model, as `enigma.cc` loads them."""
+    return {"m": jlog(load_counts(1, lang)),
+            "b": jlog(load_counts(2, lang)).reshape(26, 26),
+            "t": jlog(load_counts(3, lang)).reshape(26, 26, 26),
+            "q": score_table("quad", lang),
+            "a": score_table("all", lang)}
+
+
+def model_scores(pt, tab):
+    """(k, n) decrypts -> per-model per-symbol score, normalised as the tool
+    normalises: mono by n, bi by n-1, tri by n-2, quad/all by n-3, and -f as
+    the all-order score plus lambda=30 times the index of coincidence."""
+    k, n = pt.shape
+    f = np.zeros((k, 26), dtype=np.int64)
+    for j in range(26):
+        f[:, j] = (pt == j).sum(axis=1)
+    ic = (f * (f - 1)).sum(axis=1) / float(n * (n - 1))
+    out = {"i": ic,
+           "m": tab["m"][pt].sum(1) / n,
+           "b": tab["b"][pt[:, :-1], pt[:, 1:]].sum(1) / (n - 1),
+           "t": tab["t"][pt[:, :-2], pt[:, 1:-1], pt[:, 2:]].sum(1) / (n - 2)}
+    for key in ("q", "a"):
+        out[key] = tab[key][pt[:, :-3], pt[:, 1:-2],
+                            pt[:, 2:-1], pt[:, 3:]].sum(1) / (n - 3)
+    out["f"] = out["a"] + 30.0 * ic
+    return out
+
+
+def check_scorers(rng, texts, lang="wehrmacht", binary="./enigma"):
+    """Anchor `model_scores` against the binary: pin the rotor key, hand it a
+    board with `-s`, and compare the one score it prints.  The ranking below is
+    only worth anything if these seven agree with what the tool computes."""
+    import re
+    import subprocess
+    alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    print("\nscorer anchor: eval/ vs %s" % binary)
+    tab = ngram_tables(lang)
+    pt_text = rng.choice([t for t in texts if len(t) > 120])
+    wheels, refl, ring, start = random_key(rng)
+    plug = plugboard(np.random.default_rng(rng.randrange(1 << 30)), 10)
+    ct = crypt(pt_text, wheels, refl, ring, start, plug)
+    c = num(ct)
+    rows = core_rows(wheels, refl, ring, start, len(ct))
+    mine = model_scores(plug[rows[np.arange(len(c)), plug[c]]][None, :], tab)
+    w = "".join(str(x + 1) for x in wheels)
+    rg = "".join(alpha[x] for x in ring)
+    gg = "".join(alpha[x] for x in start)
+    sp = "".join(alpha[a] + alpha[int(plug[a])]
+                 for a in range(26) if plug[a] > a)
+    worst = 0.0
+    for m in MODELS:
+        r = subprocess.run([binary, "-" + m, "-u", refl, "-w", w, "-r", rg,
+                            "-g", gg, "-l", lang, "-s", sp],
+                           input=ct, capture_output=True, text=True)
+        tool = None
+        for line in r.stderr.splitlines():
+            hit = re.match(r"^\s*(-?[0-9]+\.[0-9]+)\s+[A-Za-z]", line)
+            if hit:
+                tool = float(hit.group(1))
+        if tool is None:
+            print("   -%s  NO SCORE from the binary" % m)
+            return False
+        worst = max(worst, abs(mine[m][0] - tool))
+        print("   -%-3s eval %12.6f   tool %12.6f   d %.4f"
+              % (m, mine[m][0], tool, abs(mine[m][0] - tool)))
+    print("   worst disagreement %.4f -- the uint8 quantisation "
+          "(ngram_scale=32) is +-0.016 per gram." % worst)
+    return worst < 0.05
+
+
+def seed_from_row(row):
+    """A deduced board row as a full involution (unassigned = self-steckered),
+    plus the cable pairs it asserts."""
+    s = np.arange(26)
+    known = np.nonzero(row != UNSET)[0]
+    s[known] = row[known]
+    pairs = tuple(sorted((a, int(s[a])) for a in known if s[a] != a
+                         and a < s[a]))
+    return s, known, pairs
+
+
+def signature_seeder(rng, texts, msgs=10, reps=1, lang="wehrmacht"):
+    """Does the TERMINAL-SIGNATURE deduction produce a seed worth pinning?
+
+    The swept seeder died on precision, not recall: its top-ranked seeds pinned
+    ~20 plugs and got ~none of them right, and a wrongly pinned plug is worse
+    than no pin because the climb cannot undo it.  Pinning the alignment to the
+    end of the message changes that arithmetic completely -- ~20 hypotheses
+    against ~2 800 -- so the two questions are asked again here:
+
+      1. does a fully CORRECT seed exist among the survivors?
+      2. can it be found without knowing the truth -- i.e. where does it RANK
+         when the seeds are ordered by their decrypt's score?
+
+    Question 2 is asked of every scoring model, because the ranking signal is
+    free to be a different one from the search's target model.
+
+    Only ~10 corpus messages end with a doubling, so `reps` fresh keys and
+    boards per message supply the sample size; the ranks move enough between
+    single runs that one pass over the ten says nothing about which model wins.
+    """
+    print("\nsignature seeder: rank of a fully correct seed, by model")
+    tab = ngram_tables(lang)
+    ends = [t for t in texts
+            if any(len(t) - (a + 2 * L + 1) <= 1
+                   for a, L in doublings(t, minlen=4, maxlen=20))]
+    print("   %d corpus messages end with a doubling; %d x %d keys, -l %s\n"
+          % (len(ends), min(msgs, len(ends)), reps, lang))
+    if reps == 1:
+        print("   %-5s %-6s %-8s %-5s %-6s %s"
+              % ("n", "seeds", "correct", "pins", "cables", "  ".join(
+                  "%3s" % ("-" + m) for m in MODELS)))
+    ranks = {m: [] for m in MODELS}
+    missing = 0
+    stats = []
+    for pt_text in ends[:msgs] * reps:
+        wheels, refl, ring, start = random_key(rng)
+        plug = plugboard(np.random.default_rng(rng.randrange(1 << 30)), 10)
+        ct = crypt(pt_text, wheels, refl, ring, start, plug)
+        n = len(ct)
+        rows = core_rows(wheels, refl, ring, start, n)
+        c = num(ct)
+        seen, boards, pins, pairs, ok = set(), [], [], [], []
+        for menu in terminal_hyps(ct):
+            alive, board = deduce(menu, rows)
+            for h in np.nonzero(alive)[0]:
+                s, known, pr = seed_from_row(board[h])
+                key = s.tobytes()
+                if key in seen:
+                    continue
+                seen.add(key)
+                boards.append(s)
+                pins.append(len(known))
+                pairs.append(pr)
+                # correct = every assignment agrees with the true board.  Both
+                # counts matter: `pins` is what a --crib-style hybrid would fix
+                # (a deduced NO-cable is a finding too), `cables` the subset
+                # that is an actual plug.
+                ok.append(bool(np.all(board[h][known] == plug[known])))
+        if not boards:
+            continue
+        # p[k, i] = steck_k[core_i[steck_k[c_i]]]
+        S = np.asarray(boards)                           # (k, 26)
+        k = np.arange(len(S))[:, None]
+        mid = rows[np.arange(n)[None, :], S[:, c]]       # (k, n)
+        sc = model_scores(S[k, mid], tab)
+        good = [i for i, o in enumerate(ok) if o]
+        if not good:
+            missing += 1
+        cells = []
+        for m in MODELS:
+            order = np.argsort(-sc[m], kind="stable")
+            pos = {int(i): r for r, i in enumerate(order)}
+            r = min((pos[i] for i in good), default=None)
+            cells.append("%3s" % ("-" if r is None else r))
+            if r is not None:
+                ranks[m].append(r)
+        stats.append((len(boards), max((pins[i] for i in good), default=0),
+                      max((len(pairs[i]) for i in good), default=0)))
+        if reps == 1:
+            print("   %-5d %-6d %-8d %-5s %-6s %s"
+                  % (n, len(boards), len(good),
+                     max((pins[i] for i in good), default="-"),
+                     max((len(pairs[i]) for i in good), default="-"),
+                     "  ".join(cells)))
+    tot = len(stats)
+    sd, sp, sc_ = (np.array([s[i] for s in stats]) for i in range(3))
+    print("   %d/%d trials have a fully correct seed; it pins %.1f assignments"
+          % (tot - missing, tot, sp[sp > 0].mean() if (sp > 0).any() else 0))
+    print("   (%d-%d) of which %.1f (%d-%d) are cables, among %.1f seeds.\n"
+          % (sp[sp > 0].min() if (sp > 0).any() else 0, sp.max(),
+             sc_[sc_ > 0].mean() if (sc_ > 0).any() else 0,
+             sc_[sc_ > 0].min() if (sc_ > 0).any() else 0, sc_.max(),
+             sd.mean()))
+    print("   %-8s %-9s %-9s %-9s %-10s %s"
+          % ("signal", "top-1", "top-3", "mean rank", "vs -i", "McNemar"))
+    base = np.array(ranks[MODELS[0]])
+    for m in MODELS:
+        r = np.array(ranks[m])
+        if m == MODELS[0]:
+            cmp_, p = "", ""
+        else:
+            x = int(((base == 0) & (r != 0)).sum())
+            y = int(((base != 0) & (r == 0)).sum())
+            cmp_, p = "%d / %d" % (x, y), "p = %.4f" % binom_two(x, y)
+        print("   %-8s %-9s %-9s %-9.1f %-10s %s"
+              % ("-" + m, "%d/%d" % ((r == 0).sum(), r.size),
+                 "%d/%d" % ((r < 3).sum(), r.size), r.mean(), cmp_, p))
+    print("\n   'vs -i' counts the trials where only -i put the correct seed")
+    print("   top / only that model did, paired over the same trials.")
+    print("\n   'correct' = every assignment the seed makes agrees with the")
+    print("   true board; 'pins'/'cables' are how many it makes and how many")
+    print("   of those are actual plugs.  The rank is that seed's position")
+    print("   when the message's seeds are sorted by their decrypt's score --")
+    print("   0 means the correct seed is the one a search would have picked.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--selftest", action="store_true")
@@ -387,6 +607,11 @@ def main():
     ap.add_argument("--swept-msgs", type=int, default=4)
     ap.add_argument("--swept-wrong", type=int, default=40)
     ap.add_argument("--seed", type=int, default=20260816)
+    ap.add_argument("--seeder-msgs", type=int, default=10)
+    ap.add_argument("--seeder-reps", type=int, default=20)
+    ap.add_argument("--lang", default="wehrmacht")
+    ap.add_argument("--check-scorers", action="store_true",
+                    help="anchor the eval scorers against ./enigma first")
     a = ap.parse_args()
     rng = random.Random(a.seed)
     texts = [t for t in corpus() if doublings(t)]
@@ -402,6 +627,11 @@ def main():
     gate(rng, texts, msgs=a.messages, wrong=a.wrong)
     swept(rng, texts, msgs=a.swept_msgs, wrong=a.swept_wrong)
     terminal(rng, texts)
+    if a.check_scorers and not check_scorers(rng, texts, lang=a.lang):
+        print("\nSCORER ANCHOR FAILED -- not ranking seeds with these.")
+        return 1
+    signature_seeder(rng, texts, msgs=a.seeder_msgs, reps=a.seeder_reps,
+                     lang=a.lang)
     return 0
 
 
