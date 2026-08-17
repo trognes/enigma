@@ -1,0 +1,30 @@
+Matched-compute A/B: does SIGNATURE SEEDING beat spending the time on -R?
+
+10 messages x 30 keys, -c -f -J --polish -S i4f10 -l wehrmacht, -T 4
+A (baseline) swept over -R 8,32,64,128,256; B/O (seeded) at -R 8
+
+
+arm    mean %     exact        score_iter     wall/trial
+A8     53.6       130/300      28156          0.08 s
+A32    68.9       178/300      79883          0.08 s
+A64    74.9       197/300      150954         0.09 s
+A128   78.3       207/300      294592         0.10 s
+A256   83.6       223/300      582450         0.12 s
+B      74.2       204/300      5767           0.07 s
+B3     85.3       238/300      24997          0.22 s
+O      97.3       275/300      6152           0.08 s
+
+matched compute: B costs 5767 score_iter, nearest baseline is A8 at 28156 (4.88x)
+   B vs A8: mean +20.55pp, CI [+14.32, +26.78] per trial, [+5.44, +35.29] clustered on 9 messages
+      exact +74 (only B 104, only A8 30), McNemar p = 0.0000
+   B3 vs A8: mean +31.71pp, CI [+26.13, +37.29] per trial, [+15.66, +44.94] clustered on 9 messages
+      exact +108 (only B3 121, only A8 13), McNemar p = 0.0000
+   O vs A8: mean +43.70pp, CI [+38.85, +48.55] per trial, [+26.01, +56.64] clustered on 9 messages
+      exact +145 (only O 145, only A8 0), McNemar p = 0.0000
+   baseline levels reaching B's mean %-correct: A64 (26.2x B's cost), A128 (51.1x B's cost), A256 (101.0x B's cost)
+
+split by whether the IC ranking picked the correct seed:
+                   trials  A8       B        B3       O
+   ranking right   215     57.2     99.2     99.2     99.2
+   ranking WRONG   85      44.5     10.9     50.3     92.6
+   correct seed in the top 3: 253/300 trials

@@ -171,7 +171,8 @@ JSON so the reading can be revisited without repeating the climbs),
 
 **5. Repeated text with an X between — the REPORTER is shipped as
 `--double-length L`; the SCORE BONUS and the SELF-CRIB FILTER are measured
-down; the SIGNATURE SEEDER is measured UP and is the one open half.** The split
+down; the SIGNATURE SEEDER beats `-R` at matched compute and is READY TO
+BUILD.** The split
 is
 the whole story of this item. As a *confirmation signal* — report the doubling,
 change no ranking — it works and is now in `enigma.cc` as `--double-length L`
@@ -790,18 +791,78 @@ is the same one that makes `-F`'s tier 1 an IC climb rather than an n-gram scan
 "the letter distribution is no longer flat" is answerable and "does this read as
 German" is not yet.
 
-Note that the ranking is over the ~28 seeds *at one rotor key*, so this measures
-the seeder, not a search. **What is NOT yet measured is the only question that
-decides whether it ships:** at matched compute, does the ~28 extra decrypts per
-key plus a seeded climb beat spending the same time on `-R`? The seeder's cost
-is negligible per key but it is paid on *every* key of a sweep, and `-R` is the
-lever this repo has repeatedly measured to dominate its challengers. Until that
-A/B exists this is a probe result, not a feature.
-
 The `eval/` scorers used for the table are anchored against the binary
 (`--check-scorers`): all seven agree to ≤0.04, the size of the uint8
 quantisation (`ngram_scale = 32`, ±0.016 per gram), and IC — which is not
 quantised — to 4 decimals.
+
+*The matched-compute A/B against `-R` — the seeder WINS, and it is the first
+thing in this repo to do so.* `-R` has beaten every challenger it has been put
+against (`--cascade`, `--polish`, `-F`, SA, the GA precondition), so this was
+the measurement that decided the item. 300 paired trials (the 10 corpus messages
+that end with a doubling × 30 fresh keys and 10-pair boards), recommended recipe
+`-c -f -l wehrmacht -S i4f10 -J --polish`, true rotor key pinned, board hidden
+(`eval/seeder_vs_restarts.py`, `eval/results-seeder-vs-restarts.txt`):
+
+| arm | mean %-correct | exact | `score_iter` | cost vs B |
+|---|---:|---:|---:|---:|
+| baseline `-R 8` | 53.6 | 130/300 | 28 156 | 4.9× |
+| baseline `-R 32` | 68.9 | 178/300 | 79 883 | 13.9× |
+| baseline `-R 64` | 74.9 | 197/300 | 150 954 | 26.2× |
+| baseline `-R 128` | 78.3 | 207/300 | 294 592 | 51.1× |
+| baseline `-R 256` | 83.6 | 223/300 | 582 450 | 101× |
+| **B** seeded, IC-top, `-R 8` | 74.2 | 204/300 | **5 767** | 1× |
+| **B3** best-by-score, top 3 seeds | **85.3** | **238/300** | 24 997 | 4.3× |
+| *O* oracle-correct seed | *97.3* | *275/300* | *6 152* | *1.1×* |
+
+- **B3 beats the `-R 256` baseline on both metrics at 1/23 of its
+  `score_iter`** — 85.3 against 83.6 mean, 238 against 223 exact — and it costs
+  *less than the `-R 8` baseline*. Against that baseline it is +31.7pp (95% CI
+  [+26.1, +37.3] per trial, [+15.7, +44.9] clustered on the messages) and +108
+  exact recoveries, McNemar p < 0.0001.
+- **B alone matches `-R 64`'s mean at 26× less compute** and beats its exact
+  rate (204 against 197). So even the single-seed form is worth ~26× of `-R`.
+- **Equal `-R` is NOT equal compute here, which is why the baseline is swept.**
+  Pinning k letters removes them from the 325-toggle scan and from the set the
+  climb must converge, so a seeded restart is ~5× cheaper than a bare one.
+  Matching on `-R` would have handed the seeded arm most of the budget.
+
+**Where the remaining gap is, and it is not the seeding.** The oracle arm —
+the same thing seeded with the *correct* seed whatever the ranking said — scores
+97.3 / 275, beating the 101×-cost baseline by 13.7pp and 52 recoveries. The
+whole distance between B and O is the ranking, and splitting on it is stark:
+
+| | trials | baseline `-R 8` | B | B3 | O |
+|---|---:|---:|---:|---:|---:|
+| ranking right | 215 | 57.2 | **99.2** | 99.2 | 99.2 |
+| ranking WRONG | 85 | 44.5 | **10.9** | 50.3 | 92.6 |
+
+**A wrong seed is worse than no seed** — 10.9 against the baseline's 44.5 —
+because `-s` pins and the climb cannot undo a pin. That is the single most
+important practical fact here, and it is what B3 exists to hedge: the correct
+seed is in the top three in **253/300** trials, so running three seeded climbs
+and keeping the best *by score* recovers most of the loss (50.3) while still
+costing less than `-R 8`. Ranking by the converged score is much sharper than
+the IC pre-ranking because by then each seed's climb has actually run.
+
+*The better fix is not available today.* `-s` is the only way to express a seed,
+and it pins. What this wants is a **soft** seed — a starting board the climb may
+modify — where a wrong seed costs one restart rather than the run. That would
+likely land near the oracle without needing three runs, and it needs a new
+option; it is untested.
+
+**Two things bound the result, and both point the same way.** This is the
+plugboard-recovery tier with the **rotor key given**, which is the tier every
+tuning result in this repo is measured on and is the seeder's *best* case — at
+a wrong key the deduction pins wrong plugs. What a full sweep does is therefore
+open in two respects: the deduction's per-key cost is real and uncounted by
+`score_iter` (~28 whole-message decrypts plus the closure, ~1% of arm B here but
+paid on every key), and whether seeding spuriously *promotes* wrong keys is
+unmeasured. And it applies only to messages ending in a doubled word — 10 of the
+18 corpus messages carrying a doubling, ~15% of the corpus. Wall time is
+reported in the results file but says nothing at this size: a run is ~0.1 s of
+which ~0.05 s is the one-off n-gram load, and B3 pays that three times because
+it is three processes.
 
 The algebra, for the record. It sidesteps the failure above entirely, because it
 works on the **ciphertext** and needs no correct decrypt at all.
