@@ -46,12 +46,17 @@ existing command lines can behave differently or stop working.
   best-of-`K` score of the *wrong* keys too, so extra recall converts into
   discrimination only slowly.
 
-  **`--self-crib-length` defaults to 6**, the knee of the cost curve. Over all
-  20 corpus messages carrying a 4+ doubling, the floor trades cost against
-  breaks monotonically — L=9 → 19/40 at 1 053 µs/key, L=7 → 24/40 at 1 588,
-  **L=6 → 26/40 at 2 438**, L=5 → 27/40 at 4 224, L=4 → 28/40 at 7 573. Six sits
-  just under `-R 16`'s own cost while breaking 7 more; 4 is there for maximum
-  coverage when the compute is free.
+  **`--self-crib-length` defaults to 6**, and the anywhere default dominates the
+  signature restriction at every length. Fixed population — all 20 corpus
+  messages carrying a 4+ doubling anywhere, 40 trials, `K = 10`, 676-key sweeps
+  — exact recoveries of 40: signature 16/14/12/11/6/4 against anywhere
+  28/27/26/24/22/19 as `L` runs 4→9, at 570→202 µs per key against 7 595→1 065.
+  A bare `-R 16` gets 19/40 at 2 901 µs, and `-R 0`/`-R 1` get 5/40. Every
+  anywhere cell beats `-R 16` except `L=9`, which ties it at 2.7× less time; the
+  signature restriction is worse than `-R 16` at every length, which is why it
+  is the flag and not the default. `L=6` is the best value (26/40 still under
+  `-R 16`'s per-key cost); `L=8` is the cheapest cell that beats it at all
+  (22/40 for 2.4× less).
 
   `score_iter` is the wrong axis for these flags and says the opposite of the
   truth: a swept `K=1` run scores *fewer* plugboards than a signature-

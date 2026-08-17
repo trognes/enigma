@@ -183,6 +183,55 @@ The position flag now follows --crib/--crib-at: the default assumes nothing
 that it closes the message.  That also puts the word "signature" only where it
 is true.
 
+== the full L grid: signature vs anywhere, against plain restarts ==
+
+Fixed population: all 20 corpus messages carrying a 4+ doubling ANYWHERE, 40
+trials, K=10, 676-key sweeps, 10-pair board hidden, -T 4.
+eval/self_crib_length_grid.py reproduces it.
+
+arm         mean %   exact     wall/trial  per key   hypotheses
+-R 0         18.3     5/40      0.18 s      265 us    --
+-R 1         17.0     5/40      0.20 s      300 us    --
+-R 16        50.5    19/40      1.96 s     2901 us    --
+sig L4       46.6    16/40      0.39 s      570 us      20
+sig L5       42.0    14/40      0.33 s      495 us      18
+sig L6       37.9    12/40      0.30 s      440 us      16
+sig L7       35.3    11/40      0.26 s      379 us      14
+sig L8       20.4     6/40      0.17 s      246 us      12
+sig L9       15.5     4/40      0.14 s      202 us      10
+any L4       76.8    28/40      5.13 s     7595 us    2806
+any L5       72.5    27/40      2.85 s     4212 us    2498
+any L6       70.5    26/40      1.64 s     2428 us    2196
+any L7       65.8    24/40      1.08 s     1597 us    1901
+any L8       58.1    22/40      0.82 s     1213 us    1611
+any L9       50.8    19/40      0.72 s     1065 us    1328
+
+ANYWHERE DOMINATES SIGNATURE AT EVERY LENGTH, and the gap widens as the floor
+rises -- 28/40 against 16/40 at L=4, 19/40 against 4/40 at L=9 -- because a long
+doubling CLOSING the message is rare (only 4 of the 66 corpus messages have an 8+
+terminal one) while long doublings SOMEWHERE stay common.
+
+Every anywhere cell beats -R 16 except L=9, which ties it (19/40) at 2.7x less
+time.  On this population the swept self-crib is never worse than a 16-restart
+baseline.
+
+SIGNATURE-RESTRICTED IS WORSE THAN -R 16 AT EVERY LENGTH here (best 16/40 at
+L=4).  It only wins when the message really does end with its doubling, which on
+a realistic mix it usually does not -- which is why it is the flag and not the
+default, and why "terminal first, it is cheapest" only holds when you have reason
+to believe the message is signed off.
+
+-R 0 and -R 1 are indistinguishable (5/40 both, 18.3 against 17.0 mean, noise on
+40 trials).  Both are a SINGLE climb; the kick only changes which basin it starts
+from.  Both are ~10x worse than -R 16.
+
+Two knees:
+  * cheapest thing that beats -R 16: any L8 -- 22/40 against 19/40 at 1213 us
+    per key against 2901, i.e. 2.4x CHEAPER for 3 more breaks;
+  * best value overall: any L6 (the shipped default) -- 26/40 at 2428 us per key,
+    still under -R 16's cost for 7 more breaks.  L5 and L4 buy 1 and 2 more
+    breaks for 1.7x and 3.1x the time.
+
 == the measurement that set --self-crib-length 6 ==
 
 Fixed population: all 20 corpus messages carrying a 4+ doubling ANYWHERE, 40

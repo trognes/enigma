@@ -569,12 +569,35 @@ are read from a **data directory** (filenames built as
     curve: raising `K` lifts the best-of-`K` score of all the **wrong** keys
     too, so extra recall converts into discrimination slowly. (23 against 24 of
     32 is one trial and is not significant on its own.)
-  - **`--self-crib-length` defaults to 6, the knee of the cost curve.** Over all
-    20 corpus messages carrying a 4+ doubling, the floor trades cost for breaks
-    monotonically: L=9 → 19/40 at 1 053 µs/key, L=7 → 24/40 at 1 588, **L=6 →
-    26/40 at 2 438**, L=5 → 27/40 at 4 224, L=4 → 28/40 at 7 573. Six sits just
-    under `-R 16`'s own per-key cost while breaking seven more; 4 is for maximum
-    coverage when the compute is free. Reliability tracks the doubled word's
+  - **`--self-crib-length` defaults to 6, and the ANYWHERE default dominates the
+    signature restriction at every length.** Fixed population — all 20 corpus
+    messages carrying a 4+ doubling anywhere, 40 trials, `K = 10`, 676-key
+    sweeps (`eval/self_crib_length_grid.py`), exact recoveries of 40 and µs per
+    key:
+    | `L` | signature | | anywhere | |
+    |---:|---:|---:|---:|---:|
+    | 4 | 16/40 | 570 | **28/40** | 7 595 |
+    | 5 | 14/40 | 495 | 27/40 | 4 212 |
+    | **6** | 12/40 | 440 | **26/40** | **2 428** |
+    | 7 | 11/40 | 379 | 24/40 | 1 597 |
+    | 8 | 6/40 | 246 | 22/40 | 1 213 |
+    | 9 | 4/40 | 202 | 19/40 | 1 065 |
+    | *`-R 0`* | *5/40* | *265* | *`-R 1`* 5/40, 300 | *`-R 16`* 19/40, 2 901 |
+  - **The gap widens as the floor rises** — 28/40 against 16/40 at `L=4`, 19/40
+    against 4/40 at `L=9` — because a long doubling *closing* the message is
+    rare (only 4 of the 66 corpus messages have an 8+ terminal one) while long
+    doublings *somewhere* stay common. Every anywhere cell beats `-R 16` except
+    `L=9`, which ties it at 2.7× less time; the signature restriction is **worse
+    than `-R 16` at every length**, which is why it is the flag and not the
+    default.
+  - **Two knees.** The cheapest thing that beats `-R 16` is anywhere `L=8` —
+    22/40 against 19/40 at 1 213 µs per key against 2 901, i.e. 2.4× *cheaper*
+    for three more breaks. The best value overall is `L=6`, the default: 26/40
+    still under `-R 16`'s per-key cost, for seven more breaks. `L=5` and `L=4`
+    buy one and two more breaks for 1.7× and 3.1× the time.
+  - **`-R 0` and `-R 1` are indistinguishable** (5/40 each, 18.3 against 17.0
+    mean — noise at 40 trials): both are a *single* climb and the kick only
+    changes which basin it starts from. Reliability tracks the doubled word's
     length because that is what sets the number of equality edges — a 6-letter
     mid-message doubling was not recovered even at `K=100` on one fixture, while
     9 and 13 letters recovered at `K=1`.
