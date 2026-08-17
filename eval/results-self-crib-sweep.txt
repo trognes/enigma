@@ -164,3 +164,47 @@ carrying no cable is the --no-plug effect, worth 25 of the 325 candidate toggles
 and the tool pins those findings too.  It is simply much weaker than a seed that
 pins cables, which is why the stricter reading is the more useful one when asking
 whether a seed will carry a climb.
+
+== RENAME: the options changed name and the position flag INVERTED ==
+
+  --double-length L      ->  --doubling-report L
+  --double-z Z           ->  --doubling-z Z
+  --double-mismatches N  ->  --doubling-mismatches N
+  --signature-seed K     ->  --self-crib-seeds K
+  --signature-length L   ->  --self-crib-length L      (default 4 -> 6)
+  --signature-sweep      ->  --self-crib-signature     (INVERTED)
+
+"signature" was only true of a doubled word CLOSING the message, and misleading
+everywhere else -- ROMANOVKA and NIKOLAJEWO are place names, not sign-offs.  The
+observable is a DOUBLING; the deduction that exploits it is a SELF-CRIB.
+
+The position flag now follows --crib/--crib-at: the default assumes nothing
+(hypothesise the doubling anywhere) and --self-crib-signature adds the knowledge
+that it closes the message.  That also puts the word "signature" only where it
+is true.
+
+== the measurement that set --self-crib-length 6 ==
+
+Fixed population: all 20 corpus messages carrying a 4+ doubling ANYWHERE, 40
+trials, K=10, 676-key sweeps.
+
+arm            mean %   exact     wall/trial  per key   hypotheses
+-R 16          50.5     19/40     1.98 s      2931 us   --
+signature L4   46.6     16/40     0.38 s       569 us     20
+anywhere L4    76.8     28/40     5.12 s      7573 us   2806
+anywhere L5    72.5     27/40     2.86 s      4224 us   2498
+anywhere L6    70.5     26/40     1.65 s      2438 us   2196
+anywhere L7    65.8     24/40     1.07 s      1588 us   1901
+anywhere L9    50.8     19/40     0.71 s      1053 us   1328
+
+Lowering the floor buys breaks MONOTONICALLY (19 -> 28 as L goes 9 -> 4), so the
+earlier worry that L=4 would be imprecise was wrong -- it is the best cell on
+recovery.  But cost rises faster than the gain: L=7 -> L=4 is 4.8x the time for
++4 breaks of 40.  L=6 is the knee -- just under -R 16's own per-key cost while
+breaking 26/40 against its 19/40, and keeping 93% of L=4's breaks for a third of
+the time.
+
+This also revises the terminal figure: on THIS population (any doubling, not
+only terminal ones) the signature restriction breaks 16/40, BELOW a bare -R 16's
+19/40.  Restricting only wins when the message really does end with its
+doubling, which is why it is the flag and not the default.

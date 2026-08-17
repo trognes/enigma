@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""--signature-seed in the tool: the sweep A/B, and the --signature-length default.
+"""--self-crib-seeds in the tool: the sweep A/B, and the --self-crib-length default.
 
     python3 eval/signature_seed_ab.py                # both measurements
     python3 eval/signature_seed_ab.py --trials 4     # a quick look
@@ -16,9 +16,9 @@ Two questions:
 
   1. THE SWEEP A/B.  `-g A..` with wheels, reflector and ring fixed = 676 start
      positions, so the true key must outscore 675 competitors.  Baseline `-R N`
-     against `--signature-seed K`, compared at equal score_iter.
+     against `--self-crib-seeds K`, compared at equal score_iter.
 
-  2. THE --signature-length DEFAULT.  A floor drops the weak short hypotheses (an
+  2. THE --self-crib-length DEFAULT.  A floor drops the weak short hypotheses (an
      L=4 menu deduces almost nothing and rejects nothing) and makes the deduction
      cheaper, at the price of missing a message actually signed with a short name.
      The corpus says 10 of 66 messages end with a 4+ signature but only 7 with a 7+
@@ -80,7 +80,7 @@ def main():
     ap.add_argument("--lengths", default="4,5,6,7,8")
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--seed", type=int, default=20260819)
-    ap.add_argument("--out", default="eval/results-signature-seed.txt")
+    ap.add_argument("--out", default="eval/results-self-crib.txt")
     a = ap.parse_args()
 
     rng = random.Random(a.seed)
@@ -102,7 +102,7 @@ def main():
     say("recipe %s\n" % " ".join(RECIPE))
 
     arms = [("R%s" % r, ["-R", r]) for r in a.restarts.split(",")]
-    arms += [("K%s" % k, ["-R", "0", "--signature-seed", k])
+    arms += [("K%s" % k, ["-R", "0", "--self-crib-seeds", k])
              for k in a.ks.split(",")]
     res = {t: [[], []] for t, _ in arms}
     for pt, ct in cases:
@@ -120,15 +120,15 @@ def main():
                "%d/%d" % ((m > 99.999).sum(), m.size), i.mean(),
                i.mean() / 676))
 
-    say("\n--signature-length sweep (K=1), coverage vs seed quality:")
+    say("\n--self-crib-length sweep (K=1), coverage vs seed quality:")
     say("%-8s %-10s %-12s %-14s %s"
         % ("length", "mean %", "exact", "score_iter", "per key"))
     for L in a.lengths.split(","):
         ms, its = [], []
         for pt, ct in cases:
             rec, it = run(a.binary, RECIPE + key +
-                          ["-R", "0", "--signature-seed", "1",
-                           "--signature-length", L], ct)
+                          ["-R", "0", "--self-crib-seeds", "1",
+                           "--self-crib-length", L], ct)
             ms.append(pct(rec, pt))
             its.append(it)
         m = np.array(ms)
