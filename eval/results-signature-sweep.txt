@@ -105,3 +105,33 @@ Marginal cost is linear and unremarkable across the whole range, ~46 us per extr
 climb.  K=10 remains the operating point: at K=50 you pay -R 16 prices (3626 vs
 3118 us per key) for 24/32 against its 13/32 -- still a large win over the
 baseline, but a poor deal against K=10's 23/32 at 45% of the cost.
+
+== CORRECTION: the swept ranking figures above were measured with a buggy probe ==
+
+The eval probe's swept enumeration used an EXCLUSIVE upper bound on the
+alignment -- `for at in range(1, n-2*L-1)` -- which omits at = n-2L-1.  That is
+exactly the TERMINAL alignment, so every message ending in its doubling lost its
+true hypothesis.  Corrected (`range(1, n-2*L-1+1)`):
+
+                    reported    corrected
+  L>=7 exists       45/48       48/48
+  L>=7 IC top-1     56%         65%
+  L>=7 IC top-5     67%         79%
+  L>=7 IC top-20    78%         92%
+  L>=9 exists       27/33       32/33
+  L>=9 IC top-1     56%         69%
+  L>=9 IC top-5     70%         84%
+
+Recall is PERFECT at L>=7, as it must be: sweeping enumerates a superset of the
+terminal alignments, so it cannot have worse recall than the terminal mode's
+200/200.  That superset argument is what made 45/48 suspicious enough to chase.
+
+The conclusion "raising the floor to 9 does NOT improve the ranking (56% top-1
+either way)" was an artefact of the bug.  It does improve it -- 69% against 65%
+top-1, 84% against 79% top-5 -- though on a smaller and different population
+(11 of 66 messages against 16).
+
+enigma.cc was NEVER affected: its bound is `at + 2*len + 1 <= textlength`, which
+is inclusive.  The closure verification used the corrected enumeration and
+matched exactly, and every end-to-end break number (23/32 at K=10, etc.) comes
+from the binary, so all of those stand.

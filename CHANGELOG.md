@@ -26,11 +26,12 @@ existing command lines can behave differently or stop working.
   while taking 15× the wall time, because its seeds are more constrained so the
   climbs are cheap and the uncounted deduction dominates.
 
-  Reliability tracks the signature length sharply: at the true key IC puts a
-  correct seed in the top 5 in 67% of trials at `L≥7`, but on one fixture a
-  6-letter mid-message doubling was not recovered even at `K=100` while 9 and 13
-  letters recovered at `K=1`. Raising the floor to 9 halves the cost without
-  improving the ranking.
+  Reliability tracks the signature length: at the true key IC puts a correct
+  seed in the top 5 in 79% of trials at `L≥7` and 84% at `L≥9`, and a correct
+  seed exists in 48/48 — sweeping enumerates a superset of the terminal
+  alignments, so its recall cannot be worse. On one fixture a 6-letter
+  mid-message doubling was not recovered even at `K=100` while 9 and 13 letters
+  recovered at `K=1`.
 
   **Use `--signature-seed 10` when sweeping.** Over 32 paired 676-key sweeps,
   swept `K` = 5/10/20/35/50 breaks 21/23/23/23/24 of 32 at 1 457 / 1 650 /

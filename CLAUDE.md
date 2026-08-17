@@ -620,14 +620,21 @@ are read from a **data directory** (filenames built as
     true key*, but in a sweep raising `K` lifts the best-of-`K` score of all 675
     **wrong** keys too, so extra recall converts into discrimination slowly and
     unevenly. Marginal cost is linear at ~46 µs per extra climb throughout.
-  - **Swept reliability tracks the SIGNATURE LENGTH, sharply.** At the true key,
-    IC puts a correct seed top-5 in 67% of trials at `L≥7` (against 84% top-3
-    for terminal), and a correct seed exists in 45/48. But on a single message a
-    6-letter mid-message doubling was not recovered even at `K=100`, while 9 and
-    13 letters recovered at `K=1` — the number of equality edges is what carries
-    the deduction. Raising the floor to 9 halves the cost and does **not**
-    improve the ranking (56% top-1 either way), so the failures are IC not
-    separating rather than the haystack being large.
+  - **Swept reliability tracks the SIGNATURE LENGTH.** At the true key, IC puts
+    a correct seed in the top 5 in **79% of trials at `L≥7` and 84% at `L≥9`**
+    (against ~84% top-3 for terminal), and a correct seed exists in **48/48** —
+    sweeping enumerates a superset of the terminal alignments, so its recall
+    cannot be worse. On a single message the length still decides it: a 6-letter
+    mid-message doubling was not recovered even at `K=100`, while 9 and 13
+    letters recovered at `K=1`. The number of equality edges is what carries the
+    deduction. **Two earlier figures here were wrong** and are corrected above:
+    the probe's swept enumeration used an exclusive upper bound on the alignment
+    (`range(1, n-2L-1)`), omitting `at = n-2L-1` — which is exactly the TERMINAL
+    alignment, so every message ending in its doubling lost its true hypothesis.
+    That reported recall as 45/48 and top-5 as 67%, and made a tighter floor
+    look like it bought nothing (56% top-1 at both `L≥7` and `L≥9`). It does
+    help. `enigma.cc` was never affected — its bound is `at + 2*len + 1 <=
+    textlength`, inclusive — so every end-to-end break number above stands.
   - Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
     and `--tune-phase` — each installs its own starting board or moves the key
     the deduction was computed for. `-T`-deterministic (candidate order is
