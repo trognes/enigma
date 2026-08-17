@@ -4598,6 +4598,26 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   return score;
 }
 
+/* The per-key climb the search actually runs, in ONE place.
+
+   --crib and --signature-seed replace the plain climb with a deduction-seeded one, and a
+   seeded climb is drawn from a completely different score distribution: its board starts
+   pinned from a hypothesis, which lifts the true key and depresses wrong ones. So
+   --confidence has to calibrate its null against the SAME unit, exactly as it already
+   climbs its samples rather than scanning them when -c is on -- calibrating one against
+   the other reports a margin for a distribution the search never samples. Routing both
+   the sweep and calibrate_null() through this helper is what stops the two drifting.
+   (--exhaust is not here: its work unit is a forced pair rather than a key, so the sweep
+   calls exhaust_unit directly with a pair index.) */
+static double climb_unit(machine & m, size_t key_index, int restart)
+{
+  if (opt_crib_text)
+    return crib_unit(m, key_index, restart);
+  if (opt_signature_seed > 0)
+    return signature_unit(m, key_index, restart);
+  return hillclimb_one(m, key_index, restart);
+}
+
 /* Run all the climbs for one key sequentially, keeping the best (used where the search
    parallelises over keys rather than restarts -- the -F tier-2 climb). --restarts 0 is a
    single un-kicked seed climb; --restarts N is N kicked climbs (indices 0..N-1). search_worker's
@@ -5499,10 +5519,7 @@ void search_worker(machine & m,
           if (opt_hillclimb)
             score = opt_exhaust
                       ? exhaust_unit(m, keyidx, static_cast<size_t>(restart))
-                      : (opt_crib_text ? crib_unit(m, keyidx, restart)
-                         : (opt_signature_seed > 0
-                              ? signature_unit(m, keyidx, restart)
-                              : hillclimb_one(m, keyidx, restart)));
+                      : climb_unit(m, keyidx, restart);
           else
             {
               init_steckerbrett(m, opt_steckerbrett);
@@ -5728,7 +5745,7 @@ static void calibrate_null(machine & m, size_t keys,
       if (! key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                            rc12, gc12, cur_wo, rg6))
         continue;
-      xs.push_back(opt_hillclimb ? hillclimb_one(m, idx, 0) : score_iter(m));
+      xs.push_back(opt_hillclimb ? climb_unit(m, idx, 0) : score_iter(m));
       if (show_progress && (((xs.size() % step) == 0) || (xs.size() == want)))
         {
           fprintf(stderr, "\rConfidence: sampling the null %3zu%% (%zu / %zu keys)",

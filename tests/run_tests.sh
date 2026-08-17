@@ -2241,6 +2241,22 @@ check "--signature-seed rejects --soft-plug" \
   "$(sig_rejects -c --signature-seed 1 --soft-plug AB)" "1"
 check "--signature-seed rejects -F" \
   "$(sig_rejects -c --signature-seed 1 -F 10)" "1"
+
+# --confidence must calibrate its null against the climb the SEARCH runs, not the plain
+# one: a seeded climb starts from a pinned board and is drawn from a different score
+# distribution entirely.  Before this was routed through climb_unit() the seeded run
+# sampled plain climbs, so its null line was byte-identical to the unseeded run's -- which
+# is exactly what this compares.  The bias is not even one-directional: near the null the
+# plain null understates the margin and far out it overstates, so a real break would have
+# been reported as more significant than it is.
+sig_null() { printf '%s' "$sig_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g A.. \
+               -c -T 1 --confidence 24 "$@" 2>&1 >/dev/null \
+             | sed -n 's/^Confidence: null \([^ ]*\) .*/\1/p'; }
+check "--confidence calibrates against the SEEDED climb, not the plain one" \
+  "$(test "$(sig_null --signature-seed 1)" != "$(sig_null -R 1)" \
+     && echo differs || echo same)" "differs"
+check "--confidence null is unchanged for an unseeded run" \
+  "$(sig_null -R 1)" "$(sig_null -R 1)"
 check "--exhaust E is bounded by the remaining free pairs" \
   "$(np_rejects -c --exhaust 6 --no-plug "$np_many")" "1"
 check "--exhaust E within the remaining free pairs is accepted" \
