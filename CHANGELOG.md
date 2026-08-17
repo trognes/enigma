@@ -23,9 +23,9 @@ existing command lines can behave differently or stop working.
 
   The `--random` kick needed no change: it draws only from self-steckered
   letters, so a soft-seeded pair is invisible to it and the kick adds pairs
-  among the letters the seed left alone. But a soft-seeded board starts *good*,
-  so the default 10-pair kick is the wrong size for it — measured 72.7 →
-  **79.0** mean %-correct at `--random 3`.
+  among the letters the seed left alone. Kick size turns out to matter little —
+  across `--random` 10/5/3/2/1 the mean %-correct spans 73.0–74.6 over 300
+  trials, and no kick at all (`-R 0`) costs ~2pp for 35% less compute.
 
   Fatal on an odd number of letters, a repeated letter, a non-letter, no `-c`, a
   letter that `-s` also pins or `--no-plug` also marks, and on

@@ -169,6 +169,10 @@ def main():
                     help="fresh keys per corpus message")
     ap.add_argument("--restarts", type=int, default=8,
                     help="-R for the seeded arms")
+    ap.add_argument("--soft-kick", type=int, default=3,
+                    help="--random size for the soft arm")
+    ap.add_argument("--soft-kicks", default="0,1,2,3",
+                    help="kick sizes to sweep for the soft arm")
     ap.add_argument("--hard-matched", type=int, default=24,
                     help="-R for the hard-seeded arm matched to the soft arm")
     ap.add_argument("--sweep", default="8,16,32,64,128,256",
@@ -193,7 +197,9 @@ def main():
         log.append(s)
 
     sweep = [int(x) for x in a.sweep.split(",")]
-    tags = ["A%d" % r for r in sweep] + ["B", "Bm", "B3", "S", "SO", "O"]
+    kicks = [int(x) for x in a.soft_kicks.split(",") if x != ""]
+    tags = (["A%d" % r for r in sweep] + ["B", "Bm", "B3"]
+            + ["S%d" % k for k in kicks] + ["SO%d" % k for k in kicks] + ["O"])
 
     say(__doc__.split("\n")[0])
     say("\n%d messages x %d keys, %s, -T %d"
@@ -215,15 +221,25 @@ def main():
                 "-g", "".join(ALPHA[x] for x in start),
                 "-l", a.lang, "-T", str(a.threads),
                 "-e", str(rng.randrange(1 << 30))]
-        def seeded(sel, soft=False, restarts=None):
+        def seeded(sel, soft=False, restarts=None, kick=None):
             args = list(RECIPE) + base
-            args += ["-R", str(restarts or a.restarts)]
             if soft:
                 # A soft-seeded board starts GOOD, so the default 10-pair kick
                 # is the wrong size for it -- measured 72.7 -> 79.0 mean at
                 # --random 3.  The staged IC pre-pass is dropped for the same
                 # reason (nothing to pre-seed) and measured near-neutral.
-                args += ["--score", "f10", "--random", "3"]
+                k = a.soft_kick if kick is None else kick
+                args += ["--score", "f10"]
+                # --random 0 makes every restart identical (the kick is the only
+                # per-restart randomness), so "no kick" is -R 0: ONE climb
+                # straight from the seed, and N of them would be N copies of it.
+                if k == 0:
+                    args += ["-R", "0"]
+                else:
+                    args += ["-R", str(restarts or a.restarts),
+                             "--random", str(k)]
+            else:
+                args += ["-R", str(restarts or a.restarts)]
             cables, noplug, _ = ranked[sel]
             if cables:
                 # --soft-plug lays the same pairs down and leaves them free; the
@@ -240,8 +256,12 @@ def main():
                 rec, it, wl, _ = run(a.binary,
                                      list(RECIPE) + base + ["-R", tag[1:]], ct)
                 out[tag] = (pct(rec, pt_text), it, wl)
-            elif tag in ("S", "SO"):
-                rec, it, wl, _ = seeded(0 if tag == "S" else corr, soft=True)
+            elif tag[0] == "S":
+                # S<k> / SO<k>: soft seed at kick size k, ranked / oracle.
+                oracle = tag.startswith("SO")
+                k = int(tag[2:] if oracle else tag[1:])
+                rec, it, wl, _ = seeded(corr if oracle else 0, soft=True,
+                                        kick=k)
                 out[tag] = (pct(rec, pt_text), it, wl)
             elif tag == "Bm":
                 rec, it, wl, _ = seeded(0, restarts=a.hard_matched)
@@ -286,7 +306,7 @@ def main():
         " %.0f (%.2fx)" % (ref, near, iters[near].mean(),
                            iters[near].mean() / max(1.0, ref)))
     msg = np.array([r[0] for r in rows_out])
-    for t in ("B", "Bm", "B3", "S", "SO", "O"):
+    for t in [x for x in tags if x[0] != "A"]:
         d, lo, hi = paired_ci(means[t] - means[near])
         # The trials repeat over only ~10 distinct messages, so a per-trial
         # interval understates the uncertainty that matters for generalising
@@ -312,12 +332,23 @@ def main():
     if hit.any() and (~hit).any():
         say("\nsplit by whether the IC ranking picked the correct seed:")
         say("   %-15s %-7s %-8s %-8s %-8s %-8s %s"
-            % ("", "trials", near, "B (-s)", "Bm", "S (soft)", "O"))
+            % ("", "trials", near, "B (-s)", "B3", "O", ""))
         for name, sel in (("ranking right", hit), ("ranking WRONG", ~hit)):
-            say("   %-15s %-7d %-8.1f %-8.1f %-8.1f %-8.1f %.1f"
+            say("   %-15s %-7d %-8.1f %-8.1f %-8.1f %-8.1f"
                 % (name, sel.sum(), means[near][sel].mean(),
-                   means["B"][sel].mean(), means["Bm"][sel].mean(),
-                   means["S"][sel].mean(), means["O"][sel].mean()))
+                   means["B"][sel].mean(), means["B3"][sel].mean(),
+                   means["O"][sel].mean()))
+        say()
+        say("   soft arm by kick size (S<k> ranked, SO<k> oracle):")
+        say("   %-8s %-9s %-9s %-11s %-9s %s"
+            % ("kick", "right", "WRONG", "mean/exact", "oracle", "score_iter"))
+        for k in kicks:
+            t, o = "S%d" % k, "SO%d" % k
+            say("   %-8s %-9.1f %-9.1f %-11s %-9.1f %.0f"
+                % ("-R 0" if k == 0 else "r%d" % k,
+                   means[t][hit].mean(), means[t][~hit].mean(),
+                   "%.1f / %d" % (means[t].mean(), exact[t].sum()),
+                   means[o].mean(), iters[t].mean()))
         top3 = np.array([r[1] is not None and r[1] < 3 for r in rows_out])
         say("   correct seed in the top 3: %d/%d trials"
             % (top3.sum(), len(rows_out)))

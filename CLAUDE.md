@@ -518,11 +518,18 @@ are read from a **data directory** (filenames built as
     the seed left alone rather than scattering the seed. Seeding therefore
     happens **before** the kick, and every restart starts from seed + its own
     kick.
-  - **A soft-seeded board starts good, so it wants a SMALLER kick.** The default
-    `--random 10` is sized for an empty board and measurably wrecks a seed:
-    72.7 → **79.0** mean %-correct at `--random 3`. Dropping the staged IC
-    pre-pass (`--score f10`) is near-neutral by comparison, so the kick is the
-    knob, not the schedule.
+  - **The kick size barely matters, and an earlier claim here was WRONG.** This
+    entry used to say a soft-seeded board wants a much smaller kick than the
+    default, citing 72.7 → **79.0** mean %-correct at `--random 3`. That was
+    measured on 60 trials and does not survive 300: the real spread across
+    `--random` 10/5/3/2/1 is 73.0 / 74.3 / 74.6 / 74.1 / 74.1, i.e. ~1.6pp
+    end to end, and on exact recovery `r3` against `r10` is 188 against 183
+    of 300 (McNemar p = 0.40 — nothing). **No kick at all** (`-R 0`, one climb
+    straight from the seed, since `--random 0` would make every restart
+    identical) costs ~2pp of mean for **35% less compute** — 11 409
+    `score_iter` against ~17 000 — so it is the cheapest sensible setting.
+    Dropping the staged IC pre-pass (`--score f10`) is near-neutral too. None
+    of these knobs rescues the option; see below.
   - Fatal on an odd number of letters, a repeated letter, a non-letter, no `-c`,
     a letter `-s` also pins or `--no-plug` also marks (each a contradiction),
     and on `--exhaust`/`--crib`/`--crib-list`/`-A`, which all install their own

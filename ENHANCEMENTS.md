@@ -885,13 +885,42 @@ corollaries fall out:
   soft variant because it spends its budget asking *which* seed is right rather
   than hedging against a single seed being wrong.
 
+*Tuning the kick does not rescue it, and an earlier claim here was wrong.* The
+obvious suspicion is that the soft arm is handicapped by the default
+`--random 10`, which is sized for an empty board and would scatter a good seed.
+A 60-trial exploration said exactly that — 72.7 → **79.0** at `--random 3` — and
+that number went into `CLAUDE.md` and `CHANGELOG.md`. **It does not survive 300
+trials.** The full sweep, same trial set as the table above:
+
+| kick | mean %-correct | exact | right / WRONG | `score_iter` |
+|---|---:|---:|---|---:|
+| `--random 10` | 73.0 | 183/300 | 90.4 / 29.1 | 18 010 |
+| `--random 5` | 74.3 | 186/300 | 91.5 / 30.7 | 17 821 |
+| `--random 3` | 74.6 | 188/300 | 91.3 / 32.4 | 17 358 |
+| `--random 2` | 74.1 | 187/300 | 91.0 / 31.5 | 16 934 |
+| `--random 1` | 74.1 | 187/300 | 91.8 / 29.2 | 16 623 |
+| **no kick (`-R 0`)** | 72.5 | 185/300 | 90.0 / 28.3 | **11 409** |
+
+The whole range spans **1.6pp** end to end, and `r3` against `r10` is 188
+against 183 exact — McNemar p = 0.40, nothing. So the kick was never the
+soft arm's problem; the 6.3pp was small-sample noise. Two things the sweep does
+establish:
+
+- **No kick at all is the cheapest sensible setting**: `-R 0` (one climb
+  straight from the seed — `--random 0` would make every restart identical,
+  since the kick is the only per-restart randomness) costs ~2pp of mean for
+  **35% less compute**, 11 409 `score_iter` against ~17 000.
+- **The kick is not what separates soft from hard.** Even the best soft cell
+  (74.6 / 188 at 17 358) loses to the hard seed's 74.2 / **204** at **5 767** —
+  the same mean, 16 more exact recoveries, at a third of the compute. Nothing in
+  the `--random` range closes a gap that comes from the search-space reduction
+  pinning provides.
+
 `--soft-plug` is kept: it is a small, tested, off-by-default option, it is the
 natural way to express a guess, and its measured behaviour (graceful when
-wrong, weaker when right) is the useful characterisation of a whole class of
-seeding ideas. It is simply not the recommendation here. One tuning note from
-building it: a soft-seeded board starts good, so the default `--random 10` kick
-is the wrong size for it — 72.7 → **79.0** mean at `--random 3`, while dropping
-the staged IC pre-pass is near-neutral.
+wrong, weaker when right, insensitive to the kick) is the useful
+characterisation of a whole class of seeding ideas. It is simply not the
+recommendation here.
 
 **Two things bound the result, and both point the same way.** This is the
 plugboard-recovery tier with the **rotor key given**, which is the tier every
