@@ -583,10 +583,45 @@ are read from a **data directory** (filenames built as
   - **`-R 0` is right and the kick should stay off**: a seeded climb starts near
     the answer, and `-R 0` measured 201 of 204 exact recoveries at half the
     compute of `-R 8`. `-R N` still asks for N kicked passes.
+  - **`--signature-sweep` hypothesises the doubled word ANYWHERE**, not only
+    closing the message. Coverage roughly doubles — **16 of the 66 corpus
+    messages carry a 7+ doubling somewhere against 7 ending with one** — and
+    the measured per-key cost is far below what the hypothesis count suggests,
+    because most hypotheses die on the first contradiction. Measured on 17 576
+    keys at L=111 (`-T 4`):
+
+    | arm | per key | `score_iter` | hypotheses |
+    |---|---:|---:|---:|
+    | terminal `K=1` | **65 µs** | 8.0 M | 20 |
+    | terminal `K=5` | 271 µs | 44.9 M | 20 |
+    | swept `L≥9 K=5` | 683 µs | 39.8 M | ~850 |
+    | swept `L≥7 K=5` | **1 137 µs** | 30.3 M | 1 883 |
+    | `-R 4` | 756 µs | 161.6 M | — |
+    | `-R 16` | **4 007 µs** | 645.4 M | — |
+
+    **Swept is 3.5× CHEAPER than `-R 16`**, not dearer: 94× the hypotheses costs
+    only 14.7× the wall time. **`score_iter` actively misleads here** — swept
+    `L≥7 K=1` scores *fewer* plugboards than terminal `K=1` (5.2 M against
+    8.0 M) while taking 15× the wall time, because its seeds are more
+    constrained so the climbs are cheap and the deduction dominates. Use wall
+    time on this flag.
+  - **Swept reliability tracks the SIGNATURE LENGTH, sharply.** At the true key,
+    IC puts a correct seed top-5 in 67% of trials at `L≥7` (against 84% top-3
+    for terminal), and a correct seed exists in 45/48. But on a single message a
+    6-letter mid-message doubling was not recovered even at `K=100`, while 9 and
+    13 letters recovered at `K=1` — the number of equality edges is what carries
+    the deduction. Raising the floor to 9 halves the cost and does **not**
+    improve the ranking (56% top-1 either way), so the failures are IC not
+    separating rather than the haystack being large.
   - Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
     and `--tune-phase` — each installs its own starting board or moves the key
     the deduction was computed for. `-T`-deterministic (candidate order is
     hypothesis-major then guess, dedupe keeps the first, the sort is stable).
+    The dedupe key is the (board, pinned-letter set) PAIR, not the board alone:
+    two hypotheses can agree on the cables while one additionally proves a
+    letter carries none, and those are different starting conditions. It keeps
+    ~2–4%
+    more seeds than a board-only key would.
 - `-c` hill-climb the plugboard. The climb rule is **steepest ascent** by
   default: each step scans the whole 325-pair toggle operator and applies the
   single best improving move, to convergence. `-J` swaps that rule for

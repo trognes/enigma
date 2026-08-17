@@ -185,6 +185,8 @@ wheels, ring and start positions — any position left as `.` is brute-forced.
   message (a signed surname): deduce candidate boards per key, rank by index of
   coincidence, climb the top `K`. Needs `-c` `[0 = off]`
 - **`--signature-length L`** — Shortest signature to hypothesise `[4]`
+- **`--signature-sweep`** — Hypothesise the doubled word anywhere, not only
+  closing the message: ~2× the coverage `[off]`
 
 `-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's `start −
 ring` offset is recoverable, so a full M4 wildcard search enumerates the

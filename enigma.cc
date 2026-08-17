@@ -187,8 +187,9 @@ static const char * opt_crib_text;
 static int opt_signature_seed = 0;        /* K: seeds climbed per key; 0 = off */
 static int opt_signature_length = 4;      /* L: shortest signature hypothesised */
 static const int sig_maxlen = 13;         /* longest -- nothing in the corpus reaches 14 */
-static const int sig_max_hyps = 2 * sig_maxlen;      /* tails x lengths, a safe bound */
-static const int sig_max_seeds = sig_max_hyps * asize;
+/* Terminal mode needs `tails x lengths` entries; sweeping needs ~3 per (alignment,
+   length) pair, which is message-dependent and runs to thousands -- so both live in a
+   vector, read-only once init_signature() returns, like crib_order. */
 /* One hypothesis: the doubled word runs [at, at+len) and [at+len+1, at+2len+1), with an X
    separator between and an X flank on the left (and on the right when the message ends
    with one). `anchor_pos` holds the positions asserted to be plaintext X. */
@@ -197,8 +198,13 @@ struct sig_hyp
   int at, len, nanchor;
   int anchor_pos[3];
 };
-static sig_hyp g_sig_hyps[sig_max_hyps];
+static std::vector<sig_hyp> g_sig_hyps;
 static int g_sig_nhyps = 0;
+/* --signature-sweep: hypothesise the doubled word ANYWHERE, not only closing the message.
+   Coverage roughly doubles -- 16 of the 66 corpus messages carry a 7+ doubling somewhere
+   against 7 that end with one -- at ~85x the hypotheses, which is the whole question this
+   flag exists to answer. */
+static bool opt_signature_sweep = false;
 static int opt_crib_at = -1;
 static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
 /* The menu, built once by init_crib(). A menu is a property of the crib AND the place it
@@ -1547,35 +1553,58 @@ static inline bool crib_set(int * board, int x, int y)
    `... X NAME X NAME X`; both occur in the corpus, so both are hypothesised. A hypothesis
    whose flank position holds a ciphertext X is impossible -- an Enigma never encrypts a
    letter to itself -- and is dropped here rather than rediscovered per key. */
-static void init_signature()
+/* Add one hypothesis if the ciphertext permits it. `flanks` selects which anchors are
+   asserted to be plaintext X: 1 = separator only, 2 = + left flank, 3 = + right flank.
+   An Enigma never encrypts a letter to itself, so a ciphertext X at an anchor position
+   makes the hypothesis impossible -- dropped here rather than rediscovered per key. */
+static void sig_add(int at, int len, int flanks)
 {
   const int xl = char2num('X');
-  g_sig_nhyps = 0;
-  for (int tail = 0; tail <= 1; tail++)
-    for (int len = opt_signature_length; len <= sig_maxlen; len++)
-      {
-        const int at = textlength - tail - 2*len - 1;
-        if (at < 1)
-          continue;                        /* no room for the left flank */
-        sig_hyp h;
-        h.at = at;
-        h.len = len;
-        h.nanchor = 0;
-        h.anchor_pos[h.nanchor++] = at - 1;        /* left flank */
-        h.anchor_pos[h.nanchor++] = at + len;      /* separator */
-        if (tail)
-          h.anchor_pos[h.nanchor++] = at + 2*len + 1;
-        bool ok = true;
-        for (int k = 0; k < h.nanchor; k++)
+  sig_hyp h;
+  h.at = at;
+  h.len = len;
+  h.nanchor = 0;
+  h.anchor_pos[h.nanchor++] = at + len;                  /* separator */
+  if (flanks >= 2)
+    h.anchor_pos[h.nanchor++] = at - 1;                  /* left flank */
+  if (flanks >= 3)
+    h.anchor_pos[h.nanchor++] = at + 2*len + 1;          /* right flank */
+  for (int k = 0; k < h.nanchor; k++)
+    {
+      const int pos = h.anchor_pos[k];
+      if ((pos < 0) || (pos >= textlength) || (num_ciphertext[pos] == xl))
+        return;
+    }
+  g_sig_hyps.push_back(h);
+}
+
+static void init_signature()
+{
+  g_sig_hyps.clear();
+  if (opt_signature_sweep)
+    {
+      /* Every alignment, three flank variants each: the flanks are a GUESS (96% left,
+         71% both in the corpus), so a sweep must try asserting neither, the left, or
+         both -- asserting one the message does not have rejects the true key. */
+      for (int len = opt_signature_length; len <= sig_maxlen; len++)
+        for (int at = 1; at + 2*len + 1 <= textlength; at++)
+          for (int flanks = 1; flanks <= 3; flanks++)
+            sig_add(at, len, flanks);
+    }
+  else
+    {
+      /* Terminal: the word closes the message, so only its length is unknown and the
+         left flank is always present. `tail` is the trailing X, present or not. */
+      for (int tail = 0; tail <= 1; tail++)
+        for (int len = opt_signature_length; len <= sig_maxlen; len++)
           {
-            const int pos = h.anchor_pos[k];
-            if ((pos < 0) || (pos >= textlength) ||
-                (num_ciphertext[pos] == xl))
-              ok = false;
+            const int at = textlength - tail - 2*len - 1;
+            if (at < 1)
+              continue;                    /* no room for the left flank */
+            sig_add(at, len, tail ? 3 : 2);
           }
-        if (ok && (g_sig_nhyps < sig_max_hyps))
-          g_sig_hyps[g_sig_nhyps++] = h;
-      }
+    }
+  g_sig_nhyps = static_cast<int>(g_sig_hyps.size());
 }
 
 /* The self-crib closure for one hypothesis under one guess for steck[X].
@@ -4037,18 +4066,20 @@ static double crib_unit(machine & m, size_t key_index, int restart)
    stable on (IC, index). */
 static double signature_unit(machine & m, size_t key_index, int restart)
 {
-  static const int xl_unused = 0; (void) xl_unused;
-  unsigned char seed_steck[sig_max_seeds][asize];
-  unsigned char seed_fixed[sig_max_seeds][asize];
-  double seed_ic[sig_max_seeds];
+  /* Per-thread scratch rather than stack arrays: sweeping yields thousands of seeds on a
+     long message, which is far past what a per-call array can hold, and reusing the
+     buffers keeps the allocation out of the per-key path. Cleared at entry, so each key's
+     result depends on nothing but that key -- the -T-independence is unaffected. */
+  static thread_local std::vector<unsigned char> seed_steck, seed_fixed;
+  static thread_local std::vector<double> seed_ic;
+  static thread_local std::vector<int> order;
+  seed_steck.clear(); seed_fixed.clear(); seed_ic.clear(); order.clear();
   int nseed = 0;
   int board[asize];
 
   for (int hi = 0; hi < g_sig_nhyps; hi++)
     for (int g = 0; g < asize; g++)
       {
-        if (nseed >= sig_max_seeds)
-          break;
         if (! sig_try(m, g_sig_hyps[hi], g, board))
           continue;
         unsigned char st[asize], fx[asize];
@@ -4059,14 +4090,14 @@ static double signature_unit(machine & m, size_t key_index, int restart)
           }
         bool dup = false;
         for (int k = 0; (k < nseed) && ! dup; k++)
-          dup = (memcmp(seed_steck[k], st, asize) == 0) &&
-                (memcmp(seed_fixed[k], fx, asize) == 0);
+          dup = (memcmp(& seed_steck[static_cast<size_t>(k) * asize], st, asize) == 0) &&
+                (memcmp(& seed_fixed[static_cast<size_t>(k) * asize], fx, asize) == 0);
         if (dup)
           continue;
-        memcpy(seed_steck[nseed], st, asize);
-        memcpy(seed_fixed[nseed], fx, asize);
+        seed_steck.insert(seed_steck.end(), st, st + asize);
+        seed_fixed.insert(seed_fixed.end(), fx, fx + asize);
         memcpy(m.steckerbrett, st, asize);
-        seed_ic[nseed] = ic_score_decode(m);   /* the ranking, one decode each */
+        seed_ic.push_back(ic_score_decode(m));  /* the ranking, one decode each */
         nseed++;
       }
 
@@ -4075,17 +4106,20 @@ static double signature_unit(machine & m, size_t key_index, int restart)
 
   /* Top K by IC, ties broken by the deterministic candidate order. Selection sort: K is
      small and nseed is ~28, so this is cheaper than sorting the whole list. */
-  int order[sig_max_seeds];
+  order.resize(static_cast<size_t>(nseed));
   for (int i = 0; i < nseed; i++)
-    order[i] = i;
+    order[static_cast<size_t>(i)] = i;
   const int want = (opt_signature_seed < nseed) ? opt_signature_seed : nseed;
   for (int i = 0; i < want; i++)
     {
-      int best_j = i;
-      for (int j = i + 1; j < nseed; j++)
-        if (seed_ic[order[j]] > seed_ic[order[best_j]])
+      size_t best_j = static_cast<size_t>(i);
+      for (size_t j = static_cast<size_t>(i) + 1;
+           j < static_cast<size_t>(nseed); j++)
+        if (seed_ic[static_cast<size_t>(order[j])] >
+            seed_ic[static_cast<size_t>(order[best_j])])
           best_j = j;
-      const int t = order[i]; order[i] = order[best_j]; order[best_j] = t;
+      const size_t ii = static_cast<size_t>(i);
+      const int t = order[ii]; order[ii] = order[best_j]; order[best_j] = t;
     }
 
   double best = 0.0;
@@ -4094,13 +4128,14 @@ static double signature_unit(machine & m, size_t key_index, int restart)
   unsigned char best_steck[asize];
   for (int i = 0; i < want; i++)
     {
-      const int si = order[i];
+      const int si = order[static_cast<size_t>(i)];
       init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
       memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
       for (int x = 0; x < asize; x++)
-        if (seed_fixed[si][x])
+        if (seed_fixed[static_cast<size_t>(si) * asize + static_cast<size_t>(x)])
           {
-            m.steckerbrett[x] = seed_steck[si][x];
+            m.steckerbrett[x] =
+              seed_steck[static_cast<size_t>(si) * asize + static_cast<size_t>(x)];
             PLUG_FIXED_EX[x] = true;               /* ... plus this deduction */
           }
       /* The kick is off by default and should stay off: a seeded climb starts near the
@@ -7694,6 +7729,10 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = off) [0]");
   fprintf(out, "  %-24s %s\n", "--signature-length L",
           "Shortest signature to hypothesise [4]");
+  fprintf(out, "  %-24s %s\n", "--signature-sweep",
+          "Hypothesise the doubled word ANYWHERE, not only");
+  fprintf(out, "  %-24s %s\n", "", "closing the message: ~2x the coverage at");
+  fprintf(out, "  %-24s %s\n", "", "~85x the hypotheses [off]");
   fprintf(out, "  %-24s %s\n", "-n, --norway",
           "Norway Enigma: reflector N and wheels (1-5)");
   fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
@@ -8129,9 +8168,9 @@ void show_settings()
             opt_soft_plug);
   if (opt_signature_seed > 0)
     fprintf(stderr, "Signature:  top %d seed%s per key by IC, %d+ letters, "
-            "%d hypotheses\n", opt_signature_seed,
+            "%d hypotheses (%s)\n", opt_signature_seed,
             (opt_signature_seed == 1) ? "" : "s", opt_signature_length,
-            g_sig_nhyps);
+            g_sig_nhyps, opt_signature_sweep ? "swept" : "terminal");
   if (opt_crib_text)
     {
       if (opt_crib_at >= 0)
@@ -8226,7 +8265,7 @@ int main(int argc, char * * argv)
      options introduced in REDESIGN Part B. */
   enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
-         OPT_NOPLUG, OPT_SOFTPLUG, OPT_SIGSEED, OPT_SIGLEN,
+         OPT_NOPLUG, OPT_SOFTPLUG, OPT_SIGSEED, OPT_SIGLEN, OPT_SIGSWEEP,
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLELEN, OPT_DOUBLEZ,
@@ -8283,6 +8322,7 @@ int main(int argc, char * * argv)
       { "soft-plug",      required_argument, nullptr, OPT_SOFTPLUG },
       { "signature-seed", required_argument, nullptr, OPT_SIGSEED },
       { "signature-length", required_argument, nullptr, OPT_SIGLEN },
+      { "signature-sweep", no_argument,       nullptr, OPT_SIGSWEEP },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
@@ -8435,6 +8475,9 @@ int main(int argc, char * * argv)
           break;
         case OPT_SIGLEN:
           opt_signature_length = atoi(optarg);
+          break;
+        case OPT_SIGSWEEP:
+          opt_signature_sweep = true;
           break;
         case OPT_FULLTEXT:
           opt_full_text = true;
@@ -8802,10 +8845,13 @@ int main(int argc, char * * argv)
        Every rejection below is a mode that installs its own starting board at its own
      site, or that re-encodes the work index: letting two of them run would silently have
      one overwrite the other. */
-  if ((opt_signature_seed < 0) || (opt_signature_seed > sig_max_seeds))
-    fatal("Illegal --signature-seed (must be 0 to 676; 0 is off)");
+  if ((opt_signature_seed < 0) || (opt_signature_seed > 10000))
+    fatal("Illegal --signature-seed (must be 0 to 10000; 0 is off)");
   if ((opt_signature_length < 2) || (opt_signature_length > sig_maxlen))
     fatal("Illegal --signature-length (must be 2 to 13)");
+  if (opt_signature_sweep && (opt_signature_seed == 0))
+    fatal("--signature-sweep needs --signature-seed (it only changes where the "
+          "doubled word is hypothesised)");
   if (opt_signature_seed > 0)
     {
       if (! opt_hillclimb)

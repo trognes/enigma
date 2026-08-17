@@ -2257,6 +2257,36 @@ check "--confidence calibrates against the SEEDED climb, not the plain one" \
      && echo differs || echo same)" "differs"
 check "--confidence null is unchanged for an unseeded run" \
   "$(sig_null -R 1)" "$(sig_null -R 1)"
+
+# --signature-sweep hypothesises the doubled word ANYWHERE, not only closing the message.
+# The property that matters is exactly that: a message whose doubling sits in the MIDDLE
+# is invisible to the terminal mode and recoverable by the swept one.
+# A NINE-letter doubled word, not six: swept reliability tracks the signature length,
+# because that is what sets the number of equality edges.  Measured on this fixture, a
+# 6-letter mid-message doubling is not recovered even at K=100 while 9 and 13 recover at
+# K=1 -- so a 6-letter fixture would assert something the mode does not deliver.
+swp_pt=DASOBERKOMMANDOXGEZXSTEINECKEXSTEINECKEXMELDETXAACHENXISTGERETTETXDURCHDENEINSATZXENDE
+swp_ct=$(run "$swp_pt" -i -u B -w 123 -r AAA -g QEW -s ABCDEFGHIJKLMNOPQRST)
+swp_run() { run "$swp_ct" -q -l german -u B -w 123 -r AAA -g QEW -c -R 0 "$@"; }
+check "--signature-sweep recovers a MID-message doubling" \
+  "$(sig_pct "$(swp_run --signature-seed 5 --signature-sweep --signature-length 7)" \
+       "$swp_pt")" "100"
+check "--signature-sweep control: terminal mode does not see it" \
+  "$(test "$(sig_pct "$(swp_run --signature-seed 5 --signature-length 7)" "$swp_pt")" \
+       -lt 30 && echo far || echo near)" "far"
+# Sweeping is the whole cost difference, so the hypothesis count must actually grow.
+swp_hyps() { printf '%s' "$swp_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW \
+               -c -R 0 --signature-seed 1 --signature-length 7 "$@" 2>&1 >/dev/null \
+             | sed -n 's/^Signature:.* \([0-9]*\) hypotheses.*/\1/p'; }
+check "--signature-sweep enumerates far more hypotheses than terminal" \
+  "$(test "$(swp_hyps --signature-sweep)" -gt "$(( $(swp_hyps) * 10 ))" \
+     && echo more || echo similar)" "more"
+check "--signature-sweep is -T-independent" \
+  "$(swp_run --signature-seed 5 --signature-sweep --signature-length 7 -T 1)" \
+  "$(swp_run --signature-seed 5 --signature-sweep --signature-length 7 -T 4)"
+check "--signature-sweep rejects a run with no --signature-seed" \
+  "$(printf '%s' "$swp_ct" | "$ENIGMA" -q -l german -u B -w 123 -r AAA -g QEW -c \
+       --signature-sweep >/dev/null 2>&1; echo $?)" "1"
 check "--exhaust E is bounded by the remaining free pairs" \
   "$(np_rejects -c --exhaust 6 --no-plug "$np_many")" "1"
 check "--exhaust E within the remaining free pairs is accepted" \

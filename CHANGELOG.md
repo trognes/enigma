@@ -8,6 +8,32 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--signature-sweep` — hypothesise the doubled word anywhere, not only
+  closing the message.** `--signature-seed` assumed the doubling was a surname
+  signing off; sweeping the alignment roughly doubles the coverage — **16 of the
+  66 corpus messages carry a 7+ doubling somewhere against 7 that end with
+  one** — at ~85× the hypotheses.
+
+  That multiplier turns out not to cost what it looks like. Measured on 17 576
+  keys at 111 letters, per key: terminal `K=1` 65 µs, terminal `K=5` 271 µs,
+  swept `L≥7 K=5` **1 137 µs** — against `-R 4` at 756 µs and `-R 16` at
+  **4 007 µs**. So sweeping is **3.5× cheaper than `-R 16`**, because 94× the
+  hypotheses costs only 14.7× the wall time: most die on the first
+  contradiction.
+
+  `score_iter` is the wrong axis for this flag and says the opposite — swept
+  `L≥7 K=1` scores *fewer* plugboards than terminal `K=1` (5.2 M against 8.0 M)
+  while taking 15× the wall time, because its seeds are more constrained so the
+  climbs are cheap and the uncounted deduction dominates.
+
+  Reliability tracks the signature length sharply: at the true key IC puts a
+  correct seed in the top 5 in 67% of trials at `L≥7`, but on one fixture a
+  6-letter mid-message doubling was not recovered even at `K=100` while 9 and 13
+  letters recovered at `K=1`. Raising the floor to 9 halves the cost without
+  improving the ranking.
+
+  Needs `--signature-seed`. `-T`-deterministic.
+
 - **`--signature-seed K` / `--signature-length L` — terminal-signature seeding,
   the first lever measured to beat `-R` at matched compute.** A doubled word is
   a *self*-crib: it says only that two positions carry the same plaintext
