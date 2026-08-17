@@ -19,6 +19,8 @@ with attribution — it is not covered by this program's GPL.
 | `ultimate-enigma-challenge.html` | the five Batch C ciphertexts (QTXMA, SZAEJ, BYQMZ, FKQLZ, XFEDT) |
 | `modern-breaking-of-enigma-ciphertexts.html` | the 13 messages of the 2017 Cryptologia article, with keys and emended plaintext |
 | `heeresgruppe-nord-july-1941.pdf` | the same July material as a compilation, with a Schlüsseltafel |
+| `german-army-messages.html` | the 23 "messages we failed to break", with headers and **indicators** |
+| `bgac-1941-message-list.html` | the whole 1941 list: per-message lengths, break status, Truppenschlüssel marks |
 
 The scanned message forms live one directory up, in `eval/forms/`.
 

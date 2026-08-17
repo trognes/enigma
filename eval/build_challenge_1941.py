@@ -26,6 +26,20 @@ C = [
   "ALGXZBOKTUGXSINFSOUZDTEXBPDTWENWBJMRMMLNUGIKXTBVZPMAPFRTNSOMUGPVXXDYWTJG", ""),
  ("6-C",  "29 Sep 1941", "QTXMA", 160,
   "QTXMAJVMOYCZAYMRVLCBSOQXYBATSXJBQLAEJKYTYXJOEMYBLOEMYOKSRMTAVLBCXJAMOESRXYTVAOEYAVYXKCJVCMEISHTBAYVXXAJWCZQCYPXMEHABLKYJYASOEIJYXOQXYTLBASYEESTAQXJVNWCBJZBYQYTM",
+  "PROBABLY NOT ENIGMA -- measured, not merely the authors' caveat. Its "
+  "index of coincidence is 0.0577 against the 0.0385 +/- 0.0018 that 3000 "
+  "simulated Enigma encryptions of German give at this length (z = +10.9; "
+  "the largest of those 3000 was 0.0468), and FOUR letters of A-Z never "
+  "occur where 0.06 are expected (P = 8.5e-08; none of the 3000 lacked "
+  "more than 2). No period flattens the IC either, so it is not "
+  "Vigenere-like; and its J-rate is 7.1% against the 3.85% a flat "
+  "26-letter cipher predicts -- the same test applied to Batch C below, "
+  "failing in the OPPOSITE direction from FKQLZ and XFEDT, which have "
+  "zero J. A 28-hour 75.2M-key sweep found nothing (best margin +0.81 sd "
+  "against a 6.0 bar), which is consistent. This does NOT carry to the "
+  "rest of Batch C: BYQMZ reads z = +0.6 with 0 unused letters. The tool "
+  "runs this test before searching, on by default (--no-preflight turns "
+  "it off); see MODERN_BREAKING_NOTES 5l and eval/preflight_null.py. "
   "Batch C, and the SECOND-LONGEST unbroken message in the collection. From "
   "the Ultimate Enigma Challenge page (27 Jul 2026); it was absent here only "
   "because it had never been transcribed. Same batch caveat as BYQMZ: the "
@@ -130,6 +144,11 @@ HEADER = """\
 # ============================================================================
 # enigma-challenge-1941.txt  --  authentic 1941 German Army ciphertexts, UNBROKEN
 # ----------------------------------------------------------------------------
+# GENERATED FILE -- DO NOT EDIT.  Edit eval/build_challenge_1941.py and re-run
+# it; anything typed here is silently discarded the next time it runs.  That
+# is not hypothetical: two rounds of hand edits (a message form's readings,
+# and a whole 'probably not Enigma' analysis) were reverted exactly that way,
+# and were only noticed because the script happened to be run afterwards.
 # Source: Geoff Sullivan & Frode Weierud, "Breaking German Army Ciphers"
 #         (Cryptologia 29(3):193-232, 2005); cryptocellar.org/bgac. HG Nord,
 #         Operation Barbarossa, Jun-Oct 1941. CC BY-NC-SA.
@@ -204,6 +223,40 @@ FORMS = {
          "confirms the 63 letters transcribed here.",
          "7 letters read differently here than in the transcription "
          "above, none applied -- see forms/README.md"),
+ "8-C": ("MGS TPL", "BYQMZ-30091941-008-out.pdf",
+         "Spruch Nr 8. Befoerdert 30.9.41 0025 Uhr, 'An 568'. The "
+         "ciphertext block opens '0014 - 172 - <six letters>', so the "
+         "form's own count confirms the 172 letters transcribed here, and "
+         "0014 is the time of origin. Vermerke reads 'Spruch 2352 yzl - "
+         "gjb - Durchgegeben' (the page reads that pair as 'qsl - qjb'), "
+         "which is a relay note about a DIFFERENT 2352 message and NOT "
+         "this one's indicator.",
+         "none -- read again from this scan at up to 1400 dpi, letter for "
+         "letter, 172 of 172. The hand separates every dangerous pair: z "
+         "is barred through the descender and y is not, q descends "
+         "straight where g loops left, and u carries the German bow. THE "
+         "DASH IS REAL: at row 2 group 3 (HIF-Y) the fourth cell is "
+         "genuinely BLANK on the form, so the letter was never written "
+         "down and the form's 172 counts it. On the INDICATOR, and why a "
+         "glyph comparison misled here, see forms/README.md -- the "
+         "preamble is in the RUNNING GERMAN hand while the cells are "
+         "careful LATIN, and calibrating one against the other is what "
+         "argued a correct reading away."),
+ "12-C": ("LMO DSV", "XFEDT-30091941-012-out.pdf",
+         "Spruch Nr 12. Befoerdert 30.9.41 0416 Uhr durch Fuhrmann, an "
+         "6q8, 'An 716 kHz'; Vermerke 'QSA anfragen, Spruchkopf "
+         "wiederholen'. The ciphertext block opens '0405 - 102 - lmo "
+         "dsv', so the form's own count confirms the 102 letters "
+         "transcribed here. NOTE the German Army Messages page heads this "
+         "message 'Funkspruch Nr.: 11', repeating Nr 11-C's number; the "
+         "form plainly reads 12 and the message list agrees, so that is a "
+         "typo upstream.",
+         "none -- read again from this scan at up to 700 dpi, all 102 "
+         "letters identical to the stored transcription AND to the German "
+         "Army Messages page. A different clerk from BYQMZ's, but the "
+         "same three safeguards hold: z barred, q straight against g's "
+         "loop, u bowed. The indicator agrees letter for letter with the "
+         "page, i.e. two independent readers."),
 }
 
 # Indicators known WITHOUT a message form in forms/ -- a third authority
@@ -216,10 +269,18 @@ FORMS = {
 # Both of these are 29 Sep 1941 and therefore share a day key, which makes
 # them the strongest pair in the file: one day key has to satisfy two
 # indicators AND two plaintexts.
-# (no: indicator)
+# (no: (indicator, where it comes from))
+UEC = "from the Ultimate Enigma Challenge page"
+GAM = "German Army Messages page, 01 Aug 2026"
 INDICATORS = {
-    "6-C": "LDP WRX",          # QTXMA, sent 2240, to 2pn on 323 kHz
-    "7-C": "GAR PLD",          # SZAEJ, sent 2314, to o37 on 716 kHz
+    "6-C": ("LDP WRX", UEC),   # QTXMA, sent 2240, to 2pn on 323 kHz
+    "7-C": ("GAR PLD", UEC),   # SZAEJ, sent 2314, to o37 on 716 kHz
+    # The German Army Messages page reproduces each message HEADER, and the
+    # header carries the indicator -- which the ciphertext transcriptions
+    # alone never did.  Four more, none of which has a form in forms/.
+    "3":   ("EFT BEU", GAM),   # EHSTQ
+    "53":  ("ZDN QMF", GAM),   # RXPSB
+    "11-C": ("RTA SDP", GAM),  # FKQLZ
 }
 
 
@@ -241,8 +302,8 @@ def main():
             f.write("LEN:         %d  (form count, incl. Kenngruppe)%s\n" % (slen, flag))
             f.write("KEY:         %s\n" % SOLVED.get(no, "UNKNOWN -- unbroken"))
             if no in INDICATORS:
-                f.write("INDICATOR:   %s   (as sent; from the Ultimate "
-                        "Enigma Challenge page)\n" % INDICATORS[no])
+                ind, src = INDICATORS[no]
+                f.write("INDICATOR:   %s   (as sent; %s)\n" % (ind, src))
             if no in FORMS:
                 ind, scan, meta, disp = FORMS[no]
                 f.write("INDICATOR:   %s   (as sent; read off the message "
