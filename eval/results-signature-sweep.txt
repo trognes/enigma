@@ -78,3 +78,30 @@ wall time.  Even K=1 beats -R 16 by 3 breaks at 40% of the cost.
 
 score_iter misleads again: swept K1 has the LOWEST count of any arm (0.21M, 7x
 below -R 1) while taking 4x -R 1's wall time.
+
+== K extended to 35 and 50 (same 32 paired trials) ==
+
+arm         mean %   exact     wall/trial  per key   score_iter
+-R 16       48.9     13/32     2.11 s      3118 us   24635219
+swept K5    75.3     21/32     0.99 s      1457 us    1164490
+swept K10   81.1     23/32     1.12 s      1650 us    2519731
+swept K20   81.2     23/32     1.43 s      2113 us    5505752
+swept K35   81.1     23/32     1.92 s      2838 us   10395636
+swept K50   84.3     24/32     2.45 s      3626 us   15613697
+
+The curve is a PLATEAU from K=10 to K=35 -- 23/32 at all three, mean flat at
+81.1-81.2 -- and then one extra recovery at K=50 for +120% time over K=10.  So
+"K=20 saturates" was too strong: the plateau is real but it is a flat stretch
+rather than a ceiling, and pushing 2.5x past it does eventually convert.  What
+the plateau does confirm is the mechanism: raising K lifts the wrong keys'
+best-of-K alongside the true key's, so gains arrive slowly and unevenly instead
+of tracking the true-key recall curve.
+
+23 vs 24 of 32 is ONE TRIAL and is not statistically meaningful on its own.  The
+solid part is the shape -- steep to K=10, flat to K=35, no cliff either way --
+not the single extra break at 50.
+
+Marginal cost is linear and unremarkable across the whole range, ~46 us per extra
+climb.  K=10 remains the operating point: at K=50 you pay -R 16 prices (3626 vs
+3118 us per key) for 24/32 against its 13/32 -- still a large win over the
+baseline, but a poor deal against K=10's 23/32 at 45% of the cost.

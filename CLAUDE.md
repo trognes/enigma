@@ -605,19 +605,21 @@ are read from a **data directory** (filenames built as
     8.0 M) while taking 15× the wall time, because its seeds are more
     constrained so the climbs are cheap and the deduction dominates. Use wall
     time on this flag.
-  - **`K = 10` is the operating point when sweeping; `K = 20` buys nothing.**
-    Measured end-to-end on 676-key sweeps (32 trials, the 16 corpus messages
-    with a 7+ doubling): swept `K` = 1/5/10/20 breaks 16/21/23/23 of 32, at 1
-    319 / 1 461 / 1 675 / 2 136 µs per key. **Swept `K=10` breaks 23/32 against
-    `-R 16`'s 13/32 in half the wall time**, and even `K=1` beats `-R 16` by 3
-    breaks at 40% of the cost. K=20 costs 28% more than K=10 for nothing. **This
-    refutes the obvious reading of the recall curve**: the probe's top-20 recall
-    (35/45 against top-5's 30/45) is measured *at the true key*, but in a sweep
-    raising `K` helps the true key **and all 675 wrong keys**, each of which
-    also gets `K` seeds and a better best-of-`K` score. Extra recall does not
-    convert into discrimination. The marginal cost per climb also *rises* with
-    `K` — 35.5, 42.8, 46.1 µs across 1→5→10→20 — because lower-ranked seeds are
-    less constrained and so climb more slowly.
+  - **`K = 10` is the operating point when sweeping.** Measured end-to-end on
+    676-key sweeps (32 paired trials, the 16 corpus messages with a 7+
+    doubling), swept `K` = 5/10/20/35/50 breaks 21/23/23/23/24 of 32 at 1 457 /
+    1 650 / 2 113 / 2 838 / 3 626 µs per key, against `-R 16`'s **13/32 at 3 118
+    µs**. So `K=10` breaks ten more messages than `-R 16` at half its cost, and
+    even `K=1` beats it by three at 40%. The curve is steep to `K=10`, then a
+    **plateau through `K=35`**, then one further break at `K=50` for +120% time
+    over `K=10` — a poor deal unless the compute is free and the message
+    specifically matters. (23 against 24 of 32 is one trial and is not
+    significant on its own; the shape is what is solid.) **The plateau is the
+    interesting part**, and it refutes the obvious reading of the recall curve:
+    the probe's top-20 recall (35/45 against top-5's 30/45) is measured *at the
+    true key*, but in a sweep raising `K` lifts the best-of-`K` score of all 675
+    **wrong** keys too, so extra recall converts into discrimination slowly and
+    unevenly. Marginal cost is linear at ~46 µs per extra climb throughout.
   - **Swept reliability tracks the SIGNATURE LENGTH, sharply.** At the true key,
     IC puts a correct seed top-5 in 67% of trials at `L≥7` (against 84% top-3
     for terminal), and a correct seed exists in 45/48. But on a single message a

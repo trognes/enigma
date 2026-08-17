@@ -32,6 +32,15 @@ existing command lines can behave differently or stop working.
   letters recovered at `K=1`. Raising the floor to 9 halves the cost without
   improving the ranking.
 
+  **Use `--signature-seed 10` when sweeping.** Over 32 paired 676-key sweeps,
+  swept `K` = 5/10/20/35/50 breaks 21/23/23/23/24 of 32 at 1 457 / 1 650 /
+  2 113 / 2 838 / 3 626 µs per key, against `-R 16`'s **13/32 at 3 118 µs** —
+  so `K=10` breaks ten more messages than `-R 16` at half its cost. The curve
+  is steep to `K=10`, flat through `K=35`, and gains one more break at `K=50`
+  for +120% time. That plateau is the tell: raising `K` lifts the best-of-`K`
+  score of the wrong keys too, so extra recall converts into discrimination
+  only slowly.
+
   Needs `--signature-seed`. `-T`-deterministic.
 
 - **`--signature-seed K` / `--signature-length L` — terminal-signature seeding,
