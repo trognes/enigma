@@ -8,6 +8,31 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--crib-seeds K` — IC-rank an ordinary crib's hypotheses and climb only the
+  best K**, exactly as `--self-crib-seeds` does. `crib_unit()` ran a full
+  plugboard climb on *every* surviving (alignment, hypothesis) pair, and a swept
+  short crib leaves a great many: measured at the true key, **438.6 survivors at
+  an 8-letter crib, 90.7 at 10, 8.3 at 12, 1.5 at 14**.
+  - A correct hypothesis pins several correct plugs, which lifts the index of
+    coincidence of its decrypt before any climbing — so the ranking needs no
+    language and no n-gram table.
+  - **The window is narrow and bounded on both sides.** At 12+ ranking is
+    perfect and pointless (nothing left to cut); at 8 the top 10 keeps only 57%
+    of correct hypotheses; only at ~10 letters are both true at once — 91
+    survivors, top-10 keeps 92.5% (`eval/crib_ic_rank.py`).
+  - **On the sweep, `K=10` costs nothing**: 20 trials, 10-letter crib, board
+    hidden, 676-key sweep — 19/20 exact against the unseeded run's 19/20 with
+    **zero discordant trials**, for **12.1× fewer plugboards**. `K=3` gives up 3
+    breaks for 43.6×, `K=1` gives up 4 for 138×. Use `K=10`, the same operating
+    point `--self-crib-seeds` reached (`eval/crib_seeds_ab.py`).
+  - `0` = off and leaves the historical path byte-identical, including the count
+    of plugboards scored. `-T`-deterministic.
+
+- **`--crib-length L` — ignore `--crib-list` entries shorter than L letters.**
+  The library is dominated by short cribs (93% of messages carry an 8-letter one
+  against 3% for a 20-letter one) and those are the ones that explode into
+  hundreds of climbs per key.
+
 - **Pre-flight: is this ciphertext even Enigma?** (on by default;
   `--no-preflight` turns it off). Enigma is a permutation
   cipher, so its output is near-flat; a ciphertext carrying residual language
@@ -473,6 +498,18 @@ existing command lines can behave differently or stop working.
   carrying this needs a major version bump.**
 
 ### Fixed
+
+- **`--crib` with `-s` could build an impossible plugboard and smash the
+  stack.** The deduction started from an empty board, so a hypothesis could
+  deduce `A–D` while `-s` said `A–B`; seeding overwrote `steck[A]` and left
+  `steck[B]` pointing at `A`. The result was not an involution, and
+  `format_plugboard` — sized for the 13 pairs an involution can have — walked
+  off its buffer on the 14+ a corrupt board yields, aborting with *"stack
+  smashing detected"*. `crib_try()` now starts from what `-s` and `--no-plug`
+  already fix,
+  so `crib_set` rejects a contradicting hypothesis instead; `format_plugboard`
+  additionally refuses to overrun whatever it is handed. Found while testing
+  `--crib-seeds`; it predates that work and reproduces on the released code.
 
 - **`--full-text` wrapped 2 columns short of the progress line.** The
   continuation width dated from a 79-column target; the progress lines were

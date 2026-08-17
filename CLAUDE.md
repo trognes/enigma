@@ -1203,6 +1203,42 @@ are read from a **data directory** (filenames built as
   alignment, and the cribs differ in length). The progress-line column header is
   printed once for the run, and the echo high-water mark carries across cribs so
   a later crib cannot re-print boards worse than the best already found.
+- `--crib-seeds K` **IC-rank the crib's surviving hypotheses and climb only the
+  best `K`** (needs `-c`; `0` = off, the historical climb-every-survivor path,
+  kept byte-identical). The same lever as `--self-crib-seeds`, and it applies
+  because `crib_unit()` had the same shape: a swept crib leaves a *set* of
+  surviving (alignment, hypothesis) pairs and every one used to get a full
+  plugboard climb.
+  - **Why there is anything to rank.** Survivors per key at the true key:
+    **438.6 at an 8-letter crib, 90.7 at 10, 8.3 at 12, 1.5 at 14**. Long cribs
+    reject nearly everything and leave nothing to cut; short ones leave hundreds
+    of climbs per key, which is exactly what puts them beyond reach — the swept
+    floor is documented as 16 letters.
+  - **Why IC works.** A correct hypothesis pins several correct plugs, and that
+    lifts the index of coincidence of its decrypt before any climbing. No
+    language and no n-gram table needed, the same reason `--self-crib-seeds`
+    ranks on it.
+  - **The window is narrow and bounded on BOTH sides** (`eval/crib_ic_rank.py`,
+    40 trials/length, true key): at 12+ ranking is perfect and pointless, at 8
+    the top 10 keeps only 57% of correct hypotheses, and only at ~10 letters are
+    both true at once — 91 survivors, top-10 keeps 92.5%.
+  - **Measured on the sweep, which is the number that decides it**
+    (`eval/crib_seeds_ab.py`, 20 trials, 10-letter crib, board hidden, 676-key
+    sweep): `K=10` recovers **19/20 against the unseeded run's 19/20 with zero
+    discordant trials, for 12.1× fewer plugboards**. `K=3` gives up 3 breaks for
+    43.6× and `K=1` gives up 4 for 138×. **Use `K=10`** — the same operating
+    point `--self-crib-seeds` settled on, reached independently.
+  - `-T`-deterministic; the dedupe key is the (board, pinned-letter-set)
+    **pair**, as in `--self-crib-seeds`, since two hypotheses can agree on
+    every cable
+    while one additionally proves a letter carries none.
+- `--crib-length L` **ignore `--crib-list` entries shorter than `L` letters**
+  (default 2, the existing floor — a 1-letter crib has no menu edge to chain
+  along). The library is dominated by short cribs (93% of messages carry an
+  8-letter one against 3% for a 20-letter one) and those are the ones that
+  explode into hundreds of climbs per key, so a floor is the one length control
+  worth having. Rejected on a bare `--crib`, which is already the length you
+  typed.
 - `--no-crib-reorder` **keep a `--crib-list` in file order** (off by default,
   i.e. cribs run cheapest-measured-cost first). Reverses `archived/cribs.md`
   §5 step 5, which priced cribs with

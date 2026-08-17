@@ -2494,6 +2494,79 @@ check "--crib: the sweep still recovers the plaintext" \
   "$(run "$cb_ct" -i -u B -w 123 -r AAA -g ... -s "$cb_plugs" --crib OBERKOMMANDO)" \
   "$cb_pt"
 
+# --crib-seeds K: IC-rank the surviving hypotheses and climb only the best K, as
+# --self-crib-seeds does.  A SWEPT crib leaves many survivors per key and every one
+# currently gets a full plugboard climb, which is what puts short cribs out of reach.
+# shellcheck disable=SC2086
+cs_run() { { printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA \
+             -g "AA." -R 0 -T 1 --crib OBERKOMMANDO "$@" >/dev/null; } 2>&1; }
+cs_iters() { cs_run "$@" | sed -n 's/.*scored \([0-9]*\) plugboard.*/\1/p'; }
+# The saving is the point, so assert it rather than the flag merely being accepted:
+# capping at 3 must cost strictly fewer plugboards than climbing every survivor.
+check "--crib-seeds climbs fewer plugboards than every survivor" \
+  "$(awk -v a="$(cs_iters)" -v b="$(cs_iters --crib-seeds 3)" \
+     'BEGIN { print (b < a) ? "fewer" : "no-saving" }')" "fewer"
+# ... and the answer must survive the cut.  This is the property that matters: a cheaper
+# run that stops finding the key is worthless.  Scored by IC with the board given, which
+# also shows the ranking needs NO language and no n-gram table -- it is the index of
+# coincidence of the decrypt, exactly as --self-crib-seeds ranks.
+check "--crib-seeds still recovers the plaintext" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -i -u B -w 123 -r AAA -g ... \
+     -s "$cb_plugs" -R 0 -T 1 --crib OBERKOMMANDO --crib-seeds 5 2>/dev/null)" "$cb_pt"
+# Cutting the list must not change the answer when the winner is inside the cut.  Run
+# under n-grams too, so both scoring families are covered.
+check "--crib-seeds agrees with climbing every survivor" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g "AA." \
+     -R 0 -T 1 --crib OBERKOMMANDO --crib-seeds 8 2>/dev/null)" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g "AA." \
+     -R 0 -T 1 --crib OBERKOMMANDO 2>/dev/null)"
+# K=0 is off, and must leave the historical path byte-identical -- including the count
+# of plugboards scored, which the seeded path's deduplication would change.
+check "--crib-seeds 0 is exactly the unseeded run" \
+  "$(cs_iters --crib-seeds 0)" "$(cs_iters)"
+# REGRESSION: --crib with -s used to build a board that was not an involution and then
+# SMASH THE STACK formatting it.  The deduction started from an empty board, so a
+# hypothesis could deduce A-D while -s said A-B; seeding overwrote steck[A] and left
+# steck[B] pointing at A, and format_plugboard -- sized for the 13 pairs an involution
+# can have -- walked off the end of its buffer on the 14+ that a corrupt board yields.
+# The deduction now starts from what -s and --no-plug already fix, so such a hypothesis
+# is rejected by crib_set instead.  Asserted two ways: the run must exit 0, and no
+# progress line may carry more than 13 pairs.
+check "--crib with -s does not crash" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -s "$cb_plugs" -R 0 -T 1 --crib OBERKOMMANDO >/dev/null 2>&1; echo $?)" "0"
+check "--crib with -s never echoes an impossible plugboard" \
+  "$({ printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -s "$cb_plugs" -R 0 -T 1 --crib OBERKOMMANDO >/dev/null; } 2>&1 \
+     | progress_lines | awk '{ n = 0; for (i = 5; i < NF; i++) n++; \
+       if (n > 13) bad++ } END { print bad+0 }')" "0"
+# The deduction must also still agree with the true board when -s is given -- rejecting
+# contradictions must not reject the TRUTH, which is the zero-tolerance direction.
+check "--crib with -s does not reject the true key" \
+  "$(cb_err --crib OBERKOMMANDO --crib-at 4 -s "$cb_plugs" -c \
+     | grep -c 'rejected 0 of 1 key')" "1"
+# -T-independence: the ranking is per key and deterministic, so thread count cannot
+# move the result.
+check "--crib-seeds is -T-independent" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -R 0 -T 1 --crib OBERKOMMANDO --crib-seeds 4 2>/dev/null)" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -R 0 -T 4 --crib OBERKOMMANDO --crib-seeds 4 2>/dev/null)"
+check "--crib-seeds echoes what it will do" \
+  "$(cs_run --crib-seeds 7 | grep -c '^Crib seeds: top 7 ')" "1"
+# Rejections, all fatal: each names something the command line asks for and the search
+# cannot honour.
+cs_rejects() { printf '%s' "$cb_ct" | "$ENIGMA" -u B -w 123 -r AAA -g AAA "$@" \
+               >/dev/null 2>&1; echo $?; }
+check "--crib-seeds rejects a run with no climb" \
+  "$(cs_rejects --crib OBERKOMMANDO --crib-seeds 3)" "1"
+check "--crib-seeds rejects a run with no crib" \
+  "$(cs_rejects -c --crib-seeds 3)" "1"
+check "--crib-seeds rejects a negative count" \
+  "$(cs_rejects -c --crib OBERKOMMANDO --crib-seeds -1)" "1"
+check "--crib-length rejects a bare --crib" \
+  "$(cs_rejects -c --crib OBERKOMMANDO --crib-length 8)" "1"
+
 # The alignment the crib survived at goes in its own progress-line column, since a swept
 # run produces lines from many alignments and they are otherwise indistinguishable. The
 # line is budgeted to exactly 80 columns either way.

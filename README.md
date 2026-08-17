@@ -355,6 +355,20 @@ English tables.
   cost, and **expected gain** (what a key costs without the crib over what it
   costs with it, so above 1 saves work and below 1 costs more than no crib),
   which is the guide to why a crib is worth running or was skipped
+- **`--crib-seeds K`** — Climb only the `K` crib hypotheses whose decrypt has
+  the highest **index of coincidence**, instead of every survivor. A swept crib
+  leaves a *set* of surviving hypotheses per key and each one otherwise costs a
+  full plugboard climb — at a 10-letter crib that is ~91 of them, at 8 letters
+  ~440, which is what puts short cribs out of reach. A correct hypothesis pins
+  several correct plugs, and that lifts the IC of its decrypt before any
+  climbing, so the ranking needs no language and no n-gram table.
+  Measured on a 676-key sweep with the board hidden, `K=10` recovers **19/20
+  against 19/20 for climbing everything, with no trial lost, at 12× fewer
+  plugboards**. `K=3` gives up 3 breaks for 43×, `K=1` gives up 4 for 138×.
+  Use 10. `0` is off.
+- **`--crib-length L`** — Ignore `--crib-list` entries shorter than `L` letters.
+  Short cribs are both the most likely to be *present* and the most expensive,
+  so a floor is the knob worth having.
 - **`--no-crib-reorder`** — Keep a `--crib-list` in the library's own order.
   By default it is run **cheapest measured cost first**. The cost of a crib
   against its length is a *cliff*: relative to a sweep with no crib, 8 letters

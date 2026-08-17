@@ -1252,13 +1252,23 @@ through it.
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
 
-**12. IC-rank the surviving hypotheses, as `--self-crib-seeds` does — MEASURED,
-and the useful window is narrow.** `crib_unit()` runs a **full plugboard climb
-on every surviving (alignment, hypothesis) pair** and keeps the best, which is
-what the self-crib path did before ranking. The same lever is available: dedupe,
-rank by the index of coincidence of the decrypt under the deduced partial board,
-climb the top `K`. `eval/crib_ic_rank.py` measures whether it would pay, at the
-true key, 40 trials per length, 10-pair board, alignment swept:
+**12. IC-rank the surviving hypotheses, as `--self-crib-seeds` does — BUILT,
+as `--crib-seeds K`.** `crib_unit()` used to run a **full plugboard climb on
+every surviving (alignment, hypothesis) pair**, which is what the self-crib path
+did before ranking. It now dedupes, ranks by the index of coincidence of the
+decrypt under the deduced partial board, and climbs the top `K`; `0` is off and
+leaves the old path byte-identical. `--crib-length L` additionally floors a
+`--crib-list` by length.
+
+**On the sweep — the number that decides it** (`eval/crib_seeds_ab.py`, 20
+trials, 10-letter crib, board hidden, 676-key sweep): `K=10` recovers **19/20
+against the unseeded 19/20 with zero discordant trials, for 12.1× fewer
+plugboards**. `K=3` gives up 3 breaks for 43.6×, `K=1` gives up 4 for 138×. So
+**`K=10`** — the same operating point `--self-crib-seeds` reached, arrived at
+independently.
+
+The ranking measurement that predicted it, at the true key, 40 trials per
+length, 10-pair board, alignment swept (`eval/crib_ic_rank.py`):
 
 | crib | surviving hyps | rank 1 | top-10 | median rank |
 |---:|---:|---:|---:|---:|
@@ -1279,14 +1289,19 @@ locked out of ("16 letters is the swept floor"), and short cribs are the ones
 most likely to be *present* (93% of messages carry an 8-letter crib, 3% a
 20-letter one).
 
-Two things to settle before building it, both being where the self-crib work
-sprang surprises. **This measures the true key only**, and a sweep spends its
-time at wrong keys: the per-key cost cap is real regardless, but whether the
-true key still *wins* depends on `K` lifting wrong keys' best-of-`K` too, which
-is exactly why self-crib `K` plateaued at 10 rather than improving with size.
-And **dedupe first**, keyed on the (board, pinned-letter-set) pair as the
-self-crib path is, since two hypotheses can agree on cables while one
-additionally proves a letter carries none.
+Both cautions raised before building it were addressed. The true-key figures
+above could not see the sweep, where wrong keys are also ranked and cut — hence
+the end-to-end A/B, which is what `K=10` rests on. And the dedupe is keyed on
+the (board, pinned-letter-set) pair as the self-crib path is, since two
+hypotheses can agree on cables while one additionally proves a letter carries
+none.
+
+**Building it also turned up a crash that predates it.** `--crib` with `-s`
+could deduce `A–D` while `-s` said `A–B`, overwrite `steck[A]`, and leave a
+board that was not an involution — which then smashed the stack in
+`format_plugboard`, sized for the 13 pairs an involution can have. The
+deduction now starts from what `-s` and `--no-plug` already fix, so a
+contradicting hypothesis is rejected rather than silently applied.
 
 > A caution on the measurement itself: a 12-trial pilot at a different seed
 > read L=8 as 12/12 in the top 10 with median rank 1, and the 40-trial run
