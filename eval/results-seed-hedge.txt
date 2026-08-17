@@ -1,0 +1,48 @@
+== hard-seeded arm: restarts x kick ==
+
+hard-seeded arm, restarts x kick, n=300 (215 ranked right)
+
+cell        mean %   exact      right/WRONG   score_iter
+R0  nokick  73.6     201/300    98.4 / 11.1   2734
+R1   r1     73.3     200/300    98.1 / 10.6   2868
+R1   r3     73.2     200/300    97.9 / 10.7   2866
+R1   r10    72.9     198/300    97.5 / 10.8   3021
+R2   r1     73.4     200/300    98.1 / 11.0   2949
+R2   r3     73.6     202/300    98.5 / 10.6   3064
+R2   r10    74.0     203/300    99.0 / 10.7   3317
+R4   r1     74.0     202/300    98.9 / 11.0   3456
+R4   r3     74.1     204/300    99.2 / 10.7   3690
+R4   r10    74.0     203/300    99.0 / 10.7   4012
+R8   r1     73.9     202/300    98.9 / 10.8   4581
+R8   r3     74.1     204/300    99.2 / 10.7   5157
+R8   r10    74.2     204/300    99.2 / 10.9   5767
+
+R0  nokick  vs R8 r10 exact: only it  0, only R8r10  3, p = 0.250
+R1   r1     vs R8 r10 exact: only it  0, only R8r10  4, p = 0.125
+R1   r3     vs R8 r10 exact: only it  0, only R8r10  4, p = 0.125
+R1   r10    vs R8 r10 exact: only it  0, only R8r10  6, p = 0.031
+R2   r1     vs R8 r10 exact: only it  0, only R8r10  4, p = 0.125
+R2   r3     vs R8 r10 exact: only it  0, only R8r10  2, p = 0.500
+R2   r10    vs R8 r10 exact: only it  0, only R8r10  1, p = 1.000
+R4   r1     vs R8 r10 exact: only it  0, only R8r10  2, p = 0.500
+R4   r10    vs R8 r10 exact: only it  0, only R8r10  1, p = 1.000
+R8   r1     vs R8 r10 exact: only it  0, only R8r10  2, p = 0.500
+
+== hedge curve: best-by-score over the top k seeds, each at -R 0 ==
+
+best-by-score over the top k seeds, each at -R 0, n=300
+mean 26.7 seeds per message (max 68); correct seed in top k:
+   k=1 215  k=2 242  k=3 253  k=5 268  k=10 281  k=all 300
+
+k      mean %    exact       right/WRONG   score_iter
+1      73.6      201/300     98.4 / 11.1   2734
+2      81.3      225/300     98.4 / 38.1   7797
+3      84.4      234/300     98.4 / 49.1   13161
+5      88.4      245/300     97.7 / 64.9   23983
+10     91.3      254/300     97.7 / 75.2   50587
+all    93.8      264/300     97.7 / 83.9   169371
+k=1    vs k=3 exact: only it  0, only k3 33, p = 0.0000
+k=2    vs k=3 exact: only it  0, only k3  9, p = 0.0039
+k=5    vs k=3 exact: only it 13, only k3  2, p = 0.0074
+k=10   vs k=3 exact: only it 22, only k3  2, p = 0.0000
+k=all  vs k=3 exact: only it 32, only k3  2, p = 0.0000

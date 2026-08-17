@@ -819,7 +819,9 @@ that end with a doubling × 30 fresh keys and 10-pair boards), recommended recip
   `score_iter`** — 85.3 against 83.6 mean, 238 against 223 exact — and it costs
   *less than the `-R 8` baseline*. Against that baseline it is +31.7pp (95% CI
   [+26.1, +37.3] per trial, [+15.7, +44.9] clustered on the messages) and +108
-  exact recoveries, McNemar p < 0.0001.
+  exact recoveries, McNemar p < 0.0001. (B3 here runs each of its three seeds at
+  `-R 8`; the hedge-curve section below drops that to `-R 0` and raises `k`,
+  which is strictly better — read the recommendation from there.)
 - **B alone matches `-R 64`'s mean at 26× less compute** and beats its exact
   rate (204 against 197). So even the single-seed form is worth ~26× of `-R`.
 - **Equal `-R` is NOT equal compute here, which is why the baseline is swept.**
@@ -876,11 +878,69 @@ climb re-searches everything and, at 100–170 letters, the score signal is not
 sharp enough to hold correct plugs in place — so it wanders off them. Two
 corollaries fall out:
 
-- **Hard seeding saturates at `-R 8`.** Arm Bm at `-R 24` is *identical* to arm
-  B at `-R 8` — 74.2 / 204 on both — because the pinned residual is small enough
-  that eight restarts either solve it or nothing will. Extra restarts on a
-  hard-seeded climb buy literally nothing; that compute belongs on more
-  hypotheses instead, which is exactly what B3 does.
+- **Hard seeding saturates at essentially ZERO restarts.** Arm Bm at `-R 24` is
+  *identical* to arm B at `-R 8` — 74.2 / 204 on both — and sweeping downward
+  shows the plateau reaches all the way to a single unkicked climb. The hard arm
+  had run at the recipe's defaults throughout while only the soft arm was ever
+  tuned, so this is the grid it should have had (300 trials, same set):
+
+  | restarts × kick | mean %-correct | exact | `score_iter` |
+  |---|---:|---:|---:|
+  | **`-R 0`, no kick** | 73.6 | **201/300** | **2 734** |
+  | `-R 1 --random 3` | 73.2 | 200/300 | 2 866 |
+  | `-R 2 --random 10` | 74.0 | 203/300 | 3 317 |
+  | `-R 4 --random 3` | 74.1 | **204/300** | 3 690 |
+  | `-R 8 --random 3` | 74.1 | 204/300 | 5 157 |
+  | `-R 8 --random 10` | 74.2 | 204/300 | 5 767 |
+
+  **One unkicked climb gets 201 of the 204 exact recoveries at 2.1× less
+  compute** (McNemar p = 0.25), and `-R 4 --random 3` matches 204 at 1.56× less.
+  Kick size is worth nothing on this arm either — and structurally so, because
+  the pins leave only ~8 free letters, so `--random 10` is clamped to ~4 pairs
+  and is barely distinguishable from `--random 3` to begin with. Every
+  difference in the grid is nested (no cell ever recovers a trial `-R 8
+  --random 10` misses), which is what a plateau looks like from below.
+
+  Extra restarts on a hard-seeded climb therefore buy almost nothing; that
+  compute belongs on more hypotheses instead. **Following that through is what
+  produced the recommendation below**, since a `-R 0` climb makes the hedge
+  ~2× cheaper and testing more than three hypotheses affordable.
+
+*The hedge curve, and the recommendation.* With each seed costing one unkicked
+climb, run the top `k` and keep the best **by converged score** (a far sharper
+judge than the IC pre-ranking, since by then each climb has run). Every `k` is
+read off the same runs — 300 trials, the whole seed list climbed once:
+
+| k | mean %-correct | exact | right / WRONG | `score_iter` |
+|---:|---:|---:|---|---:|
+| 1 | 73.6 | 201/300 | 98.4 / 11.1 | 2 734 |
+| 2 | 81.3 | 225/300 | 98.4 / 38.1 | 7 797 |
+| 3 | 84.4 | 234/300 | 98.4 / 49.1 | 13 161 |
+| **5** | **88.4** | **245/300** | 97.7 / 64.9 | **23 983** |
+| 10 | 91.3 | 254/300 | 97.7 / 75.2 | 50 587 |
+| all (~27) | 93.8 | 264/300 | 97.7 / 83.9 | 169 371 |
+
+Against the baselines (`-R 8` = 53.6 / 130 at 28 156; `-R 64` = 74.9 / 197 at
+150 954; `-R 256` = 83.6 / 223 at 582 450):
+
+- **`k = 5` is the recommendation: 245/300 for 23 983 `score_iter`** — *less*
+  than a bare `-R 8`, which recovers 130. It also beats a bare `-R 256` by 22
+  recoveries at **1/24 of its compute**.
+- **`k = 10` (254/300 at 50 587) beats `-R 256` by 31 at 1/11.5**, and climbing
+  *every* seed (264/300 at 169 371) beats it by 41 at 1/3.4. There is no `k` in
+  the range where more hypotheses stop paying, which is the opposite of what
+  `-R` does on this problem.
+- **The gain is entirely in the failure mode `k` is aimed at.** The `right`
+  column barely moves (98.4 → 97.7) while `WRONG` goes 11.1 → 83.9: raising `k`
+  does nothing for messages the ranking already got right and almost everything
+  for the ones it did not.
+
+**The residual is the scoring floor, not the ranking.** A correct seed exists in
+**300/300** trials and is in the top 5 in 268 and the top 10 in 281, yet
+climbing *all* of them still recovers only 264 — so in ~36 trials the correct
+seed's converged board does not score highest. That is the same information
+limit `-a`/`-f` were measured against and no amount of seeding or searching
+crosses it; the oracle arm's 275/300 is the same statement from the other side.
 - **The right hedge tests hypotheses, it does not soften one.** B3 beats every
   soft variant because it spends its budget asking *which* seed is right rather
   than hedging against a single seed being wrong.
