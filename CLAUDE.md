@@ -2298,9 +2298,15 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   `clang-tidy enigma.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
   tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`
   installs the binary). Run them before pushing, and grep clang-tidy's output
-  for `error:` rather than for the names you touched — it prints one file-scope
-  error and suppresses ~24 000 warnings from system headers, so a name-filtered
-  grep looks clean when it is not. A `Bench` workflow
+  for `error:` rather than for the names you touched: it suppresses ~24 000
+  warnings from system headers and reports its own findings at file scope, so a
+  name-filtered grep looks clean when it is not. **A clean tree reports ZERO
+  `error:` lines, so any count above zero is a red CI job** — an earlier version
+  of this sentence said clang-tidy "prints one file-scope error", which reads as
+  a standing benign one; it is not, and a `bugprone-implicit-widening-of-
+  multiplication-result` error was pushed on the strength of that reading
+  (`2*i` used as a pointer offset — index with a `const char *` walked two at a
+  time instead). Do not stop at the count; read the line. A `Bench` workflow
   (`.github/workflows/bench.yml`) additionally runs `make bench LONG=1` on a
   {g++, clang++} × {x86_64, arm64-Linux} matrix — on PRs as a same-machine A/B
   vs the PR base at the script's default **10%**, and **advisory only**
