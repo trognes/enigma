@@ -8,13 +8,15 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
-- **`--preflight` — is this ciphertext even Enigma?** Enigma is a permutation
+- **Pre-flight: is this ciphertext even Enigma?** (on by default;
+  `--no-preflight` turns it off). Enigma is a permutation
   cipher, so its output is near-flat; a ciphertext carrying residual language
   structure was not produced by one and has **no key to find**. The index of
   coincidence and the number of unused letters are now computed from the
-  ciphertext and compared against a length-dependent null. `--preflight`
-  always prints the report; the **warning is always on when the rotor key is
-  wildcarded**, i.e. when the run is a search.
+  ciphertext and compared against a length-dependent null, and the verdict is
+  printed before the sweep. It reports **for a search — a wildcarded key —
+  and only then**: with a full key the tool is encrypting or decrypting, and
+  on encryption the input is plaintext, which is language-like by definition.
   - Measured the expensive way: a 28-hour, 75.2M-key sweep of the QTXMA
     challenge message returned nothing, and the reason was visible up front —
     IC 0.0577 against the 0.0385 ± 0.0018 of 3000 simulated Enigma
@@ -32,10 +34,10 @@ existing command lines can behave differently or stop working.
     simulated ciphertexts (authentic 1941 German, random keys and boards — not
     real traffic) the largest z seen was 5.89 and neither test fired once.
     `eval/preflight_null.py` reproduces the calibration.
-  - **The gate is part of the feature**: with a fully-specified key the tool is
-    encrypting, and its input is then routinely plaintext, which is
-    language-like by definition. Restricting the warning to wildcarded keys is
-    what keeps it off every encryption.
+  - No pre-flight line may look like a progress line: the `--confidence`
+    margin extractor greps stderr for `^ *[+-][0-9]`, and a continuation line
+    reading `  +10.95 sd; …` was read as the run's last margin. The
+    statistics line now opens with `(` and no line begins with a digit.
 
 - **`--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature` —
   self-crib seeding, the first lever measured to beat `-R` at matched compute.**

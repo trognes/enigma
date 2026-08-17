@@ -931,8 +931,8 @@ forms under a uniform multinomial that match simulated Enigma encryptions within
 
 #### The shipped rule, and why its thresholds are generous
 
-The tool now runs this before searching (`--preflight`, and the warning is
-always on when the key is wildcarded). It warns when **z(IC) > 6.0** or
+The tool now runs this before searching, **on by default**
+(`--no-preflight` turns it off). It warns when **z(IC) > 6.0** or
 **P(unused) < 1e-4**. Those are set from the *measured* tail of genuine
 Enigma rather than a nominal p-value — the same discipline `--confidence`
 documents for its own Gaussian tail, and for the same reason: a best-of-many
@@ -951,8 +951,10 @@ negative only costs what it costs today, so the margin is deliberately wide.
 
 #### The gate is as important as the test
 
-The warning is raised **only when the rotor key is wildcarded**, i.e. when the
-run is actually a search. With a fully-specified key the tool is encrypting or
+The report is raised **only when the rotor key is wildcarded**, i.e. when the
+run is actually a search — which is also the only run for which the question
+is meaningful, since it is the one that risks looking for a key that does not
+exist. With a fully-specified key the tool is encrypting or
 decrypting, and its input is then routinely *plaintext* — which is
 language-like by definition and would trip both tests. Without the gate the
 warning would fire on every encryption, including the hundreds this repo's own

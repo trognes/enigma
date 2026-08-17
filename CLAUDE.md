@@ -1363,13 +1363,21 @@ are read from a **data directory** (filenames built as
     Not a hot-path concern: a progress line is emitted only when a board beats
   everything echoed so far, so this prints once per improvement, not once per
   board scored. Off by default.
-- `--preflight` **is this ciphertext even Enigma?** Enigma is a permutation
+- `--no-preflight` **is this ciphertext even Enigma?** (the check is **on by
+  default**; this turns it off). Enigma is a permutation
   cipher, so its output is near-flat; a ciphertext carrying residual language
   structure was not produced by one and has **no key to find**. Two free
   statistics — the index of coincidence, and how many letters of A–Z never
   occur — are computed once from the ciphertext and compared against a
-  length-dependent null. The flag *always* prints the report; the **WARNING is
-  always on** when the rotor key is wildcarded.
+  length-dependent null, and the verdict is printed before the sweep.
+    **It reports only for a SEARCH — a wildcarded key — and that gate is part
+  of the design, not a limitation.** With a fully-specified key the tool is
+  encrypting or decrypting, and on encryption the input is *plaintext*, which
+  is language-like by definition; reporting there would print an alarming
+  line about a ciphertext that is not one, on every encryption (including the
+  hundreds `tests/run_tests.sh` performs). It is also the only run for which
+  the question is meaningful: a search is what risks looking for a key that
+  does not exist.
   - **It was measured the expensive way.** A 28-hour, 75.2M-key sweep of the
     QTXMA challenge message returned nothing (best margin +0.81 sd against a
     6.0 bar). The reason was in the ciphertext before the search started: IC
@@ -1403,11 +1411,12 @@ are read from a **data directory** (filenames built as
     positive is expensive in trust (it would tell someone to abandon a
     breakable message) and a false negative only costs what it costs today,
     hence the wide margin. `eval/preflight_null.py` reproduces it.
-  - **The gate matters as much as the test.** The warning fires only when the
-    key is wildcarded, i.e. when the run is a *search*. With a fully-specified
-    key the tool is encrypting, and its input is then routinely **plaintext**,
-    which is language-like by definition — an always-on warning would fire on
-    every encryption, including the hundreds `tests/run_tests.sh` performs.
+  - **No pre-flight line may look like a progress line.** The margin extractor
+    for `--confidence` greps stderr for `^ *[+-][0-9]`, and a continuation
+    line reading `  +10.95 sd; …` was picked up as the run's last margin —
+    breaking a `--confidence` check in a way that pointed at `--confidence`
+    rather than here. The statistics line now opens with `(`, no line begins
+    with a digit, and a check asserts it.
   - Runs once per process on ≤1024 letters, so it is nowhere near the hot path
     and far below the n-gram load in the startup budget.
 - **Live sweep progress** — a `\r` line under the main sweep carrying

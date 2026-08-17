@@ -585,7 +585,7 @@ static bool opt_full_text;
    indicators are pairwise UNCORRELATED -- the shared-index covariance is
    sum p^3 - (sum p^2)^2 = 1/A^2 - 1/A^2 = 0 -- so E[IC] = 1/A and Var[IC] =
    q(1-q)/C(n,2), q = 1/A, with no dependence on the plaintext at all. */
-static bool opt_preflight;
+static bool opt_no_preflight;
 
 static char ciphertext[maxlen+1];
 static char altplaintext[maxlen+1];
@@ -7699,10 +7699,13 @@ static preflight_stats compute_preflight()
   return s;
 }
 
-/* Reported only when the run is a SEARCH. With a fully-specified key the tool
-   is encrypting or decrypting, and the input is then routinely plaintext --
-   which has a high IC by definition, so an always-on warning would fire on
-   every encryption, including the ones the test suite makes. */
+/* Reported only when the run is a SEARCH -- which is also the only run for
+   which the question is meaningful, since it is the one looking for a key that
+   may not exist. With a fully-specified key the tool is encrypting or
+   decrypting: on encryption the input is PLAINTEXT, which is language-like by
+   definition, so reporting there would print a scary-looking line on every
+   encryption (including the hundreds the test suite performs) about a
+   ciphertext that is not one. */
 static bool key_is_wildcarded()
 {
   const char * o[4] = { opt_ukw, opt_walzen,
@@ -7716,16 +7719,18 @@ static bool key_is_wildcarded()
 
 static void report_preflight()
 {
-  if (textlength < 2)
+  if (opt_no_preflight || (textlength < 2) || ! key_is_wildcarded())
     return;
   preflight_stats s = compute_preflight();
   bool flagged = s.flag_ic || s.flag_absent;
-  if ((! opt_preflight) && ! (flagged && key_is_wildcarded()))
-    return;
+  /* No continuation line may begin with an optionally-signed number: that is
+     the shape of a progress line, and the harness greps stderr for
+     `^ *[+-][0-9]` to pull the last margin out of a --confidence run. A
+     second line reading "  +10.95 sd; ..." was picked up as one. */
   fprintf(stderr,
           "Pre-flight:  index of coincidence %.4f against the %.4f Enigma "
-          "gives,\n"
-          "             %+.2f sd; %d of %d letters unused, P = %.2g\n",
+          "gives\n"
+          "             (%+.2f sd), and %d of %d letters unused (P = %.2g)\n",
           s.ic, 1.0 / asize, s.z_ic, s.absent, asize, s.p_absent);
   if (! flagged)
     {
@@ -7738,9 +7743,9 @@ static void report_preflight()
           "         Enigma is a permutation cipher and its output is"
           " near-flat;\n"
           "         this ciphertext has %s.\n"
-          "         The thresholds (%.1f sd, P < %.0e) are set so that none"
-          " of\n"
-          "         18000 simulated Enigma ciphertexts trips them -- see\n"
+          "         The thresholds (%.1f sd, P < %.0e) were set so that"
+          " not one\n"
+          "         of 18000 simulated Enigma ciphertexts trips them -- see\n"
           "         MODERN_BREAKING_NOTES 5l. Proceeding anyway.\n",
           (s.flag_ic && s.flag_absent)
             ? "language-like structure, and\n         too many unused letters"
@@ -8018,12 +8023,12 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
-  fprintf(out, "  %-24s %s\n", "--preflight",
-          "Always report whether the ciphertext looks like");
+  fprintf(out, "  %-24s %s\n", "--no-preflight",
+          "Do not report whether the ciphertext looks like");
   fprintf(out, "  %-24s %s\n", "",
-          "Enigma output (IC and unused letters). The WARNING");
+          "Enigma output at all. The report is ON by default");
   fprintf(out, "  %-24s %s\n", "",
-          "is always on when the key is wildcarded [off]");
+          "for a search (a wildcarded key) [reporting on]");
   fprintf(out, "  %-24s %s\n", "--doubling-report L",
           "Report every converged climb past the z gate whose");
   fprintf(out, "  %-24s %s\n", "",
@@ -8385,7 +8390,7 @@ int main(int argc, char * * argv)
   g_cribs.clear();
   opt_dump_all = false;
   opt_full_text = false;
-  opt_preflight = false;
+  opt_no_preflight = false;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -8416,7 +8421,7 @@ int main(int argc, char * * argv)
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
-         OPT_DOUBLINGMM, OPT_PREFLIGHT };
+         OPT_DOUBLINGMM, OPT_NOPREFLIGHT };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -8471,7 +8476,7 @@ int main(int argc, char * * argv)
       { "self-crib-length", required_argument, nullptr, OPT_SCLEN },
       { "self-crib-signature", no_argument,   nullptr, OPT_SCSIG },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
-      { "preflight",      no_argument,       nullptr, OPT_PREFLIGHT },
+      { "no-preflight",   no_argument,       nullptr, OPT_NOPREFLIGHT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
@@ -8631,8 +8636,8 @@ int main(int argc, char * * argv)
           opt_full_text = true;
           break;
 
-        case OPT_PREFLIGHT:
-          opt_preflight = true;
+        case OPT_NOPREFLIGHT:
+          opt_no_preflight = true;
           break;
         case OPT_CRIBTEXT:
           alltoupper(optarg);

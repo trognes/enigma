@@ -169,11 +169,14 @@ WARNING: this does not look like Enigma output, so searching for a
          key may be searching for something that does not exist.
 ```
 
-That message cost a 28-hour, 75-million-key sweep to learn the other way. The
-warning appears only when the rotor key is wildcarded — with a full key you are
-encrypting, and plaintext is language-like by definition. **`--preflight`**
-prints the report either way, including a plain "consistent with Enigma output"
-when nothing is wrong.
+That message cost a 28-hour, 75-million-key sweep to learn the other way. On a
+ciphertext that looks fine you get the same two lines ending in a plain
+"consistent with Enigma output" instead of the warning.
+
+This is on by default, and appears only when the rotor key is wildcarded —
+with a full key you are encrypting or decrypting, and plaintext is
+language-like by definition, so there would be nothing to conclude.
+**`--no-preflight`** turns it off.
 
 The thresholds are deliberately slack: across 18 000 simulated Enigma
 ciphertexts neither test fired once. Short messages are the reason — the
