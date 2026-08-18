@@ -1,0 +1,39 @@
+Which pre-pass does a fused target want at L=107?  (eval/prepass_ab.py)
+
+Fills the gap CLAUDE.md flagged as open: mono leaned ahead at L=60 and IC won
+at L=167, with "a crossover somewhere between" unmeasured.  Same five-seed
+design as the L=167 result, 400 paired trials per seed, -R 8, -l wehrmacht,
+authentic HG Nord decrypts, rotor key given and a 10-pair board hidden.
+
+  seed   m4f10 mean   i4f10 mean   diff      m4 exact   i4 exact   McNemar
+  7001      42.40        41.87     +0.53     137/400    132/400    p=0.682
+  7002      44.45        44.71     -0.27     140/400    142/400    p=0.921
+  7003      42.44        43.32     -0.88     134/400    137/400    p=0.848
+  7004      42.13        42.37     -0.24     136/400    136/400    p=1.000
+  7005      40.00        45.33     -5.33     123/400    148/400    p=0.011
+
+  pooled m4f10 - i4f10 = -1.28 pp, SE 1.02, 95% CI [-3.28, +0.73], z = -1.25
+  heterogeneity Q = 4.40 on 4 df (5% critical 9.49) -- seeds agree
+  pooled exact: 670/2000 (33.5%) vs 695/2000 (34.8%), McNemar p = 0.278
+
+INDISTINGUISHABLE at L=107.  Same sign as L=167, a third the size:
+
+  L=60   +1.77 pp   leans mono, CI spans 0
+  L=107  -1.28 pp   indistinguishable, CI spans 0
+  L=167  -2.81 pp   IC wins, z = 2.76
+
+so the effect is monotone in length and crosses zero below 107.  i4f10 is
+never behind at or above ~107.
+
+--------------------------------------------------------------------------
+Plugboard tier vs length and restarts (i4f10, 200 trials/cell, seed 8100)
+rotor key GIVEN, 10-pair board hidden -- exact recovery:
+
+  L        -R 8      -R 16     -R 32     -R 64
+  82      24/200      --        --       64/200
+  107     61/200    75/200    90/200    108/200
+  167    146/200      --        --      182/200
+
+Still climbing steeply at -R 64 below ~110 letters; flattening by L=167.
+L=167 at -R 8 (73.0%) beats L=107 at -R 64 (54.0%), i.e. 60 letters of length
+is worth more than 8x the restarts.

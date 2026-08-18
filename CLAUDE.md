@@ -891,7 +891,25 @@ are read from a **data directory** (filenames built as
   **does not reproduce at L=167 under either target**, which points back at
   **LENGTH** (or some other difference in that original setup) rather than at an
   interaction. A single run at L=60 did lean mono under `-f` (+1.77pp, CI spans
-  0), consistent with a crossover somewhere between. Note also that this — like
+  0), consistent with a crossover somewhere between.
+
+  **The midpoint is now measured, and the answer is that it does not matter
+  there.** Same five-seed design at **L=107** (2000 paired trials,
+  `eval/prepass_ab.py --length 107`): pooled `m4f10 − i4f10` = **−1.28pp**, 95%
+  CI [−3.28, +0.73], z = −1.25, exact 33.5% against 34.8% (McNemar p = 0.278),
+  heterogeneity Q = 4.40 on 4 df — so the seeds agree with each other and there
+  simply is no resolvable effect. Lined up by length the pre-pass effect is
+  monotone and crosses zero below 107:
+
+  | L | `m4f10 − i4f10` | reading |
+  |---:|---:|---|
+  | 60 | +1.77pp | leans mono, CI spans 0 |
+  | 107 | **−1.28pp** | **indistinguishable**, CI spans 0 |
+  | 167 | −2.81pp | IC wins, z = 2.76 |
+
+  So `i4f10` is never behind at or above ~107 and is the safe pick across the
+  operational range; the `m4f10` default only has a case below that. Note also
+  that this — like
   every other tuning result here — measures the **plugboard-recovery**
   sub-problem with the rotor key given. The schedule
   carries **only** model stages: the per-restart kick and the exhaustion are
@@ -2833,6 +2851,28 @@ the posterior instead — a failed `-r AA. -R 2` (36% win) and a failed stride-3
 > (−10.1261 against the true board's −9.1212) and needs `-R 64`. So size `-R`
 > against real traffic, not against the `crackquality` curve, when the target is
 > an actual message. §5i.
+
+> **How much LENGTH costs on the plugboard tier alone — the number to size a
+> real attempt with.** Rotor key *given*, 10-pair board hidden, `-f -l
+> wehrmacht -S i4f10`, 200 paired trials per cell on authentic HG Nord
+> decrypts (`eval/prepass_ab.py --length L --restarts R`), exact recovery:
+>
+> | L | `-R 8` | `-R 64` | an unbroken message at that length |
+> |---:|---:|---:|---|
+> | 82 | 12.0% | 32.0% | MVUEH (Nr 172) |
+> | 107 | 30.5% | 54.0% | RXPSB (Nr 53) |
+> | 167 | 73.0% | 91.0% | BYQMZ (Nr 8-C) |
+>
+> **This is the sub-problem with the key already known**, so a real sweep is
+> strictly worse — the true key must additionally outscore millions of
+> competitors. Two things follow. The curve is **still climbing steeply at
+> `-R 64` below ~110 letters** (30.5 → 54.0 at L=107, no sign of saturation),
+> where at L=167 it is already flattening — so the shorter the target, the more
+> of the budget belongs in `-R` rather than in coverage, reversing the
+> §"unknown-key break rate" advice tuned at L=167. And a 60-letter difference
+> in target length is worth **more than a 8× difference in restarts**: L=167 at
+> `-R 8` beats L=107 at `-R 64`. When choosing which unbroken message to
+> attack, length dominates every other consideration.
 
 Read `ENHANCEMENTS.md` and then `archived/IMPROVEMENTS.md` before changing the
 search or scoring code — in
