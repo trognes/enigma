@@ -1259,6 +1259,18 @@ are read from a **data directory** (filenames built as
   knowledge compound, where before they fought. The default path (no `-s`, no
   `--no-plug`) is untouched: `plug_fixed` is all false, so the seeding loop
   sets nothing.
+  - **The pins are now LOAD-BEARING, which is the other half of the same
+    change.** Being wrong about one used to cost nothing — the contradiction
+    was silently overwritten and the search still found the key. Now it kills
+    every hypothesis at every alignment, so the run ends *"Fatal error: No
+    machine configuration produced a score"* (the same way a `--crib` that
+    rejects every key already did). Demonstrated on a board of `AB CD EF GH IJ
+    KL MN OP QR ST`: `--no-plug UVWXYZ` is true and recovers the plaintext in
+    1 839 plugboards, `--no-plug XYZ` likewise in 58 063, while `--no-plug
+    QWERTYU` — false, since Q, E, R and T are all plugged — now returns
+    nothing where the released code returned the correct plaintext. Failing
+    loudly on contradictory input is the right behaviour, but it does mean a
+    guessed pin belongs in `--soft-plug`, not in `-s`.
 - **The menu is walked BREADTH-FIRST FROM THE ANCHOR, not in crib order.** An
   edge deduces nothing until one endpoint is known, and at the start only the
   anchor is; in crib order the loop visits edges whose endpoints are both

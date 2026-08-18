@@ -569,6 +569,15 @@ existing command lines can behave differently or stop working.
     Key rejection on that problem goes from 9.3% to 100.0% with three pins —
     every wrong key is now killed by the deduction and only the true one is
     ever climbed.
+  - **The other half: a WRONG pin is now fatal instead of free.** It used to be
+    overwritten silently and the search still succeeded; now it kills every
+    hypothesis at every alignment and the run ends *"No machine configuration
+    produced a score"*. On a board of `AB CD EF GH IJ KL MN OP QR ST`,
+    `--no-plug UVWXYZ` (true) recovers the plaintext in 1 839 plugboards and
+    `--no-plug QWERTYU` (false — Q, E, R, T are plugged) now returns nothing
+    where the released code returned the correct plaintext. Failing loudly on
+    contradictory input is right, but a *guessed* plug belongs in
+    `--soft-plug`, not `-s`.
 
 - **`--full-text` wrapped 2 columns short of the progress line.** The
   continuation width dated from a 79-column target; the progress lines were
