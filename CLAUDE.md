@@ -97,7 +97,14 @@ model, so a delta between the two rows is the scorer and nothing else;
 verified by A/B-ing across the change it was built to catch, where `fused`
 read −3.6/−4.1/−4.1% while `hillclimb` read +4.0/+5.3/−2.4%, i.e. noise.
 `crib` is the only tier that exercises `crib_try` (63.6% of a crib sweep) at
-all. Each has a `quick` tier (default, a few seconds) and an opt-in `long`
+all, and it earned its keep: a 26-letter prologue added to `crib_try` — to seed
+the deduction from `-s`/`--no-plug` pins — cost **+48% quick and +51% long**
+while the other three tiers stayed inside their floors. **In that tier the
+PER-HYPOTHESIS FIXED COST is what matters**, not the closure: the sweep calls
+`crib_try` 26 times per key and on a wrong key most hypotheses die within a few
+edges, so 26 extra iterations roughly doubled the work. Anything added to the
+top of `crib_try` should be behind a flag that is false in the common case
+(`g_have_known_plugs`), not merely cheap per iteration. Each has a `quick` tier (default, a few seconds) and an opt-in `long`
 tier (`make bench LONG=1`, ≥15–30s each) for a stronger signal; `make bench
 SCALE=1` additionally sweeps `-T` to show thread scaling. Timing is the min of
 several repetitions (the per-tier benchmarks are single-threaded). The

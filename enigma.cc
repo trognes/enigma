@@ -1450,6 +1450,13 @@ static bool plug_fixed[asize];
    and the crib deduction needs the value so it can reject a hypothesis that contradicts
    it. Set beside plug_fixed and read-only thereafter, like it. */
 static unsigned char g_known_plug[asize];
+/* Whether ANY letter is fixed at all, so the crib deduction can skip its known-plug
+   prologue with a single predictable branch instead of scanning 26 letters. That scan
+   cost a measured +50% on the crib benchmark: the sweep calls crib_try 26 times per key
+   and most hypotheses die in the first few edges, so the per-hypothesis FIXED cost
+   dominates and 26 extra iterations roughly doubled it. Set beside plug_fixed and
+   read-only thereafter, like it. */
+static bool g_have_known_plugs = false;
 #if defined(__clang__)
 static thread_local bool plug_fixed_ex[asize];   /* clang: thread_local scratch */
 #define PLUG_FIXED_EX plug_fixed_ex
@@ -1479,6 +1486,10 @@ void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_stri
      self-steckered, every move set that skips a fixed letter skips them too. */
   for (const char * p = no_plug_string; *p != 0; p++)
     plug_fixed[char2num(*p)] = true;
+  g_have_known_plugs = false;
+  for (int j = 0; j < asize; j++)
+    if (plug_fixed[j])
+      g_have_known_plugs = true;
 }
 
 /* --- crib deduction (--crib): the menu and its closure ---------------------------
@@ -1879,9 +1890,10 @@ static bool crib_try(int anchor, int hyp, int * board,
      deduction while B still pointed at A from -s), which then crashed
      format_plugboard. Cheap -- it runs once per hypothesis, over 26 letters, and the
      usual case of no -s and no --no-plug sets nothing at all. */
-  for (int i = 0; i < asize; i++)
-    if (plug_fixed[i] && ! crib_set(board, i, g_known_plug[i]))
-      return false;
+  if (g_have_known_plugs)
+    for (int i = 0; i < asize; i++)
+      if (plug_fixed[i] && ! crib_set(board, i, g_known_plug[i]))
+        return false;
 
   if (! crib_set(board, anchor, hyp))
     return false;
