@@ -196,6 +196,11 @@ static const int selfcrib_maxlen = 13;         /* longest -- nothing in the corp
 struct selfcrib_hyp
 {
   int at, len, nanchor;
+  /* Letters between the two copies: 1 for the separated W X W the default
+     hypothesises, 0 for the TANDEM repeat --self-crib-tandem adds. It is a
+     field rather than a constant because it is the only thing that differs --
+     the equality edges, the closure and the ranking are identical. */
+  int gap;
   int anchor_pos[3];
 };
 static std::vector<selfcrib_hyp> g_selfcrib_hyps;
@@ -207,8 +212,71 @@ static int g_selfcrib_nhyps = 0;
    wins when the assumption holds: measured over every corpus message carrying a doubling
    anywhere, terminal breaks 16/40 against a swept 26/40 and a bare -R 16's 19/40. */
 static bool opt_self_crib_signature = false;
+/* --self-crib-tandem: also hypothesise a doubled word with NO separator between the
+   copies -- SIEGFRIEDSIEGFRIED rather than ENGELMANN X ENGELMANN. The default cannot
+   see one at all: its 26 guesses are on steck[X] and the separator anchor is what
+   carries that guess into the message.
+     OPT-IN ON COST, not on whether it works. It works -- the equality edges never
+   mentioned the plaintext, so guessing at a flank instead of the separator runs the
+   same closure, and recall barely moves (a correct hypothesis exists in 195 of 200
+   trials against the separated case's 197). What it costs is enumeration: gap 0 has
+   as many alignments as gap 1, so switching it on roughly DOUBLES the hypothesis
+   count (+101% over the corpus). Per-key cost tracks that count almost linearly
+   (2196 hypotheses <-> 2428 us, 1328 <-> 1065), so on by default it would take the
+   seeder from ~2428 us per key to ~4900 -- past the 2901 us of the -R 16 baseline it
+   is measured against, i.e. it would cost the feature its headline. What it buys is
+   3 of 66 corpus messages, +4.5pp (SIEGFRIED, OSTROW, ROSENOW). A doubling of cost
+   for 4.5pp belongs behind a flag.
+     MEASURED END TO END, and on those 3 messages it is decisive: over 60 paired
+   676-key sweeps with the board hidden, 3/60 exact recoveries become 22/60 -- 19
+   only-on against 0 only-off, McNemar p = 3.8e-6. Wall time is 2.6x, matching the
+   doubled hypothesis count; plugboards SCORED fall (2.42M -> 2.31M), which is the
+   score_iter-is-the-wrong-axis note again, since the extra cost is all in the
+   uncounted deduction. On the risk population -- messages with a separated doubling
+   and no tandem one, where every tandem hypothesis is wrong by construction and
+   competes for the same K seed slots -- 38/60 becomes 36/60 (0 only-on, 2 only-off,
+   p = 0.5, 95% CI [-7.9, +1.2]pp): no measurable loss, though the sign is the one
+   crowding-out predicts. Corpus-weighted that is ~+0.6pp for 2.6x the time, which
+   is the arithmetic that keeps it opt-in. eval/selfcrib_tandem_ab.py.
+   ENHANCEMENTS.md item 5. */
+static bool opt_self_crib_tandem = false;
 static int opt_crib_at = -1;
 static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
+/* --crib-seeds K: IC-rank the surviving hypotheses and climb only the best K, exactly as
+   --self-crib-seeds does. 0 = off, which climbs every survivor (the historical path, kept
+   byte-identical).
+     WHY IT EXISTS. crib_unit() runs a FULL plugboard climb per surviving (alignment,
+   hypothesis) pair, and a SWEPT short crib leaves a great many: measured at the true key,
+   438.6 survivors at 8 letters, 90.7 at 10, 8.3 at 12, 1.5 at 14. Long cribs reject
+   nearly everything and leave nothing to rank; short ones leave hundreds of climbs per
+   key, which is exactly why the swept crib has a documented floor of 16 letters.
+     WHY IC RANKS THEM. A hypothesis that is right pins several correct plugs, and that
+   lifts the index of coincidence of its decrypt before any climbing -- the same signal
+   --self-crib-seeds ranks on, and it needs no language and no n-gram table.
+     THE WINDOW IS NARROW AND BOUNDED ON BOTH SIDES, which is the measurement that should
+   govern how this is used (eval/crib_ic_rank.py, 40 trials/length, true key, 10 plugs):
+
+       crib   survivors   rank 1   top-10   median rank
+          8       438.6    15/40    23/40             6
+         10        90.7    25/40    37/40             1
+         12         8.3    40/40    40/40             1
+         14         1.5    40/40    40/40             1
+
+   At 12+ ranking is perfect and pointless -- there is no population left to cut. At 8 the
+   population explodes and IC degrades with it: the top 10 keeps only 57% of correct
+   hypotheses, so a 44x cut costs 42% of them. Only at ~10 letters are both true at once:
+   91 survivors, top-10 keeps 92.5%, a 9x cut for ~7% loss. Do not read this as a general
+   speed-up; it is a way into the short-crib regime, and K should be raised when the crib
+   is short. ENHANCEMENTS.md, Cribs item 12. */
+static int opt_crib_seeds = 0;
+
+/* The score a work unit reports when it produced NO candidate at all -- every crib
+   hypothesis contradicted, or no rotor setting could have produced the crib. It is a
+   sentinel, not a score: it exists only so such a unit never wins the merge, and it must
+   be EXCLUDED wherever scores are treated as a distribution. calibrate_null() learned
+   that the hard way; see the filter there. */
+static const double unit_no_score = -1e300;
+
 /* The menu, built once by init_crib(). A menu is a property of the crib AND the place it
    sits, so everything except the crib letters themselves is per ALIGNMENT: the ciphertext
    letters it pairs with, and therefore the anchor letter the 26 hypotheses are about.
@@ -1377,6 +1445,18 @@ void apply_soft_plug(machine & m)
    ~19%). We give each what it wants; the exhaust path is a dominated exploration tool, so its
    own codegen does not matter -- only that the common path stays a plain global. */
 static bool plug_fixed[asize];
+/* What those fixed letters are plugged TO: the -s partner, or the letter itself for a
+   --no-plug letter. plug_fixed alone says a letter is known, not what it is known to be,
+   and the crib deduction needs the value so it can reject a hypothesis that contradicts
+   it. Set beside plug_fixed and read-only thereafter, like it. */
+static unsigned char g_known_plug[asize];
+/* Whether ANY letter is fixed at all, so the crib deduction can skip its known-plug
+   prologue with a single predictable branch instead of scanning 26 letters. That scan
+   cost a measured +50% on the crib benchmark: the sweep calls crib_try 26 times per key
+   and most hypotheses die in the first few edges, so the per-hypothesis FIXED cost
+   dominates and 26 extra iterations roughly doubled it. Set beside plug_fixed and
+   read-only thereafter, like it. */
+static bool g_have_known_plugs = false;
 #if defined(__clang__)
 static thread_local bool plug_fixed_ex[asize];   /* clang: thread_local scratch */
 #define PLUG_FIXED_EX plug_fixed_ex
@@ -1387,18 +1467,29 @@ static thread_local bool plug_fixed_ex[asize];   /* clang: thread_local scratch 
 void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_string)
 {
   for (int j = 0; j < asize; j++)
-    plug_fixed[j] = false;
+    {
+      plug_fixed[j] = false;
+      g_known_plug[j] = static_cast<unsigned char>(j);   /* self-steckered until told */
+    }
   int plug_count = static_cast<int>(strlen(steckerbrett_string) / 2);
   for (int i = 0; i < plug_count; i++)
     {
-      plug_fixed[char2num(steckerbrett_string[2*i+0])] = true;
-      plug_fixed[char2num(steckerbrett_string[2*i+1])] = true;
+      const int a = char2num(steckerbrett_string[2*i+0]);
+      const int b = char2num(steckerbrett_string[2*i+1]);
+      plug_fixed[a] = true;
+      plug_fixed[b] = true;
+      g_known_plug[a] = static_cast<unsigned char>(b);
+      g_known_plug[b] = static_cast<unsigned char>(a);
     }
   /* --no-plug letters are fixed in exactly the same sense -- the climb may not rewire
      them -- they are simply fixed to nothing rather than to a partner. Since they stay
      self-steckered, every move set that skips a fixed letter skips them too. */
   for (const char * p = no_plug_string; *p != 0; p++)
     plug_fixed[char2num(*p)] = true;
+  g_have_known_plugs = false;
+  for (int j = 0; j < asize; j++)
+    if (plug_fixed[j])
+      g_have_known_plugs = true;
 }
 
 /* --- crib deduction (--crib): the menu and its closure ---------------------------
@@ -1580,18 +1671,41 @@ static inline bool crib_set(int * board, int x, int y)
    asserted to be plaintext X: 1 = separator only, 2 = + left flank, 3 = + right flank.
    An Enigma never encrypts a letter to itself, so a ciphertext X at an anchor position
    makes the hypothesis impossible -- dropped here rather than rediscovered per key. */
-static void selfcrib_add(int at, int len, int flanks)
+/* `flanks` selects which positions the hypothesis asserts are plaintext X.
+   At gap 1 the separator comes free with the doubling and the flanks are extra:
+   1 = separator, 2 = + left, 3 = + left and right.
+     At gap 0 there IS no separator, so the left flank is asserted instead and
+   `flanks` only chooses whether the right one joins it. THE HYPOTHESIS MUST
+   CARRY AT LEAST ONE ANCHOR: the 26 guesses are on steck[X], and the equality
+   edges cannot start anything until an anchor propagates that guess into the
+   message -- with none, every board entry would stay unset and the hypothesis
+   would deduce nothing at all. A tandem repeat can afford this because it
+   nearly always HAS a left flank: 4 of 4 in the corpus, matching the 96%
+   left-flank rate measured for the separated case, and asserting it recovers
+   most of the sharpness the missing separator costs (top-5 168 -> 182 of 200,
+   ENHANCEMENTS.md item 5). */
+static void selfcrib_add(int at, int len, int flanks, int gap)
 {
   const int xl = char2num('X');
   selfcrib_hyp h;
   h.at = at;
   h.len = len;
+  h.gap = gap;
   h.nanchor = 0;
-  h.anchor_pos[h.nanchor++] = at + len;                  /* separator */
-  if (flanks >= 2)
-    h.anchor_pos[h.nanchor++] = at - 1;                  /* left flank */
-  if (flanks >= 3)
-    h.anchor_pos[h.nanchor++] = at + 2*len + 1;          /* right flank */
+  if (gap >= 1)
+    {
+      h.anchor_pos[h.nanchor++] = at + len;              /* separator */
+      if (flanks >= 2)
+        h.anchor_pos[h.nanchor++] = at - 1;              /* left flank */
+      if (flanks >= 3)
+        h.anchor_pos[h.nanchor++] = at + 2*len + 1;      /* right flank */
+    }
+  else
+    {
+      h.anchor_pos[h.nanchor++] = at - 1;                /* left flank */
+      if (flanks >= 3)
+        h.anchor_pos[h.nanchor++] = at + 2*len;          /* right flank */
+    }
   for (int k = 0; k < h.nanchor; k++)
     {
       const int pos = h.anchor_pos[k];
@@ -1614,7 +1728,7 @@ static void init_self_crib()
             const int at = textlength - tail - 2*len - 1;
             if (at < 1)
               continue;                    /* no room for the left flank */
-            selfcrib_add(at, len, tail ? 3 : 2);
+            selfcrib_add(at, len, tail ? 3 : 2, 1);
           }
     }
   else
@@ -1625,8 +1739,19 @@ static void init_self_crib()
       for (int len = opt_self_crib_length; len <= selfcrib_maxlen; len++)
         for (int at = 1; at + 2*len + 1 <= textlength; at++)
           for (int flanks = 1; flanks <= 3; flanks++)
-            selfcrib_add(at, len, flanks);
+            selfcrib_add(at, len, flanks, 1);
     }
+  /* --self-crib-tandem: the same enumeration at gap 0, appended rather than
+     replacing, since a message can hold either kind and the ranking sorts them
+     out. Two flank variants, not three: at gap 0 the left flank is the only
+     anchor available and is always asserted, so the choice is just whether the
+     right one joins it. Roughly DOUBLES the hypothesis count (+101% over the
+     corpus), which is why it is opt-in -- see the option comment. */
+  if (opt_self_crib_tandem)
+    for (int len = opt_self_crib_length; len <= selfcrib_maxlen; len++)
+      for (int at = 1; at + 2*len <= textlength; at++)
+        for (int flanks = 2; flanks <= 3; flanks++)
+          selfcrib_add(at, len, flanks, 0);
   g_selfcrib_nhyps = static_cast<int>(g_selfcrib_hyps.size());
 }
 
@@ -1678,7 +1803,7 @@ static bool self_crib_try(const machine & m, const selfcrib_hyp & h, int guess, 
         }
       for (int t = 0; t < h.len; t++)
         {
-          const int pi = h.at + t, pj = h.at + h.len + 1 + t;
+          const int pi = h.at + t, pj = h.at + h.len + h.gap + t;
           const unsigned char * __restrict ci = m.rows[pi];
           const unsigned char * __restrict cj = m.rows[pj];
           const int a = num_ciphertext[pi], b = num_ciphertext[pj];
@@ -1756,6 +1881,19 @@ static bool crib_try(int anchor, int hyp, int * board,
 {
   for (int i = 0; i < asize; i++)
     board[i] = -1;
+
+  /* Start from what is already KNOWN, not from nothing. -s says those letters are
+     plugged so, and --no-plug says its letters are plugged to nothing; a hypothesis
+     that contradicts either is impossible and crib_set rejects it here rather than
+     letting it through to be silently overwritten at the seeding site. That overwrite
+     was a real bug: it left a board that was not an involution (A plugged to D by the
+     deduction while B still pointed at A from -s), which then crashed
+     format_plugboard. Cheap -- it runs once per hypothesis, over 26 letters, and the
+     usual case of no -s and no --no-plug sets nothing at all. */
+  if (g_have_known_plugs)
+    for (int i = 0; i < asize; i++)
+      if (plug_fixed[i] && ! crib_set(board, i, g_known_plug[i]))
+        return false;
 
   if (! crib_set(board, anchor, hyp))
     return false;
@@ -2692,12 +2830,24 @@ static void show_full_text(machine & m)
 
 /* Format m's plugboard into s: canonical (each pair low-high, pairs ordered by low
    letter), so a harness can dedupe boards by string equality. */
+/* The buffer holds exactly 13 pairs -- "AB CD ... YZ" plus the NUL -- which is all a
+   plugboard can have, since it is an INVOLUTION on 26 letters. The bound is therefore
+   unreachable on any valid board, and is here because a display helper must not smash
+   the stack when handed an invalid one: a non-involution can satisfy steckerbrett[j] > j
+   for up to 25 letters. That was not hypothetical -- --crib with -s used to build such a
+   board (see crib_try's known-plug seeding) and this function was where it crashed, with
+   a "stack smashing detected" abort that named nothing useful. Truncating is the right
+   failure here: the board is already wrong, and a diagnostic line is not the place to
+   discover it. */
 static void format_plugboard(machine & m, char (&s)[3 * 13])
 {
   char * p = s;
+  const char * end = s + sizeof s;
   for (int j = 0; j < asize; j++)
     if (m.steckerbrett[j] > j)
       {
+        if ((p + ((p > s) ? 3 : 2)) >= end)
+          break;
         if (p > s)
           *p++ = ' ';
         *p++ = num2char(j);
@@ -4010,6 +4160,33 @@ static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
    short one it is the several that archived/cribs.md 7a's seed mode expects and prices. */
 static void dump_all(machine & m, double score);   /* defined with the other diagnostics */
 
+/* Pin one hypothesis's deduced plugs and run the staged climb from there. Shared by
+   both crib_unit() paths so the seeded and unseeded runs cannot drift apart. */
+static double crib_climb_one(machine & m, const int * board,
+                             size_t key_index, int restart)
+{
+  init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
+  memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
+  for (int x = 0; x < asize; x++)
+    if (board[x] >= 0)
+      {
+        m.steckerbrett[x] = static_cast<unsigned char>(board[x]);
+        PLUG_FIXED_EX[x] = true;               /* ... plus this deduction */
+      }
+  /* The kick is off by default here and should stay off: it can only scatter the
+     letters the deduction did NOT settle, and a seeded climb starts near the answer
+     (archived/cribs.md 7b). -R N still asks for N kicked passes if that is wanted. */
+  if (opt_restarts >= 1)
+    {
+      uint64_t rng = restart_seed(key_index, restart);
+      perturb_steckerbrett(m, & rng, opt_perturb);
+    }
+  const double sc = run_stages<true>(m);
+  if (opt_dump_all)
+    dump_all(m, sc);
+  return sc;
+}
+
 static double crib_unit(machine & m, size_t key_index, int restart)
 {
   double best = 0.0;
@@ -4020,45 +4197,124 @@ static double crib_unit(machine & m, size_t key_index, int restart)
   int board[asize];
 
   crib_edge ed[maxlen];
-  for (int a = 0; a < crib_aligns; a++)
+
+  if (opt_crib_seeds <= 0)
     {
-      crib_edges_for(m, a, ed);
-      for (int h = 0; h < asize; h++)
-      {
-        if (! crib_try(crib_anchor_at[a], h, board, ed))
-          continue;
-        init_steckerbrett(m, opt_steckerbrett);      /* board = identity + -s */
-        memcpy(PLUG_FIXED_EX, plug_fixed, asize);    /* pins = -s / --no-plug ... */
-        for (int x = 0; x < asize; x++)
-          if (board[x] >= 0)
+      /* Historical path: climb EVERY survivor, in discovery order. Kept exactly as it
+         was, so a run without --crib-seeds is byte-identical -- including the count of
+         plugboards scored, which deduplication would change. */
+      for (int a = 0; a < crib_aligns; a++)
+        {
+          crib_edges_for(m, a, ed);
+          for (int h = 0; h < asize; h++)
             {
-              m.steckerbrett[x] = static_cast<unsigned char>(board[x]);
-              PLUG_FIXED_EX[x] = true;               /* ... plus this deduction */
+              if (! crib_try(crib_anchor_at[a], h, board, ed))
+                continue;
+              const double sc = crib_climb_one(m, board, key_index, restart);
+              if (! have || (sc > best))
+                {
+                  best = sc;
+                  have = true;
+                  best_at = crib_align[a];
+                  memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+                  memcpy(best_steck, m.steckerbrett, asize);
+                }
             }
-        /* The kick is off by default here and should stay off: it can only scatter the
-           letters the deduction did NOT settle, and a seeded climb starts near the answer
-           (archived/cribs.md 7b). -R N still asks for N kicked passes if that is wanted. */
-        if (opt_restarts >= 1)
-          {
-            uint64_t rng = restart_seed(key_index, restart);
-            perturb_steckerbrett(m, & rng, opt_perturb);
-          }
-        double sc = run_stages<true>(m);
-        if (opt_dump_all)
-          dump_all(m, sc);
-        if (! have || (sc > best))
-          {
-            best = sc;
-            have = true;
-            best_at = crib_align[a];
-            memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
-            memcpy(best_steck, m.steckerbrett, asize);
-          }
-      }
+        }
+    }
+  else
+    {
+      /* --crib-seeds K: collect the distinct survivors, rank by the IC of their decrypt,
+         climb the best K. Per-thread scratch rather than stack arrays, since a swept
+         short crib yields hundreds of survivors -- far past what a per-call array should
+         hold -- and reusing the buffers keeps allocation out of the per-key path.
+         Cleared at entry, so a key's result depends on nothing but that key. */
+      static thread_local std::vector<unsigned char> cs_steck, cs_fixed;
+      static thread_local std::vector<double> cs_ic;
+      static thread_local std::vector<int> cs_at, cs_order;
+      cs_steck.clear(); cs_fixed.clear(); cs_ic.clear();
+      cs_at.clear(); cs_order.clear();
+      int nseed = 0;
+
+      for (int a = 0; a < crib_aligns; a++)
+        {
+          crib_edges_for(m, a, ed);
+          for (int h = 0; h < asize; h++)
+            {
+              if (! crib_try(crib_anchor_at[a], h, board, ed))
+                continue;
+              unsigned char st[asize], fx[asize];
+              for (int i = 0; i < asize; i++)
+                {
+                  st[i] = static_cast<unsigned char>((board[i] >= 0) ? board[i] : i);
+                  fx[i] = (board[i] >= 0) ? 1 : 0;
+                }
+              /* The dedupe key is the (board, pinned-letter-set) PAIR, as in
+                 self_crib_unit(): two hypotheses can agree on every cable while one
+                 additionally proves a letter carries none, and that is a different
+                 seed -- it hands the climb one less letter to search. */
+              bool dup = false;
+              for (int k = 0; (k < nseed) && ! dup; k++)
+                dup = (memcmp(& cs_steck[static_cast<size_t>(k) * asize],
+                              st, asize) == 0) &&
+                      (memcmp(& cs_fixed[static_cast<size_t>(k) * asize],
+                              fx, asize) == 0);
+              if (dup)
+                continue;
+              cs_steck.insert(cs_steck.end(), st, st + asize);
+              cs_fixed.insert(cs_fixed.end(), fx, fx + asize);
+              cs_at.push_back(crib_align[a]);
+              memcpy(m.steckerbrett, st, asize);
+              cs_ic.push_back(ic_score_decode(m));  /* the ranking, one decode each */
+              nseed++;
+            }
+        }
+
+      if (nseed == 0)
+        return unit_no_score;    /* nothing survived: never wins the merge */
+
+      /* Top K by IC, ties broken by the deterministic discovery order. Partial
+         selection sort: K is small, so this beats sorting the whole list. */
+      cs_order.resize(static_cast<size_t>(nseed));
+      for (int i = 0; i < nseed; i++)
+        cs_order[static_cast<size_t>(i)] = i;
+      const int want = (opt_crib_seeds < nseed) ? opt_crib_seeds : nseed;
+      for (int i = 0; i < want; i++)
+        {
+          size_t best_j = static_cast<size_t>(i);
+          for (size_t j = static_cast<size_t>(i) + 1;
+               j < static_cast<size_t>(nseed); j++)
+            if (cs_ic[static_cast<size_t>(cs_order[j])] >
+                cs_ic[static_cast<size_t>(cs_order[best_j])])
+              best_j = j;
+          const size_t ii = static_cast<size_t>(i);
+          const int t = cs_order[ii]; cs_order[ii] = cs_order[best_j];
+          cs_order[best_j] = t;
+        }
+
+      for (int i = 0; i < want; i++)
+        {
+          const int si = cs_order[static_cast<size_t>(i)];
+          for (int x = 0; x < asize; x++)
+            board[x] = cs_fixed[static_cast<size_t>(si) * asize
+                                + static_cast<size_t>(x)]
+                       ? static_cast<int>(cs_steck[static_cast<size_t>(si) * asize
+                                                   + static_cast<size_t>(x)])
+                       : -1;
+          const double sc = crib_climb_one(m, board, key_index, restart);
+          if (! have || (sc > best))
+            {
+              best = sc;
+              have = true;
+              best_at = cs_at[static_cast<size_t>(si)];
+              memcpy(best_pt, m.plaintext, static_cast<size_t>(textlength) + 1);
+              memcpy(best_steck, m.steckerbrett, asize);
+            }
+        }
     }
 
   if (! have)
-    return -1e300;      /* no hypothesis survived: never wins the merge */
+    return unit_no_score;      /* no hypothesis survived: never wins the merge */
   memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
   memcpy(m.steckerbrett, best_steck, asize);
   g_crib_stop_shown = best_at;   /* the progress line reports the winning alignment */
@@ -4125,7 +4381,7 @@ static double self_crib_unit(machine & m, size_t key_index, int restart)
       }
 
   if (nseed == 0)
-    return -1e300;      /* nothing survived: never wins the merge */
+    return unit_no_score;      /* nothing survived: never wins the merge */
 
   /* Top K by IC, ties broken by the deterministic candidate order. Selection sort: K is
      small and nseed is ~28, so this is cheaper than sorting the whole list. */
@@ -4181,7 +4437,7 @@ static double self_crib_unit(machine & m, size_t key_index, int restart)
         }
     }
   if (! have)
-    return -1e300;
+    return unit_no_score;
   memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
   memcpy(m.steckerbrett, best_steck, asize);
   return best;
@@ -4203,7 +4459,7 @@ static double exhaust_unit(machine & m, size_t key_index, size_t fi)
       memcpy(m.steckerbrett, c.best_steck, asize);
       return c.best;
     }
-  return -1e300;   /* no valid combo under this first pair: never wins the merge */
+  return unit_no_score;   /* no valid combo under this first pair: never wins the merge */
 }
 
 /* Whole-key exhaustion (used by the -F tier-2 climb, which parallelises over keys): every
@@ -4218,7 +4474,7 @@ static double exhaust_all_combos(machine & m, size_t key_index)
   for (size_t fi = 0; fi < nfirsts; fi++)
     {
       double s = exhaust_unit(m, key_index, fi);
-      if ((! have || (s > best)) && (s > -1e300))
+      if ((! have || (s > best)) && (s > unit_no_score))
         {
           best = s;
           have = true;
@@ -5794,8 +6050,20 @@ static void calibrate_null(machine & m, size_t keys,
 
   /* Draws are with replacement and skip keys the collapses removed; a run of
      misses cannot loop forever because total_keys is the INDEX space and at least
-     one index in it always survives (the winner did). */
-  size_t guard = want * 64 + 1024;
+     one index in it always survives (the winner did).
+       A REJECTED key is skipped too, and that one is load-bearing. Under --crib the
+     unit returns unit_no_score for a key no hypothesis survives -- and a crib worth
+     using rejects 99%+ of them, so nearly every sample came back as -1e300. The mean
+     then sat at ~-1e300 and the variance OVERFLOWED to +inf, which made (s - mu)/sd
+     exactly 0 for every board: every progress line printed the identical margin
+     -z_k, and the summary printed a 300-digit null. Those keys are not part of the
+     null the search draws from -- it never scores them at all -- so they must be
+     dropped rather than counted. The guard is much larger than the plain path's
+     because a rejected draw costs only the deduction (microseconds) while an
+     accepted one costs a whole climb, so many attempts are affordable and the loop
+     still terminates. */
+  size_t guard = want * 256 + 4096;
+  size_t rejected = 0;
   while ((xs.size() < want) && (guard-- > 0))
     {
       rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
@@ -5803,7 +6071,13 @@ static void calibrate_null(machine & m, size_t keys,
       if (! key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                            rc12, gc12, cur_wo, rg6))
         continue;
-      xs.push_back(opt_hillclimb ? climb_unit(m, idx, 0) : score_iter(m));
+      const double s = opt_hillclimb ? climb_unit(m, idx, 0) : score_iter(m);
+      if (s <= unit_no_score)
+        {
+          rejected++;
+          continue;
+        }
+      xs.push_back(s);
       if (show_progress && (((xs.size() % step) == 0) || (xs.size() == want)))
         {
           fprintf(stderr, "\rConfidence: sampling the null %3zu%% (%zu / %zu keys)",
@@ -5821,9 +6095,17 @@ static void calibrate_null(machine & m, size_t keys,
   opt_dump_all = save_dump;
   m.plugboards_scored = save_scored;   /* keep the diagnostic comparable */
 
+  /* Naming the cause matters here: with a crib this is the EXPECTED outcome of a
+     very selective one, not a malfunction, and the run is otherwise fine. */
   if (xs.size() < 8)
     {
-      fprintf(stderr, "Confidence: too few sampled keys to calibrate\n");
+      if (rejected > 0)
+        fprintf(stderr,
+                "Confidence: the crib rejected %zu of %zu sampled keys, leaving %zu "
+                "to\n            calibrate against -- too few for a null. Reporting "
+                "raw scores.\n", rejected, rejected + xs.size(), xs.size());
+      else
+        fprintf(stderr, "Confidence: too few sampled keys to calibrate\n");
       return;
     }
   double mu = 0.0;
@@ -5914,12 +6196,19 @@ static void report_confidence(double best_score)
           pfam, (opt_scoring == SCORE_IC) ? " -- IC most of all" : "");
   /* Fires exactly when the number is in the range where the p-value misleads,
      and stays quiet on a real break. The threshold is the measured 99th
-     percentile of pure noise rounded up, not a guess. */
+     percentile of pure noise rounded up, not a guess.
+       NO line here may begin with something matching '^ *[+-][0-9]' -- that is
+     the shape a progress line has, and the documented way to pull a run's
+     margin out of stderr is to grep for it. This note used to wrap as
+     "... a margin of\n            +0.5 sd came up ...", so the continuation
+     WAS such a line and a summary sentence was read back as the run's result.
+     Same bug class as the pre-flight lines guard against; found by it biting
+     a day-key sweep whose extractor reported this sentence for all 33 keys. */
   if ((z - g_null_zk) < 2.0)
     fprintf(stderr,
             "            below +2 sd is not a find: on signal-free text a "
-            "margin of\n            +0.5 sd came up in 2-5%% of runs "
-            "(more often on a bigger key space)\n");
+            "margin\n            of +0.5 sd came up in 2-5%% of runs "
+            "(more often on a\n            bigger key space)\n");
 }
 
 /* Tier 1: rank a slice of the flat key space by a cheap IC climb; keep the
@@ -7727,14 +8016,18 @@ static void report_preflight()
      the shape of a progress line, and the harness greps stderr for
      `^ *[+-][0-9]` to pull the last margin out of a --confidence run. A
      second line reading "  +10.95 sd; ..." was picked up as one. */
+  /* Label field is 12 wide and continuations are indented 12, matching every
+     other settings-echo line ("Confidence: ", "Threads:    ", ...). This block
+     used to carry one space more in both places, so it sat a column right of
+     the rest of the echo. */
   fprintf(stderr,
-          "Pre-flight:  index of coincidence %.4f against the %.4f Enigma "
+          "Pre-flight: index of coincidence %.4f against the %.4f Enigma "
           "gives\n"
-          "             (%+.2f sd), and %d of %d letters unused (P = %.2g)\n",
+          "            (%+.2f sd), and %d of %d letters unused (P = %.2g)\n",
           s.ic, 1.0 / asize, s.z_ic, s.absent, asize, s.p_absent);
   if (! flagged)
     {
-      fprintf(stderr, "             consistent with Enigma output\n");
+      fprintf(stderr, "            consistent with Enigma output\n");
       return;
     }
   fprintf(stderr,
@@ -8007,7 +8300,13 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "capture radius ~0.4*L/26, so it wants long");
   fprintf(out, "  %-24s %s\n", "", "messages [0..26, 0 = off]");
-  fprintf(out, "  %-24s %s\n", "--crib-rerank F",
+    fprintf(out, "  %-24s %s\n", "--self-crib-tandem",
+          "Also hypothesise a doubled word with NO separator");
+  fprintf(out, "  %-24s %s\n", "",
+          "(SIEGFRIEDSIEGFRIED). Roughly doubles the");
+  fprintf(out, "  %-24s %s\n", "",
+          "hypotheses, so opt-in; reaches ~5% more messages [off]");
+fprintf(out, "  %-24s %s\n", "--crib-rerank F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
   fprintf(out, "  %-24s %s\n", "", "neutral/dominated (needs -c) [off], not recommended");
@@ -8096,6 +8395,14 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "--crib-dump",
           "Print every surviving crib hypothesis and the plugs");
   fprintf(out, "  %-24s %s\n", "", "it deduces (diagnostic; needs --crib) [off]");
+  fprintf(out, "  %-24s %s\n", "--crib-seeds K",
+          "Climb only the K crib hypotheses whose decrypt has");
+  fprintf(out, "  %-24s %s\n", "",
+          "the highest index of coincidence, instead of every");
+  fprintf(out, "  %-24s %s\n", "",
+          "survivor. For SHORT swept cribs, where a key can");
+  fprintf(out, "  %-24s %s\n", "",
+          "leave hundreds (needs -c; 0 = off) [0]");
   fprintf(out, "  %-24s %s\n", "--crib-list F",
           "Crib library, one per line ('#' comments); one rotor");
   fprintf(out, "  %-24s %s\n", "", "sweep each, best board kept [off]");
@@ -8321,7 +8628,9 @@ void show_settings()
             "%d hypotheses (%s)\n", opt_self_crib_seeds,
             (opt_self_crib_seeds == 1) ? "" : "s", opt_self_crib_length,
             g_selfcrib_nhyps,
-            opt_self_crib_signature ? "signature" : "anywhere");
+            opt_self_crib_signature ? "signature"
+              : (opt_self_crib_tandem ? "anywhere, separated or tandem"
+                                      : "anywhere"));
   if (opt_crib_text)
     {
       if (opt_crib_at >= 0)
@@ -8338,6 +8647,12 @@ void show_settings()
               opt_crib_reorder ? "cheapest measured cost first"
                                : "file order (--no-crib-reorder)");
     }
+  /* Reported for --crib and --crib-list alike: it changes how many climbs each key
+     costs, which is the first thing to check when a crib run is slower or worse than
+     expected. */
+  if (opt_crib_seeds > 0)
+    fprintf(stderr, "Crib seeds: top %d hypotheses per key by index of "
+            "coincidence\n", opt_crib_seeds);
 }
 
 int main(int argc, char * * argv)
@@ -8391,6 +8706,7 @@ int main(int argc, char * * argv)
   opt_dump_all = false;
   opt_full_text = false;
   opt_no_preflight = false;
+  opt_crib_seeds = 0;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_random_set = false;
@@ -8421,7 +8737,7 @@ int main(int argc, char * * argv)
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
-         OPT_DOUBLINGMM, OPT_NOPREFLIGHT };
+         OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_SCTANDEM };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -8475,11 +8791,13 @@ int main(int argc, char * * argv)
       { "self-crib-seeds", required_argument, nullptr, OPT_SCSEEDS },
       { "self-crib-length", required_argument, nullptr, OPT_SCLEN },
       { "self-crib-signature", no_argument,   nullptr, OPT_SCSIG },
+      { "self-crib-tandem", no_argument,      nullptr, OPT_SCTANDEM },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "no-preflight",   no_argument,       nullptr, OPT_NOPREFLIGHT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
       { "crib-at",        required_argument, nullptr, OPT_CRIBAT },
       { "crib-dump",      no_argument,       nullptr, OPT_CRIBDUMP },
+      { "crib-seeds",     required_argument, nullptr, OPT_CRIBSEEDS },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
       { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
       { "doubling-report", required_argument, nullptr, OPT_DOUBLINGREPORT },
@@ -8632,6 +8950,10 @@ int main(int argc, char * * argv)
         case OPT_SCSIG:
           opt_self_crib_signature = true;
           break;
+
+        case OPT_SCTANDEM:
+          opt_self_crib_tandem = true;
+          break;
         case OPT_FULLTEXT:
           opt_full_text = true;
           break;
@@ -8655,6 +8977,10 @@ int main(int argc, char * * argv)
             fatal("--crib-at is 1-based: the first position is 1, not 0");
           opt_crib_at = atoi(optarg) - 1;
           break;
+        case OPT_CRIBSEEDS:
+          opt_crib_seeds = atoi(optarg);
+          break;
+
         case OPT_CRIBDUMP:
           opt_crib_dump = true;
           break;
@@ -8916,9 +9242,17 @@ int main(int argc, char * * argv)
          silently do nothing -- say so rather than accept and ignore it. */
       if ((! opt_crib_reorder) && (opt_crib_list == nullptr))
         fatal("--no-crib-reorder needs --crib-list (there is nothing to order)");
+      /* --crib-seeds picks WHICH hypotheses to climb, so with no climb to seed it
+         would silently do nothing -- the same contract --self-crib-seeds has. */
+      if ((opt_crib_seeds > 0) && ! opt_hillclimb)
+        fatal("--crib-seeds needs -c (it chooses which plugboard climbs to run)");
+      if ((opt_crib_seeds < 0) || (opt_crib_seeds > 10000))
+        fatal("--crib-seeds must be 0 (off) to 10000");
     }
   else if ((opt_crib_at >= 0) || opt_crib_dump)
     fatal("--crib-at and --crib-dump need --crib");
+  else if (opt_crib_seeds > 0)
+    fatal("--crib-seeds needs --crib or --crib-list");
   else if (! opt_crib_reorder)
     fatal("--no-crib-reorder needs --crib-list (there is nothing to order)");
 
@@ -9009,6 +9343,17 @@ int main(int argc, char * * argv)
   if (opt_self_crib_signature && (opt_self_crib_seeds == 0))
     fatal("--self-crib-signature needs --self-crib-seeds (it only narrows where the "
           "doubled word is hypothesised)");
+  if (opt_self_crib_tandem && (opt_self_crib_seeds == 0))
+    fatal("--self-crib-tandem needs --self-crib-seeds (it only adds hypotheses for "
+          "the seeder to rank)");
+  /* --signature says the doubled word CLOSES the message, which fixes where the
+     separator sits; --tandem says there is no separator at all. Both at once is a
+     contradiction rather than a narrowing, so it is refused rather than silently
+     preferring one. */
+  if (opt_self_crib_tandem && opt_self_crib_signature)
+    fatal("--self-crib-tandem and --self-crib-signature contradict each other "
+          "(one says the copies are separated by an X closing the message, the "
+          "other that they are not separated at all)");
   if (opt_self_crib_seeds > 0)
     {
       if (! opt_hillclimb)

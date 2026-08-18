@@ -1630,6 +1630,25 @@ check "--confidence: signal-free text gets the 'not a find' note" \
   "$(cf_note "$cf_rct")" "1"
 check "--confidence: a real break does NOT get the 'not a find' note" \
   "$(cf_note "$cf_ct")" "0"
+# NO confidence line may look like a progress line, for exactly the reason the
+# pre-flight block asserts the same of its own: the documented way to pull a
+# run's margin off stderr is to grep '^ *[+-][0-9]', and this note used to wrap
+# as "... a margin of\n            +0.5 sd came up ...".  That continuation IS
+# such a line, so an extractor read the CAVEAT back as the run's result -- and
+# silently, since it looks like a plausible margin.  Found when a sweep of 33
+# known day keys reported "+0.5 sd came up in 2-5% of runs" for every one.
+# Anchored on the signal-free arm, the only one that prints the note.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+check "confidence summary lines cannot be read as progress lines" \
+  "$(printf '%s' "$cf_rct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+     -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
+     | sed -n '/^Confidence: null/,$p' \
+     | grep -cE '^ *[+-]?[0-9]')" "0"
+check "confidence summary stays within 80 columns" \
+  "$(printf '%s' "$cf_rct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+     -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
+     | sed -n '/^Confidence: null/,$p' | awk '{ print length }' \
+     | sort -rn | head -1 | awk '{ print ($1 <= 80) ? "ok" : $1 }')" "ok"
 check "--confidence: -q does not carry the IC clause" \
   "$(cf_pline -q -l wehrmacht | grep -c 'IC')" "0"
 
@@ -2145,6 +2164,26 @@ check "pre-flight does not flag a short genuine Enigma message" \
   "$(pf_run "WCZIEDSYTCDXOICDSXOXASIMEIORSRKRISSPCCOUIMDZYDM" -g "AA." \
      | grep -c '^WARNING')" "0"
 
+# The pre-flight block is part of the settings echo, so it must align with it:
+# a 12-wide label field and 12-space continuations, exactly like "Confidence: "
+# and "Machine:    ".  It shipped with 13 in both places and so sat one column
+# right of everything above it.  Asserted against the echo's OWN continuation
+# indent rather than the literal 12, so the two cannot drift apart.
+check "pre-flight continuations align with the rest of the settings echo" \
+  "$(pf_run "$pf_qtxma" -g "AA." | awk '
+     /^Machine:/   { getline; match($0, /^ */); echo = RLENGTH }
+     /^Pre-flight:/{ getline; match($0, /^ */); pf = RLENGTH }
+     END { print (echo > 0 && pf == echo) ? "aligned" : "echo=" echo " pf=" pf }')" \
+  "aligned"
+# The label field itself, same rule: "Pre-flight:" plus padding must occupy the
+# same width as "Machine:" plus its padding.
+check "pre-flight label field is the same width as the echo's" \
+  "$(pf_run "$pf_qtxma" -g "AA." | awk '
+     /^Machine:/    { match($0, /^Machine: */);    a = RLENGTH }
+     /^Pre-flight:/ { match($0, /^Pre-flight: */); b = RLENGTH }
+     END { print (a > 0 && a == b) ? "same" : "machine=" a " preflight=" b }')" \
+  "same"
+
 check "pre-flight output stays within 80 columns" \
   "$(pf_run "$pf_qtxma" -g "AA." \
      | sed -n '/^Pre-flight:/,/Proceeding anyway/p' | awk '{ print length }' \
@@ -2433,6 +2472,45 @@ check "--exhaust E is bounded by the remaining free pairs" \
 check "--exhaust E within the remaining free pairs is accepted" \
   "$(np_rejects -c --exhaust 5 --no-plug "$np_many")" "0"
 
+# --self-crib-tandem: a doubled word with NO separator between the copies.  The
+# default cannot see one at all -- its 26 guesses are on steck[X] and the separator
+# anchor is what carries that guess into the message -- so SIEGFRIEDSIEGFRIED forms
+# no hypothesis.  Three of the 66 corpus messages carry such a doubling and no
+# X-separated one, and this is one of them.
+tdm_pt=ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEINSZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAUMXKANNNIQTEINFLIESZENXDAXDRITTEXINFXDIVXUNDXAQTEXPANZXDIVXBLOQIERENUNDRANMBELEGTHALTEXDIVXKDRX
+tdm_ct=$(run "$tdm_pt" -u B -w 342 -r ALZ -g VAT -s "AZ DV ET FS GQ JP LX MY NR OW")
+# Plugboard-recovery tier: true rotor key, board hidden, one climb from the seed.
+tdm_run() { printf '%s' "$tdm_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 342 \
+            -r ALZ -g VAT --self-crib-seeds 10 --self-crib-length 6 -R 0 "$@" 2>/dev/null; }
+# The property that justifies the flag: it recovers what the default cannot.
+check "--self-crib-tandem recovers a separator-free doubling" \
+  "$(tdm_run --self-crib-tandem -T 1)" "$tdm_pt"
+# The control keeps that from passing for the wrong reason -- the message must be
+# genuinely out of the default's reach, not merely easy.
+check "--self-crib-tandem control: the default does not" \
+  "$(test "$(tdm_run -T 1)" = "$tdm_pt" && echo same || echo different)" "different"
+check "--self-crib-tandem is -T-independent" \
+  "$(tdm_run --self-crib-tandem -T 1)" "$(tdm_run --self-crib-tandem -T 4)"
+# It adds hypotheses rather than replacing them: a separated doubling must still be
+# hypothesised with the flag on, so the count strictly grows.
+tdm_hyps() { { printf '%s' "$tdm_ct" | "$ENIGMA" -c -i -u B -w 342 -r ALZ -g VAT \
+              --self-crib-seeds 1 --self-crib-length 6 "$@" >/dev/null; } 2>&1 \
+              | sed -n 's/^Self-crib:.* \([0-9]*\) hypotheses.*/\1/p'; }
+check "--self-crib-tandem adds hypotheses, does not replace them" \
+  "$(awk -v a="$(tdm_hyps)" -v b="$(tdm_hyps --self-crib-tandem)" \
+     'BEGIN { print (b > a) ? "more" : "not-more" }')" "more"
+check "--self-crib-tandem says so in the settings echo" \
+  "$(tdm_hyps --self-crib-tandem >/dev/null; { printf '%s' "$tdm_ct" | "$ENIGMA" -c -i \
+     -u B -w 342 -r ALZ -g VAT --self-crib-seeds 1 --self-crib-tandem >/dev/null; } 2>&1 \
+     | grep -c 'separated or tandem')" "1"
+# Rejections.  --signature says the copies are separated by an X closing the message;
+# --tandem says they are not separated at all.  That is a contradiction, not a
+# narrowing, so it is refused rather than silently preferring one.
+check "--self-crib-tandem rejects a run with no --self-crib-seeds" \
+  "$(sig_rejects -c --self-crib-tandem)" "1"
+check "--self-crib-tandem rejects --self-crib-signature" \
+  "$(sig_rejects -c --self-crib-seeds 1 --self-crib-tandem --self-crib-signature)" "1"
+
 echo
 echo "== Crib deduction: --crib =="
 
@@ -2493,6 +2571,103 @@ check "--crib sweeps more than one alignment" \
 check "--crib: the sweep still recovers the plaintext" \
   "$(run "$cb_ct" -i -u B -w 123 -r AAA -g ... -s "$cb_plugs" --crib OBERKOMMANDO)" \
   "$cb_pt"
+
+# --crib-seeds K: IC-rank the surviving hypotheses and climb only the best K, as
+# --self-crib-seeds does.  A SWEPT crib leaves many survivors per key and every one
+# currently gets a full plugboard climb, which is what puts short cribs out of reach.
+# shellcheck disable=SC2086
+cs_run() { { printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA \
+             -g "AA." -R 0 -T 1 --crib OBERKOMMANDO "$@" >/dev/null; } 2>&1; }
+cs_iters() { cs_run "$@" | sed -n 's/.*scored \([0-9]*\) plugboard.*/\1/p'; }
+# The saving is the point, so assert it rather than the flag merely being accepted:
+# capping at 3 must cost strictly fewer plugboards than climbing every survivor.
+check "--crib-seeds climbs fewer plugboards than every survivor" \
+  "$(awk -v a="$(cs_iters)" -v b="$(cs_iters --crib-seeds 3)" \
+     'BEGIN { print (b < a) ? "fewer" : "no-saving" }')" "fewer"
+
+# A crib-REJECTED key reports unit_no_score (-1e300), which is a sentinel and not a
+# score.  Feeding those to the null put ~99% of samples at -1e300: the mean sat at
+# ~-1e300, the variance OVERFLOWED to +inf, and (s - mu)/sd came out exactly 0 for
+# every board -- so every progress line printed the identical margin -z_k and the
+# summary printed a 300-digit null.  The three assertions below are the three
+# visible symptoms, so any one of them regressing is caught.
+cf_crib() { { printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA \
+              -g "..." -R 0 -T 1 --crib OBERKOMMANDO --crib-at 4 --confidence 32 \
+              --no-preflight >/dev/null; } 2>&1; }
+cf_crib_out=$(cf_crib)
+check "--confidence: a crib-rejected key is not counted in the null" \
+  "$(printf '%s' "$cf_crib_out" \
+     | sed -n 's/^Confidence: null \(-*[0-9.]*\) .*/\1/p' \
+     | awk '{ print ($1 > -100) ? "sane" : "overflowed" }')" "sane"
+check "--confidence: the null spread stays finite under a crib" \
+  "$(printf '%s' "$cf_crib_out" \
+     | sed -n 's/.*+\/- \([0-9a-zA-Z.]*\) over.*/\1/p' \
+     | awk '{ print ($1 == "inf" || $1 + 0 <= 0) ? "broken" : "finite" }')" "finite"
+# The clinching symptom: with the null broken EVERY line read the same margin.
+check "--confidence: margins vary from board to board under a crib" \
+  "$(printf '%s' "$cf_crib_out" | grep -E '^ *[+-][0-9]' \
+     | awk '{ print $1 }' | sort -u | wc -l \
+     | awk '{ print ($1 > 1) ? "vary" : "all-identical" }')" "vary"
+# ... and the answer must survive the cut.  This is the property that matters: a cheaper
+# run that stops finding the key is worthless.  Scored by IC with the board given, which
+# also shows the ranking needs NO language and no n-gram table -- it is the index of
+# coincidence of the decrypt, exactly as --self-crib-seeds ranks.
+check "--crib-seeds still recovers the plaintext" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -i -u B -w 123 -r AAA -g ... \
+     -s "$cb_plugs" -R 0 -T 1 --crib OBERKOMMANDO --crib-seeds 5 2>/dev/null)" "$cb_pt"
+# Cutting the list must not change the answer when the winner is inside the cut.  Run
+# under n-grams too, so both scoring families are covered.
+check "--crib-seeds agrees with climbing every survivor" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g "AA." \
+     -R 0 -T 1 --crib OBERKOMMANDO --crib-seeds 8 2>/dev/null)" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g "AA." \
+     -R 0 -T 1 --crib OBERKOMMANDO 2>/dev/null)"
+# K=0 is off, and must leave the historical path byte-identical -- including the count
+# of plugboards scored, which the seeded path's deduplication would change.
+check "--crib-seeds 0 is exactly the unseeded run" \
+  "$(cs_iters --crib-seeds 0)" "$(cs_iters)"
+# REGRESSION: --crib with -s used to build a board that was not an involution and then
+# SMASH THE STACK formatting it.  The deduction started from an empty board, so a
+# hypothesis could deduce A-D while -s said A-B; seeding overwrote steck[A] and left
+# steck[B] pointing at A, and format_plugboard -- sized for the 13 pairs an involution
+# can have -- walked off the end of its buffer on the 14+ that a corrupt board yields.
+# The deduction now starts from what -s and --no-plug already fix, so such a hypothesis
+# is rejected by crib_set instead.  Asserted two ways: the run must exit 0, and no
+# progress line may carry more than 13 pairs.
+check "--crib with -s does not crash" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -s "$cb_plugs" -R 0 -T 1 --crib OBERKOMMANDO >/dev/null 2>&1; echo $?)" "0"
+check "--crib with -s never echoes an impossible plugboard" \
+  "$({ printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -s "$cb_plugs" -R 0 -T 1 --crib OBERKOMMANDO >/dev/null; } 2>&1 \
+     | progress_lines | awk '{ n = 0; for (i = 5; i < NF; i++) n++; \
+       if (n > 13) bad++ } END { print bad+0 }')" "0"
+# The deduction must also still agree with the true board when -s is given -- rejecting
+# contradictions must not reject the TRUTH, which is the zero-tolerance direction.
+check "--crib with -s does not reject the true key" \
+  "$(cb_err --crib OBERKOMMANDO --crib-at 4 -s "$cb_plugs" -c \
+     | grep -c 'rejected 0 of 1 key')" "1"
+# -T-independence: the ranking is per key and deterministic, so thread count cannot
+# move the result.
+check "--crib-seeds is -T-independent" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -R 0 -T 1 --crib OBERKOMMANDO --crib-seeds 4 2>/dev/null)" \
+  "$(printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA -g ... \
+     -R 0 -T 4 --crib OBERKOMMANDO --crib-seeds 4 2>/dev/null)"
+check "--crib-seeds echoes what it will do" \
+  "$(cs_run --crib-seeds 7 | grep -c '^Crib seeds: top 7 ')" "1"
+# Rejections, all fatal: each names something the command line asks for and the search
+# cannot honour.
+cs_rejects() { printf '%s' "$cb_ct" | "$ENIGMA" -u B -w 123 -r AAA -g AAA "$@" \
+               >/dev/null 2>&1; echo $?; }
+check "--crib-seeds rejects a run with no climb" \
+  "$(cs_rejects --crib OBERKOMMANDO --crib-seeds 3)" "1"
+check "--crib-seeds rejects a run with no crib" \
+  "$(cs_rejects -c --crib-seeds 3)" "1"
+check "--crib-seeds rejects a negative count" \
+  "$(cs_rejects -c --crib OBERKOMMANDO --crib-seeds -1)" "1"
+check "--crib-seeds rejects an absurd count" \
+  "$(cs_rejects -c --crib OBERKOMMANDO --crib-seeds 99999)" "1"
 
 # The alignment the crib survived at goes in its own progress-line column, since a swept
 # run produces lines from many alignments and they are otherwise indistinguishable. The

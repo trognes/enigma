@@ -8,6 +8,60 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--self-crib-tandem` — hypothesise a doubled word with no separator**
+  (`SIEGFRIEDSIEGFRIED`), which `--self-crib-seeds` could not see at all: its 26
+  guesses are on `steck[X]` and the separator anchor is what carries that guess
+  into the message.
+  - **Opt-in on cost, not on whether it works.** Recall barely moves (a correct
+    hypothesis exists in 195 of 200 trials against the separated case's 197),
+    but gap 0 has as many alignments as gap 1, so enumerating both roughly
+    **doubles the hypothesis count** (+101% over the corpus) — which would take
+    the seeder past the `-R 16` baseline it is measured against. It buys **3 of
+    66 corpus messages, +4.5pp** — four carry a tandem doubling, but one also
+    carries a separated `ZANDERS`, so the default already seeds it.
+  - **Measured end to end** (60 paired 676-key sweeps per pool, board hidden,
+    `--self-crib-seeds 10`; `eval/selfcrib_tandem_ab.py`). On the payoff
+    population — messages with a tandem doubling and no separated one — exact
+    recovery goes **3/60 → 22/60**, 19 only-on against 0 only-off, McNemar
+    **p = 3.8e-6**. On the risk population, where every tandem hypothesis is
+    wrong by construction and competes for the same `K` seed slots, 38/60 →
+    36/60 shows **no measurable loss** (0 only-on, 2 only-off, p = 0.5).
+    Corpus-weighted that is ~+0.6pp for **2.6× the wall time**, which is the
+    arithmetic that keeps it opt-in.
+  - **Plugboards scored go *down*** (2.42 M → 2.31 M) while wall time rises
+    2.6× — the whole added cost is the uncounted deduction, so `score_iter` is
+    the wrong axis for this flag and reports the opposite sign.
+  - **A tandem repeat is not anchorless**: it has no separator but nearly always
+    has an X *before* it (4 of 4 in the corpus), so the left flank is asserted
+    instead. That recovers most of the sharpness — top-5 168 → 182 of 200 —
+    which is why the variant is usable at all.
+  - Demonstrated on the corpus message carrying `SIEGFRIEDSIEGFRIED`: with the
+    board hidden and the rotor key given, the default reaches 82.7% of letters
+    and misses, `--self-crib-tandem` recovers it exactly, and *faster* (0.20 s
+    against 0.77 s) because the correct seed converges at once.
+  - Refused with `--self-crib-signature`, which asserts the copies *are*
+    separated by an X closing the message — a contradiction, not a narrowing.
+
+- **`--crib-seeds K` — IC-rank an ordinary crib's hypotheses and climb only the
+  best K**, exactly as `--self-crib-seeds` does. `crib_unit()` ran a full
+  plugboard climb on *every* surviving (alignment, hypothesis) pair, and a swept
+  short crib leaves a great many: measured at the true key, **438.6 survivors at
+  an 8-letter crib, 90.7 at 10, 8.3 at 12, 1.5 at 14**.
+  - A correct hypothesis pins several correct plugs, which lifts the index of
+    coincidence of its decrypt before any climbing — so the ranking needs no
+    language and no n-gram table.
+  - **The window is narrow and bounded on both sides.** At 12+ ranking is
+    perfect and pointless (nothing left to cut); at 8 the top 10 keeps only 57%
+    of correct hypotheses; only at ~10 letters are both true at once — 91
+    survivors, top-10 keeps 92.5% (`eval/crib_ic_rank.py`).
+  - **On the sweep, `K=10` costs nothing**: 20 trials, 10-letter crib, board
+    hidden, 676-key sweep — 19/20 exact against the unseeded run's 19/20 with
+    **zero discordant trials**, for **12.1× fewer plugboards**. `K=3` gives up 3
+    breaks for 43.6×, `K=1` gives up 4 for 138×. Use `K=10`, the same operating
+    point `--self-crib-seeds` reached (`eval/crib_seeds_ab.py`).
+  - `0` = off and leaves the historical path byte-identical, including the count
+    of plugboards scored. `-T`-deterministic.
+
 - **Pre-flight: is this ciphertext even Enigma?** (on by default;
   `--no-preflight` turns it off). Enigma is a permutation
   cipher, so its output is near-flat; a ciphertext carrying residual language
@@ -473,6 +527,78 @@ existing command lines can behave differently or stop working.
   carrying this needs a major version bump.**
 
 ### Fixed
+
+- **`--confidence` was broken by any selective `--crib`: every progress line
+  printed the same margin.** A crib-rejected key reports `unit_no_score`
+  (`-1e300`) — a sentinel meaning *this unit produced no candidate*, not a
+  score — and `calibrate_null()` pushed it straight into the sample. A crib
+  worth using rejects 99%+ of keys, so nearly every sample was `-1e300`: the
+  mean sat at ≈`-1e300`, the **variance overflowed to `+inf`**, and
+  `(s − μ)/σ` came out exactly `0.0` for every board. The visible result was a
+  300-digit null in the summary and the identical margin `−z_k` on every line.
+  Those keys are not part of the null the search draws from — it never scores
+  them — so they are now excluded, and the attempt budget is raised to
+  compensate (a rejected draw costs only the deduction, an accepted one a whole
+  climb). When a crib is so selective that too few samples survive, the run
+  says so, names the crib as the cause, and falls back to raw scores instead of
+  reporting nonsense. **The search itself was never affected** — only the
+  calibration; the run that surfaced this recovered its plaintext correctly.
+  - Residual, unchanged and deliberately conservative: the bar is still
+    `√(2 ln K)` over *all* keys rather than the smaller number a crib actually
+    lets through to be scored, so a crib run's margin is understated by roughly
+    0.5–1.1 σ. Conservative is the safe direction for an "is this a find?"
+    test.
+
+- **`--confidence`'s "not a find" note impersonated a progress line.** The
+  documented way to pull a run's margin off stderr is `grep '^ *[+-][0-9]'`,
+  and the near-zero caveat wrapped as `"… on signal-free text a margin of\n
+  +0.5 sd came up …"` — so its **continuation line matched that pattern** and
+  an extractor silently read the caveat back as the run's result. `+0.5` is a
+  plausible margin, so nothing looked wrong. Found when a sweep of 33 known
+  1941 day keys against the unbroken BYQMZ reported *"+0.5 sd came up in 2-5%
+  of runs"* as the margin for all 33. Re-wrapped so no line begins with a
+  signed number. This is the same bug class the pre-flight lines were already
+  guarded against, and the suite now asserts it of the confidence summary too —
+  verified by injecting the old wording and watching the new check fail.
+
+- **`--crib` with `-s` could build an impossible plugboard and smash the
+  stack.** The deduction started from an empty board, so a hypothesis could
+  deduce `A–D` while `-s` said `A–B`; seeding overwrote `steck[A]` and left
+  `steck[B]` pointing at `A`. The result was not an involution, and
+  `format_plugboard` — sized for the 13 pairs an involution can have — walked
+  off its buffer on the 14+ a corrupt board yields, aborting with *"stack
+  smashing detected"*. `crib_try()` now starts from what `-s` and `--no-plug`
+  already fix,
+  so `crib_set` rejects a contradicting hypothesis instead; `format_plugboard`
+  additionally refuses to overrun whatever it is handed. Found while testing
+  `--crib-seeds`; it predates that work and reproduces on the released code.
+  - **It is not only a crash fix — `--crib` with `-s` was doing enormously more
+    work than it needed to**, because the contradicting hypotheses it should
+    have rejected were instead let through to corrupt the board. Now they are
+    rejected by arithmetic, and the saving scales with the number of pins.
+    Measured on one 90-letter message, a 12-letter swept crib, 17 576 keys,
+    plugboards scored before → after (every arm still recovers the plaintext
+    exactly):
+
+    | `-s` pins | before | after | |
+    |---|---:|---:|---:|
+    | `AB` | 20 736 444 | 211 588 | 98× |
+    | `AB CD` | 15 555 774 | 1 851 | 8 404× |
+    | `AB CD EF` | 11 425 564 | 36 | 317 377× |
+    | `AB CD EF GH IJ` | 6 057 585 | 2 | 3 028 790× |
+
+    Key rejection on that problem goes from 9.3% to 100.0% with three pins —
+    every wrong key is now killed by the deduction and only the true one is
+    ever climbed.
+  - **The other half: a WRONG pin is now fatal instead of free.** It used to be
+    overwritten silently and the search still succeeded; now it kills every
+    hypothesis at every alignment and the run ends *"No machine configuration
+    produced a score"*. On a board of `AB CD EF GH IJ KL MN OP QR ST`,
+    `--no-plug UVWXYZ` (true) recovers the plaintext in 1 839 plugboards and
+    `--no-plug QWERTYU` (false — Q, E, R, T are plugged) now returns nothing
+    where the released code returned the correct plaintext. Failing loudly on
+    contradictory input is right, but a *guessed* plug belongs in
+    `--soft-plug`, not `-s`.
 
 - **`--full-text` wrapped 2 columns short of the progress line.** The
   continuation width dated from a 79-column target; the progress lines were

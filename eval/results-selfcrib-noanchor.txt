@@ -1,0 +1,16 @@
+Does a doubled word work as a self-crib WITHOUT the X between the copies?
+
+200 trials, 10-pair board, true key, doubled word of 6+ letters
+corpus: 18 messages carry W X W, 4 carry a separator-free W W
+
+arm                                surv   cables    correct  rank 1   top-5
+----------------------------------------------------------------------------
+W X W, separator asserted           4.9      4.2    197/200     167     192
+W X W, anchor withheld              6.6      3.7    195/200     142     182
+W W, separator-free                 8.7      3.4    195/200     117     168
+W W + left flank asserted           7.2      3.6    195/200     136     182
+
+surv    = hypotheses of 26 surviving the deduction (fewer = sharper)
+cables  = real plug pairs the average survivor deduces
+correct = trials where a survivor's every plug matches the true board
+          AND it deduces at least one cable

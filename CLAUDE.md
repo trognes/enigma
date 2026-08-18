@@ -97,7 +97,16 @@ model, so a delta between the two rows is the scorer and nothing else;
 verified by A/B-ing across the change it was built to catch, where `fused`
 read −3.6/−4.1/−4.1% while `hillclimb` read +4.0/+5.3/−2.4%, i.e. noise.
 `crib` is the only tier that exercises `crib_try` (63.6% of a crib sweep) at
-all. Each has a `quick` tier (default, a few seconds) and an opt-in `long`
+all, and it earned its keep: a 26-letter prologue added to `crib_try` — to seed
+the deduction from `-s`/`--no-plug` pins — cost **+48% quick and +51% long**
+while the other three tiers stayed inside their floors. **In that tier the
+PER-HYPOTHESIS FIXED COST is what matters**, not the closure: the sweep calls
+`crib_try` 26 times per key and on a wrong key most hypotheses die within a few
+edges, so 26 extra iterations roughly doubled the work. Anything added to the
+top of `crib_try` should be behind a flag that is false in the common case
+(`g_have_known_plugs`), not merely cheap per iteration.
+
+Each has a `quick` tier (default, a few seconds) and an opt-in `long`
 tier (`make bench LONG=1`, ≥15–30s each) for a stronger signal; `make bench
 SCALE=1` additionally sweeps `-T` to show thread scaling. Timing is the min of
 several repetitions (the per-tier benchmarks are single-threaded). The
@@ -106,9 +115,22 @@ same-machine A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>`
 in a throwaway git worktree and runs both, failing if any benchmark
 is >`THRESHOLD`% (default 10) slower than BASE — run this around the planned
 global-state/threading refactor to confirm single-thread throughput hasn't
-regressed. **CI uses the same 10%** — the `Bench` workflow sets no
+regressed. **CI REPORTS at the same 10%** — the `Bench` workflow sets no
 `THRESHOLD` override, so there is one number and it cannot drift from this
-sentence. That step is `continue-on-error`, so the bound is non-blocking.
+sentence — **and BLOCKS at `FAIL_OVER=25%`.** Two levels, because one number
+cannot serve both purposes: 10% is below the measured noise floor on some
+tiers (see the control data below — up to ±10% on clang `hillclimb` in a
+container), so a hard gate there would fail clean PRs, while 25% is 2.5× the
+worst floor ever recorded here and cannot plausibly be scatter. Locally
+`FAIL_OVER` defaults to `THRESHOLD`, so `make bench BASE=…` still exits
+non-zero at 10% as it always did.
+
+The split was added after a **+50% crib-sweep regression was flagged and merely
+advisory** (the step used to be `continue-on-error`). The run that verified the
+fix demonstrated the reason for two levels in one shot: with the regression
+reintroduced on a busy box, `crib` read **+45.6%** (blocked, real) while
+byte-identical `fused` read **+11.9%** (flagged only, pure noise). A single 10%
+gate would have failed on the second.
 
 **`BASE` can be a release tag, and a per-PR guard cannot see cumulative drift —
 so check against the last release now and then.** `make bench BASE=v2.1.0` at
@@ -616,6 +638,53 @@ are read from a **data directory** (filenames built as
   - **`-R 0` is right and the kick should stay off**: a seeded climb starts near
     the answer, and `-R 0` measured 201 of 204 exact recoveries at half the
     compute of `-R 8`. `-R N` still asks for N kicked passes.
+  - **`--self-crib-tandem` adds the doubled word with NO separator**
+    (`SIEGFRIEDSIEGFRIED`), which the default cannot see at all: the 26 guesses
+    are on `steck[X]`, and the separator anchor is what carries that guess into
+    the message, so a tandem repeat forms no hypothesis. **Opt-in on cost, not
+    on whether it works.** Recall barely moves — a correct hypothesis exists in
+    195 of 200 trials against the separated case's 197 — but gap 0 has as many
+    alignments as gap 1, so enumerating both roughly **doubles the hypothesis
+    count** (+101% over the corpus). Per-key cost tracks that count almost
+    linearly (2196 hypotheses ↔ 2428 µs, 1328 ↔ 1065), so on by default it
+    would take the seeder to ~4900 µs per key — past the 2901 µs of the `-R 16`
+    baseline it is measured against, i.e. it would cost the feature its
+    headline. What it buys is **3 of 66 corpus messages, +4.5pp**
+    (`SIEGFRIED`, `OSTROW`, `ROSENOW`). Four messages carry a tandem doubling,
+    but one of them also carries a separated `ZANDERS`, so the default already
+    seeds it and the flag can add nothing there — the payoff population is the
+    **tandem-only** three.
+  - **Measured end to end, and on those three messages it is decisive.** 60
+    paired 676-key sweeps per pool, board hidden, `--self-crib-seeds 10`,
+    `-R 0`, the arms differing only by the flag
+    (`eval/selfcrib_tandem_ab.py`, `eval/results-selfcrib-tandem.txt`):
+
+    | pool | off | on | discordant | wall |
+    |---|---:|---:|---|---:|
+    | tandem-only | 3/60 | **22/60** | 19 only-on, 0 only-off | 2.64× |
+    | separated-only | 38/60 | 36/60 | 0 only-on, 2 only-off | 2.60× |
+
+    The payoff arm is `p = 3.8e-6` (McNemar), +31.7pp with a 95% CI of
+    [+19.8, +43.5]. The risk arm — where every tandem hypothesis is wrong by
+    construction and competes for the same `K` seed slots — shows **no
+    measurable loss** (p = 0.5, −3.3pp, CI [−7.9, +1.2]), though the sign is
+    the one crowding-out predicts and the interval rules out only a *large*
+    loss. **Corpus-weighted that is ~+0.6pp for 2.6× the time**, which is the
+    arithmetic that keeps it opt-in.
+  - **The cost is 2.6× wall while plugboards SCORED go DOWN** (2.42 M → 2.31 M)
+    — the `score_iter`-is-the-wrong-axis note again, in its sharpest form yet:
+    the whole added cost is the uncounted deduction, and the counter moves the
+    other way because more-constrained seeds make the climbs cheaper.
+  - **A tandem repeat is not anchorless, and that is what makes it usable.** It
+    has no separator but nearly always has an X *before* it — 4 of 4 in the
+    corpus, matching the 96% left-flank rate for the separated case — so the
+    left flank is asserted instead and the closure runs unchanged. That
+    recovers most of the sharpness: top-5 168 → **182** of 200, level with a
+    separated word whose own anchor is withheld (192 fully anchored). A
+    hypothesis with no anchor at all would deduce nothing, which is why the
+    left flank is always asserted at gap 0 and only the right one is a variant.
+    Refused with `--self-crib-signature`, which says the copies *are* separated
+    by an X closing the message — a contradiction, not a narrowing.
   - Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
     and `--tune-phase` — each installs its own starting board or moves the key
     the deduction was computed for. `-T`-deterministic; the dedupe key is the
@@ -844,7 +913,25 @@ are read from a **data directory** (filenames built as
   **does not reproduce at L=167 under either target**, which points back at
   **LENGTH** (or some other difference in that original setup) rather than at an
   interaction. A single run at L=60 did lean mono under `-f` (+1.77pp, CI spans
-  0), consistent with a crossover somewhere between. Note also that this — like
+  0), consistent with a crossover somewhere between.
+
+  **The midpoint is now measured, and the answer is that it does not matter
+  there.** Same five-seed design at **L=107** (2000 paired trials,
+  `eval/prepass_ab.py --length 107`): pooled `m4f10 − i4f10` = **−1.28pp**, 95%
+  CI [−3.28, +0.73], z = −1.25, exact 33.5% against 34.8% (McNemar p = 0.278),
+  heterogeneity Q = 4.40 on 4 df — so the seeds agree with each other and there
+  simply is no resolvable effect. Lined up by length the pre-pass effect is
+  monotone and crosses zero below 107:
+
+  | L | `m4f10 − i4f10` | reading |
+  |---:|---:|---|
+  | 60 | +1.77pp | leans mono, CI spans 0 |
+  | 107 | **−1.28pp** | **indistinguishable**, CI spans 0 |
+  | 167 | −2.81pp | IC wins, z = 2.76 |
+
+  So `i4f10` is never behind at or above ~107 and is the safe pick across the
+  operational range; the `m4f10` default only has a case below that. Note also
+  that this — like
   every other tuning result here — measures the **plugboard-recovery**
   sub-problem with the rotor key given. The schedule
   carries **only** model stages: the per-restart kick and the exhaustion are
@@ -1001,6 +1088,26 @@ are read from a **data directory** (filenames built as
     s ≈ −9.43 and **above that — where a real break sits — the plain null
     overstates**. Near zero it undersold a run; far out it would have oversold
     one.
+  - **A key the unit REJECTS must be dropped, not sampled.** `crib_unit()` /
+    `self_crib_unit()` return `unit_no_score` (`-1e300`) when no hypothesis
+    survives — a sentinel so the unit never wins the merge, not a score. It
+    used to go straight into the null, and since a crib worth using rejects
+    99%+ of keys, nearly every sample was `-1e300`: μ ≈ `-1e300`, the variance
+    **overflowed to `+inf`**, and `(s − μ)/σ` was exactly `0.0` for every
+    board — so every progress line printed the identical margin `−z_k` and the
+    summary printed a 300-digit null. The search was unaffected throughout
+    (the run that surfaced it recovered its plaintext), which is exactly why it
+    went unnoticed. Rejected keys are not in the null the search draws from,
+    since it never scores them. The attempt budget is `want·256 + 4096` rather
+    than the plain path's `·64`, because a rejected draw costs only the
+    deduction while an accepted one costs a climb; if too few still survive,
+    the run names the crib and falls back to raw scores.
+  - **`K` is still the TOTAL key count under a crib, which is conservative.**
+    The best-of-`K` bar should strictly use the number of keys actually
+    *scored*, which a crib cuts by ~100×; using the total overstates the bar by
+    ~0.5–1.1σ, so a crib run's margin reads low. That is the safe direction for
+    a "is this a find?" test, and the accepted count is not known before the
+    sweep — the same reason the `--ring-stride` refinement's keys are excluded.
   - **Keys are sampled, not random text.** The null a search actually draws
     from is "this ciphertext under a wrong key", and `key_to_machine()` already
     builds exactly that in every machine mode.
@@ -1085,6 +1192,19 @@ are read from a **data directory** (filenames built as
   The signal is there, it is just 2% of the total. The cost arms therefore fix
   `-g` so the search itself is one climb and the calibration is nearly the whole
   run.
+
+  **No line of the summary may look like a progress line either** — the rule
+  the pre-flight block carries, and this one broke it. The documented way to
+  read a run's margin off stderr is `grep '^ *[+-][0-9]'`, and the near-zero
+  note wrapped as `"… a margin of\n            +0.5 sd came up …"`, so the
+  **continuation was such a line** and an extractor read the caveat back as the
+  result — silently, because `+0.5` is a plausible margin. Found when a sweep
+  of 33 known 1941 day keys against BYQMZ reported *"+0.5 sd came up in 2-5% of
+  runs"* as the margin for every one of them. Re-wrapped so no line begins with
+  a signed number, and `tests/run_tests.sh` now asserts it of the summary as it
+  already did of the pre-flight lines (verified by injecting the old wording).
+  The lesson generalises: **any new stderr line is a candidate for this bug**,
+  and the two guards are cheap.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a
   long-message throughput tool, unreliable on the short/hard end and
@@ -1157,6 +1277,42 @@ are read from a **data directory** (filenames built as
   rejection count is reported per key, counted at the key's first work item**: a
   key's restarts can straddle a chunk boundary and be seen as new by two
   workers, so counting at the deduction would make the total depend on `-T`.
+- **`-s` pins now CONSTRAIN the deduction, and that is worth orders of
+  magnitude.** `crib_try()` starts the closure from whatever `-s` and
+  `--no-plug` already fix, so a hypothesis contradicting them dies at
+  `crib_set` instead of being carried through and silently overwriting the
+  pinned plug at the seeding site. That overwrite was the stack smash (a
+  non-involution board overflowing `format_plugboard`), but the crash was the
+  cheap half of the bug: the expensive half is that every contradicting
+  hypothesis used to survive and get a **full plugboard climb**. Measured on a
+  90-letter message with a 12-letter swept crib over 17 576 keys, plugboards
+  scored before → after, plaintext recovered in every arm:
+
+  | `-s` pins | before | after | |
+  |---|---:|---:|---:|
+  | `AB` | 20 736 444 | 211 588 | 98× |
+  | `AB CD` | 15 555 774 | 1 851 | 8 404× |
+  | `AB CD EF` | 11 425 564 | 36 | 317 377× |
+  | `AB CD EF GH IJ` | 6 057 585 | 2 | 3 028 790× |
+
+  Key rejection goes 9.3% → **100.0%** at three pins: the deduction kills every
+  wrong key and only the true one is ever climbed. So `--crib` with **any**
+  known plugs is a different proposition from `--crib` alone — the two kinds of
+  knowledge compound, where before they fought. The default path (no `-s`, no
+  `--no-plug`) is untouched: `plug_fixed` is all false, so the seeding loop
+  sets nothing.
+  - **The pins are now LOAD-BEARING, which is the other half of the same
+    change.** Being wrong about one used to cost nothing — the contradiction
+    was silently overwritten and the search still found the key. Now it kills
+    every hypothesis at every alignment, so the run ends *"Fatal error: No
+    machine configuration produced a score"* (the same way a `--crib` that
+    rejects every key already did). Demonstrated on a board of `AB CD EF GH IJ
+    KL MN OP QR ST`: `--no-plug UVWXYZ` is true and recovers the plaintext in
+    1 839 plugboards, `--no-plug XYZ` likewise in 58 063, while `--no-plug
+    QWERTYU` — false, since Q, E, R and T are all plugged — now returns
+    nothing where the released code returned the correct plaintext. Failing
+    loudly on contradictory input is the right behaviour, but it does mean a
+    guessed pin belongs in `--soft-plug`, not in `-s`.
 - **The menu is walked BREADTH-FIRST FROM THE ANCHOR, not in crib order.** An
   edge deduces nothing until one endpoint is known, and at the start only the
   anchor is; in crib order the loop visits edges whose endpoints are both
@@ -1203,6 +1359,35 @@ are read from a **data directory** (filenames built as
   alignment, and the cribs differ in length). The progress-line column header is
   printed once for the run, and the echo high-water mark carries across cribs so
   a later crib cannot re-print boards worse than the best already found.
+- `--crib-seeds K` **IC-rank the crib's surviving hypotheses and climb only the
+  best `K`** (needs `-c`; `0` = off, the historical climb-every-survivor path,
+  kept byte-identical). The same lever as `--self-crib-seeds`, and it applies
+  because `crib_unit()` had the same shape: a swept crib leaves a *set* of
+  surviving (alignment, hypothesis) pairs and every one used to get a full
+  plugboard climb.
+  - **Why there is anything to rank.** Survivors per key at the true key:
+    **438.6 at an 8-letter crib, 90.7 at 10, 8.3 at 12, 1.5 at 14**. Long cribs
+    reject nearly everything and leave nothing to cut; short ones leave hundreds
+    of climbs per key, which is exactly what puts them beyond reach — the swept
+    floor is documented as 16 letters.
+  - **Why IC works.** A correct hypothesis pins several correct plugs, and that
+    lifts the index of coincidence of its decrypt before any climbing. No
+    language and no n-gram table needed, the same reason `--self-crib-seeds`
+    ranks on it.
+  - **The window is narrow and bounded on BOTH sides** (`eval/crib_ic_rank.py`,
+    40 trials/length, true key): at 12+ ranking is perfect and pointless, at 8
+    the top 10 keeps only 57% of correct hypotheses, and only at ~10 letters are
+    both true at once — 91 survivors, top-10 keeps 92.5%.
+  - **Measured on the sweep, which is the number that decides it**
+    (`eval/crib_seeds_ab.py`, 20 trials, 10-letter crib, board hidden, 676-key
+    sweep): `K=10` recovers **19/20 against the unseeded run's 19/20 with zero
+    discordant trials, for 12.1× fewer plugboards**. `K=3` gives up 3 breaks for
+    43.6× and `K=1` gives up 4 for 138×. **Use `K=10`** — the same operating
+    point `--self-crib-seeds` settled on, reached independently.
+  - `-T`-deterministic; the dedupe key is the (board, pinned-letter-set)
+    **pair**, as in `--self-crib-seeds`, since two hypotheses can agree on
+    every cable
+    while one additionally proves a letter carries none.
 - `--no-crib-reorder` **keep a `--crib-list` in file order** (off by default,
   i.e. cribs run cheapest-measured-cost first). Reverses `archived/cribs.md`
   §5 step 5, which priced cribs with
@@ -2744,6 +2929,28 @@ the posterior instead — a failed `-r AA. -R 2` (36% win) and a failed stride-3
 > (−10.1261 against the true board's −9.1212) and needs `-R 64`. So size `-R`
 > against real traffic, not against the `crackquality` curve, when the target is
 > an actual message. §5i.
+
+> **How much LENGTH costs on the plugboard tier alone — the number to size a
+> real attempt with.** Rotor key *given*, 10-pair board hidden, `-f -l
+> wehrmacht -S i4f10`, 200 paired trials per cell on authentic HG Nord
+> decrypts (`eval/prepass_ab.py --length L --restarts R`), exact recovery:
+>
+> | L | `-R 8` | `-R 64` | an unbroken message at that length |
+> |---:|---:|---:|---|
+> | 82 | 12.0% | 32.0% | MVUEH (Nr 172) |
+> | 107 | 30.5% | 54.0% | RXPSB (Nr 53) |
+> | 167 | 73.0% | 91.0% | BYQMZ (Nr 8-C) |
+>
+> **This is the sub-problem with the key already known**, so a real sweep is
+> strictly worse — the true key must additionally outscore millions of
+> competitors. Two things follow. The curve is **still climbing steeply at
+> `-R 64` below ~110 letters** (30.5 → 54.0 at L=107, no sign of saturation),
+> where at L=167 it is already flattening — so the shorter the target, the more
+> of the budget belongs in `-R` rather than in coverage, reversing the
+> §"unknown-key break rate" advice tuned at L=167. And a 60-letter difference
+> in target length is worth **more than a 8× difference in restarts**: L=167 at
+> `-R 8` beats L=107 at `-R 64`. When choosing which unbroken message to
+> attack, length dominates every other consideration.
 
 Read `ENHANCEMENTS.md` and then `archived/IMPROVEMENTS.md` before changing the
 search or scoring code — in

@@ -1,0 +1,15 @@
+Does --self-crib-tandem pay on a real sweep, and what does it cost elsewhere?
+
+60 trials per pool, --self-crib-seeds 10, 10-pair board hidden,
+start position swept (676 keys), -l wehrmacht, doubling of 6+ letters
+pools: 3 messages carry only a tandem doubling, 17 only a separated one
+
+pool             arm    exact        plugboards     wall/trial
+--------------------------------------------------------------
+tandem-only      off    3/60         2422505        2.18 s
+tandem-only      on     22/60        2313922        5.75 s
+separated-only   off    38/60        2432733        1.82 s
+separated-only   on     36/60        2326873        4.73 s
+
+tandem-only      only-on 19, only-off 0  (net +19), wall 2.64x
+separated-only   only-on 0, only-off 2  (net -2), wall 2.60x

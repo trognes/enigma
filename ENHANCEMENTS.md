@@ -214,6 +214,60 @@ caller who *knows* a network's names are long can say so, not as a tuning knob.
 The weak short hypotheses cost nothing because the IC ranking already discards
 them.
 
+*The X between the copies is REQUIRED, and dropping it is viable — measured,
+not built.* `--self-crib-seeds` guesses `steck[X]` and seeds `self_crib_try`
+with exactly that, so the equality edges cannot start anything until an anchor
+propagates the guess into the message. A doubling with **no separator at all**
+— `SIEGFRIEDSIEGFRIED` — therefore forms no hypothesis and is invisible. Three
+of the 66 corpus messages carry a 6+ separator-free doubling and no
+X-separated one anywhere: `SIEGFRIED`, `OSTROW`, `ROSENOW`.
+
+The algebra does not need the X. An equality edge gives
+`steck[c_j] = core_j[core_i[steck[c_i]]]`, which relates two *ciphertext*
+letters' plugs and mentions no plaintext; guess `steck[c_0]` instead of
+`steck[X]` and the same closure runs. What is lost is edges, not grounding.
+`eval/selfcrib_noanchor.py`, true key, 200 trials, 10-pair board, 6+ letters —
+the middle arm is the controlled one, the same word at the same alignment with
+only the assertion withheld:
+
+| arm | survivors | cables | correct exists | rank 1 | top-5 |
+|---|---:|---:|---:|---:|---:|
+| `W X W`, separator asserted | 4.9 | 4.2 | 197/200 | 167 | 192 |
+| `W X W`, anchor withheld | 6.6 | 3.7 | 195/200 | 142 | 182 |
+| `W W`, no anchor at all | 8.7 | 3.4 | 195/200 | 117 | 168 |
+| `W W` + left flank asserted | 7.2 | 3.6 | 195/200 | 136 | 182 |
+
+**The anchor is worth sharpness, not existence.** Withholding it costs 1.3×
+more survivors and half a cable; the genuinely separator-free case costs 1.8×
+more survivors (8.7) and 0.8 fewer cables. What barely moves is **whether a
+correct hypothesis exists at all** — 197/200 against 195/200 — so recall is
+essentially intact and only the *ranking* degrades, top-5 96% → 84%. At the
+shipped `K = 10` operating point 8.7 survivors are all climbed anyway, so the
+extra cost is close to nothing in absolute terms.
+
+**A tandem repeat is not anchorless in practice, and that is the design point.**
+It has no separator, but it usually has an X *before* it — 4 of 4 in this
+corpus, matching the 96% left-flank rate already recorded for the separated
+case. Asserting that flank recovers most of the loss: top-5 goes 168 → **182**,
+level with the separated word whose own anchor is withheld. So the variant
+worth shipping is *tandem with flanks*, not tandem bare.
+
+**It should be OPT-IN, and the cost decides that rather than the benefit.**
+Enumerating gap 0 alongside gap 1 **doubles the hypothesis count** — 45 024 →
+45 552 more, +101% over the corpus — and per-key cost tracks hypothesis count
+almost linearly (2 196 hypotheses ↔ 2 428 µs, 1 328 ↔ 1 065). That would take
+the seeder from ~2 428 µs per key to ~4 900, past the 2 901 µs of the `-R 16`
+baseline it is measured against, i.e. it would cost the feature its headline.
+The coverage bought is **3 of 66 messages, +4.5pp** (`SIEGFRIED`, `OSTROW`,
+`ROSENOW`). A doubling of cost for 4.5pp is the classic opt-in profile.
+
+Two caveats before acting on it. The `W W` pool is **4 messages**, so those rows
+rest on a narrow base however many trials are drawn from them — and that is a
+corpus limit, not a sampling one, so more trials cannot fix it. And this is the
+**true key**: whether wrong keys also survive more — which would cost
+discrimination on a sweep — is unmeasured, the same gap the crib-seeds work had
+to close separately, and it needs the implementation to measure.
+
 *The C++ closure is checked against the probe, not just against outcomes.* A
 wrong deduction could still recover messages by luck, so the two are compared on
 the **number of distinct surviving seeds per key** — a structural quantity —
@@ -1251,6 +1305,66 @@ through it.
 **11. Menu reuse across alignments.** Shifting a crib by one position changes
 every edge, so probably not — but worth checking before assuming the alignment
 sweep pays full price each time.
+
+**12. IC-rank the surviving hypotheses, as `--self-crib-seeds` does — BUILT,
+as `--crib-seeds K`.** `crib_unit()` used to run a **full plugboard climb on
+every surviving (alignment, hypothesis) pair**, which is what the self-crib path
+did before ranking. It now dedupes, ranks by the index of coincidence of the
+decrypt under the deduced partial board, and climbs the top `K`; `0` is off and
+leaves the old path byte-identical. It is length-agnostic: any crib the tool
+already accepts (2 letters and up) can be seeded, and nothing filters by
+length — the table below is what to expect at each, not a restriction.
+
+**On the sweep — the number that decides it** (`eval/crib_seeds_ab.py`, 20
+trials, 10-letter crib, board hidden, 676-key sweep): `K=10` recovers **19/20
+against the unseeded 19/20 with zero discordant trials, for 12.1× fewer
+plugboards**. `K=3` gives up 3 breaks for 43.6×, `K=1` gives up 4 for 138×. So
+**`K=10`** — the same operating point `--self-crib-seeds` reached, arrived at
+independently.
+
+The ranking measurement that predicted it, at the true key, 40 trials per
+length, 10-pair board, alignment swept (`eval/crib_ic_rank.py`):
+
+| crib | surviving hyps | rank 1 | top-10 | median rank |
+|---:|---:|---:|---:|---:|
+| 8 | 438.6 | 15/40 | **23/40** | 6 |
+| 10 | 90.7 | 25/40 | **37/40** | 1 |
+| 12 | 8.3 | 40/40 | 40/40 | 1 |
+| 14 | 1.5 | 40/40 | 40/40 | 1 |
+
+**The window is ~10 letters, and it is bounded on both sides.** At 12+ the
+deduction already rejects nearly everything and there is no population left to
+rank — 8 hypotheses, then 1.5. At 8 the population explodes to ~440 and IC
+degrades with it: the top 10 keeps only 57% of correct hypotheses, so a 44×
+cut costs 42% of them. Only at **10 letters** are both true at once — 91
+hypotheses, top-10 keeps 92.5%, a **9× cut for ~7% loss**.
+
+That is worth having, because it is the regime the swept crib is currently
+locked out of ("16 letters is the swept floor"), and short cribs are the ones
+most likely to be *present* (93% of messages carry an 8-letter crib, 3% a
+20-letter one).
+
+Both cautions raised before building it were addressed. The true-key figures
+above could not see the sweep, where wrong keys are also ranked and cut — hence
+the end-to-end A/B, which is what `K=10` rests on. And the dedupe is keyed on
+the (board, pinned-letter-set) pair as the self-crib path is, since two
+hypotheses can agree on cables while one additionally proves a letter carries
+none.
+
+**Building it also turned up a crash that predates it.** `--crib` with `-s`
+could deduce `A–D` while `-s` said `A–B`, overwrite `steck[A]`, and leave a
+board that was not an involution — which then smashed the stack in
+`format_plugboard`, sized for the 13 pairs an involution can have. The
+deduction now starts from what `-s` and `--no-plug` already fix, so a
+contradicting hypothesis is rejected rather than silently applied.
+
+> A caution on the measurement itself: a 12-trial pilot at a different seed
+> read L=8 as 12/12 in the top 10 with median rank 1, and the 40-trial run
+> above reads 23/40 and median 6. The pilot was not wrong about 10 and 12; it
+> was wrong about the length where the population is largest and the ranking
+> hardest, which is the one the decision turns on. A hypothesis deducing no
+> cable at all is not scored correct — it is consistent with any board and
+> would inflate every figure here.
 
 ## Measurement gaps
 

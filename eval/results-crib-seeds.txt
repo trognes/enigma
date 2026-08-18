@@ -1,0 +1,17 @@
+Does --crib-seeds K keep the answer while cutting the climbs?
+
+20 trials, 10-letter crib from the true plaintext, 10-pair board
+HIDDEN, start position swept (676 keys), -l wehrmacht
+
+arm    exact        plugboards     vs all
+------------------------------------------------
+all    19/20        29915379       1.00x
+K=1    15/20        216668         138.07x
+K=3    16/20        686873         43.55x
+K=10   19/20        2474647        12.09x
+K=30   19/20        7977867        3.75x
+
+K=1    only-all 4, only-K=1 0
+K=3    only-all 3, only-K=3 0
+K=10   only-all 0, only-K=10 0
+K=30   only-all 0, only-K=30 0
