@@ -2164,6 +2164,26 @@ check "pre-flight does not flag a short genuine Enigma message" \
   "$(pf_run "WCZIEDSYTCDXOICDSXOXASIMEIORSRKRISSPCCOUIMDZYDM" -g "AA." \
      | grep -c '^WARNING')" "0"
 
+# The pre-flight block is part of the settings echo, so it must align with it:
+# a 12-wide label field and 12-space continuations, exactly like "Confidence: "
+# and "Machine:    ".  It shipped with 13 in both places and so sat one column
+# right of everything above it.  Asserted against the echo's OWN continuation
+# indent rather than the literal 12, so the two cannot drift apart.
+check "pre-flight continuations align with the rest of the settings echo" \
+  "$(pf_run "$pf_qtxma" -g "AA." | awk '
+     /^Machine:/   { getline; match($0, /^ */); echo = RLENGTH }
+     /^Pre-flight:/{ getline; match($0, /^ */); pf = RLENGTH }
+     END { print (echo > 0 && pf == echo) ? "aligned" : "echo=" echo " pf=" pf }')" \
+  "aligned"
+# The label field itself, same rule: "Pre-flight:" plus padding must occupy the
+# same width as "Machine:" plus its padding.
+check "pre-flight label field is the same width as the echo's" \
+  "$(pf_run "$pf_qtxma" -g "AA." | awk '
+     /^Machine:/    { match($0, /^Machine: */);    a = RLENGTH }
+     /^Pre-flight:/ { match($0, /^Pre-flight: */); b = RLENGTH }
+     END { print (a > 0 && a == b) ? "same" : "machine=" a " preflight=" b }')" \
+  "same"
+
 check "pre-flight output stays within 80 columns" \
   "$(pf_run "$pf_qtxma" -g "AA." \
      | sed -n '/^Pre-flight:/,/Proceeding anyway/p' | awk '{ print length }' \

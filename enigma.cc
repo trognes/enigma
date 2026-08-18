@@ -8004,14 +8004,18 @@ static void report_preflight()
      the shape of a progress line, and the harness greps stderr for
      `^ *[+-][0-9]` to pull the last margin out of a --confidence run. A
      second line reading "  +10.95 sd; ..." was picked up as one. */
+  /* Label field is 12 wide and continuations are indented 12, matching every
+     other settings-echo line ("Confidence: ", "Threads:    ", ...). This block
+     used to carry one space more in both places, so it sat a column right of
+     the rest of the echo. */
   fprintf(stderr,
-          "Pre-flight:  index of coincidence %.4f against the %.4f Enigma "
+          "Pre-flight: index of coincidence %.4f against the %.4f Enigma "
           "gives\n"
-          "             (%+.2f sd), and %d of %d letters unused (P = %.2g)\n",
+          "            (%+.2f sd), and %d of %d letters unused (P = %.2g)\n",
           s.ic, 1.0 / asize, s.z_ic, s.absent, asize, s.p_absent);
   if (! flagged)
     {
-      fprintf(stderr, "             consistent with Enigma output\n");
+      fprintf(stderr, "            consistent with Enigma output\n");
       return;
     }
   fprintf(stderr,
