@@ -115,9 +115,22 @@ same-machine A/B: `make bench BASE=<git-ref>` builds the binary at `<git-ref>`
 in a throwaway git worktree and runs both, failing if any benchmark
 is >`THRESHOLD`% (default 10) slower than BASE — run this around the planned
 global-state/threading refactor to confirm single-thread throughput hasn't
-regressed. **CI uses the same 10%** — the `Bench` workflow sets no
+regressed. **CI REPORTS at the same 10%** — the `Bench` workflow sets no
 `THRESHOLD` override, so there is one number and it cannot drift from this
-sentence. That step is `continue-on-error`, so the bound is non-blocking.
+sentence — **and BLOCKS at `FAIL_OVER=25%`.** Two levels, because one number
+cannot serve both purposes: 10% is below the measured noise floor on some
+tiers (see the control data below — up to ±10% on clang `hillclimb` in a
+container), so a hard gate there would fail clean PRs, while 25% is 2.5× the
+worst floor ever recorded here and cannot plausibly be scatter. Locally
+`FAIL_OVER` defaults to `THRESHOLD`, so `make bench BASE=…` still exits
+non-zero at 10% as it always did.
+
+The split was added after a **+50% crib-sweep regression was flagged and merely
+advisory** (the step used to be `continue-on-error`). The run that verified the
+fix demonstrated the reason for two levels in one shot: with the regression
+reintroduced on a busy box, `crib` read **+45.6%** (blocked, real) while
+byte-identical `fused` read **+11.9%** (flagged only, pure noise). A single 10%
+gate would have failed on the second.
 
 **`BASE` can be a release tag, and a per-PR guard cannot see cumulative drift —
 so check against the last release now and then.** `make bench BASE=v2.1.0` at

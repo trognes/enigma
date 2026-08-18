@@ -8,10 +8,20 @@ name: Bench
 #
 # On pull requests each cell runs the same-machine A/B (make bench BASE=<PR
 # base> LONG=1) -- the only reliable comparison, since absolute timings differ
-# per runner. The A/B step is ADVISORY (continue-on-error): shared CI runners
-# are noisy and the climb/scan tiers are known to be bimodal on shared boxes
-# (CLAUDE.md), so a flagged regression here means "re-run and investigate on
-# quiet hardware, and compare disassembly", not an automatic block.
+# per runner.
+#
+# TWO LEVELS, because one number cannot serve both purposes. Anything over 10%
+# is REPORTED and flagged, but does not fail the job: shared runners are noisy
+# and the climb/scan tiers are bimodal on them, with base-vs-base controls on
+# byte-identical code measuring up to +-10% on the clang hillclimb tier
+# (CLAUDE.md). A hard 10% gate across this 4-cell matrix would fail clean PRs.
+# Anything over FAIL_OVER=25% BLOCKS: that is 2.5x the worst noise floor ever
+# recorded in this repo, so it cannot plausibly be scatter. The step is no
+# longer continue-on-error -- it used to be, and a +50% crib-sweep regression
+# was reported and merely advisory, which is exactly the case this must stop.
+#
+# So: a flagged-but-passing cell means "re-check on quiet hardware and compare
+# disassembly"; a failed cell means the regression is real, fix it.
 #
 # On pushes to the long-lived branches (and manual dispatch) there is no
 # meaningful base, so each cell just records HEAD timings as a reference.
@@ -49,12 +59,13 @@ jobs:
           nproc
       - name: Build
         run: make CXX=${{ matrix.cxx }}
-      - name: Bench A/B vs PR base (advisory)
+      - name: Bench A/B vs PR base (reports at 10%, fails over 25%)
         if: github.event_name == 'pull_request'
-        continue-on-error: true
-        # No THRESHOLD override: CI uses the same 10% the script defaults to,
-        # so there is one number and it cannot drift from the docs. The step is
-        # continue-on-error, so a flagged cell is a prompt to re-check, not a block.
+        # No THRESHOLD override: CI reports at the same 10% the script defaults
+        # to, so there is one number and it cannot drift from the docs.
+        # FAIL_OVER is what blocks, and is deliberately far above the floor.
+        env:
+          FAIL_OVER: 25
         run: make bench CXX=${{ matrix.cxx }} LONG=1 BASE=${{ github.event.pull_request.base.sha }}
       - name: Bench HEAD (reference timings)
         if: github.event_name != 'pull_request'

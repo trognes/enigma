@@ -52,6 +52,17 @@
 # THRESHOLD percent (default 10) slower than BASE. (The cipher and the n-gram
 # tables are assumed unchanged between the two revisions -- this benchmarks
 # code, not data.)
+#
+# TWO LEVELS. THRESHOLD (default 10) is the REPORTING level: a cell above it is
+# marked REGRESSION and the run exits non-zero, which is what a developer wants
+# locally. FAIL_OVER (default: the same as THRESHOLD) is the level at which CI
+# should actually BLOCK. They are separate because the measurement noise floor
+# is large and per-tier -- base-vs-base controls on byte-identical code have
+# measured +-4.5% on hillclimb and up to +-10% on the clang hillclimb tier in a
+# container (CLAUDE.md) -- so a hard 10% gate across a 4-cell matrix would fail
+# clean PRs regularly. CI therefore reports at 10 and fails at FAIL_OVER=25,
+# which is 2.5x the worst floor ever recorded here and far below the kind of
+# regression this is meant to stop (the +50% crib-sweep one it caught).
 
 set -u
 
@@ -70,10 +81,12 @@ fi
 LONG=${LONG:-0}
 SCALE=${SCALE:-0}
 THRESHOLD=${THRESHOLD:-10}
+FAIL_OVER=${FAIL_OVER:-$THRESHOLD}
 QUICK_REPS=3
 LONG_REPS=2
 
 regressed=0
+hard_regressed=0
 skipped=0        # tiers the BASE binary could not run at all
 head_failed=0    # the head binary itself failed: a broken benchmark
 
@@ -258,6 +271,11 @@ bench() {
     if awk -v b="$_bt" -v h="$_ht" -v t="$THRESHOLD" 'BEGIN { exit !((h - b) / b * 100 > t) }'; then
       _flag="  REGRESSION"
       regressed=1
+      if awk -v b="$_bt" -v h="$_ht" -v t="$FAIL_OVER" \
+             'BEGIN { exit !((h - b) / b * 100 > t) }'; then
+        _flag="  REGRESSION (over ${FAIL_OVER}%)"
+        hard_regressed=1
+      fi
     fi
     printf '%-10s %-5s base %8.2fs  head %8.2fs  %7s%%%s\n' \
       "$_name" "$_tier" "$_bt" "$_ht" "$_delta" "$_flag"
@@ -389,10 +407,17 @@ if [ "$head_failed" -eq 1 ]; then
   sumln "**❌ the head binary failed to run at least one benchmark.**"
   exit 1
 fi
+if [ "$hard_regressed" -eq 1 ]; then
+  echo "RESULT: regression detected (> ${FAIL_OVER}% slower than BASE) -- past the noise floor"
+  sumln "**❌ regression >${FAIL_OVER}% slower than base on at least one benchmark. That is far past any measured noise floor, so this is a real regression, not scatter.**"
+  exit 1
+fi
 if [ "$regressed" -eq 1 ]; then
   echo "RESULT: regression detected (> ${THRESHOLD}% slower than BASE)"
   sumln "**⚠️ regression detected — >${THRESHOLD}% slower than base on at least one benchmark (advisory: re-check on quiet hardware; the shared runners are bimodal on the climb tier).**"
-  exit 1
+  [ "$FAIL_OVER" = "$THRESHOLD" ] && exit 1
+  echo "  (under the ${FAIL_OVER}% hard limit, so not failing the run -- re-check on quiet hardware)"
+  exit 0
 fi
 if [ -n "$BASE_BIN" ]; then
   echo "RESULT: no regression > ${THRESHOLD}%"
