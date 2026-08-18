@@ -72,26 +72,64 @@ def longest_doubling(t, minlen=4, gaps=(0, 1)):
     return best
 
 
-def make(rng, texts, bank, wlen, total, tries=200):
-    """One message of exactly `total` letters whose longest doubling is `wlen`."""
+def make(rng, texts, bank, wlen, total, tries=400):
+    """One message of exactly `total` letters whose longest doubling is `wlen`.
+
+    Three things the splice has to get right, all of them visible in the output
+    when they are got wrong:
+
+      * NO DOUBLE X. The word goes in at an X the carrier already has -- that
+        one X becomes `X WORD X WORD X` -- rather than adding one. Writing
+        `carrier[:cut] + "X" + ...` produced `...NIQTXXZWOSIEBEN...` whenever
+        the cut landed on an existing X, an impossible token boundary sitting
+        exactly where the deduction takes its anchor.
+      * TOKEN-ALIGNED ENDS. The carrier is cut at X boundaries, so the message
+        does not open or close mid-word. An arbitrary offset into the
+        concatenated corpus gave openings like `FKMWESTLX...` -- half a word.
+      * The word must not ALREADY be in the carrier, or the message holds a
+        third copy and the alignment count stops matching the bucket label.
+
+    Note the doubled word may contain a near-repeat of its own (the corpus has
+    `OSTROVOOSTROW`) and that is harmless: the self-crib deduction needs an
+    EXACT repeat, and for any prefix P of W only the full W is followed by an
+    X, so no shorter hypothesis forms. Mismatches are a `--doubling-report`
+    notion, not a seeder one.
+    """
     pool = "X".join(texts)
     words = bank.get(wlen)
     if not words:
         raise SystemExit("no authentic word of length %d in the corpus" % wlen)
-    insert_len = 2 * wlen + 1            # WORD X WORD, spliced between two X
-    if insert_len + 20 > total:
+    # One existing X expands to `X WORD X WORD X`: 2*wlen + 2 letters added.
+    added = 2 * wlen + 2
+    if added + 20 > total:
         raise SystemExit("length %d does not fit in %d letters" % (wlen, total))
-    carrier_len = total - insert_len - 2     # the two X delimiters
+    carrier_len = total - added
+    xs_pool = [i for i, c in enumerate(pool) if c == "X"]
     for _ in range(tries):
-        start = rng.randrange(0, len(pool) - carrier_len)
+        # Start just after an X so the message opens on a whole token.
+        start = rng.choice(xs_pool) + 1
+        if start + carrier_len > len(pool):
+            continue
         carrier = pool[start:start + carrier_len]
+        # ... and end on one: the last character before the cut must complete a
+        # token, i.e. the next character in the pool is an X.
+        if pool[start + carrier_len:start + carrier_len + 1] != "X":
+            continue
         # A carrier with its own doubling would mislabel the bucket.
         if longest_doubling(carrier, 4) > 0:
             continue
         word = rng.choice(words)
-        cut = rng.randrange(len(carrier) // 4, 3 * len(carrier) // 4)
-        msg = carrier[:cut] + "X" + word + "X" + word + "X" + carrier[cut:]
-        if len(msg) != total:
+        if word in carrier:
+            continue
+        # Splice AT an existing X, never beside one.
+        spots = [i for i, c in enumerate(carrier) if c == "X"
+                 and len(carrier) // 5 < i < 4 * len(carrier) // 5
+                 and carrier[i + 1:i + 2] != "X"]
+        if not spots:
+            continue
+        p = rng.choice(spots)
+        msg = (carrier[:p] + "X" + word + "X" + word + "X" + carrier[p + 1:])
+        if len(msg) != total or "XX" in msg:
             continue
         # The splice must be the ONLY doubling, and exactly the length asked.
         if longest_doubling(msg, 4) != wlen:
