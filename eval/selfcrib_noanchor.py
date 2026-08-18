@@ -60,15 +60,23 @@ class GapMenu:
     see (W W).  Same edge shapes either way, so selfcrib_probe.deduce runs both.
     """
 
-    def __init__(self, cipher, at, L, gap, anchor):
+    def __init__(self, cipher, at, L, gap, anchor, flank=False):
         c = num(cipher)
         self.valid = True
         self.equal = [(int(c[at + t]), at + t,
                        int(c[at + L + gap + t]), at + L + gap + t)
                       for t in range(L)]
-        self.anchor_edges = []
+        # `anchor` asserts the SEPARATOR is plaintext X (only meaningful at
+        # gap 1); `flank` asserts the letter BEFORE the first copy is.  A
+        # tandem repeat has no separator but usually does have a left flank --
+        # 4 of 4 in this corpus -- so it is not anchorless in practice.
+        want = []
         if anchor:
-            pos = at + L                      # the separator
+            want.append(at + L)
+        if flank:
+            want.append(at - 1)
+        self.anchor_edges = []
+        for pos in want:
             if not (0 <= pos < len(c)):
                 self.valid = False
             elif int(c[pos]) == X:
@@ -175,10 +183,11 @@ def main():
         % (len(wxw), len(ww)))
 
     rows_out = []
-    for label, pool, gap, anchor in (
+    for label, pool, gap, anchor, *fl in (
             ("W X W, separator asserted", wxw, 1, True),
             ("W X W, anchor withheld", wxw, 1, False),
-            ("W W, separator-free", ww, 0, False)):
+            ("W W, separator-free", ww, 0, False),
+            ("W W + left flank asserted", ww, 0, False, True)):
         if not pool:
             continue
         surv, cab, corr, ranks, top1, top5 = [], [], 0, [], 0, 0
@@ -191,8 +200,9 @@ def main():
                              a.plugs)
             ct = crypt(pt, w, r, ring, start, plug)
             rows = core_rows(w, r, ring, start, len(ct))
-            n, c, ok, rk = score(GapMenu(ct, at, L, gap, anchor),
-                                 ct, rows, plug)
+            n, c, ok, rk = score(
+                GapMenu(ct, at, L, gap, anchor, bool(fl and fl[0])),
+                ct, rows, plug)
             surv.append(n)
             cab.append(c)
             if ok:

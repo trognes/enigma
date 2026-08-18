@@ -234,7 +234,8 @@ only the assertion withheld:
 |---|---:|---:|---:|---:|---:|
 | `W X W`, separator asserted | 4.9 | 4.2 | 197/200 | 167 | 192 |
 | `W X W`, anchor withheld | 6.6 | 3.7 | 195/200 | 142 | 182 |
-| `W W`, separator-free | 8.7 | 3.4 | 195/200 | 117 | 168 |
+| `W W`, no anchor at all | 8.7 | 3.4 | 195/200 | 117 | 168 |
+| `W W` + left flank asserted | 7.2 | 3.6 | 195/200 | 136 | 182 |
 
 **The anchor is worth sharpness, not existence.** Withholding it costs 1.3×
 more survivors and half a cable; the genuinely separator-free case costs 1.8×
@@ -244,11 +245,28 @@ essentially intact and only the *ranking* degrades, top-5 96% → 84%. At the
 shipped `K = 10` operating point 8.7 survivors are all climbed anyway, so the
 extra cost is close to nothing in absolute terms.
 
-Two caveats before acting on it. The `W W` pool is **4 messages**, so that row
-rests on a narrow base however many trials are drawn from it. And this is the
+**A tandem repeat is not anchorless in practice, and that is the design point.**
+It has no separator, but it usually has an X *before* it — 4 of 4 in this
+corpus, matching the 96% left-flank rate already recorded for the separated
+case. Asserting that flank recovers most of the loss: top-5 goes 168 → **182**,
+level with the separated word whose own anchor is withheld. So the variant
+worth shipping is *tandem with flanks*, not tandem bare.
+
+**It should be OPT-IN, and the cost decides that rather than the benefit.**
+Enumerating gap 0 alongside gap 1 **doubles the hypothesis count** — 45 024 →
+45 552 more, +101% over the corpus — and per-key cost tracks hypothesis count
+almost linearly (2 196 hypotheses ↔ 2 428 µs, 1 328 ↔ 1 065). That would take
+the seeder from ~2 428 µs per key to ~4 900, past the 2 901 µs of the `-R 16`
+baseline it is measured against, i.e. it would cost the feature its headline.
+The coverage bought is **3 of 66 messages, +4.5pp** (`SIEGFRIED`, `OSTROW`,
+`ROSENOW`). A doubling of cost for 4.5pp is the classic opt-in profile.
+
+Two caveats before acting on it. The `W W` pool is **4 messages**, so those rows
+rest on a narrow base however many trials are drawn from them — and that is a
+corpus limit, not a sampling one, so more trials cannot fix it. And this is the
 **true key**: whether wrong keys also survive more — which would cost
 discrimination on a sweep — is unmeasured, the same gap the crib-seeds work had
-to close separately.
+to close separately, and it needs the implementation to measure.
 
 *The C++ closure is checked against the probe, not just against outcomes.* A
 wrong deduction could still recover messages by luck, so the two are compared on
