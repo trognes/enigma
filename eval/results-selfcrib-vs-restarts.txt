@@ -1,0 +1,36 @@
+How many -R restarts is a self-crib search worth, at a given doubling length?
+
+L=167 fixed, 20 trials/bucket, 10-pair board hidden, 676-key sweep,
+-c -f -l wehrmacht -J -S i4f10, seeder at --self-crib-seeds 10 -R 0
+(the seeder runs at the DEFAULT --self-crib-length 6 in every bucket)
+
+doubling length 6 done
+doubling length 9 done
+doubling length 13 done
+
+doubling  arm        exact     wall/trial  plugboards
+------------------------------------------------------------
+6         selfcrib   14/20     3.29        2394062
+6         R8         13/20     1.52        12545972
+6         R32        13/20     5.85        50149789
+6         R64        15/20     11.67       100261019
+
+9         selfcrib   19/20     3.75        2381051
+9         R8         15/20     1.53        12533671
+9         R32        18/20     5.94        50098426
+9         R64        19/20     11.77       100201783
+
+13        selfcrib   20/20     3.08        2386797
+13        R8         17/20     1.55        12534901
+13        R32        19/20     6.05        50159543
+13        R64        20/20     11.62       100325291
+
+EQUIVALENT -R  (the restart count whose break rate the seeder matches)
+doubling  seeder       restart arms                       reading
+----------------------------------------------------------------------------
+6         14/20        R8:13  R32:13  R64:15              between R32 and R64
+9         19/20        R8:15  R32:18  R64:19              beats R64 (top arm)
+13        20/20        R8:17  R32:19  R64:20              beats R64 (top arm)
+
+Cost note: compare wall/trial, not plugboards -- the deduction runs
+outside the counted score loop, so the counter understates the seeder.
