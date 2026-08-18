@@ -551,6 +551,24 @@ existing command lines can behave differently or stop working.
   so `crib_set` rejects a contradicting hypothesis instead; `format_plugboard`
   additionally refuses to overrun whatever it is handed. Found while testing
   `--crib-seeds`; it predates that work and reproduces on the released code.
+  - **It is not only a crash fix — `--crib` with `-s` was doing enormously more
+    work than it needed to**, because the contradicting hypotheses it should
+    have rejected were instead let through to corrupt the board. Now they are
+    rejected by arithmetic, and the saving scales with the number of pins.
+    Measured on one 90-letter message, a 12-letter swept crib, 17 576 keys,
+    plugboards scored before → after (every arm still recovers the plaintext
+    exactly):
+
+    | `-s` pins | before | after | |
+    |---|---:|---:|---:|
+    | `AB` | 20 736 444 | 211 588 | 98× |
+    | `AB CD` | 15 555 774 | 1 851 | 8 404× |
+    | `AB CD EF` | 11 425 564 | 36 | 317 377× |
+    | `AB CD EF GH IJ` | 6 057 585 | 2 | 3 028 790× |
+
+    Key rejection on that problem goes from 9.3% to 100.0% with three pins —
+    every wrong key is now killed by the deduction and only the true one is
+    ever climbed.
 
 - **`--full-text` wrapped 2 columns short of the progress line.** The
   continuation width dated from a 79-column target; the progress lines were

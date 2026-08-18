@@ -1235,6 +1235,30 @@ are read from a **data directory** (filenames built as
   rejection count is reported per key, counted at the key's first work item**: a
   key's restarts can straddle a chunk boundary and be seen as new by two
   workers, so counting at the deduction would make the total depend on `-T`.
+- **`-s` pins now CONSTRAIN the deduction, and that is worth orders of
+  magnitude.** `crib_try()` starts the closure from whatever `-s` and
+  `--no-plug` already fix, so a hypothesis contradicting them dies at
+  `crib_set` instead of being carried through and silently overwriting the
+  pinned plug at the seeding site. That overwrite was the stack smash (a
+  non-involution board overflowing `format_plugboard`), but the crash was the
+  cheap half of the bug: the expensive half is that every contradicting
+  hypothesis used to survive and get a **full plugboard climb**. Measured on a
+  90-letter message with a 12-letter swept crib over 17 576 keys, plugboards
+  scored before → after, plaintext recovered in every arm:
+
+  | `-s` pins | before | after | |
+  |---|---:|---:|---:|
+  | `AB` | 20 736 444 | 211 588 | 98× |
+  | `AB CD` | 15 555 774 | 1 851 | 8 404× |
+  | `AB CD EF` | 11 425 564 | 36 | 317 377× |
+  | `AB CD EF GH IJ` | 6 057 585 | 2 | 3 028 790× |
+
+  Key rejection goes 9.3% → **100.0%** at three pins: the deduction kills every
+  wrong key and only the true one is ever climbed. So `--crib` with **any**
+  known plugs is a different proposition from `--crib` alone — the two kinds of
+  knowledge compound, where before they fought. The default path (no `-s`, no
+  `--no-plug`) is untouched: `plug_fixed` is all false, so the seeding loop
+  sets nothing.
 - **The menu is walked BREADTH-FIRST FROM THE ANCHOR, not in crib order.** An
   edge deduces nothing until one endpoint is known, and at the start only the
   anchor is; in crib order the loop visits edges whose endpoints are both
