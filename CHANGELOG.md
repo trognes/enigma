@@ -8,6 +8,27 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--self-crib-tandem` — hypothesise a doubled word with no separator**
+  (`SIEGFRIEDSIEGFRIED`), which `--self-crib-seeds` could not see at all: its 26
+  guesses are on `steck[X]` and the separator anchor is what carries that guess
+  into the message.
+  - **Opt-in on cost, not on whether it works.** Recall barely moves (a correct
+    hypothesis exists in 195 of 200 trials against the separated case's 197),
+    but gap 0 has as many alignments as gap 1, so enumerating both roughly
+    **doubles the hypothesis count** (+101% over the corpus) — which would take
+    the seeder past the `-R 16` baseline it is measured against. It buys **3 of
+    66 corpus messages, +4.5pp**.
+  - **A tandem repeat is not anchorless**: it has no separator but nearly always
+    has an X *before* it (4 of 4 in the corpus), so the left flank is asserted
+    instead. That recovers most of the sharpness — top-5 168 → 182 of 200 —
+    which is why the variant is usable at all.
+  - Demonstrated on the corpus message carrying `SIEGFRIEDSIEGFRIED`: with the
+    board hidden and the rotor key given, the default reaches 82.7% of letters
+    and misses, `--self-crib-tandem` recovers it exactly, and *faster* (0.20 s
+    against 0.77 s) because the correct seed converges at once.
+  - Refused with `--self-crib-signature`, which asserts the copies *are*
+    separated by an X closing the message — a contradiction, not a narrowing.
+
 - **`--crib-seeds K` — IC-rank an ordinary crib's hypotheses and climb only the
   best K**, exactly as `--self-crib-seeds` does. `crib_unit()` ran a full
   plugboard climb on *every* surviving (alignment, hypothesis) pair, and a swept

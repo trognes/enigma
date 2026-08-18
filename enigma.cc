@@ -196,6 +196,11 @@ static const int selfcrib_maxlen = 13;         /* longest -- nothing in the corp
 struct selfcrib_hyp
 {
   int at, len, nanchor;
+  /* Letters between the two copies: 1 for the separated W X W the default
+     hypothesises, 0 for the TANDEM repeat --self-crib-tandem adds. It is a
+     field rather than a constant because it is the only thing that differs --
+     the equality edges, the closure and the ranking are identical. */
+  int gap;
   int anchor_pos[3];
 };
 static std::vector<selfcrib_hyp> g_selfcrib_hyps;
@@ -207,6 +212,22 @@ static int g_selfcrib_nhyps = 0;
    wins when the assumption holds: measured over every corpus message carrying a doubling
    anywhere, terminal breaks 16/40 against a swept 26/40 and a bare -R 16's 19/40. */
 static bool opt_self_crib_signature = false;
+/* --self-crib-tandem: also hypothesise a doubled word with NO separator between the
+   copies -- SIEGFRIEDSIEGFRIED rather than ENGELMANN X ENGELMANN. The default cannot
+   see one at all: its 26 guesses are on steck[X] and the separator anchor is what
+   carries that guess into the message.
+     OPT-IN ON COST, not on whether it works. It works -- the equality edges never
+   mentioned the plaintext, so guessing at a flank instead of the separator runs the
+   same closure, and recall barely moves (a correct hypothesis exists in 195 of 200
+   trials against the separated case's 197). What it costs is enumeration: gap 0 has
+   as many alignments as gap 1, so switching it on roughly DOUBLES the hypothesis
+   count (+101% over the corpus). Per-key cost tracks that count almost linearly
+   (2196 hypotheses <-> 2428 us, 1328 <-> 1065), so on by default it would take the
+   seeder from ~2428 us per key to ~4900 -- past the 2901 us of the -R 16 baseline it
+   is measured against, i.e. it would cost the feature its headline. What it buys is
+   3 of 66 corpus messages, +4.5pp (SIEGFRIED, OSTROW, ROSENOW). A doubling of cost
+   for 4.5pp belongs behind a flag. ENHANCEMENTS.md item 5. */
+static bool opt_self_crib_tandem = false;
 static int opt_crib_at = -1;
 static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
 /* --crib-seeds K: IC-rank the surviving hypotheses and climb only the best K, exactly as
@@ -1619,18 +1640,41 @@ static inline bool crib_set(int * board, int x, int y)
    asserted to be plaintext X: 1 = separator only, 2 = + left flank, 3 = + right flank.
    An Enigma never encrypts a letter to itself, so a ciphertext X at an anchor position
    makes the hypothesis impossible -- dropped here rather than rediscovered per key. */
-static void selfcrib_add(int at, int len, int flanks)
+/* `flanks` selects which positions the hypothesis asserts are plaintext X.
+   At gap 1 the separator comes free with the doubling and the flanks are extra:
+   1 = separator, 2 = + left, 3 = + left and right.
+     At gap 0 there IS no separator, so the left flank is asserted instead and
+   `flanks` only chooses whether the right one joins it. THE HYPOTHESIS MUST
+   CARRY AT LEAST ONE ANCHOR: the 26 guesses are on steck[X], and the equality
+   edges cannot start anything until an anchor propagates that guess into the
+   message -- with none, every board entry would stay unset and the hypothesis
+   would deduce nothing at all. A tandem repeat can afford this because it
+   nearly always HAS a left flank: 4 of 4 in the corpus, matching the 96%
+   left-flank rate measured for the separated case, and asserting it recovers
+   most of the sharpness the missing separator costs (top-5 168 -> 182 of 200,
+   ENHANCEMENTS.md item 5). */
+static void selfcrib_add(int at, int len, int flanks, int gap)
 {
   const int xl = char2num('X');
   selfcrib_hyp h;
   h.at = at;
   h.len = len;
+  h.gap = gap;
   h.nanchor = 0;
-  h.anchor_pos[h.nanchor++] = at + len;                  /* separator */
-  if (flanks >= 2)
-    h.anchor_pos[h.nanchor++] = at - 1;                  /* left flank */
-  if (flanks >= 3)
-    h.anchor_pos[h.nanchor++] = at + 2*len + 1;          /* right flank */
+  if (gap >= 1)
+    {
+      h.anchor_pos[h.nanchor++] = at + len;              /* separator */
+      if (flanks >= 2)
+        h.anchor_pos[h.nanchor++] = at - 1;              /* left flank */
+      if (flanks >= 3)
+        h.anchor_pos[h.nanchor++] = at + 2*len + 1;      /* right flank */
+    }
+  else
+    {
+      h.anchor_pos[h.nanchor++] = at - 1;                /* left flank */
+      if (flanks >= 3)
+        h.anchor_pos[h.nanchor++] = at + 2*len;          /* right flank */
+    }
   for (int k = 0; k < h.nanchor; k++)
     {
       const int pos = h.anchor_pos[k];
@@ -1653,7 +1697,7 @@ static void init_self_crib()
             const int at = textlength - tail - 2*len - 1;
             if (at < 1)
               continue;                    /* no room for the left flank */
-            selfcrib_add(at, len, tail ? 3 : 2);
+            selfcrib_add(at, len, tail ? 3 : 2, 1);
           }
     }
   else
@@ -1664,8 +1708,19 @@ static void init_self_crib()
       for (int len = opt_self_crib_length; len <= selfcrib_maxlen; len++)
         for (int at = 1; at + 2*len + 1 <= textlength; at++)
           for (int flanks = 1; flanks <= 3; flanks++)
-            selfcrib_add(at, len, flanks);
+            selfcrib_add(at, len, flanks, 1);
     }
+  /* --self-crib-tandem: the same enumeration at gap 0, appended rather than
+     replacing, since a message can hold either kind and the ranking sorts them
+     out. Two flank variants, not three: at gap 0 the left flank is the only
+     anchor available and is always asserted, so the choice is just whether the
+     right one joins it. Roughly DOUBLES the hypothesis count (+101% over the
+     corpus), which is why it is opt-in -- see the option comment. */
+  if (opt_self_crib_tandem)
+    for (int len = opt_self_crib_length; len <= selfcrib_maxlen; len++)
+      for (int at = 1; at + 2*len <= textlength; at++)
+        for (int flanks = 2; flanks <= 3; flanks++)
+          selfcrib_add(at, len, flanks, 0);
   g_selfcrib_nhyps = static_cast<int>(g_selfcrib_hyps.size());
 }
 
@@ -1717,7 +1772,7 @@ static bool self_crib_try(const machine & m, const selfcrib_hyp & h, int guess, 
         }
       for (int t = 0; t < h.len; t++)
         {
-          const int pi = h.at + t, pj = h.at + h.len + 1 + t;
+          const int pi = h.at + t, pj = h.at + h.len + h.gap + t;
           const unsigned char * __restrict ci = m.rows[pi];
           const unsigned char * __restrict cj = m.rows[pj];
           const int a = num_ciphertext[pi], b = num_ciphertext[pj];
@@ -8176,7 +8231,13 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "capture radius ~0.4*L/26, so it wants long");
   fprintf(out, "  %-24s %s\n", "", "messages [0..26, 0 = off]");
-  fprintf(out, "  %-24s %s\n", "--crib-rerank F",
+    fprintf(out, "  %-24s %s\n", "--self-crib-tandem",
+          "Also hypothesise a doubled word with NO separator");
+  fprintf(out, "  %-24s %s\n", "",
+          "(SIEGFRIEDSIEGFRIED). Roughly doubles the");
+  fprintf(out, "  %-24s %s\n", "",
+          "hypotheses, so opt-in; reaches ~5% more messages [off]");
+fprintf(out, "  %-24s %s\n", "--crib-rerank F",
           "Known-word (crib) finisher: rank converged boards");
   fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
   fprintf(out, "  %-24s %s\n", "", "neutral/dominated (needs -c) [off], not recommended");
@@ -8498,7 +8559,9 @@ void show_settings()
             "%d hypotheses (%s)\n", opt_self_crib_seeds,
             (opt_self_crib_seeds == 1) ? "" : "s", opt_self_crib_length,
             g_selfcrib_nhyps,
-            opt_self_crib_signature ? "signature" : "anywhere");
+            opt_self_crib_signature ? "signature"
+              : (opt_self_crib_tandem ? "anywhere, separated or tandem"
+                                      : "anywhere"));
   if (opt_crib_text)
     {
       if (opt_crib_at >= 0)
@@ -8605,7 +8668,7 @@ int main(int argc, char * * argv)
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
-         OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS };
+         OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_SCTANDEM };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -8659,6 +8722,7 @@ int main(int argc, char * * argv)
       { "self-crib-seeds", required_argument, nullptr, OPT_SCSEEDS },
       { "self-crib-length", required_argument, nullptr, OPT_SCLEN },
       { "self-crib-signature", no_argument,   nullptr, OPT_SCSIG },
+      { "self-crib-tandem", no_argument,      nullptr, OPT_SCTANDEM },
       { "full-text",      no_argument,       nullptr, OPT_FULLTEXT },
       { "no-preflight",   no_argument,       nullptr, OPT_NOPREFLIGHT },
       { "crib",           required_argument, nullptr, OPT_CRIBTEXT },
@@ -8816,6 +8880,10 @@ int main(int argc, char * * argv)
           break;
         case OPT_SCSIG:
           opt_self_crib_signature = true;
+          break;
+
+        case OPT_SCTANDEM:
+          opt_self_crib_tandem = true;
           break;
         case OPT_FULLTEXT:
           opt_full_text = true;
@@ -9206,6 +9274,17 @@ int main(int argc, char * * argv)
   if (opt_self_crib_signature && (opt_self_crib_seeds == 0))
     fatal("--self-crib-signature needs --self-crib-seeds (it only narrows where the "
           "doubled word is hypothesised)");
+  if (opt_self_crib_tandem && (opt_self_crib_seeds == 0))
+    fatal("--self-crib-tandem needs --self-crib-seeds (it only adds hypotheses for "
+          "the seeder to rank)");
+  /* --signature says the doubled word CLOSES the message, which fixes where the
+     separator sits; --tandem says there is no separator at all. Both at once is a
+     contradiction rather than a narrowing, so it is refused rather than silently
+     preferring one. */
+  if (opt_self_crib_tandem && opt_self_crib_signature)
+    fatal("--self-crib-tandem and --self-crib-signature contradict each other "
+          "(one says the copies are separated by an X closing the message, the "
+          "other that they are not separated at all)");
   if (opt_self_crib_seeds > 0)
     {
       if (! opt_hillclimb)

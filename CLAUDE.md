@@ -616,6 +616,29 @@ are read from a **data directory** (filenames built as
   - **`-R 0` is right and the kick should stay off**: a seeded climb starts near
     the answer, and `-R 0` measured 201 of 204 exact recoveries at half the
     compute of `-R 8`. `-R N` still asks for N kicked passes.
+  - **`--self-crib-tandem` adds the doubled word with NO separator**
+    (`SIEGFRIEDSIEGFRIED`), which the default cannot see at all: the 26 guesses
+    are on `steck[X]`, and the separator anchor is what carries that guess into
+    the message, so a tandem repeat forms no hypothesis. **Opt-in on cost, not
+    on whether it works.** Recall barely moves — a correct hypothesis exists in
+    195 of 200 trials against the separated case's 197 — but gap 0 has as many
+    alignments as gap 1, so enumerating both roughly **doubles the hypothesis
+    count** (+101% over the corpus). Per-key cost tracks that count almost
+    linearly (2196 hypotheses ↔ 2428 µs, 1328 ↔ 1065), so on by default it
+    would take the seeder to ~4900 µs per key — past the 2901 µs of the `-R 16`
+    baseline it is measured against, i.e. it would cost the feature its
+    headline. What it buys is **3 of 66 corpus messages, +4.5pp**
+    (`SIEGFRIED`, `OSTROW`, `ROSENOW`).
+  - **A tandem repeat is not anchorless, and that is what makes it usable.** It
+    has no separator but nearly always has an X *before* it — 4 of 4 in the
+    corpus, matching the 96% left-flank rate for the separated case — so the
+    left flank is asserted instead and the closure runs unchanged. That
+    recovers most of the sharpness: top-5 168 → **182** of 200, level with a
+    separated word whose own anchor is withheld (192 fully anchored). A
+    hypothesis with no anchor at all would deduce nothing, which is why the
+    left flank is always asserted at gap 0 and only the right one is a variant.
+    Refused with `--self-crib-signature`, which says the copies *are* separated
+    by an X closing the message — a contradiction, not a narrowing.
   - Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
     and `--tune-phase` — each installs its own starting board or moves the key
     the deduction was computed for. `-T`-deterministic; the dedupe key is the

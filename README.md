@@ -224,6 +224,13 @@ distinct offsets rather than every ring×start pair.
 same identifiability limit applies to the stepping wheels, and the search
 exploits it to skip provably redundant keys:
 
+- **`--self-crib-tandem`** — Also hypothesise a doubled word with **no
+  separator** (`SIEGFRIEDSIEGFRIED`). The default cannot see one: its guesses
+  are on `steck[X]`, and the separator is what carries the guess into the
+  message. Opt-in because it roughly doubles the hypotheses for about 5% more
+  messages — but where it applies it is decisive. On the corpus message
+  carrying `SIEGFRIEDSIEGFRIED`, board hidden, the default reaches 82.7% of the
+  letters and misses; this recovers it exactly, and faster.
 - **Leftmost wheel** — nothing downstream depends on its window position, so
   only `start − ring` is recoverable. Its ring is always reported as `A`.
 - **Middle wheel** — shifting its ring and start together changes the decode

@@ -2433,6 +2433,45 @@ check "--exhaust E is bounded by the remaining free pairs" \
 check "--exhaust E within the remaining free pairs is accepted" \
   "$(np_rejects -c --exhaust 5 --no-plug "$np_many")" "0"
 
+# --self-crib-tandem: a doubled word with NO separator between the copies.  The
+# default cannot see one at all -- its 26 guesses are on steck[X] and the separator
+# anchor is what carries that guess into the message -- so SIEGFRIEDSIEGFRIED forms
+# no hypothesis.  Three of the 66 corpus messages carry such a doubling and no
+# X-separated one, and this is one of them.
+tdm_pt=ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEINSZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAUMXKANNNIQTEINFLIESZENXDAXDRITTEXINFXDIVXUNDXAQTEXPANZXDIVXBLOQIERENUNDRANMBELEGTHALTEXDIVXKDRX
+tdm_ct=$(run "$tdm_pt" -u B -w 342 -r ALZ -g VAT -s "AZ DV ET FS GQ JP LX MY NR OW")
+# Plugboard-recovery tier: true rotor key, board hidden, one climb from the seed.
+tdm_run() { printf '%s' "$tdm_ct" | "$ENIGMA" -c -f -l wehrmacht -u B -w 342 \
+            -r ALZ -g VAT --self-crib-seeds 10 --self-crib-length 6 -R 0 "$@" 2>/dev/null; }
+# The property that justifies the flag: it recovers what the default cannot.
+check "--self-crib-tandem recovers a separator-free doubling" \
+  "$(tdm_run --self-crib-tandem -T 1)" "$tdm_pt"
+# The control keeps that from passing for the wrong reason -- the message must be
+# genuinely out of the default's reach, not merely easy.
+check "--self-crib-tandem control: the default does not" \
+  "$(test "$(tdm_run -T 1)" = "$tdm_pt" && echo same || echo different)" "different"
+check "--self-crib-tandem is -T-independent" \
+  "$(tdm_run --self-crib-tandem -T 1)" "$(tdm_run --self-crib-tandem -T 4)"
+# It adds hypotheses rather than replacing them: a separated doubling must still be
+# hypothesised with the flag on, so the count strictly grows.
+tdm_hyps() { { printf '%s' "$tdm_ct" | "$ENIGMA" -c -i -u B -w 342 -r ALZ -g VAT \
+              --self-crib-seeds 1 --self-crib-length 6 "$@" >/dev/null; } 2>&1 \
+              | sed -n 's/^Self-crib:.* \([0-9]*\) hypotheses.*/\1/p'; }
+check "--self-crib-tandem adds hypotheses, does not replace them" \
+  "$(awk -v a="$(tdm_hyps)" -v b="$(tdm_hyps --self-crib-tandem)" \
+     'BEGIN { print (b > a) ? "more" : "not-more" }')" "more"
+check "--self-crib-tandem says so in the settings echo" \
+  "$(tdm_hyps --self-crib-tandem >/dev/null; { printf '%s' "$tdm_ct" | "$ENIGMA" -c -i \
+     -u B -w 342 -r ALZ -g VAT --self-crib-seeds 1 --self-crib-tandem >/dev/null; } 2>&1 \
+     | grep -c 'separated or tandem')" "1"
+# Rejections.  --signature says the copies are separated by an X closing the message;
+# --tandem says they are not separated at all.  That is a contradiction, not a
+# narrowing, so it is refused rather than silently preferring one.
+check "--self-crib-tandem rejects a run with no --self-crib-seeds" \
+  "$(sig_rejects -c --self-crib-tandem)" "1"
+check "--self-crib-tandem rejects --self-crib-signature" \
+  "$(sig_rejects -c --self-crib-seeds 1 --self-crib-tandem --self-crib-signature)" "1"
+
 echo
 echo "== Crib deduction: --crib =="
 
