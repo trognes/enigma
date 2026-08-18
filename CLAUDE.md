@@ -628,7 +628,31 @@ are read from a **data directory** (filenames built as
     would take the seeder to ~4900 µs per key — past the 2901 µs of the `-R 16`
     baseline it is measured against, i.e. it would cost the feature its
     headline. What it buys is **3 of 66 corpus messages, +4.5pp**
-    (`SIEGFRIED`, `OSTROW`, `ROSENOW`).
+    (`SIEGFRIED`, `OSTROW`, `ROSENOW`). Four messages carry a tandem doubling,
+    but one of them also carries a separated `ZANDERS`, so the default already
+    seeds it and the flag can add nothing there — the payoff population is the
+    **tandem-only** three.
+  - **Measured end to end, and on those three messages it is decisive.** 60
+    paired 676-key sweeps per pool, board hidden, `--self-crib-seeds 10`,
+    `-R 0`, the arms differing only by the flag
+    (`eval/selfcrib_tandem_ab.py`, `eval/results-selfcrib-tandem.txt`):
+
+    | pool | off | on | discordant | wall |
+    |---|---:|---:|---|---:|
+    | tandem-only | 3/60 | **22/60** | 19 only-on, 0 only-off | 2.64× |
+    | separated-only | 38/60 | 36/60 | 0 only-on, 2 only-off | 2.60× |
+
+    The payoff arm is `p = 3.8e-6` (McNemar), +31.7pp with a 95% CI of
+    [+19.8, +43.5]. The risk arm — where every tandem hypothesis is wrong by
+    construction and competes for the same `K` seed slots — shows **no
+    measurable loss** (p = 0.5, −3.3pp, CI [−7.9, +1.2]), though the sign is
+    the one crowding-out predicts and the interval rules out only a *large*
+    loss. **Corpus-weighted that is ~+0.6pp for 2.6× the time**, which is the
+    arithmetic that keeps it opt-in.
+  - **The cost is 2.6× wall while plugboards SCORED go DOWN** (2.42 M → 2.31 M)
+    — the `score_iter`-is-the-wrong-axis note again, in its sharpest form yet:
+    the whole added cost is the uncounted deduction, and the counter moves the
+    other way because more-constrained seeds make the climbs cheaper.
   - **A tandem repeat is not anchorless, and that is what makes it usable.** It
     has no separator but nearly always has an X *before* it — 4 of 4 in the
     corpus, matching the 96% left-flank rate for the separated case — so the

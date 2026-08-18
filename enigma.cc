@@ -226,7 +226,19 @@ static bool opt_self_crib_signature = false;
    seeder from ~2428 us per key to ~4900 -- past the 2901 us of the -R 16 baseline it
    is measured against, i.e. it would cost the feature its headline. What it buys is
    3 of 66 corpus messages, +4.5pp (SIEGFRIED, OSTROW, ROSENOW). A doubling of cost
-   for 4.5pp belongs behind a flag. ENHANCEMENTS.md item 5. */
+   for 4.5pp belongs behind a flag.
+     MEASURED END TO END, and on those 3 messages it is decisive: over 60 paired
+   676-key sweeps with the board hidden, 3/60 exact recoveries become 22/60 -- 19
+   only-on against 0 only-off, McNemar p = 3.8e-6. Wall time is 2.6x, matching the
+   doubled hypothesis count; plugboards SCORED fall (2.42M -> 2.31M), which is the
+   score_iter-is-the-wrong-axis note again, since the extra cost is all in the
+   uncounted deduction. On the risk population -- messages with a separated doubling
+   and no tandem one, where every tandem hypothesis is wrong by construction and
+   competes for the same K seed slots -- 38/60 becomes 36/60 (0 only-on, 2 only-off,
+   p = 0.5, 95% CI [-7.9, +1.2]pp): no measurable loss, though the sign is the one
+   crowding-out predicts. Corpus-weighted that is ~+0.6pp for 2.6x the time, which
+   is the arithmetic that keeps it opt-in. eval/selfcrib_tandem_ab.py.
+   ENHANCEMENTS.md item 5. */
 static bool opt_self_crib_tandem = false;
 static int opt_crib_at = -1;
 static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */

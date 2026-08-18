@@ -215,6 +215,13 @@ wheels, ring and start positions — any position left as `.` is brute-forced.
 - **`--self-crib-length L`** — Shortest doubled word to hypothesise `[6]`
 - **`--self-crib-signature`** — Assert the doubled word *closes* the message (a
   signed surname): ~15× cheaper, but only wins when that holds `[off]`
+- **`--self-crib-tandem`** — Also hypothesise a doubled word with **no
+  separator** (`SIEGFRIEDSIEGFRIED`). The default cannot see one: its guesses
+  are on `steck[X]`, and the separator is what carries the guess into the
+  message. Opt-in because it roughly doubles the hypotheses for about 5% more
+  messages — but where it applies it is decisive: on those messages, over 60
+  paired sweeps with the board hidden, exact recovery goes **3/60 → 22/60**
+  for 2.6× the wall time `[off]`
 
 `-n` and `-4` are mutually exclusive. In M4 mode only the Greek wheel's `start −
 ring` offset is recoverable, so a full M4 wildcard search enumerates the
@@ -224,13 +231,6 @@ distinct offsets rather than every ring×start pair.
 same identifiability limit applies to the stepping wheels, and the search
 exploits it to skip provably redundant keys:
 
-- **`--self-crib-tandem`** — Also hypothesise a doubled word with **no
-  separator** (`SIEGFRIEDSIEGFRIED`). The default cannot see one: its guesses
-  are on `steck[X]`, and the separator is what carries the guess into the
-  message. Opt-in because it roughly doubles the hypotheses for about 5% more
-  messages — but where it applies it is decisive. On the corpus message
-  carrying `SIEGFRIEDSIEGFRIED`, board hidden, the default reaches 82.7% of the
-  letters and misses; this recovers it exactly, and faster.
 - **Leftmost wheel** — nothing downstream depends on its window position, so
   only `start − ring` is recoverable. Its ring is always reported as `A`.
 - **Middle wheel** — shifting its ring and start together changes the decode
@@ -334,7 +334,13 @@ English tables.
   bare `-R 16`'s 13, in half the wall time. The default hypothesises the
   doubling
   anywhere; `--self-crib-signature` narrows it to one closing the message, which
-  is ~15× cheaper but only wins when that holds (needs `-c`; off by default)
+  is ~15× cheaper but only wins when that holds (needs `-c`; off by default).
+  **`--self-crib-tandem`** additionally hypothesises a doubling with *no*
+  separator (`SIEGFRIEDSIEGFRIED`) — the default cannot form one, because the
+  separator is what carries its guess into the message. It is opt-in because it
+  roughly doubles the hypothesis count for the ~5% of messages that carry one,
+  but on those it is decisive: **3/60 → 22/60** exact recoveries over paired
+  676-key sweeps, at 2.6× the wall time
 - **`--crib TEXT` / `--crib-at N`** — **Known plaintext**, and where it sits. A
   rotor setting that cannot have produced the crib is rejected by arithmetic and
   never scored — measured **99.9%** of a start-position keyspace on a 12-letter

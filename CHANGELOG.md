@@ -17,7 +17,20 @@ existing command lines can behave differently or stop working.
     but gap 0 has as many alignments as gap 1, so enumerating both roughly
     **doubles the hypothesis count** (+101% over the corpus) — which would take
     the seeder past the `-R 16` baseline it is measured against. It buys **3 of
-    66 corpus messages, +4.5pp**.
+    66 corpus messages, +4.5pp** — four carry a tandem doubling, but one also
+    carries a separated `ZANDERS`, so the default already seeds it.
+  - **Measured end to end** (60 paired 676-key sweeps per pool, board hidden,
+    `--self-crib-seeds 10`; `eval/selfcrib_tandem_ab.py`). On the payoff
+    population — messages with a tandem doubling and no separated one — exact
+    recovery goes **3/60 → 22/60**, 19 only-on against 0 only-off, McNemar
+    **p = 3.8e-6**. On the risk population, where every tandem hypothesis is
+    wrong by construction and competes for the same `K` seed slots, 38/60 →
+    36/60 shows **no measurable loss** (0 only-on, 2 only-off, p = 0.5).
+    Corpus-weighted that is ~+0.6pp for **2.6× the wall time**, which is the
+    arithmetic that keeps it opt-in.
+  - **Plugboards scored go *down*** (2.42 M → 2.31 M) while wall time rises
+    2.6× — the whole added cost is the uncounted deduction, so `score_iter` is
+    the wrong axis for this flag and reports the opposite sign.
   - **A tandem repeat is not anchorless**: it has no separator but nearly always
     has an X *before* it (4 of 4 in the corpus), so the left flank is asserted
     instead. That recovers most of the sharpness — top-5 168 → 182 of 200 —
