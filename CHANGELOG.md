@@ -528,6 +528,18 @@ existing command lines can behave differently or stop working.
 
 ### Fixed
 
+- **`--confidence`'s "not a find" note impersonated a progress line.** The
+  documented way to pull a run's margin off stderr is `grep '^ *[+-][0-9]'`,
+  and the near-zero caveat wrapped as `"… on signal-free text a margin of\n
+  +0.5 sd came up …"` — so its **continuation line matched that pattern** and
+  an extractor silently read the caveat back as the run's result. `+0.5` is a
+  plausible margin, so nothing looked wrong. Found when a sweep of 33 known
+  1941 day keys against the unbroken BYQMZ reported *"+0.5 sd came up in 2-5%
+  of runs"* as the margin for all 33. Re-wrapped so no line begins with a
+  signed number. This is the same bug class the pre-flight lines were already
+  guarded against, and the suite now asserts it of the confidence summary too —
+  verified by injecting the old wording and watching the new check fail.
+
 - **`--crib` with `-s` could build an impossible plugboard and smash the
   stack.** The deduction started from an empty board, so a hypothesis could
   deduce `A–D` while `-s` said `A–B`; seeding overwrote `steck[A]` and left

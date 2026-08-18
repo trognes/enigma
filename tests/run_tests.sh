@@ -1630,6 +1630,25 @@ check "--confidence: signal-free text gets the 'not a find' note" \
   "$(cf_note "$cf_rct")" "1"
 check "--confidence: a real break does NOT get the 'not a find' note" \
   "$(cf_note "$cf_ct")" "0"
+# NO confidence line may look like a progress line, for exactly the reason the
+# pre-flight block asserts the same of its own: the documented way to pull a
+# run's margin off stderr is to grep '^ *[+-][0-9]', and this note used to wrap
+# as "... a margin of\n            +0.5 sd came up ...".  That continuation IS
+# such a line, so an extractor read the CAVEAT back as the run's result -- and
+# silently, since it looks like a plausible margin.  Found when a sweep of 33
+# known day keys reported "+0.5 sd came up in 2-5% of runs" for every one.
+# Anchored on the signal-free arm, the only one that prints the note.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+check "confidence summary lines cannot be read as progress lines" \
+  "$(printf '%s' "$cf_rct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+     -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
+     | sed -n '/^Confidence: null/,$p' \
+     | grep -cE '^ *[+-]?[0-9]')" "0"
+check "confidence summary stays within 80 columns" \
+  "$(printf '%s' "$cf_rct" | "$ENIGMA" -q -l wehrmacht -u B -w 123 -r AAA \
+     -g "..." --confidence 64 -T 1 2>&1 >/dev/null \
+     | sed -n '/^Confidence: null/,$p' | awk '{ print length }' \
+     | sort -rn | head -1 | awk '{ print ($1 <= 80) ? "ok" : $1 }')" "ok"
 check "--confidence: -q does not carry the IC clause" \
   "$(cf_pline -q -l wehrmacht | grep -c 'IC')" "0"
 

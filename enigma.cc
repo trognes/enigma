@@ -6150,12 +6150,19 @@ static void report_confidence(double best_score)
           pfam, (opt_scoring == SCORE_IC) ? " -- IC most of all" : "");
   /* Fires exactly when the number is in the range where the p-value misleads,
      and stays quiet on a real break. The threshold is the measured 99th
-     percentile of pure noise rounded up, not a guess. */
+     percentile of pure noise rounded up, not a guess.
+       NO line here may begin with something matching '^ *[+-][0-9]' -- that is
+     the shape a progress line has, and the documented way to pull a run's
+     margin out of stderr is to grep for it. This note used to wrap as
+     "... a margin of\n            +0.5 sd came up ...", so the continuation
+     WAS such a line and a summary sentence was read back as the run's result.
+     Same bug class as the pre-flight lines guard against; found by it biting
+     a day-key sweep whose extractor reported this sentence for all 33 keys. */
   if ((z - g_null_zk) < 2.0)
     fprintf(stderr,
             "            below +2 sd is not a find: on signal-free text a "
-            "margin of\n            +0.5 sd came up in 2-5%% of runs "
-            "(more often on a bigger key space)\n");
+            "margin\n            of +0.5 sd came up in 2-5%% of runs "
+            "(more often on a\n            bigger key space)\n");
 }
 
 /* Tier 1: rank a slice of the flat key space by a cheap IC climb; keep the

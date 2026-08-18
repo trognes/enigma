@@ -1132,6 +1132,19 @@ are read from a **data directory** (filenames built as
   The signal is there, it is just 2% of the total. The cost arms therefore fix
   `-g` so the search itself is one climb and the calibration is nearly the whole
   run.
+
+  **No line of the summary may look like a progress line either** — the rule
+  the pre-flight block carries, and this one broke it. The documented way to
+  read a run's margin off stderr is `grep '^ *[+-][0-9]'`, and the near-zero
+  note wrapped as `"… a margin of\n            +0.5 sd came up …"`, so the
+  **continuation was such a line** and an extractor read the caveat back as the
+  result — silently, because `+0.5` is a plausible margin. Found when a sweep
+  of 33 known 1941 day keys against BYQMZ reported *"+0.5 sd came up in 2-5% of
+  runs"* as the margin for every one of them. Re-wrapped so no line begins with
+  a signed number, and `tests/run_tests.sh` now asserts it of the summary as it
+  already did of the pre-flight lines (verified by injecting the old wording).
+  The lesson generalises: **any new stderr line is a candidate for this bug**,
+  and the two guards are cheap.
 - `-p file` compare the recovered plaintext against a known plaintext file
 - `-F N` / `-F N%` key pre-filter (**not recommended** — situational: a
   long-message throughput tool, unreliable on the short/hard end and
