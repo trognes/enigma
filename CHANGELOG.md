@@ -528,6 +528,27 @@ existing command lines can behave differently or stop working.
 
 ### Fixed
 
+- **`--confidence` was broken by any selective `--crib`: every progress line
+  printed the same margin.** A crib-rejected key reports `unit_no_score`
+  (`-1e300`) — a sentinel meaning *this unit produced no candidate*, not a
+  score — and `calibrate_null()` pushed it straight into the sample. A crib
+  worth using rejects 99%+ of keys, so nearly every sample was `-1e300`: the
+  mean sat at ≈`-1e300`, the **variance overflowed to `+inf`**, and
+  `(s − μ)/σ` came out exactly `0.0` for every board. The visible result was a
+  300-digit null in the summary and the identical margin `−z_k` on every line.
+  Those keys are not part of the null the search draws from — it never scores
+  them — so they are now excluded, and the attempt budget is raised to
+  compensate (a rejected draw costs only the deduction, an accepted one a whole
+  climb). When a crib is so selective that too few samples survive, the run
+  says so, names the crib as the cause, and falls back to raw scores instead of
+  reporting nonsense. **The search itself was never affected** — only the
+  calibration; the run that surfaced this recovered its plaintext correctly.
+  - Residual, unchanged and deliberately conservative: the bar is still
+    `√(2 ln K)` over *all* keys rather than the smaller number a crib actually
+    lets through to be scored, so a crib run's margin is understated by roughly
+    0.5–1.1 σ. Conservative is the safe direction for an "is this a find?"
+    test.
+
 - **`--confidence`'s "not a find" note impersonated a progress line.** The
   documented way to pull a run's margin off stderr is `grep '^ *[+-][0-9]'`,
   and the near-zero caveat wrapped as `"… on signal-free text a margin of\n

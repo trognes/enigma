@@ -1066,6 +1066,26 @@ are read from a **data directory** (filenames built as
     s ≈ −9.43 and **above that — where a real break sits — the plain null
     overstates**. Near zero it undersold a run; far out it would have oversold
     one.
+  - **A key the unit REJECTS must be dropped, not sampled.** `crib_unit()` /
+    `self_crib_unit()` return `unit_no_score` (`-1e300`) when no hypothesis
+    survives — a sentinel so the unit never wins the merge, not a score. It
+    used to go straight into the null, and since a crib worth using rejects
+    99%+ of keys, nearly every sample was `-1e300`: μ ≈ `-1e300`, the variance
+    **overflowed to `+inf`**, and `(s − μ)/σ` was exactly `0.0` for every
+    board — so every progress line printed the identical margin `−z_k` and the
+    summary printed a 300-digit null. The search was unaffected throughout
+    (the run that surfaced it recovered its plaintext), which is exactly why it
+    went unnoticed. Rejected keys are not in the null the search draws from,
+    since it never scores them. The attempt budget is `want·256 + 4096` rather
+    than the plain path's `·64`, because a rejected draw costs only the
+    deduction while an accepted one costs a climb; if too few still survive,
+    the run names the crib and falls back to raw scores.
+  - **`K` is still the TOTAL key count under a crib, which is conservative.**
+    The best-of-`K` bar should strictly use the number of keys actually
+    *scored*, which a crib cuts by ~100×; using the total overstates the bar by
+    ~0.5–1.1σ, so a crib run's margin reads low. That is the safe direction for
+    a "is this a find?" test, and the accepted count is not known before the
+    sweep — the same reason the `--ring-stride` refinement's keys are excluded.
   - **Keys are sampled, not random text.** The null a search actually draws
     from is "this ciphertext under a wrong key", and `key_to_machine()` already
     builds exactly that in every machine mode.

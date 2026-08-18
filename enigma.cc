@@ -269,6 +269,14 @@ static bool opt_crib_dump;              /* print each surviving hypothesis (diag
    speed-up; it is a way into the short-crib regime, and K should be raised when the crib
    is short. ENHANCEMENTS.md, Cribs item 12. */
 static int opt_crib_seeds = 0;
+
+/* The score a work unit reports when it produced NO candidate at all -- every crib
+   hypothesis contradicted, or no rotor setting could have produced the crib. It is a
+   sentinel, not a score: it exists only so such a unit never wins the merge, and it must
+   be EXCLUDED wherever scores are treated as a distribution. calibrate_null() learned
+   that the hard way; see the filter there. */
+static const double unit_no_score = -1e300;
+
 /* The menu, built once by init_crib(). A menu is a property of the crib AND the place it
    sits, so everything except the crib letters themselves is per ALIGNMENT: the ciphertext
    letters it pairs with, and therefore the anchor letter the 26 hypotheses are about.
@@ -4251,7 +4259,7 @@ static double crib_unit(machine & m, size_t key_index, int restart)
         }
 
       if (nseed == 0)
-        return -1e300;    /* nothing survived: never wins the merge */
+        return unit_no_score;    /* nothing survived: never wins the merge */
 
       /* Top K by IC, ties broken by the deterministic discovery order. Partial
          selection sort: K is small, so this beats sorting the whole list. */
@@ -4294,7 +4302,7 @@ static double crib_unit(machine & m, size_t key_index, int restart)
     }
 
   if (! have)
-    return -1e300;      /* no hypothesis survived: never wins the merge */
+    return unit_no_score;      /* no hypothesis survived: never wins the merge */
   memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
   memcpy(m.steckerbrett, best_steck, asize);
   g_crib_stop_shown = best_at;   /* the progress line reports the winning alignment */
@@ -4361,7 +4369,7 @@ static double self_crib_unit(machine & m, size_t key_index, int restart)
       }
 
   if (nseed == 0)
-    return -1e300;      /* nothing survived: never wins the merge */
+    return unit_no_score;      /* nothing survived: never wins the merge */
 
   /* Top K by IC, ties broken by the deterministic candidate order. Selection sort: K is
      small and nseed is ~28, so this is cheaper than sorting the whole list. */
@@ -4417,7 +4425,7 @@ static double self_crib_unit(machine & m, size_t key_index, int restart)
         }
     }
   if (! have)
-    return -1e300;
+    return unit_no_score;
   memcpy(m.plaintext, best_pt, static_cast<size_t>(textlength) + 1);
   memcpy(m.steckerbrett, best_steck, asize);
   return best;
@@ -4439,7 +4447,7 @@ static double exhaust_unit(machine & m, size_t key_index, size_t fi)
       memcpy(m.steckerbrett, c.best_steck, asize);
       return c.best;
     }
-  return -1e300;   /* no valid combo under this first pair: never wins the merge */
+  return unit_no_score;   /* no valid combo under this first pair: never wins the merge */
 }
 
 /* Whole-key exhaustion (used by the -F tier-2 climb, which parallelises over keys): every
@@ -4454,7 +4462,7 @@ static double exhaust_all_combos(machine & m, size_t key_index)
   for (size_t fi = 0; fi < nfirsts; fi++)
     {
       double s = exhaust_unit(m, key_index, fi);
-      if ((! have || (s > best)) && (s > -1e300))
+      if ((! have || (s > best)) && (s > unit_no_score))
         {
           best = s;
           have = true;
@@ -6030,8 +6038,20 @@ static void calibrate_null(machine & m, size_t keys,
 
   /* Draws are with replacement and skip keys the collapses removed; a run of
      misses cannot loop forever because total_keys is the INDEX space and at least
-     one index in it always survives (the winner did). */
-  size_t guard = want * 64 + 1024;
+     one index in it always survives (the winner did).
+       A REJECTED key is skipped too, and that one is load-bearing. Under --crib the
+     unit returns unit_no_score for a key no hypothesis survives -- and a crib worth
+     using rejects 99%+ of them, so nearly every sample came back as -1e300. The mean
+     then sat at ~-1e300 and the variance OVERFLOWED to +inf, which made (s - mu)/sd
+     exactly 0 for every board: every progress line printed the identical margin
+     -z_k, and the summary printed a 300-digit null. Those keys are not part of the
+     null the search draws from -- it never scores them at all -- so they must be
+     dropped rather than counted. The guard is much larger than the plain path's
+     because a rejected draw costs only the deduction (microseconds) while an
+     accepted one costs a whole climb, so many attempts are affordable and the loop
+     still terminates. */
+  size_t guard = want * 256 + 4096;
+  size_t rejected = 0;
   while ((xs.size() < want) && (guard-- > 0))
     {
       rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
@@ -6039,7 +6059,13 @@ static void calibrate_null(machine & m, size_t keys,
       if (! key_to_machine(m, idx, tasks, range, rc, gc, all, rg, gsize,
                            rc12, gc12, cur_wo, rg6))
         continue;
-      xs.push_back(opt_hillclimb ? climb_unit(m, idx, 0) : score_iter(m));
+      const double s = opt_hillclimb ? climb_unit(m, idx, 0) : score_iter(m);
+      if (s <= unit_no_score)
+        {
+          rejected++;
+          continue;
+        }
+      xs.push_back(s);
       if (show_progress && (((xs.size() % step) == 0) || (xs.size() == want)))
         {
           fprintf(stderr, "\rConfidence: sampling the null %3zu%% (%zu / %zu keys)",
@@ -6057,9 +6083,17 @@ static void calibrate_null(machine & m, size_t keys,
   opt_dump_all = save_dump;
   m.plugboards_scored = save_scored;   /* keep the diagnostic comparable */
 
+  /* Naming the cause matters here: with a crib this is the EXPECTED outcome of a
+     very selective one, not a malfunction, and the run is otherwise fine. */
   if (xs.size() < 8)
     {
-      fprintf(stderr, "Confidence: too few sampled keys to calibrate\n");
+      if (rejected > 0)
+        fprintf(stderr,
+                "Confidence: the crib rejected %zu of %zu sampled keys, leaving %zu "
+                "to\n            calibrate against -- too few for a null. Reporting "
+                "raw scores.\n", rejected, rejected + xs.size(), xs.size());
+      else
+        fprintf(stderr, "Confidence: too few sampled keys to calibrate\n");
       return;
     }
   double mu = 0.0;

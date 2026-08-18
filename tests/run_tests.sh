@@ -2564,6 +2564,30 @@ cs_iters() { cs_run "$@" | sed -n 's/.*scored \([0-9]*\) plugboard.*/\1/p'; }
 check "--crib-seeds climbs fewer plugboards than every survivor" \
   "$(awk -v a="$(cs_iters)" -v b="$(cs_iters --crib-seeds 3)" \
      'BEGIN { print (b < a) ? "fewer" : "no-saving" }')" "fewer"
+
+# A crib-REJECTED key reports unit_no_score (-1e300), which is a sentinel and not a
+# score.  Feeding those to the null put ~99% of samples at -1e300: the mean sat at
+# ~-1e300, the variance OVERFLOWED to +inf, and (s - mu)/sd came out exactly 0 for
+# every board -- so every progress line printed the identical margin -z_k and the
+# summary printed a 300-digit null.  The three assertions below are the three
+# visible symptoms, so any one of them regressing is caught.
+cf_crib() { { printf '%s' "$cb_ct" | "$ENIGMA" -c -q -l german -u B -w 123 -r AAA \
+              -g "..." -R 0 -T 1 --crib OBERKOMMANDO --crib-at 4 --confidence 32 \
+              --no-preflight >/dev/null; } 2>&1; }
+cf_crib_out=$(cf_crib)
+check "--confidence: a crib-rejected key is not counted in the null" \
+  "$(printf '%s' "$cf_crib_out" \
+     | sed -n 's/^Confidence: null \(-*[0-9.]*\) .*/\1/p' \
+     | awk '{ print ($1 > -100) ? "sane" : "overflowed" }')" "sane"
+check "--confidence: the null spread stays finite under a crib" \
+  "$(printf '%s' "$cf_crib_out" \
+     | sed -n 's/.*+\/- \([0-9a-zA-Z.]*\) over.*/\1/p' \
+     | awk '{ print ($1 == "inf" || $1 + 0 <= 0) ? "broken" : "finite" }')" "finite"
+# The clinching symptom: with the null broken EVERY line read the same margin.
+check "--confidence: margins vary from board to board under a crib" \
+  "$(printf '%s' "$cf_crib_out" | grep -E '^ *[+-][0-9]' \
+     | awk '{ print $1 }' | sort -u | wc -l \
+     | awk '{ print ($1 > 1) ? "vary" : "all-identical" }')" "vary"
 # ... and the answer must survive the cut.  This is the property that matters: a cheaper
 # run that stops finding the key is worthless.  Scored by IC with the board given, which
 # also shows the ranking needs NO language and no n-gram table -- it is the index of
