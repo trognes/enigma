@@ -214,6 +214,42 @@ caller who *knows* a network's names are long can say so, not as a tuning knob.
 The weak short hypotheses cost nothing because the IC ranking already discards
 them.
 
+*The X between the copies is REQUIRED, and dropping it is viable — measured,
+not built.* `--self-crib-seeds` guesses `steck[X]` and seeds `self_crib_try`
+with exactly that, so the equality edges cannot start anything until an anchor
+propagates the guess into the message. A doubling with **no separator at all**
+— `SIEGFRIEDSIEGFRIED` — therefore forms no hypothesis and is invisible. Three
+of the 66 corpus messages carry a 6+ separator-free doubling and no
+X-separated one anywhere: `SIEGFRIED`, `OSTROW`, `ROSENOW`.
+
+The algebra does not need the X. An equality edge gives
+`steck[c_j] = core_j[core_i[steck[c_i]]]`, which relates two *ciphertext*
+letters' plugs and mentions no plaintext; guess `steck[c_0]` instead of
+`steck[X]` and the same closure runs. What is lost is edges, not grounding.
+`eval/selfcrib_noanchor.py`, true key, 200 trials, 10-pair board, 6+ letters —
+the middle arm is the controlled one, the same word at the same alignment with
+only the assertion withheld:
+
+| arm | survivors | cables | correct exists | rank 1 | top-5 |
+|---|---:|---:|---:|---:|---:|
+| `W X W`, separator asserted | 4.9 | 4.2 | 197/200 | 167 | 192 |
+| `W X W`, anchor withheld | 6.6 | 3.7 | 195/200 | 142 | 182 |
+| `W W`, separator-free | 8.7 | 3.4 | 195/200 | 117 | 168 |
+
+**The anchor is worth sharpness, not existence.** Withholding it costs 1.3×
+more survivors and half a cable; the genuinely separator-free case costs 1.8×
+more survivors (8.7) and 0.8 fewer cables. What barely moves is **whether a
+correct hypothesis exists at all** — 197/200 against 195/200 — so recall is
+essentially intact and only the *ranking* degrades, top-5 96% → 84%. At the
+shipped `K = 10` operating point 8.7 survivors are all climbed anyway, so the
+extra cost is close to nothing in absolute terms.
+
+Two caveats before acting on it. The `W W` pool is **4 messages**, so that row
+rests on a narrow base however many trials are drawn from it. And this is the
+**true key**: whether wrong keys also survive more — which would cost
+discrimination on a sweep — is unmeasured, the same gap the crib-seeds work had
+to close separately.
+
 *The C++ closure is checked against the probe, not just against outcomes.* A
 wrong deduction could still recover messages by luck, so the two are compared on
 the **number of distinct surviving seeds per key** — a structural quantity —
