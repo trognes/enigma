@@ -28,12 +28,14 @@ the bucket's own length: a real user does not know how long the doubling is, so
 telling the search would flatter it.
 """
 import argparse
+import json
 import os
 import random
 import re
 import subprocess
 import sys
 import time
+from math import comb
 
 import numpy as np
 
@@ -57,9 +59,11 @@ def run(binary, args, ct):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--binary", default="./enigma")
-    ap.add_argument("--lengths", type=int, nargs="+", default=[6, 9, 13])
-    ap.add_argument("--restarts", type=int, nargs="+", default=[8, 32, 64])
-    ap.add_argument("--trials", type=int, default=20)
+    ap.add_argument("--lengths", type=int, nargs="+",
+                    default=[4, 5, 6, 7, 9, 13])
+    ap.add_argument("--restarts", type=int, nargs="+",
+                    default=[16, 32, 64, 128])
+    ap.add_argument("--trials", type=int, default=40)
     ap.add_argument("--total", type=int, default=167)
     ap.add_argument("--seeds", type=int, default=10)
     ap.add_argument("--plugs", type=int, default=10)
@@ -128,6 +132,32 @@ def main():
                    np.mean(it[k])))
         say("")
 
+    # The arms are PAIRED -- same ciphertext through every one -- so McNemar on
+    # the discordant trials is available and is the test that applies. Aggregate
+    # counts alone cannot distinguish 19-vs-19 with 0 discordant (identical
+    # behaviour) from 19-vs-19 with 8 discordant (both arms failing different
+    # messages), and those mean very different things.
+    say("PAIRED COMPARISON  seeder vs each restart arm (McNemar, exact)")
+    say("%-9s %-7s %-9s %-9s %-11s %s"
+        % ("doubling", "arm", "seeder+", "arm+", "discordant", "p"))
+    say("-" * 62)
+    for wlen in a.lengths:
+        ok, _, _ = results[wlen]
+        sc = np.array(ok["selfcrib"])
+        for r in a.restarts:
+            ar = np.array(ok["R%d" % r])
+            b = int((sc & ~ar).sum())
+            c = int((ar & ~sc).sum())
+            n = b + c
+            if n == 0:
+                p = 1.0
+            else:
+                k = min(b, c)
+                p = min(1.0, 2 * sum(comb(n, i) for i in range(k + 1)) / 2 ** n)
+            say("%-9d %-7s %-9d %-9d %-11d %.3f"
+                % (wlen, "R%d" % r, b, c, n, p))
+        say("")
+
     say("EQUIVALENT -R  (the restart count whose break rate the seeder matches)")
     say("%-9s %-12s %-34s %s" % ("doubling", "seeder", "restart arms", "reading"))
     say("-" * 76)
@@ -152,6 +182,19 @@ def main():
 
     with open(a.out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(log) + "\n")
+    # Per-trial outcomes, so a later reader can re-test without re-running the
+    # hours this cost.
+    jl = a.out.rsplit(".", 1)[0] + ".jsonl"
+    with open(jl, "w", encoding="utf-8") as fh:
+        for wlen in a.lengths:
+            ok, wl, it = results[wlen]
+            for i in range(len(ok["selfcrib"])):
+                fh.write(json.dumps({
+                    "doubling": wlen, "trial": i,
+                    "exact": {k: bool(ok[k][i]) for k in arms},
+                    "wall": {k: round(wl[k][i], 3) for k in arms},
+                    "plugboards": {k: it[k][i] for k in arms}}) + "\n")
+    print("per-trial data in %s" % jl)
     print("\nwritten to %s" % a.out)
     return 0
 
