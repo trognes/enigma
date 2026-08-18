@@ -104,7 +104,9 @@ PER-HYPOTHESIS FIXED COST is what matters**, not the closure: the sweep calls
 `crib_try` 26 times per key and on a wrong key most hypotheses die within a few
 edges, so 26 extra iterations roughly doubled the work. Anything added to the
 top of `crib_try` should be behind a flag that is false in the common case
-(`g_have_known_plugs`), not merely cheap per iteration. Each has a `quick` tier (default, a few seconds) and an opt-in `long`
+(`g_have_known_plugs`), not merely cheap per iteration.
+
+Each has a `quick` tier (default, a few seconds) and an opt-in `long`
 tier (`make bench LONG=1`, ≥15–30s each) for a stronger signal; `make bench
 SCALE=1` additionally sweeps `-T` to show thread scaling. Timing is the min of
 several repetitions (the per-tier benchmarks are single-threaded). The
