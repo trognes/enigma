@@ -6,15 +6,34 @@ on:
 
 jobs:
   # Fast gate: build with both compilers as -Werror and run the test suite.
+  #
+  # g++-14 is a THIRD cell rather than an upgrade of the g++ one, and it is
+  # installed by name rather than taken from the image. Both choices are
+  # deliberate:
+  #
+  #   * The build is -Werror, so every warning a newer gcc introduces becomes a
+  #     red build. Naming the version means that happens on a commit here, not
+  #     whenever GitHub repoints ubuntu-latest -- which would break the build on
+  #     their schedule, for reasons unrelated to the change under review.
+  #   * Keeping the default g++ cell as well means the version most users have
+  #     stays covered while the newer one warns about what is coming.
+  #
+  # This was added after a -Wformat-truncation warning reached a user on Debian
+  # 13 (gcc 14) that CI could not see: the runners carry gcc 13.3, which does
+  # not emit it. Verified to earn its keep -- reverting that fix makes this cell
+  # fail the build and leaves the other two green.
   test:
     name: build & test (${{ matrix.cxx }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        cxx: [g++, clang++]
+        cxx: [g++, g++-14, clang++]
     steps:
       - uses: actions/checkout@v5
+      - name: Install ${{ matrix.cxx }}
+        if: matrix.cxx == 'g++-14'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq g++-14
       - name: Compiler version
         run: ${{ matrix.cxx }} --version
       - name: Build (-Werror)
