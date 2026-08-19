@@ -1,7 +1,20 @@
 name: CI
 
+# A push to a branch with an open PR is BOTH a push and a pull_request event,
+# so a bare `push:` ran the whole matrix twice per PR -- 24 check runs where 12
+# say the same thing. Restricting push to the long-lived branches leaves each
+# commit checked exactly once: by pull_request while it is under review, by
+# push once it lands on dev or master. This is what codeql.yml and bench.yml
+# already do.
+#
+# The two events are not merely duplicates of each other, and pull_request is
+# the more useful one: it builds the PR head MERGED INTO its base, i.e. what
+# the repository would actually get, whereas push builds the branch head
+# alone. The cost is that a branch pushed without a PR gets no CI; every
+# branch here becomes a PR, so that case does not arise.
 on:
   push:
+    branches: [master, dev]
   pull_request:
 
 jobs:
