@@ -324,17 +324,18 @@ English tables.
   *deduced* seed needs. A soft-seeded board starts good, so it wants a smaller
   `--random` kick than the default (needs `-c`; off by default)
 - **`--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature`** —
-  **Self-crib seeding**, the one lever measured to beat `-R` at matched compute.
-  A doubled word is a *self*-crib: it says two positions share an unknown
+  **Self-crib seeding.** A doubled word is a *self*-crib: it says two positions
+  share an unknown
   letter,
   which cancels out of the machine equation and leaves a rule computable from
   the rotor key alone. Per key the tool deduces the boards that rule allows,
   ranks them by index of coincidence, and climbs the top `K` with the deduced
-  plugs pinned. On 676-key sweeps `K = 10` broke **23 of 32** messages against a
-  bare `-R 16`'s 13, in half the wall time. The default hypothesises the
+  plugs pinned. The default hypothesises the
   doubling
   anywhere; `--self-crib-signature` narrows it to one closing the message, which
   is ~15× cheaper but only wins when that holds (needs `-c`; off by default).
+  **When it pays is length-dependent and the failure mode is severe — see
+  "When the self-crib is worth it" under Cracking strategy before using it.**
   **`--self-crib-tandem`** additionally hypothesises a doubling with *no*
   separator (`SIEGFRIEDSIEGFRIED`) — the default cannot form one, because the
   separator is what carries its guess into the message. It is opt-in because it
@@ -576,6 +577,57 @@ stuck in local optima on short ones. Two options improve this and **compose**:
   defaulting to **10** (close to a typical plug count, which works best).
   `--random 0` is a legal control (no perturbation — `N` restarts then repeat
   the seed climb).
+
+### When the self-crib is worth it
+
+`--self-crib-seeds` can be far cheaper than restarts or far worse than them,
+and which one you get depends on two things you should check first: **how long
+the message is** and **how long its doubled word is**. Measured on synthetic
+telegraphic German with the doubling length controlled, 40 paired trials per
+cell, 676-key sweeps with a 10-pair board hidden (exact recoveries of 40):
+
+**At 100 letters — the seeder wins outright above a 7-letter doubling:**
+
+| doubling | seeder 1.0 s | `-R 16` 1.3 s | `-R 64` 4.9 s | `-R 128` 9.8 s |
+|---:|---:|---:|---:|---:|
+| 4 | **1** | 4 | 12 | 19 |
+| 5 | **0** | 6 | 12 | 16 |
+| 6 | 15 | 13 | 23 | 24 |
+| 7 | **15** | 8 | 12 | 15 |
+| 9 | **24** | 11 | 17 | 21 |
+| 13 | **33** | 11 | 22 | 22 |
+
+At a 7+ doubling it ties or beats `-R 128` while costing about **9× less wall
+time** — cheaper than even `-R 16`.
+
+**At 167 letters the advantage is gone.** The same design there puts `-R 128`
+at 36–40 of 40: the restart curve has saturated, so there is no headroom left
+for a deduction to convert, and the seeder is not significantly ahead in any
+bucket. So the right question is not "does my message have a doubling?" but
+**"is `-R 128` still failing at this length?"** — if it is not, use restarts.
+
+**A too-short doubling is a near-total loss, not a wash.** At 100 letters a
+4- or 5-letter doubling gives **1/40 and 0/40** against `-R 128`'s 19 and 16
+(p = 0.000). The seeder hypothesises doublings of `--self-crib-length` (6 by
+default) *anywhere*, whether or not the message has one, pins the deduced —
+wrong — plugs, and those pins survive the climb.
+
+**So do not use it blind.** Only about 27% of authentic 1941 Army messages
+carry a 6+ doubling, and you cannot tell in advance which yours is. Instead,
+exploit the cost asymmetry — **run the seeder first, then fall back to
+restarts**:
+
+```sh
+./enigma -c -f -l wehrmacht -J -S i4f10 --self-crib-seeds 10 -R 0 \
+         -T 4 < cipher.txt          # ~1 s per key-sweep; nothing lost if it misses
+./enigma -c -f -l wehrmacht -J -S i4f10 --polish -R 128 \
+         -T 4 < cipher.txt          # the fallback
+```
+
+Doing both costs roughly **11% more than the restart run alone** and takes the
+union of what they break, which beats either arm on its own at every doubling
+length. Use `--confidence 256` on both so a miss is distinguishable from a
+find.
 
 - **`-S <schedule>` / `--score <schedule>` — staged climb.** A schedule is a
   string of `<letter><optional cap>` model tokens `i`/`m`/`b`/`t`/`q`/`a`, climb

@@ -558,8 +558,10 @@ are read from a **data directory** (filenames built as
     starting board at their own site. `-T`-deterministic.
 - `--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature`
   **self-crib seeding from a doubled word** (needs `-c`; `K = 0` = off, `L`
-  default 6). The one thing measured in this repo that beats `-R` at matched
-  compute. A doubled word is a *self*-crib: it says only that two positions
+  default 6). Beats `-R` at matched compute **at ~100 letters with a 7+
+  doubling, and not at 167** — see "When it pays" below; the unqualified claim
+  that used to sit here was measured only at the shorter length. A doubled word
+  is a *self*-crib: it says only that two positions
   carry the **same** plaintext letter, which cancels out of `p_i =
   steck[core_i[steck[c_i]]]` and leaves `steck[c_j] =
   core_j[core_i[steck[c_i]]]` — computable from the rotor key alone. As a
@@ -685,6 +687,41 @@ are read from a **data directory** (filenames built as
     left flank is always asserted at gap 0 and only the right one is a variant.
     Refused with `--self-crib-signature`, which says the copies *are* separated
     by an X closing the message — a contradiction, not a narrowing.
+  - **WHEN IT PAYS — length-dependent, and the failure mode is severe.**
+    Synthetic telegraphic German with the doubling length controlled and the
+    message length fixed, 40 paired trials per cell, 676-key sweeps, 10-pair
+    board hidden (`eval/selfcrib_vs_restarts.py`,
+    `eval/make_doubling_messages.py`). Exact recoveries of 40:
+
+    | doubling | | L=100 | | | | L=167 | |
+    |---:|---:|---:|---:|---:|---:|---:|---:|
+    | | seeder | `R16` | `R128` | | seeder | `R16` | `R128` |
+    | 4 | **1** | 4 | 19 | | **1** | 30 | 39 |
+    | 5 | **0** | 6 | 16 | | **1** | 30 | 36 |
+    | 6 | 15 | 13 | 24 | | 19 | 27 | 36 |
+    | 7 | 15 | 8 | 15 | | 28 | 29 | 37 |
+    | 9 | **24** | 11 | 21 | | 32 | 33 | 40 |
+    | 13 | **33** | 11 | 22 | | 38 | 34 | 39 |
+
+    At **L=100** the seeder ties or beats `-R 128` from a 7-letter doubling up,
+    at 1.05 s against 9.8 s — **~9× cheaper**, and cheaper than `-R 16`
+    (McNemar vs `R16`: 22-vs-0 at doubling 13, p = 0.000; 16-vs-3 at 9,
+    p = 0.004). At **L=167 it is not significantly ahead in any bucket**,
+    because `-R 128` already reaches 36–40 of 40 and there is no headroom left
+    to convert. So the operative question is **"is `-R 128` still failing at
+    this length?"**, not "does the message have a doubling?".
+  - **A doubling SHORTER than `--self-crib-length` is a near-total loss, not a
+    wash**: 1/40 and 0/40 at doubling 4 and 5 at L=100, against `-R 128`'s 19
+    and 16 (p = 0.000). The seeder hypothesises doublings of the configured
+    length *anywhere* whether or not one exists — 3520 hypotheses on such a
+    message — pins the deduced (wrong) plugs, and those pins survive the climb.
+    It does **not** degrade to an ordinary climb.
+  - **So do not use it blind**: only ~27% of the 66 authentic messages carry a
+    6+ doubling (30.3% at 4+, 24.2% at 7+, 9.1% at 10+) and nothing tells you
+    which yours is beforehand. Exploit the cost asymmetry instead — **run the
+    seeder first, then fall back to `-R`**. At 1.05 s against 9.8 s that is
+    ~11% over the restart run alone and takes the union, which beats either arm
+    at every doubling length (33 vs 22 at doubling 13; 19 vs 1 at 4).
   - Rejected with `--crib`/`--crib-list`, `--exhaust`, `-A`, `--soft-plug`, `-F`
     and `--tune-phase` — each installs its own starting board or moves the key
     the deduction was computed for. `-T`-deterministic; the dedupe key is the

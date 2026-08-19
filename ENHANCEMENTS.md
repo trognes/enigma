@@ -275,8 +275,9 @@ and they agree exactly, 0 mismatches over 6 keys spanning 1 to 43 seeds.
 
 **5. Repeated text with an X between — the REPORTER is shipped as
 `--doubling-report L`; the SCORE BONUS and the SELF-CRIB FILTER are measured
-down; the SIGNATURE SEEDER beats `-R` at matched compute and is READY TO
-BUILD.** The split
+down; the SIGNATURE SEEDER beats `-R` at matched compute (**at ~100 letters —
+at 167 it does not; see the `--self-crib-seeds` entry in `CLAUDE.md`**) and is
+SHIPPED as `--self-crib-seeds`.** The split
 is
 the whole story of this item. As a *confirmation signal* — report the doubling,
 change no ranking — it works and is now in `enigma.cc` as `--doubling-report L`
