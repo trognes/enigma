@@ -2844,7 +2844,7 @@ check "--crib-file is no longer accepted" \
 # releases because nothing checked, so this compares the getopt table in the
 # source against the help text rather than trusting a human to notice.
 help_missing=$("$ENIGMA" -h 2>&1 > /tmp/enigma_help.$$ ; \
-  grep -oE '\{ "[a-z-]+",' "$(dirname "$0")/../enigma.cc" \
+  grep -ohE '\{ "[a-z-]+",' "$(dirname "$0")"/../src/*.cc \
   | sed 's/{ "//;s/",//' | sort -u \
   | while read -r o; do grep -q -- "--$o" /tmp/enigma_help.$$ || echo "$o"; done)
 rm -f /tmp/enigma_help.$$

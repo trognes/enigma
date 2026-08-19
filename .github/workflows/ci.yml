@@ -1,8 +1,34 @@
 name: CI
 
+# A push to a branch with an open PR is BOTH a push and a pull_request event,
+# so a bare `push:` ran the whole matrix twice per PR -- 24 check runs where 12
+# say the same thing. Restricting push to the long-lived branches leaves each
+# commit checked exactly once: by pull_request while it is under review, by
+# push once it lands on dev or master. This is what codeql.yml and bench.yml
+# already do.
+#
+# The two events are not merely duplicates of each other, and pull_request is
+# the more useful one: it builds the PR head MERGED INTO its base, i.e. what
+# the repository would actually get, whereas push builds the branch head
+# alone. The cost is that a branch pushed without a PR gets no CI; every
+# branch here becomes a PR, so that case does not arise.
 on:
   push:
+    branches: [master, dev]
   pull_request:
+
+# A second push to a branch makes the first run's answer obsolete, so cancel
+# it rather than paying for a full matrix nobody will read.
+#
+# But only for pull requests. On master and dev each push is a DIFFERENT
+# landed commit, not a revision of the same one, and cancelling there would
+# mean two merges close together leave the first with no recorded CI result --
+# exactly the commit a later bisect would want an answer for. Hence the
+# condition rather than a bare `true`; bench.yml cancels unconditionally,
+# which is defensible for a job that long but is not what this matrix wants.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Fast gate: build with both compilers as -Werror and run the test suite.
@@ -136,7 +162,7 @@ jobs:
       - name: Install cppcheck
         run: sudo apt-get update && sudo apt-get install -y cppcheck
       - name: Run cppcheck
-        run: cppcheck --enable=warning,performance,portability --inline-suppr --std=c++17 --error-exitcode=1 enigma.cc
+        run: cppcheck --enable=warning,performance,portability --inline-suppr --std=c++17 --error-exitcode=1 src/
 
   clang-tidy:
     runs-on: ubuntu-latest
@@ -144,8 +170,13 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install clang-tidy
         run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      # Every translation unit, and (via HeaderFilterRegex in .clang-tidy) the
+      # headers too. A header included by several .cc files reports its findings
+      # once per includer -- noisy, but the alternative is headers going
+      # unchecked entirely, which is where a shared inline hot-path function
+      # would hide. A clean tree still reports ZERO `error:` lines.
       - name: Run clang-tidy
-        run: clang-tidy enigma.cc -- -std=c++17   # checks come from .clang-tidy
+        run: clang-tidy src/*.cc -- -std=c++17   # checks come from .clang-tidy
 
   shellcheck:
     runs-on: ubuntu-latest

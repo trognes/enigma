@@ -898,7 +898,7 @@ message, so the authentic-message sets in `eval/` remain held out.
 Language-specific letters outside plain A-Z are folded to a base A-Z letter when
 a table loads (diacritics stripped: `Ä`/`Å`/`Ö` → `A`/`A`/`O`, `Ñ` → `N`, `Ł` →
 `L`, Icelandic `Þ` → `T` pairing with `Ð` → `D`, etc.) — see `fold_codepoint()`
-in `enigma.cc`.
+in `src/`.
 
 ## Performance
 

@@ -43,8 +43,11 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 ## Repository layout
 
 ```
-enigma.cc                 The entire program (single translation unit).
-Makefile                  Builds the `enigma` binary with g++ -O3.
+src/                      The program. Being split out of the former
+                          single-file enigma.cc into modules; `src/enigma.cc`
+                          still holds everything not yet moved out.
+Makefile                  Builds the `enigma` binary from `src/*.cc` with
+                          g++ -O3 (one object per source, `-MMD -MP` deps).
 README.md                 User-facing description and usage.
 LICENSE                   GNU GPL v3.
 .gitignore                Ignores editor backups and cipher*.txt.
@@ -202,9 +205,32 @@ broken benchmark, not a skippable row.
 > ±0.5% `search` figure is g++, while clang's own base-vs-base control swung
 > −2.2%…+0.4% across three runs on the same box, so a clang `search` move under
 > ~2% says nothing. Run the control on the compiler you are judging, not just on
-> one of them. That gap decides real cases: on one set of runs a `search` +5%
-> was a genuine regression (a hot-path struct grown from 48 to 156 bytes) while
-> simultaneous `hillclimb` scatter of +4.5%/−1.3%/+5.1% was nothing at all. Both
+> one of them.
+>
+> **The CI matrix has now been controlled directly, and the long tier is not
+> the quiet one it looks like.** PR #205 moved `enigma.cc` to `src/` and split
+> the build into compile-then-link; the resulting binary is **byte-identical**
+> under both compilers (`cmp`, verified for the path change too), so its Bench
+> run is a free four-cell base-vs-base control on the runners themselves —
+> every number below is pure noise by construction:
+>
+> | cell | worst quick | worst long |
+> |---|---:|---:|
+> | g++ x86_64 | +0.9% | +0.2% |
+> | g++ arm64 | +0.2% | +0.5% |
+> | clang++ arm64 | +0.4% | +0.2% |
+> | **clang++ x86_64** | +1.8% | **−9.0%** (`search`) |
+>
+> Three cells resolve to ~1%; the fourth threw a **−9.0% on `search` long** on
+> code that cannot have changed. So the per-compiler warning above understates
+> it — a clang `search` move is worth nothing under ~10% *on the long tier*,
+> where the g++ figure is ±0.5%, and the long tier's extra repetitions do not
+> buy immunity. It also lands just under the 10% `THRESHOLD`: one more point of
+> scatter and a byte-identical build would have been flagged, which is exactly
+> why `FAIL_OVER` is a separate, higher number. That gap decides real cases: on
+> one set of runs a `search` +5% was a genuine regression (a hot-path struct
+> grown from 48 to 156 bytes) while simultaneous `hillclimb` scatter of
+> +4.5%/−1.3%/+5.1% was nothing at all. Both
 > readings you would reach without the control — "both ~5%, so both noise" and
 > "fix the hillclimb number" — are wrong. The 10% `THRESHOLD` is a
 > coarse backstop, not a resolution limit: the `search` tier resolves ~1%, so a
@@ -2681,7 +2707,7 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   default `g++` cell stays alongside it so the version most users have is still
   covered. **The two lint jobs are the ones easiest to
   meet for the first time in CI rather than locally, and both run in seconds** —
-  `clang-tidy enigma.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
+  `clang-tidy src/*.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
   tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`
   installs the binary). Run them before pushing, and grep clang-tidy's output
   for `error:` rather than for the names you touched: it suppresses ~24 000
