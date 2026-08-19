@@ -2669,9 +2669,17 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   matrices over every scoring model × language). Performance is benchmarked
   separately by `tests/bench.sh` (`make bench`; see "Build & run"). CI
   (`.github/workflows/ci.yml`) runs on every push and PR: the suite `-Werror`
-  under g++ and clang++, ASan+UBSan, valgrind, cppcheck, clang-tidy (config in
+  under g++, **g++-14** and clang++, ASan+UBSan, valgrind, cppcheck, clang-tidy
+  (config in
   `.clang-tidy`), and shellcheck; a separate CodeQL workflow runs on PRs and
-  weekly. Keep all of these green. **The two lint jobs are the ones easiest to
+  weekly. Keep all of these green. **The `g++-14` cell exists because `-Werror`
+  turns any warning a NEWER gcc adds into a build failure for users on current
+  distros, while the runners stay quiet** — a `-Wformat-truncation` warning
+  reached a Debian 13 user (gcc 14) that CI could not see on its gcc 13.3. It
+  is installed by name rather than taken from the image, so a compiler upgrade
+  is a commit here rather than something GitHub does on its own schedule; the
+  default `g++` cell stays alongside it so the version most users have is still
+  covered. **The two lint jobs are the ones easiest to
   meet for the first time in CI rather than locally, and both run in seconds** —
   `clang-tidy enigma.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
   tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`

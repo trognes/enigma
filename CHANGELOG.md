@@ -560,6 +560,18 @@ existing command lines can behave differently or stop working.
   for two unrelated features. The old name is not accepted — **the next release
   carrying this needs a major version bump.**
 
+### Changed
+
+- **CI builds with `g++-14` as well.** The build is `-Werror`, so a warning a
+  newer gcc introduces is a hard failure for anyone on a current distro while
+  the runners — ubuntu-24.04, gcc 13.3 — stay green. That is how a
+  `-Wformat-truncation` warning reached a Debian 13 user unseen. Added as a
+  third matrix cell rather than an upgrade of the existing one, and installed
+  by name rather than inherited from `ubuntu-latest`, so a compiler bump is a
+  deliberate commit here instead of something GitHub does on its own schedule.
+  Verified to earn its keep: reverting the buffer fix makes this cell fail the
+  build while the other two pass.
+
 ### Fixed
 
 - **`-Wformat-truncation` warning on gcc 14+ (a `-Werror` build failure).**
