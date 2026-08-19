@@ -1,0 +1,96 @@
+How many -R restarts is a self-crib search worth, at a given doubling length?
+
+L=100 fixed, 40 trials/bucket, 10-pair board hidden, 676-key sweep,
+-c -f -l wehrmacht -J -S i4f10, seeder at --self-crib-seeds 10 -R 0
+(the seeder runs at the DEFAULT --self-crib-length 6 in every bucket)
+
+doubling length 4 done
+doubling length 5 done
+doubling length 6 done
+doubling length 7 done
+doubling length 9 done
+doubling length 13 done
+
+doubling  arm        exact     wall/trial  plugboards
+------------------------------------------------------------
+4         selfcrib   1/40      1.01        2343569
+4         R16        4/40      1.24        24630842
+4         R32        8/40      2.43        49278172
+4         R64        12/40     4.79        98593209
+4         R128       19/40     9.66        197130265
+
+5         selfcrib   0/40      1.04        2355199
+5         R16        6/40      1.26        24650720
+5         R32        9/40      2.47        49312371
+5         R64        12/40     4.94        98610065
+5         R128       16/40     9.76        197253236
+
+6         selfcrib   15/40     1.04        2332000
+6         R16        13/40     1.27        24643315
+6         R32        14/40     2.48        49292296
+6         R64        23/40     4.91        98591774
+6         R128       24/40     9.87        197223812
+
+7         selfcrib   15/40     1.13        2329377
+7         R16        8/40      1.26        24666990
+7         R32        11/40     2.47        49326627
+7         R64        12/40     4.88        98647591
+7         R128       15/40     9.75        197312368
+
+9         selfcrib   24/40     1.09        2343976
+9         R16        11/40     1.28        24665430
+9         R32        15/40     2.50        49297828
+9         R64        17/40     4.98        98636603
+9         R128       21/40     9.81        197232621
+
+13        selfcrib   33/40     1.10        2335061
+13        R16        11/40     1.26        24621545
+13        R32        14/40     2.49        49255464
+13        R64        22/40     4.93        98505737
+13        R128       22/40     9.88        197012925
+
+PAIRED COMPARISON  seeder vs each restart arm (McNemar, exact)
+doubling  arm     seeder+   arm+      discordant  p
+--------------------------------------------------------------
+4         R16     0         3         3           0.250
+4         R32     0         7         7           0.016
+4         R64     0         11        11          0.001
+4         R128    0         18        18          0.000
+
+5         R16     0         6         6           0.031
+5         R32     0         9         9           0.004
+5         R64     0         12        12          0.000
+5         R128    0         16        16          0.000
+
+6         R16     6         4         10          0.754
+6         R32     5         4         9           1.000
+6         R64     3         11        14          0.057
+6         R128    2         11        13          0.022
+
+7         R16     13        6         19          0.167
+7         R32     11        7         18          0.481
+7         R64     11        8         19          0.648
+7         R128    10        10        20          1.000
+
+9         R16     16        3         19          0.004
+9         R32     14        5         19          0.064
+9         R64     13        6         19          0.167
+9         R128    10        7         17          0.629
+
+13        R16     22        0         22          0.000
+13        R32     19        0         19          0.000
+13        R64     11        0         11          0.001
+13        R128    11        0         11          0.001
+
+EQUIVALENT -R  (the restart count whose break rate the seeder matches)
+doubling  seeder       restart arms                       reading
+----------------------------------------------------------------------------
+4         1/40         R16:4  R32:8  R64:12  R128:19      below R16 (lowest arm)
+5         0/40         R16:6  R32:9  R64:12  R128:16      below R16 (lowest arm)
+6         15/40        R16:13  R32:14  R64:23  R128:24    between R32 and R64
+7         15/40        R16:8  R32:11  R64:12  R128:15     beats R128 (top arm)
+9         24/40        R16:11  R32:15  R64:17  R128:21    beats R128 (top arm)
+13        33/40        R16:11  R32:14  R64:22  R128:22    beats R128 (top arm)
+
+Cost note: compare wall/trial, not plugboards -- the deduction runs
+outside the counted score loop, so the counter understates the seeder.
