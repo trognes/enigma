@@ -5,10 +5,23 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-
 # without dropping the base flags:  make EXTRA_CXXFLAGS=-Werror
 EXTRA_CXXFLAGS =
 
+# The program is being split out of the former single enigma.cc into modules
+# under src/ (see CLAUDE.md, "Repository layout").  Sources are globbed rather
+# than listed so adding a module needs no Makefile edit; -MMD -MP writes a .d
+# per object so a header change rebuilds exactly its dependents.
+SRCS = $(wildcard src/*.cc)
+OBJS = $(SRCS:.cc=.o)
+DEPS = $(OBJS:.o=.d)
+
 all : enigma
 
-enigma : enigma.cc
-	$(CXX) $(CXXFLAGS) $(EXTRA_CXXFLAGS) -o enigma enigma.cc
+enigma : $(OBJS)
+	$(CXX) $(CXXFLAGS) $(EXTRA_CXXFLAGS) -o $@ $(OBJS)
+
+src/%.o : src/%.cc
+	$(CXX) $(CXXFLAGS) $(EXTRA_CXXFLAGS) -MMD -MP -c -o $@ $<
+
+-include $(DEPS)
 
 test : enigma
 	sh tests/run_tests.sh
@@ -33,6 +46,6 @@ crackquality : enigma
 	python3 tests/crack_quality.py
 
 clean :
-	rm -f enigma
+	rm -f enigma $(OBJS) $(DEPS)
 
 .PHONY : all test bench crackquality clean

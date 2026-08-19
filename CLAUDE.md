@@ -43,8 +43,11 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 ## Repository layout
 
 ```
-enigma.cc                 The entire program (single translation unit).
-Makefile                  Builds the `enigma` binary with g++ -O3.
+src/                      The program. Being split out of the former
+                          single-file enigma.cc into modules; `src/enigma.cc`
+                          still holds everything not yet moved out.
+Makefile                  Builds the `enigma` binary from `src/*.cc` with
+                          g++ -O3 (one object per source, `-MMD -MP` deps).
 README.md                 User-facing description and usage.
 LICENSE                   GNU GPL v3.
 .gitignore                Ignores editor backups and cipher*.txt.
@@ -2681,7 +2684,7 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   default `g++` cell stays alongside it so the version most users have is still
   covered. **The two lint jobs are the ones easiest to
   meet for the first time in CI rather than locally, and both run in seconds** —
-  `clang-tidy enigma.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
+  `clang-tidy src/*.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
   tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`
   installs the binary). Run them before pushing, and grep clang-tidy's output
   for `error:` rather than for the names you touched: it suppresses ~24 000

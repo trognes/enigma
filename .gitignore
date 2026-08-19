@@ -1,6 +1,8 @@
 *~
 cipher*.txt
 /enigma
+src/*.o
+src/*.d
 /enigma_cap
 /enigma_chi2
 __pycache__/

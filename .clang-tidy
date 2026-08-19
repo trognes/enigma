@@ -8,6 +8,10 @@
 #     and similar intentional char/int arithmetic.
 #   * performance-enum-size - wants a 1-byte base type for the 5-value scoring
 #     enum; irrelevant for a config selector that is never stored in bulk.
+# Findings in our own headers are reported (they are not by default); anything
+# under a system include path stays suppressed. A header included by several
+# translation units reports once per includer.
+HeaderFilterRegex: 'src/.*'
 Checks: >
   -*,
   bugprone-*,
