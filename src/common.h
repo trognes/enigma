@@ -25,7 +25,16 @@ static const double score_min = -1e30;
 enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD, SCORE_ALL,
                SCORE_FUSED };
 
-void fatal(const char * message);
+/* [[noreturn]] is load-bearing, not decoration. fatal() ends in exit(1), and
+   while it lived in the same file as its callers both the compiler and the
+   static analysers could see that for themselves. Across a translation-unit
+   boundary they cannot, so `if (f == nullptr) fatal(...);` followed by
+   fgets(..., f) reads as a null-pointer dereference -- which is exactly what
+   cppcheck (nullPointerRedundantCheck) and clang-tidy
+   (clang-analyzer-core.NonNullParamChecker) reported the moment this module
+   was split out. Declaring the contract restores what the analysers had been
+   deducing, at every one of the ~90 fatal() call sites at once. */
+[[noreturn]] void fatal(const char * message);
 
 inline int char2num(char x)
 {
