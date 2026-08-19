@@ -205,9 +205,32 @@ broken benchmark, not a skippable row.
 > ±0.5% `search` figure is g++, while clang's own base-vs-base control swung
 > −2.2%…+0.4% across three runs on the same box, so a clang `search` move under
 > ~2% says nothing. Run the control on the compiler you are judging, not just on
-> one of them. That gap decides real cases: on one set of runs a `search` +5%
-> was a genuine regression (a hot-path struct grown from 48 to 156 bytes) while
-> simultaneous `hillclimb` scatter of +4.5%/−1.3%/+5.1% was nothing at all. Both
+> one of them.
+>
+> **The CI matrix has now been controlled directly, and the long tier is not
+> the quiet one it looks like.** PR #205 moved `enigma.cc` to `src/` and split
+> the build into compile-then-link; the resulting binary is **byte-identical**
+> under both compilers (`cmp`, verified for the path change too), so its Bench
+> run is a free four-cell base-vs-base control on the runners themselves —
+> every number below is pure noise by construction:
+>
+> | cell | worst quick | worst long |
+> |---|---:|---:|
+> | g++ x86_64 | +0.9% | +0.2% |
+> | g++ arm64 | +0.2% | +0.5% |
+> | clang++ arm64 | +0.4% | +0.2% |
+> | **clang++ x86_64** | +1.8% | **−9.0%** (`search`) |
+>
+> Three cells resolve to ~1%; the fourth threw a **−9.0% on `search` long** on
+> code that cannot have changed. So the per-compiler warning above understates
+> it — a clang `search` move is worth nothing under ~10% *on the long tier*,
+> where the g++ figure is ±0.5%, and the long tier's extra repetitions do not
+> buy immunity. It also lands just under the 10% `THRESHOLD`: one more point of
+> scatter and a byte-identical build would have been flagged, which is exactly
+> why `FAIL_OVER` is a separate, higher number. That gap decides real cases: on
+> one set of runs a `search` +5% was a genuine regression (a hot-path struct
+> grown from 48 to 156 bytes) while simultaneous `hillclimb` scatter of
+> +4.5%/−1.3%/+5.1% was nothing at all. Both
 > readings you would reach without the control — "both ~5%, so both noise" and
 > "fix the hillclimb number" — are wrong. The 10% `THRESHOLD` is a
 > coarse backstop, not a resolution limit: the `search` tier resolves ~1%, so a
