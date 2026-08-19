@@ -6,6 +6,38 @@ existing command lines can behave differently or stop working.
 
 ## Unreleased
 
+### Changed
+
+- **Bounded the self-crib's headline claim, and documented when it backfires.**
+  `--self-crib-seeds` was described as "the one lever measured to beat `-R` at
+  matched compute". Measured across doubling length with the message length
+  held fixed (`eval/selfcrib_vs_restarts.py`, 40 paired trials per cell,
+  676-key sweeps), that holds **at ~100 letters with a 7+ doubling — where it
+  ties or beats `-R 128` at ~9× less wall time — and not at 167**, where
+  `-R 128` already reaches 36–40 of 40 and there is no headroom left to
+  convert.
+  - **A doubling shorter than `--self-crib-length` is a near-total loss, not a
+    wash**: 1/40 and 0/40 at doubling 4 and 5 against `-R 128`'s 19 and 16
+    (p = 0.000). The seeder hypothesises doublings of the configured length
+    *anywhere* whether or not one exists, pins the deduced (wrong) plugs, and
+    those pins survive the climb — so it does not degrade to an ordinary climb.
+  - Since only ~27% of authentic messages carry a 6+ doubling and nothing tells
+    you which yours is, `README.md` now recommends **running the seeder first
+    and falling back to `-R`**: ~11% over the restart run alone, taking the
+    union, which beats either arm at every doubling length.
+  - No code change — documentation and measurement only.
+
+- **`README.md` now says how to choose the keyspace for a real attack**, which
+  matters more than `-R` because the part left out cannot be recovered by any
+  amount of climbing. Pinning `ring0` (`-r A..`) is **lossless** — a wildcard
+  `start0` already enumerates all 26 offsets — but pinning `ring1` (`-r AA.`)
+  excludes about **28% of distinguishable keys** and is a hard ceiling no `-R`
+  lifts. Measured on a 167-letter message with reflector B and wheels I–V,
+  `-r A..` + `--ring-stride 3` is 79.6 M keys against `-r AA.`'s 9.5 M; the two
+  are close at a ~24 h budget and `-r A..` wins beyond it. Also records the two
+  restrictions the 1941 HG Nord traffic justifies rather than assumes: all 75
+  recovered keys use reflector B, and all 25 wheel orders use wheels I–V.
+
 ### Added
 
 - **`--self-crib-tandem` — hypothesise a doubled word with no separator**
@@ -94,7 +126,9 @@ existing command lines can behave differently or stop working.
     statistics line now opens with `(` and no line begins with a digit.
 
 - **`--self-crib-seeds K` / `--self-crib-length L` / `--self-crib-signature` —
-  self-crib seeding, the first lever measured to beat `-R` at matched compute.**
+  self-crib seeding, which beats `-R` at matched compute at ~100 letters with a
+  7+ doubling** (and not at 167, nor below that doubling length — see the
+  Changed entry above).
   A doubled word is a *self*-crib: it says only that two positions carry the
   same plaintext letter, which cancels out of `p = steck[core[steck[c]]]` and
   leaves `steck[c_j] = core_j[core_i[steck[c_i]]]` — computable from the rotor
