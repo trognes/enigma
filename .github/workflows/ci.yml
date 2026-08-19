@@ -17,6 +17,19 @@ on:
     branches: [master, dev]
   pull_request:
 
+# A second push to a branch makes the first run's answer obsolete, so cancel
+# it rather than paying for a full matrix nobody will read.
+#
+# But only for pull requests. On master and dev each push is a DIFFERENT
+# landed commit, not a revision of the same one, and cancelling there would
+# mean two merges close together leave the first with no recorded CI result --
+# exactly the commit a later bisect would want an answer for. Hence the
+# condition rather than a bare `true`; bench.yml cancels unconditionally,
+# which is defensible for a job that long but is not what this matrix wants.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Fast gate: build with both compilers as -Werror and run the test suite.
   #
