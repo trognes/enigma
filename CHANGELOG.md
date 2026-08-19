@@ -27,6 +27,17 @@ existing command lines can behave differently or stop working.
     union, which beats either arm at every doubling length.
   - No code change — documentation and measurement only.
 
+- **`README.md` now says how to choose the keyspace for a real attack**, which
+  matters more than `-R` because the part left out cannot be recovered by any
+  amount of climbing. Pinning `ring0` (`-r A..`) is **lossless** — a wildcard
+  `start0` already enumerates all 26 offsets — but pinning `ring1` (`-r AA.`)
+  excludes about **28% of distinguishable keys** and is a hard ceiling no `-R`
+  lifts. Measured on a 167-letter message with reflector B and wheels I–V,
+  `-r A..` + `--ring-stride 3` is 79.6 M keys against `-r AA.`'s 9.5 M; the two
+  are close at a ~24 h budget and `-r A..` wins beyond it. Also records the two
+  restrictions the 1941 HG Nord traffic justifies rather than assumes: all 75
+  recovered keys use reflector B, and all 25 wheel orders use wheels I–V.
+
 ### Added
 
 - **`--self-crib-tandem` — hypothesise a doubled word with no separator**

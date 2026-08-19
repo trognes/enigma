@@ -629,6 +629,48 @@ union of what they break, which beats either arm on its own at every doubling
 length. Use `--confidence 256` on both so a miss is distinguishable from a
 find.
 
+### Choosing the keyspace for a real attack
+
+When the rotor key is genuinely unknown, the biggest decision is not `-R` — it
+is **how much of the keyspace you enumerate**, because the part you leave out
+cannot be recovered by any amount of climbing.
+
+**Pinning `ring0` costs nothing.** Nothing downstream depends on the leftmost
+stepping wheel's absolute position, so `-r A..` with `-g ...` covers every
+distinguishable key: `ring0 = A` plus a wildcard `start0` already enumerates all
+26 offsets. That is a *lossless* 26× reduction, not a restriction.
+
+**Pinning `ring1` does cost something, and it is a hard ceiling.** `-r AA.`
+looks like a small further tightening but excludes about **28% of
+distinguishable keys**, and no `-R` recovers them. Measured on a 167-letter
+message, reflector B and wheels I–V (`-x 5`, the default):
+
+| keyspace | keys | at `-R 8`, 4 cores | coverage |
+|---|---:|---:|---:|
+| `-r A..` + `--ring-stride 3` | 79.6 M | ~49 h | ~99% |
+| `-r AA.` + `--ring-stride 3` | 9.5 M | ~6 h | 72% |
+
+At around a **24-hour** budget the two are close — `-r AA. -R 32` and
+`-r A.. -R 4` both land near 67–68% once coverage is multiplied by the climb's
+success rate. Past that, `-r A..` keeps improving while `-r AA.` is capped at
+72% forever. **So use `-r A..` unless you need an answer inside one night.**
+
+For authentic 1941 HG Nord traffic two further restrictions are justified by the
+traffic rather than guessed: **all 75 recovered keys use reflector B**, and all
+25 distinct wheel orders use **wheels I–V only** (`-x 5`, the default). Pinning
+`-u B` is a free 3×.
+
+A full recipe for a real, unknown-key message of operational length:
+
+```sh
+./enigma -c -f -l wehrmacht -J -S i4f10 --polish \
+         -R 8 --ring-stride 3 -u B -r A.. -g ... \
+         --confidence 256 --doubling-report 7 -T $(nproc) < cipher.txt
+```
+
+`--confidence` is what makes a negative result meaningful: **below +2 sd is not
+a find**, and a real break reads +15 to +17.
+
 - **`-S <schedule>` / `--score <schedule>` — staged climb.** A schedule is a
   string of `<letter><optional cap>` model tokens `i`/`m`/`b`/`t`/`q`/`a`, climb
   stages run in order; an optional number caps how many plug pairs that stage
