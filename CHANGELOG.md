@@ -562,6 +562,16 @@ existing command lines can behave differently or stop working.
 
 ### Fixed
 
+- **`-Wformat-truncation` warning on gcc 14+ (a `-Werror` build failure).**
+  `report_doubling()` sized its two scratch buffers on `maxlen / 2` (512 bytes)
+  when the value they hold is bounded by `doubling_maxlen` (30) —
+  `find_doubling()` clamps its scan to it, so the word can never be longer
+  however long the message is. gcc can only reason from the buffer size, so it
+  saw `">> %d %s"` writing up to 3 + 11 + 512 bytes into 528 and warned. Sized
+  to the real bound instead; padding the destination would have hidden the
+  mismatch rather than fixed it. Reported on Debian 13; the CI runners carry
+  gcc 13, which does not emit it.
+
 - **`--confidence` was broken by any selective `--crib`: every progress line
   printed the same margin.** A crib-rejected key reports `unit_no_score`
   (`-1e300`) — a sentinel meaning *this unit produced no candidate*, not a

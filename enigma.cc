@@ -5476,11 +5476,18 @@ static void report_doubling(machine & m, double score)
   format_key(m, w, r, g);
   format_plugboard(m, sb);
   format_score(score, scorebuf);
-  /* len <= textlength/2 <= maxlen/2, so the word always fits. */
-  char word[maxlen / 2 + 2];
+  /* Sized on doubling_maxlen, the real bound: find_doubling() clamps its scan
+     to it, so len can never exceed 30 however long the message is. These used
+     to be maxlen/2 (512 bytes) -- 17x anything reachable -- and gcc 14+ warned
+     that the snprintf below "may be truncated", because it can only reason
+     from the BUFFER size and 3 + 11 + 1 + 512 overflows 528. Sizing to the
+     true bound is both honest and what silences it; padding the destination
+     instead would have hidden the mismatch rather than fixed it. The +20
+     covers ">> " plus the widest %d an int can print. */
+  char word[doubling_maxlen + 1];
   memcpy(word, pt + at, static_cast<size_t>(len));
   word[len] = 0;
-  char text[maxlen / 2 + 16];
+  char text[doubling_maxlen + 20];
   snprintf(text, sizeof(text), ">> %d %s", len, word);
 
   /* Collapse an identical repeat. One rotor key gets a call per converged
