@@ -27,12 +27,17 @@
    that order through the start-ring offset. */
 typedef unsigned char (* subst_table)[asize][asize][asize];
 
-/* Derived from the wiring by init(). Only these two are read outside this
-   module -- by the key-space collapses, which simulate the stepping to find
-   which (ring, start) pairs are indistinguishable. rotor_fwd/rotor_rev,
-   notch_gap and reflector are private to machine.cc, which is where every
-   read of them lives. */
-extern unsigned char notch[rotor_count][asize];
+/* Derived from the wiring by init(). notch_halfperiod is the only one read
+   outside this module: three sites ask "does this wheel's notch SET have
+   period 13?", which is what makes a shift of 13 an exact decode equivalence
+   for VI/VII/VIII. It stays a plain array rather than an accessor because two
+   of those reads are per key on the scan path, where a key costs ~0.3 us and
+   a cross-unit call would not inline.
+
+   notch itself, along with rotor_fwd/rotor_rev, notch_gap and reflector, is
+   private: every read lives here now that mid_first_fire() -- the stepping
+   simulation the middle-wheel collapse is derived from -- sits beside the
+   stepping it simulates. */
 extern unsigned char notch_halfperiod[rotor_count];
 
 /* Per-search mutable machine state. Grouping it into one object (rather than
@@ -56,10 +61,10 @@ struct machine
   unsigned char grundstellung[wheels];  /* start positions */
   unsigned char ringstellung[wheels];   /* ring positions */
 
-  /* effective reflector actually applied by subst_rotors: a plain copy of
-     reflector[ukw] normally, or greek-folded thin reflector in M4 mode (set once
-     per task by set_effective_reflector, before precompute -- never in the hot
-     loop, which reads the precomputed subst_array). */
+  /* The reflector precompute() actually folds into subst_array: a plain copy
+     of reflector[ukw] normally, or the greek-folded thin reflector in M4 mode
+     (set once per task by set_effective_reflector, before precompute -- never
+     in the hot loop, which reads the precomputed table). */
   unsigned char reflector_eff[asize];
   int greek;          /* M4 Greek rotor index (Beta/Gamma), else -1 */
   int greek_offset;   /* M4 (Greek start - ring) mod 26, else 0 */
@@ -172,6 +177,14 @@ void init_ring_grund(machine & m, int a, int b, int c, int x, int y, int z);
 void set_effective_reflector(machine & m);
 void precompute(machine & m);
 void setup_mapping(machine & m, bool copy_rows);
+
+/* First index at which the middle wheel's notch fires for (w1, w2, start1,
+   start2), or -1 for "never within `limit` characters". Pure stepping -- no
+   ring setting, start0, reflector or plugboard enters a stepping decision, so
+   none of them index it. The middle-wheel ring x start collapse derives its
+   equivalence classes from this rather than from a formula, which is what
+   makes it pick up two-notch wheels for free. */
+int mid_first_fire(int w1, int w2, int s1, int s2, int limit);
 
 /* Cumulative step counts of the middle and left wheels per character position,
    and the tools the --ring-stride refinement uses to turn a difference between

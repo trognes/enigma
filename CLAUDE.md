@@ -1899,11 +1899,13 @@ A single pass through `main()`:
 - The full substitution is plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
   plugboard. The hot path computes it as precomputed `subst_array` / `mapping`
   lookups wrapped in two plugboard lookups (`decode_at`, shared by `decode()`
-  and the fused scorers). `subst_rotors()` is the same composition written out
-  directly; it has **no callers** — `precompute()` replaced it — and survives
-  only as the readable statement of what the tables encode. Being an `inline`
-  with external linkage hid that for years; making it `static` during the
-  module split is what surfaced it.
+  and the fused scorers). `precompute()`'s middle loop is where that
+  composition is written out — wheels 1 and 0 in, reflector, wheels 0 and 1
+  out — with the right wheel factored out of it, which is what makes one table
+  serve all 26 of its offsets. A `subst_rotors()` that spelled the whole stack
+  out survived until PR #218 with **no callers**: `precompute()` had replaced
+  it, and being an `inline` with external linkage hid that for years, until
+  making it `static` during the module split drew a warning.
 - The reflector applied by the rotor core is `m.reflector_eff`, resolved once
   per task by `set_effective_reflector()` (never per character). Standard/Norway
   just copy the wired reflector; **M4** composes `greek ∘ thin ∘ greek⁻¹`.

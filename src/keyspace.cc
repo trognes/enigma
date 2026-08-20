@@ -93,23 +93,6 @@ const uint32_t * g_mid_rep_mask = nullptr;
    steps rather than merely usually right. */
 
 bool g_r2_halve = false;
-/* First middle-notch firing index for (w1, w2, start1, start2), or -1 for "never
-   within `limit` characters". Pure stepping: no ring setting, start0, reflector or
-   plugboard enters a stepping decision, so those do not index this. */
-static int mid_first_fire(int w1, int w2, int s1, int s2, int limit)
-{
-  int g1 = s1;
-  int g2 = s2;
-  for (int i = 0; i < limit; i++)
-    {
-      if (notch[w1][g1])
-        return i;                    /* the firing that steps the left wheel */
-      if (notch[w2][g2])
-        g1 = step26(g1);
-      g2 = step26(g2);
-    }
-  return -1;
-}
 /* Phase 2: decode + score a slice of the flat key space. A flat index decodes to
    (wheel-order, ring combo, start combo) by mixed radix over the per-position
    ranges; the worker points its machine at the already-computed table for that
