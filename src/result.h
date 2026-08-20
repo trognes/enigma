@@ -53,7 +53,8 @@ struct best_result
    null outside a search. */
 extern best_result * g_progress;
 
-/* Deterministic ordering: higher score wins, ties go to the lower work index. */
+/* Deterministic ordering: higher score wins, ties go to the lower work
+   index. */
 inline bool better_cand(double s1, size_t i1, double s2, size_t i2)
 {
   return (s1 > s2) || ((s1 == s2) && (i1 < i2));
