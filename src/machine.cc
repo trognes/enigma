@@ -218,7 +218,6 @@ void precompute(machine & m)
               out[x] = rev[mid[fwd[x]]];
           }
       }
-  init_ring_grund(m, r1, r2, r3, asize - 1, asize - 1, asize - 1);
 }
 
 /* Step the rotors over the message and record, per character position, a pointer
