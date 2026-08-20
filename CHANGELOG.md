@@ -8,8 +8,8 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
-- **BREAKING (in the direction of failing loudly): a numeric option given a
-  non-number is now rejected instead of read as 0.** `atoi`/`atof` cannot
+- **A numeric option given a non-number is now rejected instead of read as
+  0.** `atoi`/`atof` cannot
   report failure — they return 0 for a string that is not a number at all —
   and 0 is the *off* value for most of these options, so a typo did not fail:
   it silently disabled what was asked for.
