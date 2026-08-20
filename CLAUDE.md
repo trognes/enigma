@@ -149,6 +149,25 @@ so check against the last release now and then.** `make bench BASE=v2.1.0` at
 No drift — `search` matches the −60.7% the `setup_mapping`/`mod26`/`precompute`
 work claimed, and the climb tiers are flat.
 
+**Re-run after the `src/` module split** (PRs #205–#219, 9808 lines in one
+translation unit becoming 19 modules), same command and same tier:
+
+| tier | v2.1.0 | dev | | vs the row above |
+|---|---:|---:|---:|---:|
+| `search` | 21.93 s | 8.57 s | **−60.9%** | 1.2pp |
+| `hillclimb` | 13.20 s | 13.14 s | −0.4% | 1.5pp |
+| `fused` | 18.07 s | 17.12 s | −5.3% | 0.6pp |
+
+**The split cost nothing measurable.** Every cell is within ~1.5pp of the
+pre-split reading, which is inside this machine's long-tier floor — so the
+−62% is fully retained across nineteen modules, cross-unit calls and ~30
+symbols that became `extern`. That is the answer to the question the split
+opened with, and it took a release-tag comparison to get it: the per-PR guard
+saw each step against its own base and could not have seen the sum.
+
+The `crib` tier reports `n/a — base lacks these options` in both runs, which is
+the documented graceful skip rather than a failure: `--crib` postdates v2.1.0.
+
 **Also bench against the commit where a big win LANDED, not only against the
 release** — that is the better-conditioned test and answers the more useful
 question. Against `v2.1.0` the −62% on `search` dominates everything, so a 5%
