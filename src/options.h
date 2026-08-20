@@ -1,17 +1,11 @@
 /* Everything the command line sets: one declaration per option, read by the
    search, the scorers and the diagnostics.
 
-   TRANSITIONAL. The DEFINITIONS -- and the long rationale comments that go with
-   them, which are the real documentation of what each option means and what was
-   measured about it -- still sit in enigma.cc; only the `static` keyword came
-   off them. They move here in the next step. Splitting it that way keeps
-   "give 65 declarations external linkage" and "move 580 lines of text"
-   as two separately reviewable changes rather than one diff where a mangled
-   comment block could hide.
-
-   So: to find out what an option MEANS, read enigma.cc (or CLAUDE.md) for now.
-   This header exists so that cli.cc, preflight.cc and the modules still to come
-   can see the options at all. */
+   This header is the INDEX; options.cc is the reference. The definitions there
+   carry the rationale for each option and what was measured about it, and they
+   carry the defaults, so the default configuration of the whole program is
+   readable in one place. The grouping below is navigational only -- do not read
+   it as the documentation. */
 
 #ifndef ENIGMA_OPTIONS_H
 #define ENIGMA_OPTIONS_H
