@@ -45,9 +45,13 @@ template<bool EX> double hillclimb(machine & m, int max_pairs);
    target model's score. */
 template<bool EX> double run_stages(machine & m);
 
+/* Only the two instantiations other modules actually call are exported:
+   search.cc climbs with hillclimb<false>, and --exhaust / the crib hybrid /
+   the self-crib seeder all enter through run_stages<true>. The other two
+   (hillclimb<true>, run_stages<false>) are called only from inside
+   plugboard.cc -- by run_stages<true> and optimize_once respectively -- so
+   they are instantiated implicitly there and need no declaration here. */
 extern template double hillclimb<false>(machine & m, int max_pairs);
-extern template double hillclimb<true>(machine & m, int max_pairs);
-extern template double run_stages<false>(machine & m);
 extern template double run_stages<true>(machine & m);
 
 /* Recover the board for the current key from the current seed: simulated

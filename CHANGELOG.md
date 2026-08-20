@@ -483,6 +483,26 @@ existing command lines can behave differently or stop working.
   than a revision of the same one and cancelling would leave the commit a later
   bisect wants with no recorded result.
 
+- **The climb chain exports only the two template instantiations another unit
+  calls.** `hillclimb<true>` and `run_stages<false>` were explicitly
+  instantiated in `plugboard.cc` and declared `extern template` in the header
+  with no caller outside the file — the first is reached from
+  `run_stages<true>`, the second from `optimize_once`. Both now instantiate
+  implicitly and stay internal.
+  - **Proved codegen-neutral by disassembly, not by benchmark**, which is the
+    point of the entry: every remaining function is instruction-for-instruction
+    identical under both g++ and clang, `hillclimb<false>` — the hot one, and
+    the code whose storage form is measured to matter by ~18% — included. The
+    only change is that `run_stages<false>`'s standalone body disappears while
+    `optimize_once` stays at its exact 550 (g++) / 508 (clang) instructions,
+    showing it had always been inlined there and the explicit instantiation was
+    forcing a second, unreachable copy to be emitted. `plugboard.o` shrinks
+    ~155 bytes under both compilers.
+  - A bench could not have established this: the effect is far below the floor.
+    Run anyway, it doubles as a free base-vs-base control on byte-identical hot
+    code and read −2.5%…+2.9% across the four quick tiers — a useful reading of
+    the day's noise.
+
 - **`-Wmissing-declarations` is now part of `CXXFLAGS`.** A function with
   external linkage and no header declaration is invisible to every gate this
   repo has — `subst_rotors()` sat dead for years in exactly that state, and only
