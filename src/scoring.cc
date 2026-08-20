@@ -217,9 +217,10 @@ static double g_fused_lambda = fused_lambda_default;
 
 void ic_blend_init()
 {
+  /* Empty means unset, as for the other value-carrying overrides. */
   const char * s = getenv("ENIGMA_IC_BLEND");
-  if (s)
-    g_fused_lambda = atof(s);
+  if ((s != nullptr) && (*s != 0))
+    g_fused_lambda = parse_opt_double(s, "$ENIGMA_IC_BLEND");
 }
 
 

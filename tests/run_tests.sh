@@ -1475,7 +1475,7 @@ check "--doubling-z is echoed in the settings" \
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
          --doubling-report 6 --doubling-z junk 2>&1 >/dev/null)
 check "--doubling-z rejects a non-number (atof would read it as 0)" \
-  "$(printf '%s' "$dw_err" | grep -c 'Illegal doubling gate')" "1"
+  "$(printf '%s' "$dw_err" | grep -c 'Illegal value for --doubling-z')" "1"
 dw_err=$(printf 'AAAA' | "$ENIGMA" -q -l english -c --confidence 8 \
          --doubling-z 4 2>&1 >/dev/null)
 check "--doubling-z without --doubling-report is refused" \
@@ -2849,6 +2849,93 @@ help_missing=$("$ENIGMA" -h 2>&1 > /tmp/enigma_help.$$ ; \
   | while read -r o; do grep -q -- "--$o" /tmp/enigma_help.$$ || echo "$o"; done)
 rm -f /tmp/enigma_help.$$
 check "help lists every long option" "$help_missing" ""
+
+# A numeric option given a non-number must FAIL, not read as 0.  atoi/atof
+# cannot report failure, and 0 is "off" for most of these -- so a typo used to
+# silently disable what was asked for, with no trace: at -R 0 the settings echo
+# omits the restart line entirely, and --confidence 0 prints nothing at all.
+#
+# Only -T, -x and --ring-stride caught it before, and only by accident: their
+# valid ranges exclude 0, so the BOUNDS check rejected what the PARSE had let
+# through.  Those three are in the list below to keep them covered for the
+# right reason.
+#
+# Each case asserts the exit status AND that the message names the option, so
+# a future refactor cannot satisfy this by failing for some unrelated reason.
+num_reject()   # num_reject <option-name-in-message> <args...>
+{
+  want=$1
+  shift
+  err=$(printf 'AAAA' | "$ENIGMA" -i "$@" 2>&1 >/dev/null)
+  st=$?
+  if [ "$st" -ne 0 ] && printf '%s' "$err" | grep -q "Illegal value for $want"; then
+    echo 1
+  else
+    echo 0
+  fi
+}
+for spec in "-R:-R junk" "-T:-T junk" "-x:-x junk" "-A:-A junk" \
+            "-F:-F junk" "-e:-e junk" "--confidence:--confidence junk" \
+            "--random:--random junk" "--exhaust:--exhaust junk" \
+            "--ring-stride:--ring-stride junk" "--tune-phase:--tune-phase junk" \
+            "--crib-weight:--crib-weight junk" "--crib-at:--crib-at junk" \
+            "--crib-seeds:--crib-seeds junk" \
+            "--self-crib-seeds:--self-crib-seeds junk" \
+            "--self-crib-length:--self-crib-length junk" \
+            "--doubling-report:--doubling-report junk" \
+            "--doubling-mismatches:--doubling-mismatches junk"
+do
+  nr_name=${spec%%:*}
+  nr_args=${spec#*:}
+  # shellcheck disable=SC2086
+  check "$nr_name rejects a non-number" "$(num_reject "$nr_name" $nr_args)" "1"
+done
+
+# Trailing junk is the realistic typo -- "64O" for "640" -- and atoi read it as
+# 64, which is a plausible number and so leaves nothing to notice.
+check "-R rejects trailing characters" "$(num_reject '-R' -R 64O)" "1"
+check "-R rejects an empty argument"   "$(num_reject '-R' -R '')" "1"
+
+# ...while the values that were always legal must still be.  -R 0 and -e 0 are
+# the ones that matter: 0 is a real setting for both (one deterministic climb;
+# the historical RNG stream), so a parser that rejected it would be worse than
+# the bug.
+num_ok()
+{
+  printf 'AAAA' | "$ENIGMA" -i -u B -w 123 -r AAA -g AAA "$@" >/dev/null 2>&1
+  echo $?
+}
+check "-R 0 is still legal"            "$(num_ok -R 0)" "0"
+check "-e 0 is still legal"            "$(num_ok -e 0)" "0"
+check "-e takes a full 64-bit seed"    "$(num_ok -e 18446744073709551615)" "0"
+check "-e rejects a negative seed"     "$(num_reject '-e' -e -5)" "1"
+check "-F N% is still legal"           "$(num_ok -c -F 10%)" "0"
+check "-F rejects junk before the %"   "$(num_reject '-F' -F abc%)" "1"
+
+# The measurement-only environment overrides are the same hazard with a worse
+# consequence: ENIGMA_IC_BLEND=typo silently set the blend to 0, turning -f
+# into -a, so a probe would have quietly measured the baseline instead of the
+# variant it was testing.
+env_reject()
+{
+  ev=$1
+  shift
+  err=$(printf 'AAAA' | env "$ev" "$ENIGMA" -u B -w 123 -r AAA -g AAA "$@" \
+        2>&1 >/dev/null)
+  st=$?
+  if [ "$st" -ne 0 ] && printf '%s' "$err" | grep -q 'Illegal value for \$'; then
+    echo 1
+  else
+    echo 0
+  fi
+}
+check "\$ENIGMA_SEED rejects a non-number" \
+  "$(env_reject ENIGMA_SEED=junk -i)" "1"
+check "\$ENIGMA_IC_BLEND rejects a non-number" \
+  "$(env_reject ENIGMA_IC_BLEND=junk -f -l english)" "1"
+check "\$ENIGMA_LOGLIN rejects a partial weight vector" \
+  "$(printf 'AAAA' | env ENIGMA_LOGLIN=1,0.6 "$ENIGMA" -q -l english \
+     >/dev/null 2>&1; echo $?)" "1"
 
 echo
 echo "passed: $pass, failed: $fail"

@@ -2722,6 +2722,26 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   wrapped parameter lists or `if` conditions) are aligned under the opening `(`.
   The only tabs in the repo are the recipe lines in the `Makefile`, which `make`
   requires.
+- **Parse every numeric input with `parse_opt_int`/`parse_opt_double`/
+  `parse_opt_u64` (`common.h`), never `atoi`/`atof`/bare `strtol`.** They
+  cannot report failure — `atoi("abc")` is 0 — and **0 is the *off* value for
+  most options here**, so a typo did not fail, it silently disabled what was
+  asked for and the settings echo (keyed on the same value) then printed
+  nothing to show it. `-R 64O` ran with no restarts and left no trace in the
+  log. The helpers reject non-numbers, trailing text and range errors, naming
+  the option in the message; callers still apply their own bounds afterwards.
+  The rule extends to `$ENIGMA_*` overrides, where a silently-zeroed
+  `ENIGMA_IC_BLEND` turns `-f` into `-a` and makes a probe measure the
+  baseline it was meant to be compared against. Empty means *unset* for every
+  value-carrying override, so `FOO=` still turns a probe off. **CI would not
+  have caught this, and the reason is a version skew worth knowing about**: the
+  check is `bugprone-unchecked-string-to-number-conversion`, which *is* inside
+  the enabled `bugprone-*` group with `WarningsAsErrors: '*'` — but the runner's
+  clang-tidy does not report it, so `dev` was green while a local LLVM 22
+  clang-tidy reported **26 errors, 24 of them this check**. So a green
+  clang-tidy job is evidence about the runner's version, not about the
+  enabled check list; run it locally on a recent LLVM before assuming a group
+  is being enforced.
 - **Always brace the body of an `if`/`else`/`for`/`while`, even when it is a
   single statement.** The bare form is a live hazard here, not a matter of
   taste: adding a second statement to an unbraced body silently leaves it

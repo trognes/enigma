@@ -11,6 +11,8 @@
 #ifndef ENIGMA_COMMON_H
 #define ENIGMA_COMMON_H
 
+#include <stdint.h>
+
 static const int maxlen = 1024;   /* maximum ciphertext length (letters) */
 static const int asize = 26;
 static const int wheels = 3;
@@ -43,6 +45,32 @@ const double unit_no_score = -1e300;
    deducing, at every one of the ~90 fatal() call sites at once. */
 [[noreturn]] void fatal(const char * message);
 
+/* Parse a numeric option argument, or fail naming the option.
+
+   atoi/atof CANNOT REPORT FAILURE: they return 0 for a string that is not a
+   number at all. That is not a theoretical hazard here, because 0 is the OFF
+   value for most of these options (--confidence, -A, -R, --crib-weight) and a
+   meaningful special value for another (-e 0 selects the historical
+   deterministic RNG stream). So a mistyped argument did not fail -- it
+   silently disabled the thing that was asked for. The settings echo is keyed
+   on the same values, so `-R 64O` printed no restart line and left no trace
+   in the log at all; `--confidence nope` printed nothing about confidence.
+
+   Three options did reject junk before, and only by accident: -T, -x and
+   --ring-stride have valid ranges that exclude 0, so the bounds check caught
+   what the parse had not. --doubling-z was the single place that checked the
+   parse deliberately, with a comment saying why; these generalise it.
+
+   Trailing text is rejected as well as leading junk, so "12x" and "" fail
+   rather than reading as 12 and 0. Range errors fail here too, rather than
+   arriving at the bounds check as an implementation-defined value. `what` is
+   the option as the user types it, so the message names what to go and fix.
+   Callers still apply their own bounds afterwards: these answer "is this a
+   number", not "is this a legal setting". */
+int parse_opt_int(const char * s, const char * what);
+double parse_opt_double(const char * s, const char * what);
+uint64_t parse_opt_u64(const char * s, const char * what);
+
 inline int char2num(char x)
 {
   return x - 'A';
@@ -53,8 +81,6 @@ inline char num2char(int x)
   return static_cast<char>('A' + x);
 }
 
-
-#include <stdint.h>
 
 /* splitmix64: a tiny, well-distributed deterministic PRNG. Seeded per key (not
    from the clock or thread id) so a random-restart search stays reproducible and
