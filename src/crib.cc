@@ -672,6 +672,25 @@ static double crib_climb_one(machine & m, const int * board,
     dump_all(m, sc);
   return sc;
 }
+/* --- the hybrid: deduce, then climb (archived/cribs.md 7, 12 step 5) --------------------------
+
+   One work item at a key the crib did not reject: climb once from EVERY surviving
+   hypothesis, seeded with the plugs that hypothesis deduces, and keep the best.
+
+   The deduced plugs are HELD FIXED for the climb, in PLUG_FIXED_EX -- the same per-worker
+   pin set --exhaust uses, because plug_fixed is a read-only global that no worker may
+   touch. They stay fixed through --polish too: a deduced plug comes from arithmetic on the
+   machine equation, while the finisher's cascade is score-driven local repair, so
+   releasing them would let weaker evidence overwrite stronger (archived/cribs.md 7b). A WRONG
+   hypothesis needs no such rescue -- it loses on score to the other 25.
+
+   Letters the deduction settles as carrying NO cable are pinned as well: board[x] == x is
+   a real finding, not an absence of one, and marking it stops the climb wasting moves on a
+   letter that cannot be plugged. That is the value archived/cribs.md 7 wanted --no-plug for, had
+   here for free.
+
+   Cost is one climb per surviving hypothesis. With a long crib that is usually one; with a
+   short one it is the several that archived/cribs.md 7a's seed mode expects and prices. */
 double crib_unit(machine & m, size_t key_index, int restart)
 {
   double best = 0.0;

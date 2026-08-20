@@ -136,6 +136,9 @@ static void exhaust_ctx_init(exhaust_ctx & c, size_t key_index)
   for (const char * p = opt_no_plug; *p != 0; p++)   /* --no-plug: not available to force */
     c.used[char2num(*p)] = true;
 }
+/* One parallel exhaustion unit: all combos whose first forced pair is g_exhaust_firsts[fi],
+   over all restarts. Leaves m at the unit's best board/plaintext and returns its score, or
+   a sentinel below any real score if the first pair leaves no room for E-1 more pairs. */
 double exhaust_unit(machine & m, size_t key_index, size_t fi)
 {
   exhaust_ctx c;

@@ -35,8 +35,12 @@
 #include "machine.h"
 
 #include <stddef.h>
-#include <vector>
 #include <stdint.h>
+#include <vector>
+
+/* The full key space, before any of the collapses above:
+   uwwwrrrggg = 3*8*7*6*26*26*26*26*26*26 = 311 387 102 208
+   (reflector x wheel order x ring x start, wheels I-VIII). */
 
 /* The reflector x wheel-order combinations are the unit of parallelism: each is
    independent (its own precompute + ring/start sweep). The ring/start ranges are
