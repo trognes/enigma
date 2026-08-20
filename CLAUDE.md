@@ -227,7 +227,20 @@ broken benchmark, not a skippable row.
 > where the g++ figure is ±0.5%, and the long tier's extra repetitions do not
 > buy immunity. It also lands just under the 10% `THRESHOLD`: one more point of
 > scatter and a byte-identical build would have been flagged, which is exactly
-> why `FAIL_OVER` is a separate, higher number. That gap decides real cases: on
+> **REPRODUCING A NUMBER ON THE SAME BOX IS NOT EVIDENCE THAT IT IS REAL.**
+> The advice above — re-run before believing a flagged cell — is necessary and
+> not sufficient, because a container's bias is stable *within* a session, so a
+> systematic error reproduces exactly as faithfully as a systematic effect. PR
+> #209 (the `machine` module split) measured `search` long at **+1.9% twice**,
+> against a base-vs-base control of +1.0% on byte-identical code, and it looked
+> like a small real regression. The same commit on the CI runners read **−2.2%
+> (g++ x86_64)** and **+0.3% (g++ arm64)** — the two cells whose own controls
+> resolve 0.2–0.5%. There was nothing there. What a repeat rules out is a
+> one-off disturbance; only a *different instrument* rules out a biased one, so
+> for anything under a few percent take the CI matrix as the measurement and
+> the local run as a smoke test.
+>
+> That gap decides real cases: on
 > one set of runs a `search` +5% was a genuine regression (a hot-path struct
 > grown from 48 to 156 bytes) while simultaneous `hillclimb` scatter of
 > +4.5%/−1.3%/+5.1% was nothing at all. Both
