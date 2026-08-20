@@ -29,6 +29,9 @@
 #include <vector>
 
 #include "common.h"
+#include "options.h"
+#include "cli.h"
+#include "preflight.h"
 #include "ngrams.h"
 #include "text.h"
 #include "wiring.h"
@@ -50,11 +53,11 @@
    steps rather than merely usually right. */
 
 
-static const char * opt_ukw;
-static const char * opt_walzen;
-static const char * opt_ringstellung;
-static const char * opt_grundstellung;
-static const char * opt_steckerbrett;
+const char * opt_ukw;
+const char * opt_walzen;
+const char * opt_ringstellung;
+const char * opt_grundstellung;
+const char * opt_steckerbrett;
 /* Letters that are part of a fixed (-s) plug pair are never rewired by the hill-climb,
    re-pair or SA toggle, so -s pairs are *known* plugs that survive the climb rather than
    a mere seed (see plug_fixed / PLUG_FIXED_EX below for the storage and the parallel
@@ -70,7 +73,7 @@ static const char * opt_steckerbrett;
    over: it removes 25 candidate plugs, not one. That shrinks the climb's move set
    quadratically (each marked letter drops 25 of the 325 toggles) and, more to the point,
    stops the climb spending moves on plugs that cannot exist. */
-static const char * opt_no_plug;
+const char * opt_no_plug;
 /* --soft-plug PAIRS: the same shape as -s, and the opposite contract. -s says "these
    plugs are KNOWN", marks their letters in plug_fixed[] and forbids every move that would
    touch them; --soft-plug says "these plugs are a good GUESS" -- it lays them on the board
@@ -87,7 +90,7 @@ static const char * opt_no_plug;
    SELF-STECKERED letters, so a soft-seeded pair is invisible to it -- the kick adds pairs
    among the letters the seed left alone instead of scattering the seed itself. Seeding
    therefore happens BEFORE the kick, and every restart starts from seed + its own kick. */
-static const char * opt_soft_plug;
+const char * opt_soft_plug;
 /* --crib TEXT / --crib-at N: a guess at part of the plaintext, together with where it
    sits. Given one that is right, part of the plugboard follows by ARITHMETIC instead of
    search, and rotor settings that cannot produce it are rejected without ever being
@@ -95,7 +98,7 @@ static const char * opt_soft_plug;
    file already computes. See archived/cribs.md; the deduction itself is crib_deduce() below.
      Step 3 of archived/cribs.md 12: one crib at one alignment, used as a KEY FILTER. The
    alignment sweep and the seeded climb are later steps, so --crib-at is required. */
-static const char * opt_crib_text;
+const char * opt_crib_text;
 /* --self-crib-seeds K / --self-crib-length L: the TERMINAL-SIGNATURE self-crib.
 
    A doubled word is a SELF-crib: it does not say what the plaintext letter is, only that
@@ -120,8 +123,8 @@ static const char * opt_crib_text;
    and climb the top K with the deduced plugs pinned. IC ranks them as well as the fused
    model does (150/200 against 144/200 top-1) and needs no language, which is why the
    ranking is free. See ENHANCEMENTS.md item 5. */
-static int opt_self_crib_seeds = 0;        /* K: seeds climbed per key; 0 = off */
-static int opt_self_crib_length = 6;   /* L: shortest doubled word hypothesised */
+int opt_self_crib_seeds = 0;        /* K: seeds climbed per key; 0 = off */
+int opt_self_crib_length = 6;   /* L: shortest doubled word hypothesised */
 static const int selfcrib_maxlen = 13;         /* longest -- nothing in the corpus reaches 14 */
 /* Terminal mode needs `tails x lengths` entries; sweeping needs ~3 per (alignment,
    length) pair, which is message-dependent and runs to thousands -- so both live in a
@@ -140,14 +143,14 @@ struct selfcrib_hyp
   int anchor_pos[3];
 };
 static std::vector<selfcrib_hyp> g_selfcrib_hyps;
-static int g_selfcrib_nhyps = 0;
+int g_selfcrib_nhyps = 0;
 /* --self-crib-signature: assert the doubled word CLOSES the message (a signed surname),
    rather than hypothesising it anywhere.  The default assumes nothing and the flag adds
    knowledge, which is the same shape as --crib (sweeps every alignment) and --crib-at
    (pins one).  Restricting is ~15x cheaper -- 20 hypotheses against ~2200 -- but it only
    wins when the assumption holds: measured over every corpus message carrying a doubling
    anywhere, terminal breaks 16/40 against a swept 26/40 and a bare -R 16's 19/40. */
-static bool opt_self_crib_signature = false;
+bool opt_self_crib_signature = false;
 /* --self-crib-tandem: also hypothesise a doubled word with NO separator between the
    copies -- SIEGFRIEDSIEGFRIED rather than ENGELMANN X ENGELMANN. The default cannot
    see one at all: its 26 guesses are on steck[X] and the separator anchor is what
@@ -175,9 +178,9 @@ static bool opt_self_crib_signature = false;
    crowding-out predicts. Corpus-weighted that is ~+0.6pp for 2.6x the time, which
    is the arithmetic that keeps it opt-in. eval/selfcrib_tandem_ab.py.
    ENHANCEMENTS.md item 5. */
-static bool opt_self_crib_tandem = false;
-static int opt_crib_at = -1;
-static bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
+bool opt_self_crib_tandem = false;
+int opt_crib_at = -1;
+bool opt_crib_dump;              /* print each surviving hypothesis (diagnostic) */
 /* --crib-seeds K: IC-rank the surviving hypotheses and climb only the best K, exactly as
    --self-crib-seeds does. 0 = off, which climbs every survivor (the historical path, kept
    byte-identical).
@@ -204,7 +207,7 @@ static bool opt_crib_dump;              /* print each surviving hypothesis (diag
    91 survivors, top-10 keeps 92.5%, a 9x cut for ~7% loss. Do not read this as a general
    speed-up; it is a way into the short-crib regime, and K should be raised when the crib
    is short. ENHANCEMENTS.md, Cribs item 12. */
-static int opt_crib_seeds = 0;
+int opt_crib_seeds = 0;
 
 /* The score a work unit reports when it produced NO candidate at all -- every crib
    hypothesis contradicted, or no rotor setting could have produced the crib. It is a
@@ -238,8 +241,8 @@ static std::atomic<size_t> g_crib_rejected{0};   /* keys the crib proved impossi
      You rarely know which phrase a message contains; you know the vocabulary of the
    network, which is what eval/build_cribs.py emits. A single --crib is for testing and
    for the case where you do know. */
-static const char * opt_crib_list = nullptr;
-static std::vector<std::string> g_crib_list;    /* read-only after load_crib_list() */
+const char * opt_crib_list = nullptr;
+std::vector<std::string> g_crib_list;    /* read-only after load_crib_list() */
 static const size_t crib_sample_keys = 256;
 /* --no-crib-reorder: keep a --crib-list in file order instead of running it
    cheapest-measured-cost first. Reordering is the DEFAULT, so the flag names the
@@ -247,7 +250,7 @@ static const size_t crib_sample_keys = 256;
    worst case is that the winner is found later, never that it is lost. See
    crib_cheaper() for why cheapest-first, and why it reverses what archived/cribs.md 5 step 5
    concluded from a modelled cost. */
-static bool opt_crib_reorder = true;
+bool opt_crib_reorder = true;
 /* Keys on which both sides of the choice are actually RUN, to measure the expected
    gain (the hypothesis count above needs a much larger sample, but it is far cheaper
    per key -- a climb costs thousands of board scores where a deduction costs tens of
@@ -255,42 +258,42 @@ static bool opt_crib_reorder = true;
    reported as a bound rather than measured further. */
 static const size_t crib_gain_keys = 8;
 static const uint64_t crib_gain_budget = 64;
-static char * opt_plaintext; /* plaintext to compare to */
-static const char * opt_language; /* english, german, danish, french, swedish, finnish,
+char * opt_plaintext; /* plaintext to compare to */
+const char * opt_language; /* english, german, danish, french, swedish, finnish,
                                       icelandic, polish, spanish, wehrmacht; no default */
-static const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
-static int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
-static int opt_m4;        /* use M4 (4-rotor naval) mode */
+const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
+int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */
+int opt_m4;        /* use M4 (4-rotor naval) mode */
 /* M4 mode: 4th "Greek" wheel (Beta/Gamma, rotor indices 13-14) is static (never
    steps) and folds into a thin reflector (UKW-b/c, reflector indices 4-5) to form
    an effective reflector -- so the machine stays a 3-stepping-rotor engine. The
    Greek wheel and ring/start are taken from the first character of -w/-r/-g. */
 static const int m4_thin_base = 4;   /* reflector index of UKW-b; UKW-c is +1 */
 static const int greek_base = 13;    /* rotor index of Beta; Gamma is +1 */
-static char opt_greek_walzen = '.';      /* Greek wheel: B (Beta), G (Gamma) or . */
-static char opt_greek_ringstellung = '.';   /* Greek ring letter or . */
-static char opt_greek_grundstellung = '.';  /* Greek start letter or . */
-static int opt_maxwheel;
-static int opt_scoring;   /* the resolved ranking/target model (SCORE_*) */
+char opt_greek_walzen = '.';      /* Greek wheel: B (Beta), G (Gamma) or . */
+char opt_greek_ringstellung = '.';   /* Greek ring letter or . */
+char opt_greek_grundstellung = '.';  /* Greek start letter or . */
+int opt_maxwheel;
+int opt_scoring;   /* the resolved ranking/target model (SCORE_*) */
 /* The model chosen by a bare selector -i/-m/-b/-t/-q, or -1 if none was given. The
    selectors are thin aliases for a single uncapped --score <model> stage (REDESIGN
    Part C); this records the choice so conflicting models -- two disagreeing selectors,
    or a selector vs a different --score target -- can be rejected as a fatal error. */
-static int opt_model_selector;
-static int opt_hillclimb;
+int opt_model_selector;
+int opt_hillclimb;
 /* Circular first-improvement climb instead of steepest ascent: applies the FIRST improving
    move (a cursor sweeps a fixed move list and continues from where it accepted), so it does
    far fewer score_iter calls per climb -- ~2.8x cheaper -- at the cost of recovering worse
    per restart. Set only by -J (the bare first-improvement flag was removed as dominated),
    so it is always paired with the dynamic move order below. */
-static int opt_firstimprove;
+int opt_firstimprove;
 /* -J: first-improvement with DYNAMIC best-first move ordering. Each climb first scores every
    move once against the starting (perturbed) board, sorts, and then runs the circular
    first-improvement in that order. The order is rebuilt per restart, so it front-loads good
    moves without collapsing restart diversity (unlike the rejected static order). Measured win
    on the realistic ~10-plug regime (+2-6pp mean at matched compute); a loss when few plugs are
    truly set. Off by default; needs -c. */
-static int opt_dynorder;
+int opt_dynorder;
 /* -M: make the plug cap a strict descent TARGET, not just a growth ceiling. Default (0):
    at/over the cap only a brand-new add (both ends free) is blocked, so an over-cap board
    (a big --random kick handed to a small stage cap) can converge still over the cap, merely
@@ -302,26 +305,26 @@ static int opt_dynorder;
    kick), and +3..+20pp on known-few-plug boards (-S ...q6), largest at the short/hard end;
    it is also cheaper per climb (quad converges from a tidy basin). Off by default; needs -c.
    Most useful with a tight -S target cap; near-inert (harmless) with no cap. */
-static int opt_capmerge;
+int opt_capmerge;
 /* --no-repair: disable the default 2-plug re-pair barrier cross (try_repair), for
    ablation/measurement. Off by default (baseline byte-identical); needs -c. */
-static int opt_no_repair;
+int opt_no_repair;
 /* --cascade: quadgram-gain directed-repair barrier cross, tried at quad convergence.
    A 2-ply "cascade" that uses per-position gain to propose plug corrections (both
    plugboard contacts, self-encryption pruned), ranks them by the full re-decode
    score, applies the best pair even when the first plug is downhill (which un-masks
    the second), and keeps it only if the pair nets an improvement. Off by default
    (baseline byte-identical); needs -c; quad-only. See gain_cascade(); archived/PERFORMANCE.md 4.10. */
-static int opt_cascade;
+int opt_cascade;
 /* --cascade near-solution gate: the cascade only fires on a converged board whose
    per-symbol quad score clears this threshold, so it skips the ~76% junk boards and
    spends its compute only on promising ones. Default -4.9 (English-quad calibrated:
    junk ~-5.3, near-solution 60%+ ~-4.8..-4.2); tune per language via --cascade=VALUE. */
-static double opt_cascade_gate;
+double opt_cascade_gate;
 /* Internal: enable the 3-ply gain cascade (a deeper escalation, tried only when the 2-ply
    cascade found nothing). --polish turns it on for the single best-board finisher. */
-static int opt_cascade3;
-static int opt_polish;
+int opt_cascade3;
+int opt_polish;
 /* --doubling-report L: report, on stderr, every converged climb whose score clears
    the z gate below AND whose decrypt carries a doubled word of at least L
    letters around an X separator. A CONFIRMATION SIGNAL, not a score term: it
@@ -332,7 +335,7 @@ static int opt_polish;
    lost, and in 140 genuine sweeps there were none. Reporting has no such
    dependency: it fires on the key that IS right and stays silent otherwise.
    0 = off. */
-static int opt_doubling_report;
+int opt_doubling_report;
 /* --doubling-z Z: the z the report gates on -- the raw sigma count over the
    --confidence null, NOT the margin the progress lines print (margin =
    z - sqrt(2 ln K)).
@@ -349,8 +352,8 @@ static int opt_doubling_report;
    It is a knob rather than a constant because the numbers above are for one
    corpus and one key space, and a much larger or much noisier sweep may want to
    move it -- but move L first. */
-static double opt_doubling_z;
-static int opt_doubling_z_set;
+double opt_doubling_z;
+int opt_doubling_z_set;
 /* --doubling-mismatches N: positions where the two copies may differ. Default 1,
    which is the CHANNEL's error and no more: Enigma has no diffusion, so one
    corrupted ciphertext letter damages exactly one plaintext letter, in one copy
@@ -378,8 +381,8 @@ static int opt_doubling_z_set;
    what 1.4 letters buy back -- if you want N=2, add 2 to L and you are back
    where you started. Kept as a knob because a heavily garbled message is a
    real case; the default is where the evidence is. */
-static int opt_doubling_mismatches;
-static int opt_doubling_mismatches_set;
+int opt_doubling_mismatches;
+int opt_doubling_mismatches_set;
 static const int double_mismatches_default = 1;
 static const double double_z_default = 3.0;
 /* Longest doubling the scan looks for. W and V may not contain an X, so each is
@@ -432,15 +435,15 @@ static const int doubling_maxlen = 30;
    answer is the artifact). Off by default (no crib file ->
    opt_crib 0 -> byte-identical); needs -c; -T-deterministic (the combined score is a
    deterministic function of the board). See crib_score()/load_cribs(). */
-static const char * opt_crib_rerank = nullptr;
-static double opt_crib_weight = 0.5;   /* the least-harmful weight measured (still net ~0) */
-static int opt_crib = 0;               /* set once a non-empty crib file is loaded */
+const char * opt_crib_rerank = nullptr;
+double opt_crib_weight = 0.5;   /* the least-harmful weight measured (still net ~0) */
+int opt_crib = 0;               /* set once a non-empty crib file is loaded */
 static std::vector<std::pair<std::string, double>> g_cribs;   /* read-only after load */
-static int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
+int opt_restarts;  /* --restarts/-R: number of randomised restart attempts.
                              0 (the default) = one deterministic climb from the seed,
                              no kick; N>=1 = exactly N kicked climbs, keep the best
                              (the un-kicked seed climb is not additionally run). */
-static const char * opt_staged;  /* raw --score/-S schedule string (e.g. "i4q10"), or 0;
+const char * opt_staged;  /* raw --score/-S schedule string (e.g. "i4q10"), or 0;
                                     parse_schedule() expands it into opt_stages[] */
 /* Upper bound on -R, purely a sanity guard against a typo (each restart just
    re-runs the hill-climb from a fresh perturbed board -- no extra memory -- so the
@@ -454,19 +457,14 @@ static const int pairs_uncapped = asize / 2;   /* 13: a board holds at most this
    model letters i/m/b/t/q (a stage, number = its pair cap, omitted = uncapped). The
    last model stage is the target/ranking model. The per-restart random kick and the
    partial exhaustion are separate options (--random / --exhaust), not schedule tokens. */
-static const int max_stages = 16;
-struct climbstage
-{
-  int model;   /* SCORE_* */
-  int cap;     /* max plug pairs this stage may set (1..13; 13 = uncapped) */
-};
-static struct climbstage opt_stages[max_stages];
-static int opt_nstages;    /* number of model stages in opt_stages[] */
-static int opt_perturb;    /* --random K: random plug pairs injected per restart, 0..13
+/* max_stages and struct climbstage: options.h */
+struct climbstage opt_stages[max_stages];
+int opt_nstages;    /* number of model stages in opt_stages[] */
+int opt_perturb;    /* --random K: random plug pairs injected per restart, 0..13
                               (K=0 is legal -- a no-perturbation control). */
 static const int default_perturb = 10;  /* --random default kick: near the typical plug count */
-static bool opt_random_set;             /* was --random passed explicitly? (errors without -c) */
-static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force E extra plug
+bool opt_random_set;             /* was --random passed explicitly? (errors without -c) */
+int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force E extra plug
                               pairs among the free letters (on top of any -s pairs), trying
                               every set of E disjoint pairs and keeping the best climb (0 = off).
                               Parallel over the first forced pair (exhaust_unit); exploration
@@ -495,19 +493,19 @@ static int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force
    exactly as the search does, and report how far the winning score sits above that
    null -- both on its own and against what the BEST of the analysed keys reaches by
    chance. See report_confidence(). */
-static int opt_confidence;
-static int opt_ring_stride;
+int opt_confidence;
+int opt_ring_stride;
 /* --tune-phase N (0 = off): N starting phases per wheel for tune_phase() below.
    With it on, the sweep enumerates the middle and right wheels' OFFSETS only --
    26^3 per wheel order instead of 26^5 -- and their 26x26 phase subspace
    becomes a cheap per-key scan instead of enumerated keys. */
-static int opt_tune_phase;
+int opt_tune_phase;
 /* Alternation cap for tune_phase(); it converges well before this. */
 static const int tune_phase_rounds = 4;
-static int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
+int opt_prefilter; /* key pre-filter: rank all keys by a cheap IC climb, then
                              run the full -c climb on only the top opt_prefilter keys
                              (0 = off; requires -c) */
-static double opt_prefilter_frac; /* -F N% form: fraction of the resolved keyspace to
+double opt_prefilter_frac; /* -F N% form: fraction of the resolved keyspace to
                              keep (0 = not used; when > 0 it overrides opt_prefilter) */
 /* Plug-pair cap for the tier-1 IC filter climb. Capping the climb both speeds tier 1
    up (fewer passes per key) and improves rotor-key discrimination: an uncapped climb
@@ -520,7 +518,7 @@ static const int filter_climb_cap = 5;
    worsening moves with a cooling probability to escape local optima. Needs -c; the
    move budget is SA's cost/quality knob (like -R for the greedy climb). See
    archived/SIMULATED_ANNEALING.md. */
-static int opt_anneal;
+int opt_anneal;
 static const int anneal_chain = 208;      /* moves per temperature level (8*26) */
 static const int anneal_warmup = 200;     /* warm-up samples for T calibration */
 /* chi0 is the initial worsening-move acceptance target; chi_end the final (near-greedy)
@@ -531,14 +529,14 @@ static const int anneal_warmup = 200;     /* warm-up samples for T calibration *
    measured worse and dropped. */
 static const double anneal_chi0 = 0.12;
 static const double anneal_chi_end = 0.001;
-static int opt_threads;   /* worker threads for the search (default 1) */
+int opt_threads;   /* worker threads for the search (default 1) */
 static const int max_threads = 256;
 /* Random seed for the plugboard restart perturbation. Mixed with the flat key index
    per key, so the restart RNG stays a pure function of (opt_seed, key) -- reproducible
    and independent of -T. Resolved as: -e <seed> > $ENIGMA_SEED > a fresh random draw.
    opt_seed == 0 reproduces the historical (pre-seed) behaviour exactly. */
-static uint64_t opt_seed;
-static bool opt_seed_set;
+uint64_t opt_seed;
+bool opt_seed_set;
 
 /* --true-key <reflector><3 wheels><3 ring><3 start> (standard Enigma, 10 chars,
    e.g. B241AAAQEW): a diagnostic for -F recall testing (archived/CRACKQUALITY_TESTS.md §2).
@@ -546,7 +544,7 @@ static bool opt_seed_set;
    R of N" to stderr -- R = 1 + the number of keys whose tier-1 IC score is strictly
    higher, N = total keys -- so a harness can measure how often the pre-filter keeps
    the true key. Off by default; parsed into g_tk_* below. */
-static const char * opt_true_key;
+const char * opt_true_key;
 static int g_tk_u, g_tk_w[3], g_tk_r[3], g_tk_g[3];   /* parsed --true-key (numeric) */
 static std::vector<float> g_tk_scores;                /* tier-1 IC score per flat key idx */
 static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of the true key */
@@ -556,7 +554,7 @@ static std::atomic<size_t> g_tk_idx{static_cast<size_t>(-1)};   /* flat idx of t
    wildcarded search (not just a fixed key) can be inspected key-by-key. Display-only under
    the same mutex, so it never affects which candidate wins (-T-deterministic results are
    preserved; only the line ORDER is thread-timing dependent). Very verbose; off by default. */
-static bool opt_dump_all;
+bool opt_dump_all;
 
 /* --full-text: print the WHOLE decrypted message with each progress line, instead of the
    19-character preview the fixed-width line has room for. The preview is enough to notice
@@ -568,7 +566,7 @@ static bool opt_dump_all;
      Not a hot-path concern: a progress line is emitted only when a board beats everything
    echoed so far, so this prints once per improvement -- tens of times in a run -- not once
    per board scored. Off by default. */
-static bool opt_full_text;
+bool opt_full_text;
 
 /* --preflight / the always-on sanity warning: IS THIS CIPHERTEXT EVEN ENIGMA?
      Enigma is a permutation cipher, so its output is near-flat; a ciphertext
@@ -589,7 +587,7 @@ static bool opt_full_text;
    indicators are pairwise UNCORRELATED -- the shared-index covariance is
    sum p^3 - (sum p^2)^2 = 1/A^2 - 1/A^2 = 0 -- so E[IC] = 1/A and Var[IC] =
    q(1-q)/C(n,2), q = 1/A, with no dependence on the plaintext at all. */
-static bool opt_no_preflight;
+bool opt_no_preflight;
 
 
 /* Read-only wiring tables, derived once by init() and shared by every search. */
@@ -3375,7 +3373,7 @@ static bool schedule_is_climb_only()
    free! / (2^p p! (free-2p)!). Returned as a double (the count explodes fast). Used for the
    exhaustion combo count and for the restart pigeonhole warning (a kick of K pairs among the
    free letters has this many distinct outcomes). */
-static double disjoint_pair_combinations(int free_letters, int pairs)
+double disjoint_pair_combinations(int free_letters, int pairs)
 {
   double combos = 1.0;
   for (int i = 0; i < pairs; i++)
@@ -7240,662 +7238,7 @@ static void run_crib_list(char * result)
     fatal("No crib in the list produced a scored configuration");
 }
 
-/* --- input, output, help, and CLI --------------------------------------- */
-
-/* Thresholds are set from the MEASURED tail of genuine Enigma, not from a
-   nominal p-value: over one sample of 18000 SIMULATED encryptions spanning
-   n = 40..600 -- authentic 1941 German under random keys and boards, not real
-   traffic -- the largest z(IC) seen was 5.89 and NEITHER test fired once
-   (preflight_null.py 2-3, which share a sample set so the two figures
-   describe one population). The
-   four broken 1941 messages -- genuine Enigma, and the useful controls, since
-   two of them reach z = +4.2 -- all pass. QTXMA fires on both, at z = +10.9 and
-   P = 8.5e-08. A false positive here is expensive in trust, a false negative
-   only costs what it costs today, hence the wide margin. */
-static const double preflight_z_ic = 6.0;
-static const double preflight_p_absent = 1e-4;
-
-struct preflight_stats
-{
-  double ic;         /* index of coincidence                                  */
-  double z_ic;       /* (ic - 1/26) / sd, sd analytic                         */
-  int absent;        /* letters of A-Z that never occur                       */
-  double p_absent;   /* P(absent >= this many), first Bonferroni term         */
-  bool flag_ic;
-  bool flag_absent;
-};
-
-/* P(X >= k) for the number of unseen letters, first Bonferroni term
-   C(A,k)(1-k/A)^n -- an upper bound, and an excellent approximation once it is
-   small, which is the only regime the threshold cares about. Clamped at 1
-   because the bound exceeds it badly for short messages, where several unseen
-   letters are the norm (E[absent] = 5.4 at n = 40). */
-static double absent_tail(int k, int n)
-{
-  if (k <= 0)
-    return 1.0;
-  if (k > asize)
-    return 0.0;
-  double c = 1.0;
-  for (int i = 0; i < k; i++)
-    c = c * (asize - i) / (i + 1);
-  double p = c * pow(1.0 - static_cast<double>(k) / asize, n);
-  return (p > 1.0) ? 1.0 : p;
-}
-
-static preflight_stats compute_preflight()
-{
-  preflight_stats s = {0.0, 0.0, 0, 1.0, false, false};
-  long counts[asize] = {0};
-  for (int i = 0; i < textlength; i++)
-    counts[char2num(ciphertext[i])]++;
-  for (int i = 0; i < asize; i++)
-    if (counts[i] == 0)
-      s.absent++;
-  if (textlength < 2)
-    return s;                    /* IC is undefined on fewer than two letters */
-  long same = 0;
-  for (int i = 0; i < asize; i++)
-    same += counts[i] * (counts[i] - 1);
-  double n = textlength;
-  s.ic = same / (n * (n - 1));
-  const double q = 1.0 / asize;
-  double sd = sqrt(q * (1.0 - q) / (n * (n - 1) / 2.0));
-  s.z_ic = (s.ic - q) / sd;
-  s.p_absent = absent_tail(s.absent, textlength);
-  s.flag_ic = s.z_ic > preflight_z_ic;
-  s.flag_absent = s.p_absent < preflight_p_absent;
-  return s;
-}
-
-/* Reported only when the run is a SEARCH -- which is also the only run for
-   which the question is meaningful, since it is the one looking for a key that
-   may not exist. With a fully-specified key the tool is encrypting or
-   decrypting: on encryption the input is PLAINTEXT, which is language-like by
-   definition, so reporting there would print a scary-looking line on every
-   encryption (including the hundreds the test suite performs) about a
-   ciphertext that is not one. */
-static bool key_is_wildcarded()
-{
-  const char * o[4] = { opt_ukw, opt_walzen,
-                        opt_ringstellung, opt_grundstellung };
-  for (int i = 0; i < 4; i++)
-    for (const char * p = o[i]; (p != nullptr) && (*p != 0); p++)
-      if (*p == '.')
-        return true;
-  return false;
-}
-
-static void report_preflight()
-{
-  if (opt_no_preflight || (textlength < 2) || ! key_is_wildcarded())
-    return;
-  preflight_stats s = compute_preflight();
-  bool flagged = s.flag_ic || s.flag_absent;
-  /* No continuation line may begin with an optionally-signed number: that is
-     the shape of a progress line, and the harness greps stderr for
-     `^ *[+-][0-9]` to pull the last margin out of a --confidence run. A
-     second line reading "  +10.95 sd; ..." was picked up as one. */
-  /* Label field is 12 wide and continuations are indented 12, matching every
-     other settings-echo line ("Confidence: ", "Threads:    ", ...). This block
-     used to carry one space more in both places, so it sat a column right of
-     the rest of the echo. */
-  fprintf(stderr,
-          "Pre-flight: index of coincidence %.4f against the %.4f Enigma "
-          "gives\n"
-          "            (%+.2f sd), and %d of %d letters unused (P = %.2g)\n",
-          s.ic, 1.0 / asize, s.z_ic, s.absent, asize, s.p_absent);
-  if (! flagged)
-    {
-      fprintf(stderr, "            consistent with Enigma output\n");
-      return;
-    }
-  fprintf(stderr,
-          "WARNING: this does not look like Enigma output, so searching for a\n"
-          "         key may be searching for something that does not exist.\n"
-          "         Enigma is a permutation cipher and its output is"
-          " near-flat;\n"
-          "         this ciphertext has %s.\n"
-          "         The thresholds (%.1f sd, P < %.0e) were set so that"
-          " not one\n"
-          "         of 18000 simulated Enigma ciphertexts trips them -- see\n"
-          "         MODERN_BREAKING_NOTES 5l. Proceeding anyway.\n",
-          (s.flag_ic && s.flag_absent)
-            ? "language-like structure, and\n         too many unused letters"
-            : (s.flag_ic ? "language-like structure"
-                         : "too many unused letters"),
-          preflight_z_ic, preflight_p_absent);
-}
-
-
-/* version()/help() take the output stream: explicit -h/-v write to stdout and
-   exit 0, while usage errors (no arguments, bad option) write to stderr and
-   exit 1. */
-void version(FILE * out)
-{
-  fprintf(out, "Enigma cipher tool version 2.1.0\n");
-  fprintf(out, "Copyright (C) 2017-2026 Torbjørn Rognes\n");
-  fprintf(out, "\n");
-}
-
-void help(FILE * out)
-{
-  version(out);
-  fprintf(out, "Usage: enigma [OPTIONS]\n");
-  fprintf(out, "\n");
-
-  /* Options are grouped basic/advanced; every option shows its short flag and
-     its long alias. Unambiguous long-name prefixes (e.g. --lang, --restart) also
-     work. Descriptions are aligned in a 24-column spec field (continuation lines
-     pass an empty spec) and kept within 79 columns. */
-  fprintf(out, "Basic options:\n");
-  fprintf(out, "  %-24s %s\n", "-h, --help", "Show help information");
-  fprintf(out, "  %-24s %s\n", "-v, --version", "Show version information");
-  fprintf(out, "  %-24s %s\n", "-u, --reflector X",
-          "Reflector (umkehrwalze); A-C, N, M4 b/c, or . [.]");
-  fprintf(out, "  %-24s %s\n", "-w, --wheels XYZ", "Wheels (walzen); 1-8 or . [...]");
-  fprintf(out, "  %-24s %s\n", "-r, --rings XYZ",
-          "Ring positions (ringstellung); A-Z or . [AA.]");
-  fprintf(out, "  %-24s %s\n", "-g, --start-position XYZ",
-          "Start positions (grundstellung); A-Z or . [...]");
-  fprintf(out, "  %-24s %s\n", "-s, --plugboard AB...",
-          "Plugboard (steckerbrett) A-Z letter pairs [none];");
-  fprintf(out, "  %-24s %s\n", "", "held fixed; the -c/-A climb finds the rest");
-  fprintf(out, "  %-24s %s\n", "--no-plug LETTERS",
-          "Letters known to carry NO cable: the climb leaves");
-  fprintf(out, "  %-24s %s\n", "", "them unplugged, as -s holds its pairs plugged");
-  fprintf(out, "  %-24s %s\n", "", "(needs -c) [none]");
-  fprintf(out, "  %-24s %s\n", "--soft-plug AB...",
-          "Plugboard pairs GUESSED rather than known: the");
-  fprintf(out, "  %-24s %s\n", "", "climb starts from them each restart but may");
-  fprintf(out, "  %-24s %s\n", "", "move or drop them, unlike -s (needs -c) [none]");
-  fprintf(out, "  %-24s %s\n", "--self-crib-seeds K",
-          "Seed the climb from a DOUBLED WORD in the message");
-  fprintf(out, "  %-24s %s\n", "", "(X RENNER X RENNER): deduce the boards it");
-  fprintf(out, "  %-24s %s\n", "", "allows per key, rank by IC, climb the top K");
-  fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = off) [0]");
-  fprintf(out, "  %-24s %s\n", "--self-crib-length L",
-          "Shortest doubled word to hypothesise [6]");
-  fprintf(out, "  %-24s %s\n", "--self-crib-signature",
-          "Assert the doubled word CLOSES the message (a");
-  fprintf(out, "  %-24s %s\n", "", "signed surname): ~15x cheaper, but only wins");
-  fprintf(out, "  %-24s %s\n", "", "when that holds [off]");
-  fprintf(out, "  %-24s %s\n", "-n, --norway",
-          "Norway Enigma: reflector N and wheels (1-5)");
-  fprintf(out, "  %-24s %s\n", "-4, --m4", "M4 (4-rotor naval) mode. -u selects the thin");
-  fprintf(out, "  %-24s %s\n", "", "reflector b/c; -w/-r/-g take 4 chars (Greek");
-  fprintf(out, "  %-24s %s\n", "", "wheel/ring/start first)");
-  fprintf(out, "  %-24s %s\n", "-c, --climb",
-          "Hill-climb the plugboard for each candidate key.");
-  fprintf(out, "  %-24s %s\n", "", "The climb rule is STEEPEST ASCENT by default:");
-  fprintf(out, "  %-24s %s\n", "", "score all 325 plug toggles, apply the single");
-  fprintf(out, "  %-24s %s\n", "", "best, repeat to convergence (see -J) [off]");
-  fprintf(out, "  %-24s %s\n", "-R, --restarts N",
-          "Random restart attempts: 0 = one deterministic");
-  fprintf(out, "  %-24s %s\n", "", "climb; N = N kicked climbs, keep best [0]");
-  fprintf(out, "  %-24s %s\n", "-S, --score schedule",
-          "Staged plugboard climb: <letter><cap> tokens,");
-  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q/a/f (number caps plug pairs; last");
-  fprintf(out, "  %-24s %s\n", "", "stage is the target/ranking model). E.g. --score");
-  fprintf(out, "  %-24s %s\n", "", "m4f10 (mono pre-pass then fused, both capped).");
-  fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
-  fprintf(out, "  %-24s %s\n", "-l, --language language",
-          "Scoring language: english/german/danish/french/");
-  fprintf(out, "  %-24s %s\n", "", "swedish/finnish/icelandic/polish/spanish, or");
-  fprintf(out, "  %-24s %s\n", "", "wehrmacht (telegraphic military German -- X as");
-  fprintf(out, "  %-24s %s\n", "", "word separator, Q for ch, spelled-out numbers;");
-  fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German);");
-  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q/-a/-f (no default); not -i");
-  fprintf(out, "  %-24s %s\n", "-i, --ic",
-          "Index of coincidence (IC); needs no -l [default]");
-  fprintf(out, "  %-24s %s\n", "-m, --mono", "Monogram statistics for the plaintext score");
-  fprintf(out, "  %-24s %s\n", "-b, --bi", "Bigram statistics for the plaintext score");
-  fprintf(out, "  %-24s %s\n", "-t, --tri", "Trigram statistics for the plaintext score");
-  fprintf(out, "  %-24s %s\n", "-q, --quad", "Quadgram statistics for the plaintext score");
-  fprintf(out, "  %-24s %s\n", "-a, --weighted",
-          "Weighted all-order score (log-linear mix of");
-  fprintf(out, "  %-24s %s\n", "", "quad/tri/bi/mono); sharper on short messages");
-  fprintf(out, "  %-24s %s\n", "-f, --fused",
-          "Weighted all-order score PLUS the index of");
-  fprintf(out, "  %-24s %s\n", "", "coincidence. IC is language-independent and the");
-  fprintf(out, "  %-24s %s\n", "", "plugboard cannot game it, so it adds gradient");
-  fprintf(out, "  %-24s %s\n", "", "where the n-gram surface is flat -- a better");
-  fprintf(out, "  %-24s %s\n", "", "CLIMB, not better discrimination. Recommended:");
-  fprintf(out, "  %-24s %s\n", "", "-c -S m4f10 -J --polish");
-  fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
-          "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
-  fprintf(out, "  %-24s %s\n", "-T, --threads N",
-          "Worker threads for the search (1-256) [1]");
-  fprintf(out, "\n");
-  fprintf(out, "Advanced options:\n");
-  fprintf(out, "  %-24s %s\n", "-x, --max-wheel N", "Highest wheel number to use (3-8) [5]");
-  fprintf(out, "  %-24s %s\n", "-A, --anneal N",
-          "Recover the plugboard by simulated annealing");
-  fprintf(out, "  %-24s %s\n", "", "instead of the greedy climb; N = move budget");
-  fprintf(out, "  %-24s %s\n", "", "(needs -c) [off]. Honours the -S target cap:");
-  fprintf(out, "  %-24s %s\n", "", "-A N -S qK caps it at K plugs");
-  fprintf(out, "  %-24s %s\n", "-J, --dynamic-order",
-          "Change -c's climb rule to FIRST-IMPROVEMENT in");
-  fprintf(out, "  %-24s %s\n", "", "best-first order: apply the first improving");
-  fprintf(out, "  %-24s %s\n", "", "toggle instead of scanning for the best, ~2.8x");
-  fprintf(out, "  %-24s %s\n", "", "cheaper per climb -- so pair it with a larger -R.");
-  fprintf(out, "  %-24s %s\n", "", "Wins the realistic ~10-plug case, may lose with");
-  fprintf(out, "  %-24s %s\n", "", "few plugs (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "-M, --cap-target",
-          "Make the plug cap a strict descent target: only");
-  fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
-  fprintf(out, "  %-24s %s\n", "", "-S cap (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--polish",
-          "Gain cascade once on the best board, plus a deeper");
-  fprintf(out, "  %-24s %s\n", "", "3-ply cascade for 3-plug tangles. The recommended");
-  fprintf(out, "  %-24s %s\n", "", "finisher: it runs once after all restarts, so its");
-  fprintf(out, "  %-24s %s\n", "", "cost is fixed and negligible at a high -R, but is");
-  fprintf(out, "  %-24s %s\n", "", "a few % of a low-R run (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--ring-stride K",
-          "Sparse ring sampling for the rightmost wheel:");
-  fprintf(out, "  %-24s %s\n", "", "test only every Kth ring value, then refine every");
-  fprintf(out, "  %-24s %s\n", "", "skipped one (needs -r and -g to wildcard that");
-  fprintf(out, "  %-24s %s\n", "", "wheel; no -F/--exhaust) [1..26, 1 = off].");
-  fprintf(out, "  %-24s %s\n", "", "K=2/K=3 analyse 1.9x/2.6x fewer keys for ~0.5-2pp");
-  fprintf(out, "  %-24s %s\n", "", "of exact recovery on telegraphic German; K=3 is");
-  fprintf(out, "  %-24s %s\n", "", "the better pick. K>=5 is not recommended (2-8pp).");
-  fprintf(out, "  %-24s %s\n", "", "Cost is flat over K=13..25 (2 coarse values each),");
-  fprintf(out, "  %-24s %s\n", "", "so nothing above 13 pays until K=26, which is 15%");
-  fprintf(out, "  %-24s %s\n", "", "cheaper than 13 but loses ~10pp. Still an");
-  fprintf(out, "  %-24s %s\n", "", "APPROXIMATION (archived/PERFORMANCE.md 7.11)");
-  fprintf(out, "  %-24s %s\n", "--confidence N",
-          "Sample N keys BEFORE the sweep to measure what");
-  fprintf(out, "  %-24s %s\n", "",
-          "this model scores with NO signal, and report how");
-  fprintf(out, "  %-24s %s\n", "",
-          "far the winner sits above it -- against what the");
-  fprintf(out, "  %-24s %s\n", "",
-          "BEST of the analysed keys reaches by chance, which");
-  fprintf(out, "  %-24s %s\n", "",
-          "grows with the keyspace. Read the MARGIN, not the");
-  fprintf(out, "  %-24s %s\n", "",
-          "raw score. Samples are climbed when -c is on, so");
-  fprintf(out, "  %-24s %s\n", "",
-          "the null matches the search. N buys precision in");
-  fprintf(out, "  %-24s %s\n", "",
-          "the null and nothing else: below 128 a signal-FREE");
-  fprintf(out, "  %-24s %s\n", "",
-          "ciphertext can report a positive margin, and above");
-  fprintf(out, "  %-24s %s\n", "",
-          "512 there is nothing left to buy. Free without -c;");
-  fprintf(out, "  %-24s %s\n", "",
-          "~1.7ms/sample with it. Needs a key space to sample:");
-  fprintf(out, "  %-24s %s\n", "",
-          "with the rotor key fully given there is no null, and");
-  fprintf(out, "  %-24s %s\n", "",
-          "the run says so and reports raw scores instead");
-  fprintf(out, "  %-24s %s\n", "",
-          "[0 = off, use 256]");
-  fprintf(out, "  %-24s %s\n", "--tune-phase N",
-          "Hill-climb the rotor PHASE instead of enumerating");
-  fprintf(out, "  %-24s %s\n", "",
-          "it: keep N starting phases per wheel, climb the");
-  fprintf(out, "  %-24s %s\n", "",
-          "plugboard, then scan all 26x26 middle/right ring");
-  fprintf(out, "  %-24s %s\n", "",
-          "positions with that board FROZEN (offsets held, so");
-  fprintf(out, "  %-24s %s\n", "",
-          "only the notch timing moves) and re-climb, until");
-  fprintf(out, "  %-24s %s\n", "",
-          "neither improves. Needs -c and -r/-g wildcarding");
-  fprintf(out, "  %-24s %s\n", "",
-          "the middle and right positions; no --ring-stride,");
-  fprintf(out, "  %-24s %s\n", "",
-          "-F, --exhaust, --crib or -A. An APPROXIMATION:");
-  fprintf(out, "  %-24s %s\n", "",
-          "capture radius ~0.4*L/26, so it wants long");
-  fprintf(out, "  %-24s %s\n", "", "messages [0..26, 0 = off]");
-    fprintf(out, "  %-24s %s\n", "--self-crib-tandem",
-          "Also hypothesise a doubled word with NO separator");
-  fprintf(out, "  %-24s %s\n", "",
-          "(SIEGFRIEDSIEGFRIED). Roughly doubles the");
-  fprintf(out, "  %-24s %s\n", "",
-          "hypotheses, so opt-in; reaches ~5% more messages [off]");
-fprintf(out, "  %-24s %s\n", "--crib-rerank F",
-          "Known-word (crib) finisher: rank converged boards");
-  fprintf(out, "  %-24s %s\n", "", "by score + weight*(known words present); measured");
-  fprintf(out, "  %-24s %s\n", "", "neutral/dominated (needs -c) [off], not recommended");
-  fprintf(out, "  %-24s %s\n", "--crib-weight X",
-          "Weight of the crib bonus vs the n-gram score [0.5]");
-  fprintf(out, "  %-24s %s\n", "-e, --seed N", "Random seed for restarts/annealing (also");
-  fprintf(out, "  %-24s %s\n", "", "$ENIGMA_SEED); default fresh each run, echoed");
-  fprintf(out, "  %-24s %s\n", "-p, --compare filename",
-          "Plaintext file to compare the result against");
-  fprintf(out, "  %-24s %s\n", "--random K",
-          "Random-kick size: plug pairs injected per restart");
-  fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = no kick, a control) [10]");
-  fprintf(out, "  %-24s %s\n", "--full-text",
-          "Print the whole decrypted message with each");
-  fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
-  fprintf(out, "  %-24s %s\n", "--no-preflight",
-          "Do not report whether the ciphertext looks like");
-  fprintf(out, "  %-24s %s\n", "",
-          "Enigma output at all. The report is ON by default");
-  fprintf(out, "  %-24s %s\n", "",
-          "for a search (a wildcarded key) [reporting on]");
-  fprintf(out, "  %-24s %s\n", "--doubling-report L",
-          "Report every converged climb past the z gate whose");
-  fprintf(out, "  %-24s %s\n", "",
-          "decrypt holds a word of L+ letters doubled around");
-  fprintf(out, "  %-24s %s\n", "",
-          "an X (\"ROMANOWO X ROMANOWO\"), telegraphic German's");
-  fprintf(out, "  %-24s %s\n", "",
-          "own error correction. One SUBSTITUTION is allowed,");
-  fprintf(out, "  %-24s %s\n", "",
-          "the error a garble makes; a dropped letter");
-  fprintf(out, "  %-24s %s\n", "",
-          "misaligns the copies and is missed. Marked \">>\";");
-  fprintf(out, "  %-24s %s\n", "",
-          "a CONFIRMATION only -- it never enters a ranking,");
-  fprintf(out, "  %-24s %s\n", "",
-          "so it cannot promote a wrong key, and a report is");
-  fprintf(out, "  %-24s %s\n", "",
-          "not a new best. Chance reports fall ~16x per extra");
-  fprintf(out, "  %-24s %s\n", "",
-          "letter: L=7 expects ~6 in a 230M-key sweep, L=6");
-  fprintf(out, "  %-24s %s\n", "",
-          "about 90 -- so raise L before touching the gate.");
-  fprintf(out, "  %-24s %s\n", "",
-          "Lengths above 30 are not searched (the longest in");
-  fprintf(out, "  %-24s %s\n", "",
-          "the corpus is 13; the cap is what keeps the scan");
-  fprintf(out, "  %-24s %s\n", "",
-          "cheap). Needs -c and --confidence (defines z) [off]");
-  fprintf(out, "  %-24s %s\n", "--doubling-z Z",
-          "Sigma threshold for --doubling-report. Below it a");
-  fprintf(out, "  %-24s %s\n", "",
-          "climb is not examined at all, which is what keeps");
-  fprintf(out, "  %-24s %s\n", "",
-          "the check free. Raw z over the --confidence null,");
-  fprintf(out, "  %-24s %s\n", "",
-          "NOT the margin the lines print. Lowering it finds");
-  fprintf(out, "  %-24s %s\n", "",
-          "nothing extra (the true key sits at z = 7..16) and");
-  fprintf(out, "  %-24s %s\n", "", "multiplies false reports [3]");
-  fprintf(out, "  %-24s %s\n", "--doubling-mismatches N",
-          "Positions the two copies may differ in. The");
-  fprintf(out, "  %-24s %s\n", "",
-          "default 1 is the channel's error and no more --");
-  fprintf(out, "  %-24s %s\n", "",
-          "Enigma has no diffusion, so one garbled letter");
-  fprintf(out, "  %-24s %s\n", "",
-          "damages one copy. Measured on 2M null texts, N=2");
-  fprintf(out, "  %-24s %s\n", "",
-          "multiplies false reports ~50x and finds nothing");
-  fprintf(out, "  %-24s %s\n", "",
-          "extra (of 25 real doublings, 18 have no mismatch,");
-  fprintf(out, "  %-24s %s\n", "",
-          "7 have one, none has two). A letter of L divides");
-  fprintf(out, "  %-24s %s\n", "",
-          "the rate by 16, so N=2 needs L+2 to break even [1]");
-  fprintf(out, "  %-24s %s\n", "--crib TEXT",
-          "Known plaintext: rotor settings that cannot produce");
-  fprintf(out, "  %-24s %s\n", "", "it are rejected unscored, and with -c the plugs");
-  fprintf(out, "  %-24s %s\n", "", "it deduces seed the climb. No -F/--exhaust/");
-  fprintf(out, "  %-24s %s\n", "", "--ring-stride/-A [off]");
-  fprintf(out, "  %-24s %s\n", "--crib-at N",
-          "Where the crib sits (1-based); omit to sweep every");
-  fprintf(out, "  %-24s %s\n", "", "alignment -- but rejections multiply across");
-  fprintf(out, "  %-24s %s\n", "", "them, so a swept crib needs 16+ letters");
-  fprintf(out, "  %-24s %s\n", "--crib-dump",
-          "Print every surviving crib hypothesis and the plugs");
-  fprintf(out, "  %-24s %s\n", "", "it deduces (diagnostic; needs --crib) [off]");
-  fprintf(out, "  %-24s %s\n", "--crib-seeds K",
-          "Climb only the K crib hypotheses whose decrypt has");
-  fprintf(out, "  %-24s %s\n", "",
-          "the highest index of coincidence, instead of every");
-  fprintf(out, "  %-24s %s\n", "",
-          "survivor. For SHORT swept cribs, where a key can");
-  fprintf(out, "  %-24s %s\n", "",
-          "leave hundreds (needs -c; 0 = off) [0]");
-  fprintf(out, "  %-24s %s\n", "--crib-list F",
-          "Crib library, one per line ('#' comments); one rotor");
-  fprintf(out, "  %-24s %s\n", "", "sweep each, best board kept [off]");
-  fprintf(out, "  %-24s %s\n", "--no-crib-reorder",
-          "Keep a --crib-list in file order. By default it is");
-  fprintf(out, "  %-24s %s\n", "", "run cheapest-measured-cost first, since a long");
-  fprintf(out, "  %-24s %s\n", "", "crib can cost ~2600x less than a short one [off]");
-  fprintf(out, "\n");
-  fprintf(out, "Non-recommended options (opt-in; dominated, ablation, or only\n");
-  fprintf(out, "situational -- not proven to beat the recommended knobs above):\n");
-  fprintf(out, "  %-24s %s\n", "-F, --prefilter N[%]",
-          "Key pre-filter: rank by a cheap IC climb, then");
-  fprintf(out, "  %-24s %s\n", "", "run the full -c climb on only the top N keys, or");
-  fprintf(out, "  %-24s %s\n", "", "top N% of the keyspace (needs -c) [off];");
-  fprintf(out, "  %-24s %s\n", "", "long messages only, weak on short");
-  fprintf(out, "  %-24s %s\n", "--no-repair",
-          "Disable the 2-plug re-pair barrier cross");
-  fprintf(out, "  %-24s %s\n", "", "(ablation/measurement flag; needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--cascade[=GATE]",
-          "Quadgram-gain 2-ply directed-repair cascade at");
-  fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
-  fprintf(out, "  %-24s %s\n", "", "score threshold (needs -c; quad-only) [off];");
-  fprintf(out, "  %-24s %s\n", "", "prefer --polish (kept for -F/--exhaust)");
-  fprintf(out, "  %-24s %s\n", "--exhaust E",
-          "Force E extra plug pairs among the free letters,");
-  fprintf(out, "  %-24s %s\n", "", "try every combination, keep the best climb. An");
-  fprintf(out, "  %-24s %s\n", "", "exploration tool (E=1 = 325 climbs; E>1 explodes;");
-  fprintf(out, "  %-24s %s\n", "", "needs -c; a high -R dominates it) [off]");
-  fprintf(out, "\n");
-  fprintf(out, "Diagnostic options (internal/experimental; for measurement):\n");
-  fprintf(out, "  %-24s %s\n", "--true-key KEY",
-          "With -F, print the tier-1 rank of the given");
-  fprintf(out, "  %-24s %s\n", "", "standard key (e.g. B241AAAQEW = reflector, 3");
-  fprintf(out, "  %-24s %s\n", "", "wheels, 3 ring, 3 start) among all keys [off]");
-  fprintf(out, "  %-24s %s\n", "--dump-all",
-          "With -c, print the full setting (rotor key, score,");
-  fprintf(out, "  %-24s %s\n", "", "plugboard) of every key x restart (verbose) [off]");
-  fprintf(out, "\n");
-  fprintf(out, "Defaults are indicated in [square brackets].\n");
-  fprintf(out, "\n");
-  fprintf(out, "The ciphertext is read from standard input. The final plaintext is written\n");
-  fprintf(out, "to standard output.\n");
-  fprintf(out, "\n");
-  fprintf(out, "For the reflector, wheels, ring position and start position, a dot (.)\n");
-  fprintf(out, "works as a wild card, leaving it unspecified. When these settings are not\n");
-  fprintf(out, "specified, the program will try all combinations to find the settings\n");
-  fprintf(out, "resulting in the highest plaintext score. If asked for, a hill climbing\n");
-  fprintf(out, "algorithm will be used to try to determine the plugboard settings.\n");
-  fprintf(out, "\n");
-  fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
-  fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
-  fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --polish --score m4f10 --random 10 -R 40 -f -l english\n");
-  fprintf(out, "  SA:     -c -A 12000 --score a10 -R 12 -a -l english\n");
-  fprintf(out, "-f (weighted all-order + IC) is the recommended scoring model; -R is the main\n");
-  fprintf(out, "quality dial (use -T to keep it cheap); the polisher is a small bump\n");
-  fprintf(out, "on top, not a substitute for more restarts.\n");
-  fprintf(out, "\n");
-}
-
-
-/* Echo the resolved run configuration to stderr so it is never a mystery what
-   scoring model / language / settings a run is actually using. A dot (.) in the
-   reflector/wheels/ring/start fields means that position is being searched. */
-void show_settings()
-{
-  static const char * const scoring_name[] =
-    { "index of coincidence", "monograms", "bigrams", "trigrams", "quadgrams",
-      "weighted all-orders", "weighted all-orders + IC" };
-
-  fprintf(stderr, "Ciphertext: %d letters\n", textlength);
-
-  fprintf(stderr, "Scoring:    %s", scoring_name[opt_scoring]);
-  if (opt_scoring == 0)
-    fprintf(stderr, " (language-independent)\n");
-  else
-    /* The data directory is an arbitrary path, so it gets its own continuation
-       line rather than a trailing clause that would push the line past 80. */
-    fprintf(stderr, " (language: %s)\n            n-gram files in %s\n",
-            opt_language, opt_datadir);
-
-  /* One clause per continuation line so the line stays within 79 columns even when
-     several are active (the default random seed is a full 20-digit uint64). The seed
-     is shown once -- it drives both the SA trajectory and the restart perturbation. */
-  fprintf(stderr, "Hillclimb:  %s\n", opt_hillclimb ? "yes" : "no");
-  if (opt_hillclimb && (opt_anneal > 0))
-    fprintf(stderr, "            simulated annealing, %d moves\n", opt_anneal);
-  if (opt_hillclimb && (opt_restarts >= 1))
-    fprintf(stderr, "            %d restarts, %d-pair kick\n",
-            opt_restarts, opt_perturb);
-  if (opt_hillclimb && opt_staged && (opt_anneal == 0))
-    fprintf(stderr, "            staged: %s\n", opt_staged);
-  if (opt_hillclimb && opt_exhaust)
-    {
-      int fixed_pairs = static_cast<int>(strlen(opt_steckerbrett) / 2);
-      int free_letters = asize - 2 * fixed_pairs
-                         - static_cast<int>(strlen(opt_no_plug));
-      double combos = disjoint_pair_combinations(free_letters, opt_exhaust);
-      fprintf(stderr, "            partial exhaustion: %d forced pair(s) on top of %d "
-              "-s pair(s) (%.0f combinations)\n", opt_exhaust, fixed_pairs, combos);
-    }
-  if (opt_hillclimb && opt_capmerge)
-    fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
-  if (opt_hillclimb && opt_no_repair)
-    fprintf(stderr, "            2-plug re-pair barrier cross disabled (--no-repair)\n");
-  if (opt_hillclimb && opt_cascade)
-    fprintf(stderr, "            quadgram-gain directed-repair cascade at convergence "
-            "(--cascade, near-solution gate %.2f)\n", opt_cascade_gate);
-  if (opt_hillclimb && opt_polish)
-    fprintf(stderr, "            quadgram-gain 2-ply+3-ply cascade once on the best board "
-            "(--polish)\n");
-  if (opt_hillclimb && opt_firstimprove)
-    fprintf(stderr, "            first-improvement climb%s\n",
-            opt_dynorder ? " (dynamic move order)" : "");
-  if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts >= 1)))
-    fprintf(stderr, "            seed: %llu\n",
-            static_cast<unsigned long long>(opt_seed));
-
-  if (opt_prefilter_frac > 0.0)
-    fprintf(stderr, "Pre-filter: top %g%% of keys\n", opt_prefilter_frac * 100.0);
-  else if (opt_prefilter > 0)
-    fprintf(stderr, "Pre-filter: top %d keys\n", opt_prefilter);
-
-  /* --confidence changes what the Score column MEANS, so a saved log has to say
-     so up front: a reader who joins at the progress lines cannot otherwise tell
-     a margin from a raw score, and the two differ by ~20 on the same run. N is
-     echoed with it because the margin's precision is set by N and nothing else
-     (below 128 a signal-free run can read positive -- see --help). */
-  if (opt_confidence > 0)
-    fprintf(stderr, "Confidence: %d null samples%s\n"
-            "            the first column below is the MARGIN over chance, not "
-            "a score\n",
-            opt_confidence, opt_hillclimb ? ", each climbed" : "");
-
-  /* The report fires on any key past the gate, not only on a new best, so a
-     reader who does not know it is on would misread its lines as the search
-     having improved. Say what marks them and what the gate was. */
-  if (opt_doubling_report > 0)
-    fprintf(stderr, "Doubling:   report doublings of %d+ letters at z >= %g, "
-            "up to %d mismatch%s\n"
-            "            marked \">>\" below; a report is NOT a new best\n",
-            opt_doubling_report, opt_doubling_z, opt_doubling_mismatches,
-            (opt_doubling_mismatches == 1) ? "" : "es");
-
-  /* --ring-stride makes the rotor-key search APPROXIMATE (it can miss the true key --
-     ~10pp of exact recovery at K=2 on telegraphic German, archived/PERFORMANCE.md §7.11), so a
-     run that used it must say so: otherwise a saved log is indistinguishable from an
-     exhaustive one. Every other search-affecting option is echoed here; this was the
-     only silent one. */
-  if (opt_ring_stride > 1)
-    fprintf(stderr, "Stride:     rightmost ring every %d (--ring-stride), then refine "
-            "skipped\n            rings; approximate, may miss the true key\n",
-            opt_ring_stride);
-
-  /* Same reason: --tune-phase replaces the exhaustive enumeration of the middle
-     and right rings with N starting phases plus a frozen-board scan, so the run
-     is approximate and a log of it must not read like an exhaustive sweep. */
-  if (opt_tune_phase > 0)
-    fprintf(stderr,
-            "Phase:      %d starting phase%s per wheel, then tune ring1/ring2 "
-            "with the\n            plugboard frozen (--tune-phase); "
-            "approximate, may miss the true key\n",
-            opt_tune_phase, (opt_tune_phase == 1) ? "" : "s");
-
-  fprintf(stderr, "Threads:    %d\n", opt_threads);
-
-  /* Split over two lines so it stays within 79 columns (M4 in particular is wide, and
-     the "(max wheel N)" clause pushes even the standard line over). */
-  if (opt_m4)
-    {
-      /* opt_ukw is upper-cased (B/C); echo the thin reflector in lower case. Line 1:
-         the M4-specific parts (thin reflector + the static Greek wheel and its offset);
-         line 2: the three stepping rotors. */
-      fprintf(stderr,
-              "Machine:    M4 Enigma; thin reflector %c, Greek wheel %c, ring %c, "
-              "start %c\n",
-              (opt_ukw[0] == '.') ? '.' : (opt_ukw[0] == 'B' ? 'b' : 'c'),
-              opt_greek_walzen, opt_greek_ringstellung, opt_greek_grundstellung);
-      fprintf(stderr, "            wheels %s", opt_walzen);
-      if (strchr(opt_walzen, '.'))
-        fprintf(stderr, " (max wheel %d)", opt_maxwheel);
-      fprintf(stderr, ", ring %s, start %s\n", opt_ringstellung, opt_grundstellung);
-    }
-  else
-    {
-      fprintf(stderr, "Machine:    %s Enigma; reflector %s, wheels %s",
-              opt_norenigma ? "Norway" : "standard", opt_ukw, opt_walzen);
-      if (strchr(opt_walzen, '.'))
-        fprintf(stderr, " (max wheel %d)", opt_maxwheel);
-      fprintf(stderr, "\n            ring %s, start %s\n",
-              opt_ringstellung, opt_grundstellung);
-    }
-
-  fprintf(stderr, "Plugboard:  ");
-  if (opt_steckerbrett[0])
-    {
-      /* print the de-spaced pairs with a space between each pair (AB CD ...) */
-      for (int i = 0; opt_steckerbrett[i]; i++)
-        {
-          if ((i > 0) && (i % 2 == 0))
-            fputc(' ', stderr);
-          fputc(opt_steckerbrett[i], stderr);
-        }
-      fputc('\n', stderr);
-    }
-  else
-    fprintf(stderr, "(none)\n");
-  if (opt_no_plug[0])
-    fprintf(stderr, "            %s known unplugged (--no-plug)\n", opt_no_plug);
-  if (opt_soft_plug[0])
-    fprintf(stderr, "            %s guessed, climb may revise (--soft-plug)\n",
-            opt_soft_plug);
-  if (opt_self_crib_seeds > 0)
-    fprintf(stderr, "Self-crib:  top %d seed%s per key by IC, %d+ letters, "
-            "%d hypotheses (%s)\n", opt_self_crib_seeds,
-            (opt_self_crib_seeds == 1) ? "" : "s", opt_self_crib_length,
-            g_selfcrib_nhyps,
-            opt_self_crib_signature ? "signature"
-              : (opt_self_crib_tandem ? "anywhere, separated or tandem"
-                                      : "anywhere"));
-  if (opt_crib_text)
-    {
-      if (opt_crib_at >= 0)
-        fprintf(stderr, "Crib:       %s at position %d\n",
-                opt_crib_text, opt_crib_at + 1);
-      else
-        fprintf(stderr, "Crib:       %s, sweeping every alignment\n", opt_crib_text);
-    }
-  if (opt_crib_list)
-    {
-      fprintf(stderr, "Crib list:  %s (%zu crib%s)\n", opt_crib_list,
-              g_crib_list.size(), (g_crib_list.size() == 1) ? "" : "s");
-      fprintf(stderr, "Crib order: %s\n",
-              opt_crib_reorder ? "cheapest measured cost first"
-                               : "file order (--no-crib-reorder)");
-    }
-  /* Reported for --crib and --crib-list alike: it changes how many climbs each key
-     costs, which is the first thing to check when a crib run is slower or worse than
-     expected. */
-  if (opt_crib_seeds > 0)
-    fprintf(stderr, "Crib seeds: top %d hypotheses per key by index of "
-            "coincidence\n", opt_crib_seeds);
-}
+/* --- main ---------------------------------------------------------------- */
 
 int main(int argc, char * * argv)
 {
