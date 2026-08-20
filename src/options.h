@@ -105,4 +105,26 @@ extern int opt_threads;
 extern uint64_t opt_seed;
 extern bool opt_seed_set;
 
+/* Bounds the option parser validates against. Compile-time constants in the
+   header because both the parser and the code that honours them need them. */
+
+/* Upper bound on -R, purely a sanity guard against a typo: each restart just
+   re-runs the hill-climb from a fresh perturbed board, so there is no extra
+   memory and the only real limit is patience. One billion is effectively
+   unlimited for any run yet stays well within int. */
+static const int max_restarts = 1000000000;
+
+static const int pairs_uncapped = asize / 2;   /* 13: a board holds at most this */
+
+static const int default_perturb = 10;  /* --random default kick: near the typical plug count */
+
+static const int max_threads = 256;
+
+/* --doubling-report defaults: one tolerated substitution (Enigma has no
+   diffusion, so one garbled ciphertext letter damages exactly one plaintext
+   letter, in one copy of the doubling and not the other), and a z gate of 3
+   over the calibrated null. */
+static const int double_mismatches_default = 1;
+static const double double_z_default = 3.0;
+
 #endif
