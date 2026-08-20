@@ -1,5 +1,11 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast -O3 -pthread
+# -Wmissing-declarations is here for a specific failure this repo has already
+# had: a function with external linkage and no header declaration is invisible
+# to every gate. subst_rotors() sat dead for years that way, and three search
+# workers with a single same-file caller each were found the same way. Both
+# compilers accept it, and a clean tree reports none.
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow \
+           -Wold-style-cast -Wmissing-declarations -O3 -pthread
 
 # Appended after CXXFLAGS; used by CI to add e.g. -Werror or sanitizers
 # without dropping the base flags:  make EXTRA_CXXFLAGS=-Werror

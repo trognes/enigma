@@ -260,10 +260,10 @@ uint64_t g_plugboards_scored = 0; /* total score_iter calls across workers */
    Parallelising the flat key space (not just the wheel order) means a search
    with the wheels fixed but ring/start wildcarded uses every thread -- the old
    wheel-order-only scheme left exactly that case single-threaded. */
-void precompute_worker(machine & m,
-                       const std::vector<wheel_task> & tasks,
-                       std::atomic<size_t> & next_task,
-                       subst_table all)
+static void precompute_worker(machine & m,
+                              const std::vector<wheel_task> & tasks,
+                              std::atomic<size_t> & next_task,
+                              subst_table all)
 {
   size_t i;
   while ((i = next_task.fetch_add(1)) < tasks.size())
@@ -559,13 +559,16 @@ void search_worker(machine & m,
    climb -- which, unlike a plugboard-free IC scan, partially recovers the stecker
    and so discriminates the true rotor key even under a full 10-pair board -- and
    then runs the expensive climb only on the top -F keys. */
-void filter_worker(machine & m,
-                   const std::vector<wheel_task> & tasks,
-                   const search_range & range, const int * rc, const int * gc,
-                   subst_table all, size_t rsize, size_t gsize,
-                   std::atomic<size_t> & next_key, size_t chunk, size_t topn,
-                   std::mutex & cand_mutex, std::vector<scored_key> & cand,
-                   std::atomic<size_t> & progress, bool show_progress)
+static void filter_worker(machine & m,
+                          const std::vector<wheel_task> & tasks,
+                          const search_range & range,
+                          const int * rc, const int * gc,
+                          subst_table all, size_t rsize, size_t gsize,
+                          std::atomic<size_t> & next_key, size_t chunk,
+                          size_t topn,
+                          std::mutex & cand_mutex,
+                          std::vector<scored_key> & cand,
+                          std::atomic<size_t> & progress, bool show_progress)
 {
   const size_t rg = rsize * gsize;
   const size_t total = tasks.size() * rg;
@@ -645,12 +648,13 @@ void filter_worker(machine & m,
 }
 /* Tier 2: run the full -R/-S plugboard climb on the shortlisted keys only, merging
    the global best exactly like search_worker's hill-climb path. */
-void finish_worker(machine & m,
-                   const std::vector<wheel_task> & tasks,
-                   const search_range & range, const int * rc, const int * gc,
-                   subst_table all, size_t rsize, size_t gsize,
-                   const std::vector<size_t> & shortlist,
-                   std::atomic<size_t> & next, best_result & best)
+static void finish_worker(machine & m,
+                          const std::vector<wheel_task> & tasks,
+                          const search_range & range,
+                          const int * rc, const int * gc,
+                          subst_table all, size_t rsize, size_t gsize,
+                          const std::vector<size_t> & shortlist,
+                          std::atomic<size_t> & next, best_result & best)
 {
   const size_t rg = rsize * gsize;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];

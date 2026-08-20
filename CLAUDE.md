@@ -99,7 +99,8 @@ tables, verified by loading each with zero "non-mappable character" warnings
 
 ```sh
 make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual
-                          #     -Wshadow -Wold-style-cast -O3 -pthread
+                          #     -Wshadow -Wold-style-cast
+                          #     -Wmissing-declarations -O3 -pthread
 make test                 # build, then run tests/run_tests.sh
 make bench                # build, then run tests/bench.sh (performance)
 make crackquality         # build, then run tests/crack_quality.py (cracking quality)
@@ -1967,7 +1968,13 @@ one call into a module):
   serve all 26 of its offsets. A `subst_rotors()` that spelled the whole stack
   out survived until PR #218 with **no callers**: `precompute()` had replaced
   it, and being an `inline` with external linkage hid that for years, until
-  making it `static` during the module split drew a warning.
+  making it `static` during the module split drew a warning. **That is why
+  `-Wmissing-declarations` is in `CXXFLAGS`** — external linkage with no header
+  declaration is exactly the state that hides a dead function from every gate
+  the repo has, and nothing else looks for it. It found three more the day it
+  went in (`precompute_worker`, `filter_worker`, `finish_worker`, each with one
+  same-file caller); a clean tree reports none, and both compilers accept the
+  flag.
 - The reflector applied by the rotor core is `m.reflector_eff`, resolved once
   per task by `set_effective_reflector()` (never per character). Standard/Norway
   just copy the wired reflector; **M4** composes `greek ∘ thin ∘ greek⁻¹`.
@@ -2869,6 +2876,28 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   and it was verified by reinstating the race and watching it fail (exit 66).
   Note the fan-out is capped at the restart count, so such a case needs a
   real `-R` — at `-R 2` only two threads enter the sub-search.
+  **The VALGRIND job has the same shape and had the same gap**, and it matters
+  more than it looks because valgrind is the *only* gate for **uninitialised**
+  reads — ASan does not catch them. It ran three invocations (a scan, a climb, a
+  `-p` compare), so every option that DERIVES state and then reuses it went
+  unchecked: the crib deduction and its seeded climbs, the self-crib closure,
+  `--exhaust`'s pin sets, the `--ring-stride` refinement's derived candidates,
+  `--confidence`'s sampled null, `--tune-phase`'s re-climbs, and both
+  non-standard
+  machines. A second block now covers all nine; each was verified clean when
+  added, so a failure there is new. Two things learned building it:
+  - **Use `--error-exitcode=66`, not `1`.** The program's own fatal exit is 1,
+    so
+    at `--error-exitcode=1` a run that dies of *"No machine configuration
+    produced a score"* is indistinguishable from a valgrind finding — and a
+    mis-specified case can then look like it is passing the check it no longer
+    performs. (The TSan job already used 66; the valgrind job did not.)
+  - **Inject on the HEAP, not the stack, when testing such a case.** An
+    uninitialised *stack* read is folded away at `-O1` and the compiler warns
+    (`-Wuninitialized`), so it never reaches valgrind — the injection reads as a
+    passing run. A `malloc`'d read whose value reaches a branch does reproduce:
+    with one in `refine.cc`, the three old cases still passed (which is the
+    proof the gap was real) and the new `--ring-stride` case failed with 66.
   **The two lint jobs are the ones easiest to
   meet for the first time in CI rather than locally, and both run in seconds** —
   `clang-tidy src/*.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
@@ -3027,8 +3056,8 @@ index-of-coincidence formula, the `-l`/filename overflow, the
 state into `struct machine`, and **multi-threading** the search over reflector ×
 wheel-order (`-T N`, default 1, max 256; each worker owns its own `machine`,
 results merged under a mutex) — and the build is warning-free under `-std=c++17
--Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast`, and clean under
-ThreadSanitizer.
+-Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast
+-Wmissing-declarations`, and clean under ThreadSanitizer.
 Scaling is ~3× on 4 cores (`make bench SCALE=1`). **M4 (4-rotor naval) mode** is
 now implemented (`-4`; static Greek wheel folded into an effective reflector, so
 the hot path is untouched — see "M4 mode" above and

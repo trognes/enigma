@@ -151,7 +151,22 @@ jobs:
           printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
             | ./enigma -q -l english -u B -w 123 -r AA. -g AA. -c -R 8 --ring-stride 3 --polish -T 8 >/dev/null
 
-  # Valgrind adds detection of *uninitialised* memory use that ASan misses.
+  # Valgrind adds detection of *uninitialised* memory use that ASan misses, and
+  # it is the ONLY gate that does. Like the TSan job it is a hand-picked list
+  # rather than the suite, so it covers exactly what someone thought to point it
+  # at -- and for a long time that was three invocations: a scan, a climb and a
+  # -p compare. Every option that DERIVES state and then reuses it (the crib
+  # deduction and its seeded climbs, the self-crib closure, --exhaust's forced
+  # pairs, the --ring-stride refinement's derived candidates, --confidence's
+  # sampled null, --tune-phase's re-climbs) went unchecked for uninitialised
+  # reads, which is the failure mode those paths are most exposed to. The second
+  # block below covers them; all were verified clean when added, so a failure
+  # here is new.
+  #
+  # --error-exitcode is 66, NOT 1: the program's own fatal exit is 1, so with
+  # --error-exitcode=1 a run that dies of "No machine configuration produced a
+  # score" is indistinguishable from a valgrind finding. 66 keeps the two apart
+  # (the TSan job uses the same code for the same reason).
   valgrind:
     runs-on: ubuntu-latest
     steps:
@@ -162,11 +177,41 @@ jobs:
         run: make EXTRA_CXXFLAGS="-O1 -g"
       - name: Run representative invocations under valgrind
         run: |
-          VG="valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=definite -q"
+          VG="valgrind --error-exitcode=66 --leak-check=full --errors-for-leak-kinds=definite -q"
           printf 'BDZGOWCXLTKSBTMCDLPB' | $VG ./enigma -i -u B -w 123 -r AAA -g AAA >/dev/null
           printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' | $VG ./enigma -u B -w 123 -r AAA -g AAA -c -l english >/dev/null
           printf 'AAAAAAAAAAAAAAAAAAAA' > pt.txt
           printf 'BDZGOWCXLTKSBTMCDLPB' | $VG ./enigma -i -u B -w 123 -r AAA -g AAA -p pt.txt >/dev/null
+      - name: Deduction, reduction and diagnostic paths under valgrind
+        run: |
+          VG="valgrind --error-exitcode=66 --leak-check=full --errors-for-leak-kinds=definite -q"
+          # Authentic-style telegraphic German under a known key and a 10-pair
+          # board, built here so the cases below have real structure to find.
+          PT=OBERKOMMANDOXDERXWEHRMACHTXMELDETXDASSXDIEXLAGEXANXDERXOSTFRONTXUNVERAENDERTXISTXSTOPXNACHSCHUBXWIRDXUEBERXWARSCHAUXGELEITETXSTOPXENDE
+          printf '%s' "$PT" | ./enigma -u B -w 431 -r AGD -g QMW \
+            -s "AB CD EF GH IJ KL MN OP QR ST" 2>/dev/null > ct.txt
+          # --crib: the deduction alone (no climb), then the hybrid where each
+          # surviving hypothesis's deduced plugs seed a climb via PLUG_FIXED_EX.
+          $VG ./enigma --crib OBERKOMMANDOXDER -u B -w 431 -r AGD -g .MW -i < ct.txt >/dev/null
+          $VG ./enigma -c -f -l wehrmacht --crib OBERKOMMANDOX -u B -w 431 -r AGD -g .MW \
+            -R 2 --crib-seeds 3 < ct.txt >/dev/null
+          # --self-crib-seeds: the doubled-word closure and its IC ranking.
+          $VG ./enigma -c -f -l wehrmacht --self-crib-seeds 4 -u B -w 431 -r AGD -g AMW < ct.txt >/dev/null
+          # --exhaust: per-worker forced-pair pin sets.
+          $VG ./enigma -c -q -l english --exhaust 1 -s "AB CD EF GH IJ KL MN OP" \
+            -u B -w 431 -r AGD -g AMW < ct.txt >/dev/null
+          # --ring-stride: the refinement's DERIVED candidate set (src/refine.cc).
+          $VG ./enigma -c -q -l english -u B -w 123 -r AA. -g AA. \
+            -R 2 --ring-stride 3 --polish < ct.txt >/dev/null
+          # --tune-phase: rebuilds the key per work item and re-climbs.
+          $VG ./enigma -c -q -l english -u B -w 431 -r A.. -g A.. \
+            -R 0 --tune-phase 1 < ct.txt >/dev/null
+          # --confidence: the sampled null, climbed through the same unit.
+          $VG ./enigma -q -l english -u B -w 431 -r AGD -g .MW --confidence 32 < ct.txt >/dev/null
+          # M4's folded Greek reflector and Norway's translated rotor indices:
+          # both reach code the standard machine never does.
+          $VG ./enigma -4 -u b -w B431 -r AAGD -g A.MW -i < ct.txt >/dev/null
+          $VG ./enigma -n -u N -w 431 -r AGD -g .MW -i < ct.txt >/dev/null
 
   cppcheck:
     runs-on: ubuntu-latest
