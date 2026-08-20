@@ -43,7 +43,7 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 ## Repository layout
 
 ```
-src/                      The program, as ~15 modules. main.cc is only the
+src/                      The program, as 19 modules. main.cc is only the
                           option parsing and the run; everything else lives in
                           a module with a header stating what it owns and, more
                           usefully, what it deliberately keeps private.
@@ -2710,10 +2710,12 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   the line breaks may move.
 
 - **One module per concern; per-search state in `struct machine`.** The program
-  was a single 9808-line translation unit until PRs #205-#216 split it into
-  `src/` (`common`, `wiring`, `ngrams`, `text`, `options`, `cli`, `preflight`,
-  `machine`, `scoring`, `plugboard`, `progress`, `result`, `crib`, `keyspace`,
-  `schedule`, `exhaust`, `confidence`, `search`, `main`).
+  was a single 9808-line translation unit until PRs #205-#219 split it into
+  `src/` (`args`, `cli`, `common`, `confidence`, `crib`, `exhaust`, `keyspace`,
+  `machine`, `main`, `ngrams`, `options`, `plugboard`, `preflight`, `progress`,
+  `schedule`, `scoring`, `search`, `text`, `wiring`, plus the header-only
+  `result.h`, which holds the shared best because the workers write it and the
+  display reads it and neither owns it).
 
   **The module boundaries were drawn by what must stay PRIVATE, not by
   subject.** Three cases decided their own shape and are worth knowing before
@@ -2830,8 +2832,8 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   fail" below). They were **full price under `TEST_QUICK` too**, since they
   spelled their own keyspace out rather than using `$rg`, so they cost ~6× as
   much again under ASan — which is how that job reached **24 minutes** while
-  still passing. Current baselines to watch for drift: **~65 s plain** (502
-  checks) and **~190 s under ASan** (459 checks with `TEST_QUICK`).
+  still passing. Current baselines to watch for drift: **~65 s plain** (541
+  checks) and **~190 s under ASan** (499 checks with `TEST_QUICK`).
   **Re-measure these when a PR adds checks** — nothing compares against them
   automatically, which is why the drift above went unnoticed for a day.
   Rules of thumb when adding a check:

@@ -170,7 +170,7 @@ JSON so the reading can be revisited without repeating the climbs),
 `eval/results-word-segment.txt` / `.json`.
 
 **5. Repeated text with an X between — SHIPPED as `--self-crib-seeds`, and it
-beats `-R`.** The seeder is now in `enigma.cc` (see `CLAUDE.md`), which closes
+beats `-R`.** The seeder is now in `src/crib.cc` (see `CLAUDE.md`), which closes
 the item's last open half. Two things came out of building it that the probes
 could not see, and one of them is a correction to the numbers below.
 
@@ -180,7 +180,7 @@ seed). `--polish` is a **once-per-run** finisher costing ~10 700 `score_iter`,
 so that rig made every key pay a full finisher, while the baseline arm swept all
 676 keys in one process and paid it once. In the tool both arms pay it once. The
 honest sweep numbers (`-g A..`, 676 keys, 30 trials,
-`eval/signature_seed_ab.py`):
+`eval/self_crib_ab.py`):
 
 | arm | mean %-correct | exact | `score_iter` | per key |
 |---|---:|---:|---:|---:|
@@ -280,7 +280,8 @@ at 167 it does not; see the `--self-crib-seeds` entry in `CLAUDE.md`**) and is
 SHIPPED as `--self-crib-seeds`.** The split
 is
 the whole story of this item. As a *confirmation signal* — report the doubling,
-change no ranking — it works and is now in `enigma.cc` as `--doubling-report L`
+change no ranking — it works and is now in `src/progress.cc` as
+`--doubling-report L`
 (gate at `--doubling-z Z`, default 3): see the entry in `CLAUDE.md`, note
 (a)/(b)
 below for why that shape is the defensible one, and `tests/run_tests.sh` for
