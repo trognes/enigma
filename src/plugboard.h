@@ -23,6 +23,7 @@
 #include "machine.h"
 
 #include <stdint.h>
+#include <stddef.h>
 
 /* Board setup. init_plug_fixed() parses -s and --no-plug once, before the
    threaded search starts; the other two act on one machine's board. */
@@ -61,6 +62,13 @@ double optimize_once(machine & m, uint64_t * rng);
 bool have_known_plugs();
 const bool * known_plug_mark();
 const unsigned char * known_plug_partner();
+
+/* Independent RNG seed for one restart, mixed from opt_seed, the flat key
+   index and the restart index. Each restart draws from its OWN stream rather
+   than a single stream advanced sequentially, which is what lets the restarts
+   run in any order on any thread and still give the same answer -- the
+   precondition for parallelising them. */
+uint64_t restart_seed(size_t key_index, int restart);
 
 /* Install extra pins for an EX=true climb. --exhaust, the crib hybrid and the
    self-crib seeder call reset() then pin() per deduced letter; they must go
