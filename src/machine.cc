@@ -10,7 +10,7 @@
 /* Read-only wiring tables, derived once by init() and shared by every search. */
 static unsigned char rotor_fwd[rotor_count][asize];
 static unsigned char rotor_rev[rotor_count][asize];
-unsigned char notch[rotor_count][asize];
+static unsigned char notch[rotor_count][asize];
 /* notch_gap[w][g] = characters this wheel can advance from window position g
    before its notch fires, i.e. the smallest k >= 0 with notch[w][(g+k) % 26].
    Lets setup_mapping() skip straight to the next stepping event instead of
@@ -123,22 +123,23 @@ static int rotor_r(machine & m, int x, int rotor_no)
   return diff26(x, y);
 }
 
-/* NOTE: no callers. The precompute()/subst_array path replaced it, and as an
-   `inline` with external linkage that went unnoticed -- making it static for
-   the move is what surfaced it. Left in place here rather than removed inside
-   a move-only step: deleting it also means correcting CLAUDE.md, which still
-   describes it as the rotor-stack core. Removal belongs in the docs step. */
-inline int subst_rotors(machine & m, int x)
+
+/* First middle-notch firing index for (w1, w2, start1, start2), or -1 for "never
+   within `limit` characters". Pure stepping: no ring setting, start0, reflector or
+   plugboard enters a stepping decision, so those do not index this. */
+int mid_first_fire(int w1, int w2, int s1, int s2, int limit)
 {
-  for (int r = wheels - 1; r >= 0; r--)
-    x = rotor_l(m, x, r);
-
-  x = m.reflector_eff[x];
-
-  for(int r = 0; r < wheels; r++)
-    x = rotor_r(m, x, r);
-
-  return x;
+  int g1 = s1;
+  int g2 = s2;
+  for (int i = 0; i < limit; i++)
+    {
+      if (notch[w1][g1])
+        return i;                    /* the firing that steps the left wheel */
+      if (notch[w2][g2])
+        g1 = step26(g1);
+      g2 = step26(g2);
+    }
+  return -1;
 }
 
 /* Resolve the effective reflector for this machine's reflector / Greek wheel.
