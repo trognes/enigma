@@ -241,7 +241,7 @@ void parse_args(int argc, char * * argv)
         case OPT_CASCADE:
           opt_cascade = 1;
           if (optarg != nullptr)
-            opt_cascade_gate = strtod(optarg, nullptr);
+            opt_cascade_gate = parse_opt_double(optarg, "--cascade");
           break;
         case OPT_POLISH:
           opt_polish = 1;
@@ -253,20 +253,20 @@ void parse_args(int argc, char * * argv)
           opt_staged = optarg;
           break;
         case 'x':
-          opt_maxwheel = atoi(optarg);
+          opt_maxwheel = parse_opt_int(optarg, "-x");
           break;
         case 'T':
-          opt_threads = atoi(optarg);
+          opt_threads = parse_opt_int(optarg, "-T");
           break;
         case 'R':
-          opt_restarts = atoi(optarg);
+          opt_restarts = parse_opt_int(optarg, "-R");
           break;
         case OPT_RANDOM:
-          opt_perturb = atoi(optarg);
+          opt_perturb = parse_opt_int(optarg, "--random");
           opt_random_set = true;
           break;
         case OPT_EXHAUST:
-          opt_exhaust = atoi(optarg);
+          opt_exhaust = parse_opt_int(optarg, "--exhaust");
           break;
         case OPT_TRUEKEY:
           alltoupper(optarg);
@@ -276,32 +276,28 @@ void parse_args(int argc, char * * argv)
           opt_dump_all = true;
           break;
         case OPT_RINGSTRIDE:
-          opt_ring_stride = atoi(optarg);
+          opt_ring_stride = parse_opt_int(optarg, "--ring-stride");
           break;
         case OPT_TUNEPHASE:
-          opt_tune_phase = atoi(optarg);
+          opt_tune_phase = parse_opt_int(optarg, "--tune-phase");
           break;
         case OPT_CONFIDENCE:
-          opt_confidence = atoi(optarg);
+          opt_confidence = parse_opt_int(optarg, "--confidence");
           break;
         case OPT_DOUBLINGREPORT:
-          opt_doubling_report = atoi(optarg);
+          opt_doubling_report = parse_opt_int(optarg, "--doubling-report");
           break;
         case OPT_DOUBLINGMM:
-          opt_doubling_mismatches = atoi(optarg);
+          opt_doubling_mismatches = parse_opt_int(optarg, "--doubling-mismatches");
           opt_doubling_mismatches_set = 1;
           break;
         case OPT_DOUBLINGZ:
-          {
-            /* strtod with the end pointer checked, not atof: atof turns junk
-               into 0.0 silently, and 0.0 is a legal (very loose) gate here, so
-               a typo would look like a deliberate setting. */
-            char * dz_end = nullptr;
-            opt_doubling_z = strtod(optarg, & dz_end);
-            if ((dz_end == optarg) || (*dz_end != 0))
-              fatal("Illegal doubling gate (--doubling-z takes a number)");
-            opt_doubling_z_set = 1;
-          }
+          /* This was the one option that checked its parse (0.0 is a legal,
+             very loose gate here, so a typo would have looked deliberate).
+             parse_opt_double now does the same for every numeric option --
+             see the note on it in common.h. */
+          opt_doubling_z = parse_opt_double(optarg, "--doubling-z");
+          opt_doubling_z_set = 1;
           break;
         case OPT_NOPLUG:
           alltoupper(optarg);
@@ -312,10 +308,10 @@ void parse_args(int argc, char * * argv)
           opt_soft_plug = optarg;
           break;
         case OPT_SCSEEDS:
-          opt_self_crib_seeds = atoi(optarg);
+          opt_self_crib_seeds = parse_opt_int(optarg, "--self-crib-seeds");
           break;
         case OPT_SCLEN:
-          opt_self_crib_length = atoi(optarg);
+          opt_self_crib_length = parse_opt_int(optarg, "--self-crib-length");
           break;
         case OPT_SCSIG:
           opt_self_crib_signature = true;
@@ -343,12 +339,15 @@ void parse_args(int argc, char * * argv)
                Rejected HERE rather than in validation because 0 - 1 == -1 is the
              "not given" sentinel: a --crib-at 0 that fell through would silently
              mean "sweep every alignment" instead of erroring. */
-          if (atoi(optarg) < 1)
-            fatal("--crib-at is 1-based: the first position is 1, not 0");
-          opt_crib_at = atoi(optarg) - 1;
+          {
+            const int at = parse_opt_int(optarg, "--crib-at");
+            if (at < 1)
+              fatal("--crib-at is 1-based: the first position is 1, not 0");
+            opt_crib_at = at - 1;
+          }
           break;
         case OPT_CRIBSEEDS:
-          opt_crib_seeds = atoi(optarg);
+          opt_crib_seeds = parse_opt_int(optarg, "--crib-seeds");
           break;
 
         case OPT_CRIBDUMP:
@@ -364,24 +363,35 @@ void parse_args(int argc, char * * argv)
           opt_crib_rerank = optarg;
           break;
         case OPT_CRIBWEIGHT:
-          opt_crib_weight = strtod(optarg, nullptr);
+          opt_crib_weight = parse_opt_double(optarg, "--crib-weight");
           break;
         case 'e':
-          opt_seed = strtoull(optarg, nullptr, 10);
+          opt_seed = parse_opt_u64(optarg, "-e");
           opt_seed_set = true;
           break;
         case 'A':
-          opt_anneal = atoi(optarg);
+          opt_anneal = parse_opt_int(optarg, "-A");
           break;
         case 'F':
           {
-            /* -F N keeps the top N keys; -F N% keeps the top N% of the resolved
-               keyspace (atof stops at the '%'). The fraction, if given, wins. */
-            size_t flen = strlen(optarg);
+            /* -F N keeps the top N keys; -F N% keeps the top N% of the
+               resolved keyspace. The '%' is the one legal trailing character
+               in any option argument, so it is stripped into a local copy
+               before parsing rather than tolerated by the parser -- which
+               would re-admit "10x" everywhere else. The fraction, if given,
+               wins. */
+            const size_t flen = strlen(optarg);
             if ((flen > 0) && (optarg[flen - 1] == '%'))
-              opt_prefilter_frac = atof(optarg) / 100.0;
+              {
+                char pct[64];
+                if (flen >= sizeof(pct))
+                  fatal("Illegal value for -F: too long");
+                memcpy(pct, optarg, flen - 1);
+                pct[flen - 1] = 0;
+                opt_prefilter_frac = parse_opt_double(pct, "-F") / 100.0;
+              }
             else
-              opt_prefilter = atoi(optarg);
+              opt_prefilter = parse_opt_int(optarg, "-F");
           }
           break;
         case 'l':
@@ -788,7 +798,7 @@ void parse_args(int argc, char * * argv)
     {
       const char * seed_env = getenv("ENIGMA_SEED");
       if (seed_env && *seed_env)
-        opt_seed = strtoull(seed_env, nullptr, 10);
+        opt_seed = parse_opt_u64(seed_env, "$ENIGMA_SEED");
       else
         {
           std::random_device rd;

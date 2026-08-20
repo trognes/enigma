@@ -142,7 +142,8 @@ size_t refine_ring_stride(std::vector<machine *> & machines,
      help. ENIGMA_REFINE_BAND keeps it measurable without a rebuild. */
   int refine_band = 0;
   if (const char * bp = getenv("ENIGMA_REFINE_BAND"))
-    refine_band = atoi(bp);
+    if (*bp != 0)   /* empty means unset, as elsewhere */
+      refine_band = parse_opt_int(bp, "$ENIGMA_REFINE_BAND");
   if (refine_band < 0)
     refine_band = 0;
   bool shift_start0 = (gc[0] == asize);
@@ -183,8 +184,9 @@ size_t refine_ring_stride(std::vector<machine *> & machines,
      not an interval), so the wrap subtlety a clamped window used to have cannot
      come back through it. */
   if (const char * wp = getenv("ENIGMA_REFINE_WINDOW"))
+    if (*wp != 0)   /* empty means unset, as elsewhere */
     {
-      int wk = atoi(wp);
+      int wk = parse_opt_int(wp, "$ENIGMA_REFINE_WINDOW");
       if ((wk > 0) && (wk < asize / 2))
         for (int v = 0; v < asize; v++)
           {

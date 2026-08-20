@@ -255,8 +255,15 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
      the wrong boards a noisy bottom-end gradient. This REMOVES gradient (unlike the graded
      probes, which add it). T=2 collapses {0,1,2} to the count-2 value; T=0 keeps the old
      behaviour (only count-0 unseen grams floored to a hapax). */
+  /* Empty means UNSET for every value-carrying override here, matching what
+     $ENIGMA_SEED already did. `FOO=` is a normal way to clear a variable in a
+     shell, and now that a malformed value is fatal rather than silently 0, the
+     alternative would be to abort a run over an attempt to turn the probe off.
+     (The BOOLEAN overrides -- ENIGMA_LOGLIN_SYM, ENIGMA_SA_STAGES -- keep
+     their own "set at all = on" rule; there is no value to misparse.) */
   const char * fl = getenv("ENIGMA_FLOOR");
-  const int floor_t = (fl != nullptr) ? atoi(fl) : 0;
+  const int floor_t = ((fl != nullptr) && (*fl != 0))
+                      ? parse_opt_int(fl, "$ENIGMA_FLOOR") : 0;
   const double floor_val = (floor_t >= 1) ? static_cast<double>(floor_t) : floor_count;
 
   /* SMOOTHING PROBE (env ENIGMA_SMOOTHING): how an unseen gram is scored.
@@ -275,7 +282,8 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
   /* laplace add-delta (Lidstone): delta < 1 penalises unseen harder while keeping a FLAT
      floor (all unseen == delta), un-merged from a hapax (1 + delta). ENIGMA_DELTA, default 1. */
   const char * ed = getenv("ENIGMA_DELTA");
-  const double delta = (ed != nullptr) ? atof(ed) : 1.0;
+  const double delta = ((ed != nullptr) && (*ed != 0))
+                       ? parse_opt_double(ed, "$ENIGMA_DELTA") : 1.0;
 
   double p_letter[asize]; double max_qbg = 1.0;
   if (background)
@@ -335,7 +343,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
      Unlike the floor probes this reshapes the SEEN scores, not just the tail. Note the
      model becomes conditional (vs the default joint quad), so "off" != any l4. */
   const char * ip = getenv("ENIGMA_INTERP");
-  const bool interp = (ip != nullptr) && (n == 4);
+  const bool interp = (ip != nullptr) && (*ip != 0) && (n == 4);
 
   /* Log-linear interpolation (quad only, env ENIGMA_LOGLIN="a,b,c,d"): store a WEIGHTED SUM
      of the independent joint log-scores of the four orders that a window ABCD contains,
@@ -348,7 +356,8 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
      weights, independent of the ENIGMA_LOGLIN env (which stays an experimental override on
      the plain quad table). */
   const char * lp = getenv("ENIGMA_LOGLIN");
-  const bool loglin = ((lp != nullptr) || (force_ll != nullptr)) && (n == 4) && !interp;
+  const bool loglin = (((lp != nullptr) && (*lp != 0)) || (force_ll != nullptr))
+                      && (n == 4) && !interp;
   /* symmetric folding (ENIGMA_LOGLIN_SYM): fold EVERY sub-gram a window contains (2 tris,
      3 bis, 4 monos) divided by its window-multiplicity (2/3/4), instead of only the trailing
      BCD/CD/D. Interior grams net the same weight; the difference is that the leading grams at
@@ -364,7 +373,37 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
       if (force_ll)
         { for (int j = 0; j < 4; j++) w[j] = force_ll[j]; }
       else
-        sscanf(interp ? ip : lp, "%lf,%lf,%lf,%lf", &w[0], &w[1], &w[2], &w[3]);
+        {
+          /* All four weights or none, each parsed the same way every other
+             numeric override is. This was one sscanf whose RETURN VALUE WAS
+             DROPPED, so a malformed vector left the unparsed weights at 0 --
+             and an all-zero vector is caught below and silently replaced by
+             (1,0,0,0), i.e. plain quad. A probe that quietly measures the
+             baseline instead of the variant it was set up to test is worse
+             than one that stops. */
+          const char * wname = interp ? "$ENIGMA_INTERP" : "$ENIGMA_LOGLIN";
+          const char * wsrc = interp ? ip : lp;
+          char wbuf[128];
+          if (strlen(wsrc) >= sizeof(wbuf))
+            fatal("Illegal weight vector: too long "
+                  "(want four numbers, e.g. 1,0.6,0.3,0.15)");
+          snprintf(wbuf, sizeof(wbuf), "%s", wsrc);
+
+          char * save = wbuf;
+          for (int j = 0; j < 4; j++)
+            {
+              if (save == nullptr)
+                fatal("Illegal weight vector: want four numbers separated by "
+                      "commas, e.g. 1,0.6,0.3,0.15");
+              char * comma = strchr(save, ',');
+              if (comma != nullptr)
+                *comma = 0;
+              w[j] = parse_opt_double(save, wname);
+              save = (comma != nullptr) ? comma + 1 : nullptr;
+            }
+          if (save != nullptr)
+            fatal("Illegal weight vector: more than four numbers");
+        }
       double s = w[0] + w[1] + w[2] + w[3];
       if (interp)                          /* JM linear: normalise to sum 1 */
         {

@@ -8,6 +8,48 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **BREAKING (in the direction of failing loudly): a numeric option given a
+  non-number is now rejected instead of read as 0.** `atoi`/`atof` cannot
+  report failure — they return 0 for a string that is not a number at all —
+  and 0 is the *off* value for most of these options, so a typo did not fail:
+  it silently disabled what was asked for.
+  - `-R 64O` (letter O for zero) ran with **no restarts**, and left no trace:
+    at `-R 0` the settings echo omits the restart line entirely. `--confidence
+    nope` printed nothing about confidence at all. `-A qqq` fell back to the
+    greedy climb, `--crib-weight zzz` disabled the crib bonus, and `-e
+    notanumber` selected seed **0** — which is not merely "some seed" but the
+    historical deterministic stream the tests and harnesses pin.
+  - Only `-T`, `-x` and `--ring-stride` caught this before, and only by
+    accident: their valid ranges exclude 0, so the *bounds* check rejected
+    what the *parse* had let through. `--doubling-z` was the single place
+    that checked deliberately; `parse_opt_int` / `parse_opt_double` /
+    `parse_opt_u64` in `common.cc` generalise it to all 22 numeric inputs.
+  - Trailing text is rejected too, so `-R 12x` fails rather than reading as
+    12 — the realistic typo, and the one that leaves a plausible number
+    behind. Range errors fail at the parse rather than arriving at the bounds
+    check as an implementation-defined value.
+  - **Values that were always legal still are**, including the two where 0 is
+    a real setting: `-R 0` (one deterministic climb) and `-e 0`. `-F N%` keeps
+    its one legal trailing character, stripped before parsing rather than
+    tolerated by the parser.
+  - The same applies to the measurement-only environment overrides, where the
+    consequence was worse than a failed run: `ENIGMA_IC_BLEND=typo` silently
+    set the blend to 0, turning `-f` into `-a`, so a probe would have quietly
+    measured the baseline instead of the variant it was set up to test.
+    `ENIGMA_LOGLIN` had the same hole through an `sscanf` whose return value
+    was dropped — a partial vector left the rest at 0, and an all-zero vector
+    is silently replaced by `(1,0,0,0)`, i.e. plain quad. For all of these an
+    **empty** value now means *unset*, matching what `$ENIGMA_SEED` already
+    did, so `FOO=` still turns a probe off rather than aborting the run.
+  - 18 rejection checks added to `tests/run_tests.sh`, each asserting the exit
+    status *and* that the message names the option, plus checks that the legal
+    values still pass. Verified by reverting two call sites to `atoi` and
+    watching four of them fail.
+  - Search output is unaffected: all 49 reference cases byte-identical, 570
+    tests pass, `make bench` flat. Clears 23 of the 26 `clang-tidy` findings
+    (`bugprone-unchecked-string-to-number-conversion`); the 2 remaining are
+    pre-existing and only reported by newer clang-tidy than CI runs.
+
 - **Bounded the self-crib's headline claim, and documented when it backfires.**
   `--self-crib-seeds` was described as "the one lever measured to beat `-R` at
   matched compute". Measured across doubling length with the message length
