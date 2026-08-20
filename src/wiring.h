@@ -27,4 +27,12 @@ static const int rotor_count = sizeof(rotor_string) / sizeof(char *);
 static const int norway_reflector_index = 3;
 static const int norway_rotor_base = 8;
 
+/* M4 mode: 4th "Greek" wheel (Beta/Gamma, rotor indices 13-14) is static (never
+   steps) and folds into a thin reflector (UKW-b/c, reflector indices 4-5) to form
+   an effective reflector -- so the machine stays a 3-stepping-rotor engine. The
+   Greek wheel and ring/start are taken from the first character of -w/-r/-g. */
+static const int m4_thin_base = 4;   /* reflector index of UKW-b; UKW-c is +1 */
+
+static const int greek_base = 13;    /* rotor index of Beta; Gamma is +1 */
+
 #endif
