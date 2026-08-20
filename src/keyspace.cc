@@ -81,6 +81,17 @@ static std::vector<uint32_t> g_mid_rep_store;
    identical. */
 const uint32_t * g_mid_rep_mask = nullptr;
 
+/* The --ring-stride refinement's middle-wheel offset window (mid_ring_window = 2) USED to
+   live here. It is gone because the refinement now DERIVES that offset from the coarse
+   winner's and the candidate's step schedules instead of banding it (archived/refinement.md): the
+   quantity the band was guessing at is computable from the two keys, with no knowledge of
+   the truth. The bound the band rested on still holds -- a ring2/start2 shift moves the
+   middle wheel's schedule by at most 2, 1 from the ordinary time shift plus 1 when double
+   stepping straddles the wheel's own notch, established by enumerating every rotor pair x
+   26 start1 x 26 start2 x every shift at L=600 -- but nothing depends on it any more, which
+   is what makes the refinement correct for two-notch right wheels and straddled double
+   steps rather than merely usually right. */
+
 bool g_r2_halve = false;
 /* First middle-notch firing index for (w1, w2, start1, start2), or -1 for "never
    within `limit` characters". Pure stepping: no ring setting, start0, reflector or

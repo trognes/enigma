@@ -919,7 +919,7 @@ check "crack: start position, wehrmacht -a" \
   "$pt_wehrmacht"
 
 # Non-English-corpus languages added after the original english/german/danish/french set
-# (swedish, finnish, icelandic, polish, spanish -- see fold_codepoint() in enigma.cc for
+# (swedish, finnish, icelandic, polish, spanish -- see fold_codepoint() in src/ngrams.cc for
 # the accented-letter folding this exercises, e.g. Polish ogonek/stroke/acute letters and
 # Icelandic thorn, which once silently dropped up to ~20%/~5% of a table's mass). Each
 # language's four tables must load with ZERO "non-mappable character" records -- a cheap

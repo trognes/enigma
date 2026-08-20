@@ -5,10 +5,10 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-
 # without dropping the base flags:  make EXTRA_CXXFLAGS=-Werror
 EXTRA_CXXFLAGS =
 
-# The program is being split out of the former single enigma.cc into modules
-# under src/ (see CLAUDE.md, "Repository layout").  Sources are globbed rather
-# than listed so adding a module needs no Makefile edit; -MMD -MP writes a .d
-# per object so a header change rebuilds exactly its dependents.
+# One object per module under src/ (see CLAUDE.md, "Repository layout").
+# Sources are globbed rather than listed so adding a module needs no Makefile
+# edit; -MMD -MP writes a .d per object so a header change rebuilds exactly its
+# dependents.
 SRCS = $(wildcard src/*.cc)
 OBJS = $(SRCS:.cc=.o)
 DEPS = $(OBJS:.o=.d)

@@ -43,9 +43,10 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 ## Repository layout
 
 ```
-src/                      The program. Being split out of the former
-                          single-file enigma.cc into modules; `src/enigma.cc`
-                          still holds everything not yet moved out.
+src/                      The program, as ~15 modules. main.cc is only the
+                          option parsing and the run; everything else lives in
+                          a module with a header stating what it owns and, more
+                          usefully, what it deliberately keeps private.
 Makefile                  Builds the `enigma` binary from `src/*.cc` with
                           g++ -O3 (one object per source, `-MMD -MP` deps).
 README.md                 User-facing description and usage.
@@ -71,8 +72,8 @@ messages, −10.2pp on prose — `eval/MODERN_BREAKING_NOTES.md` §6). N-gram fi
 use the format `<LETTERS> <count>` per line (e.g. `TION 13168375`) and were
 sourced from the Practical Cryptography website. Non-English letters (`Ä Å Ö Ñ Ø
 Æ Ð Þ Ł Ą Ć Ę Ń Ś Ź Ż` etc.) are folded to a base A-Z letter at load time by
-`fold_codepoint()` in `enigma.cc` (diacritics stripped, e.g. `Ł`→`L`; Icelandic
-`Þ`→`T`, pairing with `Ð`→`D` as the voiceless/voiced dental-fricative
+`fold_codepoint()` in `src/ngrams.cc` (diacritics stripped, e.g. `Ł`→`L`;
+Icelandic `Þ`→`T`, pairing with `Ð`→`D` as the voiceless/voiced dental-fricative
 counterpart) — this covers every accented letter appearing in the bundled
 tables, verified by loading each with zero "non-mappable character" warnings
 (`enigma -q -l <lang> ...`).
@@ -1896,11 +1897,14 @@ A single pass through `main()`:
   carry) — is implemented inline in `setup_mapping()`, which holds the rotor
   positions in locals across the per-character loop (see the performance note).
 - The full substitution is plugboard ∘ rotor-stack ∘ reflector ∘ rotor-stack ∘
-  plugboard. `subst_rotors()` is the rotor-stack-and-reflector core; the hot
-  path replaces it with precomputed `subst_array` / `mapping` lookups wrapped in
-  two plugboard lookups (`decode_at`, shared by `decode()` and the fused
-  scorers).
-- The reflector applied in `subst_rotors()` is `m.reflector_eff`, resolved once
+  plugboard. The hot path computes it as precomputed `subst_array` / `mapping`
+  lookups wrapped in two plugboard lookups (`decode_at`, shared by `decode()`
+  and the fused scorers). `subst_rotors()` is the same composition written out
+  directly; it has **no callers** — `precompute()` replaced it — and survives
+  only as the readable statement of what the tables encode. Being an `inline`
+  with external linkage hid that for years; making it `static` during the
+  module split is what surfaced it.
+- The reflector applied by the rotor core is `m.reflector_eff`, resolved once
   per task by `set_effective_reflector()` (never per character). Standard/Norway
   just copy the wired reflector; **M4** composes `greek ∘ thin ∘ greek⁻¹`.
 
@@ -2618,7 +2622,7 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
 ## Conventions & gotchas for contributors
 
 - **Code style.** Allman braces (every `{` and `}` on its own line), 2-space
-  indentation, and no tabs anywhere in `enigma.cc`. Continuation lines (e.g.
+  indentation, and no tabs anywhere in `src/`. Continuation lines (e.g.
   wrapped parameter lists or `if` conditions) are aligned under the opening `(`.
   The only tabs in the repo are the recipe lines in the `Makefile`, which `make`
   requires.
@@ -2666,7 +2670,7 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
 
   **Documentation is now compliant; code is not, and is not being reflowed.**
   `CLAUDE.md`, `ENHANCEMENTS.md`, `README.md` and `CHANGELOG.md` all hold to
-  80 (bar a handful of unwrappable lines inside fenced blocks). `enigma.cc` is
+  80 (bar a handful of unwrappable lines inside fenced blocks). The code is
   ~21% over and `tests/run_tests.sh` ~36%; reflowing those would touch thousands
   of lines and make every later diff noisier for no reader benefit, so apply the
   rule to new and edited code and leave the rest. A source file staying mixed
@@ -2684,7 +2688,25 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   with a token-identity assertion — the word sequence must be unchanged, only
   the line breaks may move.
 
-- **Single translation unit; per-search state in `struct machine`.** The mutable
+- **One module per concern; per-search state in `struct machine`.** The program
+  was a single 9808-line translation unit until PRs #205-#216 split it into
+  `src/` (`common`, `wiring`, `ngrams`, `text`, `options`, `cli`, `preflight`,
+  `machine`, `scoring`, `plugboard`, `progress`, `result`, `crib`, `keyspace`,
+  `schedule`, `exhaust`, `confidence`, `search`, `main`).
+
+  **The module boundaries were drawn by what must stay PRIVATE, not by
+  subject.** Three cases decided their own shape and are worth knowing before
+  moving anything between modules: `plug_fixed`/`plug_fixed_ex` are read in the
+  climb's move loop and their storage form is measured to matter by ~18%, so
+  simulated annealing lives in `plugboard.cc` rather than its own module purely
+  because `apply_toggle()` reads them; the crib menu tables are read inside
+  `crib_try`'s loop, so the units that climb from a deduced board are in
+  `crib.cc` with them rather than in the search; and `ngrams.cc` never names
+  `quad8`/`all8`, because the loader taking a destination pointer is what keeps
+  the hottest table out of a shared header. Splitting any of those "by subject"
+  would export exactly the state the measurements say to keep local.
+
+  The mutable
   per-search state — machine settings (`walzenlage`, `grundstellung`,
   `ringstellung`, `ukw`, `steckerbrett`) and the working buffers (`subst_array`,
   the per-position row pointers `rows`, the contiguous `mapping`, the candidate
