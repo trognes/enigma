@@ -1170,3 +1170,38 @@ const unsigned char * known_plug_partner()
 {
   return g_known_plug;
 }
+
+/* --exhaust E partial plugboard exhaustion (PROTOTYPE, exploration tool only -- dominated by
+   a high --restarts greedy climb at equal compute; see archived/PERFORMANCE.md §3.6). E is the number
+   of EXTRA plug pairs forced among the free letters, on top of any -s pairs. Instead of one
+   climb from the seed, try every set of E disjoint pairs among the free letters -- pin them
+   (as -s pins plugs) and run the staged climb from that seed -- and keep the best board. E=1
+   tries each of the 325 first pairs; larger E is exponentially more work (combos(free,E) =
+   free!/(2^E E! (free-2E)!) sets: ~45k for E=2, ~3.5M for E=3 with no -s). It composes with
+   the kick and restarts: for each forced combo, --restarts N runs N kicked climbs (the kick
+   perturbs only the still-free letters, leaving -s and the forced pairs intact), keeping the
+   best.
+
+   Parallel (REDESIGN Part D): the FIRST forced pair (the combo's minimum-low-letter pair)
+   is the unit of work -- there are at most C(free,2) <= 325 of them, listed in
+   g_exhaust_firsts, and every combo belongs to exactly one (its remaining pairs all use
+   letters above the first pair's low letter). Each unit runs on any thread against its own
+   PLUG_FIXED_EX pin set (per-thread under clang, per-machine under g++ -- no shared mutable
+   state), and its best merges into the global best exactly like a restart. So exhaustion now
+   scales with -T and stays -T-independent (each (unit, restart) climb is seeded only by
+   key + restart). */
+/* Independent RNG seed for one restart, mixed from opt_seed, the flat key index and the
+   restart index with a splitmix64 finaliser. Each restart draws from its OWN stream --
+   not a single stream advanced sequentially through the restarts -- so restarts are
+   order-independent and can run in any order / on any thread and still be reproducible
+   (the precondition for parallelising them; see hillclimb_one). opt_seed==0 keeps the
+   historical seedless-but-deterministic behaviour. */
+uint64_t restart_seed(size_t key_index, int restart)
+{
+  uint64_t z = opt_seed + 0x0123456789abcdefULL
+             + static_cast<uint64_t>(key_index) * 0x9E3779B97F4A7C15ULL
+             + static_cast<uint64_t>(restart)   * 0xC2B2AE3D27D4EB4FULL;
+  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+  z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+  return z ^ (z >> 31);
+}

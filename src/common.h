@@ -25,6 +25,13 @@ static const double score_min = -1e30;
 enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD, SCORE_ALL,
                SCORE_FUSED };
 
+/* The score a work unit reports when it produced NO candidate at all -- every crib
+   hypothesis contradicted, or no rotor setting could have produced the crib. It is a
+   sentinel, not a score: it exists only so such a unit never wins the merge, and it must
+   be EXCLUDED wherever scores are treated as a distribution. calibrate_null() learned
+   that the hard way; see the filter there. */
+const double unit_no_score = -1e300;
+
 /* [[noreturn]] is load-bearing, not decoration. fatal() ends in exit(1), and
    while it lived in the same file as its callers both the compiler and the
    static analysers could see that for themselves. Across a translation-unit
