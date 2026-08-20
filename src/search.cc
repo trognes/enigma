@@ -195,6 +195,14 @@ double climb_unit(machine & m, size_t key_index, int restart)
    single un-kicked seed climb; --restarts N is N kicked climbs (indices 0..N-1). search_worker's
    main path instead spreads the individual restarts across threads via hillclimb_one, so
    both share the same per-restart seeding and reach the same best. */
+/* Hill-climb the plugboard with optional random restarts. --restarts 0 runs a single climb
+   from the configured seed (identity or -s pairs), no kick -- fully deterministic. --restarts
+   N runs N climbs, each from the seed plus a fresh --random kick (opt_perturb plug pairs, a
+   moderate kick near the typical plug count), keeping the best; the un-kicked seed climb is not
+   additionally run (REDESIGN Option A). The rotor-stack mapping[] depends only on the key (not
+   the plugboard), so it is reused across restarts; only the steckerbrett is reset each time.
+   The RNG is seeded from the flat key index, so the result is independent of -T. Each start
+   runs the staged climb. */
 double hillclimb_restarts(machine & m, size_t key_index)
 {
   const int climbs = (opt_restarts >= 1) ? opt_restarts : 1;
@@ -233,6 +241,23 @@ size_t g_keys_analysed = 0;       /* rotor combinations examined */
 uint64_t g_plugboards_scored = 0; /* total score_iter calls across workers */
 /* Phase 1: fill the table for each wheel-order task pulled off the counter.
    all + i*asize is task i's table (asize rows of [asize][asize][asize]). */
+/* --- parallel search -------------------------------------------------------
+
+   The search runs in two parallel phases over a fixed pool of per-thread
+   machines:
+
+   1. Precompute the rotor-stack table for every (reflector x wheel-order) once,
+      into one big shared read-only block. (A table depends only on the reflector
+      and wheel order, and serves every ring/start of that wheel order via the
+      start-minus-ring offset; brute force has no early exit, so every table is
+      needed anyway.)
+   2. Sweep the whole flat (wheel-order x ring x start) key space: an atomic
+      counter hands out adaptive-sized chunks, each worker decodes and scores its
+      keys against the shared tables using its own private mapping.
+
+   Parallelising the flat key space (not just the wheel order) means a search
+   with the wheels fixed but ring/start wildcarded uses every thread -- the old
+   wheel-order-only scheme left exactly that case single-threaded. */
 void precompute_worker(machine & m,
                        const std::vector<wheel_task> & tasks,
                        std::atomic<size_t> & next_task,
@@ -525,6 +550,13 @@ void search_worker(machine & m,
    'progress' counter tracks keys ranked, and because each atomic add owns a disjoint
    range of that counter, exactly one thread crosses each 1%-of-total boundary and
    prints it -- so the line advances once per percent with no races or duplicates. */
+/* --- key pre-filter (-F) ---------------------------------------------------
+
+   With -c, the full plugboard climb (-R restarts x -S stages) is paid on *every*
+   key. The pre-filter instead ranks all keys by a single cheap index-of-coincidence
+   climb -- which, unlike a plugboard-free IC scan, partially recovers the stecker
+   and so discriminates the true rotor key even under a full 10-pair board -- and
+   then runs the expensive climb only on the top -F keys. */
 void filter_worker(machine & m,
                    const std::vector<wheel_task> & tasks,
                    const search_range & range, const int * rc, const int * gc,
