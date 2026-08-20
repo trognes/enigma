@@ -137,6 +137,19 @@ jobs:
           # same parallel key space; must stay race-free and -T-deterministic.
           printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
             | ./enigma -q -l english -u . -w 12. -x 4 -r AAA -g .AA -c -A 8000 -S q6 -T 8 >/dev/null
+      - name: Threaded --ring-stride refinement is race-free (-T 8)
+        run: |
+          # The refinement (src/refine.cc) fans out its OWN parallel sub-search per
+          # derived candidate, which the three cases above never reach -- and a real
+          # race lived there unnoticed until the module split put a spotlight on it
+          # (thread 0's search_worker wrote machines[0]->subst_array while the other
+          # threads read that same field to build their argument list). None of the
+          # cases above passes --ring-stride, so none of them could have caught it.
+          # -R 8 is load-bearing, not padding: the refinement's fan-out is capped at
+          # the restart count, so -R 2 would put only two threads in the sub-search.
+          # Verified to FAIL (exit 66) with the race reinstated.
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u B -w 123 -r AA. -g AA. -c -R 8 --ring-stride 3 --polish -T 8 >/dev/null
 
   # Valgrind adds detection of *uninitialised* memory use that ASan misses.
   valgrind:

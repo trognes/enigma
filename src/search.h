@@ -20,10 +20,14 @@
 #define ENIGMA_SEARCH_H
 
 #include "common.h"
+#include "keyspace.h"
 #include "machine.h"
+#include "result.h"
 
 #include <stddef.h>
 #include <stdint.h>
+#include <atomic>
+#include <vector>
 
 /* One sampled key and where it came from. The -F pre-filter and the
    --confidence sampler both keep a top-N min-heap of these; keep_worse
@@ -43,6 +47,27 @@ struct keep_worse
     return a.idx < b.idx;         /* tie: top() = largest idx */
   }
 };
+
+/* Sweep a slice of the key space: pull chunks off `next_key`, decode each flat
+   index into a rotor key, score or climb it, merge into `best`.
+
+   EXPORTED FOR THE --ring-stride REFINEMENT, which re-runs it over its own
+   tiny, mostly-pinned key space so the skipped ring2 values get exactly the
+   treatment the coarse pass gave -- restarts, staged climb, everything. That is
+   the whole reason it is not static, and the cost is nil: it is called once per
+   CHUNK (~16 x threads per sweep) with the per-key loop inside it, so a
+   cross-unit call here is nothing like the per-move reads that decided the
+   plugboard module's boundary. */
+void search_worker(machine & m,
+                   const std::vector<wheel_task> & tasks,
+                   const search_range & range,
+                   const int * rc, const int * gc,
+                   subst_table all,
+                   size_t rsize, size_t gsize,
+                   std::atomic<size_t> & next_key,
+                   size_t chunk,
+                   size_t restarts,
+                   best_result & best);
 
 /* Recover the plugboard for one key: -R restarts of the staged climb, or one
    deterministic climb from the seed at -R 0. */
