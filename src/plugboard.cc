@@ -1123,13 +1123,19 @@ double optimize_once(machine & m, uint64_t * rng)
 
 /* The climb chain is a template on EX -- whether the fixed-plug set is the
    global -s/--no-plug mark or a per-worker copy carrying additionally forced
-   pairs. Both instantiations are named here so callers in other units can
-   reach them without the definitions leaving this file, which is what keeps
+   pairs. Naming an instantiation here is what lets a caller in another unit
+   reach it without the definitions leaving this file, which is what keeps
    plug_fixed and plug_fixed_ex a plain TU-local global and a plain
-   static thread_local respectively. */
+   static thread_local respectively.
+
+   Only the two that ARE called from another unit are named: search.cc climbs
+   through hillclimb<false>, and --exhaust / the crib hybrid / the self-crib
+   seeder all enter through run_stages<true>. hillclimb<true> and
+   run_stages<false> have no caller outside this file -- run_stages<true>
+   calls the first, optimize_once the second -- so they instantiate implicitly
+   and stay internal. Exporting them cost nothing and bought nothing; leaving
+   them out lets the compiler treat them as the TU-local functions they are. */
 template double hillclimb<false>(machine & m, int max_pairs);
-template double hillclimb<true>(machine & m, int max_pairs);
-template double run_stages<false>(machine & m);
 template double run_stages<true>(machine & m);
 
 /* The three sites that install extra pins -- --exhaust, the crib hybrid and

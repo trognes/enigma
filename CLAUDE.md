@@ -2690,7 +2690,25 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
 > the compiler-conditional storage for the exhaust scratch (`PLUG_FIXED_EX`:
 > `thread_local` under clang, a `machine` member under g++ — each compiler's
 > measured-neutral form; verified byte-identical to the clean build under
-> clang). Also beware: the climb/scan benches on a shared box can be **bimodal**
+> clang).
+>
+> **Only the two instantiations another unit CALLS are exported**, and the
+> narrowing is the case study for proving a codegen-neutral change with
+> `objdump` rather than with a bench. `hillclimb<false>` (search.cc) and
+> `run_stages<true>` (`--exhaust`, the crib hybrid, the self-crib seeder) are
+> named in `plugboard.cc`; `hillclimb<true>` and `run_stages<false>` were too,
+> with **no caller outside the file** — the first is reached from
+> `run_stages<true>`, the second from `optimize_once`. Dropping the two dead
+> exports leaves **every remaining function instruction-for-instruction
+> identical on both compilers**, `hillclimb<false>` included: the only change is
+> that `run_stages<false>`'s standalone body disappears while `optimize_once`
+> stays at its exact 550 (g++) / 508 (clang) instructions — i.e. it had always
+> been inlined there and the explicit instantiation was forcing a second,
+> unreachable copy to be emitted. A bench could not have established that (the
+> effect is far below the floor); the disassembly settles it outright, and the
+> bench run then doubles as a free base-vs-base control — it read −2.5%…+2.9%
+> across the quick tiers on byte-identical hot code. Also beware: the climb/scan
+> benches on a shared box can be **bimodal**
 > — before trusting a regression, re-run and check base-vs-base; disassembly
 > comparison (`objdump -d`) settles whether codegen actually changed. The
 > shipped form was verified neutral **end-to-end on Apple-silicon clang** (M2,
