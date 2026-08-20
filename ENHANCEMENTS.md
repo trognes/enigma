@@ -900,8 +900,9 @@ German" is not yet.
 
 The `eval/` scorers used for the table are anchored against the binary
 (`--check-scorers`): all seven agree to ≤0.04, the size of the uint8
-quantisation (`ngram_scale = 32`, ±0.016 per gram), and IC — which is not
-quantised — to 4 decimals.
+quantisation (the step is `(vmax − vmin)/255` for that table, so at most about
+±0.016 per gram on the widest one), and IC — which is not quantised — to 4
+decimals.
 
 *The matched-compute A/B against `-R` — the seeder WINS, and it is the first
 thing in this repo to do so.* `-R` has beaten every challenger it has been put

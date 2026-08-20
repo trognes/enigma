@@ -5,10 +5,12 @@ this repository.
 
 ## Overview
 
-This repository contains a single-file C++ command-line tool that simulates an
+This repository contains a C++ command-line tool that simulates an
 Enigma cipher machine and, more importantly, attempts to **break** Enigma
 ciphertext by brute-forcing rotor/reflector/ring/start settings and
-hill-climbing the plugboard (steckerbrett). Candidate decryptions are scored
+hill-climbing the plugboard (steckerbrett). It was a single 9808-line
+translation unit until PRs #205–#219 split it into the 19 modules under `src/`
+described below. Candidate decryptions are scored
 against per-language n-gram statistics (monograms, bigrams, trigrams, quadgrams)
 so that the configuration producing the most "language-like" plaintext wins.
 
@@ -43,22 +45,37 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 ## Repository layout
 
 ```
-src/                      The program, as 19 modules. main.cc is only the
-                          option parsing and the run; everything else lives in
-                          a module with a header stating what it owns and, more
-                          usefully, what it deliberately keeps private.
+src/                      The program, as 19 modules (19 .cc, 19 .h -- 18
+                          module headers plus the header-only result.h).
+                          main.cc is only the run: it calls parse_args() in
+                          args.cc and then sequences read, sweep, report.
+                          Everything else lives in a module with a header
+                          stating what it owns and, more usefully, what it
+                          deliberately keeps private.
 Makefile                  Builds the `enigma` binary from `src/*.cc` with
                           g++ -O3 (one object per source, `-MMD -MP` deps).
 README.md                 User-facing description and usage.
+CHANGELOG.md              Release history.
+CLAUDE.md                 This file.
+ENHANCEMENTS.md           The open issue list -- what is still worth doing.
 LICENSE                   GNU GPL v3.
-.gitignore                Ignores editor backups and cipher*.txt.
+.gitignore                Editor backups, cipher*.txt, the built binary, the
+                          `src/*.o` / `src/*.d` build products, and __pycache__.
 ngrams/<lang>_monograms.txt   Single-letter frequencies.
 ngrams/<lang>_bigrams.txt     Two-letter frequencies.
 ngrams/<lang>_trigrams.txt    Three-letter frequencies.
 ngrams/<lang>_quadgrams.txt   Four-letter frequencies.
-cribs/                    Known-word lists for the --crib-rerank finisher.
+cribs/                    Two different things, as its README explains:
+                          german-hgnord.txt is a known-WORD list for the
+                          --crib-rerank finisher; wehrmacht.cribs is a crib
+                          LIBRARY (guessed phrases) for --crib-list.
+tests/                    run_tests.sh (make test), bench.sh (make bench),
+                          crack_quality.py (make crackquality), reflow_md.py,
+                          plus older sweep harnesses and their captured data.
 eval/                     Authentic-message database, eval harnesses, and the
                           Appendix-C source tables the wehrmacht language is built from.
+archived/                 Frozen history: every past measurement and review.
+                          READ-ONLY -- see "Status & remaining work" below.
 ```
 
 Languages provided: `english`, `german`, `danish`, `french`, `swedish`,
@@ -81,7 +98,8 @@ tables, verified by loading each with zero "non-mappable character" warnings
 ## Build & run
 
 ```sh
-make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -O3 ...
+make                      # g++ -std=c++17 -Wall -Wextra -Wpedantic -Wcast-qual
+                          #     -Wshadow -Wold-style-cast -O3 -pthread
 make test                 # build, then run tests/run_tests.sh
 make bench                # build, then run tests/bench.sh (performance)
 make crackquality         # build, then run tests/crack_quality.py (cracking quality)
@@ -393,7 +411,7 @@ are read from a **data directory** (filenames built as
 ./enigma -4 -u b -w B317 -r AAAA -g .QXP -c -q -l english < cipher.txt
 ```
 
-### Key CLI options (see `help()` in source for the full list)
+### Key CLI options (see `help()` in `src/cli.cc` for the full list)
 
 > **Recommended vs. not.** The proven-good knobs are `-c` + `-R` restarts, the
 > **`-f` fused scoring model** (`-a`'s weighted all-order mixture plus a
@@ -1795,32 +1813,57 @@ data directory, machine settings, plugboard, ciphertext length) to stderr.
 
 ## Architecture / how it works
 
-A single pass through `main()`:
+A single pass through `main()` (which is only the sequencing — the command line
+is resolved by `parse_args()` in `src/args.cc`, and each numbered step below is
+one call into a module):
 
-1. Parse and validate options (`getopt`).
-2. `readciphertext()` reads stdin, uppercases, and keeps only A–Z.
-3. Load the n-gram table matching the chosen scoring model and language; each
+1. `parse_args()` parses and validates the options (`getopt_long`).
+2. Still inside `parse_args()`, and deliberately **before stdin is touched**:
+   `load_table()` loads the n-gram table for the target model and for every
+   `--score` stage that needs a different one (target first), and the
+   `--crib-rerank` word list and `--crib-list` library are read. A missing `-l`,
+   a mistyped language or an unreadable crib file therefore fails immediately,
+   naming the offending filename, rather than after the ciphertext has been
+   consumed from a pipe that cannot be rewound.
+
+   In the loaded table, each
    count is stored as the log10 probability `log10(count / total)` (unseen grams
    floored at `log10(1 / total)` — scored as a single occurrence, a hapax), so
    the additive scorers sum a log-likelihood and `score_iter`'s per-symbol
    average is a cross-entropy (dits/char). IC is a separate normalised ratio and
    is left untouched. `ngrams_read()` quantises each table directly into a
-   **uint8 fixed-point** copy (`mono8`/`bi8`/`tri8`/`quad8`, `ngram_scale = 32`)
-   that the scorer reads: `q = round((v − bias)·32)`, with a **per-table `bias`
-   = the table's minimum log10 value** so all 256 levels land on the actual
-   `[vmin, vmax]` range (biases in `ngram_bias[SCORE_*]`). The hapax floor caps
-   each range at `log10(max_count)`, and the widest table (english trigrams,
-   ~7.9 log10 units) fits the `255/32 ≈ 8`-unit uint8 window without clipping.
+   **uint8 fixed-point** copy (`mono8`/`bi8`/`tri8`/`quad8`/`all8`) that the
+   scorer reads: `q = round((v − bias)·scale)`, where **both the bias and the
+   scale are per-table adaptive** — `bias` = the table's minimum log10 value
+   `vmin` and `scale` = `255/(vmax − vmin)`, so all 256 levels land on that
+   table's actual `[vmin, vmax]` span and nothing clips by construction
+   (`ngram_bias[SCORE_*]` / `ngram_scale[SCORE_*]`). The scale was a fixed 32
+   for a long time, which left the narrow tables short — danish quad reached
+   only byte 172 — and it has to adapt anyway because graded smoothing and
+   interpolation move the span. A zero span (an empty table) falls back to 32.
    This matters for **quad** — the hot, largest table (26⁴ entries): uint8
    shrinks it to 0.45 MB (vs 1.8 MB float / 0.9 MB int16) so it stays
    cache-resident during the scan (measured faster; see Performance notes).
    mono/bi/tri are tiny and already cache-resident — same representation only
    for consistency. Scorers sum uint8 into a `long` and recover the log-prob sum
-   as `isum/32 + n·bias`. Recovery quality is identical to the wider types for
-   every model, measured across all four languages.
-4. `init()` precomputes numeric forward/reverse rotor permutations, notch
-   tables, and reflector permutations from the hard-coded wiring strings.
-5. `bruteforce()` is the main search, run across `opt_threads` worker threads
+   as `isum/scale + n·bias`. Recovery quality is identical to the wider types
+   for every model, measured across all four languages.
+3. `readciphertext()` reads stdin, uppercases, and keeps only A–Z.
+4. `show_settings()` echoes the resolved configuration, then
+   `report_preflight()`
+   says whether the ciphertext looks like Enigma output at all — in that order,
+   so the configuration is on stderr before any verdict about the input, and
+   after the empty-ciphertext check so the statistics have something to
+   describe. `--self-crib-seeds` builds its hypothesis list just *before* the
+   echo, because the echo reports how many there are and read 0 for a while
+   when it ran first.
+5. `init()` precomputes numeric forward/reverse rotor permutations, notch
+   tables, and reflector permutations from the hard-coded wiring strings;
+   `init_plug_fixed()` turns `-s` and `--no-plug` into the pin marks, and
+   `init_crib()` builds the `--crib` menu — here rather than during option
+   validation, since it depends on the ciphertext (as do the checks that the
+   crib fits and can sit somewhere an Enigma could have produced).
+6. `bruteforce()` is the main search, run across `opt_threads` worker threads
    (`-T N`, default 1, max 256) in two parallel phases over the flat reflector ×
    wheel-order × ring × start key space:
    - **Phase 1 (`precompute_worker`)**: build `subst_array[g1][g2][g3][x]` — the
@@ -1899,7 +1942,7 @@ A single pass through `main()`:
      the cap, and with `-M` a count-preserving *move* too, so only the
      count-reducing *merge*/*remove* remain (cap as a strict descent target).
      See `archived/CODE_REVIEW_HISTORY.md` §9 item 7.
-6. The best-scoring plaintext is printed; optionally compared to `-p` file. A
+7. The best-scoring plaintext is printed; optionally compared to `-p` file. A
    final stderr diagnostic reports the number of rotor combinations analysed (`=
    total_keys`, brute force has no early exit) and plugboards scored (total
    `score_iter` calls, summed from a per-`machine` counter so the hot path stays
@@ -2583,9 +2626,11 @@ needs it per-scoring). An even earlier 16-byte-blocked decode was never shown to
 win and was removed too; the scalar fused loop is the current form.
 
 The tables the scorers read are **uint8 fixed-point**
-(`mono8`/`bi8`/`tri8`/`quad8`, `ngram_scale = 32`, per-table `bias`), not float,
+(`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),
+not float,
 and each scorer sums uint8 into a `long` (exact and order-independent, a small
-determinism bonus) then recovers the log-prob sum as `isum/32 + n·bias`. This is
+determinism bonus) then recovers the log-prob sum as `isum/scale + n·bias`. This
+is
 a cache win for **quad** — the hot, largest table: shrinking it to 0.45 MB (from
 1.8 MB float / 0.9 MB int16) keeps it cache-resident during the **scan**, where
 every key decodes a fresh message and hits cold cells. The narrowing happened in
@@ -2595,10 +2640,13 @@ total vs float). It is machine-dependent (the win is the cache-level latency
 gap, so it shrinks or vanishes on CPUs where the boundary sits elsewhere). The
 **hill-climb re-scores one message** and keeps its few cells warm, so it gains
 less. mono/bi/tri are tiny and already L1/L2-resident: 8-bit gives them **no
-measurable speed-up**; they carry it only for representational consistency. The
-uint8 range fits because unseen grams are floored at a hapax (`log10(1/total)`),
-capping each table at `log10(max_count)` — the widest (english trigrams ~7.9
-units) fits the `255/32 ≈ 8`-unit window; recovery is **neutral** vs int16
+measurable speed-up**; they carry it only for representational consistency.
+Nothing clips, because the scale is fitted to each table
+(`scale = 255/(vmax − vmin)`) rather than fixed — the span is bounded in the
+first place by the hapax floor on unseen grams (`log10(1/total)`), which caps
+each table at `log10(max_count)`, but the fitted scale is what spends all 256
+levels on it whatever that span turns out to be (a fixed 32 left danish quad
+reaching only byte 172). Recovery is **neutral** vs int16
 (`make crackquality`, 160 trials/length, all four languages). Rejected
 precision/SIMD alternatives on record: 16-bit and lower resolutions were the
 step *before* 8-bit (8-bit won); `-march=native` (no win — the gather-bound loop
@@ -2734,11 +2782,15 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   `ringstellung`, `ukw`, `steckerbrett`) and the working buffers (`subst_array`,
   the per-position row pointers `rows`, the contiguous `mapping`, the candidate
   `plaintext`) — is bundled into `struct machine`, threaded through the
-  search/scoring functions as `machine & m`; `main()` owns one heap instance.
+  search/scoring functions as `machine & m`; `bruteforce()` in `src/search.cc`
+  heap-allocates one per worker thread (it is far too big for a stack frame).
   This makes the search reentrant (the precondition for multi-threading — see
   `archived/CODE_REVIEW_HISTORY.md` §5/§6). The read-only data stays file-scope
-  global and shared: the wiring tables (`rotor_fwd/rev`, `notch`, `reflector`)
-  built by `init()`, the n-gram tables, and the `ciphertext` / `num_ciphertext`
+  global and shared: the numeric wiring tables (`rotor_fwd/rev`, `notch`,
+  `notch_gap`, `reflector`) that `init()` derives from `wiring.h`'s alphabets —
+  private to `machine.cc` since the split, the one exception being
+  `notch_halfperiod`, which the two-notch collapse reads per key on the scan
+  path — the n-gram tables, and the `ciphertext` / `num_ciphertext`
   / `textlength` input. (`-Wshadow` is on; the redundant
   `textlength`/`ciphertext`/`plaintext` parameters that used to shadow the
   globals were removed earlier.)
@@ -2774,10 +2826,16 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   end-to-end cracking — brute-force start-position and plugboard hill-climb
   matrices over every scoring model × language). Performance is benchmarked
   separately by `tests/bench.sh` (`make bench`; see "Build & run"). CI
-  (`.github/workflows/ci.yml`) runs on every push and PR: the suite `-Werror`
-  under g++, **g++-14** and clang++, ASan+UBSan, valgrind, cppcheck, clang-tidy
-  (config in
-  `.clang-tidy`), and shellcheck; a separate CodeQL workflow runs on PRs and
+  (`.github/workflows/ci.yml`) runs on **every PR, and on pushes to `dev` and
+  `master` only** — a push to a branch with an open PR is both events, so a bare
+  `push:` ran the whole matrix twice per PR; a concurrency group additionally
+  cancels a superseded PR run but never a `dev`/`master` one, where each push is
+  a different landed commit rather than a revision of the same one. The jobs are
+  the suite `-Werror`
+  under g++, **g++-14** and clang++, ASan+UBSan, ThreadSanitizer, valgrind,
+  cppcheck, clang-tidy (config in
+  `.clang-tidy`), and shellcheck plus a `py_compile` of the Python harness; a
+  separate CodeQL workflow runs on PRs and
   weekly. Keep all of these green. **The `g++-14` cell exists because `-Werror`
   turns any warning a NEWER gcc adds into a build failure for users on current
   distros, while the runners stay quiet** — a `-Wformat-truncation` warning
@@ -2941,7 +2999,8 @@ index-of-coincidence formula, the `-l`/filename overflow, the
 state into `struct machine`, and **multi-threading** the search over reflector ×
 wheel-order (`-T N`, default 1, max 256; each worker owns its own `machine`,
 results merged under a mutex) — and the build is warning-free under `-std=c++17
--Wall -Wextra -Wpedantic -Wcast-qual -Wshadow`, and clean under ThreadSanitizer.
+-Wall -Wextra -Wpedantic -Wcast-qual -Wshadow -Wold-style-cast`, and clean under
+ThreadSanitizer.
 Scaling is ~3× on 4 cores (`make bench SCALE=1`). **M4 (4-rotor naval) mode** is
 now implemented (`-4`; static Greek wheel folded into an effective reflector, so
 the hot path is untouched — see "M4 mode" above and
