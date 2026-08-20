@@ -483,6 +483,38 @@ existing command lines can behave differently or stop working.
   than a revision of the same one and cancelling would leave the commit a later
   bisect wants with no recorded result.
 
+- **`-Wmissing-declarations` is now part of `CXXFLAGS`.** A function with
+  external linkage and no header declaration is invisible to every gate this
+  repo has — `subst_rotors()` sat dead for years in exactly that state, and only
+  turned up because the module split happened to make it `static`. The flag
+  looks for the condition directly. It found three more on the day it went in —
+  `precompute_worker`, `filter_worker` and `finish_worker`, each with a single
+  same-file caller — which are now `static`. A clean tree reports none, both
+  compilers accept it, and the change is diagnostic only: the 49-case reference
+  capture stays byte-identical and `make bench BASE=` reads within noise on
+  every tier.
+
+- **The valgrind CI job now covers the paths that derive state and reuse it.**
+  It ran three invocations — a scan, a climb and a `-p` compare — and valgrind
+  is the *only* gate for **uninitialised** reads, which ASan does not catch. So
+  the crib deduction and its seeded climbs, the self-crib closure,
+  `--exhaust`'s pin sets, the `--ring-stride` refinement's derived candidates,
+  `--confidence`'s sampled null, `--tune-phase`'s re-climbs, and both
+  non-standard machines were all unchecked for the failure mode they are most
+  exposed to. A second block covers all nine; every one was clean when added,
+  so a failure there is new.
+  - `--error-exitcode` moved from `1` to **66**. The program's own fatal exit is
+    1, so at `1` a run that dies of *"No machine configuration produced a
+    score"* was indistinguishable from a valgrind finding — and a mis-specified
+    case could look like it was passing a check it no longer performed. The
+    TSan job already used 66.
+  - Verified by injection, and the injection itself is worth recording: an
+    uninitialised **stack** read is folded away at `-O1` (with a
+    `-Wuninitialized` warning) and never reaches valgrind, so it reads as a
+    passing run. A `malloc`'d read reaching a branch does reproduce — with one
+    placed in `refine.cc`, the three pre-existing cases still passed, which is
+    the proof the gap was real, and the new `--ring-stride` case failed with 66.
+
 - **Restart is now the OUTER dimension of the work space**: the sweep does
   every key at restart 0, then every key at restart 1, and so on, instead of
   finishing each key's `-R` restarts before moving on. Throughput is unchanged
