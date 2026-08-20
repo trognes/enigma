@@ -2622,6 +2622,28 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   wrapped parameter lists or `if` conditions) are aligned under the opening `(`.
   The only tabs in the repo are the recipe lines in the `Makefile`, which `make`
   requires.
+- **Always brace the body of an `if`/`else`/`for`/`while`, even when it is a
+  single statement.** The bare form is a live hazard here, not a matter of
+  taste: adding a second statement to an unbraced body silently leaves it
+  *outside* the condition, and the resulting bug is invisible to every gate
+  this repo has except the compiler. That happened during the `src/` split —
+  rewriting
+
+      if (opt_crib_text)
+        crib_stop_at = g_crib_stop_shown = crib_first_stop(m);
+
+  into two statements (the second becoming an accessor call) left the accessor
+  running on **every** key. `make test` stayed 541/541 and all 49 cases of a
+  byte-comparison harness stayed identical, because none of them distinguishes
+  the two; only `-Wmisleading-indentation` caught it, on both compilers. Braces
+  make that edit impossible to get wrong, which is worth more than the line
+  they cost.
+
+  **This applies to new and edited code only — the existing bodies are not
+  being rebraced.** There are ~517 of them across `src/`, and touching them all
+  would be a large diff that makes every later `git blame` and bisect worse for
+  no reader benefit, exactly as with the 80-column rule below. A file staying
+  mixed for a long time is expected, not a defect to tidy up in bulk.
 - **Line width: 80 columns.** From now on every file written by hand here —
   source, scripts, and documentation including Markdown — wraps at **80
   columns**, so it reads in an 80-column terminal without wrapping or horizontal
