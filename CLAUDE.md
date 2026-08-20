@@ -9,7 +9,7 @@ This repository contains a C++ command-line tool that simulates an
 Enigma cipher machine and, more importantly, attempts to **break** Enigma
 ciphertext by brute-forcing rotor/reflector/ring/start settings and
 hill-climbing the plugboard (steckerbrett). It was a single 9808-line
-translation unit until PRs #205–#219 split it into the 19 modules under `src/`
+translation unit until PRs #205–#219 split it into the modules under `src/`
 described below. Candidate decryptions are scored
 against per-language n-gram statistics (monograms, bigrams, trigrams, quadgrams)
 so that the configuration producing the most "language-like" plaintext wins.
@@ -45,13 +45,13 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 ## Repository layout
 
 ```
-src/                      The program, as 19 modules (19 .cc, 19 .h -- 18
-                          module headers plus the header-only result.h).
-                          main.cc is only the run: it calls parse_args() in
-                          args.cc and then sequences read, sweep, report.
-                          Everything else lives in a module with a header
-                          stating what it owns and, more usefully, what it
-                          deliberately keeps private.
+src/                      The program, as 20 modules (20 .cc, 21 .h -- 19
+                          module headers plus two that are header-only,
+                          result.h and parallel.h). main.cc is only the run:
+                          it calls parse_args() in args.cc and then sequences
+                          read, sweep, report. Everything else lives in a
+                          module with a header stating what it owns and, more
+                          usefully, what it deliberately keeps private.
 Makefile                  Builds the `enigma` binary from `src/*.cc` with
                           g++ -O3 (one object per source, `-MMD -MP` deps).
 README.md                 User-facing description and usage.
@@ -2175,10 +2175,12 @@ small and smoothly growing with the shift, not an unconditional equivalence
 (`archived/PERFORMANCE.md` §7.10's mismatch table). `--ring-stride K` (K=1..26,
 default 1 = off) exploits this: the coarse search tests only ring2 ∈ {0, K, 2K,
 ...} (`build_key_space()` shrinks `rc[2]`; `search_worker()`/`key_to_machine()`
-scale the decoded index back up by `K`), then `bruteforce()` runs one small
-refinement pass — reusing `search_worker` on a self-contained mini key-space —
-over the ring2 values the coarse pass skipped, keeping the improvement only if
-it beats the coarse result.
+scale the decoded index back up by `K`), then `refine_ring_stride()` in
+**`src/refine.cc`** runs one small refinement pass — reusing `search_worker` on
+a self-contained mini key-space — over the ring2 values the coarse pass skipped,
+keeping the improvement only if it beats the coarse result. That module's header
+carries the four bugs the code's shape is a response to; read it before touching
+any of this.
 
 **The refinement covers *every* skipped ring2, not a `±⌊K/2⌋` window around the
 coarse winner.** It runs **once**, at the end of the whole search (next to
@@ -2761,9 +2763,10 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   was a single 9808-line translation unit until PRs #205-#219 split it into
   `src/` (`args`, `cli`, `common`, `confidence`, `crib`, `exhaust`, `keyspace`,
   `machine`, `main`, `ngrams`, `options`, `plugboard`, `preflight`, `progress`,
-  `schedule`, `scoring`, `search`, `text`, `wiring`, plus the header-only
-  `result.h`, which holds the shared best because the workers write it and the
-  display reads it and neither owns it).
+  `refine`, `schedule`, `scoring`, `search`, `text`, `wiring`, plus two
+  header-only ones: `result.h`, which holds the shared best because the workers
+  write it and the display reads it and neither owns it, and `parallel.h`,
+  which is a template and so has nothing to compile once).
 
   **The module boundaries were drawn by what must stay PRIVATE, not by
   subject.** Three cases decided their own shape and are worth knowing before
@@ -2776,6 +2779,20 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   `quad8`/`all8`, because the loader taking a destination pointer is what keeps
   the hottest table out of a shared header. Splitting any of those "by subject"
   would export exactly the state the measurements say to keep local.
+
+  **`refine.cc` is the one boundary drawn the other way, and the distinction is
+  CALL FREQUENCY.** The `--ring-stride` refinement was 354 lines inside
+  `bruteforce()` — the largest single thing in the file, with a contract
+  separable from the sweep and a design document of its own
+  (`archived/refinement.md`). Extracting it exports `search_worker()`, which
+  sounds like exactly what the rule above forbids until you count: it is called
+  once per **chunk** (~16 × threads per sweep) with the per-key loop inside it,
+  where `plug_fixed` is read per **move**. A cross-unit call at chunk frequency
+  is free, and the long-tier bench across the extraction reads ±1.3% on every
+  tier against a base-vs-base floor of the same size. So the rule is not "never
+  export a search symbol" — it is "never export one that a hot loop reads", and
+  the two are told apart by measuring, not by which module the name looks like
+  it belongs to.
 
   The mutable
   per-search state — machine settings (`walzenlage`, `grundstellung`,
@@ -2843,7 +2860,16 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   is installed by name rather than taken from the image, so a compiler upgrade
   is a commit here rather than something GitHub does on its own schedule; the
   default `g++` cell stays alongside it so the version most users have is still
-  covered. **The two lint jobs are the ones easiest to
+  covered. **The TSan job is a handful of hand-picked invocations, not the
+  suite, so a race is only caught where someone thought to point it** — it ran
+  a scan, a climb and an SA climb, and a real race in the `--ring-stride`
+  refinement (which fans out its own parallel sub-search) sat there unreported
+  because not one of the three passed `--ring-stride`. Adding a code path that
+  spawns threads means adding a case here; a fourth now covers the refinement,
+  and it was verified by reinstating the race and watching it fail (exit 66).
+  Note the fan-out is capped at the restart count, so such a case needs a
+  real `-R` — at `-R 2` only two threads enter the sub-search.
+  **The two lint jobs are the ones easiest to
   meet for the first time in CI rather than locally, and both run in seconds** —
   `clang-tidy src/*.cc -- -std=c++17` and `shellcheck tests/run_tests.sh
   tests/bench.sh` (if `shellcheck` is missing, `pip install shellcheck-py`
@@ -2891,7 +2917,9 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   spelled their own keyspace out rather than using `$rg`, so they cost ~6× as
   much again under ASan — which is how that job reached **24 minutes** while
   still passing. Current baselines to watch for drift: **~65 s plain** (541
-  checks) and **~190 s under ASan** (499 checks with `TEST_QUICK`).
+  checks) and **~190 s under ASan** (499 with `TEST_QUICK`, of which the ASan
+  build runs 498 — the M4 oversized-allocation check detects a sanitizer
+  runtime and skips itself, by design).
   **Re-measure these when a PR adds checks** — nothing compares against them
   automatically, which is why the drift above went unnoticed for a day.
   Rules of thumb when adding a check:

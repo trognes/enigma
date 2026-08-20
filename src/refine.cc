@@ -323,6 +323,13 @@ size_t refine_ring_stride(std::vector<machine *> & machines,
      strictly-greater test keep the winner deterministic. */
   refine_cand won = cands.empty() ? refine_cand{0, 0, 0, 0, 0, 0} : cands[0];
   double prev_score = rbest.score;
+  /* Hoist the table pointer OUT of the lambda. search_worker() writes
+     m.subst_array on a task boundary, and m is *machines[0] -- so reading
+     m.subst_array inside the lambda has thread 0 writing the very field the
+     other threads read to build their own argument list. Harmless by value
+     (rtasks holds one task, so every write stores the pointer that was already
+     there) but a real data race, and TSan reported it as one. */
+  subst_table rall = m.subst_array;
   for (size_t i = 0; i < cands.size(); i++)
     {
       const refine_cand & c = cands[i];
@@ -334,7 +341,7 @@ size_t refine_ring_stride(std::vector<machine *> & machines,
       set_ring2(rrange, 1u << c.r2);
       std::atomic<size_t> rnext_key{0};
       run_parallel(rnthreads, [&](int t)
-        { search_worker(*machines[t], rtasks, rrange, rrc, rgc, m.subst_array,
+        { search_worker(*machines[t], rtasks, rrange, rrc, rgc, rall,
                         rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
       /* rbest.idx is relative to whichever sub-search produced it, so remember the
          candidate pinned when the score last improved; the reconstruction below
@@ -368,9 +375,11 @@ size_t refine_ring_stride(std::vector<machine *> & machines,
       size_t rcur_wo = static_cast<size_t>(-1);
       int rrg6[6];
       /* The refinement's own key space: rrsize == rgsize == 1, so its
-         key count is just the candidate task count. */
+         key count is just the candidate task count. rall, not m.subst_array:
+         the workers above have been writing that field, and this module's own
+         rule is not to re-read from m what the candidate list already knows. */
       key_to_machine(m, work_key(rbest.idx, rtasks.size()), rtasks, rrange,
-                     rrc, rgc, m.subst_array, rrg, rgsize, rrc12, rgc12,
+                     rrc, rgc, rall, rrg, rgsize, rrc12, rgc12,
                      rcur_wo, rrg6);
       for (int i = 0; i < asize; i++)
         m.steckerbrett[i] = rbest.steckerbrett[i];
