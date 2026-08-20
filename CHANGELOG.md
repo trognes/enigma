@@ -391,7 +391,97 @@ existing command lines can behave differently or stop working.
   a result is quoted in — until the run finished. Same figure the summary
   reports; a test asserts the two agree.
 
+- **`--crib TEXT` — a known-plaintext key filter, and with `-c` a climb seed.**
+  A crib is a guess at part of the plaintext together with where it sits.
+  Decryption is `p = steck[core_i[steck[c]]]` and the rotor core is an
+  involution, so it rearranges to `steck[p] = core_i[steck[c]]` — one lookup on
+  a table the search already builds. Guess a single plug, chain it along every
+  crib position, and add reciprocity (`steck[x]=y` ⇒ `steck[y]=x`, and no two
+  letters share a partner — **Welchman's diagonal board**, free because the
+  board is an involution). A contradiction kills the guess; all 26 dead means
+  the rotor setting cannot have produced the crib, so the search skips it
+  **without scoring anything** — measured **99.9% of keys** on a 12-letter
+  pinned crib.
+  - **The diagonal board is what does the work, not menu loops**: a loop-free
+    12-letter menu still rejects 88% of settings, against 0% without it.
+  - **`--crib-at N`** (1-based) pins the alignment; omitted, every alignment the
+    self-encryption filter leaves is tried and a key dies only if *every*
+    alignment rejects it. **Rejections multiply across alignments**, which sets
+    the usable length: on a 125-letter message a 12-letter crib rejects 99.9%
+    pinned but only **5.3%** swept, while 16 letters holds at 99.9% either way.
+    16 is the swept floor; below it a crib can only seed a climb.
+  - **With `-c` the crib also seeds the climb**, pinning each surviving
+    hypothesis's deduced plugs — including letters deduced to carry *no* cable,
+    which is a finding and not an absence of one. On an 88-letter message with
+    the board hidden and a 12-letter crib: **92% of letters recovered against
+    8% unseeded**, and the same 92% swept as pinned, so seeding does not need
+    the alignment to be known.
+  - **`--crib-list FILE`** runs a whole library, one complete rotor sweep per
+    crib, keeping the best board across all of them — crib-outer, because the
+    setup a rotor-outer loop would share is 0.6% of a run while early exit is
+    worth up to 50×. Three things fatal for a single `--crib` merely skip the
+    crib here (longer than the ciphertext, matching it at every alignment,
+    rejecting every key): a library is written against a network's vocabulary,
+    not one message. A table before each sweep reports a **measured** expected
+    gain per crib, from running both units on the same sampled keys.
+  - **`--no-crib-reorder`** keeps a library in file order; by default it runs
+    cheapest-measured-cost first. The measured cost curve is a **cliff**, not
+    the flat-ish one the generator modelled: relative to a no-crib sweep, 8
+    letters costs **52×**, 12 costs 0.67×, 25 costs 0.02×. Ordering is a
+    preference and not a filter — a `--crib-max-hyps` that *discarded* costly
+    cribs was built and removed, because cost is anti-correlated with the chance
+    of a hit and it skipped all four cribs actually present in the test message.
+  - `--crib-dump` prints each surviving hypothesis, its alignment and the plugs
+    it deduces. The menu is walked breadth-first from the anchor rather than in
+    crib order, which makes the work track the component instead of the edge
+    count (1.6–1.7× on wrong keys, the case a sweep spends its time on).
+    `-T`-deterministic and zero cost when off; rejected with `-F`, `--exhaust`,
+    `--ring-stride` and `-A`.
+
 ### Changed
+
+- **The program is now 19 modules under `src/`, not one 9808-line file.** PRs
+  #205–#221 split `enigma.cc` into 19 `.cc` and 19 `.h` (18 module headers plus
+  the header-only `result.h`), each header stating what its module owns and,
+  more usefully, what it deliberately keeps private. The `Makefile` builds one
+  object per source with `-MMD -MP` dependency tracking, so a header change
+  rebuilds exactly its dependents.
+  - **No user-visible change, and that was verified rather than assumed.** The
+    binary is byte-identical (`cmp`) under both compilers across the move to
+    `src/`, and a 49-case reference capture stayed byte-identical at every one
+    of the eleven steps.
+  - **The boundaries were drawn by what must stay private, not by subject.**
+    `plug_fixed`/`plug_fixed_ex` are read in the climb's move loop and their
+    storage form is measured to matter by ~18%, so simulated annealing lives in
+    `plugboard.cc` purely because `apply_toggle()` reads them; the crib menu
+    tables are read inside `crib_try`'s loop, so the units that climb from a
+    deduced board sit beside them; and `ngrams.cc` never names `quad8`/`all8`,
+    the loader taking a destination pointer instead. Splitting any of those by
+    subject would export exactly the state the measurements say to keep local.
+  - **The split cost nothing measurable**, which took a release-tag comparison
+    to establish — the per-PR bench guard sees each step against its own base
+    and cannot see the sum. `make bench LONG=1 BASE=v2.1.0` after the split:
+    `search` **−60.9%**, `hillclimb` −0.4%, `fused` −5.3%, every cell within
+    ~1.5pp of the pre-split reading. The −62% on `search` is fully retained
+    across nineteen modules, cross-unit calls and ~30 symbols that became
+    `extern`.
+  - One real hazard surfaced: `fatal()` lost its visible `exit(1)` across a
+    translation-unit boundary, and cppcheck and clang-tidy began reporting
+    null-pointer dereferences downstream of it. Declaring it `[[noreturn]]`
+    restores what the analysers could previously see for themselves.
+
+- **CI runs once per commit instead of twice per pull request.** A push to a
+  branch with an open PR is *both* a push and a `pull_request` event, so a bare
+  `push:` ran the whole matrix twice — 24 check runs where 12 say the same
+  thing. `push` is now restricted to `master` and `dev`, leaving each commit
+  checked exactly once: by `pull_request` while under review, by `push` once it
+  lands. The two events are not merely duplicates and `pull_request` is the more
+  useful one — it builds the PR head **merged into its base**, i.e. what the
+  repository would actually get, where `push` builds the branch head alone. A
+  concurrency group additionally cancels a superseded PR run, but deliberately
+  **not** on `master`/`dev`, where each push is a different landed commit rather
+  than a revision of the same one and cancelling would leave the commit a later
+  bisect wants with no recorded result.
 
 - **Restart is now the OUTER dimension of the work space**: the sweep does
   every key at restart 0, then every key at restart 1, and so on, instead of
@@ -571,6 +661,21 @@ existing command lines can behave differently or stop working.
   deliberate commit here instead of something GitHub does on its own schedule.
   Verified to earn its keep: reverting the buffer fix makes this cell fail the
   build while the other two pass.
+
+- **The `Bench` workflow now blocks on a real regression instead of only
+  flagging one.** It was `continue-on-error` throughout, which is how a **+50%
+  crib-sweep regression** was reported and merged anyway. It cannot simply
+  become a hard gate at one number, because the measurement noise floor is
+  per-tier and per-compiler and reaches ±10% on some cells — a gate there would
+  fail clean PRs. So there are two levels: `THRESHOLD` **reports** at 10%
+  (unchanged, and now the same 10% the script defaults to locally, so the
+  documented number cannot drift from the configured one) and `FAIL_OVER`
+  **blocks** at 25%, which is 2.5× the worst floor ever recorded here and cannot
+  plausibly be scatter. The run that verified the fix demonstrated the need for
+  two levels in one shot: with the regression reintroduced on a busy box, `crib`
+  read **+45.6%** (blocked, real) while byte-identical `fused` read **+11.9%**
+  (flagged only, pure noise). Locally `FAIL_OVER` defaults to `THRESHOLD`, so
+  `make bench BASE=…` still exits non-zero at 10% as it always did.
 
 ### Fixed
 
