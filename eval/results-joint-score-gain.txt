@@ -42,3 +42,40 @@
 # by construction. Exact recovery (0.1/1.1/8.6/16.5%) brackets CLAUDE.md's
 # 12.0% at L=82. Says nothing about trials where the climb never reaches the
 # board.
+#
+# ============================================================================
+# WHY THIS CONTRADICTS THE REPO'S DOCUMENTED ~1% SCORING FLOOR
+# ============================================================================
+#
+# CLAUDE.md records a ~1% scoring-failure floor and "at short lengths the
+# residual is ~99% search failure"; ENHANCEMENTS item 2 records "5-10% at L40,
+# 0 elsewhere".  Those come from `make crackquality`, whose corpus is 477
+# characters of ENGLISH PROSE.  They do not transfer.
+#
+# Two variables move the split, isolated one at a time (200 trials each, L=40):
+#
+#   plaintext / language                    search    scoring
+#   English prose      -q -l english        100.0%       0.0%
+#   telegraphic German -q -l wehrmacht       44.0%      56.0%
+#
+#   model, on telegraphic German            search    scoring
+#   -q                                       44.0%      56.0%
+#   -f -S i4f10 -J --polish                  10.0%      90.0%
+#
+# NOT the garbled decrypts in the pool: restricting to clean plaintexts gives
+# 89.5% against 90.5% at L=40, i.e. no effect.
+#
+# Both directions are real.  A STRONGER SEARCH MAKES IT WORSE: it reaches
+# boards a weak climb never found, and at 40 letters with ten free plug pairs
+# those boards overfit.  crackquality on its own English corpus shows the same
+# sign, 0% -> 2%, when -J --polish -R 8 is added.
+#
+# Telegraphic German is flatter to score than prose -- X separators,
+# spelled-out numbers, a small vocabulary -- so the true plaintext stands less
+# far above a wrong decrypt.  That is the same style dependence CLAUDE.md
+# already records for the wehrmacht tables (+20.9pp on real messages, -10.2pp
+# on prose) and for SA-vs-greedy; this is another instance of it.
+#
+# So "how much of the residual is scoring" is a property of the CORPUS and the
+# SEARCH STRENGTH, not of message length alone, and any single figure for it
+# needs both stated.

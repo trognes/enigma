@@ -35,10 +35,39 @@ Recommended recipe: `-c -S m4f10 -J --polish -f -l <lang> -T <cores> -R <high>`.
 converged boards are *scattered* rather than clustered near the truth, and
 clustering is the structure ILS would need. → `archived/IMPROVEMENTS.md` §2.
 
-**2. The narrow L40 scoring re-opening.** The only observed scoring failures sit
-at the identifiability floor — 5–10% at L40, 0 elsewhere. Length-sensitive
-scoring could only help at L ≲ 40, where recovery is already near the
-information floor, so the payoff is small. → `archived/IMPROVEMENTS.md` §2, §4.
+**2. Scoring failures on REAL TRAFFIC are not narrow — the "5–10% at L40, 0
+elsewhere" figure is an ENGLISH-PROSE number.** This item used to read that the
+only observed scoring failures sit at the identifiability floor, so
+length-sensitive scoring could only help at L ≲ 40 and the payoff is small.
+That conclusion rests on `make crackquality`, whose corpus is 477 characters of
+**English prose**, and it does not survive the swap to authentic telegraphic
+German. Same harness, same model, same everything but the plaintext
+(`eval/joint_score_gain.py`, 200 trials, `-q`, L = 40):
+
+| plaintext | search fail | **scoring fail** |
+|---|---:|---:|
+| English prose (`-q -l english`) | 100.0% | **0.0%** |
+| authentic telegraphic German (`-q -l wehrmacht`) | 44.0% | **56.0%** |
+
+**A SECOND variable moves it too: search strength.** A stronger climb converts
+search failures into scoring failures, because it reaches boards a weak climb
+never found and those boards overfit. On the same German corpus at L = 40,
+`-q` gives 56% scoring failures and the recommended `-f -S i4f10 -J --polish`
+gives **90%**; on the English corpus, adding `-J --polish -R 8` to `-q` moves
+crackquality's own split from 0% to 2%. So "how much of the residual is
+scoring" is a property of the corpus AND the search, not of the message length
+alone, and any single number for it needs both stated.
+
+Why this matters: telegraphic German is flatter to score than prose — X
+separators, spelled-out numbers, a small vocabulary — so the true plaintext
+stands less far above a wrong decrypt. At 40 letters with ten plugs the climb
+is fitting ~10 free parameters to 40 characters, and on that corpus it usually
+wins. The conclusion that discrimination "has essentially no ceiling left to
+recover" is therefore a statement about English prose.
+
+**It is not a dead end, because §3a shows the fix.** A second message on the
+same day key overturns essentially all of them — see the table there.
+→ `archived/IMPROVEMENTS.md` §2, §4; `eval/results-joint-score-gain.txt`.
 
 **3. Attack several messages from ONE DAY jointly.** Every measurement in
 this repo attacks a single message, but real traffic came in **day keys**: every
