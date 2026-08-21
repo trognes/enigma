@@ -154,6 +154,33 @@ it. Given that essentially every short-message failure in this repo is a
 *search* failure rather than a discrimination one, flattening the surface is
 the worst available trade.
 
+**The damage from ONE wrong plug has a closed form, and it is not small.** The
+start survives exactly when none of the six lookups touches a mis-mapped
+letter, i.e. with probability `((26 − w)/26)^6` for `w` mis-mapped letters.
+Probe, n = 20 000 per row:
+
+| one plug wrong by… | mis-mapped | survives | ruined | `((26−w)/26)^6` |
+|---|---:|---:|---:|---:|
+| being **absent** (both ends self-steckered) | 2 | 62.4% | **37.6%** | 62% |
+| having one **endpoint moved** | 3 | 47.6% | **52.4%** | 48% |
+| being **replaced** by a spurious pair | 4 | 37.0% | **63.0%** | 37% |
+
+Agreement with the formula to within a percent says the six lookups fail
+effectively independently — there is no meaningful cancellation where two wrong
+lookups undo each other, so the naive calculation can be trusted for cases not
+measured here.
+
+Two things follow. **A missing plug is much cheaper than a spurious one**:
+failing to find a plug mis-maps 2 letters, inventing one mis-maps 4 and nearly
+doubles the damage, so an over-plugged board hurts the indicator about twice as
+much as an under-plugged one at the same distance from the truth — worth
+knowing when choosing a `--score` cap for any scheme that leans on indicators.
+And read as a **test** rather than a derivation the same numbers are the point
+of the thing: one wrong plug is caught 38–63% of the time, two wrong plugs 82%,
+five 98.6%. That is a poor oracle for "is my board nearly right" and a very
+sharp one for "is my board exactly right", which is exactly the role it is
+given below.
+
 **Watching the derived score along the climb catches nothing.** If the score
 spikes only at the exact board, it is useless as a gradient but might work as a
 *detector* — cheap, if evaluated on accepted moves only. It does not: recording
