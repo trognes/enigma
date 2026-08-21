@@ -94,7 +94,7 @@ twelve, and among those the same-day groups are:
 |---|---|---:|
 | **30 Sep 1941** | BYQMZ (167), FKQLZ (107), XFEDT (97) | **371** |
 | 11 Jul 1941 | AWTZK (49), ZNLZT (69) | 118 |
-| 29 Sep 1941 | QTXMA (155), SZAEJ (51) — *not transcribed here* | 206 |
+| 29 Sep 1941 | QTXMA (155), SZAEJ (51) | 206 |
 
 So the capability does have a target, and 30 Sep is a group of three sharing a
 batch as well as a day. **But the J test (§5b) says FKQLZ and XFEDT are probably
@@ -102,12 +102,202 @@ not a 26-letter cipher at all** — zero J in 204 pooled letters against 7.8
 expected — so a joint attack on that group would be pooling one Enigma message
 with two probable non-Enigma ones, which is worse than attacking BYQMZ alone. Do
 not read "three messages, 371 letters" as `√3` of signal without settling that
-first. 11 Jul is clean but short (118 letters total), and the 29 Sep pair needs
-QTXMA transcribed before it is reachable at all — which is independently the
-best thing to add to the challenge set.
+first. 11 Jul is clean but short (118 letters total).
 
-→ `eval/MODERN_BREAKING_NOTES.md` §5a/§5b; `CLAUDE.md` "The unknown-key break
-rate", `--confidence`.
+**Since that survey was written the 29 Sep pair has become reachable and then
+useless**: QTXMA is transcribed (it is in the challenge set), and it is
+measured **not Enigma outright** — IC z = +10.9, four unused letters at
+P = 8.5e-08 (§5l). SZAEJ is 51 letters and Batch C. So of the three groups
+above, **not one is a clean pair of Enigma messages on a shared day key.** The
+current tally is 14 unbroken of the 19 challenge records, of which 9 carry an
+indicator, and the only same-day multi-message groups are the three listed.
+That is the binding constraint on this item: the statistics below are sound
+and there is nothing to run them on.
+
+→ `eval/MODERN_BREAKING_NOTES.md` §5a/§5b/§5l; `CLAUDE.md` "The unknown-key
+break rate", `--confidence`.
+
+### 3a. Can the INDICATORS remove the per-message start sweep? Mostly no
+
+The cost argument above rests on each message contributing a maximum over its
+own ~17 576 starts. Nine of the fourteen unbroken messages carry an indicator,
+which derives the start directly — so the obvious refinement is to replace that
+sweep with a derivation and get the joint statistic for free. The idea survives
+only in a narrow form, and the reasons are worth recording because three of
+them are dead ends that look attractive.
+
+**The indicators carry NO information about the plugboard.** This is
+arithmetic, not a measurement. Two indicators give six machine equations, and
+the rotor core (with reflector) is an involution, so each line solves for its
+own start letter: `s_k = steck[core_k[steck[G_k]]]`. Pick any board at all and
+both message keys follow, consistently. No board is excluded, so no rotor key
+is excluded. With `N` messages it stays exactly determined — `3N` equations
+introducing `3N` unknown start letters — so more messages never help. The
+no-self-encryption property adds nothing either: `s_k ≠ G_k` is automatically
+true of whatever the machine emits.
+
+What the indicators *do* give is a total collapse of the start subspace
+**conditional on the board**: `board × 17576^N` becomes `board × 1`. That is
+information about the starts given the board, never about the board.
+
+**Deriving the start inside the climb is worse than not using the indicator.**
+The start passes three letters through the plugboard twice, so six lookups must
+all be right. Probe (n = 2000 per row, random keys and boards): with a board
+that is *k* of 10 plugs correct, the derived start is right 1.4% of the time at
+k = 5, 18.1% at k = 8, 43.5% at k = 9, 100% at k = 10. A second probe
+(n = 300 per row) shows what that does to the objective — plaintext recovered
+with the start **fixed** at the truth rises smoothly 4% → 24% → 58% → 100% as
+*k* goes 0 → 5 → 8 → 10, while with the start **derived** it sits flat at the
+~4% noise floor until k = 6 and only breaks away at k = 9. So the derivation
+converts a smooth climbable surface into a needle with no gradient leading to
+it. Given that essentially every short-message failure in this repo is a
+*search* failure rather than a discrimination one, flattening the surface is
+the worst available trade.
+
+**The damage from ONE wrong plug has a closed form, and it is not small.** The
+start survives exactly when none of the six lookups touches a mis-mapped
+letter, i.e. with probability `((26 − w)/26)^6` for `w` mis-mapped letters.
+Probe, n = 20 000 per row:
+
+| one plug wrong by… | mis-mapped | survives | ruined | `((26−w)/26)^6` |
+|---|---:|---:|---:|---:|
+| being **absent** (both ends self-steckered) | 2 | 62.4% | **37.6%** | 62% |
+| having one **endpoint moved** | 3 | 47.6% | **52.4%** | 48% |
+| being **replaced** by a spurious pair | 4 | 37.0% | **63.0%** | 37% |
+
+Agreement with the formula to within a percent says the six lookups fail
+effectively independently — there is no meaningful cancellation where two wrong
+lookups undo each other, so the naive calculation can be trusted for cases not
+measured here.
+
+Two things follow. **A missing plug is much cheaper than a spurious one**:
+failing to find a plug mis-maps 2 letters, inventing one mis-maps 4 and nearly
+doubles the damage, so an over-plugged board hurts the indicator about twice as
+much as an under-plugged one at the same distance from the truth — worth
+knowing when choosing a `--score` cap for any scheme that leans on indicators.
+And read as a **test** rather than a derivation the same numbers are the point
+of the thing: one wrong plug is caught 38–63% of the time, two wrong plugs 82%,
+five 98.6%. That is a poor oracle for "is my board nearly right" and a very
+sharp one for "is my board exactly right", which is exactly the role it is
+given below.
+
+**Watching the derived score along the climb catches nothing.** If the score
+spikes only at the exact board, it is useless as a gradient but might work as a
+*detector* — cheap, if evaluated on accepted moves only. It does not: recording
+every accepted board and comparing the best ever visited against the board at
+convergence gave them **equal in 25 of 25 trials**, at every level of
+correctness, not merely for the exact case. Steepest ascent walks monotonically
+uphill and never transits the true board on its way somewhere else, so the
+end-of-climb check captures everything a per-step check would. (Small probe:
+n = 25, and a toy steepest-ascent climb with no restarts, kick, staged schedule
+or `try_repair`. Monotonicity is structural to steepest ascent rather than an
+artefact of the toy, but the number is thin.)
+
+**What does survive — a per-restart confirmation.** Once a climb has converged
+on message 1, derive message 2's start from its indicator, decrypt, and add the
+score. Three things make it worth having:
+
+- It is nearly free. A climb costs ~10⁴ score evaluations per key; this costs
+  one 3-letter decrypt plus one message decrypt, so ~0.01% of what was already
+  spent on that key. **No score threshold is needed to gate it** — the
+  threshold discussed during design was solving a cost problem that does not
+  exist.
+- The bar does not move. Message 2 contributes its full text as evidence while
+  adding zero keys, so `√(2 ln K)` is unchanged.
+- The all-or-nothing behaviour is a *feature* here. A merely-close board gets
+  noise from message 2, so the joint score separates "exactly right" from
+  "nearly right" — which raw n-gram scores do poorly.
+
+**Do it at every restart's convergence, not only on the final best.** Each
+restart is its own monotone climb and the merge keeps the board with the best
+*message 1* score, so a restart that finds the true board can be discarded in
+favour of one that scores higher on message 1 — precisely the scoring-failure
+case this repo measures a floor for. Checking per restart costs `R` extra
+decrypts against ~10⁴·`R` for the climbs and turns message 2 from a
+confirmation of the winner into a second opinion on every candidate the search
+produced.
+
+**Its limitation is the one that matters.** It fires only when message 1's
+climb recovered the board at 9/10 plugs or better — 12% of the time at L = 82
+with `-R 8`, 32% at `-R 64`. It converts *"the climb worked but the score is
+ambiguous"* into *"confirmed"*, and does nothing for *"the climb failed"*. That
+window is real — it is the 70–110 letter band where discrimination rather than
+climbing is the binding constraint (z = 2.20 at 69 letters against a bar of
+6.15, but 7.59 at 113) — but it is narrow, and below it the climb fails first
+so message 2 never gets its chance.
+
+**A start SWEEP degrades gracefully where the indicator does not**, which is
+the inversion to remember if this is ever revisited. Scoring message 2 across
+its 17 576 starts under a *partially* recovered board still favours the true
+start, because that is 80+ letters of evidence rather than 3. So the route to a
+genuine joint climb — one where the board sees the summed text — runs through
+sweeping message 2's start against message 1's partial board, with the
+indicators used afterwards as confirmation. That is more expensive than the
+derivation and was not designed further.
+
+### 3b. The message keys are NOT uniform — cillies, and a prior worth building
+
+Checking whether two messages on a day ever share a start turned up something
+bigger, and it is the one lever from this investigation that needs **no group,
+no board and no indicator** — it applies to every message including the single
+ones.
+
+**The non-circular proof is the collision rate.** Among the 49 operator-chosen
+starts on published rings there are **8 colliding pairs**; uniform choice over
+17 576 predicts **0.067**. Under Poisson that is p ≈ 4e-14. No judgement about
+which strings "look like words" enters it. Three *different* messages on
+27 Sep 1941 — different lengths, different Grundstellungen, entirely different
+plaintexts — were all enciphered at message key `WAS`.
+
+On categories fixed independently of this data (keyboard geometry as
+historically documented, and repeated letters), 16 of 49 = **33%**:
+
+| | count |
+|---|---:|
+| keyboard column (`RFV`, `TGB`×2, `WSX`, `VFR`) | 5 |
+| keyboard run (`WER`, `RTZ`, `TRE`, `YXC`) | 5 |
+| repeated letter (`AFF`, `OFF`, `ALA`) | 6 |
+
+A further ~37% are German words or names (`WAS`, `SEE`, `SAU`, `HEN`, `IDA`,
+`DOR`, `GUT`, `PIK`, `KLO`…). **That figure is circular** — the word list was
+assembled after looking at these very strings — and must not be quoted as a
+measurement. It is recorded only to say that the 33% is a floor, not a ceiling.
+Several of the 14 unclassified strings are patterns the rules simply did not
+encode (`IJN` and `MKO` are columns on the Enigma keyboard rather than the
+typewriter one; `OPQ` is a run).
+
+**The two halves of the indicator differ sharply, and backwards.** The
+Grundstellung — sent *in clear* — behaves as random: 0 collisions in 55, and
+2 of 55 in the objective categories. The message key, the half actually
+protecting the message, is the one chosen from a small mental shortlist. The
+mechanism is presumably that a Grundstellung is set once and forgotten while a
+message key had to be typed and then dialled up again, so it wanted to be
+memorable.
+
+*What to build.* A prior over starts, then sweep in prior order. The design
+that keeps it honest is to build it **only** from sources independent of these
+49 starts:
+
+- keyboard geometry (columns, runs) — historically documented, not fitted here;
+- repeated-letter patterns;
+- word-likeness from `ngrams/wehrmacht_trigrams.txt`, which comes from the
+  Appendix C statistics and has never seen a start position.
+
+Then report **recall@N** against the 49 known starts. Nothing is tuned on them,
+so that curve is a real estimate rather than the circular 37% above.
+
+*Why it is worth more than throughput.* Ordering the sweep finds the true start
+earlier, which is nice but only a constant. The real gain is statistical: done
+as a **prior-weighted test** rather than a truncation, it lowers the effective
+bar without excluding anything, and the bar is what short messages actually die
+on. As a rough scale, testing 500 likely starts rather than 17 576 takes
+`√(2 ln K)` on that factor from 4.42 to 3.53 — most of a sigma, which is about
+what doubling the message length buys.
+
+*The caveat to carry.* 49 starts, one network, four months, quite possibly a
+handful of operators. The phenomenon is well documented historically, but the
+specific shape of this distribution need not transfer — least of all to BYQMZ,
+which is Batch C and may not even be the same network.
 
 **4. Known-word and X-segmentation bonuses — MEASURED DOWN; do not add them to
 the score.** The idea: after each rotor setting's climb, score the candidate
