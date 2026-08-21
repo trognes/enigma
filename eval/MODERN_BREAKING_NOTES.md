@@ -1084,9 +1084,109 @@ Kept as an off-by-default, not-recommended opt-in (the negative answer is the ar
 `--score-tt`/`--repair3`. A tie-breaker variant (crib only among near-equal-n-gram boards) or
 a crib-*directed repair* (Option A) is the untried next step if the line is revisited.
 
+### 5n. The indicator recovers the TRUE ring, which the ciphertext cannot
+
+§5m used indicators the way the sources do — to derive a start position from a
+known day key. They also run the other way, and that direction answers a
+question the ciphertext provably cannot.
+
+**The gap.** A key recovered from ciphertext alone does not pin the ring. The
+left wheel's ring never reaches the machine (only start−ring does, `CLAUDE.md`
+§7.10), the middle wheel's often does not either on a short message (§7.12),
+and a two-notch right wheel adds a shift of 13. Every member of that class
+decrypts the message **byte-identically**, which is why records here carry
+`ALZ` for 09.09.1941 with an explicit warning that it is a representative.
+
+**The lever.** The indicator escapes the class. `SDG EKN` means the operator
+set his rotors to the *absolute* position `SDG`; shifting ring and start
+together leaves the message decrypt alone precisely because both move, while
+the Grundstellung does not move with them. So only the true ring reproduces the
+message key — a 3-letter test, ~1/17576 by chance, against a class of a few
+hundred.
+
+`eval/day_key_from_indicator.py` sweeps the class and intersects over every
+message on a day key. Over the 55 corpus messages carrying an indicator
+(`eval/results-indicator-ring.txt`):
+
+| outcome | count |
+|---|---:|
+| unique ring, equal to the recorded one | 43 |
+| unique ring, **different** from the recorded one | 2 |
+| two candidates, true ring among them | 4 |
+| no candidate | 6 |
+
+and **all nine multi-message day keys agree on exactly one ring**.
+
+**The two "different" results are the pay-off case, and both are checks rather
+than discoveries.** They are the only two days whose ring was recovered here
+from ciphertext and recorded as an explicit representative — and the method
+returns what Frode Weierud's key page independently publishes: 28.08.1941 →
+`CWJ` (recorded `AVJ`) and 09.09.1941 → `KFZ` (recorded `ALZ`). Both values
+were already in `build_army_messages_1941.py`'s comments. That they fall out
+of the indicators alone is what licenses using this on a day key nobody has
+published.
+
+**The six no-candidate messages are misread indicators, not method failures.**
+Four sit on published day keys where the ring is certainly right and all 26
+left-wheel shifts were tested, so nothing but the indicator can be wrong — and
+the decisive check is that the *recorded* start decrypts to clean German in
+every one of them while the indicator-derived start gives noise:
+
+| | recorded start | indicator says | at the indicator's start |
+|---|---|---|---|
+| Nr 51 | `RTZ` → `MBLDUNGUEBEREGNGN…` | `APZ` | `KXMLBQLJUCGYHAFW…` |
+| Nr 126 | `GUT` → `EINNAHMETOPOTSQHKA…` | `XEL` | `IJXELEONJKSRNMHQ…` |
+| Nr 161 | `DOR` → `NAQEXNNAHMEHOPOZ…` | `ZOR` | `QRZUKUMXHHLFHMCH…` |
+| Nr 197 | `WSX` → `NEUERGEFEQTSTANDX…` | `WNX` | `NZOIRCLRZKPMCRKT…` |
+
+Two of the four differ from the truth in a **single letter** (`ZOR`/`DOR`,
+`WNX`/`WSX`), which is what a misreading off a handwritten 1941 form looks
+like. ~11% bad indicator transcriptions is unremarkable, and it is the reason
+the intersection ignores empty votes rather than letting one bad form veto a
+day.
+
+**`--suggest-fix` names the misread letter where the evidence supports it**, and
+says so where it does not. It sweeps all 150 single-letter variants of a failing
+indicator; what makes a hit evidence is *what the variant has to hit*:
+
+- **Published ring** — the recorded ring and start are the true ones, so the
+  variant must reproduce that exact start at that exact ring. 150 tests at
+  1/17576: **0.0085 expected false positives**. A hit is a diagnosis.
+- **Representative ring** — the true ring is unknown, so a variant may satisfy
+  any of the ~500 class members. ~75 000 tests, **~4 expected false positives**.
+  A hit means nothing on its own.
+
+That gap is the whole design, and it is not hypothetical: unfiltered, the sweep
+returns hits for four of the six, and only the two published-ring hits survive.
+
+| | reported | correction |
+|---|---|---|
+| Nr 161 | `IPG PHA` → `IPG BHA` | `P`→`B`, position 4 |
+| Nr 197 | `QCV MLN` → `QCV MZN` | `L`→`Z`, position 5 |
+
+Each lands on the published ring **and** the independently confirmed start at
+once — two constraints from one letter, which chance does not satisfy together.
+`P`/`B` and `L`/`Z` are both plausible in that hand. The other four have no
+single-letter explanation, so they are worse than one slip; Nr 126 is
+suggestive, its recorded start `GUT` being identical to the indicator's second
+group.
+
+It stops at one letter deliberately: two would be 9375 variants, which even on a
+published ring is ~0.53 expected false positives — the same order as a real
+answer, so a hit would no longer be evidence.
+
+**It suggests only.** The corpus indicator fields record what the forms say and
+are not edited by any of this.
+
+`build_army_messages_1941.py` now cross-checks every indicator as it builds, so
+a future misread one is reported instead of sitting unnoticed. It reports
+rather than fails: a mismatch is ambiguous between a bad indicator and a
+recorded representative ring, and only the sweep tells those apart.
+
 ## Reproduce
 
 ```sh
+python3 eval/day_key_from_indicator.py --corpus  # true ring from indicators
 python3 eval/build_telegraphic_ngrams.py    # regenerate ngrams/wehrmacht_*.txt from Appendix C
 R=150 python3 eval/eval_crib.py             # crib finisher: telegraphic vs +crib over 69 msgs
 R=150 python3 eval/eval_telegraphic.py      # held-out eval: prose vs telegraphic over 69 msgs

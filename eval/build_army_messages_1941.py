@@ -447,6 +447,59 @@ def main():
         if not pt or len(pt) < 5:
             print("  !! %s produced no plaintext" % no); bad += 1
     print("re-verify: all decrypt OK" if not bad else "re-verify: %d FAILED" % bad)
+    check_indicators()
+
+
+def check_indicators():
+    """Cross-check every INDICATOR against its day key.
+
+    An indicator is the message key enciphered at the day's Grundstellung, so
+    deciphering its second group at its first -- under the day key -- must give
+    the message's start position. That is an INDEPENDENT check on data nothing
+    else in this file validates: the ciphertext is checked by decrypting it,
+    but a misread indicator sat unnoticed until eval/day_key_from_indicator.py
+    went looking.
+
+    A mismatch is reported, not fatal, for two reasons. The recorded ring may
+    legitimately be a class REPRESENTATIVE rather than the true day-key ring
+    (ring0 is never identifiable from ciphertext -- CLAUDE.md 7.10), in which
+    case the check fails on a correct record; and some of these indicators are
+    simply misread off handwritten forms, which is worth knowing but is not a
+    reason to refuse to build the corpus.
+
+    day_key_from_indicator.py tells the two apart: it sweeps the whole class,
+    so it reports the true ring where one exists and no candidate where the
+    indicator itself is wrong.
+    """
+    ok = shifted = bad = 0
+    for no, daykey, label, start, special, kenn, ct, notes in M:
+        if no not in INDICATORS:
+            continue
+        # KEY_OVERRIDE, not DAYS[daykey]: a few messages sit on a different
+        # NETWORK's key for the same date (Nr 173 is B/521/MRP where that date's
+        # DAYS entry is B/521/JQH). Reading the day key straight out of DAYS
+        # checked those against a key they were never enciphered on and
+        # reported them as bad indicators -- resolve it exactly as decrypt()
+        # does instead.
+        u, w, r, s = KEY_OVERRIDE.get(no, DAYS[daykey])
+        grund, enc = INDICATORS[no].split()
+        got = subprocess.run(
+            [BIN, "-u", u, "-w", w, "-r", r, "-g", grund.upper(), "-s", s],
+            input=enc.upper(), capture_output=True, text=True).stdout.strip()
+        if got == start:
+            ok += 1
+        elif r[0] == "A":
+            # Ring recorded as a class representative (left ring written A):
+            # the indicator cannot match at this representative even when both
+            # it and the key are right.
+            shifted += 1
+        else:
+            bad += 1
+            print("  ?? Nr %s: indicator %s gives %s, start is %s"
+                  % (no, INDICATORS[no], got, start))
+    print("indicators: %d confirm the day key, %d on a representative ring "
+          "(run eval/day_key_from_indicator.py), %d unexplained"
+          % (ok, shifted, bad))
 
 
 if __name__ == "__main__":

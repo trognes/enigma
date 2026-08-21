@@ -1,0 +1,99 @@
+# Recovering the true day-key ring from the indicator
+# 55 messages carrying an indicator, in 22 day-key groups.
+
+msg      date                     len  class indicator ring   rec   verdict
+108      06 Jul 1941               81    572 RFV ACK  IRD    IRD   unique, = recorded ring
+113      07 Jul 1941               26    624 LMN JGO  BUL    BUL   unique, = recorded ring
+114      27 Sep 1941              145     26 ZIP NDT  YHO    YHO   unique, = recorded ring
+115      27 Sep 1941              174     26 SCJ RWT  YHO    YHO   unique, = recorded ring
+116      27 Sep 1941              117     26 XHK FHP  YHO    YHO   unique, = recorded ring
+117      27 Sep 1941               69    598 TJI KPJ  HCO    YHO   2 candidates
+103      27 Sep 1941              106    546 NWH GGP  YHO    YHO   unique, = recorded ring
+104      27 Sep 1941               67    598 STG YTF  YHO    YHO   unique, = recorded ring
+105      27 Sep 1941              108     26 XFG GSM  YHO    YHO   unique, = recorded ring
+106      27 Sep 1941               69    598 GUR JPC  YHO    YHO   unique, = recorded ring
+136      09 Jul 1941                ?    676 JOL RVH  NAV    NAV   unique, = recorded ring
+139      09 Jul 1941                ?    676 MIN MER  NAV    NAV   unique, = recorded ring
+141      09 Jul 1941               63    598 GMD NQZ  NAV    NAV   unique, = recorded ring
+142      09 Jul 1941               44    598 NOV ANZ  NAV    NAV   unique, = recorded ring
+143      09 Jul 1941               59    572 BIW CRF  NAV    NAV   unique, = recorded ring
+153      09 Jul 1941                ?    676 HMR ECH  NAV    NAV   unique, = recorded ring
+157      09 Jul 1941              134    520 EUQ MAC  NAV    NAV   unique, = recorded ring
+158      09 Jul 1941              120    546 OPB LAB  NAV    NAV   2 candidates
+160      09 Jul 1941              124    520 UFZ AGE  NAV    NAV   unique, = recorded ring
+161      10 Jul 1941              206    468 IPG PHA  -      JQH   no match (indicator misread?)
+168      10 Jul 1941              114    546 VDJ RSJ  JQH    JQH   unique, = recorded ring
+170      10 Jul 1941                ?    676 CIJ UWH  JQH    JQH   unique, = recorded ring
+176      10 Jul 1941              115     26 BDF PNX  JQH    JQH   unique, = recorded ring
+180      10 Jul 1941               35    624 ALO XGF  JQH    JQH   unique, = recorded ring
+173      10 Jul 1941               94     26 SWV YTE  MRP    MRP   unique, = recorded ring
+19       19 Aug 1941              124    520 ALY XQE  YPC    YPC   unique, = recorded ring
+194      12 Jul 1941               85    572 FZK EWR  YCM    YCM   unique, = recorded ring
+197      13 Jul 1941               32    624 QCV MLN  -      GTO   no match (indicator misread?)
+199      13 Jul 1941               26    624 XIC YUU  GTO    GTO   2 candidates
+200      13 Jul 1941               82    572 NTO BTU  GTO    GTO   2 candidates
+201      13 Jul 1941              122    520 OLG ANW  GTO    GTO   unique, = recorded ring
+214      16 Jul 1941              101     26 LMA BJJ  -      AHV   no match (indicator misread?)
+228      18 Jul 1941                ?    676 UKM IUX  AGM    AGM   unique, = recorded ring
+234      18 Jul 1941                ?    676 RIT IZG  AGM    AGM   unique, = recorded ring
+23       08 Jul 1941              120    546 OKF QLV  PKF    PKF   unique, = recorded ring
+122      08 Jul 1941               67    572 WCK KLW  PKF    PKF   unique, = recorded ring
+126      08 Jul 1941              212     26 ACS GUT  -      PKF   no match (indicator misread?)
+127      08 Jul 1941              107     26 DRU QBP  PKF    PKF   unique, = recorded ring
+266      25 Jul 1941              174     26 FQT YSB  RVA    RVA   unique, = recorded ring
+282      29 Jul 1941               90     26 VOF ZVZ  MJW    MJW   unique, = recorded ring
+38       09 Sep 1941               74    572 BOZ IWD  KFZ    ALZ   unique, RECORDED RING IS A REPRESENTATIVE
+4        03 Oct 1941              161    494 DTI AZZ  TIP    TIP   unique, = recorded ring
+45       27 Jun 1941               38    598 SDG EKN  RGP    RGP   unique, = recorded ring
+48       27 Jun 1941                ?    676 BPG KGM  RGP    RGP   unique, = recorded ring
+51       27 Jun 1941                ?    676 ZKT FLP  -      RGP   no match (indicator misread?)
+55       28 Aug 1941               86    572 DIB TCO  CWJ    AVJ   unique, RECORDED RING IS A REPRESENTATIVE
+59       16 Sep 1941               68    572 LTB MMF  LSB    LSB   unique, = recorded ring
+60       16 Sep 1941              101    546 AIA XIE  LSB    LSB   unique, = recorded ring
+69       16 Sep 1941               64     26 SDC JKP  LSB    LSB   unique, = recorded ring
+70       16 Sep 1941               97    546 CSW MEK  LSB    LSB   unique, = recorded ring
+71       16 Sep 1941               84    572 KPH YNH  LSB    LSB   unique, = recorded ring
+7        13 Aug 1941              153    520 AMQ LKF  THE    THE   unique, = recorded ring
+73       01 Jul 1941              138    494 TCR IEI  -      AAV   no match (indicator misread?)
+99       05 Jul 1941              156    494 QCB NSR  WHJ    WHJ   unique, = recorded ring
+101      05 Jul 1941              178    468 AIK SUD  WHJ    WHJ   unique, = recorded ring
+
+# 43 unique and equal to the recorded ring, 2 unique but DIFFERENT (recorded ring was a
+# class representative), 4 ambiguous, 6 no match.
+
+# Joint over each multi-message day key -- this is what
+# removes the residual ambiguity, since one message can
+# leave two candidates:
+#   27 Sep 1941            8 of 8 messages voted -> ['YHO']
+#   09 Jul 1941            9 of 9 messages voted -> ['NAV']
+#   10 Jul 1941            4 of 5 messages voted -> ['JQH']
+#   13 Jul 1941            3 of 4 messages voted -> ['GTO']
+#   18 Jul 1941            2 of 2 messages voted -> ['AGM']
+#   08 Jul 1941            3 of 4 messages voted -> ['PKF']
+#   27 Jun 1941            2 of 3 messages voted -> ['RGP']
+#   16 Sep 1941            5 of 5 messages voted -> ['LSB']
+#   05 Jul 1941            2 of 2 messages voted -> ['WHJ']
+
+# --suggest-fix: single-letter corrections to the 6 indicators
+# that no ring satisfies.
+#
+# A ring recorded with a left ring of A is a class
+# REPRESENTATIVE,
+# so a variant there may satisfy any of the ~500 class members and
+# ~4 hits are expected by chance. Where the ring is the published
+# one, the variant must reproduce that exact start: 150 tests at
+# 1/17576, so a hit names the letter.
+#   Nr 161    IPG PHA  ring JQH
+#       IPG BHA   (P->B at position 4), ring JQH -> start DOR   [names the letter]
+#   Nr 197    QCV MLN  ring GTO
+#       QCV MZN   (L->Z at position 5), ring GTO -> start WSX   [names the letter]
+#   Nr 214    LMA BJJ  ring AHV (a representative -- hits below are not evidence)
+#       no single-letter correction reaches the recorded start
+#   Nr 126    ACS GUT  ring PKF
+#       no single-letter correction reaches the recorded start
+#   Nr 51     ZKT FLP  ring RGP
+#       no single-letter correction reaches the recorded start
+#   Nr 73     TCR IEI  ring AAV (a representative -- hits below are not evidence)
+#       TCT IEI   (R->T at position 3), ring GAV -> start QFU   [chance-level]
+#       TCV IEI   (R->V at position 3), ring SBV -> start CGU   [chance-level]
+#       TCR IEW   (I->W at position 6), ring BOV -> start LTU   [chance-level]
