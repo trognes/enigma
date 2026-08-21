@@ -30,7 +30,7 @@ be large rather than the sqrt(2) that a plain joint score gives.
 Scores are summed UNNORMALISED (weighted by length, not per-symbol averages,
 which would let a 60-letter message outvote a 100-letter one).
 
-  python3 eval/joint_score_gain.py                    # 60/80/100
+  python3 eval/joint_score_gain.py                    # 40/60/80/100
   python3 eval/joint_score_gain.py --trials 400 -R 16
 """
 import argparse
@@ -134,7 +134,7 @@ def climb_board(ct, wheels, ring, start, lang, restarts, seed):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=200)
-    ap.add_argument("--lengths", default="60,80,100")
+    ap.add_argument("--lengths", default="40,60,80,100")
     ap.add_argument("--restarts", "-R", type=int, default=8)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--language", default="wehrmacht")

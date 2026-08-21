@@ -224,14 +224,26 @@ raw numbers in `eval/results-joint-score-gain.txt`):
 
 | L | exact | search fail | **scoring fail** | rescued by message 2 |
 |---:|---:|---:|---:|---:|
+| 40 | 0.1% | 62.0% | **38.0%** | 748/759 (98.6%) |
 | 60 | 1.4% | 79.5% | **19.1%** | 382/382 (**100%**) |
 | 80 | 6.6% | 82.3% | **11.1%** | 221/221 (**100%**) |
 | 100 | 13.7% | 81.9% | **4.5%** | 89/89 (**100%**) |
 
-So scoring failures are about a fifth of trials at 60 letters and a twentieth
-by 100 — and every one of the 692 is overturned. Note the `search` column
-though: the residual at these lengths is overwhelmingly search failure, which
-this does nothing for.
+So scoring failures run from **38% of trials at 40 letters to 4.5% at 100**,
+and from 60 letters up every single one of the 692 is overturned. Note the
+`search` column though: the residual at these lengths is overwhelmingly search
+failure, which this does nothing for.
+
+**L = 40 is the first length where the rescue is not total, and the reason is
+not the one to guess.** It is *not* impostors deriving a correct start — of 9
+unrescued cases in a probe run, **zero** did; all had 0–1 correct plugs and a
+wrong start2. They fail because message 2 is a **fixed quantity of evidence**
+and at 40 letters a scoring failure can simply exceed it: those 9 impostors led
+on message 1 by 12.8 to 116.6 log units, where a 40-letter German decrypt is
+worth only ~30–40. A longer second message, or a third, would close them. The
+38% rate is itself the signature of the regime — 40 letters is ~1.6× the
+~25-letter unicity distance for this traffic, so many messages genuinely admit
+more than one plausible decrypt.
 
 It is *not* the √2 a plain joint score would give — it is the
 asymmetry: the true board derives the **correct** start for message 2 and

@@ -1,4 +1,4 @@
-# Scoring failures at 60-100 letters, and whether a SECOND message on the
+# Scoring failures at 40-100 letters, and whether a SECOND message on the
 # same day key rescues them.  eval/joint_score_gain.py, seed 1, -R 8,
 # recipe -f -S i4f10 -J --polish -l wehrmacht, true rotor key given.
 #
@@ -6,6 +6,7 @@
 real climb at -R 8
 
     L  trials    exact    search   scoring  of miss     rescued
+   40    2000     0.1%     62.0%     38.0%      38%    748/759
    60    2000     1.4%     79.5%     19.1%      19%    382/382
    80    2000     6.6%     82.3%     11.1%      12%    221/221
   100    2000    13.7%     81.9%      4.5%       5%      89/89
@@ -19,21 +20,27 @@ real climb at -R 8
   rescued = of those, how many the true board wins back once
             message 2 is added, its start DERIVED per board
 #
-# HOW COMMON: scoring failures are 19.1% of trials at L=60, 11.1% at 80 and
-# 4.5% at 100 -- about a fifth of short messages, a twentieth by 100 letters.
-# As a share of NON-EXACT trials the numbers are nearly the same (19/12/5%),
-# because exact recovery is low throughout: the residual at these lengths is
-# overwhelmingly SEARCH failure, which more restarts can attack.
+# HOW COMMON: 38% of trials at L=40, 19.1% at 60, 11.1% at 80, 4.5% at 100.
+# The L=40 rate is extreme because 40 letters is only ~1.6x the ~25-letter
+# unicity distance for this traffic: many messages genuinely admit more than
+# one plausible decrypt, so the true board often is not the best-scoring one.
 #
-# WHY THE RESCUE IS TOTAL, and not the sqrt(2) a plain joint score gives:
-# the true board derives the CORRECT start for message 2 and collects a full
-# German decrypt, while a climbed impostor derives a wrong one and collects
-# noise.  The impostor is not close (mean correct plugs 0.6 at L=60, 1.3 at
-# 80), so it gets nothing.
+# WHY THE RESCUE IS TOTAL at 60-100, and not the sqrt(2) a plain joint score
+# gives: the true board derives the CORRECT start for message 2 and collects
+# a full German decrypt, while a climbed impostor derives a wrong one and
+# collects noise.  The impostor is not close (mean correct plugs 0.6 at L=60,
+# 1.3 at 80), so it gets nothing.
+#
+# WHY L=40 IS NOT 100%: message 2 is a FIXED quantity of evidence, and at 40
+# letters a scoring failure can exceed it.  Of 9 unrescued cases in a probe
+# run, ZERO had the impostor deriving a correct start2 -- all 9 were simply
+# cases where the impostor's message-1 advantage (12.8 to 116.6 log units)
+# was larger than a 40-letter German decrypt is worth (~30-40).  A longer
+# second message, or a third, would close them.
 #
 # SCOPE: the climb runs at the TRUE rotor key, isolating scoring from search
 # by construction.  It says nothing about the case where the climb never
-# reaches the board, which is 80%+ of trials at every length here.
-# Exact recovery (1.4/6.6/13.7%) is in line with CLAUDE.md's 12.0% at L=82;
-# an earlier version of this harness ran a bare -q climb, recovered 0.5% at
-# L=80, and its numbers are superseded.
+# reaches the board, which is 62-82% of trials at every length here.
+# Exact recovery (0.1/1.4/6.6/13.7%) is in line with CLAUDE.md's 12.0% at
+# L=82; an earlier version ran a bare -q climb, recovered 0.5% at L=80, and
+# its numbers are superseded.
