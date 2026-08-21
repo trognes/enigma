@@ -104,8 +104,33 @@ def rand_wheels(rng):
     return "".join(str(d) for d in rng.sample([1, 2, 3, 4, 5], 3))
 
 
+def score_board(ct, wheels, ring, start, board, lang):
+    """Score one board under the model the CLIMB optimises, not a proxy.
+
+    This harness classified trials with a plain Python quadgram score while the
+    climb maximised the fused model -- two different metrics, disagreeing on
+    13% of trials at L = 80 and, worse, in a biased direction: a board the
+    climb converged on is by construction competitive on FUSED, so judging it
+    with quadgrams understated the scoring-failure rate badly (19% against 53%
+    of misses at L = 60). Classify with the model the search uses.
+
+    Returned per-symbol, which is what the tool prints. Both messages here are
+    the same length, so per-symbol and total orderings coincide; for unequal
+    lengths this would have to be multiplied by nterms before summing.
+    """
+    env = dict(os.environ, ENIGMA_DATA="ngrams", ENIGMA_SEED="0")
+    args = [BIN, "-f", "-S", "i4f10", "-l", lang, "-u", "B", "-w", wheels,
+            "-r", ring, "-g", start]
+    if board:
+        args += ["-s", board]
+    out = subprocess.run(args, input=ct, capture_output=True, text=True,
+                         env=env, cwd=ROOT).stderr
+    m = re.findall(r"^\s*(-?\d+\.\d+)", out, re.M)
+    return float(m[-1]) if m else None
+
+
 def climb_board(ct, wheels, ring, start, lang, restarts, seed):
-    """Run the REAL climb and return the board it converges on, best first."""
+    """Run the REAL climb; return (board, its own score under that model)."""
     env = dict(os.environ, ENIGMA_SEED=str(seed), ENIGMA_DATA="ngrams")
     # THE RECOMMENDED RECIPE, not a bare climb. An earlier version of this
     # harness ran plain `-q` and recovered the board 0.5% of the time at
@@ -128,7 +153,7 @@ def climb_board(ct, wheels, ring, start, lang, restarts, seed):
         sc = float(f[4])
         if best is None or sc > best:
             best, bestboard = sc, (f[5].strip() if len(f) > 5 else "")
-    return bestboard
+    return bestboard, best
 
 
 def main():
@@ -140,11 +165,7 @@ def main():
     ap.add_argument("--language", default="wehrmacht")
     args = ap.parse_args()
 
-    LQ, floor = load_quadgrams(args.language)
     texts = load_plaintexts()
-
-    def score(t):                      # UNNORMALISED: length is the vote
-        return sum(LQ.get(t[i:i + 4], floor) for i in range(len(t) - 3))
 
     print("%d authentic telegraphic plaintexts, model '%s',\n"
           "real climb at -R %d\n"
@@ -177,33 +198,30 @@ def main():
 
             # The climb sees message 1 only, at its true rotor key: this
             # isolates SCORING from the rotor search entirely.
-            got = climb_board(msgs[0]["ct"], wheels, ring, msgs[0]["start"],
-                              args.language, args.restarts,
-                              rng.randrange(1 << 30))
+            got, s_got = climb_board(
+                msgs[0]["ct"], wheels, ring, msgs[0]["start"],
+                args.language, args.restarts, rng.randrange(1 << 30))
             if not got:
                 continue
             if pair_set(got) == pair_set(board):
                 exact += 1      # same board, possibly spelled differently
                 continue
 
-            def joint(b):
-                """Both messages under board b; msg 2's start DERIVED."""
-                s = score(enigma_ref.decrypt(msgs[0]["ct"], wheels, ring,
-                                             msgs[0]["start"], b))
-                st = enigma_ref.decrypt(msgs[1]["enc"], wheels, ring,
-                                        msgs[1]["grund"], b)
-                return s + score(enigma_ref.decrypt(msgs[1]["ct"], wheels,
-                                                    ring, st, b))
-
-            s_true = score(enigma_ref.decrypt(msgs[0]["ct"], wheels, ring,
-                                              msgs[0]["start"], board))
-            s_got = score(enigma_ref.decrypt(msgs[0]["ct"], wheels, ring,
-                                             msgs[0]["start"], got))
+            s_true = score_board(msgs[0]["ct"], wheels, ring,
+                                 msgs[0]["start"], board, args.language)
             if s_got < s_true:
                 searchfail += 1        # a SEARCH failure, not a scoring one
                 continue
             fails += 1
-            if joint(board) > joint(got):
+
+            def msg2(b):
+                """Message 2 under board b, its start DERIVED from b."""
+                st = enigma_ref.decrypt(msgs[1]["enc"], wheels, ring,
+                                        msgs[1]["grund"], b)
+                return score_board(msgs[1]["ct"], wheels, ring, st, b,
+                                   args.language)
+
+            if s_true + msg2(board) > s_got + msg2(got):
                 rescued += 1
         miss = searchfail + fails      # every non-exact trial
         n = args.trials

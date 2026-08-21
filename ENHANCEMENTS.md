@@ -217,33 +217,42 @@ decrypts against ~10⁴·`R` for the climbs and turns message 2 from a
 confirmation of the winner into a second opinion on every candidate the search
 produced.
 
-**MEASURED, and on scoring failures it is total.** `eval/joint_score_gain.py`
-(2000 trials per length, the real climb at `-R 8` under the recommended recipe,
+**MEASURED, and above 80 letters it is total.** `eval/joint_score_gain.py`
+(800 trials per length, the real climb at `-R 8` under the recommended recipe,
 true rotor key given so that scoring is isolated from search by construction;
 raw numbers in `eval/results-joint-score-gain.txt`):
 
-| L | exact | search fail | **scoring fail** | rescued by message 2 |
-|---:|---:|---:|---:|---:|
-| 40 | 0.1% | 62.0% | **38.0%** | 748/759 (98.6%) |
-| 60 | 1.4% | 79.5% | **19.1%** | 382/382 (**100%**) |
-| 80 | 6.6% | 82.3% | **11.1%** | 221/221 (**100%**) |
-| 100 | 13.7% | 81.9% | **4.5%** | 89/89 (**100%**) |
+| L | exact | search fail | **scoring fail** | of miss | rescued |
+|---:|---:|---:|---:|---:|---:|
+| 40 | 0.1% | 11.8% | **88.1%** | 88% | 677/705 (96.0%) |
+| 60 | 1.1% | 49.4% | **49.5%** | 50% | 395/396 (99.7%) |
+| 80 | 8.6% | 69.8% | **21.6%** | 24% | 173/173 (**100%**) |
+| 100 | 16.5% | 77.0% | **6.5%** | 8% | 52/52 (**100%**) |
 
-So scoring failures run from **38% of trials at 40 letters to 4.5% at 100**,
-and from 60 letters up every single one of the 692 is overturned. Note the
-`search` column though: the residual at these lengths is overwhelmingly search
-failure, which this does nothing for.
+So scoring failures are **88% of misses at 40 letters, half at 60, and 8% by
+100**. The information floor, not the search problem, is what dominates the
+short end — the opposite of what holds at operational lengths — and from 80
+letters up every one of them is overturned.
 
-**L = 40 is the first length where the rescue is not total, and the reason is
-not the one to guess.** It is *not* impostors deriving a correct start — of 9
+**Classify with the model the search optimises.** An earlier version of this
+harness used a plain Python quadgram score while the climb maximised **fused**.
+That is not merely a different metric but a *biased* one: a board the climb
+converged on is by construction competitive on fused, so quadgrams understate
+how often it beats the truth. It read **19% of misses at L = 60 where the
+correct figure is 50%** — threefold, in the direction that made the problem
+look smaller. The rescue itself proved model-independent (re-checked under
+fused: 209/210 and 75/75 at L = 60/80), so only the frequencies moved.
+
+**The rescue degrades below 80 letters, and the reason is not the one to
+guess.** It is *not* impostors deriving a correct start — of 9
 unrescued cases in a probe run, **zero** did; all had 0–1 correct plugs and a
 wrong start2. They fail because message 2 is a **fixed quantity of evidence**
 and at 40 letters a scoring failure can simply exceed it: those 9 impostors led
 on message 1 by 12.8 to 116.6 log units, where a 40-letter German decrypt is
 worth only ~30–40. A longer second message, or a third, would close them. The
-38% rate is itself the signature of the regime — 40 letters is ~1.6× the
-~25-letter unicity distance for this traffic, so many messages genuinely admit
-more than one plausible decrypt.
+88% rate at L = 40 is itself the signature of the regime — 40 letters is ~1.6×
+the ~25-letter unicity distance for this traffic, so many messages genuinely
+admit more than one plausible decrypt.
 
 It is *not* the √2 a plain joint score would give — it is the
 asymmetry: the true board derives the **correct** start for message 2 and
@@ -254,8 +263,10 @@ cases), so it gets nothing. So the scoring floor — an information limit no
 search can cross, and the thing `-a` was built to erode — is simply **gone**
 for a message with a same-day partner.
 
-*Three harness errors, each caught only because something was checked beyond
-the headline.* The climb ran a bare `-q` with none of `-f -S i4f10 -J
+*Four harness errors, each caught only because something was checked beyond
+the headline — and the last two came from questions about the METHOD, not from
+re-reading the code.* The classification used a different scoring model from
+the climb (above). The climb ran a bare `-q` with none of `-f -S i4f10 -J
 --polish`, recovering the board 0.5% of the time at L = 80 against the 12.0%
 CLAUDE.md measures at L = 82 — a fifteen-fold weaker climb, which lands far
 from the truth and so makes the impostor trivially easy to reject. That would

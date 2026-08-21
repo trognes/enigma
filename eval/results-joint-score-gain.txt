@@ -1,46 +1,44 @@
 # Scoring failures at 40-100 letters, and whether a SECOND message on the
-# same day key rescues them.  eval/joint_score_gain.py, seed 1, -R 8,
-# recipe -f -S i4f10 -J --polish -l wehrmacht, true rotor key given.
+# same day key rescues them.  eval/joint_score_gain.py --trials 800, seed 1,
+# -R 8, recipe -f -S i4f10 -J --polish -l wehrmacht, true rotor key given.
+# CLASSIFIED WITH THE FUSED MODEL -- the one the climb optimises.
 #
-52 authentic telegraphic plaintexts, model 'wehrmacht',
-real climb at -R 8
+52 authentic telegraphic plaintexts, model 'wehrmacht', real climb at -R 8
 
     L  trials    exact    search   scoring  of miss     rescued
-   40    2000     0.1%     62.0%     38.0%      38%    748/759
-   60    2000     1.4%     79.5%     19.1%      19%    382/382
-   80    2000     6.6%     82.3%     11.1%      12%    221/221
-  100    2000    13.7%     81.9%      4.5%       5%      89/89
+   40     800     0.1%     11.8%     88.1%      88%    677/705
+   60     800     1.1%     49.4%     49.5%      50%    395/396
+   80     800     8.6%     69.8%     21.6%      24%    173/173
+  100     800    16.5%     77.0%      6.5%       8%      52/52
 
   exact   = the climb recovered the true board
-  search  = it did not, and what it found scores LOWER  (a search
-            failure -- more restarts can fix it)
-  scoring = it did not, and what it found scores HIGHER (a scoring
-            failure -- no search can fix it)
+  search  = climb missed, what it found scores LOWER  (more restarts help)
+  scoring = climb missed, what it found scores HIGHER (no search helps)
   of miss = scoring failures as a share of NON-EXACT trials
-  rescued = of those, how many the true board wins back once
-            message 2 is added, its start DERIVED per board
+  rescued = of those, how many the true board wins back once message 2 is
+            added, its start DERIVED per board under test
 #
-# HOW COMMON: 38% of trials at L=40, 19.1% at 60, 11.1% at 80, 4.5% at 100.
-# The L=40 rate is extreme because 40 letters is only ~1.6x the ~25-letter
-# unicity distance for this traffic: many messages genuinely admit more than
-# one plausible decrypt, so the true board often is not the best-scoring one.
+# HOW COMMON: 88% of MISSES at L=40, 50% at 60, 24% at 80, 8% at 100.
 #
-# WHY THE RESCUE IS TOTAL at 60-100, and not the sqrt(2) a plain joint score
-# gives: the true board derives the CORRECT start for message 2 and collects
-# a full German decrypt, while a climbed impostor derives a wrong one and
-# collects noise.  The impostor is not close (mean correct plugs 0.6 at L=60,
-# 1.3 at 80), so it gets nothing.
+# An earlier version classified with a plain Python quadgram score while the
+# climb maximised FUSED. That is not merely a different metric but a BIASED
+# one: a board the climb converged on is by construction competitive on
+# fused, so quadgrams understate how often it beats the truth. It read 19%
+# of misses at L=60 where the correct figure is 50%. Superseded -- classify
+# with the model the search uses.
 #
-# WHY L=40 IS NOT 100%: message 2 is a FIXED quantity of evidence, and at 40
-# letters a scoring failure can exceed it.  Of 9 unrescued cases in a probe
-# run, ZERO had the impostor deriving a correct start2 -- all 9 were simply
-# cases where the impostor's message-1 advantage (12.8 to 116.6 log units)
-# was larger than a 40-letter German decrypt is worth (~30-40).  A longer
-# second message, or a third, would close them.
+# WHY THE RESCUE WORKS: the true board derives the CORRECT start for message
+# 2 and collects a full German decrypt, while a climbed impostor derives a
+# wrong one and collects noise. Not the sqrt(2) a plain joint score gives --
+# an asymmetry. Verified MODEL-INDEPENDENT: re-checked under fused it is
+# 209/210 and 75/75 at L=60/80, where quadgrams also gave ~100%.
+#
+# WHY IT DEGRADES AT 40-60: message 2 is a FIXED quantity of evidence and a
+# scoring failure can exceed it. Probed at L=40, ZERO of 9 unrescued cases
+# had the impostor deriving a correct start2 -- all were cases where its
+# message-1 lead exceeded what a 40-letter German decrypt is worth.
 #
 # SCOPE: the climb runs at the TRUE rotor key, isolating scoring from search
-# by construction.  It says nothing about the case where the climb never
-# reaches the board, which is 62-82% of trials at every length here.
-# Exact recovery (0.1/1.4/6.6/13.7%) is in line with CLAUDE.md's 12.0% at
-# L=82; an earlier version ran a bare -q climb, recovered 0.5% at L=80, and
-# its numbers are superseded.
+# by construction. Exact recovery (0.1/1.1/8.6/16.5%) brackets CLAUDE.md's
+# 12.0% at L=82. Says nothing about trials where the climb never reaches the
+# board.
