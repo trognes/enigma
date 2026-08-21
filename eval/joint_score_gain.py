@@ -107,8 +107,17 @@ def rand_wheels(rng):
 def climb_board(ct, wheels, ring, start, lang, restarts, seed):
     """Run the REAL climb and return the board it converges on, best first."""
     env = dict(os.environ, ENIGMA_SEED=str(seed), ENIGMA_DATA="ngrams")
+    # THE RECOMMENDED RECIPE, not a bare climb. An earlier version of this
+    # harness ran plain `-q` and recovered the board 0.5% of the time at
+    # L = 80, against the 12.0% CLAUDE.md measures at L = 82 -- a fifteen-fold
+    # weaker climb, which lands FAR from the truth and so makes the impostor
+    # trivially easy for message 2 to reject. Measuring the rescue on that
+    # would have flattered it. `-f -S i4f10 -J --polish` gets to 6.8%; the
+    # residual gap to 12.0% is the plaintext pool (whole messages here, some
+    # corpus-flagged garbled, against prepass_ab.py's concatenated corpus).
     out = subprocess.run(
-        [BIN, "-c", "-q", "-l", lang, "-u", "B", "-w", wheels, "-r", ring,
+        [BIN, "-c", "-f", "-S", "i4f10", "-J", "--polish", "-l", lang,
+         "-u", "B", "-w", wheels, "-r", ring,
          "-g", start, "-R", str(restarts), "--dump-all"],
         input=ct, capture_output=True, text=True, env=env, cwd=ROOT).stderr
     best, bestboard = None, ""
@@ -140,14 +149,18 @@ def main():
     print("%d authentic telegraphic plaintexts, model '%s',\n"
           "real climb at -R %d\n"
           % (len(texts), args.language, args.restarts))
-    print("%5s %7s %11s %13s %11s" %
-          ("L", "trials", "scoring", "rescued by", "still lost"))
-    print("%5s %7s %11s %13s %11s" %
-          ("", "", "failures", "message 2", ""))
+    # The three outcomes are reported together because "how common is a
+    # scoring failure" has two defensible denominators and they differ by an
+    # order of magnitude: as a share of ALL trials it is small because most
+    # trials fail to climb at all, and as a share of NON-EXACT trials it is
+    # the number that says how much of the residual is out of the search's
+    # reach. Quoting one without the other is how a floor gets misread.
+    print("%5s %7s %8s %9s %9s %8s %11s" %
+          ("L", "trials", "exact", "search", "scoring", "of miss", "rescued"))
 
     for length in [int(x) for x in args.lengths.split(",")]:
         rng = random.Random(args.seed + length)
-        fails = rescued = 0
+        fails = rescued = exact = searchfail = 0
         for _ in range(args.trials):
             board = rand_board(rng)
             wheels, ring = rand_wheels(rng), rand_pos(rng)
@@ -167,8 +180,11 @@ def main():
             got = climb_board(msgs[0]["ct"], wheels, ring, msgs[0]["start"],
                               args.language, args.restarts,
                               rng.randrange(1 << 30))
-            if not got or pair_set(got) == pair_set(board):
-                continue        # same board, possibly spelled differently
+            if not got:
+                continue
+            if pair_set(got) == pair_set(board):
+                exact += 1      # same board, possibly spelled differently
+                continue
 
             def joint(b):
                 """Both messages under board b; msg 2's start DERIVED."""
@@ -184,17 +200,27 @@ def main():
             s_got = score(enigma_ref.decrypt(msgs[0]["ct"], wheels, ring,
                                              msgs[0]["start"], got))
             if s_got < s_true:
-                continue               # a SEARCH failure, not a scoring one
+                searchfail += 1        # a SEARCH failure, not a scoring one
+                continue
             fails += 1
             if joint(board) > joint(got):
                 rescued += 1
-        pct = (100.0 * rescued / fails) if fails else 0.0
-        print("%5d %7d %11d %8d %4.0f%% %11d"
-              % (length, args.trials, fails, rescued, pct, fails - rescued))
+        miss = searchfail + fails      # every non-exact trial
+        n = args.trials
+        print("%5d %7d %7.1f%% %8.1f%% %8.1f%% %7.0f%% %10s"
+              % (length, n, 100.0 * exact / n, 100.0 * searchfail / n,
+                 100.0 * fails / n,
+                 (100.0 * fails / miss) if miss else 0.0,
+                 ("%d/%d" % (rescued, fails)) if fails else "-"))
 
-    print("\n  A scoring failure is a climbed board scoring >= the true")
-    print("  board on message 1. 'Rescued' = the true board wins once")
-    print("  message 2 is added, its start DERIVED from each board tested.")
+    print("\n  exact   = the climb recovered the true board")
+    print("  search  = it did not, and what it found scores LOWER  (a search")
+    print("            failure -- more restarts can fix it)")
+    print("  scoring = it did not, and what it found scores HIGHER (a scoring")
+    print("            failure -- no search can fix it)")
+    print("  of miss = scoring failures as a share of NON-EXACT trials")
+    print("  rescued = of those, how many the true board wins back once")
+    print("            message 2 is added, its start DERIVED per board")
 
 
 if __name__ == "__main__":

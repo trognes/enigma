@@ -1,26 +1,39 @@
-# Does a SECOND message on the same day key rescue a SCORING failure?
-# eval/joint_score_gain.py, seed 1, real climb at -R 8, wehrmacht quadgrams.
+# Scoring failures at 60-100 letters, and whether a SECOND message on the
+# same day key rescues them.  eval/joint_score_gain.py, seed 1, -R 8,
+# recipe -f -S i4f10 -J --polish -l wehrmacht, true rotor key given.
 #
 52 authentic telegraphic plaintexts, model 'wehrmacht',
 real climb at -R 8
 
-    L  trials     scoring    rescued by  still lost
-                 failures     message 2            
-   60    2000         387      387  100%           0
-   80    2000         187      187  100%           0
-  100    2000          38       38  100%           0
+    L  trials    exact    search   scoring  of miss     rescued
+   60    2000     1.4%     79.5%     19.1%      19%    382/382
+   80    2000     6.6%     82.3%     11.1%      12%    221/221
+  100    2000    13.7%     81.9%      4.5%       5%      89/89
 
-  A scoring failure is a climbed board scoring >= the true
-  board on message 1. 'Rescued' = the true board wins once
-  message 2 is added, its start DERIVED from each board tested.
+  exact   = the climb recovered the true board
+  search  = it did not, and what it found scores LOWER  (a search
+            failure -- more restarts can fix it)
+  scoring = it did not, and what it found scores HIGHER (a scoring
+            failure -- no search can fix it)
+  of miss = scoring failures as a share of NON-EXACT trials
+  rescued = of those, how many the true board wins back once
+            message 2 is added, its start DERIVED per board
 #
-# Why 100%, and not the sqrt(2) a plain joint score would give: the true
-# board derives the CORRECT start for message 2 and collects a full German
-# decrypt, while a climbed impostor derives a wrong one and collects noise.
-# The impostor is nowhere near the truth -- mean correct plugs 0.6 at L=60
-# and 1.3 at L=80, deriving the right start2 in 1% and 8% of cases.
+# HOW COMMON: scoring failures are 19.1% of trials at L=60, 11.1% at 80 and
+# 4.5% at 100 -- about a fifth of short messages, a twentieth by 100 letters.
+# As a share of NON-EXACT trials the numbers are nearly the same (19/12/5%),
+# because exact recovery is low throughout: the residual at these lengths is
+# overwhelmingly SEARCH failure, which more restarts can attack.
 #
-# SCOPE: the climb runs at the TRUE rotor key, so this isolates scoring from
-# search by construction. It says nothing about the case where the climb
-# never reaches the board, which below ~110 letters is far more common.
-# Scoring failures also thin out with length: the L=100 cell rests on 38.
+# WHY THE RESCUE IS TOTAL, and not the sqrt(2) a plain joint score gives:
+# the true board derives the CORRECT start for message 2 and collects a full
+# German decrypt, while a climbed impostor derives a wrong one and collects
+# noise.  The impostor is not close (mean correct plugs 0.6 at L=60, 1.3 at
+# 80), so it gets nothing.
+#
+# SCOPE: the climb runs at the TRUE rotor key, isolating scoring from search
+# by construction.  It says nothing about the case where the climb never
+# reaches the board, which is 80%+ of trials at every length here.
+# Exact recovery (1.4/6.6/13.7%) is in line with CLAUDE.md's 12.0% at L=82;
+# an earlier version of this harness ran a bare -q climb, recovered 0.5% at
+# L=80, and its numbers are superseded.
