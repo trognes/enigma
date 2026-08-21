@@ -58,11 +58,12 @@ msg      date                     len  class indicator ring   rec   verdict
 99       05 Jul 1941              156    494 QCB NSR  WHJ    WHJ   unique, = recorded ring
 101      05 Jul 1941              178    468 AIK SUD  WHJ    WHJ   unique, = recorded ring
 
-# 43 unique and equal to the recorded ring, 2 unique but DIFFERENT (recorded ring was a class
-# representative), 4 ambiguous, 6 no match.
+# 43 unique and equal to the recorded ring, 2 unique but DIFFERENT (recorded ring was a
+# class representative), 4 ambiguous, 6 no match.
 
-# Joint over each multi-message day key -- this is what removes the
-# residual ambiguity, since one message can leave two candidates:
+# Joint over each multi-message day key -- this is what
+# removes the residual ambiguity, since one message can
+# leave two candidates:
 #   27 Sep 1941            8 of 8 messages voted -> ['YHO']
 #   09 Jul 1941            9 of 9 messages voted -> ['NAV']
 #   10 Jul 1941            4 of 5 messages voted -> ['JQH']
@@ -72,3 +73,27 @@ msg      date                     len  class indicator ring   rec   verdict
 #   27 Jun 1941            2 of 3 messages voted -> ['RGP']
 #   16 Sep 1941            5 of 5 messages voted -> ['LSB']
 #   05 Jul 1941            2 of 2 messages voted -> ['WHJ']
+
+# --suggest-fix: single-letter corrections to the 6 indicators
+# that no ring satisfies.
+#
+# A ring recorded with a left ring of A is a class
+# REPRESENTATIVE,
+# so a variant there may satisfy any of the ~500 class members and
+# ~4 hits are expected by chance. Where the ring is the published
+# one, the variant must reproduce that exact start: 150 tests at
+# 1/17576, so a hit names the letter.
+#   Nr 161    IPG PHA  ring JQH
+#       IPG BHA   (P->B at position 4), ring JQH -> start DOR   [names the letter]
+#   Nr 197    QCV MLN  ring GTO
+#       QCV MZN   (L->Z at position 5), ring GTO -> start WSX   [names the letter]
+#   Nr 214    LMA BJJ  ring AHV (a representative -- hits below are not evidence)
+#       no single-letter correction reaches the recorded start
+#   Nr 126    ACS GUT  ring PKF
+#       no single-letter correction reaches the recorded start
+#   Nr 51     ZKT FLP  ring RGP
+#       no single-letter correction reaches the recorded start
+#   Nr 73     TCR IEI  ring AAV (a representative -- hits below are not evidence)
+#       TCT IEI   (R->T at position 3), ring GAV -> start QFU   [chance-level]
+#       TCV IEI   (R->V at position 3), ring SBV -> start CGU   [chance-level]
+#       TCR IEW   (I->W at position 6), ring BOV -> start LTU   [chance-level]

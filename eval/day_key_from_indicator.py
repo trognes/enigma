@@ -43,7 +43,16 @@ all 26 left-wheel shifts were tested, so nothing but the indicator can be
 wrong.  At ~11% of a corpus transcribed from handwritten 1941 forms that is
 unremarkable -- and it is why a day key wants more than one message.
 
+--suggest-fix then asks, of each indicator no ring satisfies, whether ONE
+misread letter would explain it.  On the corpus it names the letter for two of
+the six -- `IPG PHA` -> `IPG BHA` (P->B) for Nr 161 and `QCV MLN` -> `QCV MZN`
+(L->Z) for Nr 197 -- and reports nothing usable for the rest.  See suggest_fix()
+for why a hit is evidence on a published ring and is not on a representative
+one.  IT SUGGESTS ONLY; nothing here edits the corpus, whose indicator fields
+record what the forms say.
+
   ./eval/day_key_from_indicator.py --corpus
+  ./eval/day_key_from_indicator.py --corpus --suggest-fix
   ./eval/day_key_from_indicator.py --date 09.09.1941
   ./eval/day_key_from_indicator.py --wheels 342 --ring ALZ \
       --plugs "AZ DV ET FS GQ JP LX MY NR OW" \
@@ -85,8 +94,11 @@ def class_members(ring, start, wheels):
     for k in range(26):            # left wheel: exact, unconditional
         for j in range(26):        # middle wheel: exact only on short messages
             for h in r2_shifts:    # right wheel: exact for VI/VII/VIII
-                out.append((shift(ring[0], k) + shift(ring[1], j) + shift(ring[2], h),
-                            shift(start[0], k) + shift(start[1], j) + shift(start[2], h)))
+                out.append(
+                    (shift(ring[0], k) + shift(ring[1], j)
+                     + shift(ring[2], h),
+                     shift(start[0], k) + shift(start[1], j)
+                     + shift(start[2], h)))
     return out
 
 
@@ -102,6 +114,57 @@ def same_decrypt(cands, ct, pt, wheels, plugs, refl="B"):
 def indicator_ok(ring, start, grund, enc, wheels, plugs, refl="B"):
     """Does the indicator, deciphered at this ring, give this start?"""
     return enigma_ref.decrypt(enc, wheels, ring, grund, plugs, refl) == start
+
+
+ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def suggest_fix(ring, start, grund, enc, wheels, plugs, refl="B",
+                trusted_ring=True, cands=None):
+    """Single-letter corrections to an indicator that no ring satisfies.
+
+    Six letters x 25 substitutions = 150 variants. Whether that is a diagnosis
+    or a coin toss depends entirely on WHAT THE VARIANT HAS TO HIT, and the two
+    cases are far apart:
+
+    TRUSTED RING (the day key is published, so the recorded ring and start are
+    the true ones). A variant must reproduce THAT start at THAT ring -- one
+    test each, so 150 tests at 1/17576, an expected 0.0085 false positives.
+    A hit here is a diagnosis: it names the misread letter.
+
+    REPRESENTATIVE RING (recorded left ring written A, the true one unknown).
+    The variant may satisfy ANY member of the class, so it is 150 x |class|
+    tests -- around 75 000, for ~4 expected false positives. A hit there means
+    nothing on its own and is reported as such.
+
+    That gap is not hypothetical: run unfiltered over the six corpus failures,
+    this returns hits for four of them, and only the two trusted-ring hits
+    survive. Both of those land on the published ring AND the independently
+    confirmed start at once, from one letter -- two constraints, which chance
+    does not satisfy together.
+
+    Stops at one letter deliberately. Two would be 9375 variants, and even in
+    the trusted-ring case that is ~0.53 expected false positives -- the same
+    order as a real answer, so a hit would no longer be evidence.
+    """
+    out = []
+    ind = grund + enc
+    if trusted_ring:
+        targets = [(ring, start)]
+    else:
+        targets = (cands if cands is not None
+                   else class_members(ring, start, wheels))
+    for pos in range(6):
+        for c in ALPHABET:
+            if c == ind[pos]:
+                continue
+            v = ind[:pos] + c + ind[pos + 1:]
+            g, e = v[:3], v[3:]
+            for r, s in targets:
+                if enigma_ref.decrypt(e, wheels, r, g, plugs, refl) == s:
+                    out.append(dict(grund=g, enc=e, ring=r, start=s, pos=pos,
+                                    was=ind[pos], now=c, trusted=trusted_ring))
+    return out
 
 
 def solve(messages, ring, wheels, plugs, refl="B"):
@@ -193,11 +256,12 @@ def normalise_date(text):
 def group_by_day(records):
     days = {}
     for r in records:
-        days.setdefault((r["date"], r["refl"], r["wheels"], r["plugs"]), []).append(r)
+        key = (r["date"], r["refl"], r["wheels"], r["plugs"])
+        days.setdefault(key, []).append(r)
     return days
 
 
-def corpus_report(only_date=None, out=sys.stdout):
+def corpus_report(only_date=None, out=sys.stdout, fixes=False):
     records = read_corpus()
     if only_date:
         # The corpus writes "09 Sep 1941"; the day-key tables and this script's
@@ -220,65 +284,119 @@ def corpus_report(only_date=None, out=sys.stdout):
     print("# %d messages carrying an indicator, in %d day-key groups.\n"
           % (len(records), len(days)), file=out)
     print("%-8s %-22s %5s %6s %-8s %-6s %-5s %s"
-          % ("msg", "date", "len", "class", "indicator", "ring", "rec", "verdict"),
-          file=out)
+          % ("msg", "date", "len", "class", "indicator", "ring", "rec",
+             "verdict"), file=out)
 
     stats = dict(unique=0, agree=0, multi=0, none=0)
     day_lines = []
-    for (date, refl, wheels, plugs), msgs in sorted(days.items(), key=lambda kv: kv[1][0]["no"]):
+    failures = []
+    for (date, refl, wheels, plugs), msgs in sorted(
+            days.items(), key=lambda kv: kv[1][0]["no"]):
         ring = msgs[0]["ring"]
         per, agreed = solve(
-            [(m["no"], m["start"], m["grund"], m["enc"], m["ct"], m["pt"]) for m in msgs],
-            ring, wheels, plugs, refl)
+            [(m["no"], m["start"], m["grund"], m["enc"], m["ct"], m["pt"])
+             for m in msgs], ring, wheels, plugs, refl)
         for m in msgs:
             hits = per[m["no"]]
-            n_class = len(same_decrypt(class_members(m["ring"], m["start"], wheels),
-                                       m["ct"], m["pt"], wheels, plugs, refl)
-                          if m["ct"] and m["pt"]
-                          else class_members(m["ring"], m["start"], wheels))
+            members = class_members(m["ring"], m["start"], wheels)
+            n_class = len(
+                same_decrypt(members, m["ct"], m["pt"], wheels, plugs, refl)
+                if m["ct"] and m["pt"] else members)
             if not hits:
                 verdict, key = "no match (indicator misread?)", "none"
+                failures.append((m, n_class))
             elif len(hits) > 1:
                 verdict, key = "%d candidates" % len(hits), "multi"
             elif hits[0] == m["ring"]:
                 verdict, key = "unique, = recorded ring", "unique"
             else:
-                verdict, key = "unique, RECORDED RING IS A REPRESENTATIVE", "agree"
+                verdict = "unique, RECORDED RING IS A REPRESENTATIVE"
+                key = "agree"
             stats[key] += 1
             print("%-8s %-22s %5s %6d %-8s %-6s %-5s %s"
-                  % (m["no"], m["date"], len(m["ct"]) if m["ct"] else "?", n_class,
+                  % (m["no"], m["date"],
+                     len(m["ct"]) if m["ct"] else "?", n_class,
                      m["grund"] + " " + m["enc"], hits[0] if hits else "-",
                      m["ring"], verdict), file=out)
         if len(msgs) > 1:
             voted = sum(1 for m in msgs if per[m["no"]])
             day_lines.append("%-22s %d of %d messages voted -> %s"
-                             % (date, voted, len(msgs), agreed or "no agreement"))
+                             % (date, voted, len(msgs),
+                                agreed or "no agreement"))
 
-    print("\n# %d unique and equal to the recorded ring, %d unique but DIFFERENT"
-          " (recorded ring was a class\n# representative), %d ambiguous, %d no match."
-          % (stats["unique"], stats["agree"], stats["multi"], stats["none"]), file=out)
+    print("\n# %d unique and equal to the recorded ring, %d unique but"
+          " DIFFERENT (recorded ring was a\n# class representative),"
+          " %d ambiguous, %d no match."
+          % (stats["unique"], stats["agree"], stats["multi"],
+             stats["none"]), file=out)
     if day_lines:
-        print("\n# Joint over each multi-message day key -- this is what removes the"
-              "\n# residual ambiguity, since one message can leave two candidates:",
-              file=out)
+        print("\n# Joint over each multi-message day key -- this is what"
+              "\n# removes the residual ambiguity, since one message can"
+              "\n# leave two candidates:", file=out)
         for line in day_lines:
             print("#   " + line, file=out)
+    if fixes and failures:
+        report_fixes(failures, out)
     return stats
 
 
+def report_fixes(failures, out=sys.stdout):
+    """--suggest-fix: name the misread letter where the evidence supports it."""
+    print("\n# --suggest-fix: single-letter corrections to the %d indicators"
+          "\n# that no ring satisfies." % len(failures), file=out)
+    print("#\n# A ring recorded with a left ring of A is a class"
+          "\n# REPRESENTATIVE,"
+          "\n# so a variant there may satisfy any of the ~500 class members and"
+          "\n# ~4 hits are expected by chance. Where the ring is the published"
+          "\n# one, the variant must reproduce that exact start: 150 tests at"
+          "\n# 1/17576, so a hit names the letter.", file=out)
+    for m, n_class in failures:
+        trusted = m["ring"][0] != "A"
+        cands = None
+        if not trusted:
+            members = class_members(m["ring"], m["start"], m["wheels"])
+            cands = (same_decrypt(members, m["ct"], m["pt"], m["wheels"],
+                                  m["plugs"], m["refl"])
+                     if m["ct"] and m["pt"] else members)
+        hits = suggest_fix(m["ring"], m["start"], m["grund"], m["enc"],
+                           m["wheels"], m["plugs"], m["refl"],
+                           trusted_ring=trusted, cands=cands)
+        head = "#   Nr %-6s %s %s  ring %s%s" % (
+            m["no"], m["grund"], m["enc"], m["ring"],
+            "" if trusted
+            else " (a representative -- hits below are not evidence)")
+        print(head, file=out)
+        if not hits:
+            print("#       no single-letter correction reaches the"
+                  " recorded start", file=out)
+            continue
+        for h in hits:
+            note = "names the letter" if h["trusted"] else "chance-level"
+            print("#       %s %s   (%s->%s at position %d),"
+                  " ring %s -> start %s   [%s]"
+                  % (h["grund"], h["enc"], h["was"], h["now"], h["pos"] + 1,
+                     h["ring"], h["start"], note), file=out)
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", action="store_true",
-                    help="survey every corpus message that carries an indicator")
-    ap.add_argument("--date", help="restrict --corpus to one date, e.g. 09.09.1941")
+                    help="survey every corpus message with an indicator")
+    ap.add_argument("--date",
+                    help="restrict --corpus to one date, e.g. 09.09.1941")
+    ap.add_argument("--suggest-fix", action="store_true",
+                    help="for indicators no ring satisfies, look for a single "
+                         "misread letter that would explain them")
     ap.add_argument("--wheels", help="wheel order, e.g. 342")
     ap.add_argument("--ring", help="any ring in the class, e.g. ALZ")
     ap.add_argument("--plugs", default="", help='plugboard, e.g. "AZ DV ET"')
     ap.add_argument("--reflector", default="B")
     ap.add_argument("--msg", action="append", default=[],
                     metavar="START:GRUND:ENC",
-                    help="one message: its start (in the same class as --ring), "
+                    help="one message: its start (in the same class as"
+                         " --ring), "
                          "and the indicator's two groups. Repeatable.")
     ap.add_argument("--no-selftest", action="store_true",
                     help="skip checking enigma_ref against ./enigma")
@@ -291,7 +409,7 @@ def main():
         enigma_ref.selftest()
 
     if args.corpus or args.date:
-        corpus_report(args.date)
+        corpus_report(args.date, fixes=args.suggest_fix)
         return
     if not (args.wheels and args.ring and args.msg):
         ap.error("give --corpus, or --wheels/--ring with at least one --msg")
@@ -300,7 +418,8 @@ def main():
     for i, spec in enumerate(args.msg):
         parts = spec.split(":")
         if len(parts) != 3 or any(len(p) != 3 for p in parts):
-            ap.error("--msg wants START:GRUND:ENC, three letters each: %r" % spec)
+            ap.error("--msg wants START:GRUND:ENC, three letters each: %r"
+                     % spec)
         messages.append(("msg%d" % (i + 1),) + tuple(p.upper() for p in parts))
 
     per, agreed = solve(messages, args.ring.upper(), args.wheels,
@@ -311,8 +430,27 @@ def main():
         print("\nagreed across all %d messages: %s"
               % (len(messages), agreed or "none"))
     if not agreed:
-        print("\nNo ring satisfies every indicator. Either one is misread, or the"
-              "\nstart given is not in the same class as --ring.", file=sys.stderr)
+        print("\nNo ring satisfies every indicator. Either one is misread,"
+              "\nor the start given is not in the same class as --ring.",
+              file=sys.stderr)
+        if args.suggest_fix:
+            for label, start, grund, enc in messages:
+                if per[label]:
+                    continue
+                # No ciphertext here, so the class cannot be narrowed and the
+                # ring cannot be trusted -- report at chance level and say so.
+                hits = suggest_fix(args.ring.upper(), start, grund, enc,
+                                   args.wheels, args.plugs.upper(),
+                                   args.reflector, trusted_ring=False)
+                print("%-8s single-letter variants that some class member "
+                      "satisfies (chance-level, ~4 expected):" % label)
+                for h in hits or []:
+                    print("           %s %s   (%s->%s at position %d), ring %s "
+                          "-> start %s" % (h["grund"], h["enc"], h["was"],
+                                           h["now"], h["pos"] + 1, h["ring"],
+                                           h["start"]))
+                if not hits:
+                    print("           none")
         sys.exit(1)
 
 

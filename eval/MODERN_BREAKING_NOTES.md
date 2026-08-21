@@ -1145,6 +1145,39 @@ like. ~11% bad indicator transcriptions is unremarkable, and it is the reason
 the intersection ignores empty votes rather than letting one bad form veto a
 day.
 
+**`--suggest-fix` names the misread letter where the evidence supports it**, and
+says so where it does not. It sweeps all 150 single-letter variants of a failing
+indicator; what makes a hit evidence is *what the variant has to hit*:
+
+- **Published ring** — the recorded ring and start are the true ones, so the
+  variant must reproduce that exact start at that exact ring. 150 tests at
+  1/17576: **0.0085 expected false positives**. A hit is a diagnosis.
+- **Representative ring** — the true ring is unknown, so a variant may satisfy
+  any of the ~500 class members. ~75 000 tests, **~4 expected false positives**.
+  A hit means nothing on its own.
+
+That gap is the whole design, and it is not hypothetical: unfiltered, the sweep
+returns hits for four of the six, and only the two published-ring hits survive.
+
+| | reported | correction |
+|---|---|---|
+| Nr 161 | `IPG PHA` → `IPG BHA` | `P`→`B`, position 4 |
+| Nr 197 | `QCV MLN` → `QCV MZN` | `L`→`Z`, position 5 |
+
+Each lands on the published ring **and** the independently confirmed start at
+once — two constraints from one letter, which chance does not satisfy together.
+`P`/`B` and `L`/`Z` are both plausible in that hand. The other four have no
+single-letter explanation, so they are worse than one slip; Nr 126 is
+suggestive, its recorded start `GUT` being identical to the indicator's second
+group.
+
+It stops at one letter deliberately: two would be 9375 variants, which even on a
+published ring is ~0.53 expected false positives — the same order as a real
+answer, so a hit would no longer be evidence.
+
+**It suggests only.** The corpus indicator fields record what the forms say and
+are not edited by any of this.
+
 `build_army_messages_1941.py` now cross-checks every indicator as it builds, so
 a future misread one is reported instead of sitting unnoticed. It reports
 rather than fails: a mismatch is ambiguous between a bad indicator and a
