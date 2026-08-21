@@ -1,0 +1,26 @@
+# Does a SECOND message on the same day key rescue a SCORING failure?
+# eval/joint_score_gain.py, seed 1, real climb at -R 8, wehrmacht quadgrams.
+#
+52 authentic telegraphic plaintexts, model 'wehrmacht',
+real climb at -R 8
+
+    L  trials     scoring    rescued by  still lost
+                 failures     message 2            
+   60    2000         387      387  100%           0
+   80    2000         187      187  100%           0
+  100    2000          38       38  100%           0
+
+  A scoring failure is a climbed board scoring >= the true
+  board on message 1. 'Rescued' = the true board wins once
+  message 2 is added, its start DERIVED from each board tested.
+#
+# Why 100%, and not the sqrt(2) a plain joint score would give: the true
+# board derives the CORRECT start for message 2 and collects a full German
+# decrypt, while a climbed impostor derives a wrong one and collects noise.
+# The impostor is nowhere near the truth -- mean correct plugs 0.6 at L=60
+# and 1.3 at L=80, deriving the right start2 in 1% and 8% of cases.
+#
+# SCOPE: the climb runs at the TRUE rotor key, so this isolates scoring from
+# search by construction. It says nothing about the case where the climb
+# never reaches the board, which below ~110 letters is far more common.
+# Scoring failures also thin out with length: the L=100 cell rests on 38.

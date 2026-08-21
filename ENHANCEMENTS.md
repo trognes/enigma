@@ -217,6 +217,37 @@ decrypts against ~10⁴·`R` for the climbs and turns message 2 from a
 confirmation of the winner into a second opinion on every candidate the search
 produced.
 
+**MEASURED, and on scoring failures it is total.** `eval/joint_score_gain.py`
+(2000 trials per length, the real climb at `-R 8`, true rotor key given so that
+scoring is isolated from search by construction; raw numbers in
+`eval/results-joint-score-gain.txt`):
+
+| L | scoring failures | rescued by message 2 |
+|---:|---:|---:|
+| 60 | 387 of 2000 | **387 (100%)** |
+| 80 | 187 of 2000 | **187 (100%)** |
+| 100 | 38 of 2000 | **38 (100%)** |
+
+Every one. And it is *not* the √2 a plain joint score would give — it is the
+asymmetry: the true board derives the **correct** start for message 2 and
+collects a full German decrypt, while a climbed impostor derives a wrong one
+and collects noise. The impostor is nowhere near the truth (mean correct plugs
+0.6 at L = 60, 1.3 at L = 80; it derives the right start2 in 1% and 8% of
+cases), so it gets nothing. So the scoring floor — an information limit no
+search can cross, and the thing `-a` was built to erode — is simply **gone**
+for a message with a same-day partner.
+
+*Two harness errors, both caught only because the mechanism was checked rather
+than the headline.* The first version scored random wrong ROTOR KEYS against
+the true board: z = 9.6 at L = 60 against a 5.3 bar with the true key first in
+100% of trials, i.e. **no scoring failures at all** — a board never fitted to
+the ciphertext is not a competitor. The second version compared boards as
+STRINGS while the binary normalises pair order, so the same board spelled two
+ways counted as different: **40% of the L = 100 "failures" were the true board
+itself**, producing a clean 100/92/57% falling-with-length trend and a
+plausible story to explain it. Compare boards through `pair_set()`, never as
+strings.
+
 **Its limitation is the one that matters.** It fires only when message 1's
 climb recovered the board at 9/10 plugs or better — 12% of the time at L = 82
 with `-R 8`, 32% at `-R 64`. It converts *"the climb worked but the score is
