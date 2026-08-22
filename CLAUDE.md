@@ -3007,7 +3007,15 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   installs the binary). Run them before pushing, and grep clang-tidy's output
   for `error:` rather than for the names you touched: it suppresses ~24 000
   warnings from system headers and reports its own findings at file scope, so a
-  name-filtered grep looks clean when it is not. **A clean tree reports ZERO
+  name-filtered grep looks clean when it is not. **Two findings that a newer
+  clang-tidy reports and the runner's does not have now been fixed** — an
+  `ArrayBound` on `set_effective_reflector()`'s Greek offset (the analyser
+  cannot see that `(start − ring) mod 26` is in range across a translation
+  unit, so the invariant is now asserted) and a
+  `bugprone-throwing-static-initialization` on the sweep's start timestamp
+  (a static `steady_clock::time_point`, now held as the raw tick count).
+  Neither was a live bug; both made the "zero `error:` lines" bar unreachable
+  on a recent LLVM. **A clean tree reports ZERO
   `error:` lines, so any count above zero is a red CI job** — an earlier version
   of this sentence said clang-tidy "prints one file-scope error", which reads as
   a standing benign one; it is not, and a `bugprone-implicit-widening-of-
