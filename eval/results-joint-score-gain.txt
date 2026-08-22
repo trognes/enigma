@@ -189,3 +189,23 @@ real climb at -R 8
 #
 # Neither touches what dominates short texts: the climb not reaching the board
 # at all, 75-99% of trials at every length here.  That is a SEARCH problem.
+#
+# DOES RAISING -R OPEN THE CONVERSION DOOR?  No -- 350 trials per cell:
+#
+#     L    -R   answer right   wrong, truth in restarts   truth absent
+#    60     8           4.3%                       0.0%          95.7%
+#    60    32           6.6%                       0.0%          93.4%
+#    60   100          11.7%                       0.0%          88.3%
+#    80     8           9.1%                       0.0%          90.9%
+#    80    32          19.4%                       0.0%          80.6%
+#    80   100          28.6%                       0.3%          71.1%
+#
+# Restarts help enormously (9.1% -> 28.6% exact at L=80) but move trials from
+# "truth absent" straight to "answer right", never through the middle column.
+# THE TWO POPULATIONS ARE DISJOINT: when a restart finds the true board it also
+# wins on message 1, so there is never a board for joint scoring to promote.
+#
+# That also explains the scoring failures.  A scoring failure means the search
+# converged on a board scoring HIGHER than the truth, so the truth is not the
+# model's optimum and no restart climbs to it -- it is not the top of any hill.
+# More restarts just locate the better-scoring impostor more reliably.
