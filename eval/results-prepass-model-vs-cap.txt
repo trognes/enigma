@@ -97,6 +97,49 @@
 # the length-dependent recommendation the tool already ships.
 #
 # ============================================================================
+# THE CAP ROW SURVIVED A CHALLENGE -- AND THE CHALLENGE FOUND SOMETHING ELSE
+# ============================================================================
+#
+# `f10` vs `f4f10` differ by TWO things, not one: the cap, and the fact that
+# the second is a two-STAGE schedule.  Calling that row "the cap" assumes the
+# extra stage is free.  Checked, at L = 167, 300 paired trials:
+#
+#   f10 vs f10f10   +0.00pp, 95% CI [+0.00, +0.00], 0 discordant
+#
+# An extra stage with the SAME model and SAME cap is an exact no-op -- a
+# converged stage re-converges immediately.  So the -4.36pp is the cap, and
+# the row is correctly labelled.
+#
+# BUT THE IC PRE-PASS CAP IS INERT WHERE IT MATTERS, which is what stopped
+# experiment B:
+#
+#   i1f10 vs i4f10  +0.00pp, 95% CI [-0.00, +0.01], 0 discordant of 2000
+#                   exact recovery 1569 vs 1569, score_iter within 0.01%
+#
+# Caps 1 and 4 on an IC pre-pass produce the SAME SEARCH, trial for trial.  So
+# a cap sweep over an IC pre-pass measures nothing, and B cannot be run as
+# designed.  `i1f10` vs `if10` (uncapped) DOES differ -- 41 discordant of 200,
+# 20% more score_iter -- so the mechanism works; it just has no grip in 1..4.
+#
+# THE CAP IS NOT INERT IN GENERAL, and an intermediate claim here that it was
+# came from a single -R 1 run and was wrong.  Final plug counts at -R 4:
+#
+#   f4 -> 7    f10 -> 10    i4 -> 8    i10 -> 10
+#
+# The cap does pull the count down.  What it cannot do, per CLAUDE.md's -M
+# entry, is pull an OVER-cap board down by itself: at/over the cap only adds
+# are blocked, and the default `--random 10` kick starts every restart at ten
+# plugs, so a tight cap has nothing to block.  That is the documented "flat
+# plateau ... -M is what makes a tight cap bite", and it is why the grip is
+# model-dependent and weak at the low end.
+#
+# WHAT IS UNRESOLVED: why cap 1 and cap 4 give identical results through an IC
+# pre-pass when, as sole stages, they converge on different plug counts.  The
+# following f10 stage evidently erases that difference -- yet the pre-pass
+# MODEL survives the same f10 stage with a 17.84pp effect.  Not explained
+# here, and not guessed at.
+#
+# ============================================================================
 # WHAT THIS DOES NOT SETTLE
 # ============================================================================
 #

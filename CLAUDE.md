@@ -1003,7 +1003,17 @@ are read from a **data directory** (filenames built as
   > model both sides): −4.36pp at L=167 and nothing measurable at L=60. So the
   > pre-pass's value is **in the model, not the cap, by 4×** — and note the
   > cap's own length dependence runs opposite to the naive expectation that
-  > capping should matter most where the least text is available.
+  > capping should matter most where the least text is available. That row
+  > isolates the cap and not the extra stage: `f10` against `f10f10` reads
+  > +0.00pp with zero discordant trials, a converged stage re-converging
+  > immediately.
+  >
+  > **But a stage cap in 1…4 is INERT on an IC pre-pass** — `i1f10` against
+  > `i4f10` is 0 discordant of 2000, identical exact recovery, `score_iter`
+  > within 0.01%. The `-M` entry below explains it: without `-M` the cap only
+  > blocks *adds*, and the default `--random 10` kick starts every restart at
+  > ten plugs, so a tight cap has nothing to block. Sweeping such a cap
+  > measures nothing; use `-M`, or a kick smaller than the cap.
 
   **The recommended target is now `a` (weighted), staged as
   `--score m4a10`** (mono pre-pass then

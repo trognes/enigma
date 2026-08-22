@@ -208,13 +208,45 @@ zero and IC +2.81pp at 167; this reads +2.21pp (p = 0.015) and +3.86pp
 genuine: the same length and trial count resolves 2.21pp, so the instrument is
 not blind there, the cap simply does not move it.
 
+**The cap row was challenged and survived.** `f10` and `f4f10` differ by *two*
+things — the cap, and being a two-stage schedule — so labelling that row "the
+cap" assumes the extra stage is free. It is: `f10` vs `f10f10` reads +0.00pp,
+CI [+0.00, +0.00], zero discordant, because a converged stage re-converges
+immediately. The −4.36pp is the cap.
+
 **Not settled: only `-R 8` was run.** §6.10 established the pre-pass ordering is
 restart-budget-dependent, so none of this should be assumed to hold at the high
 `-R` the restart ladder now recommends — the `f4` trap in particular might
 soften where many restarts can recover from over-commitment.
 
-**B. Cap sweep — also no code.** `i2f10` / `i4f10` / `i6f10` / `i8f10`. The 4
-appears never to have been swept.
+**B. Cap sweep — BLOCKED AS DESIGNED; the IC pre-pass cap is inert.** The plan
+was `i1f10` … `i6f10` against the `i4f10` default. The first cell killed it:
+
+| | diff | CI | discordant |
+|---|---:|---|---:|
+| `i1f10` vs `i4f10` | +0.00pp | [−0.00, +0.01] | **0 of 2000** |
+
+Identical exact recovery (1569 both) and `score_iter` within 0.01% — caps 1 and
+4 on an IC pre-pass run the *same search*, trial for trial, so sweeping them
+measures nothing.
+
+**Why, and it is documented.** Without `-M` the cap is only a *growth ceiling* —
+at or over it, adds are blocked but count-preserving moves are not — and the
+default `--random 10` kick starts every restart at ten plugs, so a tight cap
+has nothing to block. That is CLAUDE.md's "flat plateau … `-M` is what makes a
+tight cap bite", and it should have been read before the sweep was launched.
+
+**The cap is not inert in general**, so do not over-correct: `i1f10` vs `if10`
+(uncapped) *does* differ (41 discordant of 200, 20% more `score_iter`), and
+final plug counts at `-R 4` are `f4` → 7, `f10` → 10, `i4` → 8, `i10` → 10. The
+grip is model-dependent and simply absent in 1…4 for IC.
+
+**To ask the intended question** the cap has to bite: add `-M`, or use a kick
+smaller than the cap. Both move off the recommended recipe, so it is a
+deliberate choice rather than a default. **Unresolved:** why caps 1 and 4 give
+identical results *through* an IC pre-pass when as sole stages they converge on
+different plug counts — the following `f10` stage erases that difference, yet
+the pre-pass *model* survives the same stage with a 17.84pp effect.
 
 **C. Third-moment coincidence — MEASURED DOWN, do not build the token.** The
 offline gate ran and Σf³ failed it (`eval/coincidence_order_probe.py`, results

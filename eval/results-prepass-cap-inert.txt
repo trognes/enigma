@@ -1,0 +1,9 @@
+### L=167  arms: i1f10 i4f10
+L=167  n=2000  -R 8  seed=4242
+  i1f10: mean %correct  81.42   exact 1569/2000   score_iter 52,606,461
+  i4f10: mean %correct  81.41   exact 1569/2000   score_iter 52,612,819
+  McNemar on exact: i1f10-only 0, i4f10-only 0, discordant 0, p=1.000
+  paired diff (i1f10-i4f10):  +0.00 pp  95% CI [-0.00, +0.01]   (negative = i4f10 ahead)
+
+### L=167  arms: i2f10 i4f10
+# corpus 7400 letters of authentic HG Nord decrypts
