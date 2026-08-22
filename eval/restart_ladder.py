@@ -356,11 +356,18 @@ def main():
                           % (R, kind, 0.0, "-", "-", "-", "-", scale))
                     continue
                 k = len(ranks)
-                print("%6d %7s %8.1f%% %7.0f%% %7.0f%% %7d %7d %7.0f"
+                # A p90 needs enough observations to BE a p90.  The estimator
+                # is nearest-rank, so below k = 20 the index lands on the last
+                # element and the column silently becomes "worst of k" -- a
+                # single trial reading as a distributional tail.  Print it only
+                # when it means what the header says.
+                p90 = ("%7d" % ranks[min(k - 1, int(0.9 * k))]
+                       if k >= 20 else "%7s" % "-")
+                print("%6d %7s %8.1f%% %7.0f%% %7.0f%% %7d %s %7.0f"
                       % (R, kind, 100.0 * k / n,
                          100.0 * sum(1 for r in ranks if r == 1) / k,
                          100.0 * sum(1 for r in ranks if r <= TOPK) / k,
-                         ranks[k // 2], ranks[min(k - 1, int(0.9 * k))],
+                         ranks[k // 2], p90,
                          scale))
 
         # What the winning board LOOKS like, split by class: a search failure
@@ -414,6 +421,8 @@ def main():
     print("  present  = share of trials whose converged boards include such")
     print("             a board; the rank columns are over those trials only")
     print("  top 8    = share of them inside the re-ranking window above")
+    print("  p90      = 90th percentile rank, nearest-rank; blank under 20")
+    print("             observations, where it would just be the worst one")
     print("  of n     = mean distinct converged boards, the scale a rank is")
     print("             read against")
     print("  plugs/10 = mean plugs the winning board shares with the truth")
