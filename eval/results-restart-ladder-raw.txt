@@ -1,0 +1,270 @@
+52 authentic telegraphic plaintexts, model 'wehrmacht', 350 trials/cell,
+recipe -c -f -S i4f10 -J --polish, rotor key GIVEN,
+a board counts as RECOVERED at >= 50% of the plaintext
+
+L = 40
+    -R   recov50    exact    mean%   scoring   visited
+     8      1.4%     0.3%      9.5       90%      1.1%
+    32      2.9%     0.6%     10.9       94%      1.1%
+   100      1.7%     0.6%     10.6       96%      2.3%
+   316      2.9%     0.9%     11.6       97%      2.3%
+  1000      3.7%     1.4%     12.5       97%      2.3%
+  2000      3.7%     1.4%     12.5       97%      2.3%
+  5000      4.0%     1.4%     12.6       98%      2.6%
+
+        of the trials that did NOT recover, did the search PRODUCE
+        a board clearing 50%, and does joint re-ranking find it?
+    -R     conv   absent   promoted    n good  best rank
+     8     0.9%    97.7%        1/3       1.0          4
+    32     2.0%    95.1%        3/7       1.3          5
+   100     6.6%    91.7%       1/23       1.3          9
+   316     9.4%    87.7%       1/33       1.7         18
+  1000    12.6%    83.7%       3/44       2.3         46
+  2000    16.3%    80.0%       4/57       2.4         65
+  5000    22.6%    73.4%       3/79       2.8        146
+
+        where a GOOD board sits in the search's own ranking of the boards
+        it converged on -- the true one, and the best one clearing 50%
+    -R   board   present   rank 1    top 8  median     p90    of n
+     8    true      0.3%     100%     100%       1       -       8
+     8   any50      2.0%      57%     100%       1       -       8
+    32    true      0.6%     100%     100%       1       -      29
+    32   any50      4.6%      56%      88%       1       -      29
+   100    true      0.6%     100%     100%       1       -      78
+   100   any50      8.3%      28%      76%       3      25      78
+   316    true      0.9%     100%     100%       1       -     200
+   316   any50     12.3%      28%      67%       4      44     200
+  1000    true      2.0%      86%      86%       1       -     474
+  1000   any50     16.3%      25%      51%       8     121     474
+  2000    true      2.3%      75%      75%       1       -     762
+  2000   any50     20.0%      20%      41%      15     160     762
+  5000    true      2.9%      60%      70%       1       -    1356
+  5000   any50     26.6%      16%      33%      22     351    1356
+
+        the winning board on SCORING failures (it OUTSCORES the truth)
+    -R      n  plugs/10       pct      lead   start2
+     8    311      0.65      8.3      79.5     0.0%
+    32    321      0.70      8.8      84.4     0.3%
+   100    330      0.72      9.2      86.4     0.3%
+   316    329      0.77      9.4      88.4     0.3%
+  1000    327      0.79      9.7      89.9     0.3%
+  2000    328      0.77      9.6      90.0     0.3%
+  5000    329      0.77      9.6      89.9     0.3%
+
+        the winning board on SEARCH failures (the truth OUTSCORES it)
+    -R      n  plugs/10       pct      lead   start2
+     8     34      0.79     10.4     -15.7     0.0%
+    32     19      0.89     11.3     -15.3     0.0%
+   100     14      1.07     11.8     -16.7     0.0%
+   316     11      1.18     11.1     -12.8     0.0%
+  1000     10      1.50     11.5     -11.5     0.0%
+  2000      9      1.44     12.8     -12.5     0.0%
+  5000      7      1.29      8.6     -12.1     0.0%
+
+L = 60
+    -R   recov50    exact    mean%   scoring   visited
+     8      6.0%     4.3%     13.9       54%      0.3%
+    32      9.1%     6.9%     17.6       62%      1.1%
+   100     12.9%     9.1%     20.2       67%      2.0%
+   316     16.9%    11.7%     23.2       72%      3.1%
+  1000     25.4%    16.6%     30.4       80%      2.9%
+  2000     26.9%    17.7%     32.0       82%      3.4%
+  5000     30.3%    20.0%     34.8       85%      3.4%
+
+        of the trials that did NOT recover, did the search PRODUCE
+        a board clearing 50%, and does joint re-ranking find it?
+    -R     conv   absent   promoted    n good  best rank
+     8     0.3%    93.7%        0/1       1.0          4
+    32     1.7%    89.1%        0/6       1.0          6
+   100     4.9%    82.3%       3/17       1.0          8
+   316    10.9%    72.3%       4/38       1.2         15
+  1000    15.4%    59.1%       3/54       1.7         25
+  2000    18.9%    54.3%       8/66       2.1         74
+  5000    23.7%    46.0%      13/83       2.4        129
+
+        where a GOOD board sits in the search's own ranking of the boards
+        it converged on -- the true one, and the best one clearing 50%
+    -R   board   present   rank 1    top 8  median     p90    of n
+     8    true      1.1%     100%     100%       1       -       8
+     8   any50      3.1%      82%     100%       1       -       8
+    32    true      4.3%     100%     100%       1       -      29
+    32   any50     10.0%      74%      94%       1       4      29
+   100    true      6.3%      95%     100%       1       1      80
+   100   any50     16.6%      69%      91%       1       6      80
+   316    true     10.0%      97%     100%       1       1     206
+   316   any50     27.4%      60%      83%       1      13     206
+  1000    true     16.0%      96%     100%       1       1     492
+  1000   any50     40.6%      63%      78%       1      22     492
+  2000    true     19.4%      90%      97%       1       2     791
+  2000   any50     45.7%      59%      74%       1      46     791
+  5000    true     22.9%      86%      96%       1       3    1414
+  5000   any50     54.0%      57%      71%       1     153    1414
+
+        the winning board on SCORING failures (it OUTSCORES the truth)
+    -R      n  plugs/10       pct      lead   start2
+     8    179      0.78      8.6      57.8     0.0%
+    32    198      0.86      9.4      62.8     0.0%
+   100    203      0.79      8.7      65.1     0.0%
+   316    209      0.84      8.8      66.8     0.0%
+  1000    208      0.89      8.9      68.5     0.0%
+  2000    210      0.96      9.5      68.5     0.0%
+  5000    208      0.95      9.5      69.6     0.0%
+
+        the winning board on SEARCH failures (the truth OUTSCORES it)
+    -R      n  plugs/10       pct      lead   start2
+     8    150      0.87      9.3     -44.9     0.0%
+    32    120      1.17     10.9     -37.5     0.8%
+   100    102      1.19     11.7     -33.4     1.0%
+   316     82      1.06     10.3     -27.7     0.0%
+  1000     53      1.15     11.1     -22.3     0.0%
+  2000     46      1.09     11.1     -22.7     0.0%
+  5000     36      1.08     10.5     -20.5     0.0%
+
+L = 80
+    -R   recov50    exact    mean%   scoring   visited
+     8     15.1%    13.4%     22.2       30%      0.3%
+    32     27.7%    23.7%     33.6       40%      0.3%
+   100     36.0%    30.0%     41.1       49%      1.7%
+   316     44.3%    36.0%     48.2       59%      1.4%
+  1000     52.6%    42.9%     55.5       71%      1.1%
+  2000     55.7%    45.4%     57.7       76%      1.1%
+  5000     58.6%    48.6%     60.3       82%      1.1%
+
+        of the trials that did NOT recover, did the search PRODUCE
+        a board clearing 50%, and does joint re-ranking find it?
+    -R     conv   absent   promoted    n good  best rank
+     8     0.3%    84.6%        0/1       1.0          2
+    32     0.9%    71.4%        0/3       1.3          6
+   100     5.7%    58.3%       4/20       1.1         10
+   316     6.9%    48.9%       4/24       1.2         24
+  1000     9.1%    38.3%       6/32       1.3         49
+  2000    12.0%    32.3%       9/42       1.6         75
+  5000    15.7%    25.7%       9/55       2.1        113
+
+        where a GOOD board sits in the search's own ranking of the boards
+        it converged on -- the true one, and the best one clearing 50%
+    -R   board   present   rank 1    top 8  median     p90    of n
+     8    true      9.1%     100%     100%       1       1       8
+     8   any50     12.0%      98%     100%       1       1       8
+    32    true     18.3%     100%     100%       1       1      29
+    32   any50     26.6%      97%      99%       1       1      29
+   100    true     27.1%      98%     100%       1       1      79
+   100   any50     39.7%      86%      94%       1       2      79
+   316    true     34.0%      98%     100%       1       1     206
+   316   any50     50.6%      86%      93%       1       3     206
+  1000    true     43.4%      98%      99%       1       1     490
+  1000   any50     61.7%      86%      91%       1       5     490
+  2000    true     46.9%      98%      99%       1       1     792
+  2000   any50     67.7%      83%      89%       1      14     792
+  5000    true     51.4%      96%      98%       1       1    1421
+  5000   any50     74.3%      79%      86%       1      29    1421
+
+        the winning board on SCORING failures (it OUTSCORES the truth)
+    -R      n  plugs/10       pct      lead   start2
+     8     89      1.22      9.4      44.9     0.0%
+    32    102      1.12      9.6      48.3     0.0%
+   100    109      1.11      9.6      48.9     0.0%
+   316    116      1.23     10.3      50.1     0.0%
+  1000    118      1.37     10.7      51.0     0.0%
+  2000    118      1.18      9.7      52.5     0.0%
+  5000    119      1.13      9.6      52.6     0.0%
+
+        the winning board on SEARCH failures (the truth OUTSCORES it)
+    -R      n  plugs/10       pct      lead   start2
+     8    208      1.00      8.9     -80.4     0.0%
+    32    151      0.88      9.6     -63.7     0.0%
+   100    115      1.07     10.9     -53.0     0.0%
+   316     79      1.00      9.9     -44.9     0.0%
+  1000     48      1.02     10.4     -32.5     0.0%
+  2000     37      0.92      9.4     -32.2     0.0%
+  5000     26      0.85      8.4     -27.2     0.0%
+
+L = 100
+    -R   recov50    exact    mean%   scoring   visited
+     8     26.6%    22.6%     33.3        8%      0.6%
+    32     44.3%    37.7%     49.0       12%      2.3%
+   100     55.1%    46.6%     58.4       18%      2.6%
+   316     64.6%    54.6%     66.7       27%      3.1%
+  1000     75.1%    64.3%     76.1       36%      2.3%
+  2000     79.7%    68.0%     80.0       44%      1.7%
+  5000     84.0%    71.7%     83.8       57%      1.7%
+
+        of the trials that did NOT recover, did the search PRODUCE
+        a board clearing 50%, and does joint re-ranking find it?
+    -R     conv   absent   promoted    n good  best rank
+     8     0.0%    73.4%          -         -          -
+    32     1.4%    54.3%        2/5       1.6          3
+   100     3.4%    41.4%       3/12       1.5          4
+   316     5.1%    30.3%       5/18       1.4          5
+  1000     6.3%    18.6%       4/22       1.6         16
+  2000     7.1%    13.1%       9/25       1.8         36
+  5000     6.9%     9.1%       9/24       2.2         57
+
+        where a GOOD board sits in the search's own ranking of the boards
+        it converged on -- the true one, and the best one clearing 50%
+    -R   board   present   rank 1    top 8  median     p90    of n
+     8    true     16.0%     100%     100%       1       1       8
+     8   any50     20.3%     100%     100%       1       1       8
+    32    true     30.6%     100%     100%       1       1      28
+    32   any50     40.6%      97%     100%       1       1      28
+   100    true     42.3%      99%     100%       1       1      77
+   100   any50     54.3%      94%     100%       1       1      77
+   316    true     53.7%      97%     100%       1       1     200
+   316   any50     67.7%      92%      98%       1       1     200
+  1000    true     64.3%      98%     100%       1       1     477
+  1000   any50     81.1%      92%      97%       1       1     477
+  2000    true     70.9%      96%     100%       1       1     769
+  2000   any50     86.6%      92%      96%       1       1     769
+  5000    true     75.1%      96%     100%       1       1    1375
+  5000   any50     90.9%      92%      96%       1       1    1375
+
+        the winning board on SCORING failures (it OUTSCORES the truth)
+    -R      n  plugs/10       pct      lead   start2
+     8     21      2.43     17.9      31.0     0.0%
+    32     24      2.21     16.0      31.4     0.0%
+   100     28      2.39     17.5      33.3     0.0%
+   316     33      2.30     16.4      32.3     0.0%
+  1000     31      2.52     17.6      37.0     0.0%
+  2000     31      2.26     16.6      40.8     0.0%
+  5000     32      2.38     17.0      40.3     0.0%
+
+        the winning board on SEARCH failures (the truth OUTSCORES it)
+    -R      n  plugs/10       pct      lead   start2
+     8    236      1.27      9.4    -120.7     0.4%
+    32    171      1.31     10.3     -96.9     1.2%
+   100    129      1.24     10.2     -80.9     1.6%
+   316     91      1.32     10.6     -67.3     0.0%
+  1000     56      1.14      9.5     -54.6     0.0%
+  2000     40      1.27     10.9     -53.7     0.0%
+  5000     24      1.00      9.1     -44.1     0.0%
+
+  recov50  = the reported board decrypts >= 50% of message 1
+  exact    = it is the true board, plug for plug
+  mean%    = mean %-correct over ALL trials, the graded signal
+  scoring  = share of NON-RECOVERED trials whose winner outscores
+             the true board (a scoring failure, not a search one)
+  visited  = a board clearing 50%% was echoed on a progress line,
+             i.e. a climb PASSED THROUGH one and kept going up.
+             A LOWER BOUND -- progress lines fire only above the
+             run's high-water mark
+  conv     = the answer did not read, but a CONVERGED board would
+  promoted = of those, how many joint re-ranking over the search's
+             own top-8 boards puts one of them first
+  n good   = converged boards clearing 50%%
+  best rank= where the best-SCORING one of them sits in the
+             search's own ranking (so top-8 is visibly enough,
+             or visibly not)
+  board    = which good board the rank is of: 'true' the true
+             one, 'any50' the best-scoring one clearing 50%%
+  present  = share of trials whose converged boards include such
+             a board; the rank columns are over those trials only
+  top 8    = share of them inside the re-ranking window above
+  p90      = 90th percentile rank, nearest-rank; blank under 20
+             observations, where it would just be the worst one
+  of n     = mean distinct converged boards, the scale a rank is
+             read against
+  plugs/10 = mean plugs the winning board shares with the truth
+  lead     = its score minus the truth's, in LOG UNITS over the
+             whole message (per-symbol score x length)
+  start2   = share deriving message 2's TRUE start from the
+             indicator -- six plugboard lookups, all must be right

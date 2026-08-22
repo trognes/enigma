@@ -1,124 +1,155 @@
-# Restarts out to -R 1000, and whether that opens the joint-scoring door.
+# Restarts out to -R 5000, judged at >= 50% of the plaintext recovered.
 #
-# eval/restart_ladder.py --trials 350 -L 60,80 -R 8,32,100,316,1000
+# eval/restart_ladder.py --trials 350 -L 40,60,80,100 \
+#     -R 8,32,100,316,1000,2000,5000
 #
 # 52 authentic telegraphic plaintexts (eval/enigma-army-messages-1941.txt),
 # model 'wehrmacht', recipe -c -f -S i4f10 -J --polish, ROTOR KEY GIVEN and
-# only the 10-pair plugboard hidden.  Every R in the ladder sees the same 350
-# trials (same board, key, plaintexts, indicators, climb seed), so the columns
-# are paired.  Second message: same day key, own indicator, its start DERIVED
-# per candidate board.
+# only the 10-pair plugboard hidden.  Every R sees the same 350 trials (same
+# board, key, plaintexts, indicators, climb seed), so the columns are paired.
+# Second message: same day key, own indicator, its start DERIVED per candidate
+# board.
 #
-# Extends eval/results-joint-score-gain.txt, whose ladder stopped at -R 100.
-# The trial set is NOT the same one (that sweep's generator was not committed;
-# this harness is), so the overlapping cells re-measure rather than reproduce.
-#
-# ============================================================================
-# THE LADDER
-# ============================================================================
-#
-#  L = 60
-#      -R    exact     conv   absent   promoted   scoring   visited
-#       8     4.3%     0.0%    95.7%          -       55%      0.0%
-#      32     6.9%     0.0%    93.1%          -       63%      0.3%
-#     100     9.1%     0.3%    90.6%        1/1       68%      0.3%
-#     316    11.7%     0.3%    88.0%        1/1       73%      0.3%
-#    1000    16.6%     0.9%    82.6%        3/3       80%      0.9%
-#
-#  L = 80
-#      -R    exact     conv   absent   promoted   scoring   visited
-#       8    13.4%     0.0%    86.6%          -       31%      0.0%
-#      32    23.7%     0.0%    76.3%          -       43%      0.6%
-#     100    30.0%     0.9%    69.1%        3/3       52%      1.1%
-#     316    36.0%     0.9%    63.1%        3/3       64%      1.4%
-#    1000    42.9%     1.7%    55.4%        6/6       75%      2.3%
-#
-#   exact    the search reported the true board
-#   conv     it did not, but some restart CONVERGED on the true board --
-#            the population joint scoring can act on
-#   absent   no restart ever reached it
-#   promoted of the conv trials, how many joint re-ranking over the search's
-#            own boards actually puts the truth first
-#   scoring  share of NON-EXACT trials whose winner outscores the truth
-#   visited  non-exact trials where the truth was echoed on a progress line,
-#            i.e. a climb PASSED THROUGH it and kept going uphill.  A LOWER
-#            BOUND: progress lines fire only above the run's high-water mark.
+# A BOARD COUNTS AS RECOVERED AT >= 50% OF THE PLAINTEXT.  Exact recovery is
+# reported beside it.  An earlier version of this file used exact recovery
+# only, at -R <= 1000; both of those choices materially changed the
+# conclusions, as below.
 #
 # ============================================================================
-# 1.  RESTARTS ARE STILL PAYING AT -R 1000.  NO FLATTENING.
+# 1.  RESTARTS ARE STILL PAYING AT -R 5000 -- except at L = 40
 # ============================================================================
 #
-# Exact recovery triples again over the range the previous sweep stopped at:
+# Recovery at >= 50% (exact recovery in brackets):
 #
-#   L=80   13.4% -> 23.7 -> 30.0 -> 36.0 -> 42.9%
-#   L=60    4.3% ->  6.9 ->  9.1 -> 11.7 -> 16.6%
+#     -R      L=40         L=60         L=80         L=100
+#      8   1.4% (0.3)   6.0% ( 4.3)  15.1% (13.4)  26.6% (22.6)
+#     32   2.9% (0.6)   9.1% ( 6.9)  27.7% (23.7)  44.3% (37.7)
+#    100   1.7% (0.6)  12.9% ( 9.1)  36.0% (30.0)  55.1% (46.6)
+#    316   2.9% (0.9)  16.9% (11.7)  44.3% (36.0)  64.6% (54.6)
+#   1000   3.7% (1.4)  25.4% (16.6)  52.6% (42.9)  75.1% (64.3)
+#   2000   3.7% (1.4)  26.9% (17.7)  55.7% (45.4)  79.7% (68.0)
+#   5000   4.0% (1.4)  30.3% (20.0)  58.6% (48.6)  84.0% (71.7)
 #
-# It is close to linear in log R -- about +6pp per 3.16x at L=80 and +4pp at
-# L=60 -- with the last step (316 -> 1000) worth +6.9pp and +4.9pp, i.e. the
-# largest single step at both lengths.  Whatever the ceiling is, -R 1000 is
-# not near it, and this is the plugboard sub-problem with the rotor key
-# already given, so a real sweep gets no cheaper.
+# The 1000 -> 5000 step is still worth +4.9pp at L = 60, +6.0pp at L = 80 and
+# +8.9pp at L = 100.  Nothing here is near a ceiling.
 #
-# ============================================================================
-# 2.  THE CONVERSION DOOR DOES OPEN -- AND IT IS FREE, BUT SMALL.
-# ============================================================================
+# L = 40 IS THE EXCEPTION and saturates hard: exact recovery is flat at 1.4%
+# from -R 1000 on, and 5000 restarts buy 4.0%.  Forty letters is past what
+# restarts can reach, which matches the scoring-failure share below (98%).
 #
-# results-joint-score-gain.txt closed this at -R 8..100: the truth was never
-# among the produced boards while a different board won (1 trial in 1200), so
-# joint re-ranking had nothing to promote.  It re-opens with R:
-#
-#   conv, L=80    0.0% -> 0.0 -> 0.9 -> 0.9 -> 1.7%
-#   conv, L=60    0.0% -> 0.0 -> 0.3 -> 0.3 -> 0.9%
-#
-# and when there IS something to promote, the second message promotes it
-# EVERY TIME: 9 of 9 across both lengths, no failures.  So at L=80, -R 1000,
-# joint re-ranking takes 42.9% -> 44.6%.
-#
-# +1.7pp is small beside the +6.9pp the last restart step bought -- but the
-# comparison is not like for like, and this is the part the earlier writeup
-# got wrong by omission.  The restarts cost 3.16x the compute.  The second
-# message costs ONE DECRYPT PER CANDIDATE BOARD against a run of a thousand
-# climbs, i.e. nothing.  If a same-day message with a known indicator is in
-# hand, take the 1.7pp; it is free.  It is simply not a substitute for -R.
-#
-# THE PROMOTION IS NOT AN ARTEFACT OF THE HARNESS HANDING IT THE TRUTH.  The
-# re-ranking adds the true board to the candidate set explicitly, so it would
-# report 9/9 even if the truth sat far below any list an attacker would keep.
-# It does not.  Its rank by message-1 score among the converged boards:
-#
-#   L=60   1, 2, 2          of 500 / 550 / 580 distinct boards
-#   L=80   2, 20, 1, 2, 1, 1  of 519 / 576 / 486 / 508 / 616 / 386
-#
-# Eight of nine are the top or the runner-up, so a top-8 list promotes 8 of 9
-# unaided; the ninth needs a top-20.  Keeping the whole dump is affordable
-# anyway -- joint-scoring 500 boards is 500 decrypts against 1000 climbs.
-#
-# Four of the nine have the truth at RANK 1, meaning it was the best converged
-# board and --polish then produced something better on message 1.  Those are
-# scoring failures manufactured by the finisher, and joint scoring undoes them.
+# THE 50% CRITERION IS WORTH ABOUT 10pp over exact at L = 60-100 and is the
+# operationally right bar -- a board missing two plugs still recovers most of
+# the message.  It changes no conclusion about the SHAPE of the curves.
 #
 # ============================================================================
-# 3.  THE RESIDUAL IS TURNING INTO THE INFORMATION FLOOR.
+# 2.  THE CONVERSION DOOR IS WIDE OPEN AT HIGH R -- the earlier reading was an
+#     artefact of stopping at -R 1000 and demanding an exact board
 # ============================================================================
 #
-# The scoring share of the misses rises monotonically with R:
+# `conv` = the reported answer did not clear 50%, but some CONVERGED restart
+# board would have.  That is the population joint scoring can act on, and it
+# grows by more than an order of magnitude across the ladder:
 #
-#   L=80   31% -> 43 -> 52 -> 64 -> 75%
-#   L=60   55% -> 63 -> 68 -> 73 -> 80%
+#     -R      L=40    L=60    L=80   L=100
+#      8     0.9%    0.3%    0.3%    0.0%
+#    100     6.6%    4.9%    5.7%    3.4%
+#   1000    12.6%   15.4%    9.1%    6.3%
+#   5000    22.6%   23.7%   15.7%    6.9%
 #
-# which is what saturation looks like from the inside: restarts retire the
-# SEARCH failures, and what is left is increasingly boards that outscore the
-# truth -- an information limit of the scoring model that no restart count
-# crosses.  At -R 1000 three quarters of the remaining misses at L=80 are of
-# that kind.
+# At L = 60, -R 5000, the search PRODUCES a good board in 23.7% of trials
+# where it reports a bad one -- against 0.3% at -R 8.  The previous writeup's
+# "one trial in 1200", and its successor's 1.7%, were both measured at low R
+# under the exact criterion.  Neither generalises.
 #
-# This is also why raising R does not open the door faster than it does.  A
-# scoring failure means the truth is not the model's optimum, so it is not the
-# top of any hill and no climb converges to it: the conv population can only
-# grow through the shrinking search-failure half.  The `visited` column says
-# the same thing from the trajectory side -- 2.3% at L=80/-R 1000 against a
-# conv of 1.7%, so the climb essentially never passes through the truth
-# without stopping on it.
+# ============================================================================
+# 3.  BUT JOINT RE-RANKING MOSTLY MISSES IT, AND THE CAUSE IS THE WINDOW
+# ============================================================================
+#
+# Of those conv trials, joint re-ranking over the search's own top-8 boards
+# promotes a good one only 4-38% of the time (3/79, 13/83, 9/55, 9/24 at
+# L = 40/60/80/100, -R 5000).  The reason is not that joint scoring fails; it
+# is that the good board is nowhere near the top of the search's own ranking.
+# Mean rank of the best 50%-clearing board on conv trials: 146, 129, 113, 57
+# at -R 5000 -- against a top-8 window.
+#
+# HOW DEEP A LIST WOULD BE NEEDED (share of conv trials whose good board is
+# within rank K -- a NECESSARY condition for a top-K re-rank to find it):
+#
+#     L      R      n    <=8   <=32  <=128  <=512
+#    40    100     23    70%    96%   100%   100%
+#    40   5000     79    22%    48%    70%    92%
+#    60    100     17    71%    94%   100%   100%
+#    60   5000     83    34%    65%    76%    93%
+#    80   5000     55    33%    55%    78%    93%
+#   100   5000     24    50%    67%    83%   100%
+#
+# So at -R 100 a top-8 list is nearly sufficient; at -R 5000 it holds a third
+# of the good boards and a top-128 list holds ~70-83%.
+#
+# WHAT THAT PROJECTS TO, clearly labelled as a PROJECTION.  Where the good
+# board IS inside the window, re-ranking promotes it about half the time
+# (L = 60: 13 promoted against ~28 in-window; L = 80: 9 against ~18).  Holding
+# that rate, a top-128 list would promote roughly 35-40% of conv trials rather
+# than 16% -- i.e. ~+8pp of recovery at L = 60, -R 5000, on top of 30.3%.
+# TREAT THAT AS OPTIMISTIC: deeper candidates score worse on message 1, so the
+# conditional promotion rate almost certainly falls with rank, and the
+# calculation assumes it does not.  The measurement is cheap and has not been
+# run.
+#
+# The cost argument favours a deep list: joint-scoring a candidate is one
+# decrypt and one score against a whole plugboard climb to have produced it.
+# The top-8 window is a limit of THIS HARNESS (two binary invocations per
+# candidate), not of the method.
+#
+# ============================================================================
+# 4.  WHAT THE SCORING FAILURES ARE -- more restarts find BETTER-SCORING
+#     impostors, not NEARER ones
+# ============================================================================
+#
+# The winning board on a scoring failure, mean plugs shared with the truth (of
+# 10) and its lead over the true board in log units over the whole message:
+#
+#          L=40           L=60           L=80          L=100
+#    -R   plugs  lead   plugs  lead   plugs  lead   plugs  lead
+#     8    0.65  79.5    0.78  57.8    1.22  44.9    2.43  31.0
+#  1000    0.79  89.9    0.89  68.5    1.37  51.0    2.52  37.0
+#  5000    0.77  89.9    0.95  69.6    1.13  52.6    2.38  40.3
+#
+# PLUG OVERLAP IS FLAT ACROSS A 625x RANGE OF -R while the LEAD GROWS.  These
+# are not near-misses the search is closing in on: they are unrelated boards
+# that fit the ciphertext better than the truth does, and more search finds
+# better ones.  They decrypt 8-18% of the message.
+#
+# SEARCH failures behave in the opposite way and are being retired: at L = 100
+# they fall from 236 trials to 24 and their deficit narrows from -120.7 to
+# -44.1 log units.  Hence the scoring share of the remaining misses rises with
+# R at every length -- L = 100 goes 8% -> 57%, L = 80 30% -> 82%, L = 40
+# 90% -> 98%.
+#
+# THE ASYMMETRY JOINT SCORING RELIES ON IS CONFIRMED AT SCALE.  An impostor
+# derives message 2's TRUE start from the indicator in 0.0-0.3% of cases at
+# every length and every R (n ~ 300 per cell) -- six plugboard lookups all have
+# to be right.  A correct board derives it always.
+#
+# ============================================================================
+# 5.  WHERE THE TRUE BOARD RANKS when the search does converge on it
+# ============================================================================
+#
+#            present at -R 5000     rank 1     within top 8
+#   L = 40          2.9%              60%           70%
+#   L = 60         22.9%              86%           96%
+#   L = 80         51.4%              96%           98%
+#   L = 100        75.1%              96%          100%
+#
+# When the search reaches the true board it also ranks it at or near the top --
+# so the true board is not the thing joint re-ranking has to dig for.  The deep
+# ranks in section 3 belong to the OTHER boards clearing 50%, which are far
+# more numerous (present in 54.0% of L = 60 trials against the truth's 22.9%)
+# and much worse ranked.
+#
+# Note the two rank tables cover different populations: this one is over ALL
+# trials including recovered ones, section 3's is over conv trials only.  That
+# is why a median rank of 1 coexists with a mean conv rank of 129.
 #
 # ============================================================================
 # SCOPE
@@ -126,9 +157,27 @@
 #
 # Rotor key given, so this is the plugboard tier alone; a real sweep must also
 # have the true key outscore millions of competitors.  Both messages are the
-# same length, so per-symbol scores sum without reweighting (unequal lengths
-# would need multiplying by nterms first).  Indicators are assumed read
-# correctly; ENHANCEMENTS 3a has what one wrong plug does to a derived start.
-# The plaintext pool is whole corpus messages, some of them corpus-flagged as
-# garbled, which is why these exact-recovery figures read a little under
-# CLAUDE.md's prepass_ab.py table at comparable lengths.
+# same length, so per-symbol scores sum without reweighting.  Indicators are
+# assumed read correctly (ENHANCEMENTS 3a has what one wrong plug costs).  The
+# plaintext pool is whole corpus messages, some corpus-flagged as garbled.
+# `scoring` keeps the repo's definition -- measured against the TRUE board, not
+# against the best available one -- since the claim it supports is that the
+# true board is not the model's optimum.
+#
+# ============================================================================
+# RECONCILED WITH THE OLDER IMPOSTOR TABLE (ENHANCEMENTS 3a)
+# ============================================================================
+#
+# That table reports impostors deriving message 2's TRUE start 21.7% of the
+# time at L = 100, where section 4 above reports 0.0-0.3% everywhere.  The gap
+# is the CRITERION, not a disagreement: re-running these records under the
+# older definition -- non-EXACT rather than non-RECOVERED -- reproduces it.
+#
+#   L = 100, -R 8      n    plugs/10   start2
+#   non-exact         35      5.06      17.1%     (old table: 3.83, 21.7%)
+#   non-recovered     21      2.43       0.0%     (section 4)
+#
+# Judging at 50% moves the near-miss boards (8-9 plugs right) out of the
+# failure population and into the recoveries, and those are exactly the ones
+# whose six plugboard lookups all come out right.  Both figures are correct
+# about their own population; neither should be quoted without saying which.

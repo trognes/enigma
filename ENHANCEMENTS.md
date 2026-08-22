@@ -496,70 +496,97 @@ to 1–2% by `-R 1000`, measured in the next block:
 **One trial in 1200.** When the search is wrong it is not because the truth was
 found and mis-ranked; the truth was never reached.
 
-**Raising `-R` barely opens that door** — the obvious next hypothesis, since
-more restarts mean more candidate boards. Measured to `-R 1000`, 350 paired
-trials per cell (`eval/restart_ladder.py`, results in
-`eval/results-restart-ladder.txt`):
+**Raising `-R` OPENS that door wide — but only past `-R 1000`, and only when a
+board is judged by whether the plaintext reads rather than by an exact match.**
+Both qualifications were missing from the first two attempts at this question,
+and each on its own was enough to hide the effect. Measured to `-R 5000` at
+four lengths, 350 paired trials per cell, a board counting as recovered at
+**≥ 50% of the plaintext** (`eval/restart_ladder.py`, full numbers in
+`eval/results-restart-ladder.txt`).
 
-| L | `-R` | answer right | **wrong, truth in restarts** | truth absent |
+**Recovery is still climbing at `-R 5000`** at every length but 40 — the
+1000 → 5000 step is worth +4.9pp at L = 60, +6.0pp at L = 80 and +8.9pp at
+L = 100. Recovery at ≥ 50%, exact in brackets:
+
+| `-R` | L = 40 | L = 60 | L = 80 | L = 100 |
 |---:|---:|---:|---:|---:|
-| 60 | 8 | 4.3% | **0.0%** | 95.7% |
-| 60 | 32 | 6.9% | **0.0%** | 93.1% |
-| 60 | 100 | 9.1% | **0.3%** | 90.6% |
-| 60 | 316 | 11.7% | **0.3%** | 88.0% |
-| 60 | 1000 | 16.6% | **0.9%** | 82.6% |
-| 80 | 8 | 13.4% | **0.0%** | 86.6% |
-| 80 | 32 | 23.7% | **0.0%** | 76.3% |
-| 80 | 100 | 30.0% | **0.9%** | 69.1% |
-| 80 | 316 | 36.0% | **0.9%** | 63.1% |
-| 80 | 1000 | 42.9% | **1.7%** | 55.4% |
+| 8 | 1.4% (0.3) | 6.0% (4.3) | 15.1% (13.4) | 26.6% (22.6) |
+| 100 | 1.7% (0.6) | 12.9% (9.1) | 36.0% (30.0) | 55.1% (46.6) |
+| 1000 | 3.7% (1.4) | 25.4% (16.6) | 52.6% (42.9) | 75.1% (64.3) |
+| **5000** | 4.0% (1.4) | 30.3% (20.0) | 58.6% (48.6) | 84.0% (71.7) |
 
-Restarts help enormously — exact recovery 13.4% → 42.9% at L = 80 — and the
-middle column stays nearly empty throughout: they move trials from *truth
-absent* straight to *answer right*. **The two populations are almost disjoint,
-because when a restart finds the true board it usually also wins on message 1.**
+**L = 40 saturates** — flat at 1.4% exact from `-R 1000` — which is what the
+98% scoring-failure share there predicts.
 
-**Almost, not entirely, and the gap grows with `-R`.** By `-R 1000` the middle
-column reaches **1.7%** at L = 80 and 0.9% at L = 60, and where there *is*
-something to promote the second message promotes it **every time — 9 of 9
-across both lengths**. So joint re-ranking takes L = 80 from 42.9% to **44.6%**.
-That is small beside the +6.9pp the last restart step bought, but the two are
-not paid for alike: the restarts cost 3.16× the compute and the second message
-costs **one decrypt per candidate board** against a run of a thousand climbs.
-If a same-day message with a known indicator is in hand, take the 1.7pp — it is
-free. It is simply not a substitute for `-R`.
+**The conversion population grows by more than an order of magnitude.** `conv`
+= the reported answer did not clear 50% but a CONVERGED board would have:
 
-**The 9-of-9 is not the harness handing itself the truth.** The re-ranking adds
-the true board to the candidate set explicitly, so it would read 9/9 even if
-the truth sat far below any list an attacker would keep. Its rank by message-1
-score among the ~500 converged boards is **1, 2, 2** at L = 60 and **2, 20, 1,
-2, 1, 1** at L = 80 — eight of nine are the top or the runner-up, so a top-8
-list promotes 8 of 9 unaided and the ninth needs a top-20. Four of the nine sit
-at rank **1**, meaning the truth was the best converged board and `--polish`
-then produced something better on message 1: scoring failures manufactured by
-the finisher, which joint scoring undoes.
+| `-R` | L = 40 | L = 60 | L = 80 | L = 100 |
+|---:|---:|---:|---:|---:|
+| 8 | 0.9% | 0.3% | 0.3% | 0.0% |
+| 1000 | 12.6% | 15.4% | 9.1% | 6.3% |
+| 5000 | **22.6%** | **23.7%** | **15.7%** | 6.9% |
 
-That near-disjointness also explains the scoring failures themselves. A scoring
-failure means the search converged on a board scoring HIGHER than the truth —
-so the truth is not the scoring model's optimum, and no restart climbs to it
-because it is not the top of any hill. More restarts simply locate the
-better-scoring impostor more reliably, which is why the conversion population
-can only grow through the shrinking *search*-failure half. That matches the
-monotonicity result above — a climb that does not converge on the true board
-never visits it either — and the trajectory data agrees: at L = 80, `-R 1000`
-the truth is echoed mid-climb in 2.3% of trials against a conversion population
-of 1.7%, so a climb essentially never passes *through* the truth without
-stopping on it.
+At L = 60, `-R 5000`, the search **produces a good board in 23.7% of the trials
+where it reports a bad one**. The earlier "one trial in 1200", and its
+successor "1.7%", were both measured at low `-R` under the exact criterion.
+Neither generalises.
 
-**The residual is turning into the information floor.** The scoring share of
-the misses rises monotonically with `-R` — 31 → 43 → 52 → 64 → **75%** at
-L = 80, and 55 → 63 → 68 → 73 → **80%** at L = 60. Restarts retire the search
-failures, and three quarters of what is left at `-R 1000` is a limit no restart
-count crosses.
+**But joint re-ranking mostly misses it, and the cause is the WINDOW rather
+than the method.** Over the search's top-8 boards it promotes a good one only
+4–38% of the time, because the good board is nowhere near the top of the
+search's own ranking: mean rank on conv trials at `-R 5000` is 146/129/113/57
+at L = 40/60/80/100. Share of conv trials whose good board is within rank `K`
+— a *necessary* condition for a top-`K` re-rank to find it:
 
-So the honest summary is: **the discrimination property is real, and the
-end-to-end gain is real but worth 1–2pp.** What mostly survives is
-confirmation, not search — see the limitation below.
+| L | `-R` | ≤ 8 | ≤ 32 | ≤ 128 | ≤ 512 |
+|---:|---:|---:|---:|---:|---:|
+| 60 | 100 | 71% | 94% | 100% | 100% |
+| 60 | 5000 | 34% | 65% | 76% | 93% |
+| 80 | 5000 | 33% | 55% | 78% | 93% |
+| 100 | 5000 | 50% | 67% | 83% | 100% |
+
+**A PROJECTION, and an optimistic one.** Where the good board is inside the
+window, re-ranking promotes it about half the time (13 of ~28 at L = 60, 9 of
+~18 at L = 80). Holding that rate, a top-128 list would promote ~35–40% of conv
+trials rather than 16% — roughly **+8pp on top of 30.3%** at L = 60, `-R 5000`.
+Deeper candidates score worse on message 1, so the conditional rate almost
+certainly falls with rank and this assumes it does not. **The measurement is
+cheap and has not been run.** The top-8 window is a limit of the harness (two
+binary invocations per candidate), not of the method: joint-scoring a candidate
+is one decrypt against the whole climb that produced it.
+
+**What the scoring failures ARE — more restarts find better-SCORING impostors,
+not NEARER ones.** Mean plugs shared with the truth, and the winner's lead over
+the true board in log units over the whole message:
+
+| `-R` | L = 40 | L = 60 | L = 80 | L = 100 |
+|---:|---:|---:|---:|---:|
+| 8 | 0.65 / 79.5 | 0.78 / 57.8 | 1.22 / 44.9 | 2.43 / 31.0 |
+| 5000 | 0.77 / 89.9 | 0.95 / 69.6 | 1.13 / 52.6 | 2.38 / 40.3 |
+
+**Overlap is flat across a 625× range of `-R` while the lead grows.** These are
+not near-misses being closed in on — they are unrelated boards that fit the
+ciphertext better than the truth does, decrypting 8–18% of the message. SEARCH
+failures do the opposite and are retired: at L = 100 they fall from 236 trials
+to 24 and their deficit narrows from −120.7 to −44.1 log units. So the scoring
+share of the residue rises with `-R` everywhere (L = 100: 8% → 57%; L = 80:
+30% → 82%; L = 40: 90% → 98%).
+
+**The asymmetry joint scoring depends on is confirmed at scale.** An impostor
+derives message 2's true start in **0.0–0.3%** of cases at every length and
+every `-R` (n ≈ 300 per cell); a correct board derives it always.
+
+**Where the TRUE board ranks is not the problem.** When the search converges on
+it, it is rank 1 in 86–96% of trials at L = 60–100 and inside the top 8 in
+96–100%. The deep ranks above belong to the *other* boards clearing 50%, which
+are far more numerous — present in 54.0% of L = 60 trials against the truth's
+22.9% — and much worse ranked.
+
+So the honest summary is: **the discrimination property is real, the conversion
+population is far larger than previously recorded, and the end-to-end gain is
+worth ~4pp measured and plausibly ~8pp — but only with a candidate list two
+orders of magnitude deeper than the one measured here.**
 
 **How the search is run, exactly**, because the result is meaningless without
 it: `-u B -w <true> -r <true> -g <true start1>` are all pinned, so the keyspace
@@ -586,6 +613,17 @@ time — **and the rescue is still 53/53**. Getting the start right is not
 enough: a 3.8-of-10 board decrypts message 2 only partially while the true
 board decrypts it perfectly, so the truth still wins. The mechanism is
 therefore sturdier than "the impostor gets noise" suggests.
+
+> **This table and the `start2` figures above describe DIFFERENT populations,
+> and the gap is the criterion, not a disagreement.** The ladder reports
+> 0.0–0.3% right-start impostors at every length where this one reports 21.7%
+> at L = 100. Re-running the ladder's own records under *this* table's
+> definition — non-**exact** rather than non-**recovered** — reproduces it:
+> n = 35, 5.06 plugs, **17.1%** at L = 100, `-R 8`, against 3.83 and 21.7%
+> here. Judging at 50% moves the near-miss boards (8–9 plugs right) out of the
+> failure population and into the recoveries, and those are precisely the ones
+> that derive a correct start. Both numbers are right about their own
+> population; quote neither without saying which.
 
 **The rescue degrades at 40 letters, and the reason is not the one to guess.**
 It is *not* impostors deriving a correct start — of 9 unrescued cases probed
