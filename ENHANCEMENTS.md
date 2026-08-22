@@ -118,12 +118,38 @@ that matters is **event counts at operational length**, here L = 60:
 | Σf³ | 34 220 triples | 51 | 144 | **~13** |
 | digraphic IC | 1 711 bigram pairs | 2.5 | 9.0 | ~4.0 |
 
-**That ~13 is a naive UPPER BOUND.** The closed form under
-`--no-preflight` rests on pair-coincidence indicators being *exactly*
-uncorrelated under a uniform null (the shared-index covariance
-`Σp³ − (Σp²)²` vanishes); that property does **not** extend to triples, which
-are positively correlated, so the true variance is higher by an unknown factor.
-The number says "worth measuring", not "three times better".
+**That ~13 is a naive UPPER BOUND**, and a first probe says it is worse than
+that — see the next paragraph. The closed form the pre-flight check uses rests
+on pair-coincidence indicators being *exactly* uncorrelated under a uniform
+null (the shared-index covariance `Σp³ − (Σp²)²` vanishes); that property does
+**not** extend to triples, which are positively correlated, so the true
+variance is higher by an unknown factor.
+
+**MEASURED, and it deflates the idea: `z` is the wrong summary here.** 2000
+random 60-letter corpus windows against 2000 uniform-random texts, unbiased
+falling-factorial estimators:
+
+| k | German | uniform | z | German over the null's 95th pct |
+|---:|---:|---:|---:|---:|
+| 2 (IC) | 5.99e-02 | 3.87e-02 | 4.47 | **91.5%** |
+| 3 | 4.57e-03 | 1.47e-03 | 5.75 | 91.0% |
+| 4 | 3.89e-04 | 5.52e-05 | 6.86 | 82.3% |
+| 5 | 3.40e-05 | 2.12e-06 | 8.12 | 68.8% |
+
+**`z` rises monotonically with `k` while the actual separation peaks at k = 2–3
+and then collapses.** The columns disagree because the null grows badly
+right-skewed as `k` rises, so a mean shift of many "sd" stops implying the
+distributions come apart. That is the same failure `--confidence` already
+documents for IC itself (6.1σ observed against 4.4 predicted, because IC's null
+is a quadratic form in the histogram rather than a sum over positions). Higher
+moments make it worse. **On the metric that is not fooled, Σf³ is level with
+plain IC and k ≥ 4 is clearly worse.**
+
+**This does not settle it, in either direction.** German-versus-uniform is the
+easy case, and a climb does not detect against a null — it *orders boards*. The
+decisive question stays the one in step C1 below: does the statistic separate
+`j` correct plugs from `j+1`? But the case for building the token is much
+weaker than the contrast table alone suggests, and k ≥ 4 can be dropped now.
 
 **Digraphic IC is a trap, and the reason is granularity rather than
 discriminability.** Its contrast beats IC's, but it rests on about **nine
