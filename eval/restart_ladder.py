@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Does a bigger -R open the JOINT-SCORING conversion door?
+"""How far do restarts go, and does a bigger -R open the joint-scoring door?
+
+A BOARD COUNTS AS RECOVERED AT 50% OF THE PLAINTEXT, not at an exact match.
+That is the operational criterion: a board missing two of ten plugs still
+reads, and a cryptanalyst who can read the message has broken it.  Exact
+recovery is reported alongside, because it is what every earlier sweep here
+measured and the two diverge sharply -- but the headline is the 50% column and
+the mean %-correct beside it, which is also the graded signal CLAUDE.md tells
+you to judge search changes on.
 
 BACKGROUND.  eval/joint_score_gain.py measured that a second message on the
 same day key overturns essentially every SCORING failure -- and that this does
@@ -7,37 +15,39 @@ not convert into breaks, because joint re-ranking can only promote a board the
 search ACTUALLY PRODUCED, and at -R 8..100 the truth is almost never among the
 produced boards while a different board wins.  One trial in 1200.
 
-THE OPEN QUESTION.  More restarts means more converged boards, so the truth
-should eventually be produced-but-mis-ranked rather than absent.  At -R 8..100
-that population stayed empty.  This runs the ladder well past it.
+THE OPEN QUESTION.  More restarts means more converged boards, so a good board
+should eventually be produced-but-mis-ranked rather than absent.  This runs the
+ladder well past where that sweep stopped.
 
 WHAT IS MEASURED, per (trial, R):
 
-  exact    the reported board IS the true board
-  conv     it is not, but the true board IS among the converged restarts
+  recov    the reported board decrypts >= 50% of message 1 correctly
+  conv     it does not, but some CONVERGED restart board would
            (the CONVERSION CANDIDATE population -- what joint scoring needs)
-  absent   the true board was never reached by any restart
+  absent   no converged board reaches 50%
 
-and, for every conv trial, whether joint re-ranking actually promotes the
-truth.  That last step is the honest end-to-end test: it ranks the top-K
-boards the search produced BY JOINT SCORE, message 2's start DERIVED per board
-from the indicators, and asks whether the truth comes out on top.  Comparing
-the truth against the winner alone would overstate it -- a third board can win
-jointly.
+and, for every conv trial, whether joint re-ranking actually promotes one.
+That is the honest end-to-end test: it ranks the top-K boards THE SEARCH
+PRODUCED by joint score, message 2's start DERIVED per board from the
+indicators, and asks whether the winner reads.  The true board is NOT put into
+that set -- an attacker does not have it, and an earlier version of this
+harness which did inject it reported a promotion rate that a real top-K list
+could not have delivered (the truth ranked 60th and 87th of ~1600 converged
+boards at -R 5000).  The rank of the best readable board is reported so the
+K window is visibly not doing the work.
 
-AND WHAT THE WINNING BOARD LOOKS LIKE.  The first version of this harness kept
-only the scoring/search boolean, which cannot answer the obvious follow-up:
-does a bigger -R find boards NEARER the truth, or merely boards that SCORE
-better?  Each non-exact trial now records the winning board, its score, the
-truth's score, their difference in log units over the whole message, how many
-of the ten plugs it gets right, and whether it derives message 2's true start.
---out writes every record as JSONL so the run can be re-analysed without
-re-running it.
+AND WHAT THE WINNING BOARD LOOKS LIKE.  A scoring/search boolean alone cannot
+answer the obvious follow-up: does a bigger -R find boards NEARER the truth, or
+merely boards that SCORE better?  Each non-recovered trial records the winning
+board, its score, the truth's score, the difference in log units over the whole
+message, how many of the ten plugs it shares with the truth, its %-correct, and
+whether it derives message 2's true start.  --out writes every record as JSONL
+so a long run can be re-analysed without being re-run.
 
 PAIRED.  Every R in the ladder sees the same trial (same board, key,
 plaintexts, indicators), so the columns are directly comparable.
 
-  python3 eval/restart_ladder.py                       # L=60,80  R=8..1000
+  python3 eval/restart_ladder.py
   python3 eval/restart_ladder.py -L 40,60,80,100 \\
       -R 8,32,100,316,1000,2000,5000 --out results-restart-ladder.jsonl
 """
@@ -55,10 +65,39 @@ import enigma_ref
 from joint_score_gain import (BIN, ROOT, load_plaintexts, pair_set,
                               rand_board, rand_pos, rand_wheels, score_board)
 
-# How many of the search's own boards enter the joint re-ranking.  The
-# candidates are ordered by their message-1 score, so K is a depth into a list
-# the search itself produces -- a real attacker has exactly this list.
+# How many of the search's own boards enter the joint re-ranking.  Each costs
+# two binary invocations, so this is a real budget; the reported rank of the
+# best readable board says whether it binds.
 TOPK = 8
+
+# A decrypt this correct is a break.  Two missing plugs cost ~4 letters in 26.
+READABLE = 50.0
+
+
+def core_table(wheels, ring, start, length):
+    """The rotor-stack permutation per position, plugboard removed.
+
+    Decryption is p_i = S[core_i[S[c_i]]] (enigma_ref.decrypt), so with core_i
+    in hand, applying a BOARD costs two array lookups per letter instead of a
+    fresh Enigma run -- which is what makes it affordable to test all ~2000
+    converged boards of an -R 5000 run rather than only the reported one.
+
+    Recovered with 26 constant-letter decrypts under an EMPTY board, where S is
+    the identity: decrypt(chr(x)*L, ...)[i] is exactly core_i[x].
+    """
+    cols = [enigma_ref.decrypt(chr(65 + x) * length, wheels, ring, start, "")
+            for x in range(26)]
+    return [[ord(cols[x][i]) - 65 for x in range(26)] for i in range(length)]
+
+
+def pct_correct(board, ct_nums, core, pt_nums):
+    """Percentage of message positions this board decrypts correctly."""
+    s = enigma_ref._plugboard(board)      # reuse, never re-derive the machine
+    hit = 0
+    for i, c in enumerate(ct_nums):
+        if s[core[i][s[c]]] == pt_nums[i]:
+            hit += 1
+    return 100.0 * hit / len(pt_nums)
 
 
 def climb_dump(ct, wheels, ring, start, lang, restarts, seed):
@@ -67,15 +106,14 @@ def climb_dump(ct, wheels, ring, start, lang, restarts, seed):
     The reported answer comes off the last PROGRESS line, not the best dumpall
     line: --polish runs after all restarts and never appears in the dump (see
     joint_score_gain.climb_board).  The dump gives the CONVERGED boards, which
-    is what "did the search produce the truth as a candidate" needs.
+    is what "did the search produce a readable board" needs.
 
     The fourth return is every board echoed on a progress line -- boards the
     climb PASSED THROUGH.  They are a different thing from a converged board:
-    a climb can visit the truth and keep going uphill past it, which is what
-    "the truth is not the top of any hill" looks like from the inside.  This
-    set UNDERCOUNTS such visits badly, because a progress line fires only on a
-    board beating the run's global high-water mark, so a truth visited late in
-    a good run is silent.  Read it as a lower bound, never as a rate.
+    a climb can visit a good board and keep going uphill past it.  This set
+    UNDERCOUNTS such visits badly, because a progress line fires only on a
+    board beating the run's global high-water mark, so one visited late in a
+    good run is silent.  Read it as a lower bound, never as a rate.
     """
     env = dict(os.environ, ENIGMA_SEED=str(seed), ENIGMA_DATA="ngrams")
     out = subprocess.run(
@@ -116,7 +154,7 @@ def make_trial(rng, texts, length):
         grund, start = rand_pos(rng), rand_pos(rng)
         enc = enigma_ref.decrypt(start, wheels, ring, grund, board)
         ct = enigma_ref.decrypt(pt, wheels, ring, start, board)
-        msgs.append(dict(ct=ct, grund=grund, enc=enc, start=start))
+        msgs.append(dict(ct=ct, pt=pt, grund=grund, enc=enc, start=start))
     return dict(board=board, wheels=wheels, ring=ring, msgs=msgs,
                 length=length, seed=rng.randrange(1 << 30))
 
@@ -127,6 +165,13 @@ def run_trial(job):
     m1, m2 = trial["msgs"]
     truth = pair_set(board)
     s_true = score_board(m1["ct"], wheels, ring, m1["start"], board, lang)
+
+    core = core_table(wheels, ring, m1["start"], trial["length"])
+    ct_nums = [ord(c) - 65 for c in m1["ct"]]
+    pt_nums = [ord(c) - 65 for c in m1["pt"]]
+
+    def readable(b):
+        return pct_correct(b, ct_nums, core, pt_nums)
 
     def msg2_score(b):
         """Message 2 under board b, its start DERIVED from b via the indicator.
@@ -145,39 +190,41 @@ def run_trial(job):
         if not got:
             out[R] = dict(state="err")
             continue
-        if pair_set(got) == truth:
-            out[R] = dict(state="exact")
-            continue
-        reached = any(pair_set(b) == truth for b in dump)
-        # ANATOMY of the board that actually won.  Recording only the
-        # scoring/search boolean, as the first version of this harness did,
-        # cannot answer what the winner LOOKS like -- whether more restarts
-        # find boards nearer the truth or merely boards that score better.
-        # `lead` is in log units over the whole message (the per-symbol score
-        # times the length), matching how ENHANCEMENTS 3a quotes it.
-        got_pairs = pair_set(got)
+
+        pct = readable(got)
         st2 = enigma_ref.decrypt(m2["enc"], wheels, ring, m2["grund"], got)
-        rec = dict(state="conv" if reached else "absent",
-                   scoring=(s_got >= s_true),
-                   visited=any(pair_set(b) == truth for b in seen),
+        got_pairs = pair_set(got)
+        rec = dict(pct=pct, exact=(got_pairs == truth),
                    board=got, s_got=s_got, s_true=s_true,
                    lead=(s_got - s_true) * trial["length"],
                    correct=len(got_pairs & truth), nplugs=len(got_pairs),
                    start2=(st2 == m2["start"]))
-        if reached:
-            # Joint re-ranking over the boards the SEARCH produced, deepest
-            # first by message-1 score.  The reported answer is included
-            # explicitly: --polish can move it off the dump.
-            # How deep the truth sits in the search's OWN message-1 ranking.
-            # The re-ranking below adds the true board explicitly, so without
-            # this the promotion rate would silently assume a candidate list
-            # deep enough to contain it.  Rank 1 = best-scoring converged
-            # board; report it so TOPK is visibly not the binding constraint.
-            order = sorted(dump.items(), key=lambda kv: -kv[1])
-            rec["rank"] = next((i + 1 for i, (b, _) in enumerate(order)
-                                if pair_set(b) == truth), None)
+        if pct >= READABLE:
+            rec["state"] = "recov"
+            out[R] = rec
+            continue
+
+        # SCORING vs SEARCH keeps the repo's definition -- measured against the
+        # TRUE board, since the claim it supports is that the true board is not
+        # the model's optimum.  Counted only among non-recovered trials.
+        rec["scoring"] = (s_got >= s_true)
+
+        # Every converged board, ranked by the message-1 score the search
+        # itself assigned it.  Affordable because core_table() removed the
+        # Enigma run from the inner loop.
+        order = sorted(dump.items(), key=lambda kv: -kv[1])
+        good = [(i + 1, b) for i, (b, _) in enumerate(order)
+                if readable(b) >= READABLE]
+        rec["visited"] = any(readable(b) >= READABLE for b in seen)
+        rec["ngood"] = len(good)
+        rec["state"] = "conv" if good else "absent"
+        if good:
+            rec["rank"] = good[0][0]        # best-SCORING readable board
             rec["ncand"] = len(order)
-            names = {b for b, _ in order[:TOPK]} | {got, board}
+            # The true board is deliberately NOT added: an attacker re-ranks
+            # the list the search gave them, and injecting the answer would
+            # report a promotion no real top-K list could deliver.
+            names = {b for b, _ in order[:TOPK]} | {got}
             best, best_s = None, None
             for b in names:
                 j = score_board(m1["ct"], wheels, ring, m1["start"], b, lang)
@@ -187,7 +234,7 @@ def run_trial(job):
                 if best_s is None or j > best_s:
                     best, best_s = b, j
             rec["promoted"] = (best is not None
-                               and pair_set(best) == truth)
+                               and readable(best) >= READABLE)
         out[R] = rec
     return out
 
@@ -195,8 +242,8 @@ def run_trial(job):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=350)
-    ap.add_argument("--lengths", "-L", default="60,80")
-    ap.add_argument("--restarts", "-R", default="8,32,100,316,1000")
+    ap.add_argument("--lengths", "-L", default="40,60,80,100")
+    ap.add_argument("--restarts", "-R", default="8,32,100,316,1000,2000,5000")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--language", default="wehrmacht")
     ap.add_argument("--jobs", "-j", type=int,
@@ -208,8 +255,9 @@ def main():
     texts = load_plaintexts()
     out_fh = open(args.out, "w", encoding="utf-8") if args.out else None
     print("%d authentic telegraphic plaintexts, model '%s', %d trials/cell,\n"
-          "recipe -c -f -S i4f10 -J --polish, rotor key GIVEN\n"
-          % (len(texts), args.language, args.trials))
+          "recipe -c -f -S i4f10 -J --polish, rotor key GIVEN,\n"
+          "a board counts as RECOVERED at >= %.0f%% of the plaintext\n"
+          % (len(texts), args.language, args.trials, READABLE))
 
     for length in [int(x) for x in args.lengths.split(",")]:
         rng = random.Random(args.seed + length)
@@ -226,88 +274,93 @@ def main():
                         true_board=job[0]["board"])) + "\n")
             out_fh.flush()
 
+        cells_by_r = {R: [r[R] for r in results if r[R]["state"] != "err"]
+                      for R in ladder}
+
         print("L = %d" % length)
-        print("%6s %8s %8s %8s %10s %9s %9s" %
-              ("-R", "exact", "conv", "absent", "promoted", "scoring",
-               "visited"))
+        print("%6s %9s %8s %8s %9s %9s"
+              % ("-R", "recov50", "exact", "mean%", "scoring", "visited"))
         for R in ladder:
-            cells = [r[R] for r in results if r[R]["state"] != "err"]
+            cells = cells_by_r[R]
             n = len(cells) or 1
-            ex = sum(1 for c in cells if c["state"] == "exact")
-            cv = [c for c in cells if c["state"] == "conv"]
-            ab = sum(1 for c in cells if c["state"] == "absent")
-            sc = sum(1 for c in cells if c["state"] != "exact"
-                     and c.get("scoring"))
+            rc = sum(1 for c in cells if c["state"] == "recov")
+            ex = sum(1 for c in cells if c.get("exact"))
+            sc = sum(1 for c in cells if c.get("scoring"))
             vis = sum(1 for c in cells if c.get("visited"))
-            miss = len(cells) - ex
-            print("%6d %7.1f%% %7.1f%% %7.1f%% %10s %8.0f%% %8.1f%%"
-                  % (R, 100.0 * ex / n, 100.0 * len(cv) / n, 100.0 * ab / n,
-                     ("%d/%d" % (sum(1 for c in cv if c.get("promoted")),
-                                 len(cv))) if cv else "-",
+            miss = len(cells) - rc
+            print("%6d %8.1f%% %7.1f%% %8.1f %8.0f%% %8.1f%%"
+                  % (R, 100.0 * rc / n, 100.0 * ex / n,
+                     sum(c["pct"] for c in cells) / n,
                      (100.0 * sc / miss) if miss else 0.0,
                      100.0 * vis / n))
-            if cv:
-                print("%6s truth's rank among the %s converged boards: %s"
-                      % ("", "/".join(str(c.get("ncand")) for c in cv),
-                         "/".join(str(c.get("rank")) for c in cv)))
 
-        # What the winning board LOOKS like.  Split by class, because the two
-        # are different objects: a search failure lost to the truth and a
-        # scoring failure beat it, and there is no reason their plug overlap
-        # should behave the same way as -R rises.
-        print("\n%6s  the winning board on SCORING failures (it OUTSCORES"
-              " the truth)" % "")
-        print("%6s %6s %9s %10s %10s %9s"
-              % ("-R", "n", "plugs/10", "mean lead", "max lead", "start2"))
+        print("\n%6s  of the trials that did NOT read, did the search still"
+              " PRODUCE\n%6s  a readable board, and does joint re-ranking find"
+              " it?" % ("", ""))
+        print("%6s %8s %8s %10s %9s %10s"
+              % ("-R", "conv", "absent", "promoted", "n good", "best rank"))
         for R in ladder:
-            cells = [r[R] for r in results if r[R]["state"] not in
-                     ("err", "exact") and r[R].get("scoring")]
-            if not cells:
-                print("%6d %6d %9s %10s %10s %9s"
-                      % (R, 0, "-", "-", "-", "-"))
-                continue
-            n = len(cells)
-            print("%6d %6d %9.2f %10.1f %10.1f %8.1f%%"
-                  % (R, n,
-                     sum(c["correct"] for c in cells) / n,
-                     sum(c["lead"] for c in cells) / n,
-                     max(c["lead"] for c in cells),
-                     100.0 * sum(1 for c in cells if c["start2"]) / n))
+            cells = cells_by_r[R]
+            n = len(cells) or 1
+            cv = [c for c in cells if c["state"] == "conv"]
+            ab = sum(1 for c in cells if c["state"] == "absent")
+            print("%6d %7.1f%% %7.1f%% %10s %9s %10s"
+                  % (R, 100.0 * len(cv) / n, 100.0 * ab / n,
+                     ("%d/%d" % (sum(1 for c in cv if c.get("promoted")),
+                                 len(cv))) if cv else "-",
+                     ("%.1f" % (sum(c["ngood"] for c in cv) / len(cv)))
+                     if cv else "-",
+                     ("%.0f" % (sum(c["rank"] for c in cv) / len(cv)))
+                     if cv else "-"))
 
-        print("\n%6s  the winning board on SEARCH failures (the truth"
-              " OUTSCORES it)" % "")
-        print("%6s %6s %9s %10s %9s"
-              % ("-R", "n", "plugs/10", "mean gap", "start2"))
-        for R in ladder:
-            cells = [r[R] for r in results if r[R]["state"] not in
-                     ("err", "exact") and not r[R].get("scoring")]
-            if not cells:
-                print("%6d %6d %9s %10s %9s" % (R, 0, "-", "-", "-"))
-                continue
-            n = len(cells)
-            print("%6d %6d %9.2f %10.1f %8.1f%%"
-                  % (R, n,
-                     sum(c["correct"] for c in cells) / n,
-                     sum(c["lead"] for c in cells) / n,
-                     100.0 * sum(1 for c in cells if c["start2"]) / n))
+        # What the winning board LOOKS like, split by class: a search failure
+        # lost to the truth and a scoring failure beat it, and there is no
+        # reason their plug overlap should move with -R the same way.
+        for label, want in (("SCORING failures (it OUTSCORES the truth)", True),
+                            ("SEARCH failures (the truth OUTSCORES it)",
+                             False)):
+            print("\n%6s  the winning board on %s" % ("", label))
+            print("%6s %6s %9s %9s %9s %8s"
+                  % ("-R", "n", "plugs/10", "pct", "lead", "start2"))
+            for R in ladder:
+                cells = [c for c in cells_by_r[R]
+                         if c["state"] != "recov" and c.get("scoring") == want]
+                if not cells:
+                    print("%6d %6d %9s %9s %9s %8s"
+                          % (R, 0, "-", "-", "-", "-"))
+                    continue
+                n = len(cells)
+                print("%6d %6d %9.2f %8.1f %9.1f %7.1f%%"
+                      % (R, n,
+                         sum(c["correct"] for c in cells) / n,
+                         sum(c["pct"] for c in cells) / n,
+                         sum(c["lead"] for c in cells) / n,
+                         100.0 * sum(1 for c in cells if c["start2"]) / n))
         print()
 
-    print("  exact    = the search reported the true board")
-    print("  conv     = it did not, but some restart DID converge on the true")
-    print("             board -- the population joint scoring can act on")
-    print("  absent   = no restart ever reached the true board")
-    print("  promoted = of the conv trials, how many joint re-ranking over the")
-    print("             search's own top-%d boards actually puts the truth"
+    if out_fh:
+        out_fh.close()
+
+    print("  recov50  = the reported board decrypts >= %.0f%% of message 1"
+          % READABLE)
+    print("  exact    = it is the true board, plug for plug")
+    print("  mean%    = mean %-correct over ALL trials, the graded signal")
+    print("  scoring  = share of NON-RECOVERED trials whose winner outscores")
+    print("             the true board (a scoring failure, not a search one)")
+    print("  visited  = a readable board was echoed on a progress line, i.e.")
+    print("             a climb PASSED THROUGH one and kept going uphill.")
+    print("             A LOWER BOUND -- progress lines fire only above the")
+    print("             run's high-water mark")
+    print("  conv     = the answer did not read, but a CONVERGED board would")
+    print("  promoted = of those, how many joint re-ranking over the search's")
+    print("             own top-%d boards puts a readable board first" % TOPK)
+    print("  n good   = readable boards among the converged ones")
+    print("  best rank= where the best-SCORING readable one sits in the")
+    print("             search's own ranking (so top-%d is visibly enough,"
           % TOPK)
-    print("             first (message 2's start DERIVED per board)")
-    print("  scoring  = share of NON-EXACT trials whose winner outscores the")
-    print("             truth (a scoring failure, not a search one)")
-    print("  visited  = non-exact trials where the truth was echoed on a")
-    print("             progress line, i.e. a climb PASSED THROUGH it and")
-    print("             kept going uphill.  A LOWER BOUND -- progress lines")
-    print("             fire only above the run's high-water mark")
+    print("             or visibly not)")
     print("  plugs/10 = mean plugs the winning board shares with the truth")
-    print("  lead/gap = its score minus the truth's, in LOG UNITS over the")
+    print("  lead     = its score minus the truth's, in LOG UNITS over the")
     print("             whole message (per-symbol score x length)")
     print("  start2   = share deriving message 2's TRUE start from the")
     print("             indicator -- six plugboard lookups, all must be right")
