@@ -82,7 +82,7 @@ own status line before citing it:**
 | **B** | cap sweep | **blocked** — the IC pre-pass cap is inert in 1…4 |
 | **C** | third-moment coincidence Σf³ | **measured down** — never built |
 | **D** | best-of-two seeds per restart | open; crux unresolved |
-| **E** | fuse mono and IC (`-S k`) | **measuring** — see its own note |
+| **E** | fuse mono and IC (`-S k`) | **measured, adopted** — see its note |
 | **F** | many cheap seeds, promote a subset | open; gated on D's crux |
 
 Effect sizes carrying a CI are measurements; the rest is arithmetic on corpus
@@ -511,8 +511,8 @@ is the risky cell. The falsification condition above still has to be met after
 the token is built.
 
 **E IS NOW MEASURED END TO END — the condition FAILED on one cell of four, and
-NO RECOMMENDATION HAS BEEN DECIDED** (`eval/results-monoic-endtoend.txt`).
-`k4f10`
+`k4f10` was adopted for telegraphic traffic anyway**
+(`eval/results-monoic-endtoend.txt`). `k4f10`
 minus the named arm, 2000 paired trials per cell, telegraphic German,
 plugboard tier, `-R 8`:
 
@@ -530,7 +530,10 @@ breaks. **λ was retuned and then reverted**: `1.1·√L` (IC contributing one s
 at every length, correcting an exponent that really is wrong — see
 `eval/results-monoic-lambda.txt`) measured **null** in a paired A/B, pooled
 −0.40pp [−1.09, +0.28], so `0.1·L` stands and these numbers describe the
-shipping configuration after all. **No recommendation has been decided.**
+shipping configuration. **`-S k4f10` is now the recommended pre-pass for
+telegraphic traffic at every measured length** — a decision taken on the
+evidence above rather than on a passed gate, which is the distinction this
+paragraph exists to keep.
 
 **The decisive cell holds across five seeds** — +4.45/+4.94/+6.10/+6.94/+4.66,
 pooled **+5.01pp** [+3.86, +6.16], z = 8.5, Q = 2.07 on 4 df (p = 0.72). That

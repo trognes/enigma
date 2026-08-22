@@ -20,8 +20,10 @@
 # [-0.58, +1.62] and McNemar p = 0.087 -- a tie, not a win.  Three of the four
 # pre-registered cells passed decisively; the fourth did not.
 #
-# THE TOKEN WAS ADOPTED ANYWAY.  That was a judgment call by the repository
-# owner on the grounds below, NOT a passed gate, and lambda was NOT re-tuned:
+# THE TOKEN WAS ADOPTED ANYWAY, and -S k4f10 is now the recommended pre-pass
+# for telegraphic traffic at every measured length (L = 60..167).  That was a
+# judgment call by the repository owner on the grounds below, NOT a passed
+# gate:
 #
 #   * the failure is a TIE, not a loss -- k4f10 is not behind anywhere measured;
 #   * L = 60 is far below operational length, and in that cell every arm scores
@@ -32,7 +34,20 @@
 #     shortest one rather than half the evidence.
 #
 # Recorded this way deliberately: the claim must not drift from its evidence
-# just because the decision went the other way.
+# just because the decision went the other way.  What the evidence supports is
+# "never measurably behind at any length, decisively ahead at 100 and 167" --
+# which is a sound basis for a default and is not the same sentence as "passed
+# its gate".
+#
+# ONE FURTHER NOTE ON "EVERY LENGTH": the measured range is L = 60..167.  Below
+# 60 nothing was run end to end (the offline probe favours the blend at L = 40,
+# +.007 over the better component, which is weak support and not a recovery
+# measurement); above 167 nothing was run either, though the trend there is
+# favourable.
+#
+# LAMBDA: a retune to 1.1*sqrt(L) was built and measured NULL after this run
+# (pooled -0.40pp [-1.09, +0.28]) and reverted, so the numbers below describe
+# the shipping configuration.  eval/results-monoic-lambda.txt.
 #
 # ============================================================================
 # THE RESULT
