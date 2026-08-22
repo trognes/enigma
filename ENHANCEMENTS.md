@@ -186,22 +186,56 @@ far more trials to say anything.
 **B. Cap sweep — also no code.** `i2f10` / `i4f10` / `i6f10` / `i8f10`. The 4
 appears never to have been swept.
 
-**C. Third-moment coincidence, in three steps.** Do NOT start by adding the
-token:
+**C. Third-moment coincidence — MEASURED DOWN, do not build the token.** The
+offline gate ran and Σf³ failed it (`eval/coincidence_order_probe.py`, results
+in `eval/results-coincidence-order.txt`).
 
-1. **Offline discriminability probe, pure Python, no binary change.** For
-   random keys and boards holding `j` of the ten true plugs, `j` = 0…10,
-   compute IC and Σf³ of the decrypt and ask which separates `j` from `j+1`
-   better (rank correlation, or AUC per step). This settles whether the token
-   is worth building, at a fraction of the cost, and it is the step that can
-   *falsify* the table above rather than dress it up.
-2. **Only if step 1 favours Σf³:** a schedule token — `k`, for the kappa
-   family of coincidence statistics; `i m b t q a f` are taken. Standalone
-   like IC, so it needs no n-gram table and no `-l`.
-3. **Then `--arms k4f10 i4f10`** at L = 40/60/80/100/167.
+**The gate was the right test because contrast is not the right test.**
+Separation from a uniform null measures *detection* — is this text German? A
+pre-pass does not detect, it **orders boards**: at each step it must rank a
+board with one more CORRECT plug above one with one more WRONG plug. So the
+probe builds boards with `n` plugs of which `c` are correct (`n` = 1…4, the
+cap) and reports `AUC = P(the statistic ranks c+1 above c)`, 6000 draws per
+cell — exactly the comparison the climb makes.
 
-**Falsification, stated in advance:** if `k4f10` fails to beat `i4f10` at any
-length, drop the token rather than tuning a blend weight until it wins.
+Mean AUC over the ten (n, c) cells:
+
+| | L = 40 | L = 60 | L = 100 |
+|---|---:|---:|---:|
+| IC (Σf²) | **0.543** | **0.561** | **0.593** |
+| Σf³ | 0.539 | 0.560 | 0.591 |
+| mono | 0.563 | 0.572 | 0.591 |
+
+**Σf³ is at or below IC in all thirty cells.** No length, plug count or `c`
+where the third moment orders boards better. Dropped per the condition fixed
+in advance — *no blend was tried*, which is what writing the condition down
+beforehand was for, since the 2.85× contrast table is exactly the sort of
+number that would have justified one more attempt.
+
+**Why detection and ordering come apart.** Raising the moment order
+concentrates the statistic on the largest frequencies (at k → ∞ it is just
+`max_x f_x`). That sharpens German-versus-uniform, because German is peaked.
+It does not sharpen the *plug* question, because one plug moves two letters'
+counts by a few units and a statistic dominated by the tallest bars is less
+sensitive to that, not more.
+
+**The probe validates itself on a known effect**, which is what makes the
+negative worth trusting: the `mono` column reproduces the documented mono/IC
+crossover unasked — mono ahead by .020 at L = 40 and .011 at 60, IC ahead by
+.002 at 100. CLAUDE.md records that end-to-end from 2000-trial paired recovery
+sweeps; this probe never sees a climb or a recovery rate and finds the same
+ordering and the same crossover point. An instrument that resolves a ~1–2pp
+end-to-end effect would have seen one in Σf³.
+
+**The incidental finding is worth more than the headline: EVERY AUC IS BETWEEN
+0.52 AND 0.64.** Even the best statistic at the longest length ranks a better
+board above a worse one only ~60% of the time; at L = 40 with one plug set it
+is 0.53, barely above chance. **The pre-pass is a weak instrument**, which is
+why the whole mono-versus-IC debate spans ~2pp end-to-end — the two differ by
+0.01–0.02 of AUC on a scale where both are near a coin flip. Any replacement
+statistic is competing for that same narrow margin, and the reframe below
+(deduce the first plugs instead of scoring them) is not competing on this
+scale at all.
 
 **D. Best-of-two SEEDS inside each restart — the one portfolio variant not yet
 measured.** Running IC and mono pre-passes and taking the better is a natural
