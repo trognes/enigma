@@ -382,9 +382,29 @@ survive:
   pattern in §5j, cheap and it fails loudly.
 
 Neither helps the case that dominates short texts: **the climb not reaching the
-board at all**, 75–99% of trials at every length measured here. That is a
-SEARCH problem, and its levers are the documented ones — restarts bought with
-`-T` — plus the message-key prior in §3b, which needs no second message.
+board at all**, 71–99% of trials at every length measured here. That is a
+SEARCH problem.
+
+**And the positive finding to take away from all of this is about `-R`, not
+about second messages.** The same sweep that closed the conversion door
+measures the lever that does work at these lengths:
+
+| | `-R 8` | `-R 32` | `-R 100` |
+|---|---:|---:|---:|
+| exact recovery, L = 60 | 4.3% | 6.6% | **11.7%** |
+| exact recovery, L = 80 | 9.1% | 19.4% | **28.6%** |
+
+Restarts roughly **triple** exact recovery at L = 80 and nearly triple it at
+60, and the curve has not flattened at 100. That is consistent with CLAUDE.md's
+own plugboard-tier table (12.0% at `-R 8`, 32.0% at `-R 64`, L = 82) — this
+harness reads a little lower throughout, which is the plaintext pool (whole
+messages, some corpus-flagged garbled, against `prepass_ab.py`'s concatenated
+corpus).
+
+So for a short text the order of business is: **spend on `-R`, bought with
+`-T`**; then the message-key prior in §3b, which needs no second message; and
+only then a second message, for confirming what you found rather than finding
+it.
 
 **A start SWEEP degrades gracefully where the indicator does not**, which is
 the inversion to remember if this is ever revisited. Scoring message 2 across

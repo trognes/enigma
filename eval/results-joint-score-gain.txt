@@ -209,3 +209,20 @@ real climb at -R 8
 # converged on a board scoring HIGHER than the truth, so the truth is not the
 # model's optimum and no restart climbs to it -- it is not the top of any hill.
 # More restarts just locate the better-scoring impostor more reliably.
+#
+# THE POSITIVE FINDING, and it is about -R rather than second messages.  The
+# same sweep that closed the conversion door measures the lever that works:
+#
+#                          -R 8    -R 32   -R 100
+#   exact recovery L=60     4.3%     6.6%    11.7%
+#   exact recovery L=80     9.1%    19.4%    28.6%
+#
+# Restarts roughly TRIPLE exact recovery at L=80 and the curve has not
+# flattened at 100.  Consistent with CLAUDE.md's plugboard-tier table (12.0% at
+# -R 8, 32.0% at -R 64, L=82); this harness reads a little lower throughout,
+# which is the plaintext pool (whole messages, some corpus-flagged garbled,
+# against prepass_ab.py's concatenated corpus).
+#
+# Order of business for a short text: spend on -R bought with -T; then the
+# message-key prior (ENHANCEMENTS 3b), which needs no second message; and only
+# then a second message, for CONFIRMING what you found rather than finding it.
