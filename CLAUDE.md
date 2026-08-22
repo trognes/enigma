@@ -418,9 +418,8 @@ are read from a **data directory** (filenames built as
 > **`-f` fused scoring model** (`-a`'s weighted all-order mixture plus a
 > weighted index of coincidence — the strongest measured scoring model, and the
 > only one that does not depend on the writing style; see the `-f` entry below),
-> `-S m4f10` staging (mono pre-pass then fused; **`k4f10` on telegraphic
-> traffic from ~100 letters up** — measured, see `-S` and the `-S k` entry;
-> it displaced `i4f10` there), `-J` (dynamic move
+> `-S m4f10` staging (mono pre-pass then fused; **`i4f10` on telegraphic
+> traffic at operational length** — measured, see `-S`), `-J` (dynamic move
 > order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the
 > best-board
 > finisher `--polish` (the recommended finisher: one fixed-cost pass after all
@@ -473,9 +472,8 @@ are read from a **data directory** (filenames built as
 > delivers (the first measured short-message *scoring* gain, +~1–2pp mean
 > %-correct at L40–100 across all four languages; PR #106). Recipe: `-c -J
 > --polish --score m4f10 --random 10 -R <as high as -T affords> -f -l <lang> -T
-> <cores>` — swapping `m4f10` for **`k4f10` on telegraphic traffic from ~100
-> letters up** (+5.0pp over `i4f10`, pooled over five seeds; see the `-S k`
-> entry). `i4f10` is the runner-up there and still beats `m4f10` at L≥107.
+> <cores>` — swapping `m4f10` for **`i4f10` on telegraphic traffic at
+> operational length** (+2.8pp, measured; see the `-S` entry).
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -1037,13 +1035,11 @@ are read from a **data directory** (filenames built as
   **75.2%**; McNemar over the 1800 trials with logged discordants p = 0.021).
   All five seeds favour `i4f10`, heterogeneity is Q = 1.65 on 4 df (so they
   scatter around one effect rather than disagreeing), and `score_iter` matched
-  within 2% every run. **`i4f10` beat `m4f10` for telegraphic traffic at
-  operational length**; `m4f10` remains the default elsewhere. **Both have
-  since been beaten there by `k4f10`** — the mono+IC blend, +5.01pp over
-  `i4f10` pooled across five seeds at L=167 and ahead of both components at
-  L=100 — so the recommendation for telegraphic traffic is now `-S k4f10` and
-  the rows below are the history that led to it. See the `-S k` entry and
-  `eval/results-monoic-endtoend.txt`.
+  within 2% every run. **Use `-S i4f10` for telegraphic traffic at operational
+  length**; `m4f10` remains the default elsewhere. A candidate to displace it —
+  `k4f10`, the mono+IC blend — measured ahead of both at L=100 and 167, but
+  those runs used a λ that has since changed and **no recommendation has been
+  decided**; see the `-S k` entry.
 
   **The full `{m4,i4} × {a,f}` square is measured at L=167** (1000 paired trials
   per cell, two seeds), and it says two things:
@@ -1156,13 +1152,12 @@ are read from a **data directory** (filenames built as
   (`archived/PERFORMANCE.md` 6.4) puts the whole gain in surface reshaping
   (+3.4pp) with selection contributing -0.0pp, so it does *not* move the
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
-  <lang>` — but on **telegraphic traffic from ~100 letters up** use `k4f10`
-  instead of `m4f10` (+5.0pp over `i4f10`, itself +2.8pp over `m4f10`; see the
-  `-S k` entry).
-- `-S k` / `--score k…` **mono + IC fused, as a PRE-PASS model**
-  (**recommended** as the pre-pass on telegraphic traffic from ~100 letters up;
-  needs `-l`; schedule token only — there is deliberately no bare `-k`
-  selector). The monogram score and the index of coincidence are **both
+  <lang>` — but on **telegraphic traffic at operational length** use `i4f10`
+  instead of `m4f10` (+2.8pp over 2000 paired trials; see `-S`).
+- `-S k` / `--score k…` **mono + IC fused, as a PRE-PASS model** (measured
+  promising, **not yet recommended — still being measured**; needs `-l`;
+  schedule token only — there is deliberately no bare `-k` selector). The
+  monogram score and the index of coincidence are **both
   functions of the same 26-bin letter histogram**, so one decode pass yields
   both and the fusion costs 26 multiply-adds — cheaper than `-f`'s, which has
   to accumulate IC alongside a gather-bound quad loop.
@@ -1204,8 +1199,9 @@ are read from a **data directory** (filenames built as
     across **five independent seeds** — +4.45/+4.94/+6.10/+6.94/+4.66, pooled
     **+5.01pp** [+3.86, +6.16], z = 8.5, Q = 2.07 on 4 df — i.e. the same
     evidential footing as the `i4f10` recommendation it displaces (Q = 1.65 on
-    4 df) at nearly twice the effect size. **So use `-S k4f10` in place of
-    `i4f10` on telegraphic traffic.**
+    4 df) at nearly twice the effect size. **That is not yet a
+    recommendation**: those runs used `λ = 0.1·L`, which has since been
+    replaced, so the configuration they describe is not the one that ships.
   - **Its pre-registered condition FAILED, and it was adopted anyway.** The
     condition was "beat *both* components at *both* L = 60 and 167, or drop it
     rather than re-tune λ". The L = 60 cell against mono is a **tie**. It was

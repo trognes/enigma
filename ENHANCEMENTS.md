@@ -82,7 +82,7 @@ own status line before citing it:**
 | **B** | cap sweep | **blocked** — the IC pre-pass cap is inert in 1…4 |
 | **C** | third-moment coincidence Σf³ | **measured down** — never built |
 | **D** | best-of-two seeds per restart | open; crux unresolved |
-| **E** | fuse mono and IC (`-S k`) | **measured, shipped** — see its own note |
+| **E** | fuse mono and IC (`-S k`) | **measuring** — see its own note |
 | **F** | many cheap seeds, promote a subset | open; gated on D's crux |
 
 Effect sizes carrying a CI are measurements; the rest is arithmetic on corpus
@@ -511,7 +511,8 @@ is the risky cell. The falsification condition above still has to be met after
 the token is built.
 
 **E IS NOW MEASURED END TO END — the condition FAILED on one cell of four, and
-the token was adopted anyway** (`eval/results-monoic-endtoend.txt`). `k4f10`
+NO RECOMMENDATION HAS BEEN DECIDED** (`eval/results-monoic-endtoend.txt`).
+`k4f10`
 minus the named arm, 2000 paired trials per cell, telegraphic German,
 plugboard tier, `-R 8`:
 
@@ -522,12 +523,13 @@ plugboard tier, `-R 8`:
 | 167 | +4.45 [+2.85, +6.05] | +8.31 [+6.54, +10.07] |
 
 The L = 60 cell against mono is a **tie**, so "beat both at both" is not met.
-Adoption was a judgment call by the repository owner — the failure is a tie
-rather than a loss, **λ was not re-tuned**, and at L = 60 every arm scores
-14–17% mean correct at ~5% exact recovery, i.e. that cell ranks pre-passes in
-a regime where the message essentially never breaks. Written down this way on
-purpose: the claim must not drift from its evidence because the decision went
-the other way.
+The arguments for keeping it are that the failure is a tie rather than a loss,
+and that at L = 60 every arm scores 14–17% mean correct at ~5% exact recovery,
+i.e. that cell ranks pre-passes in a regime where the message essentially never
+breaks. **λ has since been retuned** (`0.1·L` → `1.1·√L`, so IC contributes one
+sd at every length), which means these numbers describe a configuration the
+binary no longer ships and a re-measurement is required before any
+recommendation changes.
 
 **The decisive cell holds across five seeds** — +4.45/+4.94/+6.10/+6.94/+4.66,
 pooled **+5.01pp** [+3.86, +6.16], z = 8.5, Q = 2.07 on 4 df (p = 0.72). That
