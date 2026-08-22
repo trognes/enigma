@@ -69,6 +69,122 @@ recover" is therefore a statement about English prose.
 same day key overturns essentially all of them — see the table there.
 → `archived/IMPROVEMENTS.md` §2, §4; `eval/results-joint-score-gain.txt`.
 
+### 2a. Alternatives to IC for the PRE-PASS — planned, nothing measured yet
+
+The staged climb opens with a low-order stage (`--score i4f10` / `m4f10`) whose
+job is to steer the first few plugs into a good basin. **Everything below is a
+PLAN plus arithmetic on corpus statistics — no climb has been run, and none of
+the effect sizes are measurements.** Recorded now so the design is on paper
+before the code is.
+
+**What is already settled, and should not be re-derived.** IC versus mono is
+measured and length-dependent (mono leans at L = 60, IC wins by 2.81pp at
+L = 167, indistinguishable at 107). A **bigram** pre-pass measured much worse
+than IC. **χ²** lost to IC as the `-F` tier-1 model. Extra stages after IC add
+little.
+
+**The constraint a pre-pass model must satisfy is robustness to a very high
+letter-error rate**, not smoothness. At cap 4 against ten true plugs most
+positions still decrypt wrong, and a contiguous quadgram is destroyed by any
+one wrong letter inside it — so ordered n-gram models have almost no signal
+there. IC and mono survive because they are order-free. That is the likeliest
+reason bigram already lost: brittle without being much stronger.
+
+**A structural asymmetry worth naming.** Decryption is `p = S[core(S[c])]`, so
+toggling a plug changes both the core's input and a *relabeling* of the output.
+**IC is invariant under relabeling the output**, so it responds to only half of
+what a move does. That is simultaneously why its surface is clean — no gradient
+from a cosmetic permutation — and why it is weak. Mono and χ² see both halves:
+more signal, and more to overfit. The evidence on which matters is mixed (χ²
+lost in one context, mono is competitive in another), so this is a hypothesis
+to test, not a finding.
+
+**The untried candidate is a HIGHER-ORDER coincidence.** IC is Σf², the
+pair-coincidence rate; nothing forces order 2. Over the 6119 letters of the 52
+corpus decrypts, contrast against the flat null:
+
+| statistic | corpus | flat | contrast |
+|---|---:|---:|---:|
+| Σf² (IC) | 0.0571 | 0.0385 | 1.49× |
+| Σf³ | 0.00422 | 0.00148 | **2.85×** |
+| Σf⁴ | 0.00037 | 0.00006 | 6.44× |
+
+Contrast alone proves nothing, since higher moments are noisier. The comparison
+that matters is **event counts at operational length**, here L = 60:
+
+| statistic | comparisons | expected (flat) | corpus | excess/√exp |
+|---|---:|---:|---:|---:|
+| IC | 1 770 pairs | 68 | 101 | ~4.0 |
+| Σf³ | 34 220 triples | 51 | 144 | **~13** |
+| digraphic IC | 1 711 bigram pairs | 2.5 | 9.0 | ~4.0 |
+
+**That ~13 is a naive UPPER BOUND.** The closed form under
+`--no-preflight` rests on pair-coincidence indicators being *exactly*
+uncorrelated under a uniform null (the shared-index covariance
+`Σp³ − (Σp²)²` vanishes); that property does **not** extend to triples, which
+are positively correlated, so the true variance is higher by an unknown factor.
+The number says "worth measuring", not "three times better".
+
+**Digraphic IC is a trap, and the reason is granularity rather than
+discriminability.** Its contrast beats IC's, but it rests on about **nine
+events** at L = 60. A plug toggle either creates a bigram coincidence or does
+not, so the surface is a coarse step function — disqualifying for a hill-climb
+whatever its separation. That is the same sparsity that presumably sank the
+bigram pre-pass, and it is why this one is planned *not* to be built.
+
+**Σf³ would be nearly free.** The fused scorer already accumulates the 26-bin
+letter histogram for IC, so the extra cost is 26 multiplies per scored board,
+and `ENIGMA_IC_BLEND` shows the blend machinery already exists.
+
+#### The experiments, cheapest first
+
+**A. Model versus cap — needs NO code, and is the gap that matters most.**
+Nobody has isolated whether a pre-pass earns its keep because the *model*
+differs from the target or merely because the *cap* is tight. `-S f4f10` parses
+and runs today, and `eval/prepass_ab.py --arms` is a **paired two-arm**
+harness (`nargs=2`), so this is a small set of pairwise A/Bs rather than one
+four-way run:
+
+| pair | what it prices |
+|---|---|
+| `f10` vs `f4f10` | the CAP alone — same model both sides |
+| `f4f10` vs `i4f10` | the MODEL alone — same cap both sides |
+| `i4f10` vs `m4f10` | already measured, the continuity check |
+
+Run at L = 60 and L = 167, the two ends of the known IC/mono crossover. **If
+`f4f10` matches `i4f10`, the pre-pass is a cap effect and the whole IC/mono
+debate is misdirected**; if it sits apart, the model is doing the work. Keep
+the pairing — an unpaired four-way comparison at ~2pp effect sizes would need
+far more trials to say anything.
+
+**B. Cap sweep — also no code.** `i2f10` / `i4f10` / `i6f10` / `i8f10`. The 4
+appears never to have been swept.
+
+**C. Third-moment coincidence, in three steps.** Do NOT start by adding the
+token:
+
+1. **Offline discriminability probe, pure Python, no binary change.** For
+   random keys and boards holding `j` of the ten true plugs, `j` = 0…10,
+   compute IC and Σf³ of the decrypt and ask which separates `j` from `j+1`
+   better (rank correlation, or AUC per step). This settles whether the token
+   is worth building, at a fraction of the cost, and it is the step that can
+   *falsify* the table above rather than dress it up.
+2. **Only if step 1 favours Σf³:** a schedule token — `k`, for the kappa
+   family of coincidence statistics; `i m b t q a f` are taken. Standalone
+   like IC, so it needs no n-gram table and no `-l`.
+3. **Then `--arms k4f10 i4f10`** at L = 40/60/80/100/167.
+
+**Falsification, stated in advance:** if `k4f10` fails to beat `i4f10` at any
+length, drop the token rather than tuning a blend weight until it wins.
+
+**The reframe worth keeping in view.** The pre-pass exists to place the first
+few plugs, and *scoring* is only one way to do that. Where a crib or a doubled
+word exists, **deducing** those plugs is measured decisive — the self-crib
+seeder beats `-R 128` at ~9× less compute (§5). The whole IC-versus-mono
+question spans ~2pp. If better first plugs are the goal rather than a better
+first statistic, deduction has by far the larger measured effect, and these
+experiments are the smaller lever.
+
 **3. Attack several messages from ONE DAY jointly.** Every measurement in
 this repo attacks a single message, but real traffic came in **day keys**: every
 message on a net that day shared reflector, wheel order, ring settings and
