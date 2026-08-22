@@ -9,7 +9,7 @@ produced boards while a different board wins.  One trial in 1200.
 
 THE OPEN QUESTION.  More restarts means more converged boards, so the truth
 should eventually be produced-but-mis-ranked rather than absent.  At -R 8..100
-that population stayed empty.  This runs the ladder out to -R 1000.
+that population stayed empty.  This runs the ladder well past it.
 
 WHAT IS MEASURED, per (trial, R):
 
@@ -25,13 +25,24 @@ from the indicators, and asks whether the truth comes out on top.  Comparing
 the truth against the winner alone would overstate it -- a third board can win
 jointly.
 
+AND WHAT THE WINNING BOARD LOOKS LIKE.  The first version of this harness kept
+only the scoring/search boolean, which cannot answer the obvious follow-up:
+does a bigger -R find boards NEARER the truth, or merely boards that SCORE
+better?  Each non-exact trial now records the winning board, its score, the
+truth's score, their difference in log units over the whole message, how many
+of the ten plugs it gets right, and whether it derives message 2's true start.
+--out writes every record as JSONL so the run can be re-analysed without
+re-running it.
+
 PAIRED.  Every R in the ladder sees the same trial (same board, key,
 plaintexts, indicators), so the columns are directly comparable.
 
   python3 eval/restart_ladder.py                       # L=60,80  R=8..1000
-  python3 eval/restart_ladder.py --trials 100 -L 80 -R 100,1000
+  python3 eval/restart_ladder.py -L 40,60,80,100 \\
+      -R 8,32,100,316,1000,2000,5000 --out results-restart-ladder.jsonl
 """
 import argparse
+import json
 import multiprocessing
 import os
 import random
@@ -107,7 +118,7 @@ def make_trial(rng, texts, length):
         ct = enigma_ref.decrypt(pt, wheels, ring, start, board)
         msgs.append(dict(ct=ct, grund=grund, enc=enc, start=start))
     return dict(board=board, wheels=wheels, ring=ring, msgs=msgs,
-                seed=rng.randrange(1 << 30))
+                length=length, seed=rng.randrange(1 << 30))
 
 
 def run_trial(job):
@@ -138,9 +149,21 @@ def run_trial(job):
             out[R] = dict(state="exact")
             continue
         reached = any(pair_set(b) == truth for b in dump)
+        # ANATOMY of the board that actually won.  Recording only the
+        # scoring/search boolean, as the first version of this harness did,
+        # cannot answer what the winner LOOKS like -- whether more restarts
+        # find boards nearer the truth or merely boards that score better.
+        # `lead` is in log units over the whole message (the per-symbol score
+        # times the length), matching how ENHANCEMENTS 3a quotes it.
+        got_pairs = pair_set(got)
+        st2 = enigma_ref.decrypt(m2["enc"], wheels, ring, m2["grund"], got)
         rec = dict(state="conv" if reached else "absent",
                    scoring=(s_got >= s_true),
-                   visited=any(pair_set(b) == truth for b in seen))
+                   visited=any(pair_set(b) == truth for b in seen),
+                   board=got, s_got=s_got, s_true=s_true,
+                   lead=(s_got - s_true) * trial["length"],
+                   correct=len(got_pairs & truth), nplugs=len(got_pairs),
+                   start2=(st2 == m2["start"]))
         if reached:
             # Joint re-ranking over the boards the SEARCH produced, deepest
             # first by message-1 score.  The reported answer is included
@@ -178,10 +201,12 @@ def main():
     ap.add_argument("--language", default="wehrmacht")
     ap.add_argument("--jobs", "-j", type=int,
                     default=max(1, (os.cpu_count() or 2)))
+    ap.add_argument("--out", help="write per-trial records here as JSONL")
     args = ap.parse_args()
 
     ladder = [int(x) for x in args.restarts.split(",")]
     texts = load_plaintexts()
+    out_fh = open(args.out, "w", encoding="utf-8") if args.out else None
     print("%d authentic telegraphic plaintexts, model '%s', %d trials/cell,\n"
           "recipe -c -f -S i4f10 -J --polish, rotor key GIVEN\n"
           % (len(texts), args.language, args.trials))
@@ -192,6 +217,14 @@ def main():
                 for _ in range(args.trials)]
         with multiprocessing.Pool(args.jobs) as pool:
             results = pool.map(run_trial, jobs)
+
+        if out_fh:
+            for i, (job, res) in enumerate(zip(jobs, results)):
+                for R, rec in res.items():
+                    out_fh.write(json.dumps(dict(
+                        rec, L=length, R=R, trial=i,
+                        true_board=job[0]["board"])) + "\n")
+            out_fh.flush()
 
         print("L = %d" % length)
         print("%6s %8s %8s %8s %10s %9s %9s" %
@@ -217,6 +250,46 @@ def main():
                 print("%6s truth's rank among the %s converged boards: %s"
                       % ("", "/".join(str(c.get("ncand")) for c in cv),
                          "/".join(str(c.get("rank")) for c in cv)))
+
+        # What the winning board LOOKS like.  Split by class, because the two
+        # are different objects: a search failure lost to the truth and a
+        # scoring failure beat it, and there is no reason their plug overlap
+        # should behave the same way as -R rises.
+        print("\n%6s  the winning board on SCORING failures (it OUTSCORES"
+              " the truth)" % "")
+        print("%6s %6s %9s %10s %10s %9s"
+              % ("-R", "n", "plugs/10", "mean lead", "max lead", "start2"))
+        for R in ladder:
+            cells = [r[R] for r in results if r[R]["state"] not in
+                     ("err", "exact") and r[R].get("scoring")]
+            if not cells:
+                print("%6d %6d %9s %10s %10s %9s"
+                      % (R, 0, "-", "-", "-", "-"))
+                continue
+            n = len(cells)
+            print("%6d %6d %9.2f %10.1f %10.1f %8.1f%%"
+                  % (R, n,
+                     sum(c["correct"] for c in cells) / n,
+                     sum(c["lead"] for c in cells) / n,
+                     max(c["lead"] for c in cells),
+                     100.0 * sum(1 for c in cells if c["start2"]) / n))
+
+        print("\n%6s  the winning board on SEARCH failures (the truth"
+              " OUTSCORES it)" % "")
+        print("%6s %6s %9s %10s %9s"
+              % ("-R", "n", "plugs/10", "mean gap", "start2"))
+        for R in ladder:
+            cells = [r[R] for r in results if r[R]["state"] not in
+                     ("err", "exact") and not r[R].get("scoring")]
+            if not cells:
+                print("%6d %6d %9s %10s %9s" % (R, 0, "-", "-", "-"))
+                continue
+            n = len(cells)
+            print("%6d %6d %9.2f %10.1f %8.1f%%"
+                  % (R, n,
+                     sum(c["correct"] for c in cells) / n,
+                     sum(c["lead"] for c in cells) / n,
+                     100.0 * sum(1 for c in cells if c["start2"]) / n))
         print()
 
     print("  exact    = the search reported the true board")
@@ -233,6 +306,11 @@ def main():
     print("             progress line, i.e. a climb PASSED THROUGH it and")
     print("             kept going uphill.  A LOWER BOUND -- progress lines")
     print("             fire only above the run's high-water mark")
+    print("  plugs/10 = mean plugs the winning board shares with the truth")
+    print("  lead/gap = its score minus the truth's, in LOG UNITS over the")
+    print("             whole message (per-symbol score x length)")
+    print("  start2   = share deriving message 2's TRUE start from the")
+    print("             indicator -- six plugboard lookups, all must be right")
 
 
 if __name__ == "__main__":
