@@ -41,8 +41,8 @@ extern uint8_t all8[asize][asize][asize][asize];
 
 /* Per-model quantisation affine: a stored byte q means log10 p = q/scale + bias.
    Indexed by SCORE_*. */
-extern double ngram_scale[SCORE_FUSED + 1];
-extern double ngram_bias[SCORE_FUSED + 1];
+extern double ngram_scale[SCORE_MONOIC + 1];
+extern double ngram_bias[SCORE_MONOIC + 1];
 
 /* Read the ENIGMA_IC_BLEND override for -f's IC weight. Called once from
    main(), before the search. */
@@ -51,7 +51,7 @@ void ic_blend_init();
 /* Load the table backing one model (IC needs none). */
 void load_table(int model);
 
-/* Map a scoring-model letter (i/m/b/t/q/a/f) to its SCORE_* value. */
+/* Map a scoring-model letter (i/m/b/t/q/a/f/k) to its SCORE_* value. */
 int model_of(char c);
 
 /* Record a bare -i/-m/-b/-t/-q/-a/-f selector; fatal on two that disagree. */

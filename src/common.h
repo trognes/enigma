@@ -25,7 +25,7 @@ static const double score_min = -1e30;
 /* Plaintext scoring models; values match the scoring_name[] order and the
    *_score_decode dispatch in score_iter(). */
 enum scoring { SCORE_IC, SCORE_MONO, SCORE_BI, SCORE_TRI, SCORE_QUAD, SCORE_ALL,
-               SCORE_FUSED };
+               SCORE_FUSED, SCORE_MONOIC };
 
 /* The score a work unit reports when it produced NO candidate at all -- every crib
    hypothesis contradicted, or no rotor setting could have produced the crib. It is a

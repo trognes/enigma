@@ -1151,6 +1151,31 @@ are read from a **data directory** (filenames built as
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
   <lang>` — but on **telegraphic traffic at operational length** use `i4f10`
   instead of `m4f10` (+2.8pp over 2000 paired trials; see `-S`).
+- `-S k` / `--score k…` **mono + IC fused, as a PRE-PASS model** (experimental,
+  needs `-l`; schedule token only — there is deliberately no bare `-k`
+  selector). The monogram score and the index of coincidence are **both
+  functions of the same 26-bin letter histogram**, so one decode pass yields
+  both and the fusion costs 26 multiply-adds — cheaper than `-f`'s, which has
+  to accumulate IC alongside a gather-bound quad loop.
+  - **`lambda` scales with LENGTH here, unlike `-f`'s baked 30.** The term
+    added is `lambda · L · IC` with `lambda = 0.1` (`ENIGMA_MONOIC_BLEND`
+    overrides). IC's spread falls as ~`1/L` (a rate over `C(L,2)` pairs) while
+    the per-symbol monogram score's falls as ~`1/√L` (a mean of `L` terms), so
+    the weight that balances them grows with `L`. Measured, the optimum tracks
+    `0.1·L` across L = 40…167 while a fixed constant drifts away from it —
+    worst at operational length, which is why `-f`'s design was not copied.
+  - **Motivated by a measured AUC gain, NOT yet by a recovery gain.** On the
+    board-ordering probe it beats both components at four lengths
+    (+.007/+.015/+.029/+.020 at L = 40/60/100/167, held out on a second seed)
+    and is simultaneously *more* resistant to spurious plugs than either. That
+    probe never runs a climb, so **the end-to-end question is open** —
+    `ENHANCEMENTS.md` §2a E carries the falsification condition it still has to
+    meet. Do not put it in a recommended recipe until it has.
+  - **One scope warning on the evidence**: the probe scored boards holding 1–4
+    plugs, which is the climb's state under `-R 0` (no kick). Under the default
+    `--random 10` every restart *starts* at ten plugs, so the regime the probe
+    modelled is not the one a kicked search runs in. Re-probing at ten plugs is
+    outstanding.
 - `--confidence N` **is the winner better than chance?** (N = null samples, 0 =
   off). A raw score answers nothing on its own: each model has a distribution on
   text with no signal, and a search reports the **maximum** over the keys it

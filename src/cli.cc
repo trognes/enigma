@@ -87,7 +87,8 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "climb; N = N kicked climbs, keep best [0]");
   fprintf(out, "  %-24s %s\n", "-S, --score schedule",
           "Staged plugboard climb: <letter><cap> tokens,");
-  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q/a/f (number caps plug pairs; last");
+  fprintf(out, "  %-24s %s\n", "", "models i/m/b/t/q/a/f/k (k = mono+IC, experimental;");
+  fprintf(out, "  %-24s %s\n", "", "number caps plug pairs; last");
   fprintf(out, "  %-24s %s\n", "", "stage is the target/ranking model). E.g. --score");
   fprintf(out, "  %-24s %s\n", "", "m4f10 (mono pre-pass then fused, both capped).");
   fprintf(out, "  %-24s %s\n", "", "Without -c only the target model is used (to rank).");
@@ -373,7 +374,8 @@ void show_settings()
 {
   static const char * const scoring_name[] =
     { "index of coincidence", "monograms", "bigrams", "trigrams", "quadgrams",
-      "weighted all-orders", "weighted all-orders + IC" };
+      "weighted all-orders", "weighted all-orders + IC",
+      "monograms + IC" };
 
   fprintf(stderr, "Ciphertext: %d letters\n", textlength);
 

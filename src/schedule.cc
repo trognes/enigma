@@ -64,7 +64,7 @@ void parse_schedule()
             }
         }
 
-      if (strchr("imbtqaf", letter))
+      if (strchr("imbtqafk", letter))
         {
           if (opt_nstages >= max_stages)
             fatal("Illegal --score schedule: too many stages (max 16)");
@@ -76,7 +76,7 @@ void parse_schedule()
           opt_nstages++;
         }
       else
-        fatal("Illegal --score schedule (tokens are i/m/b/t/q/a/f + optional cap, "
+        fatal("Illegal --score schedule (tokens are i/m/b/t/q/a/f/k + optional cap, "
               "e.g. --score m4f10; use --random for the kick, --exhaust for forcing)");
     }
 
