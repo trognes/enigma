@@ -261,12 +261,14 @@ full method and raw numbers in `eval/results-joint-score-gain.txt`):
 So scoring failures are **90% of misses at 40 letters, 56% at 60, and 11% by
 100**, and from 60 letters up every one of them is overturned.
 
-**BUT IT DOES NOT CONVERT INTO BREAKS, and that is the finding that matters.**
+**BUT AT `-R 8` IT DOES NOT CONVERT INTO BREAKS, and that is the finding that
+matters.**
 The rescue compares the true board against the impostor — and a real search
 does not have the true board to put into that comparison. Joint re-ranking can
 only promote a board the search ACTUALLY PRODUCED, so it helps exactly when
-some restart found the truth while a *different* board won on message 1. That
-population is empty (300 trials per length, `-R 8`, same recipe):
+some restart found the truth while a *different* board won on message 1. At
+`-R 8` that population is empty (300 trials per length, same recipe); it opens
+to 1–2% by `-R 1000`, measured in the next block:
 
 | L | answer right | wrong, **truth among the restarts** | truth absent |
 |---:|---:|---:|---:|
@@ -278,36 +280,70 @@ population is empty (300 trials per length, `-R 8`, same recipe):
 **One trial in 1200.** When the search is wrong it is not because the truth was
 found and mis-ranked; the truth was never reached.
 
-**Raising `-R` does not open that door either** — the obvious next hypothesis,
-since more restarts mean more candidate boards. Measured, 350 trials per cell:
+**Raising `-R` barely opens that door** — the obvious next hypothesis, since
+more restarts mean more candidate boards. Measured to `-R 1000`, 350 paired
+trials per cell (`eval/restart_ladder.py`, results in
+`eval/results-restart-ladder.txt`):
 
 | L | `-R` | answer right | **wrong, truth in restarts** | truth absent |
 |---:|---:|---:|---:|---:|
 | 60 | 8 | 4.3% | **0.0%** | 95.7% |
-| 60 | 32 | 6.6% | **0.0%** | 93.4% |
-| 60 | 100 | 11.7% | **0.0%** | 88.3% |
-| 80 | 8 | 9.1% | **0.0%** | 90.9% |
-| 80 | 32 | 19.4% | **0.0%** | 80.6% |
-| 80 | 100 | 28.6% | **0.3%** | 71.1% |
+| 60 | 32 | 6.9% | **0.0%** | 93.1% |
+| 60 | 100 | 9.1% | **0.3%** | 90.6% |
+| 60 | 316 | 11.7% | **0.3%** | 88.0% |
+| 60 | 1000 | 16.6% | **0.9%** | 82.6% |
+| 80 | 8 | 13.4% | **0.0%** | 86.6% |
+| 80 | 32 | 23.7% | **0.0%** | 76.3% |
+| 80 | 100 | 30.0% | **0.9%** | 69.1% |
+| 80 | 316 | 36.0% | **0.9%** | 63.1% |
+| 80 | 1000 | 42.9% | **1.7%** | 55.4% |
 
-Restarts help enormously — exact recovery 9.1% → 28.6% at L = 80 — but they
-move trials from *truth absent* straight to *answer right*, never through the
-middle column. **The two populations are disjoint: when a restart finds the
-true board it also wins on message 1**, so there is never a board to promote.
+Restarts help enormously — exact recovery 13.4% → 42.9% at L = 80 — and the
+middle column stays nearly empty throughout: they move trials from *truth
+absent* straight to *answer right*. **The two populations are almost disjoint,
+because when a restart finds the true board it usually also wins on message 1.**
 
-That also explains the scoring failures themselves. A scoring failure means the
-search converged on a board scoring HIGHER than the truth — so the truth is not
-the scoring model's optimum, and no restart climbs to it because it is not the
-top of any hill. More restarts simply locate the better-scoring impostor more
-reliably. That matches the
+**Almost, not entirely, and the gap grows with `-R`.** By `-R 1000` the middle
+column reaches **1.7%** at L = 80 and 0.9% at L = 60, and where there *is*
+something to promote the second message promotes it **every time — 9 of 9
+across both lengths**. So joint re-ranking takes L = 80 from 42.9% to **44.6%**.
+That is small beside the +6.9pp the last restart step bought, but the two are
+not paid for alike: the restarts cost 3.16× the compute and the second message
+costs **one decrypt per candidate board** against a run of a thousand climbs.
+If a same-day message with a known indicator is in hand, take the 1.7pp — it is
+free. It is simply not a substitute for `-R`.
+
+**The 9-of-9 is not the harness handing itself the truth.** The re-ranking adds
+the true board to the candidate set explicitly, so it would read 9/9 even if
+the truth sat far below any list an attacker would keep. Its rank by message-1
+score among the ~500 converged boards is **1, 2, 2** at L = 60 and **2, 20, 1,
+2, 1, 1** at L = 80 — eight of nine are the top or the runner-up, so a top-8
+list promotes 8 of 9 unaided and the ninth needs a top-20. Four of the nine sit
+at rank **1**, meaning the truth was the best converged board and `--polish`
+then produced something better on message 1: scoring failures manufactured by
+the finisher, which joint scoring undoes.
+
+That near-disjointness also explains the scoring failures themselves. A scoring
+failure means the search converged on a board scoring HIGHER than the truth —
+so the truth is not the scoring model's optimum, and no restart climbs to it
+because it is not the top of any hill. More restarts simply locate the
+better-scoring impostor more reliably, which is why the conversion population
+can only grow through the shrinking *search*-failure half. That matches the
 monotonicity result above — a climb that does not converge on the true board
-never visits it either — and it means the 90%/56%/27% scoring-failure rates and
-the 100% rescue are both correctly measured and do not compose into an
-advantage.
+never visits it either — and the trajectory data agrees: at L = 80, `-R 1000`
+the truth is echoed mid-climb in 2.3% of trials against a conversion population
+of 1.7%, so a climb essentially never passes *through* the truth without
+stopping on it.
 
-So the honest summary is: **the discrimination property is real, the
-end-to-end gain is not demonstrated.** What survives is confirmation, not
-search — see the limitation below.
+**The residual is turning into the information floor.** The scoring share of
+the misses rises monotonically with `-R` — 31 → 43 → 52 → 64 → **75%** at
+L = 80, and 55 → 63 → 68 → 73 → **80%** at L = 60. Restarts retire the search
+failures, and three quarters of what is left at `-R 1000` is a limit no restart
+count crosses.
+
+So the honest summary is: **the discrimination property is real, and the
+end-to-end gain is real but worth 1–2pp.** What mostly survives is
+confirmation, not search — see the limitation below.
 
 **How the search is run, exactly**, because the result is meaningless without
 it: `-u B -w <true> -r <true> -g <true start1>` are all pinned, so the keyspace
@@ -381,30 +417,37 @@ survive:
 - **Testing a candidate day key across several messages at once** — the GEHRG
   pattern in §5j, cheap and it fails loudly.
 
-Neither helps the case that dominates short texts: **the climb not reaching the
-board at all**, 71–99% of trials at every length measured here. That is a
-SEARCH problem.
+A third use is worth 1–2pp and is free where it applies: **re-ranking the
+search's own converged boards**, as measured above. What none of them helps is
+the case that dominates short texts — **the climb not reaching the board at
+all**, 55–99% of trials at every length measured here. That is a SEARCH
+problem.
 
-**And the positive finding to take away from all of this is about `-R`, not
-about second messages.** The same sweep that closed the conversion door
-measures the lever that does work at these lengths:
+**And the main finding to take away from all of this is about `-R`, not about
+second messages.** The same sweep measures the lever that does work at these
+lengths, and it is still paying at a thousand restarts:
 
-| | `-R 8` | `-R 32` | `-R 100` |
-|---|---:|---:|---:|
-| exact recovery, L = 60 | 4.3% | 6.6% | **11.7%** |
-| exact recovery, L = 80 | 9.1% | 19.4% | **28.6%** |
+| | `-R 8` | `-R 32` | `-R 100` | `-R 316` | `-R 1000` |
+|---|---:|---:|---:|---:|---:|
+| exact recovery, L = 60 | 4.3% | 6.9% | 9.1% | 11.7% | **16.6%** |
+| exact recovery, L = 80 | 13.4% | 23.7% | 30.0% | 36.0% | **42.9%** |
 
-Restarts roughly **triple** exact recovery at L = 80 and nearly triple it at
-60, and the curve has not flattened at 100. That is consistent with CLAUDE.md's
-own plugboard-tier table (12.0% at `-R 8`, 32.0% at `-R 64`, L = 82) — this
-harness reads a little lower throughout, which is the plaintext pool (whole
-messages, some corpus-flagged garbled, against `prepass_ab.py`'s concatenated
-corpus).
+**No flattening anywhere in the range.** Recovery is close to linear in log `R`
+— about **+6pp per 3.16×** at L = 80 and +4pp at L = 60 — and the last step
+(316 → 1000) is the **largest single step at both lengths**, +6.9pp and +4.9pp.
+Whatever the ceiling is, `-R 1000` is not near it. That is consistent with
+CLAUDE.md's own plugboard-tier table (12.0% at `-R 8`, 32.0% at `-R 64`,
+L = 82); this harness reads a little differently because of the plaintext pool
+(whole messages, some corpus-flagged garbled, against `prepass_ab.py`'s
+concatenated corpus) and because its trials are a different set — the earlier
+`-R 8`/`32`/`100` sweep's generator was never committed, so those cells are
+re-measured here rather than reproduced.
 
 So for a short text the order of business is: **spend on `-R`, bought with
-`-T`**; then the message-key prior in §3b, which needs no second message; and
-only then a second message, for confirming what you found rather than finding
-it.
+`-T`, and spend more than feels reasonable** — a thousand restarts is still on
+the steep part of the curve; then the message-key prior in §3b, which needs no
+second message; and only then a second message — for confirming what you found,
+plus the free 1–2pp of re-ranking, rather than for finding it.
 
 **A start SWEEP degrades gracefully where the indicator does not**, which is
 the inversion to remember if this is ever revisited. Scoring message 2 across
