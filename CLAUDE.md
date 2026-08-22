@@ -1098,7 +1098,13 @@ are read from a **data directory** (filenames built as
   when the language is known; needs `-l`; a schedule token too -- `-S m4f10`).
   Takes `-a`'s `all8` table unchanged and adds `lambda * IC` to the
   **per-symbol** score, with `lambda = 30` baked in (`ENIGMA_IC_BLEND` overrides
-  it, mirroring `ENIGMA_LOGLIN` for `-a`'s weights). IC cannot be folded into
+  it). **`ENIGMA_LOGLIN` does NOT override `-a`'s weights** — an earlier version
+  of this sentence said it mirrored them, and it does not: `load_table()` passes
+  the baked vector as `force_ll`, and that branch ignores the environment
+  entirely. The override reshapes the plain **quad** table instead, so
+  `ENIGMA_LOGLIN=0,0,0,1 -q` is a monogram-shaped `-q` while `-a`/`-f` are
+  byte-identical to an unset run (verified: `-a` reads −14.1491 either way while
+  `-q` moves −8.9547 → −1.5214). IC cannot be folded into
   the table the way `-a`'s four orders are -- they are additive over positions,
   IC is quadratic in the whole-message letter histogram -- so it is accumulated
   in the same decode pass and added after normalisation. Measured **+3.0 to

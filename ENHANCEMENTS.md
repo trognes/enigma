@@ -238,6 +238,45 @@ model differs from the target, so that cannot be assumed — and if the
 correlation is weak, "keep the better seed" is picking at random for 1.39× the
 price. `--dump-all` over both arms on the same problems answers it offline.
 
+**E. FUSE mono and IC into one pre-pass score, the way `-f` fuses `-a` with
+IC.** The most promising of these, and the cheapest to run.
+
+**It is nearly free, which `-f`'s fusion was not.** `ic_score_decode()` builds a
+26-bin histogram and returns `Σ n_x(n_x−1)/n(n−1)`; the monogram score is
+`Σ_x freq[x]·mono8[x]` over that *same* histogram. One decode pass yields both,
+so mono+IC costs about what either costs alone — no second table and no second
+gather, where `-f` had to accumulate IC alongside a gather-bound quad loop.
+
+**But the `-f` precedent is WEAKER than it looks, and the reason matters.** `-f`
+fused an order-*sensitive* model with an order-*free* one — genuinely different
+views of the text. mono+IC is a linear form and a quadratic form of one
+histogram: more expressive than either, but carrying **no** information about
+letter order. The mechanism behind `-f`'s +3–4pp is therefore not the mechanism
+here, and the gain should not be expected to transfer on that basis.
+
+**The complementarity it does have runs along the identity axis.** IC is
+relabel-invariant, mono is not — one reads only the shape of the distribution,
+the other which letter holds which count. That is a real difference, and at cap
+4 the order information order-sensitive models want is mostly destroyed anyway,
+which is the original argument for an order-free pre-pass.
+
+**The strongest argument is the length crossover itself.** Mono leans at L = 60,
+ties at 107, IC wins at 167 — and IC's variance goes as `1/C(n,2)`. That pattern
+is the signature of two estimators with different *precision* profiles rather
+than two different models, and blending is the standard fix: one fixed `λ`
+should be at least as good as the better of the two at **both** ends, removing
+the length-dependent choice entirely.
+
+**Zero-code stand-in available today:** `-S m2i2f10` — mono for the first two
+plugs, then IC for the next two. Sequential rather than blended, so not the same
+thing, but the "extra stages after IC add little" result was measured on
+`i4m4`, not on this order.
+
+**Falsification, in advance:** `λ` is a free parameter and this is exactly where
+a probe gets tuned until it wins. Fix `λ` by the same method `-f`'s 30 was
+fixed, measure once at L = 60 and L = 167, and if the blend fails to beat
+*both* `m4f10` and `i4f10` at *both* lengths, drop it rather than re-tuning.
+
 **The reframe worth keeping in view.** The pre-pass exists to place the first
 few plugs, and *scoring* is only one way to do that. Where a crib or a doubled
 word exists, **deducing** those plugs is measured decisive — the self-crib
