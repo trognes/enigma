@@ -177,6 +177,41 @@ token:
 **Falsification, stated in advance:** if `k4f10` fails to beat `i4f10` at any
 length, drop the token rather than tuning a blend weight until it wins.
 
+**D. Best-of-two SEEDS inside each restart — the one portfolio variant not yet
+measured.** Running IC and mono pre-passes and taking the better is a natural
+idea and has been **measured down twice**, so read those first: the 50/50
+IC+mono restart portfolio lands between IC and mono, below pure mono
+(`archived/PERFORMANCE.md` §6.10, `eval/prepass_portfolio.py`), and the
+greedy+SA portfolio is neutral-to-negative for a reason spelled out there.
+
+**The premise is right and the accounting is what fails.** The complementarity
+is real — for greedy+SA, at *double* budget the union beat the best single by
+**+10–17pp**, with large only-A and only-B sets — but halving each solver to
+fund both cost 11–14pp, almost exactly cancelling it. The rule recorded there:
+a portfolio helps only when *neither* solver dominates **and the split is
+cheap**. Note also that the restart-ladder work (`eval/restart_ladder.py`)
+makes the halving penalty **worse**: recovery is still climbing steeply at
+`-R 5000`, and a steep curve is exactly where halving hurts most.
+
+**And a hedge is only worth paying for when the selector is unobservable.**
+Here it is observable — the IC/mono winner is length-dependent and the
+ciphertext's length is known — so picking from the table beats mixing.
+
+**What is left untested is a cheaper split.** §6.10 divided *restarts* between
+two whole configs. The alternative is to run both pre-passes **inside** each
+restart and keep the better seed before the expensive `f10` stage. From §6.10's
+own `score_iter` ratios (`q10` = 0.594× `i4q10`, `m4q10` = 0.983×) each
+pre-pass is ~0.40 of a restart, so doing both costs ~**1.39×** — 72% of the
+restarts retained rather than 50%, which is the "cheap split" the rejection
+says a portfolio needs.
+
+**The crux is a correlation nobody has checked**, and it should be measured
+before any code: is the 4-plug seed that scores better *under the target model*
+the one that ends up climbing higher? A pre-pass exists precisely because its
+model differs from the target, so that cannot be assumed — and if the
+correlation is weak, "keep the better seed" is picking at random for 1.39× the
+price. `--dump-all` over both arms on the same problems answers it offline.
+
 **The reframe worth keeping in view.** The pre-pass exists to place the first
 few plugs, and *scoring* is only one way to do that. Where a crib or a doubled
 word exists, **deducing** those plugs is measured decisive — the self-crib
