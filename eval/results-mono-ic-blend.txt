@@ -59,6 +59,29 @@
 # anywhere.
 #
 # ============================================================================
+# EXTENDED TO L = 167, THE OPERATIONAL LENGTH -- THE BLEND STILL WINS
+# ============================================================================
+#
+# The sweep above stopped at L = 100, leaving the cell that matters most
+# unprobed and, because of the lambda drift below, the riskiest.  Added:
+#
+#     L      sd ratio   pure mono   pure IC   best blend   peak r   gain
+#    40         7.4       .563       .543       .571        0.5     +.007
+#    60         8.8       .572       .561       .587        1.0     +.015
+#   100        11.0       .591       .593       .622        1.0     +.029
+#   167        14.2       .601       .625       .645       1.0-2.0  +.020
+#
+# ("gain" is over the BETTER of the two components at that length.)
+#
+# THE BLEND BEATS BOTH COMPONENTS AT ALL FOUR LENGTHS, and keeps its
+# over-plugging advantage at 167 too: at four wrong plugs it reads .407 against
+# IC's .432 and mono's .433, still the most resistant of the three.
+#
+# AND THE DOCUMENTED mono/IC CROSSOVER IS NOW A CLEAN FOUR-POINT CURVE -- mono
+# ahead at 40 and 60, tied at 100, IC clearly ahead at 167.  That is the third
+# independent reproduction of it, from a measurement that never runs a climb.
+#
+# ============================================================================
 # THE IMPLEMENTATION QUESTION: lambda IS NOT LENGTH-INVARIANT
 # ============================================================================
 #
@@ -68,22 +91,26 @@
 # ~ 1/L) while mono is a mean of L terms (sd ~ 1/sqrt(L)).  Dividing out:
 # 1.17 / 1.14 / 1.10 times sqrt(L), so slightly sub-sqrt.
 #
-# So the optimal RAW lambda nearly triples from L = 40 to L = 100 (3.7 to 11
-# at the per-length peak).  Two workable designs:
+# So the optimal RAW lambda rises steeply with length.  The L = 167 cell
+# SETTLES the design, and rules out the fixed constant an earlier version of
+# this file offered as the simplest option:
 #
-#   * A FIXED lambda ~ 6.5.  It lands at r = 0.88 / 0.74 / 0.59 for
-#     L = 40 / 60 / 100 -- inside the broad plateau at all three, costing
-#     ~.001 at L = 40 and ~.006 at L = 100 against the per-length optimum, and
-#     still beating both pure statistics everywhere.  Simplest, and it is what
-#     -f does with its baked 30.
-#   * lambda = 0.85 * sqrt(textlength), holding r ~ 0.75 constant.  The binary
-#     knows the length, so this is no harder, and it tracks the optimum rather
-#     than drifting across it.
+#              r that each rule gives, against the measured peak r
+#     L        peak r     lambda = 0.1*L     fixed lambda = 6.5
+#    40         0.5           0.54                 0.88
+#    60         1.0           0.68                 0.74
+#   100         1.0           0.91                 0.59
+#   167       1.0-2.0         1.18                 0.46
 #
-# The two effects work against each other, which is worth knowing: a fixed
-# lambda makes r FALL with length, while the measured peak r RISES with it
-# (0.5 at L = 40, 1.0 at L = 100).  That is why the fixed-lambda cost is
-# larger at the long end.
+# A LENGTH-PROPORTIONAL lambda tracks the peak at every length; a fixed lambda
+# drifts AWAY from it, because the two effects compound rather than cancel --
+# a fixed lambda makes r fall with length while the measured peak r rises.  At
+# L = 167 the fixed rule sits at r = 0.46 against a peak of 1-2, i.e. wrong at
+# exactly the length that matters.  With only L <= 100 probed the two rules
+# looked comparable; they are not.
+#
+# RECOMMENDED: lambda = 0.1 * textlength.  The binary knows the length, so it
+# is no harder than a baked constant.
 #
 # ============================================================================
 # THE TWO GAPS THIS RESULT OPENED WITH ARE NOW CLOSED

@@ -439,15 +439,37 @@ is complementarity rather than one being sharper, exactly what the
 relabel-invariance argument predicts. For scale, the whole mono-versus-IC
 question spans .010–.020 of AUC and is worth ~2pp end-to-end.
 
-**`λ` is NOT length-invariant, which is the implementation question.**
-`sd(mono)/sd(ic)` measures 7.4 / 8.8 / 11.0 at L = 40/60/100 — close to the
-√L theory predicts, since IC is a rate over `C(L,2)` pairs while mono is a
-mean of `L` terms. So the optimal raw `λ` nearly triples over that range.
-Either a **fixed λ ≈ 6.5** (lands at r = 0.88/0.74/0.59, inside the plateau
-throughout, costing ~.006 at the long end) or **λ = 0.85·√textlength**
-(holding r ≈ 0.75, and the binary knows the length). Note the two drifts
-oppose: a fixed λ makes `r` fall with length while the measured peak `r`
-rises.
+**Extended to L = 167, and the blend still wins.** The sweep first stopped at
+L = 100, leaving the operational length — and, because of the λ drift, the
+riskiest cell — unprobed:
+
+| L | pure mono | pure IC | best blend | peak r | gain |
+|---:|---:|---:|---:|---:|---:|
+| 40 | **.563** | .543 | .571 | 0.5 | +.007 |
+| 60 | **.572** | .561 | .587 | 1.0 | +.015 |
+| 100 | .591 | **.593** | .622 | 1.0 | +.029 |
+| 167 | .601 | **.625** | **.645** | 1.0–2.0 | +.020 |
+
+It beats both components at all four lengths and keeps its over-plugging
+advantage at 167 (.407 at four wrong plugs, against IC .432 and mono .433).
+The documented mono/IC crossover also appears as a clean four-point curve —
+mono ahead at 40 and 60, tied at 100, IC clearly ahead at 167.
+
+**`λ` is NOT length-invariant, and L = 167 settles the design.**
+`sd(mono)/sd(ic)` measures 7.4 / 8.8 / 11.0 / **14.2** — close to the √L theory
+predicts, since IC is a rate over `C(L,2)` pairs while mono is a mean of `L`
+terms — while the measured peak `r` *rises* with length. The two compound
+rather than cancel:
+
+| L | peak r | `λ = 0.1·L` gives | fixed `λ = 6.5` gives |
+|---:|---:|---:|---:|
+| 40 | 0.5 | 0.54 | 0.88 |
+| 167 | 1.0–2.0 | **1.18** | 0.46 |
+
+**A length-proportional λ tracks the peak; a fixed one drifts away from it**,
+worst at exactly the length that matters. With only L ≤ 100 probed the two
+rules looked comparable — they are not. **Recommended: `λ = 0.1 ×
+textlength`**, which the binary can compute as easily as a baked constant.
 
 **It does not buy the gain against over-plugging** — the one way this could
 have been a false economy, now measured. AUC of `n` *wrong* plugs against the
