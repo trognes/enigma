@@ -170,7 +170,7 @@ def make_trial(rng, texts, length):
 
 
 def run_trial(job):
-    trial, ladder, lang = job
+    trial, ladder, lang, depths = job
     board, wheels, ring = trial["board"], trial["wheels"], trial["ring"]
     m1, m2 = trial["msgs"]
     truth = pair_set(board)
@@ -247,20 +247,38 @@ def run_trial(job):
         rec["visited"] = any(clears(b) >= RECOVER_PCT for b in seen)
         rec["state"] = "conv" if good else "absent"
         if good:
-            # The true board is deliberately NOT added: an attacker re-ranks
-            # the list the search gave them, and injecting the answer would
-            # report a promotion no real top-K list could deliver.
-            names = {b for b, _ in order[:TOPK]} | {got}
-            best, best_s = None, None
-            for b in names:
-                j = score_board(m1["ct"], wheels, ring, m1["start"], b, lang)
-                if j is None:
-                    continue
-                j += msg2_score(b)
-                if best_s is None or j > best_s:
-                    best, best_s = b, j
-            rec["promoted"] = (best is not None
-                               and clears(best) >= RECOVER_PCT)
+            # JOINT RE-RANKING AT SEVERAL DEPTHS.  The true board is
+            # deliberately NOT added: an attacker re-ranks the list the search
+            # gave them, and injecting the answer would report a promotion no
+            # real top-K list could deliver.
+            #
+            # Message-1 scores come from the DUMP, not from a fresh run --
+            # verified identical to score_board() to four decimals on every
+            # board checked, which is what makes a depth of 128 affordable at
+            # all (it halves the subprocess count). Message 2 still needs the
+            # binary, since its start is derived per board.
+            #
+            # The depths are ascending and share one cache, so a sweep of
+            # 8/32/128 costs 128 evaluations, not 168.
+            s2cache = {}
+
+            def joint(b, s1):
+                if b not in s2cache:
+                    s2cache[b] = msg2_score(b)
+                return None if s2cache[b] is None else s1 + s2cache[b]
+
+            rec["promoted_at"] = {}
+            for K in depths:
+                best, best_j = None, None
+                for b, s1 in list(order[:K]) + [(got, s_got)]:
+                    j = joint(b, s1)
+                    if j is None:
+                        continue
+                    if best_j is None or j > best_j:
+                        best, best_j = b, j
+                rec["promoted_at"][K] = (best is not None
+                                         and clears(best) >= RECOVER_PCT)
+            rec["promoted"] = rec["promoted_at"][depths[0]]
         out[R] = rec
     return out
 
@@ -275,9 +293,13 @@ def main():
     ap.add_argument("--jobs", "-j", type=int,
                     default=max(1, (os.cpu_count() or 2)))
     ap.add_argument("--out", help="write per-trial records here as JSONL")
+    ap.add_argument("--rerank-depth", default=str(TOPK),
+                    help="candidate-list depths for the joint "
+                         "re-ranking, ascending (default %d)" % TOPK)
     args = ap.parse_args()
 
     ladder = [int(x) for x in args.restarts.split(",")]
+    depths = sorted(int(x) for x in args.rerank_depth.split(","))
     texts = load_plaintexts()
     out_fh = open(args.out, "w", encoding="utf-8") if args.out else None
     print("%d authentic telegraphic plaintexts, model '%s', %d trials/cell,\n"
@@ -287,7 +309,8 @@ def main():
 
     for length in [int(x) for x in args.lengths.split(",")]:
         rng = random.Random(args.seed + length)
-        jobs = [(make_trial(rng, texts, length), ladder, args.language)
+        jobs = [(make_trial(rng, texts, length), ladder, args.language,
+                 depths)
                 for _ in range(args.trials)]
         with multiprocessing.Pool(args.jobs) as pool:
             results = pool.map(run_trial, jobs)
@@ -338,6 +361,29 @@ def main():
                      if cv else "-",
                      ("%.0f" % (sum(c["good_rank"] for c in cv) / len(cv)))
                      if cv else "-"))
+
+        if len(depths) > 1:
+            # promoted@K against the CEILING at K -- the share of conv trials
+            # whose good board is even inside a top-K list.  Reporting the two
+            # together is the point: a low promotion rate means something
+            # different when the board is not in the window at all.
+            print("\n%6s  joint re-ranking at DEPTH: promoted / of those whose"
+                  "\n%6s  good board is inside the window at all" % ("", ""))
+            hdr = "%6s %7s" % ("-R", "conv")
+            for K in depths:
+                hdr += " %13s" % ("K=%d" % K)
+            print(hdr)
+            for R in ladder:
+                cv = [c for c in cells_by_r[R] if c["state"] == "conv"]
+                if not cv:
+                    continue
+                row = "%6d %7d" % (R, len(cv))
+                for K in depths:
+                    p = sum(1 for c in cv if c.get("promoted_at", {}).get(K))
+                    inw = sum(1 for c in cv if c["good_rank"] <= K)
+                    row += " %5.0f%% /%5.0f%%" % (100.0 * p / len(cv),
+                                                  100.0 * inw / len(cv))
+                print(row)
 
         print("\n%6s  where a GOOD board sits in the search's own ranking of"
               " the boards\n%6s  it converged on -- the true one, and the"

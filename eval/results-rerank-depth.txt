@@ -1,0 +1,130 @@
+# How deep should the joint re-ranking candidate list be?
+#
+# eval/restart_ladder.py --trials 200 -L 40,60,80,100 -R 1000,5000 \
+#     --rerank-depth 8,32,128
+#
+# Same setup as results-restart-ladder.txt: 52 authentic telegraphic
+# plaintexts, -c -f -S i4f10 -J --polish, rotor key GIVEN, 10-pair board
+# hidden, second message on the same day key with its start DERIVED per
+# candidate board.  A board counts as recovered at >= 50% of the plaintext.
+#
+# THIS REPLACES A PROJECTION.  results-restart-ladder.txt section 3 estimated
+# that a top-128 list would be worth ~+8pp at L = 60 by holding the
+# conditional promotion rate constant at ~50%.  It was flagged as optimistic.
+# It is optimistic, by about 1.6x, and the reason is the assumption itself.
+#
+# ============================================================================
+# THE MEASUREMENT
+# ============================================================================
+#
+# promoted@K = share of conv trials where joint re-ranking over the search's
+# top-K boards puts a 50%-clearing board first.
+# ceiling@K  = share whose good board is inside a top-K list AT ALL -- a
+#              necessary condition, reported beside it because a low promotion
+#              rate means something different when the board was never there.
+#
+#   -R 5000     conv      K=8         K=32        K=128     gain at 128
+#   L = 40     22.5%    4% / 24%    7% / 44%   11% / 60%      +2.5pp
+#   L = 60     23.0%   17% / 37%   22% / 70%   22% / 80%      +5.1pp
+#   L = 80     18.0%   19% / 36%   25% / 53%   31% / 78%      +5.6pp
+#   L = 100     7.5%   40% / 53%   40% / 67%   40% / 87%      +3.0pp
+#
+#   -R 1000     conv      K=8         K=32        K=128
+#   L = 40     13.0%   12% / 46%    8% / 69%   12% / 85%
+#   L = 60     15.0%    0% / 47%   10% / 77%    7% / 97%
+#   L = 80     10.5%   24% / 38%   29% / 76%   29% / 90%
+#   L = 100     5.5%   27% / 82%   27% / 100%  27% / 100%
+#
+# "gain" is promoted@128 x conv, i.e. percentage points of recovery added on
+# top of what the search reports unaided (31.0% at L = 60, 57.5% at L = 80).
+#
+# ============================================================================
+# 1.  DEPTH HELPS, BUT FAR LESS THAN THE CEILING SUGGESTS
+# ============================================================================
+#
+# The ceiling rises steeply with K -- at L = 60, -R 5000, from 37% to 80% --
+# while promotion goes 17% -> 22% -> 22%.  The CONDITIONAL rate (promoted
+# divided by ceiling) FALLS with depth:
+#
+#            K=8    K=32   K=128
+#   L = 60   46%    31%     27%
+#   L = 80   53%    47%     40%
+#
+# A deeper list does surface the good board, and the board then loses to one
+# of the extra competitors the same list admits.  The projection assumed this
+# rate was constant; it is not, and that is the whole error.
+#
+# PROMOTION IS NOT EVEN MONOTONE IN K.  L = 60 at -R 1000 reads 0% / 10% / 7%
+# and L = 40 reads 12% / 8% / 12%.  Adding candidates can LOSE a trial that a
+# shallower list won.  Any tuning of K has to be measured, not reasoned.
+#
+# ============================================================================
+# 2.  K = 32 IS THE OPERATING POINT
+# ============================================================================
+#
+# It captures all of the L = 60 gain (22% at both 32 and 128), most of L = 80
+# (25% against 31%) and all of L = 100 (40% flat), at a QUARTER of the
+# joint-scoring cost.  Only L = 80 pays measurably for going deeper, +6pp of
+# conv trials for 4x the candidates.
+#
+# Note this is the same recommendation the rank data gave, for a DIFFERENT
+# reason.  The rank data said a top-32 list contains 65% of the good boards;
+# the reason to stop there is not that deeper lists lack the board -- at K=128
+# they hold 78-87% of them -- but that the joint score cannot pick it out of a
+# crowded list.
+#
+# ============================================================================
+# 3.  THE GAIN PEAKS IN THE MIDDLE, AND THE MECHANISM IS AN EVIDENCE RATIO
+# ============================================================================
+#
+# +2.5 / +5.1 / +5.6 / +3.0 pp at L = 40 / 60 / 80 / 100.  Both ends are
+# limited, for opposite reasons: at L = 40 the conv population is large
+# (22.5%) but almost nothing in it can be overturned, and at L = 100 nearly
+# everything in it is overturned but the population is small (7.5%) because
+# the search usually succeeds unaided.
+#
+# THE CONDITIONAL RATE TRACKS ONE RATIO -- what a second message is worth
+# against what the impostor leads by.  A German decrypt runs ~0.85 log units
+# per letter (ENHANCEMENTS 3a puts a 40-letter one at ~30-40), and the
+# impostor's lead on message 1 is measured in the same run:
+#
+#      L    impostor lead    msg 2 worth    ratio    conditional at K=8
+#     40         91.3          ~35          0.38            17%
+#     60         69.7          ~52          0.75            46%
+#     80         54.3          ~70          1.29            53%
+#    100         36.6          ~87          2.38            75%
+#
+# Monotone across every length.  When the second message supplies less
+# evidence than the impostor's lead, no candidate list depth rescues it; when
+# it supplies more, a shallow list already suffices.  That is also why L = 40
+# is flat in K: depth was never its binding constraint.
+#
+# ============================================================================
+# 4.  WHAT JOINT SCORING IS ACTUALLY WORTH
+# ============================================================================
+#
+# At -R 5000 with K = 32, on top of what the search reports unaided:
+#
+#   L = 40    3.0% -> 4.6%    (+1.6pp)
+#   L = 60   31.0% -> 36.1%   (+5.1pp)
+#   L = 80   57.5% -> 62.0%   (+4.5pp)
+#   L = 100  83.5% -> 86.5%   (+3.0pp)
+#
+# Real, and several times the 1.7pp the exact-criterion run reported -- but
+# not the step change the ceiling numbers hinted at.  It remains free in
+# compute terms (one decrypt and one score per candidate against the whole
+# climb that produced it), so it is worth doing wherever a same-day message
+# with a known indicator exists; it is still not a substitute for -R, which
+# buys +4.9 to +8.9pp for the 1000 -> 5000 step alone.
+#
+# ============================================================================
+# SCOPE
+# ============================================================================
+#
+# 200 paired trials per cell, so a promoted@K figure rests on 11-46 conv
+# trials and single cells carry +/- 10pp of binomial noise -- read the trend
+# across lengths and depths, not an individual cell.  K = 512 was not run
+# (4x the cost of 128, and 128 already shows the conditional rate falling).
+# Message-1 scores come from the dump, verified identical to a fresh
+# score_board() call; message 2 needs the binary since its start is derived
+# per board.  Rotor key given throughout, so this is the plugboard tier alone.
