@@ -1166,13 +1166,29 @@ are read from a **data directory** (filenames built as
   functions of the same 26-bin letter histogram**, so one decode pass yields
   both and the fusion costs 26 multiply-adds — cheaper than `-f`'s, which has
   to accumulate IC alongside a gather-bound quad loop.
-  - **`lambda` scales with LENGTH here, unlike `-f`'s baked 30.** The term
-    added is `lambda · L · IC` with `lambda = 0.1` (`ENIGMA_MONOIC_BLEND`
-    overrides). IC's spread falls as ~`1/L` (a rate over `C(L,2)` pairs) while
-    the per-symbol monogram score's falls as ~`1/√L` (a mean of `L` terms), so
-    the weight that balances them grows with `L`. Measured, the optimum tracks
-    `0.1·L` across L = 40…167 while a fixed constant drifts away from it —
-    worst at operational length, which is why `-f`'s design was not copied.
+  - **`lambda` scales with LENGTH here, unlike `-f`'s baked 30 — and it scales
+    as `√L`.** The term added is `lambda · √L · IC` with `lambda = 1.1`
+    (`ENIGMA_MONOIC_BLEND` overrides). IC's spread falls as ~`1/L` (a rate over
+    `C(L,2)` pairs) while the per-symbol monogram score's falls as ~`1/√L` (a
+    mean of `L` terms), so the weight that balances them is `sd(mono)/sd(IC)` —
+    measured 7.4 / 8.8 / 11.0 / 14.2 at L = 40/60/100/167, i.e. 1.17 / 1.14 /
+    1.10 / 1.10 times `√L`. So `1.1·√L` makes IC contribute **one standard
+    deviation for every one of mono's** at every length (`r` = 0.94 / 0.97 /
+    1.00 / 1.00), which is the parameterisation
+    `eval/results-mono-ic-blend.txt` sweeps in.
+  - **It was `0.1·L`, and that had the wrong EXPONENT.** Linear where the
+    quantity it tracks goes as `√L`, so the two cross exactly once — at
+    **L = 121** — undershooting below and overshooting above: `r` = 0.54 / 0.68
+    / 0.91 / 1.18. The old constant was fitted to the probe's measured *peak*
+    `r`, which itself rises with length, and the cost of the correction is at
+    **L = 40, where that peak is 0.5** and the new rule sits near 0.94 — the
+    right end to give up, since `-S k` is recommended from ~100 letters up.
+    Expect little from it either way: the blend surface is a broad plateau
+    (every `r` in 0.25…2.0 beats both pure statistics at L ≥ 60).
+  - > ⚠️ **The recovery numbers below were measured at the OLD `λ = 0.1·L`**
+    > and have not yet been re-measured at `1.1·√L`. The plateau says they
+    > should barely move, but until the re-run lands they describe a
+    > configuration the binary no longer ships.
   - **MEASURED END TO END, and it is the best pre-pass on telegraphic traffic
     at and above ~100 letters.** Paired recovery A/Bs, 2000 trials per cell,
     authentic HG Nord decrypts, plugboard tier, `-R 8`

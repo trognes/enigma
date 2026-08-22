@@ -166,10 +166,11 @@ static double monogram_score_decode(machine & m)
   return static_cast<double>(isum) / ngram_scale[SCORE_MONO] + textlength * ngram_bias[SCORE_MONO];
 }
 
-/* -S k's IC weight, PER LETTER: the term added is lambda * L * IC.  See the
-   decoder below for why it scales with length where -f's does not.
-   ENIGMA_MONOIC_BLEND overrides it, as ENIGMA_IC_BLEND does for -f. */
-static const double monoic_lambda_default = 0.1;
+/* -S k's IC weight: the term added is lambda * sqrt(L) * IC.  See the decoder
+   below for why it scales with length where -f's does not, and why the
+   exponent is 1/2 rather than 1.  ENIGMA_MONOIC_BLEND overrides it, as
+   ENIGMA_IC_BLEND does for -f. */
+static const double monoic_lambda_default = 1.1;
 static double g_monoic_lambda = monoic_lambda_default;
 
 /* -S k (SCORE_MONOIC): the monogram score fused with the index of coincidence.
@@ -179,12 +180,26 @@ static double g_monoic_lambda = monoic_lambda_default;
    is what makes this cheaper than -f's fusion, which had to accumulate IC
    alongside a gather-bound quad loop.
 
-   lambda is PROPORTIONAL TO LENGTH, unlike -f's baked constant. IC's spread
-   falls as ~1/L (a rate over C(L,2) pairs) while the per-symbol monogram
-   score's falls as ~1/sqrt(L) (a mean of L terms), so the weight that balances
-   them grows with L; measured, the optimum tracks 0.1*L across L = 40..167
-   while a fixed lambda drifts away from it, worst at operational length
-   (eval/results-mono-ic-blend.txt). ENIGMA_MONOIC_BLEND overrides the 0.1. */
+   lambda GROWS WITH LENGTH, unlike -f's baked constant, and it grows as
+   sqrt(L). IC's spread falls as ~1/L (a rate over C(L,2) pairs) while the
+   per-symbol monogram score's falls as ~1/sqrt(L) (a mean of L terms), so the
+   weight that balances the two is sd(mono)/sd(IC), measured at 7.4 / 8.8 /
+   11.0 / 14.2 for L = 40 / 60 / 100 / 167 -- i.e. 1.17 / 1.14 / 1.10 / 1.10
+   times sqrt(L). Setting lambda = 1.1 * sqrt(L) therefore makes IC contribute
+   about ONE standard deviation for every one of mono's ("r = 1.0", the
+   parameterisation eval/results-mono-ic-blend.txt sweeps in) at every length:
+   r = 0.94 / 0.97 / 1.00 / 1.00 across that range.
+
+   THE EXPONENT IS THE POINT. This was 0.1 * L, which is LINEAR while the
+   quantity it has to track goes as sqrt(L) -- so the two curves cross exactly
+   once, at L = 121, and the rule undershoots below that and overshoots above:
+   it gave r = 0.54 / 0.68 / 0.91 / 1.18. The old constant was fitted to the
+   probe's measured peak r, which itself rises with length; the cost of the
+   change is at L = 40, where that peak is 0.5 and this rule sits near 0.94.
+   -S k is recommended from ~100 letters up, so that is the right end to give
+   up. The blend surface is a broad plateau (every r in 0.25..2.0 beats both
+   pure statistics at L >= 60), so none of this should be expected to move
+   recovery much. ENIGMA_MONOIC_BLEND overrides the 1.1. */
 /* NOT INLINED, deliberately.  score_iter() is the scan's hottest function and
    clang inlines this decoder straight into it, growing it 623 -> 1042
    instructions -- so an experimental model that no default path calls would
@@ -218,7 +233,7 @@ static double monoic_score_decode(machine & m)
         / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
   /* mono per symbol, matching how -f normalises before adding its IC term. */
   return mono / (textlength > 0 ? textlength : 1)
-         + g_monoic_lambda * textlength * ic;
+         + g_monoic_lambda * std::sqrt(static_cast<double>(textlength)) * ic;
 }
 
 double ic_score_decode(machine & m)
