@@ -546,15 +546,45 @@ at L = 40/60/80/100. Share of conv trials whose good board is within rank `K`
 | 80 | 5000 | 33% | 55% | 78% | 93% |
 | 100 | 5000 | 50% | 67% | 83% | 100% |
 
-**A PROJECTION, and an optimistic one.** Where the good board is inside the
-window, re-ranking promotes it about half the time (13 of ~28 at L = 60, 9 of
-~18 at L = 80). Holding that rate, a top-128 list would promote ~35–40% of conv
-trials rather than 16% — roughly **+8pp on top of 30.3%** at L = 60, `-R 5000`.
-Deeper candidates score worse on message 1, so the conditional rate almost
-certainly falls with rank and this assumes it does not. **The measurement is
-cheap and has not been run.** The top-8 window is a limit of the harness (two
-binary invocations per candidate), not of the method: joint-scoring a candidate
-is one decrypt against the whole climb that produced it.
+**MEASURED, and the projection that stood here was optimistic by ~1.6×**
+(`eval/results-rerank-depth.txt`, 200 paired trials, depths 8/32/128). It
+assumed the conditional rate — promoted ÷ in-window — stays at ~50% as the list
+deepens. It falls: 46 → 31 → 27% at L = 60 and 53 → 47 → 40% at L = 80. A
+deeper list does surface the good board, which then loses to one of the extra
+competitors the same list admits. Promotion is not even monotone in `K`.
+
+promoted@K / ceiling@K, `-R 5000`, and what that adds to recovery:
+
+| L | conv | K=8 | K=32 | K=128 | gain@32 |
+|---:|---:|---|---|---|---:|
+| 40 | 22.5% | 4% / 24% | 7% / 44% | 11% / 60% | +1.6pp |
+| 60 | 23.0% | 17% / 37% | 22% / 70% | 22% / 80% | **+5.1pp** |
+| 80 | 18.0% | 19% / 36% | 25% / 53% | 31% / 78% | +4.5pp |
+| 100 | 7.5% | 40% / 53% | 40% / 67% | 40% / 87% | +3.0pp |
+
+**`K` = 32 is the operating point** — all of the L = 60 and L = 100 gain, most
+of L = 80, at a quarter of the cost. That is the same recommendation the rank
+data gave for a *different* reason: the limit is not that deeper lists lack the
+board (at K = 128 they hold 78–87% of them) but that the joint score cannot
+pick it out of a crowded list.
+
+**The gain peaks in the middle, and one ratio explains it** — what a second
+message is worth (~0.85 log units per letter) against the impostor's lead on
+message 1, both measured in the same run:
+
+| L | impostor lead | msg 2 worth | ratio | conditional at K = 8 |
+|---:|---:|---:|---:|---:|
+| 40 | 91.3 | ~35 | 0.38 | 17% |
+| 60 | 69.7 | ~52 | 0.75 | 46% |
+| 80 | 54.3 | ~70 | 1.29 | 53% |
+| 100 | 36.6 | ~87 | 2.38 | 75% |
+
+Monotone at every length. Below a ratio of 1 no list depth rescues the trial;
+above it a shallow list already suffices. L = 40 is flat in `K` for exactly
+that reason — depth was never its binding constraint. The two ends are limited
+oppositely: at L = 40 the conv population is large but unconvertible, at
+L = 100 nearly all of it converts but the search rarely fails in the first
+place.
 
 **What the scoring failures ARE — more restarts find better-SCORING impostors,
 not NEARER ones.** Mean plugs shared with the truth, and the winner's lead over

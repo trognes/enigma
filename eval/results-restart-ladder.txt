@@ -93,8 +93,13 @@
 # than 16% -- i.e. ~+8pp of recovery at L = 60, -R 5000, on top of 30.3%.
 # TREAT THAT AS OPTIMISTIC: deeper candidates score worse on message 1, so the
 # conditional promotion rate almost certainly falls with rank, and the
-# calculation assumes it does not.  The measurement is cheap and has not been
-# run.
+# calculation assumes it does not.
+#
+# *** SUPERSEDED: MEASURED in results-rerank-depth.txt, and this projection is
+# *** optimistic by ~1.6x for exactly that reason.  The conditional rate falls
+# *** 46 -> 31 -> 27% (L=60) and 53 -> 47 -> 40% (L=80) as K goes 8 -> 32 ->
+# *** 128, so a top-128 list is worth +5.1pp at L=60 rather than +8pp, and
+# *** K=32 captures nearly all of it.  Promotion is not monotone in K.
 #
 # The cost argument favours a deep list: joint-scoring a candidate is one
 # decrypt and one score against a whole plugboard climb to have produced it.
