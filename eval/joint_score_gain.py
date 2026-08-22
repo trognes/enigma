@@ -130,30 +130,44 @@ def score_board(ct, wheels, ring, start, board, lang):
 
 
 def climb_board(ct, wheels, ring, start, lang, restarts, seed):
-    """Run the REAL climb; return (board, its own score under that model)."""
+    """Run the REAL climb; return (board, score) as the search ACTUALLY reports.
+
+    Read off the last progress line, NOT the best --dump-all line. --dump-all
+    prints each restart's converged board, but --polish runs afterwards on the
+    best of them and its result never appears there: measured, the final
+    reported score beats the best dumpall line in 8 of 12 runs, by up to 0.72.
+    Using dumpall therefore understated the search on both counts -- the score
+    (so scoring failures were undercounted) and the board (so the "impostor"
+    tested against message 2 was not the board the search would report).
+
+    THE RECOMMENDED RECIPE, not a bare climb. An earlier version ran plain `-q`
+    and recovered the board 0.5% of the time at L = 80, against the 12.0%
+    CLAUDE.md measures at L = 82 -- a fifteen-fold weaker climb, which lands
+    FAR from the truth and so makes the impostor trivially easy for message 2
+    to reject.
+    """
     env = dict(os.environ, ENIGMA_SEED=str(seed), ENIGMA_DATA="ngrams")
-    # THE RECOMMENDED RECIPE, not a bare climb. An earlier version of this
-    # harness ran plain `-q` and recovered the board 0.5% of the time at
-    # L = 80, against the 12.0% CLAUDE.md measures at L = 82 -- a fifteen-fold
-    # weaker climb, which lands FAR from the truth and so makes the impostor
-    # trivially easy for message 2 to reject. Measuring the rescue on that
-    # would have flattered it. `-f -S i4f10 -J --polish` gets to 6.8%; the
-    # residual gap to 12.0% is the plaintext pool (whole messages here, some
-    # corpus-flagged garbled, against prepass_ab.py's concatenated corpus).
     out = subprocess.run(
         [BIN, "-c", "-f", "-S", "i4f10", "-J", "--polish", "-l", lang,
          "-u", "B", "-w", wheels, "-r", ring,
-         "-g", start, "-R", str(restarts), "--dump-all"],
+         "-g", start, "-R", str(restarts)],
         input=ct, capture_output=True, text=True, env=env, cwd=ROOT).stderr
-    best, bestboard = None, ""
+    best = None
     for line in out.splitlines():
-        if not line.startswith("dumpall"):
+        f = line.split()
+        # A progress line is: score key ring start [plug pairs...] preview.
+        # The preview is one long token, so every 2-letter token after the
+        # start field is a plug and the first longer one ends the board.
+        if len(f) < 5 or not re.match(r"^-?\d+\.\d+$", f[0]):
             continue
-        f = line.split(None, 5)
-        sc = float(f[4])
-        if best is None or sc > best:
-            best, bestboard = sc, (f[5].strip() if len(f) > 5 else "")
-    return bestboard, best
+        plugs = []
+        for tok in f[4:]:
+            if len(tok) == 2 and tok.isalpha() and tok.isupper():
+                plugs.append(tok)
+            else:
+                break
+        best = (" ".join(sorted(plugs)), float(f[0]))
+    return best if best else ("", None)
 
 
 def main():
