@@ -3,11 +3,10 @@
 
 A BOARD COUNTS AS RECOVERED AT 50% OF THE PLAINTEXT, not at an exact match.
 That is the operational criterion: a board missing two of ten plugs still
-recovers most of the message, and that is a break.  Exact
-recovery is reported alongside, because it is what every earlier sweep here
-measured and the two diverge sharply -- but the headline is the 50% column and
-the mean %-correct beside it, which is also the graded signal CLAUDE.md tells
-you to judge search changes on.
+recovers most of the message, and that is a break.  Exact recovery is reported
+alongside, because it is what every earlier sweep here measured, together with
+the mean %-correct, which is the graded signal CLAUDE.md tells you to judge
+search changes on.
 
 BACKGROUND.  eval/joint_score_gain.py measured that a second message on the
 same day key overturns essentially every SCORING failure -- and that this does
@@ -35,6 +34,14 @@ harness which did inject it reported a promotion rate that a real top-K list
 could not have delivered (the truth ranked 60th and 87th of ~1600 converged
 boards at -R 5000).  The rank of the best 50%-clearing board is reported so
 the K window is visibly not doing the work.
+
+WHERE THE GOOD BOARDS RANK.  Two ranks per trial, both against the search's
+own ordering of the boards it converged on: the TRUE board's, and that of the
+best board clearing 50%.  The second is the one that matters operationally --
+recovering the board exactly is not required, so what counts is how near the
+top the search puts something good enough.  Recorded for EVERY trial,
+recovered ones included; restricting them to misses would answer a conditioned
+version of the question.
 
 AND WHAT THE WINNING BOARD LOOKS LIKE.  A scoring/search boolean alone cannot
 answer the obvious follow-up: does a bigger -R find boards NEARER the truth, or
@@ -213,8 +220,22 @@ def run_trial(job):
         rec["ncand"] = len(order)
         rec["true_rank"] = next((i + 1 for i, (b, _) in enumerate(order)
                                  if pair_set(b) == truth), None)
+
+        # And where the best board CLEARING 50% sits, which is the rank that
+        # actually matters: recovering the true board exactly is not required,
+        # so the question is how near the top the search puts something good
+        # enough.  Computed for every trial too, for the same reason.
+        good = [(i + 1, b) for i, (b, _) in enumerate(order)
+                if clears(b) >= RECOVER_PCT]
+        rec["ngood"] = len(good)
+        rec["good_rank"] = good[0][0] if good else None
+
         if pct >= RECOVER_PCT:
             rec["state"] = "recov"
+            # A recovered trial with NO converged board clearing 50% means
+            # --polish produced the answer after the restarts: worth keeping
+            # separable, since no re-ranking of converged boards could find it.
+            rec["polish_only"] = not good
             out[R] = rec
             continue
 
@@ -223,15 +244,9 @@ def run_trial(job):
         # the model's optimum.  Counted only among non-recovered trials.
         rec["scoring"] = (s_got >= s_true)
 
-        # Which converged boards would have cleared 50%.  Affordable because
-        # core_table() removed the Enigma run from the inner loop.
-        good = [(i + 1, b) for i, (b, _) in enumerate(order)
-                if clears(b) >= RECOVER_PCT]
         rec["visited"] = any(clears(b) >= RECOVER_PCT for b in seen)
-        rec["ngood"] = len(good)
         rec["state"] = "conv" if good else "absent"
         if good:
-            rec["rank"] = good[0][0]        # best-SCORING one of them
             # The true board is deliberately NOT added: an attacker re-ranks
             # the list the search gave them, and injecting the answer would
             # report a promotion no real top-K list could deliver.
@@ -321,32 +336,32 @@ def main():
                                  len(cv))) if cv else "-",
                      ("%.1f" % (sum(c["ngood"] for c in cv) / len(cv)))
                      if cv else "-",
-                     ("%.0f" % (sum(c["rank"] for c in cv) / len(cv)))
+                     ("%.0f" % (sum(c["good_rank"] for c in cv) / len(cv)))
                      if cv else "-"))
 
-        print("\n%6s  where the TRUE board sits in the search's own ranking"
-              " of the\n%6s  boards it converged on, when it converged at all"
-              % ("", ""))
-        print("%6s %9s %8s %8s %8s %8s %9s"
-              % ("-R", "present", "rank 1", "median", "p90", "worst",
-                 "of n"))
+        print("\n%6s  where a GOOD board sits in the search's own ranking of"
+              " the boards\n%6s  it converged on -- the true one, and the"
+              " best one clearing 50%%" % ("", ""))
+        print("%6s %7s %9s %8s %8s %7s %7s %7s"
+              % ("-R", "board", "present", "rank 1", "top 8", "median",
+                 "p90", "of n"))
         for R in ladder:
             cells = cells_by_r[R]
             n = len(cells) or 1
-            ranks = sorted(c["true_rank"] for c in cells
-                           if c.get("true_rank"))
-            if not ranks:
-                print("%6d %8.1f%% %8s %8s %8s %8s %9.0f"
-                      % (R, 0.0, "-", "-", "-", "-",
-                         sum(c["ncand"] for c in cells) / n))
-                continue
-            k = len(ranks)
-            print("%6d %8.1f%% %7.0f%% %8d %8d %8d %9.0f"
-                  % (R, 100.0 * k / n,
-                     100.0 * sum(1 for r in ranks if r == 1) / k,
-                     ranks[k // 2], ranks[min(k - 1, int(0.9 * k))],
-                     ranks[-1],
-                     sum(c["ncand"] for c in cells) / n))
+            scale = sum(c["ncand"] for c in cells) / n
+            for kind, key in (("true", "true_rank"), ("any50", "good_rank")):
+                ranks = sorted(c[key] for c in cells if c.get(key))
+                if not ranks:
+                    print("%6d %7s %8.1f%% %8s %8s %7s %7s %7.0f"
+                          % (R, kind, 0.0, "-", "-", "-", "-", scale))
+                    continue
+                k = len(ranks)
+                print("%6d %7s %8.1f%% %7.0f%% %7.0f%% %7d %7d %7.0f"
+                      % (R, kind, 100.0 * k / n,
+                         100.0 * sum(1 for r in ranks if r == 1) / k,
+                         100.0 * sum(1 for r in ranks if r <= TOPK) / k,
+                         ranks[k // 2], ranks[min(k - 1, int(0.9 * k))],
+                         scale))
 
         # What the winning board LOOKS like, split by class: a search failure
         # lost to the truth and a scoring failure beat it, and there is no
@@ -394,9 +409,11 @@ def main():
     print("             search's own ranking (so top-%d is visibly enough,"
           % TOPK)
     print("             or visibly not)")
-    print("  present  = share of trials whose converged boards include the")
-    print("             TRUE one; the rank columns are over those trials only")
-    print("             and say how near the top the search puts it")
+    print("  board    = which good board the rank is of: 'true' the true")
+    print("             one, 'any50' the best-scoring one clearing 50%%")
+    print("  present  = share of trials whose converged boards include such")
+    print("             a board; the rank columns are over those trials only")
+    print("  top 8    = share of them inside the re-ranking window above")
     print("  of n     = mean distinct converged boards, the scale a rank is")
     print("             read against")
     print("  plugs/10 = mean plugs the winning board shares with the truth")
