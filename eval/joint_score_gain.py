@@ -27,8 +27,12 @@ six plugboard lookups have to be right and it fails at least one (ENHANCEMENTS
 3a) -- so it collects noise.  The asymmetry is the whole effect, and it should
 be large rather than the sqrt(2) that a plain joint score gives.
 
-Scores are summed UNNORMALISED (weighted by length, not per-symbol averages,
-which would let a 60-letter message outvote a 100-letter one).
+SCORES.  score_board() returns the per-symbol figure the tool prints.  Both
+messages in a trial are the SAME length, so summing per-symbol scores orders
+identically to summing totals and the distinction does not arise here.  It
+would for messages of unequal length: there the per-symbol scores must be
+multiplied by nterms before summing, or a 60-letter message outvotes a
+100-letter one.
 
   python3 eval/joint_score_gain.py                    # 40/60/80/100
   python3 eval/joint_score_gain.py --trials 400 -R 16

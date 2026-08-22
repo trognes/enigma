@@ -247,68 +247,79 @@ confirmation of the winner into a second opinion on every candidate the search
 produced.
 
 **MEASURED, and above 80 letters it is total.** `eval/joint_score_gain.py`
-(800 trials per length, the real climb at `-R 8` under the recommended recipe,
+(600 trials per length, the real climb at `-R 8` under the recommended recipe,
 true rotor key given so that scoring is isolated from search by construction;
-raw numbers in `eval/results-joint-score-gain.txt`):
+full method and raw numbers in `eval/results-joint-score-gain.txt`):
 
 | L | exact | search fail | **scoring fail** | of miss | rescued |
 |---:|---:|---:|---:|---:|---:|
-| 40 | 0.1% | 11.8% | **88.1%** | 88% | 677/705 (96.0%) |
-| 60 | 1.1% | 49.4% | **49.5%** | 50% | 395/396 (99.7%) |
-| 80 | 8.6% | 69.8% | **21.6%** | 24% | 173/173 (**100%**) |
-| 100 | 16.5% | 77.0% | **6.5%** | 8% | 52/52 (**100%**) |
+| 40 | 0.3% | 9.5% | **90.2%** | 90% | 509/541 (94.1%) |
+| 60 | 4.0% | 42.3% | **53.7%** | 56% | 322/322 (**100%**) |
+| 80 | 12.5% | 60.7% | **26.8%** | 31% | 161/161 (**100%**) |
+| 100 | 22.8% | 68.3% | **8.8%** | 11% | 53/53 (**100%**) |
 
-So scoring failures are **88% of misses at 40 letters, half at 60, and 8% by
+So scoring failures are **90% of misses at 40 letters, 56% at 60, and 11% by
 100**. The information floor, not the search problem, is what dominates the
-short end — the opposite of what holds at operational lengths — and from 80
+short end — the opposite of what holds at operational lengths — and from 60
 letters up every one of them is overturned.
 
-**Classify with the model the search optimises.** An earlier version of this
-harness used a plain Python quadgram score while the climb maximised **fused**.
-That is not merely a different metric but a *biased* one: a board the climb
-converged on is by construction competitive on fused, so quadgrams understate
-how often it beats the truth. It read **19% of misses at L = 60 where the
-correct figure is 50%** — threefold, in the direction that made the problem
-look smaller. The rescue itself proved model-independent (re-checked under
-fused: 209/210 and 75/75 at L = 60/80), so only the frequencies moved.
+**How the search is run, exactly**, because the result is meaningless without
+it: `-u B -w <true> -r <true> -g <true start1>` are all pinned, so the keyspace
+holds one rotor key and only the plugboard is searched. `s_got` is the score on
+the **last progress line** — what the run actually reports — with the board
+parsed off the same line; `s_true` is the same binary and model with `-s <true
+board>` and no `-c`. "Rescued" is a **two-way** comparison of true against that
+one impostor, not a re-ranking of every candidate.
 
-**The rescue degrades below 80 letters, and the reason is not the one to
-guess.** It is *not* impostors deriving a correct start — of 9
-unrescued cases in a probe run, **zero** did; all had 0–1 correct plugs and a
-wrong start2. They fail because message 2 is a **fixed quantity of evidence**
-and at 40 letters a scoring failure can simply exceed it: those 9 impostors led
-on message 1 by 12.8 to 116.6 log units, where a 40-letter German decrypt is
-worth only ~30–40. A longer second message, or a third, would close them. The
-88% rate at L = 40 is itself the signature of the regime — 40 letters is ~1.6×
-the ~25-letter unicity distance for this traffic, so many messages genuinely
-admit more than one plausible decrypt.
+**It is not the √2 a plain joint score would give** — it is the asymmetry: the
+true board derives the **correct** start for message 2 and collects a full
+German decrypt, while the impostor derives a wrong one and collects noise.
+Measured on the scoring failures themselves (400 trials per length):
 
-It is *not* the √2 a plain joint score would give — it is the
-asymmetry: the true board derives the **correct** start for message 2 and
-collects a full German decrypt, while a climbed impostor derives a wrong one
-and collects noise. The impostor is nowhere near the truth (mean correct plugs
-0.6 at L = 60, 1.3 at L = 80; it derives the right start2 in 1% and 8% of
-cases), so it gets nothing. So the scoring floor — an information limit no
-search can cross, and the thing `-a` was built to erode — is simply **gone**
-for a message with a same-day partner.
+| L | mean correct plugs in the impostor | impostor's start2 right |
+|---:|---:|---:|
+| 40 | 0.69 | 0.3% |
+| 60 | 1.15 | 0.9% |
+| 80 | 1.66 | 3.0% |
+| 100 | 3.83 | 21.7% |
 
-*Four harness errors, each caught only because something was checked beyond
-the headline — and the last two came from questions about the METHOD, not from
-re-reading the code.* The classification used a different scoring model from
-the climb (above). The climb ran a bare `-q` with none of `-f -S i4f10 -J
---polish`, recovering the board 0.5% of the time at L = 80 against the 12.0%
-CLAUDE.md measures at L = 82 — a fifteen-fold weaker climb, which lands far
-from the truth and so makes the impostor trivially easy to reject. That would
-have flattered the rescue; the numbers above are the re-run, and the result
-survived. The first version scored random wrong ROTOR KEYS against
-the true board: z = 9.6 at L = 60 against a 5.3 bar with the true key first in
-100% of trials, i.e. **no scoring failures at all** — a board never fitted to
-the ciphertext is not a competitor. The second version compared boards as
-STRINGS while the binary normalises pair order, so the same board spelled two
-ways counted as different: **40% of the L = 100 "failures" were the true board
-itself**, producing a clean 100/92/57% falling-with-length trend and a
-plausible story to explain it. Compare boards through `pair_set()`, never as
-strings.
+At 100 letters the impostor is closer and gets the right start a fifth of the
+time — **and the rescue is still 53/53**. Getting the start right is not
+enough: a 3.8-of-10 board decrypts message 2 only partially while the true
+board decrypts it perfectly, so the truth still wins. The mechanism is
+therefore sturdier than "the impostor gets noise" suggests.
+
+**The rescue degrades at 40 letters, and the reason is not the one to guess.**
+It is *not* impostors deriving a correct start — of 9 unrescued cases probed
+separately, **zero** did; all had 0–1 correct plugs. They fail because message
+2 is a **fixed quantity of evidence** and at 40 letters a scoring failure can
+exceed it: those 9 impostors led on message 1 by 12.8 to 116.6 log units, where
+a 40-letter German decrypt is worth only ~30–40. A longer second message, or a
+third, would close them. The 90% rate at L = 40 is itself the signature of the
+regime — 40 letters is ~1.6× the ~25-letter unicity distance for this traffic,
+so many messages genuinely admit more than one plausible decrypt.
+
+*Five harness errors, in the order found. Each made the result look BETTER or
+SIMPLER than it was, none announced itself, and the last two came from
+questions about the METHOD rather than from re-reading the code.*
+
+1. **Scored random wrong ROTOR KEYS against the true board** — z = 9.6 at
+   L = 60 against a 5.3 bar, true key first in 100% of trials, i.e. no scoring
+   failures at all. A board never fitted to the ciphertext is not a competitor.
+2. **Compared boards as STRINGS** while the binary normalises pair order, so
+   one board spelled two ways counted as different: 40% of the L = 100
+   "failures" were the true board itself, producing a tidy 100/92/57%
+   falling-with-length trend with a plausible mechanism ready to explain it.
+3. **Ran a bare `-q` climb** with none of `-f -S i4f10 -J --polish` — 0.5%
+   exact at L = 80 against CLAUDE.md's 12.0% at L = 82. A weak climb lands far
+   from the truth, making the impostor trivially easy to reject.
+4. **Classified with quadgrams while the climb maximised fused** — a *biased*
+   mismatch, since a climbed board is by construction competitive on fused. Read
+   19% of misses at L = 60 where the truth is ~54%.
+5. **Took `s_got` from the best `--dump-all` line.** `--polish` runs after all
+   restarts and never appears there: the final reported score beats the best
+   dumpall line in **8 of 12** runs, by up to 0.72. That understated the score
+   (scoring failures undercounted) *and* used the wrong board as the impostor.
 
 **Its limitation is the one that matters.** It fires only when message 1's
 climb recovered the board at 9/10 plugs or better — 12% of the time at L = 82

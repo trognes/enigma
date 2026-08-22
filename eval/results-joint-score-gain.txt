@@ -1,58 +1,98 @@
-# Scoring failures at 40-100 letters, and whether a SECOND message on the
-# same day key rescues them.  eval/joint_score_gain.py --trials 800, seed 1,
-# -R 8, recipe -f -S i4f10 -J --polish -l wehrmacht, true rotor key given.
-# CLASSIFIED WITH THE FUSED MODEL -- the one the climb optimises.
+# ============================================================================
+# SCORING FAILURES AT 40-100 LETTERS, AND WHETHER A SECOND MESSAGE ON THE SAME
+# DAY KEY OVERTURNS THEM.   eval/joint_score_gain.py --trials 600, seed 1.
+# ============================================================================
 #
-52 authentic telegraphic plaintexts, model 'wehrmacht', real climb at -R 8
+# METHOD, exactly.
+#
+#   Per trial: a random day key (reflector B, wheel order from I-V, random
+#   ring, random 10-pair board) and TWO messages -- random L-letter excerpts of
+#   authentic HG Nord decrypts, each at its own random Grundstellung and
+#   message key.  Both indicators are computed, so each board derives a start
+#   for message 2.
+#
+#   THE SEARCH IS THE PLUGBOARD ONLY.  The rotor key is pinned to the truth:
+#
+#     ./enigma -c -f -S i4f10 -J --polish -l wehrmacht \
+#              -u B -w <true> -r <true> -g <true start1> -R 8
+#
+#   -u/-w/-r/-g are all given, so the keyspace holds exactly ONE rotor key and
+#   only the board is searched (8 restarts).  That isolates scoring from the
+#   rotor sweep, matching how `make crackquality SPLIT=1` defines the split.
+#
+#   s_got  = the score on the LAST progress line, i.e. what the run actually
+#            reports, with the board parsed off the same line.
+#   s_true = the same binary, same model, `-s <true board>` and NO -c: one
+#            decrypt at the true key.
+#
+#   s_got >= s_true  ->  SCORING failure (the search found something better
+#                        than the truth; no search can fix that)
+#   s_got <  s_true  ->  SEARCH failure  (more restarts could fix it)
+#
+#   RESCUED means: score(msg1 under b) + score(msg2 under b, its start DERIVED
+#   from b via the indicator) is higher for the true board than for the
+#   impostor.  It is a TWO-WAY comparison against the one board the search
+#   produced -- not a re-ranking of every candidate, and not a claim that the
+#   search now finds the truth.
+#
+52 authentic telegraphic plaintexts, model 'wehrmacht',
+real climb at -R 8
 
     L  trials    exact    search   scoring  of miss     rescued
-   40     800     0.1%     11.8%     88.1%      88%    677/705
-   60     800     1.1%     49.4%     49.5%      50%    395/396
-   80     800     8.6%     69.8%     21.6%      24%    173/173
-  100     800    16.5%     77.0%      6.5%       8%      52/52
+   40     600     0.3%      9.5%     90.2%      90%    509/541
+   60     600     4.0%     42.3%     53.7%      56%    322/322
+   80     600    12.5%     60.7%     26.8%      31%    161/161
+  100     600    22.8%     68.3%      8.8%      11%      53/53
 
   exact   = the climb recovered the true board
-  search  = climb missed, what it found scores LOWER  (more restarts help)
-  scoring = climb missed, what it found scores HIGHER (no search helps)
+  search  = it did not, and what it found scores LOWER  (a search
+            failure -- more restarts can fix it)
+  scoring = it did not, and what it found scores HIGHER (a scoring
+            failure -- no search can fix it)
   of miss = scoring failures as a share of NON-EXACT trials
-  rescued = of those, how many the true board wins back once message 2 is
-            added, its start DERIVED per board under test
+  rescued = of those, how many the true board wins back once
+            message 2 is added, its start DERIVED per board
 #
-# HOW COMMON: 88% of MISSES at L=40, 50% at 60, 24% at 80, 8% at 100.
+#   rescue rates: 509/541 = 94.1%, then 100%, 100%, 100%.
 #
-# An earlier version classified with a plain Python quadgram score while the
-# climb maximised FUSED. That is not merely a different metric but a BIASED
-# one: a board the climb converged on is by construction competitive on
-# fused, so quadgrams understate how often it beats the truth. It read 19%
-# of misses at L=60 where the correct figure is 50%. Superseded -- classify
-# with the model the search uses.
+# ----------------------------------------------------------------------------
+# WHY THE RESCUE WORKS
+# ----------------------------------------------------------------------------
 #
-# WHY THE RESCUE WORKS: the true board derives the CORRECT start for message
-# 2 and collects a full German decrypt, while a climbed impostor derives a
-# wrong one and collects noise. Not the sqrt(2) a plain joint score gives --
-# an asymmetry. Verified MODEL-INDEPENDENT: re-checked under fused it is
-# 209/210 and 75/75 at L=60/80, where quadgrams also gave ~100%.
+# Not the sqrt(2) a plain joint score gives.  An asymmetry: the true board
+# derives the CORRECT start for message 2 and collects a full German decrypt,
+# while the impostor derives a wrong one and collects noise.  Measured on the
+# scoring failures themselves (400 trials/length, corrected extraction):
 #
-# WHY IT DEGRADES AT 40-60: message 2 is a FIXED quantity of evidence and a
-# scoring failure can exceed it. Probed at L=40, ZERO of 9 unrescued cases
-# had the impostor deriving a correct start2 -- all were cases where its
-# message-1 lead exceeded what a 40-letter German decrypt is worth.
+#     L    scoring fails   mean correct plugs   impostor start2 right
+#    40              362                 0.69                    0.3%
+#    60              223                 1.15                    0.9%
+#    80              101                 1.66                    3.0%
+#   100               46                 3.83                   21.7%
 #
-# SCOPE: the climb runs at the TRUE rotor key, isolating scoring from search
-# by construction. Exact recovery (0.1/1.1/8.6/16.5%) brackets CLAUDE.md's
-# 12.0% at L=82. Says nothing about trials where the climb never reaches the
-# board.
+# At 100 letters the impostor is closer and gets the right start a fifth of the
+# time -- yet the rescue is still 53/53.  Getting the start right is not enough:
+# a 3.8-of-10 board decrypts message 2 only partially, while the true board
+# decrypts it perfectly, so the truth still wins.
 #
-# ============================================================================
+# WHY L=40 IS NOT 100%.  Message 2 is a FIXED quantity of evidence and at 40
+# letters a scoring failure can exceed it.  Of 9 unrescued cases probed
+# separately, ZERO had the impostor deriving a correct start2 -- all had 0-1
+# correct plugs.  They lost because the impostor led on message 1 by 12.8 to
+# 116.6 log units, where a 40-letter German decrypt is worth only ~30-40.  A
+# longer second message, or a third, would close them.
+#
+# ----------------------------------------------------------------------------
 # WHY THIS CONTRADICTS THE REPO'S DOCUMENTED ~1% SCORING FLOOR
-# ============================================================================
+# ----------------------------------------------------------------------------
 #
 # CLAUDE.md records a ~1% scoring-failure floor and "at short lengths the
 # residual is ~99% search failure"; ENHANCEMENTS item 2 records "5-10% at L40,
 # 0 elsewhere".  Those come from `make crackquality`, whose corpus is 477
 # characters of ENGLISH PROSE.  They do not transfer.
 #
-# Two variables move the split, isolated one at a time (200 trials each, L=40):
+# Two variables move the split, isolated one at a time (200 trials, L=40, and
+# both arms free of the --polish extraction bug since neither used --polish):
 #
 #   plaintext / language                    search    scoring
 #   English prose      -q -l english        100.0%       0.0%
@@ -60,22 +100,57 @@
 #
 #   model, on telegraphic German            search    scoring
 #   -q                                       44.0%      56.0%
-#   -f -S i4f10 -J --polish                  10.0%      90.0%
+#   -f -S i4f10 -J --polish                   9.5%      90.2%   (from the run
+#                                                                above, L=40)
 #
-# NOT the garbled decrypts in the pool: restricting to clean plaintexts gives
+# NOT the garbled decrypts in the pool: restricting to clean plaintexts gave
 # 89.5% against 90.5% at L=40, i.e. no effect.
 #
-# Both directions are real.  A STRONGER SEARCH MAKES IT WORSE: it reaches
-# boards a weak climb never found, and at 40 letters with ten free plug pairs
-# those boards overfit.  crackquality on its own English corpus shows the same
-# sign, 0% -> 2%, when -J --polish -R 8 is added.
+# A STRONGER SEARCH MAKES IT WORSE -- it reaches boards a weak climb never
+# found, and at 40 letters with ten free plug pairs those overfit.  crackquality
+# on its OWN English corpus shows the same sign, 0% -> 2%, when -J --polish -R 8
+# is added, so this is not an artefact of the German harness.
 #
-# Telegraphic German is flatter to score than prose -- X separators,
-# spelled-out numbers, a small vocabulary -- so the true plaintext stands less
-# far above a wrong decrypt.  That is the same style dependence CLAUDE.md
-# already records for the wehrmacht tables (+20.9pp on real messages, -10.2pp
-# on prose) and for SA-vs-greedy; this is another instance of it.
+# Telegraphic German is flatter to score than prose (X separators, spelled-out
+# numbers, small vocabulary), so the truth stands less far above a wrong
+# decrypt.  Same style dependence CLAUDE.md already records for the wehrmacht
+# tables (+20.9pp on real messages, -10.2pp on prose).
 #
-# So "how much of the residual is scoring" is a property of the CORPUS and the
-# SEARCH STRENGTH, not of message length alone, and any single figure for it
-# needs both stated.
+# ----------------------------------------------------------------------------
+# SCOPE
+# ----------------------------------------------------------------------------
+#
+# * The rotor key is GIVEN.  This says nothing about the case where the climb
+#   never reaches the board -- 9.5% to 68.3% of trials here depending on length.
+#   With the rotor key unknown the competitor set is far larger, so this is a
+#   LOWER bound on the real-attack scoring floor.
+# * Exact recovery (0.3/4.0/12.5/22.8%) brackets CLAUDE.md's 12.0% at L=82.
+# * The rescue is a two-way comparison against one impostor, not a re-ranking.
+# * 52 authentic plaintexts, 13 of them corpus-flagged garbled (kept: shown to
+#   have no effect on the split).
+#
+# ----------------------------------------------------------------------------
+# FIVE HARNESS ERRORS, in the order they were found.  Each made the result look
+# BETTER or SIMPLER than it was, and none announced itself.
+# ----------------------------------------------------------------------------
+#
+# 1. Scored random wrong ROTOR KEYS against the true board.  z = 9.6 at L=60
+#    against a 5.3 bar, true key first in 100% of trials -- i.e. NO scoring
+#    failures at all.  A board never fitted to the ciphertext is not a
+#    competitor.
+# 2. Compared boards as STRINGS while the binary normalises pair order, so one
+#    board spelled two ways counted as different.  40% of the L=100 "failures"
+#    were the true board itself, producing a tidy 100/92/57% falling-with-length
+#    trend with a plausible mechanism ready to explain it.
+# 3. Ran a bare -q climb with none of -f -S i4f10 -J --polish: 0.5% exact at
+#    L=80 against CLAUDE.md's 12.0% at L=82.  A weak climb lands far from the
+#    truth, making the impostor trivially easy to reject.
+# 4. Classified with a Python quadgram score while the climb maximised FUSED --
+#    a BIASED mismatch, since a climbed board is by construction competitive on
+#    fused.  Read 19% of misses at L=60 where the truth is ~54%.
+# 5. Took s_got from the best --dump-all line.  --polish runs after all restarts
+#    and never appears there: the final reported score beats the best dumpall
+#    line in 8 of 12 runs, by up to 0.72.  Both the score (scoring failures
+#    undercounted) and the board (wrong impostor) were affected.
+#
+# Errors 4 and 5 were found by questions about METHOD, not by re-reading code.
