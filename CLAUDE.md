@@ -3128,7 +3128,17 @@ traffic, `archived/PERFORMANCE.md` §3.11). The heavier metaheuristics once
 listed as open — tabu and **GA** — have since been **measured down**:
 `--restart-tt` (PR #100) found restarts already almost never revisit a basin
 (near-total exact-board diversity at `--random 10`), so a tabu visited-set has
-nothing to forbid; and an oracle probe of the GA precondition
+nothing to forbid — **but that is an `-R` ≲ 64 result and it does not hold at
+high `-R`.** The distinct-converged-board count per restart falls steadily with
+budget: measured over 350 trials at each of four lengths
+(`eval/restart_ladder.py`), **0.97 at `-R 8`, 0.79 at 100, 0.49 at 1000 and
+0.28 at 5000** — so at five thousand restarts **72% of them rediscover a basin
+already found**, which is exactly what a visited-set would forbid. The premise
+"nothing to forbid" is therefore false in the regime where restarts are the
+recommended lever; whether forbidding helps is still open, since the basins a
+tabu set would push the climb into may simply be worse. Do not cite this
+sentence as closing tabu at high `-R`. And an oracle probe of the GA
+precondition
 (`archived/PERFORMANCE.md` §3.10) found the crossover *material* exists (correct
 plugs union to ~8/10 across restarts) but is **unselectable** — board-fitness
 picks only ~2.5/10 and per-plug consensus is worse (~1.1/10, amplifying the
