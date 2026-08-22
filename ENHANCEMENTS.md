@@ -526,10 +526,11 @@ The L = 60 cell against mono is a **tie**, so "beat both at both" is not met.
 The arguments for keeping it are that the failure is a tie rather than a loss,
 and that at L = 60 every arm scores 14–17% mean correct at ~5% exact recovery,
 i.e. that cell ranks pre-passes in a regime where the message essentially never
-breaks. **λ has since been retuned** (`0.1·L` → `1.1·√L`, so IC contributes one
-sd at every length), which means these numbers describe a configuration the
-binary no longer ships and a re-measurement is required before any
-recommendation changes.
+breaks. **λ was retuned and then reverted**: `1.1·√L` (IC contributing one sd
+at every length, correcting an exponent that really is wrong — see
+`eval/results-monoic-lambda.txt`) measured **null** in a paired A/B, pooled
+−0.40pp [−1.09, +0.28], so `0.1·L` stands and these numbers describe the
+shipping configuration after all. **No recommendation has been decided.**
 
 **The decisive cell holds across five seeds** — +4.45/+4.94/+6.10/+6.94/+4.66,
 pooled **+5.01pp** [+3.86, +6.16], z = 8.5, Q = 2.07 on 4 df (p = 0.72). That

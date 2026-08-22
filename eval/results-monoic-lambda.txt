@@ -1,0 +1,98 @@
+# -S k's lambda: correcting the EXPONENT measures NULL.  The 0.1*L rule stays.
+#
+# eval/lambda_ab.py <length> 2000
+#
+# A paired A/B of the blend weight itself, run after -S k was measured end to
+# end (results-monoic-endtoend.txt).  Telegraphic German, rotor key given, only
+# the 10-pair plugboard hidden, -c -J --polish -R 8 -T 4.
+#
+# ============================================================================
+# THE QUESTION
+# ============================================================================
+#
+# -S k adds lambda * L * IC to the per-symbol monogram score, with lambda = 0.1.
+# Expressed in units of each statistic's own spread -- r = lambda_raw *
+# sd(IC)/sd(mono), the parameterisation results-mono-ic-blend.txt sweeps in --
+# that is NOT a constant:
+#
+#     L        sd(mono)/sd(IC)   lambda_raw = 0.1*L    r
+#     40             7.4               4.00          0.54
+#     60             8.8               6.00          0.68
+#    100            11.0              10.00          0.91
+#    167            14.2              16.70          1.18
+#
+# THE EXPONENT IS WRONG AND THE ARITHMETIC IS NOT SUBTLE.  sd(mono)/sd(IC) goes
+# as ~1.1*sqrt(L) (dividing out: 1.17 / 1.14 / 1.10 / 1.10 times sqrt(L)).  A
+# LINEAR rule crosses that curve exactly once -- 0.1*L = 1.1*sqrt(L) at
+# L = 121 -- so it must undershoot below and overshoot above, which is exactly
+# the drift in the r column.  lambda = 1.1*sqrt(L) holds r = 0.94 / 0.97 /
+# 1.00 / 1.00 instead.
+#
+# ============================================================================
+# THE MEASUREMENT
+# ============================================================================
+#
+# Both arms are k4f10 in the SAME binary.  At a fixed length both rules are
+# constants, so the old one is reproduced exactly by the env override:
+#
+#     g * sqrt(L) = 0.1 * L   =>   ENIGMA_MONOIC_BLEND = 0.1 * sqrt(L)
+#
+# That is what makes this a genuine PAIRED test of the retune.  Comparing each
+# lambda against i4f10 in separate runs cannot do it: the difference of two
+# such comparisons has the variance of both, and the two arms are not paired
+# trial by trial.
+#
+#   L      exact new / old   only-new / only-old   paired diff (new - old)
+#  167      1654 / 1632         119 / 97           +0.84  [-0.47, +2.15]
+#  100       657 /  668         116 / 127          -0.75  [-2.18, +0.68]
+#   60        99 /  108          41 / 50           -0.93  [-1.90, +0.05]
+#
+#   pooled (fixed effect)                          -0.40  [-1.09, +0.28]
+#
+# EVERY INTERVAL SPANS ZERO, and McNemar on the exact counts is null in all
+# three (z = 1.5 / 0.7 / 0.9).  The sign is mildly AGAINST the tidier rule.
+#
+# THE CELL IT WAS AIMED AT IS THE WORST ONE.  L = 60 is where r moves furthest
+# (0.68 -> 0.97, the others 0.91 -> 1.00 and 1.18 -> 1.00) and it came back
+# -0.93pp with the interval barely touching zero.  So the change did not fail
+# for want of leverage; it failed where it had the most.
+#
+# ============================================================================
+# WHY, AND WHAT IT MEANS FOR THE NEXT PERSON
+# ============================================================================
+#
+# THE SURFACE IS A BROAD PLATEAU.  results-mono-ic-blend.txt already recorded
+# it: "every r from 0.25 to 2.0 beats both pure statistics at L >= 60".  Both
+# rules sit inside that plateau at every length measured, so the exponent is a
+# tidiness question, not a performance one.
+#
+# The L = 100 cell is the cleanest demonstration: there the two rules differ by
+# 10% of the blend weight (ENIGMA_MONOIC_BLEND = 1.0000 against a default 1.1)
+# and 2000 paired trials cannot tell them apart.
+#
+# 0.1*L IS KEPT for two reasons, neither of them that it is the better
+# derivation:
+#
+#   * it is the configuration the five-seed end-to-end evidence describes
+#     (results-monoic-endtoend.txt), so keeping it costs no re-measurement;
+#   * it happens to track the probe's measured PEAK r, which itself RISES with
+#     length -- 0.5 / 1.0 / 1.0 / 1.0-2.0 at L = 40 / 60 / 100 / 167.  At
+#     L = 40 that peak is 0.5 and 0.1*L gives 0.54, almost exactly on it, where
+#     the sqrt rule gives 0.94.  So the linear rule is better at the short end
+#     and worse at the long one, and the sqrt rule is the reverse.
+#
+# WHAT THIS DOES NOT SAY.  Not that the sqrt reasoning is wrong -- sd(mono)/
+# sd(IC) really does scale that way and 0.1*L really does have the wrong
+# exponent.  It says the error does not MATTER at n = 2000.  The intervals
+# still admit effects up to about +-2pp, so this is "no measurable difference",
+# not "identical".
+#
+# ============================================================================
+# SCOPE
+# ============================================================================
+#
+# Plugboard-recovery tier, rotor key given.  Telegraphic German only.  -R 8
+# only -- and PERFORMANCE 6.10 established the pre-pass ordering is
+# restart-budget dependent, so a plateau at -R 8 is not evidence of one at high
+# -R.  Three lengths, one corpus, one seed per cell (n = 2000 paired trials
+# each, so the pairing rather than the seed count carries the precision).
