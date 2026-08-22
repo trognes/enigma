@@ -615,8 +615,10 @@ are far more numerous — present in 54.0% of L = 60 trials against the truth's
 
 So the honest summary is: **the discrimination property is real, the conversion
 population is far larger than previously recorded, and the end-to-end gain is
-worth ~4pp measured and plausibly ~8pp — but only with a candidate list two
-orders of magnitude deeper than the one measured here.**
++1.6 to +5.1pp — measured, at a candidate depth of 32.** It peaks at
+L = 60–80: at 40 letters the conversion population is large but almost nothing
+in it can be overturned, and at 100 nearly all of it converts but the search
+rarely fails in the first place.
 
 **How the search is run, exactly**, because the result is meaningless without
 it: `-u B -w <true> -r <true> -g <true start1>` are all pinned, so the keyspace
@@ -701,11 +703,18 @@ survive:
 - **Testing a candidate day key across several messages at once** — the GEHRG
   pattern in §5j, cheap and it fails loudly.
 
-A third use is worth 1–2pp and is free where it applies: **re-ranking the
-search's own converged boards**, as measured above. What none of them helps is
-the case that dominates short texts — **the climb not reaching the board at
-all**, 55–99% of trials at every length measured here. That is a SEARCH
-problem.
+A third use is worth **+1.6 to +5.1pp** and is free where it applies:
+**re-ranking the search's own converged boards** at a depth of ~32, as measured
+above. What none of them helps is the case that dominates short texts — **the
+climb not reaching the board at all**, 55–99% of trials at every length
+measured here. That is a SEARCH problem.
+
+**At the short end the lever is a LONGER second message, not a deeper list.**
+The conditional promotion rate tracks the ratio of what message 2 supplies
+(~0.85 log units per letter) to the impostor's lead on message 1, and at
+L = 40 that ratio is 0.38 — no candidate depth rescues a trial below 1. Two
+60-letter messages convert better than two 40-letter ones, and a *third*
+message is the natural extension where only short traffic exists.
 
 **And the main finding to take away from all of this is about `-R`, not about
 second messages.** The same sweep measures the lever that does work at these
@@ -731,7 +740,8 @@ So for a short text the order of business is: **spend on `-R`, bought with
 `-T`, and spend more than feels reasonable** — a thousand restarts is still on
 the steep part of the curve; then the message-key prior in §3b, which needs no
 second message; and only then a second message — for confirming what you found,
-plus the free 1–2pp of re-ranking, rather than for finding it.
+plus **+1.6 to +5.1pp** from re-ranking its converged boards at depth ~32,
+rather than for finding it.
 
 **A start SWEEP degrades gracefully where the indicator does not**, which is
 the inversion to remember if this is ever revisited. Scoring message 2 across

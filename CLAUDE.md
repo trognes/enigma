@@ -3179,7 +3179,13 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   (see the note above — on telegraphic German at L = 40 it is the reverse), and
   the coverage curve is
   **still climbing at R=256** (~+15–25pp per 4× R — the true basin is reachable,
-  just a rare deep target). The apparent restart diversity is an illusion: 64
+  just a rare deep target). **It is still climbing at `-R 5000` too, on
+  telegraphic German** — measured 350 paired trials per cell, judged at ≥50% of
+  the plaintext recovered: the 1000 → 5000 step alone is worth +4.9pp at L=60,
+  +6.0pp at L=80 and +8.9pp at L=100, reaching 30.3/58.6/84.0%. Only L=40
+  saturates (flat at 1.4% exact from `-R 1000`), which is what its 98%
+  scoring-failure share predicts. `eval/results-restart-ladder.txt`. The
+  apparent restart diversity is an illusion: 64
   restarts give ~60 distinct *exact* boards but only **~15 distinct correct-plug
   states** (a 4× overcount — the rest is spurious-plug noise on a few basins),
   with per-restart depth ~0.7/10 and the truth assembled only in the **union
