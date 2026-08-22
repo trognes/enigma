@@ -31,7 +31,15 @@ Three statistics, all read off the SAME 26-bin histogram:
   mono   Sum n_x log p(x)             -- what -S m4... uses, for reference
 
 FALSIFICATION, fixed in advance (ENHANCEMENTS 2a): if cc3 fails to beat ic,
-drop the token rather than tuning a blend until it wins.
+drop the token rather than tuning a blend until it wins.  cc3 failed; it is
+kept here as the measured-down reference, not as a candidate.
+
+IT ALSO SWEEPS THE mono + lambda*IC BLEND (experiment E), which PASSES: the
+weight is expressed as r = lambda * sd(ic) / sd(mono), so "r = 1" means IC
+contributes one standard deviation for every one of mono's, and the grid is
+comparable across lengths where a raw lambda is not.  The blend columns appear
+in the c = 0 table too, because an AUC gain bought at the price of MORE
+over-plugging would not be a gain.
 
   python3 eval/coincidence_order_probe.py
   python3 eval/coincidence_order_probe.py --lengths 60 --keys 400
@@ -228,20 +236,36 @@ def main():
         # averaged rather than the draws pooled: a c=1 board with n=1 has no
         # wrong plugs and one with n=4 has three, so they are different
         # objects and pooling their values would blur two effects together.
+        # sd ratio first: the blend columns below need it, and it is also the
+        # raw lambda a binary would have to bake in (see the sweep).
+        allm = [v for cell in samples.values() for v in cell["mono"]]
+        alli = [v for cell in samples.values() for v in cell["ic"]]
+        sd_m = statistics.pstdev(allm) or 1.0
+        sd_i = statistics.pstdev(alli) or 1.0
+
+        def fused(cell, r):
+            lam = r * sd_m / sd_i
+            return [m + lam * i for m, i
+                    in zip(samples[cell]["mono"], samples[cell]["ic"])]
+
         # c = 0: n WRONG plugs against the empty board.  Above 0.5 means the
         # statistic rewards a spurious plug, so the climb is pushed to add
         # plugs it has no evidence for -- the over-plugging the `-M` cap rule
-        # exists to fight.  Below 0.5 means it resists.
-        print("%6s %8s %8s %8s %8s %9s"
-              % ("", "0 wrong", "ic", "cc3", "mono", "n each"))
+        # exists to fight.  Below 0.5 means it resists.  The blend columns are
+        # here because an AUC gain bought at the cost of MORE over-plugging
+        # would not be a gain at all.
+        print("%6s %8s %7s %7s %7s %7s %7s"
+              % ("", "0 wrong", "ic", "mono", "r=0.5", "r=1.0", "n each"))
         for n in range(1, args.cap + 1):
-            row = [auc(samples[(n, 0)][nm], samples[(0, 0)][nm])
-                   for nm in names]
+            row = [auc(samples[(n, 0)]["ic"], samples[(0, 0)]["ic"]),
+                   auc(samples[(n, 0)]["mono"], samples[(0, 0)]["mono"]),
+                   auc(fused((n, 0), 0.5), fused((0, 0), 0.5)),
+                   auc(fused((n, 0), 1.0), fused((0, 0), 1.0))]
             if any(x is None for x in row):
                 continue
-            print("%6s %8s %8.3f %8.3f %8.3f %9d"
-                  % ("", "%d plugs" % n, row[0], row[1], row[2],
-                     len(samples[(n, 0)][names[0]])))
+            print("%6s %8s %7.3f %7.3f %7.3f %7.3f %7d"
+                  % ("", "%d plugs" % n, row[0], row[1], row[2], row[3],
+                     len(samples[(n, 0)]["ic"])))
 
         # FUSED mono + lambda*IC (ENHANCEMENTS 2a experiment E), swept.
         #
@@ -252,11 +276,8 @@ def main():
         # per-symbol log10 near -1.3 and IC a ratio near 0.05, so the useful
         # range would move with the corpus and the length.
         #
-        # This costs no new decrypts -- it recombines values already stored.
-        allm = [v for cell in samples.values() for v in cell["mono"]]
-        alli = [v for cell in samples.values() for v in cell["ic"]]
-        sd_m = statistics.pstdev(allm) or 1.0
-        sd_i = statistics.pstdev(alli) or 1.0
+        # This costs no new decrypts -- it recombines values already stored,
+        # through the same fused() helper the tables above and below use.
         # The raw lambda a BINARY would need is r * sd(mono)/sd(ic), and that
         # ratio is not length-invariant: IC's spread falls as ~1/L (it is a
         # rate over C(L,2) pairs) while mono's falls as ~1/sqrt(L) (a mean of
@@ -267,17 +288,10 @@ def main():
               % ("", "blend r", "mean AUC", "vs best", sd_m / sd_i))
         blend = {}
         for r in (0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0):
-            lam = r * sd_m / sd_i
             vals = []
             for n in range(1, args.cap + 1):
                 for c in range(0, n):
-                    hi = [m + lam * i for m, i
-                          in zip(samples[(n, c + 1)]["mono"],
-                                 samples[(n, c + 1)]["ic"])]
-                    lo = [m + lam * i for m, i
-                          in zip(samples[(n, c)]["mono"],
-                                 samples[(n, c)]["ic"])]
-                    a = auc(hi, lo)
+                    a = auc(fused((n, c + 1), r), fused((n, c), r))
                     if a is not None:
                         vals.append(a)
             blend[r] = sum(vals) / len(vals)
@@ -307,6 +321,32 @@ def main():
                   % ("", target, sum(per["ic"]) / len(per["ic"]),
                      sum(per["cc3"]) / len(per["cc3"]),
                      sum(per["mono"]) / len(per["mono"]), len(per["ic"])))
+
+        # The same split for the BLEND, as a separate table rather than extra
+        # columns on the one above: that table is quoted verbatim in
+        # results-coincidence-order.txt, and widening it there would leave the
+        # committed file no longer reproducible from this harness.
+        print("%6s %8s %7s %7s %7s %7s %7s"
+              % ("", "blend c", "ic", "mono", "r=0.5", "r=1.0", "over n"))
+        for target in range(1, args.cap + 1):
+            per = collections.defaultdict(list)
+            for n in range(target, args.cap + 1):
+                for nm in ("ic", "mono"):
+                    a = auc(samples[(n, target)][nm],
+                            samples[(n, target - 1)][nm])
+                    if a is not None:
+                        per[nm].append(a)
+                for r in (0.5, 1.0):
+                    a = auc(fused((n, target), r), fused((n, target - 1), r))
+                    if a is not None:
+                        per["r%.1f" % r].append(a)
+            if not per["ic"]:
+                continue
+            print("%6s %8d %7.3f %7.3f %7.3f %7.3f %7d"
+                  % ("", target, sum(per["ic"]) / len(per["ic"]),
+                     sum(per["mono"]) / len(per["mono"]),
+                     sum(per["r0.5"]) / len(per["r0.5"]),
+                     sum(per["r1.0"]) / len(per["r1.0"]), len(per["ic"])))
 
     print("\n  ic   = Sum f^2, the index of coincidence (-S i4...)")
     print("  cc3  = Sum f^3, the triple-coincidence rate, the candidate")
