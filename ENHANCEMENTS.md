@@ -177,31 +177,170 @@ four-way run:
 | `f4f10` vs `i4f10` | the MODEL alone — same cap both sides |
 | `i4f10` vs `m4f10` | already measured, the continuity check |
 
-Run at L = 60 and L = 167, the two ends of the known IC/mono crossover. **If
-`f4f10` matches `i4f10`, the pre-pass is a cap effect and the whole IC/mono
-debate is misdirected**; if it sits apart, the model is doing the work. Keep
-the pairing — an unpaired four-way comparison at ~2pp effect sizes would need
-far more trials to say anything.
+Run at L = 60 and L = 167, the two ends of the known IC/mono crossover.
 
-**B. Cap sweep — also no code.** `i2f10` / `i4f10` / `i6f10` / `i8f10`. The 4
-appears never to have been swept.
+**MEASURED, and the model wins by 4× — plus a trap worth knowing about**
+(2000 paired trials per cell, `-R 8`, `eval/results-prepass-model-vs-cap.txt`):
 
-**C. Third-moment coincidence, in three steps.** Do NOT start by adding the
-token:
+| | L = 60 | L = 167 |
+|---|---|---|
+| `f10` → `f4f10` (the **cap**) | −0.87pp, ns | **−4.36pp** |
+| `f4f10` → `i4f10` (the **model**) | −0.31pp, ns | **−17.84pp** |
+| `i4f10` → `m4f10` (continuity) | −2.21pp (mono ahead) | +3.86pp (IC ahead) |
 
-1. **Offline discriminability probe, pure Python, no binary change.** For
-   random keys and boards holding `j` of the ten true plugs, `j` = 0…10,
-   compute IC and Σf³ of the decrypt and ask which separates `j` from `j+1`
-   better (rank correlation, or AUC per step). This settles whether the token
-   is worth building, at a fraction of the cost, and it is the step that can
-   *falsify* the table above rather than dress it up.
-2. **Only if step 1 favours Σf³:** a schedule token — `k`, for the kappa
-   family of coincidence statistics; `i m b t q a f` are taken. Standalone
-   like IC, so it needs no n-gram table and no `-l`.
-3. **Then `--arms k4f10 i4f10`** at L = 40/60/80/100/167.
+**The pre-pass is not a cap effect**, which is what this was run to rule out
+before spending effort on experiment E — the model channel is worth 17.84pp
+against the cap's 4.36pp at L = 167, with `score_iter` matched within 3% on the
+model row.
 
-**Falsification, stated in advance:** if `k4f10` fails to beat `i4f10` at any
-length, drop the token rather than tuning a blend weight until it wins.
+**`-S f4f10` is a trap**: using the target model as the pre-pass costs 17.84pp,
+six times what the entire IC-versus-mono question is worth. §6.10's mechanism
+taken to its limit — sharper models "over-commit and lose at low R" and `-f` is
+the sharpest available. **Invisible at L = 60** (−0.31pp: sixty letters is too
+little for `-f`'s n-gram half to say anything at four plugs, so `f4`
+degenerates to IC) and severe at operational length, which is the worst
+possible place for it to hide.
+
+**The continuity arm did double duty.** It reproduces the documented crossover
+and sharpens it — CLAUDE.md has mono +1.77pp at L = 60 with the CI spanning
+zero and IC +2.81pp at 167; this reads +2.21pp (p = 0.015) and +3.86pp
+(p = 0.000). Both ends now significant. It also proves the two L = 60 nulls are
+genuine: the same length and trial count resolves 2.21pp, so the instrument is
+not blind there, the cap simply does not move it.
+
+**The cap row was challenged and survived.** `f10` and `f4f10` differ by *two*
+things — the cap, and being a two-stage schedule — so labelling that row "the
+cap" assumes the extra stage is free. It is: `f10` vs `f10f10` reads +0.00pp,
+CI [+0.00, +0.00], zero discordant, because a converged stage re-converges
+immediately. The −4.36pp is the cap.
+
+**Not settled: only `-R 8` was run.** §6.10 established the pre-pass ordering is
+restart-budget-dependent, so none of this should be assumed to hold at the high
+`-R` the restart ladder now recommends — the `f4` trap in particular might
+soften where many restarts can recover from over-commitment.
+
+**B. Cap sweep — BLOCKED AS DESIGNED; the IC pre-pass cap is inert.** The plan
+was `i1f10` … `i6f10` against the `i4f10` default. The first cell killed it:
+
+| | diff | CI | discordant |
+|---|---:|---|---:|
+| `i1f10` vs `i4f10` | +0.00pp | [−0.00, +0.01] | **0 of 2000** |
+
+Identical exact recovery (1569 both) and `score_iter` within 0.01% — caps 1 and
+4 on an IC pre-pass run the *same search*, trial for trial, so sweeping them
+measures nothing.
+
+**Why, and it is documented.** Without `-M` the cap is only a *growth ceiling* —
+at or over it, adds are blocked but count-preserving moves are not — and the
+default `--random 10` kick starts every restart at ten plugs, so a tight cap
+has nothing to block. That is CLAUDE.md's "flat plateau … `-M` is what makes a
+tight cap bite", and it should have been read before the sweep was launched.
+
+**The cap is not inert in general**, so do not over-correct: `i1f10` vs `if10`
+(uncapped) *does* differ (41 discordant of 200, 20% more `score_iter`), and
+final plug counts at `-R 4` are `f4` → 7, `f10` → 10, `i4` → 8, `i10` → 10. The
+grip is model-dependent and simply absent in 1…4 for IC.
+
+**To ask the intended question** the cap has to bite: add `-M`, or use a kick
+smaller than the cap. Both move off the recommended recipe, so it is a
+deliberate choice rather than a default. **Unresolved:** why caps 1 and 4 give
+identical results *through* an IC pre-pass when as sole stages they converge on
+different plug counts — the following `f10` stage erases that difference, yet
+the pre-pass *model* survives the same stage with a 17.84pp effect.
+
+**C. Third-moment coincidence — MEASURED DOWN, do not build the token.** The
+offline gate ran and Σf³ failed it (`eval/coincidence_order_probe.py`, results
+in `eval/results-coincidence-order.txt`).
+
+**The gate was the right test because contrast is not the right test.**
+Separation from a uniform null measures *detection* — is this text German? A
+pre-pass does not detect, it **orders boards**: at each step it must rank a
+board with one more CORRECT plug above one with one more WRONG plug. So the
+probe builds boards with `n` plugs of which `c` are correct (`n` = 1…4, the
+cap) and reports `AUC = P(the statistic ranks c+1 above c)`, 6000 draws per
+cell — exactly the comparison the climb makes.
+
+Mean AUC over the ten (n, c) cells:
+
+| | L = 40 | L = 60 | L = 100 |
+|---|---:|---:|---:|
+| IC (Σf²) | **0.543** | **0.561** | **0.593** |
+| Σf³ | 0.539 | 0.560 | 0.591 |
+| mono | 0.563 | 0.572 | 0.591 |
+
+**Σf³ is at or below IC in all thirty cells.** No length, plug count or `c`
+where the third moment orders boards better. Separated by `c` — which correct
+plug is being added, averaged over the board sizes that reach it — the same
+holds in all twelve cells, and the gap *widens* with `c`:
+
+| → c | L = 40 | L = 60 | L = 100 |
+|---:|---|---|---|
+| 1 | .528 / .524 / **.541** | .545 / .544 / **.551** | **.569** / .568 / .565 |
+| 2 | .543 / .540 / **.566** | .564 / .562 / **.567** | **.597** / .595 / .593 |
+| 3 | .561 / .558 / **.585** | .578 / .577 / **.597** | .611 / .607 / **.616** |
+| 4 | .568 / .561 / **.600** | .585 / .584 / **.618** | .637 / .632 / **.637** |
+
+(ic / cc3 / mono.) **At `c` = 0 the question changes**, since there is no
+`c` = −1 to climb from: it asks whether a statistic prefers a board carrying
+*wrong* plugs to the empty board. AUC of `n` wrong plugs against no plugs:
+
+| wrong plugs | L = 40 | L = 60 | L = 100 |
+|---:|---|---|---|
+| 1 | .493 / .495 / .490 | .492 / .491 / .487 | .487 / .489 / .486 |
+| 4 | .461 / .467 / .456 | .464 / .463 / .435 | .451 / .457 / .453 |
+
+**All three pass, and all three pass only just.** Every value is below 0.5 and
+falls monotonically as junk accumulates, so none of them *drives*
+over-plugging. But the penalty for a wrong plug is 0.01–0.05 below chance
+against a 0.03–0.14 reward for a correct one, and a single random wrong plug
+still beats the empty board 49% of the time — while the climb takes the **best
+of 325** toggles. At ~0.49 per candidate the best of ~300 wrong ones beats the
+empty board essentially always. **That is the over-plugging mechanism,
+measured**: the statistics do not cause it, they are simply far too weak to
+resist selection at that fan-out — which makes the plug cap and `-M`
+load-bearing rather than tuning knobs. Note also that mono resists wrong plugs
+harder than IC at the short lengths (.435 against .464 at L = 60) and converges
+by L = 100, so at short lengths it is better on *both* axes — a cleaner account
+of the crossover than "mono is sharper".
+
+Two further readings. **Every statistic improves
+monotonically with `c`**, so the pre-pass gets easier as it goes and the hard
+decision is the *first* plug, at AUC .53–.57. And **mono's advantage over IC
+grows with `c` at every length** (+.013 → +.032 at L = 40, +.006 → +.033 at 60,
+−.004 → .000 at 100) — a monotone pattern rather than one cell, which
+**predicts something for experiment B**: if mono keeps gaining as plugs
+accumulate, raising the *mono* cap should pay more than raising the IC cap,
+`m6`/`m8` beating `m4` by more than `i6` beats `i4`. Do not read the L = 100,
+`c` = 1 cell as "IC wins the first plug" — its +.004 sits at the per-cell SE of
+~.005. Dropped per the condition fixed
+in advance — *no blend was tried*, which is what writing the condition down
+beforehand was for, since the 2.85× contrast table is exactly the sort of
+number that would have justified one more attempt.
+
+**Why detection and ordering come apart.** Raising the moment order
+concentrates the statistic on the largest frequencies (at k → ∞ it is just
+`max_x f_x`). That sharpens German-versus-uniform, because German is peaked.
+It does not sharpen the *plug* question, because one plug moves two letters'
+counts by a few units and a statistic dominated by the tallest bars is less
+sensitive to that, not more.
+
+**The probe validates itself on a known effect**, which is what makes the
+negative worth trusting: the `mono` column reproduces the documented mono/IC
+crossover unasked — mono ahead by .020 at L = 40 and .011 at 60, IC ahead by
+.002 at 100. CLAUDE.md records that end-to-end from 2000-trial paired recovery
+sweeps; this probe never sees a climb or a recovery rate and finds the same
+ordering and the same crossover point. An instrument that resolves a ~1–2pp
+end-to-end effect would have seen one in Σf³.
+
+**The incidental finding is worth more than the headline: EVERY AUC IS BETWEEN
+0.52 AND 0.64.** Even the best statistic at the longest length ranks a better
+board above a worse one only ~60% of the time; at L = 40 with one plug set it
+is 0.53, barely above chance. **The pre-pass is a weak instrument**, which is
+why the whole mono-versus-IC debate spans ~2pp end-to-end — the two differ by
+0.01–0.02 of AUC on a scale where both are near a coin flip. Any replacement
+statistic is competing for that same narrow margin, and the reframe below
+(deduce the first plugs instead of scoring them) is not competing on this
+scale at all.
 
 **D. Best-of-two SEEDS inside each restart — the one portfolio variant not yet
 measured.** Running IC and mono pre-passes and taking the better is a natural
@@ -276,6 +415,87 @@ thing, but the "extra stages after IC add little" result was measured on
 a probe gets tuned until it wins. Fix `λ` by the same method `-f`'s 30 was
 fixed, measure once at L = 60 and L = 167, and if the blend fails to beat
 *both* `m4f10` and `i4f10` at *both* lengths, drop it rather than re-tuning.
+
+**THE OFFLINE GATE PASSES — decisively, and unlike experiment C**
+(`eval/results-mono-ic-blend.txt`). The same AUC probe, with `λ` swept in
+units of each statistic's spread (`r` = IC's sd-weight against mono's):
+
+| | L = 40 | L = 60 | L = 100 |
+|---|---:|---:|---:|
+| pure mono | .563 | .572 | .591 |
+| pure IC | .543 | .561 | .593 |
+| **best blend** | **.571** (r=0.5) | **.587** (r=1) | **.622** (r=1) |
+| gain | +.007 | +.016 | **+.029** |
+
+**Held out, not fitted:** `r` was chosen on seed 1 and re-measured on a
+disjoint draw (seed 77) at +.006 / +.012 / +.025 — same optimum, same shape.
+The plateau is broad, every `r` from 0.25 to 2.0 beating both pure statistics
+at L ≥ 60, so this is not knife-edge tuning.
+
+**The L = 100 cell is the telling one.** There pure mono (.591) and pure IC
+(.593) are individually interchangeable, and fusing them gains **+.029** —
+two statistics of equal strength combining to something clearly better, which
+is complementarity rather than one being sharper, exactly what the
+relabel-invariance argument predicts. For scale, the whole mono-versus-IC
+question spans .010–.020 of AUC and is worth ~2pp end-to-end.
+
+**Extended to L = 167, and the blend still wins.** The sweep first stopped at
+L = 100, leaving the operational length — and, because of the λ drift, the
+riskiest cell — unprobed:
+
+| L | pure mono | pure IC | best blend | peak r | gain |
+|---:|---:|---:|---:|---:|---:|
+| 40 | **.563** | .543 | .571 | 0.5 | +.007 |
+| 60 | **.572** | .561 | .587 | 1.0 | +.015 |
+| 100 | .591 | **.593** | .622 | 1.0 | +.029 |
+| 167 | .601 | **.625** | **.645** | 1.0–2.0 | +.020 |
+
+It beats both components at all four lengths and keeps its over-plugging
+advantage at 167 (.407 at four wrong plugs, against IC .432 and mono .433).
+The documented mono/IC crossover also appears as a clean four-point curve —
+mono ahead at 40 and 60, tied at 100, IC clearly ahead at 167.
+
+**`λ` is NOT length-invariant, and L = 167 settles the design.**
+`sd(mono)/sd(ic)` measures 7.4 / 8.8 / 11.0 / **14.2** — close to the √L theory
+predicts, since IC is a rate over `C(L,2)` pairs while mono is a mean of `L`
+terms — while the measured peak `r` *rises* with length. The two compound
+rather than cancel:
+
+| L | peak r | `λ = 0.1·L` gives | fixed `λ = 6.5` gives |
+|---:|---:|---:|---:|
+| 40 | 0.5 | 0.54 | 0.88 |
+| 167 | 1.0–2.0 | **1.18** | 0.46 |
+
+**A length-proportional λ tracks the peak; a fixed one drifts away from it**,
+worst at exactly the length that matters. With only L ≤ 100 probed the two
+rules looked comparable — they are not. **Recommended: `λ = 0.1 ×
+textlength`**, which the binary can compute as easily as a baked constant.
+
+**It does not buy the gain against over-plugging** — the one way this could
+have been a false economy, now measured. AUC of `n` *wrong* plugs against the
+empty board, where **lower means more resistant**, blend at r = 1:
+
+| wrong plugs | L = 40 | L = 60 | L = 100 |
+|---:|---|---|---|
+| 1 | .493 / .490 / **.490** | .492 / .487 / **.484** | .487 / .486 / **.480** |
+| 4 | .461 / .456 / **.448** | .464 / .435 / **.427** | .451 / .453 / **.432** |
+
+(ic / mono / blend.) At or below **both** components in every cell, the margin
+widening as junk accumulates — and L = 100 shows the complementarity signature
+again, ic .451 and mono .453 tied while the blend reaches .432. So it finds
+correct plugs better *and* rejects wrong ones better.
+
+**And the gain is at every `c`, not one plug count.** Blend against the better
+component: +.005…+.011 at L = 40, +.013…+.020 at L = 60, +.024…+.034 at
+L = 100 — twelve cells of twelve, growing with length and, at L = 100, with
+`c` as well.
+
+**One gap remains, and it is the important one.** The probe never runs a climb,
+so there is no end-to-end number: the AUC-to-recovery conversion is unknown and
+the single calibration point (.010–.020 ↔ ~2pp) is not enough to extrapolate
+from. L = 167 also sits outside the probed range, and the λ drift is why that
+is the risky cell. The falsification condition above still has to be met after
+the token is built.
 
 **The reframe worth keeping in view.** The pre-pass exists to place the first
 few plugs, and *scoring* is only one way to do that. Where a crib or a doubled

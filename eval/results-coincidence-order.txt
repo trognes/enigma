@@ -1,0 +1,188 @@
+# Higher-order coincidence as a pre-pass statistic: MEASURED DOWN.
+#
+# eval/coincidence_order_probe.py --lengths 40,60,100 --keys 250
+#
+# ENHANCEMENTS 2a experiment C, step 1 -- the offline gate that had to pass
+# before a schedule token was worth building.  It does not pass.
+#
+# ============================================================================
+# WHAT WAS ASKED, AND WHY THE OBVIOUS TEST IS THE WRONG ONE
+# ============================================================================
+#
+# IC is Sum f^2, the pair-coincidence rate; Sum f^3 is the triple rate.  Over
+# the corpus Sum f^3 separates from a flat null by 2.85x where IC manages
+# 1.49x, which is what made it look promising.
+#
+# But contrast against a uniform null measures DETECTION -- is this text
+# German?  A pre-pass does not detect, it ORDERS BOARDS: at each step it must
+# rank a board with one more CORRECT plug above one with one more WRONG plug.
+# A statistic can be excellent at the first and useless at the second.
+#
+# So this measures the ordering directly.  For a true 10-pair board, build
+# candidate boards with n plugs of which c are correct (n = 1..4, the pre-pass
+# cap; c = 0..n), decrypt, score, and report
+#     AUC = P(the statistic ranks the (c+1)-correct board above the c-correct)
+# over independent draws.  0.5 is a coin flip.  That is exactly the comparison
+# the climb makes when choosing its next plug.
+#
+# 250 keys x 24 boards per cell = 6000 draws per cell, authentic telegraphic
+# plaintexts, wehrmacht monograms.
+#
+# ============================================================================
+# THE RESULT: cc3 LOSES TO IC IN EVERY CELL
+# ============================================================================
+#
+#            L = 40             L = 60            L = 100
+#   n  c    ic   cc3  mono     ic   cc3  mono     ic   cc3  mono
+#   1 0->1 .528 .524 .550    .551 .550 .555    .576 .575 .576
+#   2 0->1 .534 .531 .538    .549 .546 .556    .574 .573 .568
+#   2 1->2 .547 .544 .576    .565 .565 .580    .600 .600 .598
+#   3 0->1 .522 .517 .544    .540 .540 .544    .568 .567 .563
+#   3 1->2 .543 .538 .560    .566 .566 .569    .596 .594 .593
+#   3 2->3 .563 .561 .589    .575 .572 .600    .616 .613 .617
+#   4 0->1 .528 .522 .532    .539 .539 .548    .558 .558 .552
+#   4 1->2 .540 .539 .563    .559 .555 .552    .593 .593 .589
+#   4 2->3 .559 .555 .581    .581 .581 .594    .606 .602 .615
+#   4 3->4 .568 .561 .600    .585 .584 .618    .637 .632 .637
+#   mean   .543 .539 .563    .561 .560 .572    .593 .591 .591
+#
+# cc3 is at or below ic in ALL THIRTY cells, and below it at every length in
+# the mean (-0.004 / -0.001 / -0.002).  There is no length, no plug count and
+# no c where the third moment orders boards better than the second.
+#
+# SEPARATED BY c -- which correct plug is being added, averaged over the board
+# sizes n that can reach it (4 cells at c=1 down to 1 at c=4):
+#
+#          L = 40            L = 60            L = 100
+#   -> c   ic   cc3  mono    ic   cc3  mono    ic   cc3  mono
+#     1   .528 .524 .541   .545 .544 .551   .569 .568 .565
+#     2   .543 .540 .566   .564 .562 .567   .597 .595 .593
+#     3   .561 .558 .585   .578 .577 .597   .611 .607 .616
+#     4   .568 .561 .600   .585 .584 .618   .637 .632 .637
+#
+# Three things the per-n table buried:
+#
+# 1. cc3 <= ic in all TWELVE cells here too, and the gap WIDENS with c (.004
+#    -> .007 at L=40, .001 -> .005 at L=100).  The third moment is worst
+#    exactly where the signal is strongest, so it does not merely fail to
+#    help -- it degrades a little more as the decrypt gets cleaner.
+#
+# 2. EVERY statistic improves monotonically with c at every length (.528 ->
+#    .568 at L=40, .569 -> .637 at L=100).  The pre-pass gets easier as it
+#    goes, so the hard decision is the FIRST plug, at AUC .53-.57.
+#
+# 3. MONO'S ADVANTAGE OVER IC GROWS WITH c AT EVERY LENGTH: +.013 -> +.032
+#    (L=40), +.006 -> +.033 (L=60), -.004 -> .000 (L=100).  A consistent
+#    monotone pattern rather than one cell, and it PREDICTS something for the
+#    cap sweep (2a experiment B): if mono keeps gaining as plugs accumulate,
+#    raising the MONO cap should pay more than raising the IC cap -- m6/m8
+#    beating m4 by more than i6 beats i4.
+#
+# AND AT c = 0 -- n WRONG plugs against the EMPTY board.  c=0 is never a
+# destination in the table above (there is no c = -1), so the question it
+# poses is a different one: does a statistic prefer a board carrying spurious
+# plugs to one carrying none?  Above 0.5 it would drive over-plugging on its
+# own; below 0.5 it resists.
+#
+#   wrong      L = 40            L = 60            L = 100
+#   plugs   ic   cc3  mono    ic   cc3  mono    ic   cc3  mono
+#     1    .493 .495 .490   .492 .491 .487   .487 .489 .486
+#     2    .479 .480 .478   .479 .480 .464   .468 .472 .474
+#     3    .478 .482 .465   .475 .473 .451   .459 .464 .464
+#     4    .461 .467 .456   .464 .463 .435   .451 .457 .453
+#
+# ALL THREE PASS, AND ALL THREE PASS ONLY JUST.  Every value is below 0.5 and
+# falls monotonically as junk accumulates, so none of them rewards a spurious
+# plug -- the right sign, and not guaranteed in advance.
+#
+# BUT THE MAGNITUDES ARE THE POINT, AND THEY MEASURE THE OVER-PLUGGING
+# MECHANISM.  The penalty for a wrong plug is 0.01-0.05 BELOW chance while the
+# reward for a correct one is 0.03-0.14 ABOVE it.  A single random wrong plug
+# still beats the empty board 49% of the time -- and the climb does not try
+# one wrong plug, it takes the BEST OF 325 toggles.  At ~0.49 per candidate
+# the best of ~300 wrong ones beats the empty board essentially always.
+#
+# So the statistics do not CAUSE over-plugging; they are simply far too weak
+# to resist selection at that fan-out.  That is a quantitative argument for
+# the plug cap and for `-M` being load-bearing rather than tuning knobs, and
+# it is measured rather than argued.
+#
+# ONE SECONDARY READING: mono resists wrong plugs harder than IC at the short
+# lengths (.435 against .464 at L=60, 4 plugs) and the two converge by L=100.
+# Since mono also has the better c -> c+1 AUC there, it is better on BOTH axes
+# at short lengths -- a cleaner account of the documented crossover than
+# "mono is sharper".
+#
+# DO NOT read the L=100 c=1 cell as "IC is better for the first plug".  Its
+# +.004 edge sits at the per-cell SE of ~.005 (Hanley-McNeil at 6000/6000).
+# What the data supports is the TREND in the mono-minus-IC difference, which
+# is monotone at all three lengths; a single cell of it is not.
+#
+# VERDICT: DROPPED, per the falsification condition fixed in advance --
+# "if cc3 fails to beat ic, drop the token rather than tuning a blend weight
+# until it wins".  No blend was tried.  That restraint is the point of writing
+# the condition down before running the probe, and the contrast table in
+# ENHANCEMENTS 2a is exactly the kind of number that would have justified one
+# more attempt.
+#
+# WHY DETECTION AND ORDERING COME APART HERE.  Raising the moment order
+# concentrates the statistic on the largest frequencies -- at k -> infinity it
+# is just max_x f_x.  That sharpens the German-vs-uniform contrast, because
+# German has a peaked distribution.  It does NOT sharpen the plug question,
+# because one plug moves two letters' counts by a few units each, and a
+# statistic dominated by the tallest bars is less sensitive to that, not more.
+#
+# ============================================================================
+# THE PROBE VALIDATES ITSELF ON A KNOWN EFFECT
+# ============================================================================
+#
+# A negative result is only worth as much as the instrument, so note what the
+# `mono` column does WITHOUT being asked to:
+#
+#   L = 40    mono .563  vs  ic .543     mono ahead by .020
+#   L = 60    mono .572  vs  ic .561     mono ahead by .011
+#   L = 100   mono .591  vs  ic .593     ic ahead by .002
+#
+# That is the documented mono/IC crossover, reproduced from a completely
+# different measurement.  CLAUDE.md records it end-to-end -- mono leans at
+# L = 60, indistinguishable at 107, IC wins at 167 -- from paired recovery
+# sweeps of 2000 trials.  This probe never sees a climb, a restart or a
+# recovery rate, and recovers the same ordering and the same crossover point
+# from board-ranking AUC alone.  So the instrument detects a ~1-2pp
+# end-to-end effect; it would have detected cc3 if cc3 had one.
+#
+# ============================================================================
+# THE INCIDENTAL FINDING WORTH MORE THAN THE HEADLINE
+# ============================================================================
+#
+# EVERY AUC HERE IS BETWEEN 0.52 AND 0.64.  Even the best statistic at the
+# longest length ranks a better board above a worse one only ~60% of the time,
+# and at L = 40 with one plug set it is 0.53 -- barely above chance.
+#
+# The pre-pass is a WEAK INSTRUMENT, and that reframes the whole 2a question.
+# It explains why the entire mono-versus-IC debate spans ~2pp end-to-end: the
+# two statistics differ by ~0.01-0.02 of AUC on a scale where both are close
+# to a coin flip.  Any replacement statistic is competing for the same
+# narrow margin.
+#
+# It also strengthens the reframe already in 2a: where a crib or a doubled
+# word exists, DEDUCING the first plugs is measured decisive (the self-crib
+# seeder beats -R 128 at ~9x less compute).  Deduction is not competing on
+# this 0.52-0.64 scale at all -- it is arithmetic on the machine equation.
+#
+# ============================================================================
+# SCOPE
+# ============================================================================
+#
+# The boards here have exactly n plugs with c correct and the rest drawn at
+# random from unused letters, which is a MODEL of the climb's state rather
+# than the climb's actual trajectory -- a real climb's wrong plugs are ones
+# that scored well, not random ones, and are presumably harder to displace.
+# That should hurt every statistic about equally, and the mono/IC crossover
+# reproducing end-to-end is the evidence that it does.
+#
+# Statistics use falling-factorial (unbiased) estimators so they compare
+# across lengths; within one length any monotone form ranks identically.
+# Rotor key given, telegraphic German only.  k >= 4 was already dropped by the
+# earlier null probe recorded in ENHANCEMENTS 2a (z rises with moment order
+# while actual separation peaks at k = 2-3, the null being right-skewed).

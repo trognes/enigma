@@ -412,7 +412,15 @@ void dump_all(machine & m, double score)
 static std::atomic<size_t> g_sweep_done{0};
 static size_t g_sweep_total = 0;        /* work items in the armed sweep */
 static size_t g_sweep_restarts = 1;     /* items per key, so counts read as keys */
-static std::chrono::steady_clock::time_point g_sweep_t0;
+/* The sweep's start, held as the clock's RAW TICK COUNT rather than a
+   time_point.  A static-duration object whose constructor is formally
+   throwing cannot have that exception caught anywhere -- which is what
+   clang-tidy's bugprone-throwing-static-initialization objects to, and
+   steady_clock::time_point's default constructor is only constexpr, not
+   noexcept.  Nothing here needs a time_point: the value is written once and
+   only ever subtracted from a later reading, so the representation suffices
+   and zero is a valid "not armed yet". */
+static long long g_sweep_t0_ticks = 0;
 static bool g_sweep_drawn = false;      /* a \r line is on screen; under best.mutex */
 static int g_sweep_width = 0;           /* its length, so the erase matches exactly */
 /* ms since g_sweep_t0 of the last redraw, so the line can be rate-limited by
@@ -485,7 +493,9 @@ void sweep_progress_tick(size_t n, best_result & best)
   const bool final_draw = (after >= total);
 
   const double el = std::chrono::duration<double>
-    (std::chrono::steady_clock::now() - g_sweep_t0).count();
+    (std::chrono::steady_clock::duration
+       (std::chrono::steady_clock::now().time_since_epoch().count()
+        - g_sweep_t0_ticks)).count();
   /* A sweep that finishes in well under a second should not flash a progress
      line up and wipe it again; and an ETA off the first few milliseconds is
      noise anyway. */
@@ -814,7 +824,7 @@ void sweep_progress_arm(size_t total_items, size_t restarts)
   g_sweep_done.store(0, std::memory_order_relaxed);
   g_sweep_last_ms.store(-1000000, std::memory_order_relaxed);
   g_sweep_restarts = (restarts > 0) ? restarts : 1;
-  g_sweep_t0 = std::chrono::steady_clock::now();
+  g_sweep_t0_ticks = std::chrono::steady_clock::now().time_since_epoch().count();
   g_sweep_total = total_items;
 }
 

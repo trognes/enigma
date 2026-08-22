@@ -1,0 +1,154 @@
+# Does a pre-pass earn its keep through the MODEL or through the CAP?
+#
+# eval/prepass_ab.py --length {60,167} --trials 2000 --arms <pair>
+#
+# ENHANCEMENTS 2a experiment A.  No code: `-S f4f10` already parses, so the
+# question separates into pairwise A/Bs that hold one factor fixed.  2000
+# paired trials per cell, authentic HG Nord decrypts, -R 8, seed 4242.
+#
+#   f10   vs f4f10   same MODEL both sides   -> prices the CAP
+#   f4f10 vs i4f10   same CAP both sides     -> prices the MODEL
+#   i4f10 vs m4f10   already documented      -> continuity check
+#
+# ============================================================================
+# THE RESULT
+# ============================================================================
+#
+#                              L = 60                    L = 167
+#   f10   -> f4f10   (cap)    -0.87pp  [-1.85, +0.11]   -4.36pp  [-6.4, -2.3]
+#   f4f10 -> i4f10   (model)  -0.31pp  [-1.35, +0.72]  -17.84pp  [-20.0, -15.7]
+#   i4f10 -> m4f10   (both)   -2.21pp  [-3.32, -1.11]   +3.86pp  [+1.9, +5.8]
+#
+#   (negative = the SECOND arm is ahead)
+#
+# Mean %-correct behind the L = 167 rows: f10 59.21, f4f10 63.57, i4f10 81.41,
+# m4f10 77.56.  Exact recovery of 2000: 1102 / 1191 / 1569 / 1489.
+#
+# ============================================================================
+# 1.  THE MODEL DOMINATES THE CAP BY 4x
+# ============================================================================
+#
+# At L = 167 swapping the pre-pass MODEL is worth 17.84pp and adding the CAP is
+# worth 4.36pp.  The pre-pass is emphatically NOT "a cap effect with a model
+# attached", which was the live possibility this experiment was run to rule
+# out -- and it had to be ruled out before spending effort on a better pre-pass
+# statistic (2a experiment E), which would otherwise have been improving a
+# component that does not matter.
+#
+# score_iter is nearly matched on the model row (51.0M against 52.6M, 3%), so
+# that 17.84pp is not a compute artefact.  The cap row is NOT matched -- f4f10
+# costs 17% more than f10 -- but 17% more restarts at -R 8 buys well under a
+# point at this length, so the cap still wins on compute.
+#
+# ============================================================================
+# 2.  USING THE TARGET MODEL AS THE PRE-PASS IS CATASTROPHIC -- AT LENGTH
+# ============================================================================
+#
+# `-S f4f10` reads like a reasonable thing to write: cap the target model for
+# the first four plugs, then let it run.  It costs 17.84pp against `i4f10` at
+# L = 167 -- SIX TIMES the 2.81pp that CLAUDE.md records for the whole
+# IC-versus-mono question at that length.  "Which low-order pre-pass" is a
+# small question; "a low-order pre-pass AT ALL, versus the target model" is a
+# very large one.
+#
+# THE MECHANISM IS ALREADY IN THE ARCHIVE.  PERFORMANCE 6.10 measured bigram
+# and trigram pre-passes and found them inside the i/m/q envelope everywhere:
+# "Being sharper than mono, they inherit the worst of both ends: they
+# over-commit and lose at low R."  `-f` is the sharpest model the tool has, so
+# as a pre-pass it over-commits worst.  This is that finding taken to its
+# limit, and it is the first time the TARGET model itself was tried in the
+# pre-pass slot.
+#
+# THE LENGTH INTERACTION FOLLOWS FROM THE SAME MECHANISM.  At L = 60 the same
+# swap is -0.31pp, i.e. nothing: sixty letters is too little for the n-gram
+# half of `-f` to say anything at four plugs, so `f4` degenerates to an IC
+# pre-pass.  By 167 it bites, and what it bites with is a model that
+# over-commits.  So the trap is invisible at the length where most tuning
+# here has been done and severe at operational length.
+#
+# ============================================================================
+# 3.  THE CAP IS LENGTH-DEPENDENT TOO, IN THE UNEXPECTED DIRECTION
+# ============================================================================
+#
+# 4.36pp at L = 167 and nothing measurable at L = 60.  The naive expectation is
+# the opposite -- capping should matter MOST where ten free plugs are fitted to
+# the least text.  Two readings, and this run does not separate them:
+#
+#   * a floor effect -- every arm at L = 60 scores 12.9-16.3% mean correct, so
+#     differences compress;
+#   * or the cap genuinely does nothing at 60 letters.
+#
+# The continuity row argues against a pure floor effect: the SAME length, same
+# trial count, resolves 2.21pp between i4f10 and m4f10 with p = 0.015.  The
+# instrument works there; the cap simply does not move it.
+#
+# ============================================================================
+# 4.  THE CONTINUITY CHECK CONFIRMS AND SHARPENS THE DOCUMENTED CROSSOVER
+# ============================================================================
+#
+# CLAUDE.md records mono leaning at L = 60 (+1.77pp, CI spanning zero) and IC
+# winning at L = 167 (+2.81pp, z = 2.76).  This run reads +2.21pp for mono at
+# 60 with the CI EXCLUDING zero (p = 0.015) and +3.86pp for IC at 167
+# (p = 0.000).  Same direction at both ends, both now significant, and the
+# crossover reproduced on an independent run.
+#
+# That is what the continuity arm is for.  It means the two nulls at L = 60 are
+# genuine nulls rather than a blind instrument, and it independently confirms
+# the length-dependent recommendation the tool already ships.
+#
+# ============================================================================
+# THE CAP ROW SURVIVED A CHALLENGE -- AND THE CHALLENGE FOUND SOMETHING ELSE
+# ============================================================================
+#
+# `f10` vs `f4f10` differ by TWO things, not one: the cap, and the fact that
+# the second is a two-STAGE schedule.  Calling that row "the cap" assumes the
+# extra stage is free.  Checked, at L = 167, 300 paired trials:
+#
+#   f10 vs f10f10   +0.00pp, 95% CI [+0.00, +0.00], 0 discordant
+#
+# An extra stage with the SAME model and SAME cap is an exact no-op -- a
+# converged stage re-converges immediately.  So the -4.36pp is the cap, and
+# the row is correctly labelled.
+#
+# BUT THE IC PRE-PASS CAP IS INERT WHERE IT MATTERS, which is what stopped
+# experiment B:
+#
+#   i1f10 vs i4f10  +0.00pp, 95% CI [-0.00, +0.01], 0 discordant of 2000
+#                   exact recovery 1569 vs 1569, score_iter within 0.01%
+#
+# Caps 1 and 4 on an IC pre-pass produce the SAME SEARCH, trial for trial.  So
+# a cap sweep over an IC pre-pass measures nothing, and B cannot be run as
+# designed.  `i1f10` vs `if10` (uncapped) DOES differ -- 41 discordant of 200,
+# 20% more score_iter -- so the mechanism works; it just has no grip in 1..4.
+#
+# THE CAP IS NOT INERT IN GENERAL, and an intermediate claim here that it was
+# came from a single -R 1 run and was wrong.  Final plug counts at -R 4:
+#
+#   f4 -> 7    f10 -> 10    i4 -> 8    i10 -> 10
+#
+# The cap does pull the count down.  What it cannot do, per CLAUDE.md's -M
+# entry, is pull an OVER-cap board down by itself: at/over the cap only adds
+# are blocked, and the default `--random 10` kick starts every restart at ten
+# plugs, so a tight cap has nothing to block.  That is the documented "flat
+# plateau ... -M is what makes a tight cap bite", and it is why the grip is
+# model-dependent and weak at the low end.
+#
+# WHAT IS UNRESOLVED: why cap 1 and cap 4 give identical results through an IC
+# pre-pass when, as sole stages, they converge on different plug counts.  The
+# following f10 stage evidently erases that difference -- yet the pre-pass
+# MODEL survives the same f10 stage with a 17.84pp effect.  Not explained
+# here, and not guessed at.
+#
+# ============================================================================
+# WHAT THIS DOES NOT SETTLE
+# ============================================================================
+#
+# Only -R 8 was run.  PERFORMANCE 6.10 established that the pre-pass ordering
+# is RESTART-BUDGET-DEPENDENT -- IC best at -R 10, mono in the mid band, pure
+# quad at matched compute by -R 1280 -- so none of these figures should be
+# assumed to hold at the high -R the restart ladder now recommends.  The f4
+# trap in particular might soften at high R, where over-commitment matters
+# less because there are many restarts to recover from it.  That is the
+# obvious follow-up and it was not run.
+#
+# Two lengths only, telegraphic German only, rotor key given (plugboard tier).

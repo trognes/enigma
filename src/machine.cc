@@ -157,6 +157,14 @@ void set_effective_reflector(machine & m)
       return;
     }
 
+  /* greek_offset is (start - ring) mod 26 and so is always in [0, 25], but
+     that is established at its assignment site in another translation unit --
+     the analyser cannot see it here, and reads a possibly-negative `o` as an
+     out-of-bounds index into rotor_fwd below.  Stating the invariant costs one
+     branch PER TASK (this runs once per wheel_task, never per character) and
+     turns a silent wrong answer into a loud one if it is ever violated. */
+  if ((m.greek_offset < 0) || (m.greek_offset >= asize))
+    fatal("Internal error: Greek wheel offset out of range");
   const int o = m.greek_offset;
   const unsigned char * thin = reflector[m.ukw];      /* ukw = thin index 4/5 */
   const unsigned char * gf = rotor_fwd[m.greek];

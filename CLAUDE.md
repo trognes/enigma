@@ -982,8 +982,41 @@ are read from a **data directory** (filenames built as
   capped at 6 pairs, then quad uncapped. A lower-order early stage steers the
   first plugs into a better basin (its surface is smoother when few plugs are
   set); **`--score i…q` (IC pre-pass) is the best measured** for a quad target —
-  much better than bigram, extra stages after IC add little. **The recommended
-  target is now `a` (weighted), staged as `--score m4a10`** (mono pre-pass then
+  much better than bigram, extra stages after IC add little.
+
+  > ⚠️ **NEVER use the TARGET model as the pre-pass — `-S f4f10` is a trap.**
+  > The syntax permits it and it reads like a reasonable thing to write ("cap
+  > the target for the first four plugs, then let it run"). Measured against
+  > `i4f10` at L=167, 2000 paired trials, `score_iter` matched within 3%, it
+  > costs **−17.84pp** of mean %-correct (63.57 against 81.41; exact recovery
+  > 1191/2000 against 1569), 95% CI [−20.0, −15.7]. That is **six times** the
+  > 2.81pp the whole IC-versus-mono question is worth at that length — so
+  > *which* low-order pre-pass barely matters beside *using one at all*. The
+  > mechanism is §6.10's, taken to its limit: sharper models "over-commit and
+  > lose at low R", and `-f` is the sharpest the tool has. **The trap is
+  > invisible at short lengths** — the same swap is −0.31pp at L=60, because
+  > sixty letters is too little for the n-gram half of `-f` to say anything at
+  > four plugs, so `f4` degenerates to an IC pre-pass. It is severe exactly at
+  > operational length. `eval/results-prepass-model-vs-cap.txt`.
+  >
+  > The same run prices the **cap** separately (`f10` against `f4f10`, same
+  > model both sides): −4.36pp at L=167 and nothing measurable at L=60. So the
+  > pre-pass's value is **in the model, not the cap, by 4×** — and note the
+  > cap's own length dependence runs opposite to the naive expectation that
+  > capping should matter most where the least text is available. That row
+  > isolates the cap and not the extra stage: `f10` against `f10f10` reads
+  > +0.00pp with zero discordant trials, a converged stage re-converging
+  > immediately.
+  >
+  > **But a stage cap in 1…4 is INERT on an IC pre-pass** — `i1f10` against
+  > `i4f10` is 0 discordant of 2000, identical exact recovery, `score_iter`
+  > within 0.01%. The `-M` entry below explains it: without `-M` the cap only
+  > blocks *adds*, and the default `--random 10` kick starts every restart at
+  > ten plugs, so a tight cap has nothing to block. Sweeping such a cap
+  > measures nothing; use `-M`, or a kick smaller than the cap.
+
+  **The recommended target is now `a` (weighted), staged as
+  `--score m4a10`** (mono pre-pass then
   weighted, both capped) — the `a` stage reads the log-linear `all8` table, so
   `-S m4a10` is byte-identical to the winning tuning recipe. **The mono-vs-IC
   pre-pass choice depends mildly on the writing style**
@@ -1118,6 +1151,31 @@ are read from a **data directory** (filenames built as
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
   <lang>` — but on **telegraphic traffic at operational length** use `i4f10`
   instead of `m4f10` (+2.8pp over 2000 paired trials; see `-S`).
+- `-S k` / `--score k…` **mono + IC fused, as a PRE-PASS model** (experimental,
+  needs `-l`; schedule token only — there is deliberately no bare `-k`
+  selector). The monogram score and the index of coincidence are **both
+  functions of the same 26-bin letter histogram**, so one decode pass yields
+  both and the fusion costs 26 multiply-adds — cheaper than `-f`'s, which has
+  to accumulate IC alongside a gather-bound quad loop.
+  - **`lambda` scales with LENGTH here, unlike `-f`'s baked 30.** The term
+    added is `lambda · L · IC` with `lambda = 0.1` (`ENIGMA_MONOIC_BLEND`
+    overrides). IC's spread falls as ~`1/L` (a rate over `C(L,2)` pairs) while
+    the per-symbol monogram score's falls as ~`1/√L` (a mean of `L` terms), so
+    the weight that balances them grows with `L`. Measured, the optimum tracks
+    `0.1·L` across L = 40…167 while a fixed constant drifts away from it —
+    worst at operational length, which is why `-f`'s design was not copied.
+  - **Motivated by a measured AUC gain, NOT yet by a recovery gain.** On the
+    board-ordering probe it beats both components at four lengths
+    (+.007/+.015/+.029/+.020 at L = 40/60/100/167, held out on a second seed)
+    and is simultaneously *more* resistant to spurious plugs than either. That
+    probe never runs a climb, so **the end-to-end question is open** —
+    `ENHANCEMENTS.md` §2a E carries the falsification condition it still has to
+    meet. Do not put it in a recommended recipe until it has.
+  - **One scope warning on the evidence**: the probe scored boards holding 1–4
+    plugs, which is the climb's state under `-R 0` (no kick). Under the default
+    `--random 10` every restart *starts* at ten plugs, so the regime the probe
+    modelled is not the one a kicked search runs in. Re-probing at ten plugs is
+    outstanding.
 - `--confidence N` **is the winner better than chance?** (N = null samples, 0 =
   off). A raw score answers nothing on its own: each model has a distribution on
   text with no signal, and a search reports the **maximum** over the keys it
@@ -2949,7 +3007,15 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   installs the binary). Run them before pushing, and grep clang-tidy's output
   for `error:` rather than for the names you touched: it suppresses ~24 000
   warnings from system headers and reports its own findings at file scope, so a
-  name-filtered grep looks clean when it is not. **A clean tree reports ZERO
+  name-filtered grep looks clean when it is not. **Two findings that a newer
+  clang-tidy reports and the runner's does not have now been fixed** — an
+  `ArrayBound` on `set_effective_reflector()`'s Greek offset (the analyser
+  cannot see that `(start − ring) mod 26` is in range across a translation
+  unit, so the invariant is now asserted) and a
+  `bugprone-throwing-static-initialization` on the sweep's start timestamp
+  (a static `steady_clock::time_point`, now held as the raw tick count).
+  Neither was a live bug; both made the "zero `error:` lines" bar unreachable
+  on a recent LLVM. **A clean tree reports ZERO
   `error:` lines, so any count above zero is a red CI job** — an earlier version
   of this sentence said clang-tidy "prints one file-scope error", which reads as
   a standing benign one; it is not, and a `bugprone-implicit-widening-of-

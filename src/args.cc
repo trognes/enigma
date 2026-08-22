@@ -1033,7 +1033,10 @@ void parse_args(int argc, char * * argv)
      decrypt (which fell back to IC and needs no table). */
   if (needs_scoring || (opt_scoring != SCORE_IC))
     {
-      bool table_loaded[SCORE_FUSED + 1] = { false, false, false, false, false, false, false };
+      /* Sized by the LAST model, not by a literal list -- adding SCORE_MONOIC
+         left the old seven-element initialiser one short, and only UBSan saw
+         it (a plain build read past the array and happened to work). */
+      bool table_loaded[SCORE_MONOIC + 1] = { false };
       load_table(opt_scoring);
       table_loaded[opt_scoring] = true;
       for (int i = 0; i < opt_nstages; i++)

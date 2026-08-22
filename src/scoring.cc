@@ -32,8 +32,8 @@
    tables) trims quantisation error on borderline rankings. The map MUST stay linear (an affine
    image of log10 p) so the additive sum reconstructs; adaptive *scale* is the only free lever,
    not a nonlinear curve. Raw counts live in a transient scratch buffer inside ngrams_read(). */
-double ngram_scale[SCORE_FUSED + 1];   /* per-model: 255/(vmax-vmin), full 0..255 range */
-double ngram_bias[SCORE_FUSED + 1];    /* per-model vmin; indexed by SCORE_* */
+double ngram_scale[SCORE_MONOIC + 1];   /* per-model: 255/(vmax-vmin), full 0..255 range */
+double ngram_bias[SCORE_MONOIC + 1];    /* per-model vmin; indexed by SCORE_* */
 static uint8_t mono8[asize];
 static uint8_t bi8[asize][asize];
 static uint8_t tri8[asize][asize][asize];
@@ -166,6 +166,54 @@ static double monogram_score_decode(machine & m)
   return static_cast<double>(isum) / ngram_scale[SCORE_MONO] + textlength * ngram_bias[SCORE_MONO];
 }
 
+/* -S k's IC weight, PER LETTER: the term added is lambda * L * IC.  See the
+   decoder below for why it scales with length where -f's does not.
+   ENIGMA_MONOIC_BLEND overrides it, as ENIGMA_IC_BLEND does for -f. */
+static const double monoic_lambda_default = 0.1;
+static double g_monoic_lambda = monoic_lambda_default;
+
+/* -S k (SCORE_MONOIC): the monogram score fused with the index of coincidence.
+   BOTH halves are functions of the same 26-bin histogram -- the monogram score
+   is sum n_x * log p(x) and IC is sum n_x(n_x-1) / N(N-1) -- so one decode pass
+   yields both and the fusion costs 26 multiply-adds, not a second gather. That
+   is what makes this cheaper than -f's fusion, which had to accumulate IC
+   alongside a gather-bound quad loop.
+
+   lambda is PROPORTIONAL TO LENGTH, unlike -f's baked constant. IC's spread
+   falls as ~1/L (a rate over C(L,2) pairs) while the per-symbol monogram
+   score's falls as ~1/sqrt(L) (a mean of L terms), so the weight that balances
+   them grows with L; measured, the optimum tracks 0.1*L across L = 40..167
+   while a fixed lambda drifts away from it, worst at operational length
+   (eval/results-mono-ic-blend.txt). ENIGMA_MONOIC_BLEND overrides the 0.1. */
+static double monoic_score_decode(machine & m)
+{
+  int freq[asize];
+  for (int j = 0; j < asize; j++)
+    freq[j] = 0;
+
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * const * __restrict rows = m.rows;
+  for (int i = 0; i < textlength; i++)
+    freq[decode_at(steck, rows, ct, i)]++;
+
+  long isum = 0;
+  int coin = 0;
+  for (int j = 0; j < asize; j++)
+    {
+      isum += static_cast<long>(freq[j]) * mono8[j];
+      coin += freq[j] * (freq[j] - 1);
+    }
+  const double mono = static_cast<double>(isum) / ngram_scale[SCORE_MONO]
+                      + textlength * ngram_bias[SCORE_MONO];
+  const double ic = (textlength > 1)
+    ? static_cast<double>(coin)
+        / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
+  /* mono per symbol, matching how -f normalises before adding its IC term. */
+  return mono / (textlength > 0 ? textlength : 1)
+         + g_monoic_lambda * textlength * ic;
+}
+
 double ic_score_decode(machine & m)
 {
   int freq[asize];
@@ -210,8 +258,11 @@ double ic_score_decode(machine & m)
    all-order score. Baked like -a's order weights rather than exposed as a knob:
    the optimum is a broad plateau (lambda 20/30/40 measured +3.6/+4.4/+3.8pp and
    statistically indistinguishable from each other), so there is nothing for a user
-   to tune. ENIGMA_IC_BLEND overrides it for experiments, exactly as ENIGMA_LOGLIN
-   overrides -a's weights. See archived/PERFORMANCE.md 6.4. */
+   to tune. ENIGMA_IC_BLEND overrides it for experiments. (It does NOT mirror
+   ENIGMA_LOGLIN, which an earlier version of this comment claimed: load_table()
+   passes -a's weights as force_ll and that branch ignores the environment, so
+   ENIGMA_LOGLIN reshapes the plain QUAD table instead.) archived/PERFORMANCE.md
+   6.4. */
 static const double fused_lambda_default = 30.0;
 static double g_fused_lambda = fused_lambda_default;
 
@@ -221,6 +272,9 @@ void ic_blend_init()
   const char * s = getenv("ENIGMA_IC_BLEND");
   if ((s != nullptr) && (*s != 0))
     g_fused_lambda = parse_opt_double(s, "$ENIGMA_IC_BLEND");
+  const char * k = getenv("ENIGMA_MONOIC_BLEND");
+  if ((k != nullptr) && (*k != 0))
+    g_monoic_lambda = parse_opt_double(k, "$ENIGMA_MONOIC_BLEND");
 }
 
 
@@ -298,6 +352,10 @@ double score_iter(machine & m)
       score = ic_score_decode(m);   /* already a normalised ratio; left as-is */
       break;
 
+    case SCORE_MONOIC:
+      score = monoic_score_decode(m);   /* already per-symbol; left as-is */
+      break;
+
     case SCORE_MONO:
       score = monogram_score_decode(m);
       nterms = textlength;
@@ -343,6 +401,7 @@ void load_table(int model)
   switch (model)
     {
     case SCORE_MONO:
+    case SCORE_MONOIC:   /* -S k reuses mono8; only the IC term differs at score time */
       ngrams_read(1, mono8, & ngram_bias[SCORE_MONO], & ngram_scale[SCORE_MONO],
                   opt_datadir, opt_language, "monograms");
       break;
@@ -375,7 +434,7 @@ void load_table(int model)
     }
 }
 
-/* Map a scoring-model letter (i/m/b/t/q) to its SCORE_* value. */
+/* Map a scoring-model letter (i/m/b/t/q/a/f/k) to its SCORE_* value. */
 int model_of(char c)
 {
   switch (c)
@@ -387,6 +446,7 @@ int model_of(char c)
     case 'q': return SCORE_QUAD;
     case 'a': return SCORE_ALL;
     case 'f': return SCORE_FUSED;
+    case 'k': return SCORE_MONOIC;
     default:  return SCORE_IC;
     }
 }

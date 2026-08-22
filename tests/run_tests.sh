@@ -2933,6 +2933,17 @@ check "\$ENIGMA_SEED rejects a non-number" \
   "$(env_reject ENIGMA_SEED=junk -i)" "1"
 check "\$ENIGMA_IC_BLEND rejects a non-number" \
   "$(env_reject ENIGMA_IC_BLEND=junk -f -l english)" "1"
+check "\$ENIGMA_MONOIC_BLEND rejects a non-number" \
+  "$(env_reject ENIGMA_MONOIC_BLEND=junk -c -S k -l english -g AAA)" "1"
+check "-S k (mono+IC) is accepted and named in the settings echo" \
+  "$(printf 'ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGH' | "$ENIGMA" -c -S k -l english \
+     -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null | grep -c 'monograms + IC')" "1"
+check "-S k4f10 (mono+IC pre-pass, fused target) parses" \
+  "$(printf 'ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGH' | "$ENIGMA" -c -S k4f10 -l english \
+     -u B -w 123 -r AAA -g AAA >/dev/null 2>&1; echo $?)" "0"
+check "-S k needs a language, like every other n-gram model" \
+  "$(printf 'ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGH' | "$ENIGMA" -c -S k \
+     -u B -w 123 -r AAA -g AAA >/dev/null 2>&1; echo $?)" "1"
 check "\$ENIGMA_LOGLIN rejects a partial weight vector" \
   "$(printf 'AAAA' | env ENIGMA_LOGLIN=1,0.6 "$ENIGMA" -q -l english \
      >/dev/null 2>&1; echo $?)" "1"
