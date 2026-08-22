@@ -69,13 +69,24 @@ recover" is therefore a statement about English prose.
 same day key overturns essentially all of them — see the table there.
 → `archived/IMPROVEMENTS.md` §2, §4; `eval/results-joint-score-gain.txt`.
 
-### 2a. Alternatives to IC for the PRE-PASS — planned, nothing measured yet
+### 2a. Alternatives to IC for the PRE-PASS — part measured, part still plan
 
 The staged climb opens with a low-order stage (`--score i4f10` / `m4f10`) whose
-job is to steer the first few plugs into a good basin. **Everything below is a
-PLAN plus arithmetic on corpus statistics — no climb has been run, and none of
-the effect sizes are measurements.** Recorded now so the design is on paper
-before the code is.
+job is to steer the first few plugs into a good basin. **This section was
+written as a pure PLAN and is now part measurement — check each experiment's
+own status line before citing it:**
+
+| | experiment | status |
+|---|---|---|
+| **A** | model versus cap | **measured** — model dominates cap 4× at L = 167 |
+| **B** | cap sweep | **blocked** — the IC pre-pass cap is inert in 1…4 |
+| **C** | third-moment coincidence Σf³ | **measured down** — never built |
+| **D** | best-of-two seeds per restart | open; crux unresolved |
+| **E** | fuse mono and IC (`-S k`) | **measured, shipped** — see its own note |
+| **F** | many cheap seeds, promote a subset | open; gated on D's crux |
+
+Effect sizes carrying a CI are measurements; the rest is arithmetic on corpus
+statistics, kept because it is the design record.
 
 **What is already settled, and should not be re-derived.** IC versus mono is
 measured and length-dependent (mono leans at L = 60, IC wins by 2.81pp at
@@ -498,6 +509,61 @@ the single calibration point (.010–.020 ↔ ~2pp) is not enough to extrapolate
 from. L = 167 also sits outside the probed range, and the λ drift is why that
 is the risky cell. The falsification condition above still has to be met after
 the token is built.
+
+**E IS NOW MEASURED END TO END — the condition FAILED on one cell of four, and
+the token was adopted anyway** (`eval/results-monoic-endtoend.txt`). `k4f10`
+minus the named arm, 2000 paired trials per cell, telegraphic German,
+plugboard tier, `-R 8`:
+
+| L | vs `i4f10` | vs `m4f10` |
+|---:|---:|---:|
+| 60 | +2.73 [+1.69, +3.77] | **+0.52 [−0.58, +1.62]** |
+| 100 | +6.12 [+4.23, +8.00] | +4.95 [+3.06, +6.84] |
+| 167 | +4.45 [+2.85, +6.05] | +8.31 [+6.54, +10.07] |
+
+The L = 60 cell against mono is a **tie**, so "beat both at both" is not met.
+Adoption was a judgment call by the repository owner — the failure is a tie
+rather than a loss, **λ was not re-tuned**, and at L = 60 every arm scores
+14–17% mean correct at ~5% exact recovery, i.e. that cell ranks pre-passes in
+a regime where the message essentially never breaks. Written down this way on
+purpose: the claim must not drift from its evidence because the decision went
+the other way.
+
+**The decisive cell holds across five seeds** — +4.45/+4.94/+6.10/+6.94/+4.66,
+pooled **+5.01pp** [+3.86, +6.16], z = 8.5, Q = 2.07 on 4 df (p = 0.72). That
+matches the evidential standard of the `i4f10` recommendation it displaces
+(five seeds, Q = 1.65 on 4 df) at nearly twice the effect size.
+
+**L = 100 was added after seeing the L = 60 tie**, which is post hoc and cannot
+convert a failed condition into a passed one. What it legitimately did was
+characterise the effect, and it changed the reading: with 60 and 167 only, the
+failing cell was half the evidence; with 100 in, `k4f10` beats **both**
+components at both operational lengths and the failure is confined to the
+single shortest one.
+
+**Two methodological findings worth more than the token itself.**
+
+- **The AUC probe predicts ORDERING, not magnitude.** Probe gain over the
+  better component was +.015/+.029/+.020 at L = 60/100/167; end to end it is
+  +0.52/+4.95/+4.45. The ordering matches exactly and the probe called the
+  **inverted U in length** before any climb ran — but the implied conversion
+  spans **6×** (35/171/223 pp per AUC unit), worst at L = 60 where the floor
+  effect lives. So this probe ranks candidate statistics and must never be used
+  to size an end-to-end gain. That is the standing answer to the "one
+  calibration point" gap above, and it applies to experiment F's F1 gate too.
+- **An inverted U is invisible until the middle is sampled.** An intermediate
+  reading here, from L = 60 and 167 alone, concluded the end-to-end gain grew
+  monotonically and therefore *contradicted* the probe. Two points can always
+  be joined by a line; L = 100 refuted it.
+
+**`score_iter` said "better and cheaper" and was wrong.** `k4f10` scores 3–5%
+fewer plugboards in all six cells, but the counter counts **calls** and this
+decoder does 26 multiply-adds on top of the coincidence sum. On wall time at
+`-R 1024` with startup subtracted, against a 1.3% self-control floor: −3.5% vs
+`i4f10`, **+7.2% vs `m4f10`** — comparable within ±7% in both directions, not a
+saving. Two earlier attempts at that number were worthless because at `-R 8` an
+invocation costs 0.111 s of which **0.105 s is process startup**; the
+`-R 0/8/64/256/1024` scaling check is the cheap diagnostic to run first.
 
 **F. Generate MANY cheap 4-plug seeds, promote only a subset to the full
 climb.** Experiment D keeps the better of two seeds; this generalises it in the

@@ -173,6 +173,23 @@
 # re-tuning lambda.  Note L = 167 is outside the range probed here, and the
 # lambda drift above is exactly why that cell is the risky one.
 #
+# ---------------------------------------------------------------------------
+# SINCE MEASURED -- see results-monoic-endtoend.txt.  The condition FAILED, on
+# one cell of four: k4f10 ties m4f10 at L = 60 (+0.52pp, CI [-0.58, +1.62]).
+# It wins the other three, and wins both arms at an added L = 100.  The token
+# was adopted anyway as a judgment call, with lambda NOT re-tuned.
+#
+# TWO THINGS THAT FILE SETTLES ABOUT THIS ONE:
+#   * the AUC-to-recovery conversion, left open above, is now measured at three
+#     lengths -- the probe predicts the ORDERING exactly (it called the
+#     inverted U in length before any climb ran) but the implied conversion
+#     spans 6x, so this probe ranks candidate statistics and must NOT be used
+#     to size an end-to-end gain;
+#   * the "risky cell" called out above, L = 167, was in fact the SAFEST -- it
+#     passed at +4.45pp on this seed and +5.01pp pooled over five.  The lambda
+#     drift worry did not materialise; the failure came at the short end.
+# ---------------------------------------------------------------------------
+#
 # ============================================================================
 # SCOPE
 # ============================================================================
