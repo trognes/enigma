@@ -3,7 +3,7 @@
 
 A BOARD COUNTS AS RECOVERED AT 50% OF THE PLAINTEXT, not at an exact match.
 That is the operational criterion: a board missing two of ten plugs still
-reads, and a cryptanalyst who can read the message has broken it.  Exact
+recovers most of the message, and that is a break.  Exact
 recovery is reported alongside, because it is what every earlier sweep here
 measured and the two diverge sharply -- but the headline is the 50% column and
 the mean %-correct beside it, which is also the graded signal CLAUDE.md tells
@@ -29,12 +29,12 @@ WHAT IS MEASURED, per (trial, R):
 and, for every conv trial, whether joint re-ranking actually promotes one.
 That is the honest end-to-end test: it ranks the top-K boards THE SEARCH
 PRODUCED by joint score, message 2's start DERIVED per board from the
-indicators, and asks whether the winner reads.  The true board is NOT put into
+indicators, and asks whether the winner clears 50%.  The true board is NOT in
 that set -- an attacker does not have it, and an earlier version of this
 harness which did inject it reported a promotion rate that a real top-K list
 could not have delivered (the truth ranked 60th and 87th of ~1600 converged
-boards at -R 5000).  The rank of the best readable board is reported so the
-K window is visibly not doing the work.
+boards at -R 5000).  The rank of the best 50%-clearing board is reported so
+the K window is visibly not doing the work.
 
 AND WHAT THE WINNING BOARD LOOKS LIKE.  A scoring/search boolean alone cannot
 answer the obvious follow-up: does a bigger -R find boards NEARER the truth, or
@@ -67,11 +67,14 @@ from joint_score_gain import (BIN, ROOT, load_plaintexts, pair_set,
 
 # How many of the search's own boards enter the joint re-ranking.  Each costs
 # two binary invocations, so this is a real budget; the reported rank of the
-# best readable board says whether it binds.
+# best 50%-clearing board says whether it binds.
 TOPK = 8
 
-# A decrypt this correct is a break.  Two missing plugs cost ~4 letters in 26.
-READABLE = 50.0
+# A decrypt this correct counts as recovered.  NOT a claim about legibility:
+# it is the operational bar this sweep was asked for, and half the letters
+# wrong is well short of prose.  Everything below says "clears 50%", never
+# "readable", so the threshold is never quietly upgraded into a claim.
+RECOVER_PCT = 50.0
 
 
 def core_table(wheels, ring, start, length):
@@ -106,7 +109,7 @@ def climb_dump(ct, wheels, ring, start, lang, restarts, seed):
     The reported answer comes off the last PROGRESS line, not the best dumpall
     line: --polish runs after all restarts and never appears in the dump (see
     joint_score_gain.climb_board).  The dump gives the CONVERGED boards, which
-    is what "did the search produce a readable board" needs.
+    is what "did the search produce a board clearing 50%" needs.
 
     The fourth return is every board echoed on a progress line -- boards the
     climb PASSED THROUGH.  They are a different thing from a converged board:
@@ -170,7 +173,7 @@ def run_trial(job):
     ct_nums = [ord(c) - 65 for c in m1["ct"]]
     pt_nums = [ord(c) - 65 for c in m1["pt"]]
 
-    def readable(b):
+    def clears(b):
         return pct_correct(b, ct_nums, core, pt_nums)
 
     def msg2_score(b):
@@ -191,7 +194,7 @@ def run_trial(job):
             out[R] = dict(state="err")
             continue
 
-        pct = readable(got)
+        pct = clears(got)
         st2 = enigma_ref.decrypt(m2["enc"], wheels, ring, m2["grund"], got)
         got_pairs = pair_set(got)
         rec = dict(pct=pct, exact=(got_pairs == truth),
@@ -199,7 +202,18 @@ def run_trial(job):
                    lead=(s_got - s_true) * trial["length"],
                    correct=len(got_pairs & truth), nplugs=len(got_pairs),
                    start2=(st2 == m2["start"]))
-        if pct >= READABLE:
+
+        # WHERE THE TRUE BOARD SITS in the search's own ranking of the boards
+        # it converged on, by the message-1 score it assigned them.  Computed
+        # for EVERY trial, recovered ones included -- the question "when the
+        # search reaches the truth, how near the top does it put it" is about
+        # the whole population, and restricting it to misses would answer a
+        # conditioned version of it.  None when the truth never converged.
+        order = sorted(dump.items(), key=lambda kv: -kv[1])
+        rec["ncand"] = len(order)
+        rec["true_rank"] = next((i + 1 for i, (b, _) in enumerate(order)
+                                 if pair_set(b) == truth), None)
+        if pct >= RECOVER_PCT:
             rec["state"] = "recov"
             out[R] = rec
             continue
@@ -209,18 +223,15 @@ def run_trial(job):
         # the model's optimum.  Counted only among non-recovered trials.
         rec["scoring"] = (s_got >= s_true)
 
-        # Every converged board, ranked by the message-1 score the search
-        # itself assigned it.  Affordable because core_table() removed the
-        # Enigma run from the inner loop.
-        order = sorted(dump.items(), key=lambda kv: -kv[1])
+        # Which converged boards would have cleared 50%.  Affordable because
+        # core_table() removed the Enigma run from the inner loop.
         good = [(i + 1, b) for i, (b, _) in enumerate(order)
-                if readable(b) >= READABLE]
-        rec["visited"] = any(readable(b) >= READABLE for b in seen)
+                if clears(b) >= RECOVER_PCT]
+        rec["visited"] = any(clears(b) >= RECOVER_PCT for b in seen)
         rec["ngood"] = len(good)
         rec["state"] = "conv" if good else "absent"
         if good:
-            rec["rank"] = good[0][0]        # best-SCORING readable board
-            rec["ncand"] = len(order)
+            rec["rank"] = good[0][0]        # best-SCORING one of them
             # The true board is deliberately NOT added: an attacker re-ranks
             # the list the search gave them, and injecting the answer would
             # report a promotion no real top-K list could deliver.
@@ -234,7 +245,7 @@ def run_trial(job):
                 if best_s is None or j > best_s:
                     best, best_s = b, j
             rec["promoted"] = (best is not None
-                               and readable(best) >= READABLE)
+                               and clears(best) >= RECOVER_PCT)
         out[R] = rec
     return out
 
@@ -257,7 +268,7 @@ def main():
     print("%d authentic telegraphic plaintexts, model '%s', %d trials/cell,\n"
           "recipe -c -f -S i4f10 -J --polish, rotor key GIVEN,\n"
           "a board counts as RECOVERED at >= %.0f%% of the plaintext\n"
-          % (len(texts), args.language, args.trials, READABLE))
+          % (len(texts), args.language, args.trials, RECOVER_PCT))
 
     for length in [int(x) for x in args.lengths.split(",")]:
         rng = random.Random(args.seed + length)
@@ -294,9 +305,9 @@ def main():
                      (100.0 * sc / miss) if miss else 0.0,
                      100.0 * vis / n))
 
-        print("\n%6s  of the trials that did NOT read, did the search still"
-              " PRODUCE\n%6s  a readable board, and does joint re-ranking find"
-              " it?" % ("", ""))
+        print("\n%6s  of the trials that did NOT recover, did the search"
+              " PRODUCE\n%6s  a board clearing 50%%, and does joint re-ranking"
+              " find it?" % ("", ""))
         print("%6s %8s %8s %10s %9s %10s"
               % ("-R", "conv", "absent", "promoted", "n good", "best rank"))
         for R in ladder:
@@ -312,6 +323,30 @@ def main():
                      if cv else "-",
                      ("%.0f" % (sum(c["rank"] for c in cv) / len(cv)))
                      if cv else "-"))
+
+        print("\n%6s  where the TRUE board sits in the search's own ranking"
+              " of the\n%6s  boards it converged on, when it converged at all"
+              % ("", ""))
+        print("%6s %9s %8s %8s %8s %8s %9s"
+              % ("-R", "present", "rank 1", "median", "p90", "worst",
+                 "of n"))
+        for R in ladder:
+            cells = cells_by_r[R]
+            n = len(cells) or 1
+            ranks = sorted(c["true_rank"] for c in cells
+                           if c.get("true_rank"))
+            if not ranks:
+                print("%6d %8.1f%% %8s %8s %8s %8s %9.0f"
+                      % (R, 0.0, "-", "-", "-", "-",
+                         sum(c["ncand"] for c in cells) / n))
+                continue
+            k = len(ranks)
+            print("%6d %8.1f%% %7.0f%% %8d %8d %8d %9.0f"
+                  % (R, 100.0 * k / n,
+                     100.0 * sum(1 for r in ranks if r == 1) / k,
+                     ranks[k // 2], ranks[min(k - 1, int(0.9 * k))],
+                     ranks[-1],
+                     sum(c["ncand"] for c in cells) / n))
 
         # What the winning board LOOKS like, split by class: a search failure
         # lost to the truth and a scoring failure beat it, and there is no
@@ -342,23 +377,28 @@ def main():
         out_fh.close()
 
     print("  recov50  = the reported board decrypts >= %.0f%% of message 1"
-          % READABLE)
+          % RECOVER_PCT)
     print("  exact    = it is the true board, plug for plug")
     print("  mean%    = mean %-correct over ALL trials, the graded signal")
     print("  scoring  = share of NON-RECOVERED trials whose winner outscores")
     print("             the true board (a scoring failure, not a search one)")
-    print("  visited  = a readable board was echoed on a progress line, i.e.")
-    print("             a climb PASSED THROUGH one and kept going uphill.")
+    print("  visited  = a board clearing 50%% was echoed on a progress line,")
+    print("             i.e. a climb PASSED THROUGH one and kept going up.")
     print("             A LOWER BOUND -- progress lines fire only above the")
     print("             run's high-water mark")
     print("  conv     = the answer did not read, but a CONVERGED board would")
     print("  promoted = of those, how many joint re-ranking over the search's")
-    print("             own top-%d boards puts a readable board first" % TOPK)
-    print("  n good   = readable boards among the converged ones")
-    print("  best rank= where the best-SCORING readable one sits in the")
+    print("             own top-%d boards puts one of them first" % TOPK)
+    print("  n good   = converged boards clearing 50%%")
+    print("  best rank= where the best-SCORING one of them sits in the")
     print("             search's own ranking (so top-%d is visibly enough,"
           % TOPK)
     print("             or visibly not)")
+    print("  present  = share of trials whose converged boards include the")
+    print("             TRUE one; the rank columns are over those trials only")
+    print("             and say how near the top the search puts it")
+    print("  of n     = mean distinct converged boards, the scale a rank is")
+    print("             read against")
     print("  plugs/10 = mean plugs the winning board shares with the truth")
     print("  lead     = its score minus the truth's, in LOG UNITS over the")
     print("             whole message (per-symbol score x length)")
