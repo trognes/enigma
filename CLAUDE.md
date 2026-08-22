@@ -1098,7 +1098,13 @@ are read from a **data directory** (filenames built as
   when the language is known; needs `-l`; a schedule token too -- `-S m4f10`).
   Takes `-a`'s `all8` table unchanged and adds `lambda * IC` to the
   **per-symbol** score, with `lambda = 30` baked in (`ENIGMA_IC_BLEND` overrides
-  it, mirroring `ENIGMA_LOGLIN` for `-a`'s weights). IC cannot be folded into
+  it). **`ENIGMA_LOGLIN` does NOT override `-a`'s weights** — an earlier version
+  of this sentence said it mirrored them, and it does not: `load_table()` passes
+  the baked vector as `force_ll`, and that branch ignores the environment
+  entirely. The override reshapes the plain **quad** table instead, so
+  `ENIGMA_LOGLIN=0,0,0,1 -q` is a monogram-shaped `-q` while `-a`/`-f` are
+  byte-identical to an unset run (verified: `-a` reads −14.1491 either way while
+  `-q` moves −8.9547 → −1.5214). IC cannot be folded into
   the table the way `-a`'s four orders are -- they are additive over positions,
   IC is quadratic in the whole-message letter histogram -- so it is accumulated
   in the same decode pass and added after normalisation. Measured **+3.0 to
@@ -3122,7 +3128,17 @@ traffic, `archived/PERFORMANCE.md` §3.11). The heavier metaheuristics once
 listed as open — tabu and **GA** — have since been **measured down**:
 `--restart-tt` (PR #100) found restarts already almost never revisit a basin
 (near-total exact-board diversity at `--random 10`), so a tabu visited-set has
-nothing to forbid; and an oracle probe of the GA precondition
+nothing to forbid — **but that is an `-R` ≲ 64 result and it does not hold at
+high `-R`.** The distinct-converged-board count per restart falls steadily with
+budget: measured over 350 trials at each of four lengths
+(`eval/restart_ladder.py`), **0.97 at `-R 8`, 0.79 at 100, 0.49 at 1000 and
+0.28 at 5000** — so at five thousand restarts **72% of them rediscover a basin
+already found**, which is exactly what a visited-set would forbid. The premise
+"nothing to forbid" is therefore false in the regime where restarts are the
+recommended lever; whether forbidding helps is still open, since the basins a
+tabu set would push the climb into may simply be worse. Do not cite this
+sentence as closing tabu at high `-R`. And an oracle probe of the GA
+precondition
 (`archived/PERFORMANCE.md` §3.10) found the crossover *material* exists (correct
 plugs union to ~8/10 across restarts) but is **unselectable** — board-fitness
 picks only ~2.5/10 and per-plug consensus is worse (~1.1/10, amplifying the

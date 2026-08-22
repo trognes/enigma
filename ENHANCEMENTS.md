@@ -69,6 +69,222 @@ recover" is therefore a statement about English prose.
 same day key overturns essentially all of them — see the table there.
 → `archived/IMPROVEMENTS.md` §2, §4; `eval/results-joint-score-gain.txt`.
 
+### 2a. Alternatives to IC for the PRE-PASS — planned, nothing measured yet
+
+The staged climb opens with a low-order stage (`--score i4f10` / `m4f10`) whose
+job is to steer the first few plugs into a good basin. **Everything below is a
+PLAN plus arithmetic on corpus statistics — no climb has been run, and none of
+the effect sizes are measurements.** Recorded now so the design is on paper
+before the code is.
+
+**What is already settled, and should not be re-derived.** IC versus mono is
+measured and length-dependent (mono leans at L = 60, IC wins by 2.81pp at
+L = 167, indistinguishable at 107). A **bigram** pre-pass measured much worse
+than IC. **χ²** lost to IC as the `-F` tier-1 model. Extra stages after IC add
+little.
+
+**The constraint a pre-pass model must satisfy is robustness to a very high
+letter-error rate**, not smoothness. At cap 4 against ten true plugs most
+positions still decrypt wrong, and a contiguous quadgram is destroyed by any
+one wrong letter inside it — so ordered n-gram models have almost no signal
+there. IC and mono survive because they are order-free. That is the likeliest
+reason bigram already lost: brittle without being much stronger.
+
+**A structural asymmetry worth naming.** Decryption is `p = S[core(S[c])]`, so
+toggling a plug changes both the core's input and a *relabeling* of the output.
+**IC is invariant under relabeling the output**, so it responds to only half of
+what a move does. That is simultaneously why its surface is clean — no gradient
+from a cosmetic permutation — and why it is weak. Mono and χ² see both halves:
+more signal, and more to overfit. The evidence on which matters is mixed (χ²
+lost in one context, mono is competitive in another), so this is a hypothesis
+to test, not a finding.
+
+**The untried candidate is a HIGHER-ORDER coincidence.** IC is Σf², the
+pair-coincidence rate; nothing forces order 2. Over the 6119 letters of the 52
+corpus decrypts, contrast against the flat null:
+
+| statistic | corpus | flat | contrast |
+|---|---:|---:|---:|
+| Σf² (IC) | 0.0571 | 0.0385 | 1.49× |
+| Σf³ | 0.00422 | 0.00148 | **2.85×** |
+| Σf⁴ | 0.00037 | 0.00006 | 6.44× |
+
+Contrast alone proves nothing, since higher moments are noisier. The comparison
+that matters is **event counts at operational length**, here L = 60:
+
+| statistic | comparisons | expected (flat) | corpus | excess/√exp |
+|---|---:|---:|---:|---:|
+| IC | 1 770 pairs | 68 | 101 | ~4.0 |
+| Σf³ | 34 220 triples | 51 | 144 | **~13** |
+| digraphic IC | 1 711 bigram pairs | 2.5 | 9.0 | ~4.0 |
+
+**That ~13 is a naive UPPER BOUND**, and a first probe says it is worse than
+that — see the next paragraph. The closed form the pre-flight check uses rests
+on pair-coincidence indicators being *exactly* uncorrelated under a uniform
+null (the shared-index covariance `Σp³ − (Σp²)²` vanishes); that property does
+**not** extend to triples, which are positively correlated, so the true
+variance is higher by an unknown factor.
+
+**MEASURED, and it deflates the idea: `z` is the wrong summary here.** 2000
+random 60-letter corpus windows against 2000 uniform-random texts, unbiased
+falling-factorial estimators:
+
+| k | German | uniform | z | German over the null's 95th pct |
+|---:|---:|---:|---:|---:|
+| 2 (IC) | 5.99e-02 | 3.87e-02 | 4.47 | **91.5%** |
+| 3 | 4.57e-03 | 1.47e-03 | 5.75 | 91.0% |
+| 4 | 3.89e-04 | 5.52e-05 | 6.86 | 82.3% |
+| 5 | 3.40e-05 | 2.12e-06 | 8.12 | 68.8% |
+
+**`z` rises monotonically with `k` while the actual separation peaks at k = 2–3
+and then collapses.** The columns disagree because the null grows badly
+right-skewed as `k` rises, so a mean shift of many "sd" stops implying the
+distributions come apart. That is the same failure `--confidence` already
+documents for IC itself (6.1σ observed against 4.4 predicted, because IC's null
+is a quadratic form in the histogram rather than a sum over positions). Higher
+moments make it worse. **On the metric that is not fooled, Σf³ is level with
+plain IC and k ≥ 4 is clearly worse.**
+
+**This does not settle it, in either direction.** German-versus-uniform is the
+easy case, and a climb does not detect against a null — it *orders boards*. The
+decisive question stays the one in step C1 below: does the statistic separate
+`j` correct plugs from `j+1`? But the case for building the token is much
+weaker than the contrast table alone suggests, and k ≥ 4 can be dropped now.
+
+**Digraphic IC is a trap, and the reason is granularity rather than
+discriminability.** Its contrast beats IC's, but it rests on about **nine
+events** at L = 60. A plug toggle either creates a bigram coincidence or does
+not, so the surface is a coarse step function — disqualifying for a hill-climb
+whatever its separation. That is the same sparsity that presumably sank the
+bigram pre-pass, and it is why this one is planned *not* to be built.
+
+**Σf³ would be nearly free.** The fused scorer already accumulates the 26-bin
+letter histogram for IC, so the extra cost is 26 multiplies per scored board,
+and `ENIGMA_IC_BLEND` shows the blend machinery already exists.
+
+#### The experiments, cheapest first
+
+**A. Model versus cap — needs NO code, and is the gap that matters most.**
+Nobody has isolated whether a pre-pass earns its keep because the *model*
+differs from the target or merely because the *cap* is tight. `-S f4f10` parses
+and runs today, and `eval/prepass_ab.py --arms` is a **paired two-arm**
+harness (`nargs=2`), so this is a small set of pairwise A/Bs rather than one
+four-way run:
+
+| pair | what it prices |
+|---|---|
+| `f10` vs `f4f10` | the CAP alone — same model both sides |
+| `f4f10` vs `i4f10` | the MODEL alone — same cap both sides |
+| `i4f10` vs `m4f10` | already measured, the continuity check |
+
+Run at L = 60 and L = 167, the two ends of the known IC/mono crossover. **If
+`f4f10` matches `i4f10`, the pre-pass is a cap effect and the whole IC/mono
+debate is misdirected**; if it sits apart, the model is doing the work. Keep
+the pairing — an unpaired four-way comparison at ~2pp effect sizes would need
+far more trials to say anything.
+
+**B. Cap sweep — also no code.** `i2f10` / `i4f10` / `i6f10` / `i8f10`. The 4
+appears never to have been swept.
+
+**C. Third-moment coincidence, in three steps.** Do NOT start by adding the
+token:
+
+1. **Offline discriminability probe, pure Python, no binary change.** For
+   random keys and boards holding `j` of the ten true plugs, `j` = 0…10,
+   compute IC and Σf³ of the decrypt and ask which separates `j` from `j+1`
+   better (rank correlation, or AUC per step). This settles whether the token
+   is worth building, at a fraction of the cost, and it is the step that can
+   *falsify* the table above rather than dress it up.
+2. **Only if step 1 favours Σf³:** a schedule token — `k`, for the kappa
+   family of coincidence statistics; `i m b t q a f` are taken. Standalone
+   like IC, so it needs no n-gram table and no `-l`.
+3. **Then `--arms k4f10 i4f10`** at L = 40/60/80/100/167.
+
+**Falsification, stated in advance:** if `k4f10` fails to beat `i4f10` at any
+length, drop the token rather than tuning a blend weight until it wins.
+
+**D. Best-of-two SEEDS inside each restart — the one portfolio variant not yet
+measured.** Running IC and mono pre-passes and taking the better is a natural
+idea and has been **measured down twice**, so read those first: the 50/50
+IC+mono restart portfolio lands between IC and mono, below pure mono
+(`archived/PERFORMANCE.md` §6.10, `eval/prepass_portfolio.py`), and the
+greedy+SA portfolio is neutral-to-negative for a reason spelled out there.
+
+**The premise is right and the accounting is what fails.** The complementarity
+is real — for greedy+SA, at *double* budget the union beat the best single by
+**+10–17pp**, with large only-A and only-B sets — but halving each solver to
+fund both cost 11–14pp, almost exactly cancelling it. The rule recorded there:
+a portfolio helps only when *neither* solver dominates **and the split is
+cheap**. Note also that the restart-ladder work (`eval/restart_ladder.py`)
+makes the halving penalty **worse**: recovery is still climbing steeply at
+`-R 5000`, and a steep curve is exactly where halving hurts most.
+
+**And a hedge is only worth paying for when the selector is unobservable.**
+Here it is observable — the IC/mono winner is length-dependent and the
+ciphertext's length is known — so picking from the table beats mixing.
+
+**What is left untested is a cheaper split.** §6.10 divided *restarts* between
+two whole configs. The alternative is to run both pre-passes **inside** each
+restart and keep the better seed before the expensive `f10` stage. From §6.10's
+own `score_iter` ratios (`q10` = 0.594× `i4q10`, `m4q10` = 0.983×) each
+pre-pass is ~0.40 of a restart, so doing both costs ~**1.39×** — 72% of the
+restarts retained rather than 50%, which is the "cheap split" the rejection
+says a portfolio needs.
+
+**The crux is a correlation nobody has checked**, and it should be measured
+before any code: is the 4-plug seed that scores better *under the target model*
+the one that ends up climbing higher? A pre-pass exists precisely because its
+model differs from the target, so that cannot be assumed — and if the
+correlation is weak, "keep the better seed" is picking at random for 1.39× the
+price. `--dump-all` over both arms on the same problems answers it offline.
+
+**E. FUSE mono and IC into one pre-pass score, the way `-f` fuses `-a` with
+IC.** The most promising of these, and the cheapest to run.
+
+**It is nearly free, which `-f`'s fusion was not.** `ic_score_decode()` builds a
+26-bin histogram and returns `Σ n_x(n_x−1)/n(n−1)`; the monogram score is
+`Σ_x freq[x]·mono8[x]` over that *same* histogram. One decode pass yields both,
+so mono+IC costs about what either costs alone — no second table and no second
+gather, where `-f` had to accumulate IC alongside a gather-bound quad loop.
+
+**But the `-f` precedent is WEAKER than it looks, and the reason matters.** `-f`
+fused an order-*sensitive* model with an order-*free* one — genuinely different
+views of the text. mono+IC is a linear form and a quadratic form of one
+histogram: more expressive than either, but carrying **no** information about
+letter order. The mechanism behind `-f`'s +3–4pp is therefore not the mechanism
+here, and the gain should not be expected to transfer on that basis.
+
+**The complementarity it does have runs along the identity axis.** IC is
+relabel-invariant, mono is not — one reads only the shape of the distribution,
+the other which letter holds which count. That is a real difference, and at cap
+4 the order information order-sensitive models want is mostly destroyed anyway,
+which is the original argument for an order-free pre-pass.
+
+**The strongest argument is the length crossover itself.** Mono leans at L = 60,
+ties at 107, IC wins at 167 — and IC's variance goes as `1/C(n,2)`. That pattern
+is the signature of two estimators with different *precision* profiles rather
+than two different models, and blending is the standard fix: one fixed `λ`
+should be at least as good as the better of the two at **both** ends, removing
+the length-dependent choice entirely.
+
+**Zero-code stand-in available today:** `-S m2i2f10` — mono for the first two
+plugs, then IC for the next two. Sequential rather than blended, so not the same
+thing, but the "extra stages after IC add little" result was measured on
+`i4m4`, not on this order.
+
+**Falsification, in advance:** `λ` is a free parameter and this is exactly where
+a probe gets tuned until it wins. Fix `λ` by the same method `-f`'s 30 was
+fixed, measure once at L = 60 and L = 167, and if the blend fails to beat
+*both* `m4f10` and `i4f10` at *both* lengths, drop it rather than re-tuning.
+
+**The reframe worth keeping in view.** The pre-pass exists to place the first
+few plugs, and *scoring* is only one way to do that. Where a crib or a doubled
+word exists, **deducing** those plugs is measured decisive — the self-crib
+seeder beats `-R 128` at ~9× less compute (§5). The whole IC-versus-mono
+question spans ~2pp. If better first plugs are the goal rather than a better
+first statistic, deduction has by far the larger measured effect, and these
+experiments are the smaller lever.
+
 **3. Attack several messages from ONE DAY jointly.** Every measurement in
 this repo attacks a single message, but real traffic came in **day keys**: every
 message on a net that day shared reflector, wheel order, ring settings and
@@ -261,12 +477,14 @@ full method and raw numbers in `eval/results-joint-score-gain.txt`):
 So scoring failures are **90% of misses at 40 letters, 56% at 60, and 11% by
 100**, and from 60 letters up every one of them is overturned.
 
-**BUT IT DOES NOT CONVERT INTO BREAKS, and that is the finding that matters.**
+**BUT AT `-R 8` IT DOES NOT CONVERT INTO BREAKS, and that is the finding that
+matters.**
 The rescue compares the true board against the impostor — and a real search
 does not have the true board to put into that comparison. Joint re-ranking can
 only promote a board the search ACTUALLY PRODUCED, so it helps exactly when
-some restart found the truth while a *different* board won on message 1. That
-population is empty (300 trials per length, `-R 8`, same recipe):
+some restart found the truth while a *different* board won on message 1. At
+`-R 8` that population is empty (300 trials per length, same recipe); it opens
+to 1–2% by `-R 1000`, measured in the next block:
 
 | L | answer right | wrong, **truth among the restarts** | truth absent |
 |---:|---:|---:|---:|
@@ -278,36 +496,97 @@ population is empty (300 trials per length, `-R 8`, same recipe):
 **One trial in 1200.** When the search is wrong it is not because the truth was
 found and mis-ranked; the truth was never reached.
 
-**Raising `-R` does not open that door either** — the obvious next hypothesis,
-since more restarts mean more candidate boards. Measured, 350 trials per cell:
+**Raising `-R` OPENS that door wide — but only past `-R 1000`, and only when a
+board is judged by whether the plaintext reads rather than by an exact match.**
+Both qualifications were missing from the first two attempts at this question,
+and each on its own was enough to hide the effect. Measured to `-R 5000` at
+four lengths, 350 paired trials per cell, a board counting as recovered at
+**≥ 50% of the plaintext** (`eval/restart_ladder.py`, full numbers in
+`eval/results-restart-ladder.txt`).
 
-| L | `-R` | answer right | **wrong, truth in restarts** | truth absent |
+**Recovery is still climbing at `-R 5000`** at every length but 40 — the
+1000 → 5000 step is worth +4.9pp at L = 60, +6.0pp at L = 80 and +8.9pp at
+L = 100. Recovery at ≥ 50%, exact in brackets:
+
+| `-R` | L = 40 | L = 60 | L = 80 | L = 100 |
 |---:|---:|---:|---:|---:|
-| 60 | 8 | 4.3% | **0.0%** | 95.7% |
-| 60 | 32 | 6.6% | **0.0%** | 93.4% |
-| 60 | 100 | 11.7% | **0.0%** | 88.3% |
-| 80 | 8 | 9.1% | **0.0%** | 90.9% |
-| 80 | 32 | 19.4% | **0.0%** | 80.6% |
-| 80 | 100 | 28.6% | **0.3%** | 71.1% |
+| 8 | 1.4% (0.3) | 6.0% (4.3) | 15.1% (13.4) | 26.6% (22.6) |
+| 100 | 1.7% (0.6) | 12.9% (9.1) | 36.0% (30.0) | 55.1% (46.6) |
+| 1000 | 3.7% (1.4) | 25.4% (16.6) | 52.6% (42.9) | 75.1% (64.3) |
+| **5000** | 4.0% (1.4) | 30.3% (20.0) | 58.6% (48.6) | 84.0% (71.7) |
 
-Restarts help enormously — exact recovery 9.1% → 28.6% at L = 80 — but they
-move trials from *truth absent* straight to *answer right*, never through the
-middle column. **The two populations are disjoint: when a restart finds the
-true board it also wins on message 1**, so there is never a board to promote.
+**L = 40 saturates** — flat at 1.4% exact from `-R 1000` — which is what the
+98% scoring-failure share there predicts.
 
-That also explains the scoring failures themselves. A scoring failure means the
-search converged on a board scoring HIGHER than the truth — so the truth is not
-the scoring model's optimum, and no restart climbs to it because it is not the
-top of any hill. More restarts simply locate the better-scoring impostor more
-reliably. That matches the
-monotonicity result above — a climb that does not converge on the true board
-never visits it either — and it means the 90%/56%/27% scoring-failure rates and
-the 100% rescue are both correctly measured and do not compose into an
-advantage.
+**The conversion population grows by more than an order of magnitude.** `conv`
+= the reported answer did not clear 50% but a CONVERGED board would have:
 
-So the honest summary is: **the discrimination property is real, the
-end-to-end gain is not demonstrated.** What survives is confirmation, not
-search — see the limitation below.
+| `-R` | L = 40 | L = 60 | L = 80 | L = 100 |
+|---:|---:|---:|---:|---:|
+| 8 | 0.9% | 0.3% | 0.3% | 0.0% |
+| 1000 | 12.6% | 15.4% | 9.1% | 6.3% |
+| 5000 | **22.6%** | **23.7%** | **15.7%** | 6.9% |
+
+At L = 60, `-R 5000`, the search **produces a good board in 23.7% of the trials
+where it reports a bad one**. The earlier "one trial in 1200", and its
+successor "1.7%", were both measured at low `-R` under the exact criterion.
+Neither generalises.
+
+**But joint re-ranking mostly misses it, and the cause is the WINDOW rather
+than the method.** Over the search's top-8 boards it promotes a good one only
+4–38% of the time, because the good board is nowhere near the top of the
+search's own ranking: mean rank on conv trials at `-R 5000` is 146/129/113/57
+at L = 40/60/80/100. Share of conv trials whose good board is within rank `K`
+— a *necessary* condition for a top-`K` re-rank to find it:
+
+| L | `-R` | ≤ 8 | ≤ 32 | ≤ 128 | ≤ 512 |
+|---:|---:|---:|---:|---:|---:|
+| 60 | 100 | 71% | 94% | 100% | 100% |
+| 60 | 5000 | 34% | 65% | 76% | 93% |
+| 80 | 5000 | 33% | 55% | 78% | 93% |
+| 100 | 5000 | 50% | 67% | 83% | 100% |
+
+**A PROJECTION, and an optimistic one.** Where the good board is inside the
+window, re-ranking promotes it about half the time (13 of ~28 at L = 60, 9 of
+~18 at L = 80). Holding that rate, a top-128 list would promote ~35–40% of conv
+trials rather than 16% — roughly **+8pp on top of 30.3%** at L = 60, `-R 5000`.
+Deeper candidates score worse on message 1, so the conditional rate almost
+certainly falls with rank and this assumes it does not. **The measurement is
+cheap and has not been run.** The top-8 window is a limit of the harness (two
+binary invocations per candidate), not of the method: joint-scoring a candidate
+is one decrypt against the whole climb that produced it.
+
+**What the scoring failures ARE — more restarts find better-SCORING impostors,
+not NEARER ones.** Mean plugs shared with the truth, and the winner's lead over
+the true board in log units over the whole message:
+
+| `-R` | L = 40 | L = 60 | L = 80 | L = 100 |
+|---:|---:|---:|---:|---:|
+| 8 | 0.65 / 79.5 | 0.78 / 57.8 | 1.22 / 44.9 | 2.43 / 31.0 |
+| 5000 | 0.77 / 89.9 | 0.95 / 69.6 | 1.13 / 52.6 | 2.38 / 40.3 |
+
+**Overlap is flat across a 625× range of `-R` while the lead grows.** These are
+not near-misses being closed in on — they are unrelated boards that fit the
+ciphertext better than the truth does, decrypting 8–18% of the message. SEARCH
+failures do the opposite and are retired: at L = 100 they fall from 236 trials
+to 24 and their deficit narrows from −120.7 to −44.1 log units. So the scoring
+share of the residue rises with `-R` everywhere (L = 100: 8% → 57%; L = 80:
+30% → 82%; L = 40: 90% → 98%).
+
+**The asymmetry joint scoring depends on is confirmed at scale.** An impostor
+derives message 2's true start in **0.0–0.3%** of cases at every length and
+every `-R` (n ≈ 300 per cell); a correct board derives it always.
+
+**Where the TRUE board ranks is not the problem.** When the search converges on
+it, it is rank 1 in 86–96% of trials at L = 60–100 and inside the top 8 in
+96–100%. The deep ranks above belong to the *other* boards clearing 50%, which
+are far more numerous — present in 54.0% of L = 60 trials against the truth's
+22.9% — and much worse ranked.
+
+So the honest summary is: **the discrimination property is real, the conversion
+population is far larger than previously recorded, and the end-to-end gain is
+worth ~4pp measured and plausibly ~8pp — but only with a candidate list two
+orders of magnitude deeper than the one measured here.**
 
 **How the search is run, exactly**, because the result is meaningless without
 it: `-u B -w <true> -r <true> -g <true start1>` are all pinned, so the keyspace
@@ -334,6 +613,17 @@ time — **and the rescue is still 53/53**. Getting the start right is not
 enough: a 3.8-of-10 board decrypts message 2 only partially while the true
 board decrypts it perfectly, so the truth still wins. The mechanism is
 therefore sturdier than "the impostor gets noise" suggests.
+
+> **This table and the `start2` figures above describe DIFFERENT populations,
+> and the gap is the criterion, not a disagreement.** The ladder reports
+> 0.0–0.3% right-start impostors at every length where this one reports 21.7%
+> at L = 100. Re-running the ladder's own records under *this* table's
+> definition — non-**exact** rather than non-**recovered** — reproduces it:
+> n = 35, 5.06 plugs, **17.1%** at L = 100, `-R 8`, against 3.83 and 21.7%
+> here. Judging at 50% moves the near-miss boards (8–9 plugs right) out of the
+> failure population and into the recoveries, and those are precisely the ones
+> that derive a correct start. Both numbers are right about their own
+> population; quote neither without saying which.
 
 **The rescue degrades at 40 letters, and the reason is not the one to guess.**
 It is *not* impostors deriving a correct start — of 9 unrescued cases probed
@@ -381,30 +671,37 @@ survive:
 - **Testing a candidate day key across several messages at once** — the GEHRG
   pattern in §5j, cheap and it fails loudly.
 
-Neither helps the case that dominates short texts: **the climb not reaching the
-board at all**, 71–99% of trials at every length measured here. That is a
-SEARCH problem.
+A third use is worth 1–2pp and is free where it applies: **re-ranking the
+search's own converged boards**, as measured above. What none of them helps is
+the case that dominates short texts — **the climb not reaching the board at
+all**, 55–99% of trials at every length measured here. That is a SEARCH
+problem.
 
-**And the positive finding to take away from all of this is about `-R`, not
-about second messages.** The same sweep that closed the conversion door
-measures the lever that does work at these lengths:
+**And the main finding to take away from all of this is about `-R`, not about
+second messages.** The same sweep measures the lever that does work at these
+lengths, and it is still paying at a thousand restarts:
 
-| | `-R 8` | `-R 32` | `-R 100` |
-|---|---:|---:|---:|
-| exact recovery, L = 60 | 4.3% | 6.6% | **11.7%** |
-| exact recovery, L = 80 | 9.1% | 19.4% | **28.6%** |
+| | `-R 8` | `-R 32` | `-R 100` | `-R 316` | `-R 1000` |
+|---|---:|---:|---:|---:|---:|
+| exact recovery, L = 60 | 4.3% | 6.9% | 9.1% | 11.7% | **16.6%** |
+| exact recovery, L = 80 | 13.4% | 23.7% | 30.0% | 36.0% | **42.9%** |
 
-Restarts roughly **triple** exact recovery at L = 80 and nearly triple it at
-60, and the curve has not flattened at 100. That is consistent with CLAUDE.md's
-own plugboard-tier table (12.0% at `-R 8`, 32.0% at `-R 64`, L = 82) — this
-harness reads a little lower throughout, which is the plaintext pool (whole
-messages, some corpus-flagged garbled, against `prepass_ab.py`'s concatenated
-corpus).
+**No flattening anywhere in the range.** Recovery is close to linear in log `R`
+— about **+6pp per 3.16×** at L = 80 and +4pp at L = 60 — and the last step
+(316 → 1000) is the **largest single step at both lengths**, +6.9pp and +4.9pp.
+Whatever the ceiling is, `-R 1000` is not near it. That is consistent with
+CLAUDE.md's own plugboard-tier table (12.0% at `-R 8`, 32.0% at `-R 64`,
+L = 82); this harness reads a little differently because of the plaintext pool
+(whole messages, some corpus-flagged garbled, against `prepass_ab.py`'s
+concatenated corpus) and because its trials are a different set — the earlier
+`-R 8`/`32`/`100` sweep's generator was never committed, so those cells are
+re-measured here rather than reproduced.
 
 So for a short text the order of business is: **spend on `-R`, bought with
-`-T`**; then the message-key prior in §3b, which needs no second message; and
-only then a second message, for confirming what you found rather than finding
-it.
+`-T`, and spend more than feels reasonable** — a thousand restarts is still on
+the steep part of the curve; then the message-key prior in §3b, which needs no
+second message; and only then a second message — for confirming what you found,
+plus the free 1–2pp of re-ranking, rather than for finding it.
 
 **A start SWEEP degrades gracefully where the indicator does not**, which is
 the inversion to remember if this is ever revisited. Scoring message 2 across
