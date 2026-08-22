@@ -177,11 +177,41 @@ four-way run:
 | `f4f10` vs `i4f10` | the MODEL alone — same cap both sides |
 | `i4f10` vs `m4f10` | already measured, the continuity check |
 
-Run at L = 60 and L = 167, the two ends of the known IC/mono crossover. **If
-`f4f10` matches `i4f10`, the pre-pass is a cap effect and the whole IC/mono
-debate is misdirected**; if it sits apart, the model is doing the work. Keep
-the pairing — an unpaired four-way comparison at ~2pp effect sizes would need
-far more trials to say anything.
+Run at L = 60 and L = 167, the two ends of the known IC/mono crossover.
+
+**MEASURED, and the model wins by 4× — plus a trap worth knowing about**
+(2000 paired trials per cell, `-R 8`, `eval/results-prepass-model-vs-cap.txt`):
+
+| | L = 60 | L = 167 |
+|---|---|---|
+| `f10` → `f4f10` (the **cap**) | −0.87pp, ns | **−4.36pp** |
+| `f4f10` → `i4f10` (the **model**) | −0.31pp, ns | **−17.84pp** |
+| `i4f10` → `m4f10` (continuity) | −2.21pp (mono ahead) | +3.86pp (IC ahead) |
+
+**The pre-pass is not a cap effect**, which is what this was run to rule out
+before spending effort on experiment E — the model channel is worth 17.84pp
+against the cap's 4.36pp at L = 167, with `score_iter` matched within 3% on the
+model row.
+
+**`-S f4f10` is a trap**: using the target model as the pre-pass costs 17.84pp,
+six times what the entire IC-versus-mono question is worth. §6.10's mechanism
+taken to its limit — sharper models "over-commit and lose at low R" and `-f` is
+the sharpest available. **Invisible at L = 60** (−0.31pp: sixty letters is too
+little for `-f`'s n-gram half to say anything at four plugs, so `f4`
+degenerates to IC) and severe at operational length, which is the worst
+possible place for it to hide.
+
+**The continuity arm did double duty.** It reproduces the documented crossover
+and sharpens it — CLAUDE.md has mono +1.77pp at L = 60 with the CI spanning
+zero and IC +2.81pp at 167; this reads +2.21pp (p = 0.015) and +3.86pp
+(p = 0.000). Both ends now significant. It also proves the two L = 60 nulls are
+genuine: the same length and trial count resolves 2.21pp, so the instrument is
+not blind there, the cap simply does not move it.
+
+**Not settled: only `-R 8` was run.** §6.10 established the pre-pass ordering is
+restart-budget-dependent, so none of this should be assumed to hold at the high
+`-R` the restart ladder now recommends — the `f4` trap in particular might
+soften where many restarts can recover from over-commitment.
 
 **B. Cap sweep — also no code.** `i2f10` / `i4f10` / `i6f10` / `i8f10`. The 4
 appears never to have been swept.

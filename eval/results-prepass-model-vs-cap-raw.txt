@@ -1,0 +1,42 @@
+### L=60  arms: f10 f4f10
+L=60  n=2000  -R 8  seed=4242
+  f10: mean %correct  12.88   exact 63/2000   score_iter 47,943,629
+  f4f10: mean %correct  13.75   exact 71/2000   score_iter 55,548,528
+  McNemar on exact: f10-only 40, f4f10-only 48, discordant 88, p=0.456
+  paired diff (f10-f4f10):  -0.87 pp  95% CI [-1.85, +0.11]   (negative = f4f10 ahead)
+
+### L=60  arms: f4f10 i4f10
+L=60  n=2000  -R 8  seed=4242
+  f4f10: mean %correct  13.75   exact 71/2000   score_iter 55,548,528
+  i4f10: mean %correct  14.06   exact 64/2000   score_iter 58,028,531
+  McNemar on exact: f4f10-only 48, i4f10-only 41, discordant 89, p=0.525
+  paired diff (f4f10-i4f10):  -0.31 pp  95% CI [-1.35, +0.72]   (negative = i4f10 ahead)
+
+### L=60  arms: i4f10 m4f10
+L=60  n=2000  -R 8  seed=4242
+  i4f10: mean %correct  14.06   exact 64/2000   score_iter 58,028,531
+  m4f10: mean %correct  16.27   exact 90/2000   score_iter 59,162,482
+  McNemar on exact: i4f10-only 40, m4f10-only 66, discordant 106, p=0.015
+  paired diff (i4f10-m4f10):  -2.21 pp  95% CI [-3.32, -1.11]   (negative = m4f10 ahead)
+
+### L=167  arms: f10 f4f10
+L=167  n=2000  -R 8  seed=4242
+  f10: mean %correct  59.21   exact 1102/2000   score_iter 43,501,321
+  f4f10: mean %correct  63.57   exact 1191/2000   score_iter 50,958,121
+  McNemar on exact: f10-only 208, f4f10-only 297, discordant 505, p=0.000
+  paired diff (f10-f4f10):  -4.36 pp  95% CI [-6.37, -2.35]   (negative = f4f10 ahead)
+
+### L=167  arms: f4f10 i4f10
+L=167  n=2000  -R 8  seed=4242
+  f4f10: mean %correct  63.57   exact 1191/2000   score_iter 50,958,121
+  i4f10: mean %correct  81.41   exact 1569/2000   score_iter 52,612,819
+  McNemar on exact: f4f10-only 125, i4f10-only 503, discordant 628, p=0.000
+  paired diff (f4f10-i4f10): -17.84 pp  95% CI [-19.96, -15.72]   (negative = i4f10 ahead)
+
+### L=167  arms: i4f10 m4f10
+L=167  n=2000  -R 8  seed=4242
+  i4f10: mean %correct  81.41   exact 1569/2000   score_iter 52,612,819
+  m4f10: mean %correct  77.56   exact 1489/2000   score_iter 53,128,603
+  McNemar on exact: i4f10-only 272, m4f10-only 192, discordant 464, p=0.000
+  paired diff (i4f10-m4f10):  +3.86 pp  95% CI [+1.95, +5.76]   (negative = m4f10 ahead)
+

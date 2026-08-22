@@ -982,8 +982,31 @@ are read from a **data directory** (filenames built as
   capped at 6 pairs, then quad uncapped. A lower-order early stage steers the
   first plugs into a better basin (its surface is smoother when few plugs are
   set); **`--score i…q` (IC pre-pass) is the best measured** for a quad target —
-  much better than bigram, extra stages after IC add little. **The recommended
-  target is now `a` (weighted), staged as `--score m4a10`** (mono pre-pass then
+  much better than bigram, extra stages after IC add little.
+
+  > ⚠️ **NEVER use the TARGET model as the pre-pass — `-S f4f10` is a trap.**
+  > The syntax permits it and it reads like a reasonable thing to write ("cap
+  > the target for the first four plugs, then let it run"). Measured against
+  > `i4f10` at L=167, 2000 paired trials, `score_iter` matched within 3%, it
+  > costs **−17.84pp** of mean %-correct (63.57 against 81.41; exact recovery
+  > 1191/2000 against 1569), 95% CI [−20.0, −15.7]. That is **six times** the
+  > 2.81pp the whole IC-versus-mono question is worth at that length — so
+  > *which* low-order pre-pass barely matters beside *using one at all*. The
+  > mechanism is §6.10's, taken to its limit: sharper models "over-commit and
+  > lose at low R", and `-f` is the sharpest the tool has. **The trap is
+  > invisible at short lengths** — the same swap is −0.31pp at L=60, because
+  > sixty letters is too little for the n-gram half of `-f` to say anything at
+  > four plugs, so `f4` degenerates to an IC pre-pass. It is severe exactly at
+  > operational length. `eval/results-prepass-model-vs-cap.txt`.
+  >
+  > The same run prices the **cap** separately (`f10` against `f4f10`, same
+  > model both sides): −4.36pp at L=167 and nothing measurable at L=60. So the
+  > pre-pass's value is **in the model, not the cap, by 4×** — and note the
+  > cap's own length dependence runs opposite to the naive expectation that
+  > capping should matter most where the least text is available.
+
+  **The recommended target is now `a` (weighted), staged as
+  `--score m4a10`** (mono pre-pass then
   weighted, both capped) — the `a` stage reads the log-linear `all8` table, so
   `-S m4a10` is byte-identical to the winning tuning recipe. **The mono-vs-IC
   pre-pass choice depends mildly on the writing style**
