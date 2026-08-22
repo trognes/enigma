@@ -35,10 +35,39 @@ Recommended recipe: `-c -S m4f10 -J --polish -f -l <lang> -T <cores> -R <high>`.
 converged boards are *scattered* rather than clustered near the truth, and
 clustering is the structure ILS would need. → `archived/IMPROVEMENTS.md` §2.
 
-**2. The narrow L40 scoring re-opening.** The only observed scoring failures sit
-at the identifiability floor — 5–10% at L40, 0 elsewhere. Length-sensitive
-scoring could only help at L ≲ 40, where recovery is already near the
-information floor, so the payoff is small. → `archived/IMPROVEMENTS.md` §2, §4.
+**2. Scoring failures on REAL TRAFFIC are not narrow — the "5–10% at L40, 0
+elsewhere" figure is an ENGLISH-PROSE number.** This item used to read that the
+only observed scoring failures sit at the identifiability floor, so
+length-sensitive scoring could only help at L ≲ 40 and the payoff is small.
+That conclusion rests on `make crackquality`, whose corpus is 477 characters of
+**English prose**, and it does not survive the swap to authentic telegraphic
+German. Same harness, same model, same everything but the plaintext
+(`eval/joint_score_gain.py`, 200 trials, `-q`, L = 40):
+
+| plaintext | search fail | **scoring fail** |
+|---|---:|---:|
+| English prose (`-q -l english`) | 100.0% | **0.0%** |
+| authentic telegraphic German (`-q -l wehrmacht`) | 44.0% | **56.0%** |
+
+**A SECOND variable moves it too: search strength.** A stronger climb converts
+search failures into scoring failures, because it reaches boards a weak climb
+never found and those boards overfit. On the same German corpus at L = 40,
+`-q` gives 56% scoring failures and the recommended `-f -S i4f10 -J --polish`
+gives **90%**; on the English corpus, adding `-J --polish -R 8` to `-q` moves
+crackquality's own split from 0% to 2%. So "how much of the residual is
+scoring" is a property of the corpus AND the search, not of the message length
+alone, and any single number for it needs both stated.
+
+Why this matters: telegraphic German is flatter to score than prose — X
+separators, spelled-out numbers, a small vocabulary — so the true plaintext
+stands less far above a wrong decrypt. At 40 letters with ten plugs the climb
+is fitting ~10 free parameters to 40 characters, and on that corpus it usually
+wins. The conclusion that discrimination "has essentially no ceiling left to
+recover" is therefore a statement about English prose.
+
+**It is not a dead end, because §3a shows the fix.** A second message on the
+same day key overturns essentially all of them — see the table there.
+→ `archived/IMPROVEMENTS.md` §2, §4; `eval/results-joint-score-gain.txt`.
 
 **3. Attack several messages from ONE DAY jointly.** Every measurement in
 this repo attacks a single message, but real traffic came in **day keys**: every
@@ -217,14 +246,165 @@ decrypts against ~10⁴·`R` for the climbs and turns message 2 from a
 confirmation of the winner into a second opinion on every candidate the search
 produced.
 
-**Its limitation is the one that matters.** It fires only when message 1's
-climb recovered the board at 9/10 plugs or better — 12% of the time at L = 82
-with `-R 8`, 32% at `-R 64`. It converts *"the climb worked but the score is
-ambiguous"* into *"confirmed"*, and does nothing for *"the climb failed"*. That
-window is real — it is the 70–110 letter band where discrimination rather than
-climbing is the binding constraint (z = 2.20 at 69 letters against a bar of
-6.15, but 7.59 at 113) — but it is narrow, and below it the climb fails first
-so message 2 never gets its chance.
+**MEASURED, and above 80 letters it is total.** `eval/joint_score_gain.py`
+(600 trials per length, the real climb at `-R 8` under the recommended recipe,
+true rotor key given so that scoring is isolated from search by construction;
+full method and raw numbers in `eval/results-joint-score-gain.txt`):
+
+| L | exact | search fail | **scoring fail** | of miss | rescued |
+|---:|---:|---:|---:|---:|---:|
+| 40 | 0.3% | 9.5% | **90.2%** | 90% | 509/541 (94.1%) |
+| 60 | 4.0% | 42.3% | **53.7%** | 56% | 322/322 (**100%**) |
+| 80 | 12.5% | 60.7% | **26.8%** | 31% | 161/161 (**100%**) |
+| 100 | 22.8% | 68.3% | **8.8%** | 11% | 53/53 (**100%**) |
+
+So scoring failures are **90% of misses at 40 letters, 56% at 60, and 11% by
+100**, and from 60 letters up every one of them is overturned.
+
+**BUT IT DOES NOT CONVERT INTO BREAKS, and that is the finding that matters.**
+The rescue compares the true board against the impostor — and a real search
+does not have the true board to put into that comparison. Joint re-ranking can
+only promote a board the search ACTUALLY PRODUCED, so it helps exactly when
+some restart found the truth while a *different* board won on message 1. That
+population is empty (300 trials per length, `-R 8`, same recipe):
+
+| L | answer right | wrong, **truth among the restarts** | truth absent |
+|---:|---:|---:|---:|
+| 40 | 0.3% | **0.0%** | 99.7% |
+| 60 | 1.7% | **0.3%** | 98.0% |
+| 80 | 12.7% | **0.0%** | 87.3% |
+| 100 | 25.3% | **0.0%** | 74.7% |
+
+**One trial in 1200.** When the search is wrong it is not because the truth was
+found and mis-ranked; the truth was never reached.
+
+**Raising `-R` does not open that door either** — the obvious next hypothesis,
+since more restarts mean more candidate boards. Measured, 350 trials per cell:
+
+| L | `-R` | answer right | **wrong, truth in restarts** | truth absent |
+|---:|---:|---:|---:|---:|
+| 60 | 8 | 4.3% | **0.0%** | 95.7% |
+| 60 | 32 | 6.6% | **0.0%** | 93.4% |
+| 60 | 100 | 11.7% | **0.0%** | 88.3% |
+| 80 | 8 | 9.1% | **0.0%** | 90.9% |
+| 80 | 32 | 19.4% | **0.0%** | 80.6% |
+| 80 | 100 | 28.6% | **0.3%** | 71.1% |
+
+Restarts help enormously — exact recovery 9.1% → 28.6% at L = 80 — but they
+move trials from *truth absent* straight to *answer right*, never through the
+middle column. **The two populations are disjoint: when a restart finds the
+true board it also wins on message 1**, so there is never a board to promote.
+
+That also explains the scoring failures themselves. A scoring failure means the
+search converged on a board scoring HIGHER than the truth — so the truth is not
+the scoring model's optimum, and no restart climbs to it because it is not the
+top of any hill. More restarts simply locate the better-scoring impostor more
+reliably. That matches the
+monotonicity result above — a climb that does not converge on the true board
+never visits it either — and it means the 90%/56%/27% scoring-failure rates and
+the 100% rescue are both correctly measured and do not compose into an
+advantage.
+
+So the honest summary is: **the discrimination property is real, the
+end-to-end gain is not demonstrated.** What survives is confirmation, not
+search — see the limitation below.
+
+**How the search is run, exactly**, because the result is meaningless without
+it: `-u B -w <true> -r <true> -g <true start1>` are all pinned, so the keyspace
+holds one rotor key and only the plugboard is searched. `s_got` is the score on
+the **last progress line** — what the run actually reports — with the board
+parsed off the same line; `s_true` is the same binary and model with `-s <true
+board>` and no `-c`. "Rescued" is a **two-way** comparison of true against that
+one impostor, not a re-ranking of every candidate.
+
+**It is not the √2 a plain joint score would give** — it is the asymmetry: the
+true board derives the **correct** start for message 2 and collects a full
+German decrypt, while the impostor derives a wrong one and collects noise.
+Measured on the scoring failures themselves (400 trials per length):
+
+| L | mean correct plugs in the impostor | impostor's start2 right |
+|---:|---:|---:|
+| 40 | 0.69 | 0.3% |
+| 60 | 1.15 | 0.9% |
+| 80 | 1.66 | 3.0% |
+| 100 | 3.83 | 21.7% |
+
+At 100 letters the impostor is closer and gets the right start a fifth of the
+time — **and the rescue is still 53/53**. Getting the start right is not
+enough: a 3.8-of-10 board decrypts message 2 only partially while the true
+board decrypts it perfectly, so the truth still wins. The mechanism is
+therefore sturdier than "the impostor gets noise" suggests.
+
+**The rescue degrades at 40 letters, and the reason is not the one to guess.**
+It is *not* impostors deriving a correct start — of 9 unrescued cases probed
+separately, **zero** did; all had 0–1 correct plugs. They fail because message
+2 is a **fixed quantity of evidence** and at 40 letters a scoring failure can
+exceed it: those 9 impostors led on message 1 by 12.8 to 116.6 log units, where
+a 40-letter German decrypt is worth only ~30–40. A longer second message, or a
+third, would close them. The 90% rate at L = 40 is itself the signature of the
+regime — 40 letters is ~1.6× the ~25-letter unicity distance for this traffic,
+so many messages genuinely admit more than one plausible decrypt.
+
+*Five harness errors, in the order found. Each made the result look BETTER or
+SIMPLER than it was, none announced itself, and the last two came from
+questions about the METHOD rather than from re-reading the code.*
+
+1. **Scored random wrong ROTOR KEYS against the true board** — z = 9.6 at
+   L = 60 against a 5.3 bar, true key first in 100% of trials, i.e. no scoring
+   failures at all. A board never fitted to the ciphertext is not a competitor.
+2. **Compared boards as STRINGS** while the binary normalises pair order, so
+   one board spelled two ways counted as different: 40% of the L = 100
+   "failures" were the true board itself, producing a tidy 100/92/57%
+   falling-with-length trend with a plausible mechanism ready to explain it.
+3. **Ran a bare `-q` climb** with none of `-f -S i4f10 -J --polish` — 0.5%
+   exact at L = 80 against CLAUDE.md's 12.0% at L = 82. A weak climb lands far
+   from the truth, making the impostor trivially easy to reject.
+4. **Classified with quadgrams while the climb maximised fused** — a *biased*
+   mismatch, since a climbed board is by construction competitive on fused. Read
+   19% of misses at L = 60 where the truth is ~54%.
+5. **Took `s_got` from the best `--dump-all` line.** `--polish` runs after all
+   restarts and never appears there: the final reported score beats the best
+   dumpall line in **8 of 12** runs, by up to 0.72. That understated the score
+   (scoring failures undercounted) *and* used the wrong board as the impostor.
+
+**Its limitation is the one that matters**, and the conversion table above is
+the sharp form of it. A second message is a *confirmation* instrument. Two uses
+survive:
+
+- **Deciding whether a hit is real.** When the search does find the board
+  (12.7% of trials at L = 80, 25.3% at L = 100), the joint score raises the
+  margin while the `√(2 ln K)` bar does not move, because message 2 adds no
+  keys. In the 70–110 letter band, where a single message's true-key z sits
+  near the threshold (z = 2.20 at 69 letters against a bar of 6.15, but 7.59 at
+  113), that can be the difference between a defensible break and an unusable
+  one.
+- **Testing a candidate day key across several messages at once** — the GEHRG
+  pattern in §5j, cheap and it fails loudly.
+
+Neither helps the case that dominates short texts: **the climb not reaching the
+board at all**, 71–99% of trials at every length measured here. That is a
+SEARCH problem.
+
+**And the positive finding to take away from all of this is about `-R`, not
+about second messages.** The same sweep that closed the conversion door
+measures the lever that does work at these lengths:
+
+| | `-R 8` | `-R 32` | `-R 100` |
+|---|---:|---:|---:|
+| exact recovery, L = 60 | 4.3% | 6.6% | **11.7%** |
+| exact recovery, L = 80 | 9.1% | 19.4% | **28.6%** |
+
+Restarts roughly **triple** exact recovery at L = 80 and nearly triple it at
+60, and the curve has not flattened at 100. That is consistent with CLAUDE.md's
+own plugboard-tier table (12.0% at `-R 8`, 32.0% at `-R 64`, L = 82) — this
+harness reads a little lower throughout, which is the plaintext pool (whole
+messages, some corpus-flagged garbled, against `prepass_ab.py`'s concatenated
+corpus).
+
+So for a short text the order of business is: **spend on `-R`, bought with
+`-T`**; then the message-key prior in §3b, which needs no second message; and
+only then a second message, for confirming what you found rather than finding
+it.
 
 **A start SWEEP degrades gracefully where the indicator does not**, which is
 the inversion to remember if this is ever revisited. Scoring message 2 across

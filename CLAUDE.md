@@ -3136,15 +3136,32 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   folded once into a quad-shaped table so the hot path is untouched — the
   **first measured short-message scoring gain** (+~1–2pp mean %-correct at
   L40–100, all four languages; 2000-trial German confirmed). It is now
-  near-optimal on **both** scoring axes: the **scoring-failure floor is ~1%**
-  (SPLIT under `-a`: with the correct rotor key the true plugboard already
-  scores highest ~99% of the time — so *discrimination* has essentially no
-  ceiling left to recover), and the **climb-surface smoothness is flat** (an 8×
+  near-optimal on **both** scoring axes **as measured on English prose**: the
+  **scoring-failure floor is ~1%** (SPLIT under `-a`: with the correct rotor key
+  the true plugboard already scores highest ~99% of the time — so
+  *discrimination* has essentially no ceiling left to recover), and the
+  **climb-surface smoothness is flat** (an 8×
   sweep of the order weights moves search-fail% by <1pp). `-a` in fact won by
   *smoothing the climb surface* (fewer search failures), not by lifting an
-  information floor. Scoring is tapped.
+  information floor. Scoring is tapped **on prose**.
+
+  > **On AUTHENTIC TELEGRAPHIC GERMAN it is not.** The two bullets here rest on
+  > `make crackquality`, whose corpus is 477 characters of English prose. Swap
+  > in real HG Nord decrypts and the split inverts: same harness, same `-q`
+  > model, L = 40, scoring failures go **0.0% → 56.0%**, and under the
+  > recommended `-f -S i4f10 -J --polish` recipe **90%**. A stronger search
+  > makes it worse rather than better, because it reaches boards a weak climb
+  > never found and those overfit 40 characters with ten free plug pairs.
+  > Telegraphic German is flatter to score than prose — X separators,
+  > spelled-out numbers, small vocabulary — so the truth stands less far above
+  > a wrong decrypt. Neither "~1%" nor "~99% search failure" below is a
+  > statement about real traffic. `ENHANCEMENTS.md` item 2 and §3a;
+  > `eval/joint_score_gain.py`.
+
 - **Search — resolved, compute-bound with no selectable shortcut.** At short
-  lengths the residual is ~99% *search* failure, and the coverage curve is
+  lengths **on the English-prose corpus** the residual is ~99% *search* failure
+  (see the note above — on telegraphic German at L = 40 it is the reverse), and
+  the coverage curve is
   **still climbing at R=256** (~+15–25pp per 4× R — the true basin is reachable,
   just a rare deep target). The apparent restart diversity is an illusion: 64
   restarts give ~60 distinct *exact* boards but only **~15 distinct correct-plug

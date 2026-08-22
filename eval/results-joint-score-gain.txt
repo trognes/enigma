@@ -1,0 +1,228 @@
+# ============================================================================
+# SCORING FAILURES AT 40-100 LETTERS, AND WHETHER A SECOND MESSAGE ON THE SAME
+# DAY KEY OVERTURNS THEM.   eval/joint_score_gain.py --trials 600, seed 1.
+# ============================================================================
+#
+# METHOD, exactly.
+#
+#   Per trial: a random day key (reflector B, wheel order from I-V, random
+#   ring, random 10-pair board) and TWO messages -- random L-letter excerpts of
+#   authentic HG Nord decrypts, each at its own random Grundstellung and
+#   message key.  Both indicators are computed, so each board derives a start
+#   for message 2.
+#
+#   THE SEARCH IS THE PLUGBOARD ONLY.  The rotor key is pinned to the truth:
+#
+#     ./enigma -c -f -S i4f10 -J --polish -l wehrmacht \
+#              -u B -w <true> -r <true> -g <true start1> -R 8
+#
+#   -u/-w/-r/-g are all given, so the keyspace holds exactly ONE rotor key and
+#   only the board is searched (8 restarts).  That isolates scoring from the
+#   rotor sweep, matching how `make crackquality SPLIT=1` defines the split.
+#
+#   s_got  = the score on the LAST progress line, i.e. what the run actually
+#            reports, with the board parsed off the same line.
+#   s_true = the same binary, same model, `-s <true board>` and NO -c: one
+#            decrypt at the true key.
+#
+#   s_got >= s_true  ->  SCORING failure (the search found something better
+#                        than the truth; no search can fix that)
+#   s_got <  s_true  ->  SEARCH failure  (more restarts could fix it)
+#
+#   RESCUED means: score(msg1 under b) + score(msg2 under b, its start DERIVED
+#   from b via the indicator) is higher for the true board than for the
+#   impostor.  It is a TWO-WAY comparison against the one board the search
+#   produced -- not a re-ranking of every candidate, and not a claim that the
+#   search now finds the truth.
+#
+52 authentic telegraphic plaintexts, model 'wehrmacht',
+real climb at -R 8
+
+    L  trials    exact    search   scoring  of miss     rescued
+   40     600     0.3%      9.5%     90.2%      90%    509/541
+   60     600     4.0%     42.3%     53.7%      56%    322/322
+   80     600    12.5%     60.7%     26.8%      31%    161/161
+  100     600    22.8%     68.3%      8.8%      11%      53/53
+
+  exact   = the climb recovered the true board
+  search  = it did not, and what it found scores LOWER  (a search
+            failure -- more restarts can fix it)
+  scoring = it did not, and what it found scores HIGHER (a scoring
+            failure -- no search can fix it)
+  of miss = scoring failures as a share of NON-EXACT trials
+  rescued = of those, how many the true board wins back once
+            message 2 is added, its start DERIVED per board
+#
+#   rescue rates: 509/541 = 94.1%, then 100%, 100%, 100%.
+#
+# ----------------------------------------------------------------------------
+# WHY THE RESCUE WORKS
+# ----------------------------------------------------------------------------
+#
+# Not the sqrt(2) a plain joint score gives.  An asymmetry: the true board
+# derives the CORRECT start for message 2 and collects a full German decrypt,
+# while the impostor derives a wrong one and collects noise.  Measured on the
+# scoring failures themselves (400 trials/length, corrected extraction):
+#
+#     L    scoring fails   mean correct plugs   impostor start2 right
+#    40              362                 0.69                    0.3%
+#    60              223                 1.15                    0.9%
+#    80              101                 1.66                    3.0%
+#   100               46                 3.83                   21.7%
+#
+# At 100 letters the impostor is closer and gets the right start a fifth of the
+# time -- yet the rescue is still 53/53.  Getting the start right is not enough:
+# a 3.8-of-10 board decrypts message 2 only partially, while the true board
+# decrypts it perfectly, so the truth still wins.
+#
+# WHY L=40 IS NOT 100%.  Message 2 is a FIXED quantity of evidence and at 40
+# letters a scoring failure can exceed it.  Of 9 unrescued cases probed
+# separately, ZERO had the impostor deriving a correct start2 -- all had 0-1
+# correct plugs.  They lost because the impostor led on message 1 by 12.8 to
+# 116.6 log units, where a 40-letter German decrypt is worth only ~30-40.  A
+# longer second message, or a third, would close them.
+#
+# ----------------------------------------------------------------------------
+# WHY THIS CONTRADICTS THE REPO'S DOCUMENTED ~1% SCORING FLOOR
+# ----------------------------------------------------------------------------
+#
+# CLAUDE.md records a ~1% scoring-failure floor and "at short lengths the
+# residual is ~99% search failure"; ENHANCEMENTS item 2 records "5-10% at L40,
+# 0 elsewhere".  Those come from `make crackquality`, whose corpus is 477
+# characters of ENGLISH PROSE.  They do not transfer.
+#
+# Two variables move the split, isolated one at a time (200 trials, L=40, and
+# both arms free of the --polish extraction bug since neither used --polish):
+#
+#   plaintext / language                    search    scoring
+#   English prose      -q -l english        100.0%       0.0%
+#   telegraphic German -q -l wehrmacht       44.0%      56.0%
+#
+#   model, on telegraphic German            search    scoring
+#   -q                                       44.0%      56.0%
+#   -f -S i4f10 -J --polish                   9.5%      90.2%   (from the run
+#                                                                above, L=40)
+#
+# NOT the garbled decrypts in the pool: restricting to clean plaintexts gave
+# 89.5% against 90.5% at L=40, i.e. no effect.
+#
+# A STRONGER SEARCH MAKES IT WORSE -- it reaches boards a weak climb never
+# found, and at 40 letters with ten free plug pairs those overfit.  crackquality
+# on its OWN English corpus shows the same sign, 0% -> 2%, when -J --polish -R 8
+# is added, so this is not an artefact of the German harness.
+#
+# Telegraphic German is flatter to score than prose (X separators, spelled-out
+# numbers, small vocabulary), so the truth stands less far above a wrong
+# decrypt.  Same style dependence CLAUDE.md already records for the wehrmacht
+# tables (+20.9pp on real messages, -10.2pp on prose).
+#
+# ----------------------------------------------------------------------------
+# SCOPE
+# ----------------------------------------------------------------------------
+#
+# * The rotor key is GIVEN.  This says nothing about the case where the climb
+#   never reaches the board -- 9.5% to 68.3% of trials here depending on length.
+#   With the rotor key unknown the competitor set is far larger, so this is a
+#   LOWER bound on the real-attack scoring floor.
+# * Exact recovery (0.3/4.0/12.5/22.8%) brackets CLAUDE.md's 12.0% at L=82.
+# * The rescue is a two-way comparison against one impostor, not a re-ranking.
+# * 52 authentic plaintexts, 13 of them corpus-flagged garbled (kept: shown to
+#   have no effect on the split).
+#
+# ----------------------------------------------------------------------------
+# FIVE HARNESS ERRORS, in the order they were found.  Each made the result look
+# BETTER or SIMPLER than it was, and none announced itself.
+# ----------------------------------------------------------------------------
+#
+# 1. Scored random wrong ROTOR KEYS against the true board.  z = 9.6 at L=60
+#    against a 5.3 bar, true key first in 100% of trials -- i.e. NO scoring
+#    failures at all.  A board never fitted to the ciphertext is not a
+#    competitor.
+# 2. Compared boards as STRINGS while the binary normalises pair order, so one
+#    board spelled two ways counted as different.  40% of the L=100 "failures"
+#    were the true board itself, producing a tidy 100/92/57% falling-with-length
+#    trend with a plausible mechanism ready to explain it.
+# 3. Ran a bare -q climb with none of -f -S i4f10 -J --polish: 0.5% exact at
+#    L=80 against CLAUDE.md's 12.0% at L=82.  A weak climb lands far from the
+#    truth, making the impostor trivially easy to reject.
+# 4. Classified with a Python quadgram score while the climb maximised FUSED --
+#    a BIASED mismatch, since a climbed board is by construction competitive on
+#    fused.  Read 19% of misses at L=60 where the truth is ~54%.
+# 5. Took s_got from the best --dump-all line.  --polish runs after all restarts
+#    and never appears there: the final reported score beats the best dumpall
+#    line in 8 of 12 runs, by up to 0.72.  Both the score (scoring failures
+#    undercounted) and the board (wrong impostor) were affected.
+#
+# Errors 4 and 5 were found by questions about METHOD, not by re-reading code.
+#
+# ============================================================================
+# DOES THE RESCUE CONVERT INTO BREAKS?  NO -- and this is the load-bearing
+# limitation of everything above.
+# ============================================================================
+#
+# The rescue compares the TRUE board against the impostor.  A real search does
+# not have the true board to put into that comparison: joint re-ranking can
+# only promote a board the search ACTUALLY PRODUCED.  So it converts into a
+# break exactly when some restart found the truth while a DIFFERENT board won
+# on message 1.  Measured, 300 trials per length, -R 8, same recipe:
+#
+#     L   answer right   wrong, truth among restarts   truth absent
+#    40           0.3%                          0.0%          99.7%
+#    60           1.7%                          0.3%          98.0%
+#    80          12.7%                          0.0%          87.3%
+#   100          25.3%                          0.0%          74.7%
+#
+# ONE TRIAL IN 1200.  When the search is wrong it is not because the truth was
+# found and mis-ranked -- the truth was never reached.  That matches the
+# trajectory result recorded in ENHANCEMENTS 3a (a steepest-ascent climb that
+# does not converge on the true board never visits it either).
+#
+# So the scoring-failure rates and the 100% rescue are both correctly measured
+# and DO NOT COMPOSE into an end-to-end advantage.  What survives is
+# CONFIRMATION, not search:
+#
+#   * deciding whether a hit is real -- when the search does find the board
+#     (12.7% at L=80, 25.3% at L=100) the joint score raises the margin while
+#     the sqrt(2 ln K) bar does not move, since message 2 adds no keys;
+#   * testing a candidate day key across several messages at once (the GEHRG
+#     pattern, MODERN_BREAKING_NOTES 5j).
+#
+# Neither touches what dominates short texts: the climb not reaching the board
+# at all, 75-99% of trials at every length here.  That is a SEARCH problem.
+#
+# DOES RAISING -R OPEN THE CONVERSION DOOR?  No -- 350 trials per cell:
+#
+#     L    -R   answer right   wrong, truth in restarts   truth absent
+#    60     8           4.3%                       0.0%          95.7%
+#    60    32           6.6%                       0.0%          93.4%
+#    60   100          11.7%                       0.0%          88.3%
+#    80     8           9.1%                       0.0%          90.9%
+#    80    32          19.4%                       0.0%          80.6%
+#    80   100          28.6%                       0.3%          71.1%
+#
+# Restarts help enormously (9.1% -> 28.6% exact at L=80) but move trials from
+# "truth absent" straight to "answer right", never through the middle column.
+# THE TWO POPULATIONS ARE DISJOINT: when a restart finds the true board it also
+# wins on message 1, so there is never a board for joint scoring to promote.
+#
+# That also explains the scoring failures.  A scoring failure means the search
+# converged on a board scoring HIGHER than the truth, so the truth is not the
+# model's optimum and no restart climbs to it -- it is not the top of any hill.
+# More restarts just locate the better-scoring impostor more reliably.
+#
+# THE POSITIVE FINDING, and it is about -R rather than second messages.  The
+# same sweep that closed the conversion door measures the lever that works:
+#
+#                          -R 8    -R 32   -R 100
+#   exact recovery L=60     4.3%     6.6%    11.7%
+#   exact recovery L=80     9.1%    19.4%    28.6%
+#
+# Restarts roughly TRIPLE exact recovery at L=80 and the curve has not
+# flattened at 100.  Consistent with CLAUDE.md's plugboard-tier table (12.0% at
+# -R 8, 32.0% at -R 64, L=82); this harness reads a little lower throughout,
+# which is the plaintext pool (whole messages, some corpus-flagged garbled,
+# against prepass_ab.py's concatenated corpus).
+#
+# Order of business for a short text: spend on -R bought with -T; then the
+# message-key prior (ENHANCEMENTS 3b), which needs no second message; and only
+# then a second message, for CONFIRMING what you found rather than finding it.
