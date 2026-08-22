@@ -154,3 +154,38 @@ real climb at -R 8
 #    undercounted) and the board (wrong impostor) were affected.
 #
 # Errors 4 and 5 were found by questions about METHOD, not by re-reading code.
+#
+# ============================================================================
+# DOES THE RESCUE CONVERT INTO BREAKS?  NO -- and this is the load-bearing
+# limitation of everything above.
+# ============================================================================
+#
+# The rescue compares the TRUE board against the impostor.  A real search does
+# not have the true board to put into that comparison: joint re-ranking can
+# only promote a board the search ACTUALLY PRODUCED.  So it converts into a
+# break exactly when some restart found the truth while a DIFFERENT board won
+# on message 1.  Measured, 300 trials per length, -R 8, same recipe:
+#
+#     L   answer right   wrong, truth among restarts   truth absent
+#    40           0.3%                          0.0%          99.7%
+#    60           1.7%                          0.3%          98.0%
+#    80          12.7%                          0.0%          87.3%
+#   100          25.3%                          0.0%          74.7%
+#
+# ONE TRIAL IN 1200.  When the search is wrong it is not because the truth was
+# found and mis-ranked -- the truth was never reached.  That matches the
+# trajectory result recorded in ENHANCEMENTS 3a (a steepest-ascent climb that
+# does not converge on the true board never visits it either).
+#
+# So the scoring-failure rates and the 100% rescue are both correctly measured
+# and DO NOT COMPOSE into an end-to-end advantage.  What survives is
+# CONFIRMATION, not search:
+#
+#   * deciding whether a hit is real -- when the search does find the board
+#     (12.7% at L=80, 25.3% at L=100) the joint score raises the margin while
+#     the sqrt(2 ln K) bar does not move, since message 2 adds no keys;
+#   * testing a candidate day key across several messages at once (the GEHRG
+#     pattern, MODERN_BREAKING_NOTES 5j).
+#
+# Neither touches what dominates short texts: the climb not reaching the board
+# at all, 75-99% of trials at every length here.  That is a SEARCH problem.

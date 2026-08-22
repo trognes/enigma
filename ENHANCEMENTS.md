@@ -259,9 +259,32 @@ full method and raw numbers in `eval/results-joint-score-gain.txt`):
 | 100 | 22.8% | 68.3% | **8.8%** | 11% | 53/53 (**100%**) |
 
 So scoring failures are **90% of misses at 40 letters, 56% at 60, and 11% by
-100**. The information floor, not the search problem, is what dominates the
-short end — the opposite of what holds at operational lengths — and from 60
-letters up every one of them is overturned.
+100**, and from 60 letters up every one of them is overturned.
+
+**BUT IT DOES NOT CONVERT INTO BREAKS, and that is the finding that matters.**
+The rescue compares the true board against the impostor — and a real search
+does not have the true board to put into that comparison. Joint re-ranking can
+only promote a board the search ACTUALLY PRODUCED, so it helps exactly when
+some restart found the truth while a *different* board won on message 1. That
+population is empty (300 trials per length, `-R 8`, same recipe):
+
+| L | answer right | wrong, **truth among the restarts** | truth absent |
+|---:|---:|---:|---:|
+| 40 | 0.3% | **0.0%** | 99.7% |
+| 60 | 1.7% | **0.3%** | 98.0% |
+| 80 | 12.7% | **0.0%** | 87.3% |
+| 100 | 25.3% | **0.0%** | 74.7% |
+
+**One trial in 1200.** When the search is wrong it is not because the truth was
+found and mis-ranked; the truth was never reached. That matches the
+monotonicity result above — a climb that does not converge on the true board
+never visits it either — and it means the 90%/56%/27% scoring-failure rates and
+the 100% rescue are both correctly measured and do not compose into an
+advantage.
+
+So the honest summary is: **the discrimination property is real, the
+end-to-end gain is not demonstrated.** What survives is confirmation, not
+search — see the limitation below.
 
 **How the search is run, exactly**, because the result is meaningless without
 it: `-u B -w <true> -r <true> -g <true start1>` are all pinned, so the keyspace
@@ -321,14 +344,24 @@ questions about the METHOD rather than from re-reading the code.*
    dumpall line in **8 of 12** runs, by up to 0.72. That understated the score
    (scoring failures undercounted) *and* used the wrong board as the impostor.
 
-**Its limitation is the one that matters.** It fires only when message 1's
-climb recovered the board at 9/10 plugs or better — 12% of the time at L = 82
-with `-R 8`, 32% at `-R 64`. It converts *"the climb worked but the score is
-ambiguous"* into *"confirmed"*, and does nothing for *"the climb failed"*. That
-window is real — it is the 70–110 letter band where discrimination rather than
-climbing is the binding constraint (z = 2.20 at 69 letters against a bar of
-6.15, but 7.59 at 113) — but it is narrow, and below it the climb fails first
-so message 2 never gets its chance.
+**Its limitation is the one that matters**, and the conversion table above is
+the sharp form of it. A second message is a *confirmation* instrument. Two uses
+survive:
+
+- **Deciding whether a hit is real.** When the search does find the board
+  (12.7% of trials at L = 80, 25.3% at L = 100), the joint score raises the
+  margin while the `√(2 ln K)` bar does not move, because message 2 adds no
+  keys. In the 70–110 letter band, where a single message's true-key z sits
+  near the threshold (z = 2.20 at 69 letters against a bar of 6.15, but 7.59 at
+  113), that can be the difference between a defensible break and an unusable
+  one.
+- **Testing a candidate day key across several messages at once** — the GEHRG
+  pattern in §5j, cheap and it fails loudly.
+
+Neither helps the case that dominates short texts: **the climb not reaching the
+board at all**, 75–99% of trials at every length measured here. That is a
+SEARCH problem, and its levers are the documented ones — restarts bought with
+`-T` — plus the message-key prior in §3b, which needs no second message.
 
 **A start SWEEP degrades gracefully where the indicator does not**, which is
 the inversion to remember if this is ever revisited. Scoring message 2 across
