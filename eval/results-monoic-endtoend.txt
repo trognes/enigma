@@ -1,0 +1,172 @@
+# -S k (mono + IC fused) END TO END: wins at L = 100 and 167, ties mono at 60.
+#
+# eval/prepass_ab.py --length {60,100,167} --trials 2000 --arms <pair>
+# eval/prepass_ab.py --length 167 --trials 500 --seed {1,2,3,4} --arms k4f10 i4f10
+#
+# ENHANCEMENTS 2a experiment E, the end-to-end half.  The offline AUC gate is
+# in results-mono-ic-blend.txt; this is the recovery measurement that gate was
+# a precondition for.  Authentic HG Nord decrypts, telegraphic German, rotor
+# key GIVEN and only the 10-pair plugboard hidden, -c -J --polish -R 8 -T 4.
+#
+# ============================================================================
+# THE PRE-REGISTERED CONDITION FAILED -- READ THIS BEFORE THE TABLE
+# ============================================================================
+#
+# The condition, recorded before the token was built: k4f10 must beat BOTH
+# m4f10 and i4f10 at BOTH lengths (60 and 167), or the token is DROPPED rather
+# than lambda re-tuned.
+#
+# It did not.  At L = 60 against m4f10 the result is +0.52pp with a 95% CI of
+# [-0.58, +1.62] and McNemar p = 0.087 -- a tie, not a win.  Three of the four
+# pre-registered cells passed decisively; the fourth did not.
+#
+# THE TOKEN WAS ADOPTED ANYWAY, and -S k4f10 is now the recommended pre-pass
+# for telegraphic traffic at every measured length (L = 60..167).  That was a
+# judgment call by the repository owner on the grounds below, NOT a passed
+# gate:
+#
+#   * the failure is a TIE, not a loss -- k4f10 is not behind anywhere measured;
+#   * L = 60 is far below operational length, and in that cell every arm scores
+#     14-17% mean correct at ~5% exact recovery, i.e. it ranks pre-passes in a
+#     regime where the message essentially never breaks;
+#   * L = 100 was added afterwards (see the honesty note below) and k4f10 beats
+#     BOTH components there decisively, so the failing cell is the single
+#     shortest one rather than half the evidence.
+#
+# Recorded this way deliberately: the claim must not drift from its evidence
+# just because the decision went the other way.  What the evidence supports is
+# "never measurably behind at any length, decisively ahead at 100 and 167" --
+# which is a sound basis for a default and is not the same sentence as "passed
+# its gate".
+#
+# ONE FURTHER NOTE ON "EVERY LENGTH": the measured range is L = 60..167.  Below
+# 60 nothing was run end to end (the offline probe favours the blend at L = 40,
+# +.007 over the better component, which is weak support and not a recovery
+# measurement); above 167 nothing was run either, though the trend there is
+# favourable.
+#
+# LAMBDA: a retune to 1.1*sqrt(L) was built and measured NULL after this run
+# (pooled -0.40pp [-1.09, +0.28]) and reverted, so the numbers below describe
+# the shipping configuration.  eval/results-monoic-lambda.txt.
+#
+# ============================================================================
+# THE RESULT
+# ============================================================================
+#
+#   2000 paired trials per cell, seed 4242.  mean %-correct / exact of 2000:
+#
+#     L        k4f10          i4f10          m4f10
+#     60    16.79  109      14.06   64     16.27   90
+#    100    45.13  710      39.01  592     40.17  615
+#    167    85.87 1663      81.41 1569     77.56 1489
+#
+#   paired difference, k4f10 minus the named arm (positive = k4f10 ahead):
+#
+#     L      vs i4f10                    vs m4f10
+#     60    +2.73  [+1.69, +3.77]       +0.52  [-0.58, +1.62]   <- the tie
+#    100    +6.12  [+4.23, +8.00]       +4.95  [+3.06, +6.84]
+#    167    +4.45  [+2.85, +6.05]       +8.31  [+6.54, +10.07]
+#
+#   McNemar on exact recovery is p = 0.000 in five of the six cells and
+#   p = 0.087 in the sixth (the tie).
+#
+# WHICH COMPONENT IS THE HARDER BASELINE MOVES WITH LENGTH, as the documented
+# crossover says it should: mono at 60 (and marginally at 100), IC at 167.  So
+# "gain over the BETTER component" is +0.52 / +4.95 / +4.45 -- and the blend is
+# ahead of whichever one is winning at every length except the shortest.
+#
+# ============================================================================
+# THE DECISIVE CELL, ON FIVE SEEDS
+# ============================================================================
+#
+# The recommendation this displaces (i4f10 for telegraphic traffic at
+# operational length, +2.81pp) was established over FIVE independent seeds with
+# a heterogeneity check.  The headline cell above rests on one.  Four more, 500
+# paired trials each, L = 167, k4f10 vs i4f10:
+#
+#     seed     diff      95% CI              SE      n
+#     4242    +4.45   [+2.85, +6.05]       0.816   2000
+#        1    +4.94   [+1.71, +8.17]       1.648    500
+#        2    +6.10   [+2.97, +9.24]       1.599    500
+#        3    +6.94   [+3.32, +10.56]      1.847    500
+#        4    +4.66   [+1.31, +8.00]       1.707    500
+#
+#     pooled  +5.01pp  95% CI [+3.86, +6.16]   z = 8.5
+#     Cochran Q = 2.07 on 4 df, p = 0.72
+#
+# ALL FIVE FAVOUR k4f10 and every interval excludes zero.  Q = 2.07 on 4 df
+# means the seeds scatter around one effect rather than disagreeing -- the same
+# shape as the displaced recommendation's own Q = 1.65 on 4 df, so the new
+# claim rests on the same kind of evidence as the one it replaces, at nearly
+# twice the effect size.
+#
+# ============================================================================
+# COMPUTE IS NOT THE EXPLANATION -- AND score_iter SAID OTHERWISE
+# ============================================================================
+#
+# k4f10 scores 3-5% FEWER plugboards than either component in all six cells
+# (e.g. 50.3M against 52.6M and 53.1M at L = 167).  That looked like "better
+# AND cheaper", and it is wrong: score_iter counts CALLS, and the k decoder
+# does 26 multiply-adds on top of the coincidence sum, so its per-call cost is
+# above IC's.  This is CLAUDE.md's standing warning about the counter, hit
+# directly.
+#
+# MEASURED ON WALL TIME instead, one message, -R 1024 so the climb dominates,
+# 4 problems, min of 3 reps, with the measured 0.105 s process startup
+# subtracted and a k4f10-against-itself control for the floor:
+#
+#     k4f10 vs i4f10             -3.5%   (k4f10 faster)
+#     k4f10 vs m4f10             +7.2%   (k4f10 slower)
+#     k4f10 vs k4f10 (control)   -1.3%   <- the noise floor
+#
+# So there is NO uniform "cheaper": compute is comparable within about +-7%, in
+# both directions, consistent with the mechanism (k does mono's work plus IC's,
+# but converges in fewer calls).  Near -R 8 a 7% compute difference is worth
+# ~0.2-0.4pp on the restart curve, against effect sizes of 5pp, so it cannot
+# explain the result either way.
+#
+# THE FIRST TWO ATTEMPTS AT THIS MEASUREMENT WERE WORTHLESS, and the reason is
+# worth keeping: at -R 8 a whole invocation costs 0.111 s of which 0.105 s is
+# process startup, so ~95% of the harness was timing the n-gram load.  The
+# scaling check that exposed it -- -R 0/8/64/256/1024 costing
+# 0.105/0.111/0.146/0.299/0.928 s -- is the cheap diagnostic to run FIRST when
+# timing anything at a low restart count.
+#
+# ============================================================================
+# WHAT THIS SAYS ABOUT THE AUC PROBE: SHAPE TRANSFERS, MAGNITUDE DOES NOT
+# ============================================================================
+#
+# results-mono-ic-blend.txt closed with the AUC-to-recovery conversion unknown
+# and one calibration point.  There are now three, and they answer it -- with a
+# more cautious answer than hoped:
+#
+#     L      probe gain (AUC)     end to end (pp)    implied pp per AUC unit
+#            over better comp.    over better comp.
+#     60         +.015                +0.52                    35
+#    100         +.029                +4.95                   171
+#    167         +.020                +4.45                   223
+#
+# THE ORDERING IS PREDICTED EXACTLY -- 100 > 167 > 60 in both columns, and the
+# probe called the inverted U in length before any climb was run.  THE
+# MAGNITUDE IS NOT: the implied conversion spans 6x, and the compression is
+# worst at L = 60, which is where the floor effect lives (every arm at 14-17%
+# mean correct).
+#
+# So the probe is a tool for RANKING candidate statistics, not for sizing the
+# end-to-end gain.  An intermediate reading here, taken from L = 60 and 167
+# only, concluded that the end-to-end gain grew monotonically with length and
+# therefore CONTRADICTED the probe's inverted U.  Adding L = 100 refuted that:
+# an inverted U is invisible until the middle is sampled, and two points can
+# always be joined by a line.
+#
+# ============================================================================
+# SCOPE
+# ============================================================================
+#
+# Plugboard-recovery tier only -- the rotor key is GIVEN and only the board is
+# hidden, as with every tuning result in this repo.  Telegraphic German
+# (-l wehrmacht) on authentic HG Nord decrypts only; PROSE IS NOT MEASURED, so
+# the general m4f10 default is untouched by this.  -R 8 for the recovery cells;
+# PERFORMANCE 6.10 established that the pre-pass ordering is restart-budget
+# dependent, so none of this should be assumed to hold at the high -R the
+# restart ladder recommends.  Three lengths, one corpus, one machine mode.

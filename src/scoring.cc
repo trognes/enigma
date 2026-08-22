@@ -167,7 +167,8 @@ static double monogram_score_decode(machine & m)
 }
 
 /* -S k's IC weight, PER LETTER: the term added is lambda * L * IC.  See the
-   decoder below for why it scales with length where -f's does not.
+   decoder below for why it scales with length where -f's does not, and for
+   why the exponent is 1 even though the quantity it tracks goes as sqrt(L).
    ENIGMA_MONOIC_BLEND overrides it, as ENIGMA_IC_BLEND does for -f. */
 static const double monoic_lambda_default = 0.1;
 static double g_monoic_lambda = monoic_lambda_default;
@@ -184,7 +185,32 @@ static double g_monoic_lambda = monoic_lambda_default;
    score's falls as ~1/sqrt(L) (a mean of L terms), so the weight that balances
    them grows with L; measured, the optimum tracks 0.1*L across L = 40..167
    while a fixed lambda drifts away from it, worst at operational length
-   (eval/results-mono-ic-blend.txt). ENIGMA_MONOIC_BLEND overrides the 0.1. */
+   (eval/results-mono-ic-blend.txt). ENIGMA_MONOIC_BLEND overrides the 0.1.
+
+   THE EXPONENT IS NOMINALLY WRONG, AND FIXING IT WAS MEASURED NULL -- do not
+   "correct" it again. The quantity lambda has to track is sd(mono)/sd(IC),
+   measured 7.4 / 8.8 / 11.0 / 14.2 at L = 40 / 60 / 100 / 167, i.e. about
+   1.1 * sqrt(L). A LINEAR rule crosses that curve exactly once, at L = 121,
+   so 0.1*L undershoots below and overshoots above: in units of each
+   statistic's own spread it gives r = 0.54 / 0.68 / 0.91 / 1.18 rather than a
+   constant. lambda = 1.1*sqrt(L), which holds r = 0.94 / 0.97 / 1.00 / 1.00,
+   was therefore built and A/B'd against this rule -- paired, both arms in one
+   binary via ENIGMA_MONOIC_BLEND, n = 2000 at each of three lengths
+   (eval/results-monoic-lambda.txt):
+
+       L = 167   +0.84pp  [-0.47, +2.15]
+       L = 100   -0.75pp  [-2.18, +0.68]
+       L =  60   -0.93pp  [-1.90, +0.05]
+       pooled    -0.40pp  [-1.09, +0.28]
+
+   Every interval spans zero and the sign is mildly AGAINST the tidier rule,
+   including at L = 60 where r moved furthest (0.68 -> 0.97). The blend surface
+   is a broad plateau -- every r in 0.25..2.0 beats both pure statistics at
+   L >= 60 -- so the exponent does not matter empirically. 0.1*L is kept
+   because it is the configuration the five-seed end-to-end evidence describes,
+   and because it happens to track the probe's measured PEAK r, which itself
+   rises with length (0.5 / 1.0 / 1.0 / 1.0-2.0) -- at L = 40 the peak is 0.5
+   and 0.1*L gives 0.54, where the sqrt rule would give 0.94. */
 /* NOT INLINED, deliberately.  score_iter() is the scan's hottest function and
    clang inlines this decoder straight into it, growing it 623 -> 1042
    instructions -- so an experimental model that no default path calls would

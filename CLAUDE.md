@@ -41,6 +41,25 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
   auto-delete on merge, so a merged branch lingering on the remote means nothing
   and must not be pruned or reused on that basis. `git fetch --prune` is fine
   when the owner has already deleted them; deleting them yourself is not.
+- **ASK BEFORE STARTING OR KILLING ANY RUN EXPECTED TO TAKE MORE THAN A
+  MINUTE.** Propose the command and the estimate, then wait. This covers
+  `make bench`, `make crackquality`, every `eval/` A/B or sweep, and — just as
+  much — **killing a job already in flight**, including one you started
+  yourself. It does not cover a build, a single `./enigma` invocation, or a
+  grep; note `make test` at ~65 s *is* over the line. When unsure, ask.
+  - **A run in flight belongs to whoever is waiting on it, not to whoever
+    started it.** The failure mode is killing a measurement mid-way to
+    substitute a better-designed one: the new design may well be better, and
+    it is still not your call, because the results already accumulated and the
+    time already spent are someone else's.
+  - **Starting one unasked is the worse half, because it can corrupt a
+    measurement silently.** Everything under "Build & run" about an idle box
+    applies — a second job on the same cores produced a `crib` reading of
+    **+1096%** that re-measured at −7.0% once the box was quiet, and the
+    damage was not spread evenly enough to be obvious from the table. So an
+    unannounced run does not merely compete for cores; it can invalidate a
+    number someone else is about to act on, with nothing in the output saying
+    so.
 
 ## Repository layout
 
@@ -418,8 +437,9 @@ are read from a **data directory** (filenames built as
 > **`-f` fused scoring model** (`-a`'s weighted all-order mixture plus a
 > weighted index of coincidence — the strongest measured scoring model, and the
 > only one that does not depend on the writing style; see the `-f` entry below),
-> `-S m4f10` staging (mono pre-pass then fused; **`i4f10` on telegraphic
-> traffic at operational length** — measured, see `-S`), `-J` (dynamic move
+> `-S m4f10` staging (mono pre-pass then fused; **`k4f10` on telegraphic
+> traffic, at every length** — measured, see `-S` and the `-S k` entry; it
+> displaced `i4f10` there), `-J` (dynamic move
 > order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the
 > best-board
 > finisher `--polish` (the recommended finisher: one fixed-cost pass after all
@@ -472,8 +492,10 @@ are read from a **data directory** (filenames built as
 > delivers (the first measured short-message *scoring* gain, +~1–2pp mean
 > %-correct at L40–100 across all four languages; PR #106). Recipe: `-c -J
 > --polish --score m4f10 --random 10 -R <as high as -T affords> -f -l <lang> -T
-> <cores>` — swapping `m4f10` for **`i4f10` on telegraphic traffic at
-> operational length** (+2.8pp, measured; see the `-S` entry).
+> <cores>` — swapping `m4f10` for **`k4f10` on telegraphic traffic, at every
+> length** (+5.0pp over `i4f10` at L=167, pooled over five seeds, and never
+> behind at any length measured; see the `-S k` entry). `i4f10` is the
+> runner-up there and still beats `m4f10` at L≥107.
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -1035,8 +1057,14 @@ are read from a **data directory** (filenames built as
   **75.2%**; McNemar over the 1800 trials with logged discordants p = 0.021).
   All five seeds favour `i4f10`, heterogeneity is Q = 1.65 on 4 df (so they
   scatter around one effect rather than disagreeing), and `score_iter` matched
-  within 2% every run. **Use `-S i4f10` for telegraphic traffic at operational
-  length**; `m4f10` remains the default elsewhere.
+  within 2% every run. **`i4f10` beat `m4f10` for telegraphic traffic at
+  operational length**; `m4f10` remains the default elsewhere. **Both have
+  since been displaced there by `k4f10`**, the mono+IC blend — +5.01pp over
+  `i4f10` at L=167 pooled across five seeds, ahead of both components at L=100,
+  and never measurably behind at L=60 — so the recommendation for telegraphic
+  traffic is now `-S k4f10` at every length, and the rows below are the history
+  that led to it. See the `-S k` entry and
+  `eval/results-monoic-endtoend.txt`.
 
   **The full `{m4,i4} × {a,f}` square is measured at L=167** (1000 paired trials
   per cell, two seeds), and it says two things:
@@ -1149,11 +1177,14 @@ are read from a **data directory** (filenames built as
   (`archived/PERFORMANCE.md` 6.4) puts the whole gain in surface reshaping
   (+3.4pp) with selection contributing -0.0pp, so it does *not* move the
   scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
-  <lang>` — but on **telegraphic traffic at operational length** use `i4f10`
-  instead of `m4f10` (+2.8pp over 2000 paired trials; see `-S`).
-- `-S k` / `--score k…` **mono + IC fused, as a PRE-PASS model** (experimental,
+  <lang>` — but on **telegraphic traffic** use `k4f10` instead of `m4f10`, at
+  every length (+5.0pp over `i4f10`, itself +2.8pp over `m4f10`; see the `-S k`
+  entry).
+- `-S k` / `--score k…` **mono + IC fused, as a PRE-PASS model**
+  (**recommended** as the pre-pass on telegraphic traffic, at every length;
   needs `-l`; schedule token only — there is deliberately no bare `-k`
-  selector). The monogram score and the index of coincidence are **both
+  selector). The
+  monogram score and the index of coincidence are **both
   functions of the same 26-bin letter histogram**, so one decode pass yields
   both and the fusion costs 26 multiply-adds — cheaper than `-f`'s, which has
   to accumulate IC alongside a gather-bound quad loop.
@@ -1164,18 +1195,88 @@ are read from a **data directory** (filenames built as
     the weight that balances them grows with `L`. Measured, the optimum tracks
     `0.1·L` across L = 40…167 while a fixed constant drifts away from it —
     worst at operational length, which is why `-f`'s design was not copied.
-  - **Motivated by a measured AUC gain, NOT yet by a recovery gain.** On the
-    board-ordering probe it beats both components at four lengths
-    (+.007/+.015/+.029/+.020 at L = 40/60/100/167, held out on a second seed)
-    and is simultaneously *more* resistant to spurious plugs than either. That
-    probe never runs a climb, so **the end-to-end question is open** —
-    `ENHANCEMENTS.md` §2a E carries the falsification condition it still has to
-    meet. Do not put it in a recommended recipe until it has.
-  - **One scope warning on the evidence**: the probe scored boards holding 1–4
-    plugs, which is the climb's state under `-R 0` (no kick). Under the default
-    `--random 10` every restart *starts* at ten plugs, so the regime the probe
-    modelled is not the one a kicked search runs in. Re-probing at ten plugs is
-    outstanding.
+  - **The exponent is nominally WRONG, and correcting it measured NULL — do
+    not "fix" it again.** What `λ` has to track is `sd(mono)/sd(IC)`, measured
+    7.4 / 8.8 / 11.0 / 14.2 at L = 40/60/100/167, i.e. about `1.1·√L`. A
+    *linear* rule crosses that curve exactly once — at **L = 121** — so
+    `0.1·L` undershoots below and overshoots above, giving `r` (IC's weight in
+    units of each statistic's own spread) = 0.54 / 0.68 / 0.91 / 1.18 instead
+    of a constant. `λ = 1.1·√L`, which holds `r` = 0.94 / 0.97 / 1.00 / 1.00,
+    was built and A/B'd against it — paired, both arms in one binary via
+    `ENIGMA_MONOIC_BLEND`, n = 2000 at three lengths: **+0.84 / −0.75 / −0.93pp
+    at L = 167/100/60, pooled −0.40pp [−1.09, +0.28]**. Every interval spans
+    zero and the sign is mildly *against* the tidier rule, including at L = 60
+    where `r` moved furthest. The surface is a broad plateau — every `r` in
+    0.25…2.0 beats both pure statistics at L ≥ 60 — so the exponent does not
+    matter empirically, and `0.1·L` additionally tracks the probe's *peak* `r`,
+    which itself rises with length (0.5 / 1.0 / 1.0 / 1.0–2.0). See
+    `eval/results-monoic-lambda.txt`.
+  - **MEASURED END TO END, and it is the best pre-pass on telegraphic traffic
+    at and above ~100 letters.** Paired recovery A/Bs, 2000 trials per cell,
+    authentic HG Nord decrypts, plugboard tier, `-R 8`
+    (`eval/results-monoic-endtoend.txt`) — `k4f10` minus the named arm:
+
+    | L | vs `i4f10` | vs `m4f10` |
+    |---:|---:|---:|
+    | 60 | +2.73 [+1.69, +3.77] | **+0.52 [−0.58, +1.62]** |
+    | 100 | +6.12 [+4.23, +8.00] | +4.95 [+3.06, +6.84] |
+    | 167 | +4.45 [+2.85, +6.05] | +8.31 [+6.54, +10.07] |
+
+    Five of six cells are McNemar p = 0.000. The decisive cell is confirmed
+    across **five independent seeds** — +4.45/+4.94/+6.10/+6.94/+4.66, pooled
+    **+5.01pp** [+3.86, +6.16], z = 8.5, Q = 2.07 on 4 df — i.e. the same
+    evidential footing as the `i4f10` recommendation it displaces (Q = 1.65 on
+    4 df) at nearly twice the effect size. **So use `-S k4f10` in place of
+    `i4f10` on telegraphic traffic**, at every length: it is decisively ahead
+    of both components at L=100 and 167, ahead of IC at L=60, and never
+    measurably behind anywhere. (The numbers describe the shipping
+    configuration — a λ retune was tried and reverted after measuring null,
+    `eval/results-monoic-lambda.txt`.)
+  - **Its pre-registered condition FAILED, and it was adopted anyway.** The
+    condition was "beat *both* components at *both* L = 60 and 167, or drop it
+    rather than re-tune λ". The L = 60 cell against mono is a **tie**. It was
+    adopted as a judgment call — the failure is a tie rather than a loss, λ was
+    *not* re-tuned, and at L = 60 every arm scores 14–17% mean correct at ~5%
+    exact, so that cell ranks pre-passes in a regime where the message
+    essentially never breaks. Recorded because the claim must not drift from
+    its evidence just because the decision went the other way.
+  - **Compute is not the explanation, and `score_iter` says otherwise.** It
+    scores 3–5% *fewer* plugboards than either component in all six cells,
+    which looks like "better and cheaper" and is wrong — the counter counts
+    **calls**, and this decoder does 26 multiply-adds on top of the coincidence
+    sum. On wall time at `-R 1024` with startup subtracted, against a 1.3%
+    self-control floor, it is **−3.5% vs `i4f10` and +7.2% vs `m4f10`**: no
+    uniform saving, comparable within ±7% in both directions, which near `-R 8`
+    is worth ~0.2–0.4pp against effect sizes of 5pp.
+  - **Timing anything at a low `-R` needs a scaling check first.** Two attempts
+    at the wall-time number were worthless because at `-R 8` a whole invocation
+    costs 0.111 s of which **0.105 s is process startup** — ~95% of the harness
+    was timing the n-gram load. The diagnostic is one command:
+    `-R 0/8/64/256/1024` costs 0.105/0.111/0.146/0.299/0.928 s.
+  - **The AUC probe predicts the ORDERING and not the magnitude.** Probe gain
+    over the better component was +.015/+.029/+.020 at L = 60/100/167 and the
+    end-to-end gain is +0.52/+4.95/+4.45 — the ordering matches exactly, and
+    the probe called the **inverted U in length** before any climb was run. But
+    the implied conversion spans **6×** (35/171/223 pp per AUC unit), worst at
+    L = 60 where the floor effect lives. Use that probe to *rank* candidate
+    statistics, never to size an end-to-end gain.
+  - **PROSE IS NOT MEASURED.** Everything above is telegraphic German, so the
+    general `m4f10` default is untouched by it — this changes the telegraphic
+    recommendation only. `-R 8` only, and §6.10 established the pre-pass
+    ordering is restart-budget dependent, so it should not be assumed to hold
+    at high `-R`.
+  - **"Every length" means L = 60…167, the range measured.** Below 60 nothing
+    was run end to end; the offline probe favours the blend at L = 40 too
+    (+.007 over the better component), which is weak support and not a
+    recovery measurement. Above 167 nothing was run either, though the trend
+    there is the favourable one.
+  - **One scope warning on the offline evidence**: the probe scored boards
+    holding 1–4 plugs, which is the climb's state under `-R 0` (no kick). Under
+    the default `--random 10` every restart *starts* at ten plugs, so the
+    regime the probe modelled is not the one a kicked search runs in. The
+    end-to-end result above makes this moot for the *decision* — the real
+    regime was measured and the token won — but it remains a reason not to
+    trust the probe's magnitudes.
 - `--confidence N` **is the winner better than chance?** (N = null samples, 0 =
   off). A raw score answers nothing on its own: each model has a distribution on
   text with no signal, and a search reports the **maximum** over the keys it

@@ -69,13 +69,24 @@ recover" is therefore a statement about English prose.
 same day key overturns essentially all of them — see the table there.
 → `archived/IMPROVEMENTS.md` §2, §4; `eval/results-joint-score-gain.txt`.
 
-### 2a. Alternatives to IC for the PRE-PASS — planned, nothing measured yet
+### 2a. Alternatives to IC for the PRE-PASS — part measured, part still plan
 
 The staged climb opens with a low-order stage (`--score i4f10` / `m4f10`) whose
-job is to steer the first few plugs into a good basin. **Everything below is a
-PLAN plus arithmetic on corpus statistics — no climb has been run, and none of
-the effect sizes are measurements.** Recorded now so the design is on paper
-before the code is.
+job is to steer the first few plugs into a good basin. **This section was
+written as a pure PLAN and is now part measurement — check each experiment's
+own status line before citing it:**
+
+| | experiment | status |
+|---|---|---|
+| **A** | model versus cap | **measured** — model dominates cap 4× at L = 167 |
+| **B** | cap sweep | **blocked** — the IC pre-pass cap is inert in 1…4 |
+| **C** | third-moment coincidence Σf³ | **measured down** — never built |
+| **D** | best-of-two seeds per restart | open; crux unresolved |
+| **E** | fuse mono and IC (`-S k`) | **measured, adopted** — see its note |
+| **F** | many cheap seeds, promote a subset | open; gated on D's crux |
+
+Effect sizes carrying a CI are measurements; the rest is arithmetic on corpus
+statistics, kept because it is the design record.
 
 **What is already settled, and should not be re-derived.** IC versus mono is
 measured and length-dependent (mono leans at L = 60, IC wins by 2.81pp at
@@ -342,9 +353,11 @@ statistic is competing for that same narrow margin, and the reframe below
 (deduce the first plugs instead of scoring them) is not competing on this
 scale at all.
 
-**D. Best-of-two SEEDS inside each restart — the one portfolio variant not yet
-measured.** Running IC and mono pre-passes and taking the better is a natural
-idea and has been **measured down twice**, so read those first: the 50/50
+**D. Best-of-two SEEDS inside each restart — a portfolio variant not yet
+measured** (generalised by **F** below, which shares D's unresolved crux and
+should be gated on the same measurement). Running IC and mono pre-passes and
+taking the better is a natural idea and has been **measured down twice**, so
+read those first: the 50/50
 IC+mono restart portfolio lands between IC and mono, below pure mono
 (`archived/PERFORMANCE.md` §6.10, `eval/prepass_portfolio.py`), and the
 greedy+SA portfolio is neutral-to-negative for a reason spelled out there.
@@ -496,6 +509,183 @@ the single calibration point (.010–.020 ↔ ~2pp) is not enough to extrapolate
 from. L = 167 also sits outside the probed range, and the λ drift is why that
 is the risky cell. The falsification condition above still has to be met after
 the token is built.
+
+**E IS NOW MEASURED END TO END — the condition FAILED on one cell of four, and
+`k4f10` was adopted for telegraphic traffic anyway**
+(`eval/results-monoic-endtoend.txt`). `k4f10`
+minus the named arm, 2000 paired trials per cell, telegraphic German,
+plugboard tier, `-R 8`:
+
+| L | vs `i4f10` | vs `m4f10` |
+|---:|---:|---:|
+| 60 | +2.73 [+1.69, +3.77] | **+0.52 [−0.58, +1.62]** |
+| 100 | +6.12 [+4.23, +8.00] | +4.95 [+3.06, +6.84] |
+| 167 | +4.45 [+2.85, +6.05] | +8.31 [+6.54, +10.07] |
+
+The L = 60 cell against mono is a **tie**, so "beat both at both" is not met.
+The arguments for keeping it are that the failure is a tie rather than a loss,
+and that at L = 60 every arm scores 14–17% mean correct at ~5% exact recovery,
+i.e. that cell ranks pre-passes in a regime where the message essentially never
+breaks. **λ was retuned and then reverted**: `1.1·√L` (IC contributing one sd
+at every length, correcting an exponent that really is wrong — see
+`eval/results-monoic-lambda.txt`) measured **null** in a paired A/B, pooled
+−0.40pp [−1.09, +0.28], so `0.1·L` stands and these numbers describe the
+shipping configuration. **`-S k4f10` is now the recommended pre-pass for
+telegraphic traffic at every measured length** — a decision taken on the
+evidence above rather than on a passed gate, which is the distinction this
+paragraph exists to keep.
+
+**The decisive cell holds across five seeds** — +4.45/+4.94/+6.10/+6.94/+4.66,
+pooled **+5.01pp** [+3.86, +6.16], z = 8.5, Q = 2.07 on 4 df (p = 0.72). That
+matches the evidential standard of the `i4f10` recommendation it displaces
+(five seeds, Q = 1.65 on 4 df) at nearly twice the effect size.
+
+**L = 100 was added after seeing the L = 60 tie**, which is post hoc and cannot
+convert a failed condition into a passed one. What it legitimately did was
+characterise the effect, and it changed the reading: with 60 and 167 only, the
+failing cell was half the evidence; with 100 in, `k4f10` beats **both**
+components at both operational lengths and the failure is confined to the
+single shortest one.
+
+**Two methodological findings worth more than the token itself.**
+
+- **The AUC probe predicts ORDERING, not magnitude.** Probe gain over the
+  better component was +.015/+.029/+.020 at L = 60/100/167; end to end it is
+  +0.52/+4.95/+4.45. The ordering matches exactly and the probe called the
+  **inverted U in length** before any climb ran — but the implied conversion
+  spans **6×** (35/171/223 pp per AUC unit), worst at L = 60 where the floor
+  effect lives. So this probe ranks candidate statistics and must never be used
+  to size an end-to-end gain. That is the standing answer to the "one
+  calibration point" gap above, and it applies to experiment F's F1 gate too.
+- **An inverted U is invisible until the middle is sampled.** An intermediate
+  reading here, from L = 60 and 167 alone, concluded the end-to-end gain grew
+  monotonically and therefore *contradicted* the probe. Two points can always
+  be joined by a line; L = 100 refuted it.
+
+**`score_iter` said "better and cheaper" and was wrong.** `k4f10` scores 3–5%
+fewer plugboards in all six cells, but the counter counts **calls** and this
+decoder does 26 multiply-adds on top of the coincidence sum. On wall time at
+`-R 1024` with startup subtracted, against a 1.3% self-control floor: −3.5% vs
+`i4f10`, **+7.2% vs `m4f10`** — comparable within ±7% in both directions, not a
+saving. Two earlier attempts at that number were worthless because at `-R 8` an
+invocation costs 0.111 s of which **0.105 s is process startup**; the
+`-R 0/8/64/256/1024` scaling check is the cheap diagnostic to run first.
+
+**F. Generate MANY cheap 4-plug seeds, promote only a subset to the full
+climb.** Experiment D keeps the better of two seeds; this generalises it in the
+direction that makes it a *search structure* rather than a tie-break — run `k`
+cap-4 climbs, rank the resulting boards, and pay for the expensive `f10`
+continuation on only the best `m < k`. Nothing measured; recorded before the
+code, like the rest of §2a.
+
+**The shape has three precedents here, two of them measured wins.** `-F` is
+exactly this one level up: a cheap IC climb ranks *keys* and the full climb
+runs on the top `N`. `--crib-seeds` and `--self-crib-seeds` are exactly this at
+the *board* level — rank the surviving deduced boards by IC, climb the top `K`
+— and both independently settled on **`K = 10`**, the crib seeder measuring
+19/20 recovery against the climb-everything path's 19/20 for **12.1× fewer
+plugboards**. So "cheap generator, cheap ranker, expensive finisher on a
+shortlist" is a pattern this codebase has already twice found to pay. What is
+untested is whether it pays when the candidates come from the *same key and the
+same starting board*, differing only in the pre-pass that produced them — the
+crib seeders' candidates come from genuinely different deduction hypotheses,
+which is a far richer source of diversity.
+
+**Why the mechanism is better here than for any finisher.** Every finisher
+(`--cascade`, `--polish`, the sacrifice probes) is Pareto-dominated by more
+`-R`, and CLAUDE.md gives the reason: the hard residual is **wrong-basin**
+failure, and local plug repair can complete a near board but cannot relocate a
+wrong basin. Selecting among seeds *is* basin selection — it chooses which
+basin to descend into before the descent is paid for. That is the one lever
+aimed at the actual residual, so the finisher precedent does not transfer.
+
+**THE TWO CLAIMS MUST BE SEPARATED OR THE RESULT IS UNREADABLE.** "Several
+climbs, promote a subset" contains two independent propositions, and the
+obvious experiment confounds them:
+
+1. **Selective promotion** — ranking cheap seeds and spending the expensive
+   budget on the best ones beats spending it uniformly.
+2. **Model diversity** — mono, IC and the blend land on *different* 4-plug
+   boards, so a portfolio over models supplies candidates that a portfolio over
+   kicks does not.
+
+Claim 1 needs no model portfolio at all: `k` seeds from **one** model under `k`
+different kicks is the same structure. That is the control arm, and it must be
+run — if it wins, the finding is about promotion and the models are irrelevant;
+if the model portfolio beats it, that is the evidence for claim 2 and nothing
+else supplies it. Run both or neither.
+
+**The cost arithmetic, and it sets a hard bar.** From §6.10's `score_iter`
+ratios a cap-4 pre-pass is ~0.41 of a restart and the `f10` continuation ~0.59
+(over-attributing to the pre-pass, since an `f10` stage *after* one converges
+faster than `f10` from scratch — so 0.41 is an upper bound). Cost per promoted
+seed is then `0.41·(k/m) + 0.59`, which depends on the **ratio** `k/m` and
+barely on `k`:
+
+| `k/m` | cost per full climb | restarts retained |
+|---:|---:|---:|
+| 1 (today) | 1.00 | 100% |
+| 2 | 1.41 | 71% |
+| 3 | 1.82 | 55% |
+| 4 | 2.23 | 45% |
+
+At `k/m = 2` this is D's "cheap split" (72%) almost exactly, which is the
+narrow window a portfolio is allowed by §6.10's rejection. **And 71% of the
+restarts is not free**: interpolating the measured climb curve (`-R`
+2/4/8/16 → 50/68/79/87% at L = 167) a 1.41× cut near `-R 8` costs roughly
+**4pp**. So the selector must be worth more than ~4pp before anything is
+gained, and `k/m ≥ 3` needs ~8pp. **`k/m = 2` is the only ratio worth
+building**, and any design that generates many candidates and promotes one is
+dead on arithmetic before it is measured.
+
+**THE GATE IS SHARED WITH D, AND IT SHOULD BE RUN FIRST — cheapest, and it can
+kill both.** D's crux is unresolved: *does the 4-plug seed that ranks better
+predict the board that climbs higher?* If the `f10` outcome is only weakly
+determined by its seed, then selecting seeds selects nothing and both
+experiments are picking at random for 1.41× the price. Two sub-gates, in
+order:
+
+- **F0, diversity.** Do the three models even disagree? Measure distinct cap-4
+  boards among `{m4, i4, k4}` on one key and one kick, and the correct-plug
+  count of each. If they mostly agree, claim 2 is dead on the spot and only the
+  kick-portfolio control survives. Then compare the pairwise board distance for
+  (same kick, different model) against (different kick, same model): **if kick
+  diversity is cheaper per unit of diversity, `-R` dominates by construction**
+  and there is nothing to build.
+- **F1, predictiveness.** Rank candidate seeds by each statistic, then measure
+  the rank correlation against the score each actually reaches after `f10`.
+  This is the number the whole idea turns on, and it is measured with the true
+  board *never* consulted, so it is directly realizable.
+
+**A zero-code harness exists for all of it.** `-S m4` / `-S i4` / `-S k4` are
+legal terminal schedules, so `--dump-all` yields the cap-4 board of each arm;
+`--soft-plug <pairs>` lays a board down and leaves it **free**, so `-c -R 0
+--soft-plug <seed> -S f10` is precisely "continue the full climb from this
+seed" with no kick to scatter it. Generator, promoter and both gates are
+therefore buildable today, in Python, against the shipped binary. (`-R 0` is
+required: `--soft-plug` is invisible to the kick, but any `-R N` would add a
+fresh kick on top of the seed and measure something else.)
+
+**The selector is a separate question from the climb model, and experiment E's
+evidence bears on it MORE directly.** The AUC probe's metric is
+`P(ranks a board with c+1 correct plugs above one with c)` — that is literally
+a *selection* metric, not a climb metric, so the blend's measured advantage
+there (+.007…+.029 over the better component, twelve cells of twelve) is
+better evidence for using it as the **ranker** than for using it as the
+pre-pass stage it was built for. Against that, the crib seeders both chose
+**IC** as their ranker on measurement — CLAUDE.md records IC tying the fused
+model (150/200 vs 144/200 top-1) and beating every other model at p ≤ 0.005 —
+and IC needs no language and no table. So the ranker is a three-way question
+(IC / blend / the target model `-f` itself) with real evidence on two sides,
+and F1 settles it.
+
+**Falsification, in advance.** At matched **wall time** — not matched restarts
+— the portfolio must beat plain `-S <best-single>f10 -R N` at both L = 60 and
+L = 167. If the *oracle* best-of-`k` wins while the realizable selector does
+not, record it as **unselectable and stop**: that is precisely the GA outcome
+(`archived/PERFORMANCE.md` §3.10 — the crossover material exists at ~8/10 but
+board-fitness picks only ~2.5/10), and the correct response is to record the
+ceiling, not to try a fourth selector until one wins.
 
 **The reframe worth keeping in view.** The pre-pass exists to place the first
 few plugs, and *scoring* is only one way to do that. Where a crib or a doubled

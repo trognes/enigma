@@ -1,0 +1,74 @@
+# Raw harness output behind results-monoic-endtoend.txt.  Cells run in
+# order: L=167 and L=60 (the pre-registered pair), then L=100 (added after,
+# post hoc), then the four extra seeds of the decisive cell at L=167.
+
+### L=167  arms: k4f10 i4f10
+L=167  n=2000  -R 8  seed=4242
+  k4f10: mean %correct  85.87   exact 1663/2000   score_iter 50,271,992
+  i4f10: mean %correct  81.41   exact 1569/2000   score_iter 52,612,819
+  McNemar on exact: k4f10-only 212, i4f10-only 118, discordant 330, p=0.000
+  paired diff (k4f10-i4f10):  +4.45 pp  95% CI [+2.85, +6.05]   (negative = i4f10 ahead)
+
+### L=167  arms: k4f10 m4f10
+L=167  n=2000  -R 8  seed=4242
+  k4f10: mean %correct  85.87   exact 1663/2000   score_iter 50,271,992
+  m4f10: mean %correct  77.56   exact 1489/2000   score_iter 53,128,603
+  McNemar on exact: k4f10-only 289, m4f10-only 115, discordant 404, p=0.000
+  paired diff (k4f10-m4f10):  +8.31 pp  95% CI [+6.54, +10.07]   (negative = m4f10 ahead)
+
+### L=60  arms: k4f10 i4f10
+L=60  n=2000  -R 8  seed=4242
+  k4f10: mean %correct  16.79   exact 109/2000   score_iter 56,373,658
+  i4f10: mean %correct  14.06   exact 64/2000   score_iter 58,028,531
+  McNemar on exact: k4f10-only 76, i4f10-only 31, discordant 107, p=0.000
+  paired diff (k4f10-i4f10):  +2.73 pp  95% CI [+1.69, +3.77]   (negative = i4f10 ahead)
+
+### L=60  arms: k4f10 m4f10
+L=60  n=2000  -R 8  seed=4242
+  k4f10: mean %correct  16.79   exact 109/2000   score_iter 56,373,658
+  m4f10: mean %correct  16.27   exact 90/2000   score_iter 59,162,482
+  McNemar on exact: k4f10-only 65, m4f10-only 46, discordant 111, p=0.087
+  paired diff (k4f10-m4f10):  +0.52 pp  95% CI [-0.58, +1.62]   (negative = m4f10 ahead)
+
+### L=100  arms: k4f10 i4f10
+L=100  n=2000  -R 8  seed=4242
+  k4f10: mean %correct  45.13   exact 710/2000   score_iter 54,699,761
+  i4f10: mean %correct  39.01   exact 592/2000   score_iter 57,120,878
+  McNemar on exact: k4f10-only 280, i4f10-only 162, discordant 442, p=0.000
+  paired diff (k4f10-i4f10):  +6.12 pp  95% CI [+4.23, +8.00]   (negative = i4f10 ahead)
+
+### L=100  arms: k4f10 m4f10
+L=100  n=2000  -R 8  seed=4242
+  k4f10: mean %correct  45.13   exact 710/2000   score_iter 54,699,761
+  m4f10: mean %correct  40.17   exact 615/2000   score_iter 57,294,145
+  McNemar on exact: k4f10-only 268, m4f10-only 173, discordant 441, p=0.000
+  paired diff (k4f10-m4f10):  +4.95 pp  95% CI [+3.06, +6.84]   (negative = m4f10 ahead)
+
+### L=167 seed=1  arms: k4f10 i4f10
+L=167  n=500  -R 8  seed=1
+  k4f10: mean %correct  83.18   exact 397/500   score_iter 12,565,479
+  i4f10: mean %correct  78.24   exact 373/500   score_iter 13,219,178
+  McNemar on exact: k4f10-only 53, i4f10-only 29, discordant 82, p=0.011
+  paired diff (k4f10-i4f10):  +4.94 pp  95% CI [+1.71, +8.17]   (negative = i4f10 ahead)
+
+### L=167 seed=2  arms: k4f10 i4f10
+L=167  n=500  -R 8  seed=2
+  k4f10: mean %correct  86.09   exact 419/500   score_iter 12,578,919
+  i4f10: mean %correct  79.99   exact 383/500   score_iter 12,981,980
+  McNemar on exact: k4f10-only 58, i4f10-only 22, discordant 80, p=0.000
+  paired diff (k4f10-i4f10):  +6.10 pp  95% CI [+2.97, +9.24]   (negative = i4f10 ahead)
+
+### L=167 seed=3  arms: k4f10 i4f10
+L=167  n=500  -R 8  seed=3
+  k4f10: mean %correct  85.83   exact 418/500   score_iter 12,603,281
+  i4f10: mean %correct  78.90   exact 382/500   score_iter 13,261,717
+  McNemar on exact: k4f10-only 71, i4f10-only 35, discordant 106, p=0.001
+  paired diff (k4f10-i4f10):  +6.94 pp  95% CI [+3.32, +10.56]   (negative = i4f10 ahead)
+
+### L=167 seed=4  arms: k4f10 i4f10
+L=167  n=500  -R 8  seed=4
+  k4f10: mean %correct  82.91   exact 401/500   score_iter 12,506,137
+  i4f10: mean %correct  78.26   exact 375/500   score_iter 13,333,920
+  McNemar on exact: k4f10-only 56, i4f10-only 30, discordant 86, p=0.007
+  paired diff (k4f10-i4f10):  +4.66 pp  95% CI [+1.31, +8.00]   (negative = i4f10 ahead)
+
