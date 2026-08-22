@@ -185,6 +185,13 @@ static double g_monoic_lambda = monoic_lambda_default;
    them grows with L; measured, the optimum tracks 0.1*L across L = 40..167
    while a fixed lambda drifts away from it, worst at operational length
    (eval/results-mono-ic-blend.txt). ENIGMA_MONOIC_BLEND overrides the 0.1. */
+/* NOT INLINED, deliberately.  score_iter() is the scan's hottest function and
+   clang inlines this decoder straight into it, growing it 623 -> 1042
+   instructions -- so an experimental model that no default path calls would
+   change the code layout every OTHER model runs through, which is exactly the
+   clang/ARM sensitivity documented under "Struct layout matters for the hot
+   loop".  Out of line, score_iter is instruction-identical to before. */
+__attribute__((noinline))
 static double monoic_score_decode(machine & m)
 {
   int freq[asize];
