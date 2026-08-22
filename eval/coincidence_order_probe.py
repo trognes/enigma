@@ -213,6 +213,29 @@ def main():
                  sum(pooled["cc3"]) / len(pooled["cc3"]),
                  sum(pooled["mono"]) / len(pooled["mono"])))
 
+        # BY c, averaged over the board sizes n that can reach it.  Which
+        # correct plug is being added matters more than how many wrong ones
+        # sit beside it, and the per-n table buries that.  The AUCs are
+        # averaged rather than the draws pooled: a c=1 board with n=1 has no
+        # wrong plugs and one with n=4 has three, so they are different
+        # objects and pooling their values would blur two effects together.
+        print("%6s %8s %8s %8s %8s %9s"
+              % ("", "-> c =", "ic", "cc3", "mono", "over n"))
+        for target in range(1, args.cap + 1):
+            per = collections.defaultdict(list)
+            for n in range(target, args.cap + 1):
+                for nm in names:
+                    a = auc(samples[(n, target)][nm],
+                            samples[(n, target - 1)][nm])
+                    if a is not None:
+                        per[nm].append(a)
+            if not per["ic"]:
+                continue
+            print("%6s %8d %8.3f %8.3f %8.3f %9d"
+                  % ("", target, sum(per["ic"]) / len(per["ic"]),
+                     sum(per["cc3"]) / len(per["cc3"]),
+                     sum(per["mono"]) / len(per["mono"]), len(per["ic"])))
+
     print("\n  ic   = Sum f^2, the index of coincidence (-S i4...)")
     print("  cc3  = Sum f^3, the triple-coincidence rate, the candidate")
     print("  mono = monogram log-probability (-S m4...), for reference")

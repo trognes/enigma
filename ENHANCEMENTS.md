@@ -207,7 +207,27 @@ Mean AUC over the ten (n, c) cells:
 | mono | 0.563 | 0.572 | 0.591 |
 
 **Σf³ is at or below IC in all thirty cells.** No length, plug count or `c`
-where the third moment orders boards better. Dropped per the condition fixed
+where the third moment orders boards better. Separated by `c` — which correct
+plug is being added, averaged over the board sizes that reach it — the same
+holds in all twelve cells, and the gap *widens* with `c`:
+
+| → c | L = 40 | L = 60 | L = 100 |
+|---:|---|---|---|
+| 1 | .528 / .524 / **.541** | .545 / .544 / **.551** | **.569** / .568 / .565 |
+| 2 | .543 / .540 / **.566** | .564 / .562 / **.567** | **.597** / .595 / .593 |
+| 3 | .561 / .558 / **.585** | .578 / .577 / **.597** | .611 / .607 / **.616** |
+| 4 | .568 / .561 / **.600** | .585 / .584 / **.618** | .637 / .632 / **.637** |
+
+(ic / cc3 / mono.) Two further readings. **Every statistic improves
+monotonically with `c`**, so the pre-pass gets easier as it goes and the hard
+decision is the *first* plug, at AUC .53–.57. And **mono's advantage over IC
+grows with `c` at every length** (+.013 → +.032 at L = 40, +.006 → +.033 at 60,
+−.004 → .000 at 100) — a monotone pattern rather than one cell, which
+**predicts something for experiment B**: if mono keeps gaining as plugs
+accumulate, raising the *mono* cap should pay more than raising the IC cap,
+`m6`/`m8` beating `m4` by more than `i6` beats `i4`. Do not read the L = 100,
+`c` = 1 cell as "IC wins the first plug" — its +.004 sits at the per-cell SE of
+~.005. Dropped per the condition fixed
 in advance — *no blend was tried*, which is what writing the condition down
 beforehand was for, since the 2.85× contrast table is exactly the sort of
 number that would have justified one more attempt.

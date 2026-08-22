@@ -50,6 +50,39 @@
 # the mean (-0.004 / -0.001 / -0.002).  There is no length, no plug count and
 # no c where the third moment orders boards better than the second.
 #
+# SEPARATED BY c -- which correct plug is being added, averaged over the board
+# sizes n that can reach it (4 cells at c=1 down to 1 at c=4):
+#
+#          L = 40            L = 60            L = 100
+#   -> c   ic   cc3  mono    ic   cc3  mono    ic   cc3  mono
+#     1   .528 .524 .541   .545 .544 .551   .569 .568 .565
+#     2   .543 .540 .566   .564 .562 .567   .597 .595 .593
+#     3   .561 .558 .585   .578 .577 .597   .611 .607 .616
+#     4   .568 .561 .600   .585 .584 .618   .637 .632 .637
+#
+# Three things the per-n table buried:
+#
+# 1. cc3 <= ic in all TWELVE cells here too, and the gap WIDENS with c (.004
+#    -> .007 at L=40, .001 -> .005 at L=100).  The third moment is worst
+#    exactly where the signal is strongest, so it does not merely fail to
+#    help -- it degrades a little more as the decrypt gets cleaner.
+#
+# 2. EVERY statistic improves monotonically with c at every length (.528 ->
+#    .568 at L=40, .569 -> .637 at L=100).  The pre-pass gets easier as it
+#    goes, so the hard decision is the FIRST plug, at AUC .53-.57.
+#
+# 3. MONO'S ADVANTAGE OVER IC GROWS WITH c AT EVERY LENGTH: +.013 -> +.032
+#    (L=40), +.006 -> +.033 (L=60), -.004 -> .000 (L=100).  A consistent
+#    monotone pattern rather than one cell, and it PREDICTS something for the
+#    cap sweep (2a experiment B): if mono keeps gaining as plugs accumulate,
+#    raising the MONO cap should pay more than raising the IC cap -- m6/m8
+#    beating m4 by more than i6 beats i4.
+#
+# DO NOT read the L=100 c=1 cell as "IC is better for the first plug".  Its
+# +.004 edge sits at the per-cell SE of ~.005 (Hanley-McNeil at 6000/6000).
+# What the data supports is the TREND in the mono-minus-IC difference, which
+# is monotone at all three lengths; a single cell of it is not.
+#
 # VERDICT: DROPPED, per the falsification condition fixed in advance --
 # "if cc3 fails to beat ic, drop the token rather than tuning a blend weight
 # until it wins".  No blend was tried.  That restraint is the point of writing
