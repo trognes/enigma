@@ -41,6 +41,25 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
   auto-delete on merge, so a merged branch lingering on the remote means nothing
   and must not be pruned or reused on that basis. `git fetch --prune` is fine
   when the owner has already deleted them; deleting them yourself is not.
+- **ASK BEFORE STARTING OR KILLING ANY RUN EXPECTED TO TAKE MORE THAN A
+  MINUTE.** Propose the command and the estimate, then wait. This covers
+  `make bench`, `make crackquality`, every `eval/` A/B or sweep, and — just as
+  much — **killing a job already in flight**, including one you started
+  yourself. It does not cover a build, a single `./enigma` invocation, or a
+  grep; note `make test` at ~65 s *is* over the line. When unsure, ask.
+  - **A run in flight belongs to whoever is waiting on it, not to whoever
+    started it.** The failure mode is killing a measurement mid-way to
+    substitute a better-designed one: the new design may well be better, and
+    it is still not your call, because the results already accumulated and the
+    time already spent are someone else's.
+  - **Starting one unasked is the worse half, because it can corrupt a
+    measurement silently.** Everything under "Build & run" about an idle box
+    applies — a second job on the same cores produced a `crib` reading of
+    **+1096%** that re-measured at −7.0% once the box was quiet, and the
+    damage was not spread evenly enough to be obvious from the table. So an
+    unannounced run does not merely compete for cores; it can invalidate a
+    number someone else is about to act on, with nothing in the output saying
+    so.
 
 ## Repository layout
 
