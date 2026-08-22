@@ -1,0 +1,121 @@
+# Fusing mono with IC as the pre-pass statistic: PASSES ITS GATE.
+#
+# eval/coincidence_order_probe.py --lengths 40,60,100 --keys 250
+#   (and again with --seed 77 as a held-out check)
+#
+# ENHANCEMENTS 2a experiment E.  Same probe and same metric as the Sum f^3
+# gate (results-coincidence-order.txt), which the third moment FAILED: the
+# AUC of "ranks a board with c+1 correct plugs above one with c", 6000 draws
+# per cell, n = 1..4 plugs, authentic telegraphic German.
+#
+# WHY A BLEND AT ALL.  -f already fuses IC into the n-gram target and gained
+# +3.0-4.4pp across three corpora.  mono and IC are both functions of the SAME
+# 26-bin histogram, so the fusion costs nothing: one decode pass, then 26
+# multiply-adds for each part.  But they read that histogram differently --
+# IC is invariant under relabeling the output letters, mono is not -- so one
+# sees only the core-input channel of a plug toggle and the other sees both.
+#
+# lambda is swept in units of each statistic's own spread,
+#     r = lambda * sd(ic) / sd(mono),
+# so "r = 1" means IC contributes one standard deviation for every one of
+# mono's.  A raw lambda is not comparable across lengths; see below.
+#
+# ============================================================================
+# THE RESULT: THE BLEND BEATS BOTH COMPONENTS AT EVERY LENGTH
+# ============================================================================
+#
+#            L = 40         L = 60         L = 100
+#     r     seed1 seed77   seed1 seed77   seed1 seed77
+#   0.00    .563  .566     .572  .576     .591  .592     <- pure mono
+#   0.25    .568  .571     .581  .584     .606  .606
+#   0.50    .571  .572     .586  .588     .615  .614
+#   1.00    .569  .569     .587  .588     .622  .619
+#   2.00    .563  .562     .582  .583     .618  .616
+#   4.00    .555  .554     .574  .575     .609  .608
+#   8.00    .550  .549     .568  .570     .602  .602
+#   pure ic .543  .542     .561  .563     .593  .594
+#
+#   best gain over the better pure statistic:
+#            +.007 +.006    +.016 +.012    +.029 +.025
+#
+# HELD OUT, NOT FITTED.  r was chosen on seed 1 and the seed-77 column is a
+# disjoint draw of keys, boards and plaintexts: same optimum, same shape, same
+# magnitudes within .004.  That check matters because a sweep that reports its
+# own best cell is otherwise selecting on noise.
+#
+# THE GAIN GROWS WITH LENGTH: +.006/.007, +.012/.016, +.025/.029.  And the
+# plateau is broad -- every r from 0.25 to 2.0 beats both pure statistics at
+# L >= 60 -- so this is not a knife-edge tuning.
+#
+# THE STRIKING CELL IS L = 100.  There pure mono (.591) and pure IC (.593) are
+# within .002 of each other, i.e. individually interchangeable -- and fusing
+# them gains +.029.  Two statistics of equal strength combining to something
+# clearly better is the signature of genuine complementarity rather than one
+# of them simply being sharper, and it is what the relabel-invariance argument
+# predicts.
+#
+# For scale: the entire mono-versus-IC question spans .010-.020 of AUC and is
+# worth ~2pp end to end.  The blend's +.029 at L = 100 is larger than that gap
+# anywhere.
+#
+# ============================================================================
+# THE IMPLEMENTATION QUESTION: lambda IS NOT LENGTH-INVARIANT
+# ============================================================================
+#
+# The binary would need a raw lambda, and raw lambda = r * sd(mono)/sd(ic).
+# That ratio is measured at 7.4 / 8.8 / 11.0 for L = 40 / 60 / 100 -- close to
+# the sqrt(L) that theory predicts, since IC is a rate over C(L,2) pairs (sd
+# ~ 1/L) while mono is a mean of L terms (sd ~ 1/sqrt(L)).  Dividing out:
+# 1.17 / 1.14 / 1.10 times sqrt(L), so slightly sub-sqrt.
+#
+# So the optimal RAW lambda nearly triples from L = 40 to L = 100 (3.7 to 11
+# at the per-length peak).  Two workable designs:
+#
+#   * A FIXED lambda ~ 6.5.  It lands at r = 0.88 / 0.74 / 0.59 for
+#     L = 40 / 60 / 100 -- inside the broad plateau at all three, costing
+#     ~.001 at L = 40 and ~.006 at L = 100 against the per-length optimum, and
+#     still beating both pure statistics everywhere.  Simplest, and it is what
+#     -f does with its baked 30.
+#   * lambda = 0.85 * sqrt(textlength), holding r ~ 0.75 constant.  The binary
+#     knows the length, so this is no harder, and it tracks the optimum rather
+#     than drifting across it.
+#
+# The two effects work against each other, which is worth knowing: a fixed
+# lambda makes r FALL with length, while the measured peak r RISES with it
+# (0.5 at L = 40, 1.0 at L = 100).  That is why the fixed-lambda cost is
+# larger at the long end.
+#
+# ============================================================================
+# WHAT THIS DOES AND DOES NOT ESTABLISH
+# ============================================================================
+#
+# ESTABLISHED: at the pre-pass's own job -- ordering boards by correct-plug
+# count, c <= 4 -- mono + lambda*IC beats both mono and IC at three lengths on
+# two independent samples, by a margin larger than the mono/IC gap itself.
+#
+# NOT ESTABLISHED: any end-to-end number.  This probe never runs a climb, a
+# restart or a recovery.  The AUC-to-recovery conversion is unknown; the only
+# calibration point is that the mono/IC gap of .010-.020 here corresponds to
+# ~2pp end to end, and extrapolating from one point is not a measurement.
+#
+# THE FALSIFICATION CONDITION FOR E IS UNCHANGED and still has to be met:
+# build the token, then measure once at L = 60 and L = 167, and if the blend
+# fails to beat BOTH m4f10 and i4f10 at BOTH lengths, drop it rather than
+# re-tuning lambda.  Note L = 167 is outside the range probed here, and the
+# lambda drift above is exactly why that cell is the risky one.
+#
+# ALSO NOT MEASURED: whether the blend inherits mono's stronger resistance to
+# spurious plugs (the c = 0 table in results-coincidence-order.txt, where mono
+# reads .435 against IC's .464 at L = 60).  Over-plugging is what the cap and
+# -M exist to fight, so a blend that is worse there could cost more than its
+# AUC gain returns.  One line of probe work; do it before the token.
+#
+# ============================================================================
+# SCOPE
+# ============================================================================
+#
+# Pre-pass regime only: c <= 4 of the true board's 10, n <= 4 plugs.  Boards
+# are a model of the climb's state, not its trajectory -- a real climb's wrong
+# plugs scored well rather than being random.  Telegraphic German, rotor key
+# given.  L = 40/60/100; nothing above 100 was probed, and the recommended
+# operational length is 167.

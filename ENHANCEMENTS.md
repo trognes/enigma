@@ -354,6 +354,48 @@ a probe gets tuned until it wins. Fix `λ` by the same method `-f`'s 30 was
 fixed, measure once at L = 60 and L = 167, and if the blend fails to beat
 *both* `m4f10` and `i4f10` at *both* lengths, drop it rather than re-tuning.
 
+**THE OFFLINE GATE PASSES — decisively, and unlike experiment C**
+(`eval/results-mono-ic-blend.txt`). The same AUC probe, with `λ` swept in
+units of each statistic's spread (`r` = IC's sd-weight against mono's):
+
+| | L = 40 | L = 60 | L = 100 |
+|---|---:|---:|---:|
+| pure mono | .563 | .572 | .591 |
+| pure IC | .543 | .561 | .593 |
+| **best blend** | **.571** (r=0.5) | **.587** (r=1) | **.622** (r=1) |
+| gain | +.007 | +.016 | **+.029** |
+
+**Held out, not fitted:** `r` was chosen on seed 1 and re-measured on a
+disjoint draw (seed 77) at +.006 / +.012 / +.025 — same optimum, same shape.
+The plateau is broad, every `r` from 0.25 to 2.0 beating both pure statistics
+at L ≥ 60, so this is not knife-edge tuning.
+
+**The L = 100 cell is the telling one.** There pure mono (.591) and pure IC
+(.593) are individually interchangeable, and fusing them gains **+.029** —
+two statistics of equal strength combining to something clearly better, which
+is complementarity rather than one being sharper, exactly what the
+relabel-invariance argument predicts. For scale, the whole mono-versus-IC
+question spans .010–.020 of AUC and is worth ~2pp end-to-end.
+
+**`λ` is NOT length-invariant, which is the implementation question.**
+`sd(mono)/sd(ic)` measures 7.4 / 8.8 / 11.0 at L = 40/60/100 — close to the
+√L theory predicts, since IC is a rate over `C(L,2)` pairs while mono is a
+mean of `L` terms. So the optimal raw `λ` nearly triples over that range.
+Either a **fixed λ ≈ 6.5** (lands at r = 0.88/0.74/0.59, inside the plateau
+throughout, costing ~.006 at the long end) or **λ = 0.85·√textlength**
+(holding r ≈ 0.75, and the binary knows the length). Note the two drifts
+oppose: a fixed λ makes `r` fall with length while the measured peak `r`
+rises.
+
+**Still to do before the token, and both are cheap.** The probe never runs a
+climb, so there is no end-to-end number — the AUC-to-recovery conversion is
+unknown and the single calibration point (.010–.020 ↔ ~2pp) is not enough to
+extrapolate from. And it is unmeasured whether the blend inherits mono's
+stronger resistance to spurious plugs (c = 0: mono .435 against IC .464 at
+L = 60); a blend worse there could cost more in over-plugging than its AUC
+gain returns. L = 167 also sits outside the probed range, and the λ drift is
+why that is the risky cell.
+
 **The reframe worth keeping in view.** The pre-pass exists to place the first
 few plugs, and *scoring* is only one way to do that. Where a crib or a doubled
 word exists, **deducing** those plugs is measured decisive — the self-crib

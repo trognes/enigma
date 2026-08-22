@@ -41,6 +41,7 @@ import collections
 import math
 import os
 import random
+import statistics
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -241,6 +242,54 @@ def main():
             print("%6s %8s %8.3f %8.3f %8.3f %9d"
                   % ("", "%d plugs" % n, row[0], row[1], row[2],
                      len(samples[(n, 0)][names[0]])))
+
+        # FUSED mono + lambda*IC (ENHANCEMENTS 2a experiment E), swept.
+        #
+        # lambda is expressed in units of each statistic's own spread --
+        # r = lambda * sd(ic) / sd(mono) -- so it means "IC contributes r
+        # standard deviations for every one of mono's" and the grid is
+        # comparable across lengths.  A raw lambda is not: mono is a
+        # per-symbol log10 near -1.3 and IC a ratio near 0.05, so the useful
+        # range would move with the corpus and the length.
+        #
+        # This costs no new decrypts -- it recombines values already stored.
+        allm = [v for cell in samples.values() for v in cell["mono"]]
+        alli = [v for cell in samples.values() for v in cell["ic"]]
+        sd_m = statistics.pstdev(allm) or 1.0
+        sd_i = statistics.pstdev(alli) or 1.0
+        # The raw lambda a BINARY would need is r * sd(mono)/sd(ic), and that
+        # ratio is not length-invariant: IC's spread falls as ~1/L (it is a
+        # rate over C(L,2) pairs) while mono's falls as ~1/sqrt(L) (a mean of
+        # L terms), so the ratio grows as ~sqrt(L).  A single baked constant
+        # therefore cannot sit at the optimum across lengths -- printed here
+        # because that is an implementation decision, not a detail.
+        print("%6s %8s %8s %9s   (r = IC sd-weight; raw lambda = r * %.1f)"
+              % ("", "blend r", "mean AUC", "vs best", sd_m / sd_i))
+        blend = {}
+        for r in (0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0):
+            lam = r * sd_m / sd_i
+            vals = []
+            for n in range(1, args.cap + 1):
+                for c in range(0, n):
+                    hi = [m + lam * i for m, i
+                          in zip(samples[(n, c + 1)]["mono"],
+                                 samples[(n, c + 1)]["ic"])]
+                    lo = [m + lam * i for m, i
+                          in zip(samples[(n, c)]["mono"],
+                                 samples[(n, c)]["ic"])]
+                    a = auc(hi, lo)
+                    if a is not None:
+                        vals.append(a)
+            blend[r] = sum(vals) / len(vals)
+        pure_ic = sum(pooled["ic"]) / len(pooled["ic"])
+        pure_mono = sum(pooled["mono"]) / len(pooled["mono"])
+        best_pure = max(pure_ic, pure_mono)
+        for r in sorted(blend):
+            print("%6s %8.2f %8.3f %9s"
+                  % ("", r, blend[r],
+                     "%+.3f" % (blend[r] - best_pure)))
+        print("%6s %8s %8.3f %9s  (r=0 is pure mono)"
+              % ("", "pure ic", pure_ic, "%+.3f" % (pure_ic - best_pure)))
 
         print("%6s %8s %8s %8s %8s %9s"
               % ("", "-> c =", "ic", "cc3", "mono", "over n"))
