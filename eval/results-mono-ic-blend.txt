@@ -86,12 +86,54 @@
 # larger at the long end.
 #
 # ============================================================================
+# THE TWO GAPS THIS RESULT OPENED WITH ARE NOW CLOSED
+# ============================================================================
+#
+# THE OVER-PLUGGING QUESTION IS NOW MEASURED, AND IT GOES THE RIGHT WAY.  The
+# worry was that a blend might inherit IC's weaker resistance to spurious
+# plugs and lose more to over-plugging than its AUC gain returns.  It does the
+# opposite -- AUC of n WRONG plugs against the empty board, where LOWER means
+# more resistant:
+#
+#   wrong      L = 40              L = 60              L = 100
+#   plugs   ic  mono  blend     ic  mono  blend     ic  mono  blend
+#     1   .493 .490  .490     .492 .487  .484     .487 .486  .480
+#     2   .479 .478  .477     .479 .464  .459     .468 .474  .458
+#     3   .478 .465  .465     .475 .451  .446     .459 .464  .446
+#     4   .461 .456  .448     .464 .435  .427     .451 .453  .432
+#
+# (blend at r = 1.0.)  At or BELOW both components in every cell, with the
+# margin widening as junk accumulates.  L = 100 shows the complementarity
+# signature a second time: ic .451 and mono .453 are tied and the blend
+# reaches .432.  So the blend both finds correct plugs better AND rejects
+# wrong ones better; there is no trade to price.
+#
+# AND THE GAIN IS PRESENT AT EVERY c, not concentrated at one plug count:
+#
+#   -> c      L = 40              L = 60              L = 100
+#          ic  mono  blend     ic  mono  blend     ic  mono  blend
+#     1   .528 .541  .546     .545 .551  .565     .569 .565  .593
+#     2   .543 .566  .573     .564 .567  .587     .597 .593  .627
+#     3   .561 .585  .596     .578 .597  .612     .611 .616  .647
+#     4   .568 .600  .609     .585 .618  .631     .637 .637  .671
+#
+# Gain over the better component: +.005..+.011 (L=40), +.013..+.020 (L=60),
+# +.024..+.034 (L=100).  Twelve cells of twelve.  At L = 100 it grows with c
+# as well as with length, so the blend helps most exactly where the pre-pass
+# is doing its most useful work.
+#
+# r = 0.5 edges r = 1.0 at L = 40 and r = 1.0 edges r = 0.5 at L = 100, which
+# is the same peak-r-rises-with-length drift the sweep showed.
+#
+# ============================================================================
 # WHAT THIS DOES AND DOES NOT ESTABLISH
 # ============================================================================
 #
 # ESTABLISHED: at the pre-pass's own job -- ordering boards by correct-plug
 # count, c <= 4 -- mono + lambda*IC beats both mono and IC at three lengths on
-# two independent samples, by a margin larger than the mono/IC gap itself.
+# two independent samples, by a margin larger than the mono/IC gap itself; at
+# every c separately; and it resists spurious plugs better than either, so the
+# gain is not bought against over-plugging.
 #
 # NOT ESTABLISHED: any end-to-end number.  This probe never runs a climb, a
 # restart or a recovery.  The AUC-to-recovery conversion is unknown; the only
@@ -103,12 +145,6 @@
 # fails to beat BOTH m4f10 and i4f10 at BOTH lengths, drop it rather than
 # re-tuning lambda.  Note L = 167 is outside the range probed here, and the
 # lambda drift above is exactly why that cell is the risky one.
-#
-# ALSO NOT MEASURED: whether the blend inherits mono's stronger resistance to
-# spurious plugs (the c = 0 table in results-coincidence-order.txt, where mono
-# reads .435 against IC's .464 at L = 60).  Over-plugging is what the cap and
-# -M exist to fight, so a blend that is worse there could cost more than its
-# AUC gain returns.  One line of probe work; do it before the token.
 #
 # ============================================================================
 # SCOPE

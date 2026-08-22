@@ -387,14 +387,31 @@ throughout, costing ~.006 at the long end) or **λ = 0.85·√textlength**
 oppose: a fixed λ makes `r` fall with length while the measured peak `r`
 rises.
 
-**Still to do before the token, and both are cheap.** The probe never runs a
-climb, so there is no end-to-end number — the AUC-to-recovery conversion is
-unknown and the single calibration point (.010–.020 ↔ ~2pp) is not enough to
-extrapolate from. And it is unmeasured whether the blend inherits mono's
-stronger resistance to spurious plugs (c = 0: mono .435 against IC .464 at
-L = 60); a blend worse there could cost more in over-plugging than its AUC
-gain returns. L = 167 also sits outside the probed range, and the λ drift is
-why that is the risky cell.
+**It does not buy the gain against over-plugging** — the one way this could
+have been a false economy, now measured. AUC of `n` *wrong* plugs against the
+empty board, where **lower means more resistant**, blend at r = 1:
+
+| wrong plugs | L = 40 | L = 60 | L = 100 |
+|---:|---|---|---|
+| 1 | .493 / .490 / **.490** | .492 / .487 / **.484** | .487 / .486 / **.480** |
+| 4 | .461 / .456 / **.448** | .464 / .435 / **.427** | .451 / .453 / **.432** |
+
+(ic / mono / blend.) At or below **both** components in every cell, the margin
+widening as junk accumulates — and L = 100 shows the complementarity signature
+again, ic .451 and mono .453 tied while the blend reaches .432. So it finds
+correct plugs better *and* rejects wrong ones better.
+
+**And the gain is at every `c`, not one plug count.** Blend against the better
+component: +.005…+.011 at L = 40, +.013…+.020 at L = 60, +.024…+.034 at
+L = 100 — twelve cells of twelve, growing with length and, at L = 100, with
+`c` as well.
+
+**One gap remains, and it is the important one.** The probe never runs a climb,
+so there is no end-to-end number: the AUC-to-recovery conversion is unknown and
+the single calibration point (.010–.020 ↔ ~2pp) is not enough to extrapolate
+from. L = 167 also sits outside the probed range, and the λ drift is why that
+is the risky cell. The falsification condition above still has to be met after
+the token is built.
 
 **The reframe worth keeping in view.** The pre-pass exists to place the first
 few plugs, and *scoring* is only one way to do that. Where a crib or a doubled
