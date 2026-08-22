@@ -181,6 +181,14 @@ def main():
             ct = enigma_ref.decrypt(pt, wheels, ring, start, board_str)
             ct_nums = [ord(x) - 65 for x in ct]
             core = core_table(wheels, ring, start, length)
+            # The EMPTY board, as the c = 0 baseline.  It is the only board a
+            # pre-pass starts from, and comparing the all-wrong boards against
+            # it asks whether a statistic prefers spurious plugs to none --
+            # i.e. whether it drives over-plugging on its own.  One draw per
+            # key, since the empty board is deterministic.
+            h = decode_hist(list(range(26)), ct_nums, core)
+            for nm, v in zip(names, stats(h, length, logp)):
+                samples[(0, 0)][nm].append(v)
             for n in range(1, args.cap + 1):
                 for c in range(0, n + 1):
                     for _ in range(args.boards):
@@ -219,6 +227,21 @@ def main():
         # averaged rather than the draws pooled: a c=1 board with n=1 has no
         # wrong plugs and one with n=4 has three, so they are different
         # objects and pooling their values would blur two effects together.
+        # c = 0: n WRONG plugs against the empty board.  Above 0.5 means the
+        # statistic rewards a spurious plug, so the climb is pushed to add
+        # plugs it has no evidence for -- the over-plugging the `-M` cap rule
+        # exists to fight.  Below 0.5 means it resists.
+        print("%6s %8s %8s %8s %8s %9s"
+              % ("", "0 wrong", "ic", "cc3", "mono", "n each"))
+        for n in range(1, args.cap + 1):
+            row = [auc(samples[(n, 0)][nm], samples[(0, 0)][nm])
+                   for nm in names]
+            if any(x is None for x in row):
+                continue
+            print("%6s %8s %8.3f %8.3f %8.3f %9d"
+                  % ("", "%d plugs" % n, row[0], row[1], row[2],
+                     len(samples[(n, 0)][names[0]])))
+
         print("%6s %8s %8s %8s %8s %9s"
               % ("", "-> c =", "ic", "cc3", "mono", "over n"))
         for target in range(1, args.cap + 1):

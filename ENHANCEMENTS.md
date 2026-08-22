@@ -218,7 +218,30 @@ holds in all twelve cells, and the gap *widens* with `c`:
 | 3 | .561 / .558 / **.585** | .578 / .577 / **.597** | .611 / .607 / **.616** |
 | 4 | .568 / .561 / **.600** | .585 / .584 / **.618** | .637 / .632 / **.637** |
 
-(ic / cc3 / mono.) Two further readings. **Every statistic improves
+(ic / cc3 / mono.) **At `c` = 0 the question changes**, since there is no
+`c` = −1 to climb from: it asks whether a statistic prefers a board carrying
+*wrong* plugs to the empty board. AUC of `n` wrong plugs against no plugs:
+
+| wrong plugs | L = 40 | L = 60 | L = 100 |
+|---:|---|---|---|
+| 1 | .493 / .495 / .490 | .492 / .491 / .487 | .487 / .489 / .486 |
+| 4 | .461 / .467 / .456 | .464 / .463 / .435 | .451 / .457 / .453 |
+
+**All three pass, and all three pass only just.** Every value is below 0.5 and
+falls monotonically as junk accumulates, so none of them *drives*
+over-plugging. But the penalty for a wrong plug is 0.01–0.05 below chance
+against a 0.03–0.14 reward for a correct one, and a single random wrong plug
+still beats the empty board 49% of the time — while the climb takes the **best
+of 325** toggles. At ~0.49 per candidate the best of ~300 wrong ones beats the
+empty board essentially always. **That is the over-plugging mechanism,
+measured**: the statistics do not cause it, they are simply far too weak to
+resist selection at that fan-out — which makes the plug cap and `-M`
+load-bearing rather than tuning knobs. Note also that mono resists wrong plugs
+harder than IC at the short lengths (.435 against .464 at L = 60) and converges
+by L = 100, so at short lengths it is better on *both* axes — a cleaner account
+of the crossover than "mono is sharper".
+
+Two further readings. **Every statistic improves
 monotonically with `c`**, so the pre-pass gets easier as it goes and the hard
 decision is the *first* plug, at AUC .53–.57. And **mono's advantage over IC
 grows with `c` at every length** (+.013 → +.032 at L = 40, +.006 → +.033 at 60,
