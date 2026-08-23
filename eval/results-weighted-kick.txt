@@ -8,7 +8,7 @@
 #   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
 #   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/wkick eval/proto_wkick.cc $objs
 #   /tmp/wkick [keys] [restarts] [L] [temperature] [kick] [-M] [cap] [seed]
-#     cap = 0 skips the cap climb -- the ablation, not a configuration
+#     cap = 0 skips the cap climb -- both an ablation and a real arm
 #
 #   eval/proto_plugrank.cc measures the mechanism this rests on.
 #
@@ -127,9 +127,9 @@
 #   0.25          69        77         0.56         6.46     +0.98
 #
 # With no climb the full bias survives and it converts: +38% of breaks at
-# T = 0.5.  But the whole arm sits far below the climbed one (95 against the
-# climbed uniform's 91 at the same budget, and against 128 for the shipped
-# kick), so this is a mechanism demonstration, not a recipe.
+# T = 0.5.  At equal R the whole arm sits far below the climbed one (95 against
+# 128 for the shipped kick) -- but it is also much cheaper, so the fair test is
+# matched compute, which the section "WITHOUT THE CAP CLIMB" below runs.
 #
 # THE UNDILUTED CONFIGURATION IS A REAL WIN, CONFIRMED.  At kick 4 with -M,
 # so the seed is forced to exactly four plugs, 3200 keys:
@@ -160,6 +160,65 @@
 # small and forced, and adds nothing once the seed is allowed to grow.  A +7%
 # improvement to a configuration 27% below the baseline is not a route to more
 # breaks.
+#
+# ============================================================================
+# WITHOUT THE CAP CLIMB IT IS A REAL CONFIGURATION -- AND STILL DOES NOT WIN
+# ============================================================================
+#
+# The ablation above is also a proposal: if the cap climb is what erases the
+# bias, DROP IT and hand the weighted kick straight to the f10 continuation.
+# That makes the arm cheaper as well as biased, so it deserves a matched-
+# compute test rather than the equal-R one the ablation got.
+#
+# IT IS PROPERLY TUNED.  T = 0.5 is an interior optimum, not an edge (400 keys,
+# kick 4, R = 13):
+#
+#   T        1     0.7    0.5    0.35   0.25
+#   breaks  104    113    125    112    101
+#   true    0.25   0.32   0.43   0.51   0.56
+#   apart  12.73  11.81  10.27   8.28   6.35
+#
+#   Note the optimum sits where neither true-plug count nor apartness is
+#   extremal -- it is the trade between them that peaks, which is the clearest
+#   evidence in this file that both halves matter.
+#
+# AND IT IS 42% CHEAPER, so it buys ~1.7x the restarts.  The two compute curves
+# (400 keys, L = 100), shipped against no-climb weighted:
+#
+#      shipped: cap-4 climb, kick 10      no-climb weighted: T = 0.5, kick 4
+#      R     breaks    ms/key             R     breaks    ms/key
+#      4       85       1.97               8       95       2.34
+#      8      128       4.05              13      125       4.00
+#     13      171       7.04              16      123       4.78
+#     16      171       8.06              20      140       6.02
+#     20      194       9.90              26      137       7.80
+#     26      193      12.95              32      164       9.47
+#
+# LEVEL AT ~4 ms AND BEATEN ABOVE IT.  At 4 ms the two are 128 against 125,
+# inside the +-9.2 SE of a 400-trial cell; by ~9.5 ms it is 194 against 164,
+# more than three SE apart, and the gap grows with budget.  So dropping the cap
+# climb closes nearly all of the deficit the with-climb weighted arm carried --
+# it is the best weighted configuration measured anywhere in this file -- and
+# it does not cross.
+#
+# THE REASON IS THAT THE CAP CLIMB IS PRODUCTIVE WORK, NOT OVERHEAD.  It turns
+# a uniform 10-plug kick into a seed holding 0.93 true plugs; the weighted
+# 4-plug kick delivers 0.43.  The climb does more for the board than the bias
+# does, it does it on every restart, and the 42% saved by skipping it does not
+# buy enough extra restarts to make up the difference.
+#
+# ONE SHAPE WORTH KEEPING.  Without the climb, the UNIFORM arm collapses as the
+# kick grows while the weighted arm does not (400 keys, T = 0.5):
+#
+#   kick        4     6     8    10
+#   uniform    69    61    57    39
+#   weighted   95    79    83    92
+#
+# More random plugs is more damage with nothing to repair it; more WEIGHTED
+# plugs brings true plugs along too (0.12 -> 0.82 across that row).  So the
+# bias substitutes for the climb's repair -- which is the same substitution
+# seen under -M, in a setting where the climb is absent rather than
+# constrained, and it is still a substitution rather than an addition.
 #
 # ============================================================================
 # WHAT THIS REFUTES
