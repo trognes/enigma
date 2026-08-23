@@ -229,10 +229,18 @@ Cost of the barrier, at `T = 8`, `K = 79.6 M`, `-R 100`:
   when the requested bits per item does not fit, naming the largest that does;
   it never thins the filter silently.
 - Echo in `show_settings()`: `blocks_per_key`, bytes per key, total bytes, the
-  **effective** bits per item (which is not the requested figure — the round-up
-  to 8 bytes and the distinct-only load both move it; see §3), `k`, and the
-  **expected false-positive rate**, because that is a coverage loss the user is
-  choosing to accept and it must not be buried.
+  **provisioned** bits per item, `k`, and the **expected false-positive rate**,
+  because that is a coverage loss the user is choosing to accept and it must
+  not be buried.
+
+  **Provisioned, not effective — the echo cannot know the effective figure.**
+  §3 gives 10.02 bits per item at `-R 100`, but that divides by the 83
+  *distinct* seeds, a realised quantity no run knows before it has run. At echo
+  time only `832 / R = 8.32` is available, so that is what is printed, with the
+  FP bound at that load (~2.8%) rather than the 1.65% actually paid. Printing
+  the optimistic figure up front would be a claim about the run's outcome. The
+  realised rate follows from the final skip line, and the manual should say how
+  to get there rather than the echo pretending to know it.
 ### Reporting the skips — required, not optional
 
 **The run must report how many full climbs were skipped, as a count and a
@@ -285,9 +293,25 @@ it.
 Reject with a clear message (these either re-encode the work index, install
 their own starting board, or have no staged seed):
 
-`-F`, `--exhaust`, `--crib` / `--crib-list`, `--tune-phase`, `-A`,
-`--ring-stride` (its refinement reuses `search_worker` over a private key
-space and would need a filter of its own), and any single-stage `--score`.
+`-F`, `--exhaust`, `--crib` / `--crib-list`, `--tune-phase`, `-A`, and any
+single-stage `--score`.
+
+**`--ring-stride` is ALLOWED, with the filter on the coarse pass only.** An
+earlier draft refused it, on the grounds that the refinement reuses
+`search_worker` over a private key space — true, but it only argues against
+filtering the *refinement*, and the coarse pass is an ordinary restart-major
+sweep that dedups like any other. So the filter is sized and indexed on the
+**coarse** key count (`range.r2_vals` already holds the strided set, the same
+quantity `--confidence` builds its bar from), and `refine_ring_stride()` runs
+with the filter off.
+
+That costs nothing: the refinement is one pass over 25 ring2 values on a single
+pinned wheel order — hundreds of keys against the coarse pass's tens of
+millions — so there is no duplication there worth catching, and leaving it
+unfiltered also keeps it free of the pass-barrier restructuring below. The
+refusal mattered in practice, because `--ring-stride 3` is the recommended
+setting for exactly the week-long large-keyspace run this feature is for; a
+version that refused it would have been unusable on its own motivating case.
 
 `-R 0` is inert (one climb, nothing to repeat). `--polish` is unaffected: it
 runs once on the best board after all restarts.
@@ -313,20 +337,45 @@ accounting must still count the item, or the percentage and ETA go wrong.
    same reported skip count** — the counter is part of the contract, not a
    by-product, so a `-T`-dependent total means the barrier is not doing its
    job even if the winning board happens to agree.
-5. **Skip count matches prediction.** ~17% at `-R 100`, ~44% at `-R 1000`,
-   from `eval/results-experiment-f.txt` §7. Against the exact-set arm of
-   check 3 the Bloom count must exceed the exact one by the expected
-   false-positive share and no more.
-   **Also check the denominator**: the percentage is over `K × R` work items,
-   and the easiest way to get it wrong is to divide by `K`. A run at `-R 1`
-   should report 0.0%, and one at `-R 2` on a keyspace with a known duplicate
-   rate should report roughly half what `-R 4` does — a factor-of-`R` error is
-   invisible at `-R 1` and obvious across that pair.
-6. **TSan** with dedup on and `-T 4`. The suite's TSan job is a handful of
-   hand-picked invocations; a new one is required here, because a path that
-   spawns threads and touches shared state is exactly what it is for.
-7. **Bench** with the flag off, to confirm the added branch costs nothing on
+5. **Skip count is exact under `--random 0`.** That is the cheap test fixture,
+   and it is the one to write first: with no kick every restart climbs from the
+   same unperturbed seed, so at `-R 4` exactly **3 of 4** are duplicates and the
+   line must read 75.0% — an exact expected value on a 26-key keyspace, in a
+   fraction of a second. The natural fixture (real kicks) duplicates only 1.4%
+   at `-R 8` and would need a large sweep to assert anything, which is precisely
+   the kind of check `CLAUDE.md` warns costs 10× under the sanitizers for no
+   extra coverage. It also pins the denominator directly: `-R 1` must read
+   0.0%, and `-R 2` / `-R 4` must read 50.0% / 75.0%, so a divide-by-`K` error
+   is invisible in the first and unmistakable across the rest.
+6. **Skip rate matches prediction on real kicks.** ~17% at `-R 100`, ~44% at
+   `-R 1000`, from `eval/results-experiment-f.txt` §7. Against the exact-set arm
+   of check 3 the Bloom count must exceed the exact one by the expected
+   false-positive share and no more. This one is a bench-scale measurement, not
+   a suite check.
+7. **TSan and valgrind cases, both new.** The suite's TSan job is a handful of
+   hand-picked invocations, and a real race in the `--ring-stride` refinement
+   once sat there unreported because none of them passed `--ring-stride`; a
+   path that spawns threads and touches shared state needs its own case. The
+   **valgrind** job is the more important of the two here, because it is the
+   only gate for *uninitialised* reads and this adds a multi-gigabyte heap
+   array whose zeroing is load-bearing — a filter read before it is zeroed
+   would skip climbs at random and be invisible in every other check. Use
+   `--error-exitcode=66`, since the program's own fatal exit is 1.
+8. **Bench** with the flag off, to confirm the added branch costs nothing on
    the default path.
+
+### Build order
+
+The filter is the small half. Turning one `run_parallel` over `keys × restarts`
+into one per pass touches the chunking, `g_sweep_total` and the progress line's
+pass field, and must keep the **global** flat work index intact so
+`better_cand`'s lowest-index tie-break is unchanged.
+
+**Land that restructuring first, on its own, with the output byte-identical**
+(check 1 against the current binary, plus check 4's `-T` matrix). Otherwise a
+determinism regression from the barrier arrives in the same commit as the
+filter and gets attributed to it — and of the two, the barrier is where such a
+bug is more likely and harder to see.
 
 ## 8. Falsification, in advance
 
