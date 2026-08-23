@@ -50,7 +50,8 @@ ALL_ARMS={"kick4":  ("k4 seeds, kick 4  (CONTROL: saturated)",
                      ["-S","k4f10","--random","10"])}
 ARMS=[ALL_ARMS[a] for a in
       os.environ.get("ARMS","kick4,kick10,final").split(",")]
-GRID=[n for n in [8,32,128,512,1000,2000,4000,10000,20000,50000] if n<=R]
+GRID=[n for n in [8,32,128,512,1000,2000,4000,10000,20000,50000,
+                  100000,200000,500000] if n<=R]
 
 def stats(job):
     """Run one key and reduce it IN THE WORKER to the summary statistics.
