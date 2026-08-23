@@ -234,6 +234,11 @@ int main(int argc, char * * argv)
   /* survey accumulators, used when KEYS > 1 */
   double sum_true_z = 0, sum_beam_z = 0;
   int hit_top1 = 0, hit_top8 = 0, n_truth_at_top = 0;
+  /* MEAN true plugs PER BEAM SEED, which is the only figure comparable with
+     the kicked arms in eval/results-weighted-kick.txt -- top-1 flatters the
+     beam (its single best board) and the top-8 union flatters it differently
+     (a count over eight boards).  Same basis, or the comparison is empty. */
+  double beam_mean_true = 0;
 
   for (int keyi = 0; keyi < KEYS; keyi++)
     {
@@ -507,6 +512,18 @@ int main(int argc, char * * argv)
               }
           }
         hit_top8 += static_cast<int>(u.size());
+        {
+          double per = 0;
+          for (const std::pair<double, std::string> & bp : beam)
+            {
+              for (size_t q = 0; q + 1 < bp.second.size(); q += 3)
+                {
+                  if (tb.find(bp.second.substr(q, 2)) != std::string::npos)
+                    per += 1.0;
+                }
+            }
+          beam_mean_true += per / static_cast<double>(beam.size());
+        }
       }
     }
 
@@ -523,6 +540,9 @@ int main(int argc, char * * argv)
       printf("  true plugs in beam top-1   %.2f of %d\n",
              hit_top1 / kd, PLUGS);
       printf("  true plugs in beam top-8   %.2f\n", hit_top8 / kd);
+      printf("  true plugs PER beam seed   %.2f of %d   (%.1f%%)\n",
+             beam_mean_true / kd, PLUGS,
+             100.0 * beam_mean_true / (kd * PLUGS));
     }
   free(m.subst_array);
   delete mp;

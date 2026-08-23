@@ -182,6 +182,25 @@
 #   extremal -- it is the trade between them that peaks, which is the clearest
 #   evidence in this file that both halves matter.
 #
+#   READ AS BREAKS AGAINST CORRECTNESS, that row is the whole line of work in
+#   one curve.  The seeds hold exactly four plugs, so the true-plug count is a
+#   fraction directly:
+#
+#     correct plugs   6.3%   8.0%   10.8%   12.8%   14.0%
+#     breaks           104    113     125     112     101
+#
+#   BREAKS PEAK NEAR 11% CORRECT AND FALL ON BOTH SIDES.  Below it there is too
+#   little signal; above it too much diversity has been paid for the
+#   correctness.  For scale: chance is 3.1%, and the IC beam -- the purest
+#   four-plug board any method here produces -- sits at 17.9%
+#   (eval/results-seed-landscape.txt), well past the peak, which is the
+#   quantitative form of why it loses.
+#
+#   THE SHIPPED SEED IS NOT ON THIS CURVE AT ALL, and that is the point.  It is
+#   nominally cap 4 but carries 6.7 plugs holding 0.93 true -- a lower FRACTION
+#   (13.9%) than the beam and more than double the absolute count of any true
+#   four-plug board here.  It wins by not respecting the cap.
+#
 # AND IT IS 42% CHEAPER, so it buys ~1.7x the restarts.  The two compute curves
 # (400 keys, L = 100), shipped against no-climb weighted:
 #
