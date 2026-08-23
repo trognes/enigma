@@ -184,6 +184,32 @@ void help(FILE * out)
           "the run says so and reports raw scores instead");
   fprintf(out, "  %-24s %s\n", "",
           "[0 = off, use 256]");
+  fprintf(out, "  %-24s %s\n", "--seed-dedup",
+          "Skip the target climb when this restart's stage-0");
+  fprintf(out, "  %-24s %s\n", "",
+          "seed was already climbed for this key -- the seed");
+  fprintf(out, "  %-24s %s\n", "",
+          "determines the climb, so a repeat is pure waste");
+  fprintf(out, "  %-24s %s\n", "",
+          "(17% of seeds at -R 100, 73% at -R 10000). Needs");
+  fprintf(out, "  %-24s %s\n", "",
+          "-c and a staged -S with a cheap first stage; no");
+  fprintf(out, "  %-24s %s\n", "",
+          "-F, --exhaust, --crib, --tune-phase or -A.");
+  fprintf(out, "  %-24s %s\n", "--seed-dedup-bits N",
+          "Bloom filter bits per item (4-24, default 8). The");
+  fprintf(out, "  %-24s %s\n", "",
+          "memory is keys x restarts x N bits, rounded up per");
+  fprintf(out, "  %-24s %s\n", "",
+          "key to 8 bytes; a false positive skips a seed that");
+  fprintf(out, "  %-24s %s\n", "",
+          "was NOT a duplicate, so this is a coverage trade.");
+  fprintf(out, "  %-24s %s\n", "--seed-dedup-max BYTES",
+          "Memory ceiling (e.g. 4G, 512M). REFUSES when the");
+  fprintf(out, "  %-24s %s\n", "",
+          "requested bits/item does not fit, naming what does");
+  fprintf(out, "  %-24s %s\n", "",
+          "-- it never thins the filter silently.");
   fprintf(out, "  %-24s %s\n", "--tune-phase N",
           "Hill-climb the rotor PHASE instead of enumerating");
   fprintf(out, "  %-24s %s\n", "",
@@ -470,6 +496,20 @@ void show_settings()
             "with the\n            plugboard frozen (--tune-phase); "
             "approximate, may miss the true key\n",
             opt_tune_phase, (opt_tune_phase == 1) ? "" : "s");
+
+  /* --seed-dedup trades a false-positive rate for skipped work, and a false
+     positive is a DISTINCT seed never climbed -- a coverage loss the user is
+     choosing to accept. It must not be buried, so the expected rate is part of
+     the geometry line rather than something to be worked out from the flags.
+     Sizing depends on the keyspace, which is not resolved yet, so the line is
+     printed by bruteforce() once the filter exists; here we only say it is on,
+     in the same place every other search-affecting option is echoed. */
+  if (opt_seed_dedup)
+    fprintf(stderr,
+            "Seed dedup: skip the target climb when this restart's stage-0 "
+            "seed was already\n            climbed for this key; %d bits/item "
+            "requested (--seed-dedup)\n",
+            opt_seed_dedup_bits);
 
   fprintf(stderr, "Threads:    %d\n", opt_threads);
 

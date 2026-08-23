@@ -83,6 +83,9 @@ extern int opt_crib;
 
 /* key-space reductions and the pre-filter */
 extern int opt_ring_stride;
+extern int opt_seed_dedup;
+extern int opt_seed_dedup_bits;
+extern uint64_t opt_seed_dedup_max;
 extern int opt_tune_phase;
 extern int opt_prefilter;
 extern double opt_prefilter_frac;

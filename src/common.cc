@@ -107,3 +107,48 @@ uint64_t parse_opt_u64(const char * s, const char * what)
 
   return static_cast<uint64_t>(v);
 }
+/* A byte count with an optional K/M/G suffix (--seed-dedup-max). Same contract
+   as the rest: reject anything that is not exactly a number and at most one
+   recognised suffix, rather than silently taking the leading digits -- a
+   memory budget misread by 1024x is a swap-death or a refusal, and neither
+   would point at the typo. Powers of 1024, since that is what the figure is
+   compared against and what the echo prints. */
+uint64_t parse_opt_bytes(const char * s, const char * what)
+{
+  if ((s == nullptr) || (*s == 0))
+    bad_number("", what, "is empty");
+  if (*s == '-')
+    bad_number(s, what, "is negative");
+
+  errno = 0;
+  char * end = nullptr;
+  const unsigned long long v = strtoull(s, & end, 10);
+
+  if (end == s)
+    bad_number(s, what, "is not a number");
+  if (errno == ERANGE)
+    bad_number(s, what, "is out of range");
+
+  uint64_t mult = 1;
+  if (*end != 0)
+    {
+      switch (*end)
+        {
+        case 'k': case 'K': mult = 1024ULL; break;
+        case 'm': case 'M': mult = 1024ULL * 1024; break;
+        case 'g': case 'G': mult = 1024ULL * 1024 * 1024; break;
+        default:
+          bad_number(s, what, "has trailing characters");
+        }
+      end++;
+      /* one optional 'B', so 4G and 4GB both work; nothing else */
+      if ((*end == 'b') || (*end == 'B'))
+        end++;
+      if (*end != 0)
+        bad_number(s, what, "has trailing characters");
+    }
+
+  if ((mult > 1) && (v > UINT64_MAX / mult))
+    bad_number(s, what, "is out of range");
+  return static_cast<uint64_t>(v) * mult;
+}

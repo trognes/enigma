@@ -151,6 +151,28 @@ jobs:
           printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
             | ./enigma -q -l english -u B -w 123 -r AA. -g AA. -c -R 8 --ring-stride 3 --polish -T 8 >/dev/null
 
+      - name: Threaded --seed-dedup is race-free (-T 8)
+        run: |
+          # The filter is written with no lock and no atomic, which is only safe
+          # because the sweep runs ONE RESTART PASS AT A TIME and a key appears
+          # exactly once per pass -- so no two threads are ever in different
+          # passes on the same key. That is an argument; this is the check.
+          # Verified to FAIL (exit 66, one race report on the filter word) with
+          # the pass loop replaced by a single run_parallel over the whole space.
+          #
+          # THE FIXTURE IS DELIBERATELY DEGENERATE -- ONE KEY -- and a wider one
+          # does NOT catch it. Without the barrier the race needs two threads on
+          # the SAME key at once, and key k's items sit R apart in the work
+          # index; threads hand out small consecutive chunks, so on a 676-key
+          # sweep they are always on different keys and TSan sees nothing. The
+          # number of keys has to be at most the thread count for a pass to fit
+          # inside the threads' span. Real kicks are load-bearing too: with
+          # --random 0 every restart yields the same seed, so there is one write
+          # and R-1 reads, and a read/read overlap is not a race.
+          printf 'OWUJLGEZLXLQTANLYHLFKCJXOKTNHKJFVKQPVTQW' \
+            | ./enigma -q -l english -u B -w 123 -r AAA -g AAA -c -R 64 \
+              --random 10 -S i4q10 --seed-dedup -T 8 >/dev/null
+
   # Valgrind adds detection of *uninitialised* memory use that ASan misses, and
   # it is the ONLY gate that does. Like the TSan job it is a hand-picked list
   # rather than the suite, so it covers exactly what someone thought to point it
@@ -208,6 +230,16 @@ jobs:
             -R 0 --tune-phase 1 < ct.txt >/dev/null
           # --confidence: the sampled null, climbed through the same unit.
           $VG ./enigma -q -l english -u B -w 431 -r AGD -g .MW --confidence 32 < ct.txt >/dev/null
+          # --seed-dedup: a multi-megabyte calloc'd filter whose ZEROING is
+          # load-bearing -- a block read before it is zeroed would skip climbs
+          # at random, which no other gate here can see. Valgrind is the only
+          # check for that, which is the whole reason this case exists.
+          $VG ./enigma -c -q -l english -u B -w 123 -r AA. -g AA. \
+            -R 4 --random 0 -S i4q10 --seed-dedup < ct.txt >/dev/null
+          # ...and with --ring-stride, where the refinement reuses search_worker
+          # over a key space whose indices alias the coarse filter's regions.
+          $VG ./enigma -c -q -l english -u B -w 123 -r AA. -g AA. \
+            -R 4 --random 0 -S i4q10 --seed-dedup --ring-stride 3 < ct.txt >/dev/null
           # M4's folded Greek reflector and Norway's translated rotor indices:
           # both reach code the standard machine never does.
           $VG ./enigma -4 -u b -w B431 -r AAGD -g A.MW -i < ct.txt >/dev/null

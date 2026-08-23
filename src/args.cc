@@ -94,6 +94,9 @@ void parse_args(int argc, char * * argv)
   opt_anneal = 0;
   opt_ring_stride = 1;
   opt_tune_phase = 0;
+  opt_seed_dedup = 0;
+  opt_seed_dedup_bits = 0;   /* 0 = unset; the default of 8 is applied below */
+  opt_seed_dedup_max = 0;
   opt_confidence = 0;
 
   /* get arguments */
@@ -107,7 +110,8 @@ void parse_args(int argc, char * * argv)
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
-         OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_SCTANDEM };
+         OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_SCTANDEM,
+         OPT_SEEDDEDUP, OPT_SEEDDEDUPBITS, OPT_SEEDDEDUPMAX };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -170,6 +174,9 @@ void parse_args(int argc, char * * argv)
       { "crib-seeds",     required_argument, nullptr, OPT_CRIBSEEDS },
       { "crib-list",      required_argument, nullptr, OPT_CRIBLIST },
       { "no-crib-reorder", no_argument,      nullptr, OPT_NOCRIBREORDER },
+      { "seed-dedup",     no_argument,       nullptr, OPT_SEEDDEDUP },
+      { "seed-dedup-bits", required_argument, nullptr, OPT_SEEDDEDUPBITS },
+      { "seed-dedup-max", required_argument, nullptr, OPT_SEEDDEDUPMAX },
       { "doubling-report", required_argument, nullptr, OPT_DOUBLINGREPORT },
       { "doubling-z",     required_argument, nullptr, OPT_DOUBLINGZ },
       { "doubling-mismatches", required_argument, nullptr, OPT_DOUBLINGMM },
@@ -277,6 +284,15 @@ void parse_args(int argc, char * * argv)
           break;
         case OPT_RINGSTRIDE:
           opt_ring_stride = parse_opt_int(optarg, "--ring-stride");
+          break;
+        case OPT_SEEDDEDUP:
+          opt_seed_dedup = 1;
+          break;
+        case OPT_SEEDDEDUPBITS:
+          opt_seed_dedup_bits = parse_opt_int(optarg, "--seed-dedup-bits");
+          break;
+        case OPT_SEEDDEDUPMAX:
+          opt_seed_dedup_max = parse_opt_bytes(optarg, "--seed-dedup-max");
           break;
         case OPT_TUNEPHASE:
           opt_tune_phase = parse_opt_int(optarg, "--tune-phase");
@@ -545,6 +561,47 @@ void parse_args(int argc, char * * argv)
       ((opt_ringstellung[2] != '.') || (opt_grundstellung[2] != '.')))
     fatal("--ring-stride needs both -r and -g to wildcard the rightmost "
           "wheel's position (e.g. -r ..X -> -r ...)");
+
+  /* --seed-dedup: skip the target climb when this restart's stage-0 seed has
+     already been climbed for this key.
+
+     It needs a CHEAP PREFIX to key on, so a single-stage schedule is refused
+     rather than silently doing nothing -- with one stage the "seed" would be
+     the converged board itself, by which point the expensive work is already
+     paid for (which is exactly what the removed --restart-tt measured down).
+
+     Everything else refused here either installs its own starting board (so
+     the board after stage 0 is not a function of (key, restart) alone), or
+     re-encodes the work index so that "one key per pass" stops holding.
+     --ring-stride is NOT in that list: its coarse pass is an ordinary
+     restart-major sweep and dedups like any other, and its refinement simply
+     runs with the filter off. */
+  if (opt_seed_dedup)
+    {
+      if (! opt_hillclimb)
+        fatal("--seed-dedup needs -c (there is no climb to skip without it)");
+      if (opt_seed_dedup_bits == 0)
+        opt_seed_dedup_bits = 8;
+      if ((opt_seed_dedup_bits < 4) || (opt_seed_dedup_bits > 24))
+        fatal("Illegal bits per item (--seed-dedup-bits must be 4 to 24; "
+              "below 4 the false-positive rate costs more coverage than the "
+              "skipping saves)");
+      if (opt_anneal > 0)
+        fatal("--seed-dedup does not work with -A (annealing has no staged "
+              "seed to key on)");
+      if (opt_exhaust > 0)
+        fatal("--seed-dedup does not work with --exhaust");
+      if ((opt_prefilter > 0) || (opt_prefilter_frac > 0.0))
+        fatal("--seed-dedup does not work with -F");
+      if (opt_tune_phase > 0)
+        fatal("--seed-dedup does not work with --tune-phase");
+      if ((opt_crib_text != nullptr) || (opt_crib_list != nullptr))
+        fatal("--seed-dedup does not work with --crib or --crib-list");
+      if (opt_self_crib_seeds > 0)
+        fatal("--seed-dedup does not work with --self-crib-seeds");
+    }
+  else if ((opt_seed_dedup_max > 0) || (opt_seed_dedup_bits != 0))
+    fatal("--seed-dedup-bits / --seed-dedup-max need --seed-dedup");
 
   /* --tune-phase N: keep N starting phases per wheel instead of enumerating all
      26, and let tune_phase() find the rest by scanning with the plugboard
@@ -1016,6 +1073,16 @@ void parse_args(int argc, char * * argv)
         fatal("A scoring language is required: add -l <language> "
               "(e.g. -l english), or use -i for the language-independent "
               "index of coincidence");
+
+  /* Checked here rather than with the other --seed-dedup rules above, because
+     the stage count is not known until the schedule has been parsed. One stage
+     means there is no cheap prefix to key on: the "seed" would be the converged
+     board, and skipping on that saves nothing (the removed --restart-tt
+     measured exactly this). Refused rather than quietly inert. */
+  if (opt_seed_dedup && (opt_nstages < 2))
+    fatal("--seed-dedup needs a staged --score schedule with a cheap first "
+          "stage to key on (e.g. -S k4f10); with one stage there is no seed "
+          "before the expensive climb");
 
   if (opt_language &&
       ((strlen(opt_language) < 1) ||

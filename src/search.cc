@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "crib.h"
+#include "dedup.h"
 #include "keyspace.h"
 #include "machine.h"
 #include "options.h"
@@ -158,6 +159,38 @@ static double tune_phase(machine & m, uint64_t * rng, double score)
    climb is not run (REDESIGN Option A). With --restarts 0 there is a single un-kicked climb.
    Each restart draws from its own independent (key,restart) stream, so it is a self-contained
    unit of work; leaves m at this climb's converged board + plaintext and returns its score. */
+/* The staged climb with the seed-dedup gate between stage 0 and the rest.
+
+   Spelled out here rather than hooked into run_stages() so that plugboard.cc
+   keeps knowing nothing about the filter -- the same reason its own module
+   boundary is drawn where it is. The duplication is five lines and is checked
+   by construction: with the filter forced to answer "not present" this must be
+   byte-identical to the run_stages() path, which is verification check 2.
+
+   Only run_stages<false> is reproduced. The EX=true path belongs to --crib,
+   --exhaust and the self-crib seeder, all of which install their own starting
+   board and are refused by --seed-dedup for exactly that reason. */
+static double staged_with_dedup(machine & m, size_t key_index, bool & skipped)
+{
+  m.scoring = opt_stages[0].model;
+  double s = hillclimb<false>(m, opt_stages[0].cap);
+
+  /* The seed. Everything downstream of it is a deterministic function of this
+     board, so if it has been climbed for this key the result would be
+     byte-identical and the target climb is pure waste. */
+  if (seed_dedup_seen(key_index, m.steckerbrett))
+    {
+      skipped = true;
+      return unit_no_score;
+    }
+
+  for (int i = 1; i < opt_nstages; i++)
+    {
+      m.scoring = opt_stages[i].model;
+      s = hillclimb<false>(m, opt_stages[i].cap);
+    }
+  return s;
+}
 static double hillclimb_one(machine & m, size_t key_index, int restart)
 {
   init_steckerbrett(m, opt_steckerbrett);
@@ -165,7 +198,24 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   uint64_t rng = restart_seed(key_index, restart);
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
-  double score = optimize_once(m, & rng);
+  double score;
+  if (seed_dedup_on())
+    {
+      bool skipped = false;
+      score = staged_with_dedup(m, key_index, skipped);
+      /* A skipped item produced no candidate at all, so it returns the same
+         sentinel a rejected crib key does and must reach none of the
+         per-climb reporting below: dump_all would print a row scoring
+         -1e300, and the doubling report would decode a board that was never
+         finished. It cannot win the merge either -- unit_no_score is below
+         score_min -- and it does not need to: the earlier restart that
+         reached this same seed is still in the sweep with a lower work
+         index, which is the index better_cand's tie-break already prefers. */
+      if (skipped)
+        return score;
+    }
+  else
+    score = optimize_once(m, & rng);
   if (opt_tune_phase > 0)
     score = tune_phase(m, & rng, score);
   if (opt_dump_all)
@@ -1002,6 +1052,25 @@ double bruteforce(char * result, bool allow_empty)
   if (nthreads < 1)
     nthreads = 1;
 
+  /* The filter is sized on the keys THIS sweep will visit and the restarts it
+     will run, both known only now. Under --ring-stride that is the COARSE key
+     count, which is what total_keys already holds -- the refinement runs with
+     the filter off, since it is hundreds of keys against the coarse pass's
+     millions and has no duplication worth catching. */
+  if (! seed_dedup_init(total_keys, restarts_par))
+    fatal("--seed-dedup could not be configured");
+  if (seed_dedup_on())
+    {
+      /* The geometry belongs with the rest of the settings echo, but it cannot
+         be computed there: it depends on the resolved keyspace and restart
+         count, which build_key_space() decides. Printed here for the same
+         reason the middle-wheel collapse line is -- so the figure cannot drift
+         from the thing that was actually allocated. */
+      char geo[256];
+      seed_dedup_describe(geo, sizeof(geo));
+      fprintf(stderr, "Seed dedup: %s\n", geo);
+    }
+
   subst_table all = allocate_subst_tables(nwo);
 
   std::vector<machine *> machines(static_cast<size_t>(nthreads));
@@ -1238,8 +1307,20 @@ double bruteforce(char * result, bool allow_empty)
          Kept a module of its own because it is the one part of the sweep with
          a separable contract -- and the one with a design document behind it. */
       if (opt_ring_stride > 1)
-        extra_keys_analysed = refine_ring_stride(machines, tasks, cur_wo, range,
-                                                 rc, gc, restarts_par, best);
+        {
+          /* THE REFINEMENT RUNS UNFILTERED, and saying so is not enough -- it
+             has to be enforced. It reuses search_worker over its OWN key
+             space, whose indices start again at 0 and therefore ALIAS the
+             coarse pass's per-key filter regions: unsuspended it would both
+             consume those regions and have its own climbs skipped by seeds it
+             never produced. There is nothing to catch there anyway (hundreds
+             of keys against the coarse pass's millions). Set and cleared from
+             this thread, outside the refinement's own fan-out and join. */
+          seed_dedup_suspend(true);
+          extra_keys_analysed = refine_ring_stride(machines, tasks, cur_wo, range,
+                                                   rc, gc, restarts_par, best);
+          seed_dedup_suspend(false);
+        }
 
       /* Guarded by opt_polish. This block shares its enclosing `if` with the
          --ring-stride refinement above (both need best.idx reconstructed once), and

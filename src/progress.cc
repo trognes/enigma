@@ -1,4 +1,5 @@
 #include "progress.h"
+#include "dedup.h"
 
 #include "common.h"
 #include "machine.h"
@@ -567,8 +568,25 @@ void sweep_progress_tick(size_t n, best_result & best)
     snprintf(pb, sizeof(pb), "pass %zu/%zu, ",
              ((pass < g_sweep_restarts) ? pass : g_sweep_restarts - 1) + 1,
              g_sweep_restarts);
-  snprintf(line, sizeof(line), "Progress:  %3zu%% (%s%s / %s keys) %s/s, %s left",
-           (shown >= total) ? 100 : (shown * 100) / total, pb, db, tb, rb, eb);
+  /* --seed-dedup: the skip rate matters mid-run, not just in the final line,
+     because the runs this is for last days -- and it is the one number that
+     says whether the filter is earning its memory. Appended rather than
+     inserted so the fields before it stay where a reader's eye expects them,
+     and it is the first field to drop if a later one pushes the line past 80
+     columns (the final report always carries it). */
+  char sd[32] = "";
+  if (seed_dedup_on())
+    {
+      const uint64_t sk = seed_dedup_skipped();
+      const uint64_t se = seed_dedup_seeds();
+      if (se > 0)
+        snprintf(sd, sizeof(sd), ", %.0f%% dup",
+                 100.0 * static_cast<double>(sk) / static_cast<double>(se));
+    }
+  snprintf(line, sizeof(line),
+           "Progress:  %3zu%% (%s%s / %s keys) %s/s, %s left%s",
+           (shown >= total) ? 100 : (shown * 100) / total, pb, db, tb, rb, eb,
+           sd);
 
   std::lock_guard<std::mutex> lock(best.mutex);
   /* Padded to the widest line drawn so far, and erased at that width too. The
