@@ -235,7 +235,7 @@ Cost of the barrier, at `T = 8`, `K = 79.6 M`, `-R 100`:
   choosing to accept and it must not be buried.
 ### Reporting the skips — required, not optional
 
-**The run must report how many restarts were skipped, as a count and a
+**The run must report how many full climbs were skipped, as a count and a
 percentage.** Without it the feature is invisible: nothing else in the output
 moves in a way that identifies it (`Analysed N rotor combinations` is
 unchanged, since every key is still analysed, and `plugboards scored` falls
@@ -243,16 +243,16 @@ for reasons that could be anything). It sits with the existing final
 diagnostics:
 
 ```
-Skipped 13 542 118 duplicate restarts of 7 960 000 000 (17.0%)
+Skipped 13 542 118 full climbs on duplicate seeds of 7 960 000 000 (17.0%)
 ```
 
 Three things about that line:
 
-- **The unit is a restart, not a key.** No key is ever skipped — a key is
-  visited once per pass whatever the filter says. What is skipped is the
-  *target climb* of one `(key, restart)` work item, and the denominator is
-  therefore the work-item count `K × R`, not `K`. Calling them skipped *keys*
-  would misreport by a factor of `R`.
+- **The unit is a SEED, not a key.** No key is ever skipped — a key is
+  visited once per pass whatever the filter says. One seed is produced per
+  `(key, restart)` work item, and it is that seed's *full climb* that is
+  skipped, so the denominator is the seed count `K × R`, not `K`. Reporting
+  skipped *keys* would misreport by a factor of `R`.
 - **The count is an upper bound on true duplicates**, because a false positive
   is indistinguishable from a duplicate at run time — that is what a Bloom
   filter is. At the §3 operating point the FP share of the skips is small
@@ -261,10 +261,11 @@ Three things about that line:
   FP rate, so the two can be read together. The word *duplicate* in the line is
   therefore approximate by construction, and the manual should say so rather
   than the line growing a caveat.
-- **The skipped work is not free.** The pre-pass still ran; only the target
-  climb was avoided. So the compute saved is the skip percentage times the
-  target stage's share (~64% at `-S k4f10`), and the line reports skips rather
-  than a saving for that reason — a "saved 17% of compute" line would be wrong.
+- **A skipped seed is not skipped work — it is a skipped CLIMB.** The pre-pass
+  ran in full; that is what produced the seed to test. So the compute saved is
+  the skip percentage times the target stage's share (~64% at `-S k4f10`),
+  which is why the line names the climbs rather than claiming a saving — a
+  "saved 17% of compute" line would be wrong by that factor.
 
 **Mid-run visibility matters more than the final line here**, because the runs
 this is for last days. The live sweep progress line already carries a pass
