@@ -240,6 +240,55 @@
 # constrained, and it is still a substitution rather than an addition.
 #
 # ============================================================================
+# LETTING THE PRE-PASS FILL THE BOARD IS WORSE -- cap 10 AGAINST cap 4
+# ============================================================================
+#
+# Raising the PRE-PASS cap from 4 to 10, so the k climb may keep all ten plugs
+# the kick laid down rather than only blocking adds, is a different schedule
+# and not a weighting question at all.  Weighting adds nothing there either
+# (400 keys, R = 8, uniform baseline 127 for that configuration: T = 2 reads
+# 134, T = 1 125, T = 0.5 123, T = 0.25 103), but the UNIFORM arm is worth a
+# paired test on its own.
+#
+#   PAIRED, arm A cap 4 against arm B cap 10, uniform kick 10:
+#
+#     seed        cap 4   cap 10   onlyA/onlyB      z     effect
+#     20260824     1052     962      436/346      -3.22   -8.6%
+#     777          1024     978      418/372      -1.64   -4.5%
+#     31337        1057     1023     406/372      -1.22   -3.2%
+#
+#     pooled 1260 only-A against 1090 only-B, z = -3.51.  All three seeds
+#     negative; the seed that first showed it is the largest, which is the
+#     usual regression to the mean and a reason to quote the pooled figure
+#     rather than the -8.6%.
+#
+# THE UNPAIRED HINT POINTED THE OTHER WAY.  Two independent 400-key cells read
+# 132 for cap 10 against 128 for cap 4 and looked like a small win; paired at
+# the same 400 keys they read 128 against 127, and only power resolves it.
+# That is the case for pairing in one example.
+#
+# `apart` AND `trueplg` ARE NOT COMPARABLE ACROSS BOARD SIZES, and reading them
+# raw here inverts the conclusion.  At 800 keys:
+#
+#     pre-pass   plugs   true plugs   correct %   apart   apart/plug
+#     cap 4       6.69      0.92        13.8%     17.27      1.29
+#     cap 10      9.77      1.09        11.2%     21.72      1.11
+#
+# Cap 10 holds MORE true plugs in absolute count and a LOWER fraction, and its
+# higher apartness is board size -- a 9.77-plug board has 19.5 non-fixed
+# entries against 13.4, so more room to differ.  Normalised, correctness and
+# diversity both fall, which is what the break count does.  Taken raw the two
+# columns say cap 10 improved on both, which is the opposite of the truth.
+#
+# THE MECHANISM IS THE PRE-PASS TRAP CLAUDE.md ALREADY DOCUMENTS, in its cap
+# rather than its model: filling the board under k means the WEAKER model
+# places all ten plugs and f10 inherits its mistakes instead of doing the
+# placement itself.  A cap of 4 leaves f10 the real work.  This extends the
+# documented "a stage cap in 1..4 is INERT on an IC pre-pass" -- inert relative
+# to each other, because below the kick size a cap only blocks adds, but a cap
+# AT the kick size is a different climb and is materially worse.
+#
+# ============================================================================
 # WHAT THIS REFUTES
 # ============================================================================
 #

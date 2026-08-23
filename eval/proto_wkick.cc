@@ -29,6 +29,7 @@
      objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
      g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/wkick eval/proto_wkick.cc $objs
      /tmp/wkick [keys] [restarts] [L] [temperature] [kick] [-M] [cap] [seed]
+              [arm-B cap]
 
    cap = 0 SKIPS the cap climb, handing the kicked board straight to the
    continuation.  That is not a realistic configuration -- it is the ablation
@@ -254,6 +255,10 @@ int main(int argc, char * * argv)
      cells that one z = 2 among them is unremarkable. */
   const uint64_t SEED = (argc > 8)
                           ? strtoull(argv[8], nullptr, 10) : 20260824ULL;
+  /* Arm B's pre-pass cap, defaulting to arm A's.  Setting it DIFFERENT with
+     T = 0 turns the harness into a paired test of the cap itself, which two
+     independent single-arm cells cannot give. */
+  const int CAPB  = (argc > 9) ? atoi(argv[9]) : CAP;
 
   opt_language = "wehrmacht";
   opt_datadir = "ngrams";
@@ -294,9 +299,13 @@ int main(int argc, char * * argv)
   std::mt19937_64 rng(SEED);
   char truth[maxlen + 1];
 
+  /* `plugs` is not decoration: `apart` is a Hamming distance over the 26 board
+     entries, so a bigger board has more room to differ and the two columns
+     cannot be compared across configurations of different size.  Nor can
+     `truep`, which is a COUNT -- the fraction needs this. */
   struct arm { int breaks = 0; double pct = 0; double distinct = 0;
                double apartness = 0; int apairs = 0; double truep = 0;
-               double secs = 0; double seedsecs = 0; };
+               double plugs = 0; double secs = 0; double seedsecs = 0; };
   arm A, B;
   int only_a = 0, only_b = 0;
 
@@ -390,11 +399,11 @@ int main(int argc, char * * argv)
           init_steckerbrett(m, "");
           uint64_t s = rng();
           weighted_kick(m, P, KICK, s);
-          if (CAP > 0)
+          if (CAPB > 0)
             {
               m.scoring = SCORE_MONOIC;
               opt_capmerge = CAPM;
-              hillclimb<false>(m, CAP);
+              hillclimb<false>(m, CAPB);
               opt_capmerge = 0;
             }
           seedsB.push_back(board_key(m.steckerbrett));
@@ -423,6 +432,18 @@ int main(int argc, char * * argv)
                   }
               }
             acc.truep += tp / static_cast<double>(seeds.size());
+            double pl = 0;
+            for (const std::string & sd : seeds)
+              {
+                int np2 = 0;
+                for (int q = 0; q < asize; q++)
+                  {
+                    if (static_cast<unsigned char>(sd[q]) > q)
+                      np2++;
+                  }
+                pl += np2;
+              }
+            acc.plugs += pl / static_cast<double>(seeds.size());
             for (size_t i = 0; i < seeds.size(); i++)
               {
                 for (size_t j = i + 1; j < seeds.size(); j++)
@@ -468,19 +489,24 @@ int main(int argc, char * * argv)
 
   const double kd = KEYS;
   printf("weighted kick: %d keys, R = %d, L = %d, T = %.2f, kick %d, "
-         "-M %s, cap %d\n", KEYS, R, L, TEMP, KICK, CAPM ? "on" : "off", CAP);
+         "-M %s, cap %d", KEYS, R, L, TEMP, KICK, CAPM ? "on" : "off", CAP);
+  if (CAPB != CAP)
+    printf("  (arm B cap %d)", CAPB);
+  printf("\n");
   printf("telegraphic German (HG Nord), rotor key given, 10-pair board "
          "hidden\n\n");
-  printf("  %-20s %7s %7s %8s %7s %7s %8s %8s\n", "arm", "breaks", "mean%",
-         "trueplg", "apart", "finals", "seed ms", "climb ms");
-  printf("  %-20s %6d  %6.1f %8.2f %7.2f %7.2f %8.2f %8.2f\n",
-         "A  uniform kick", A.breaks, A.pct / kd, A.truep / kd,
+  printf("  %-20s %7s %7s %7s %7s %7s %7s %7s %8s\n", "arm", "breaks",
+         "mean%", "plugs", "trueplg", "true%", "apart", "finals", "ms/key");
+  printf("  %-20s %6d  %6.1f %7.2f %7.2f %6.1f%% %7.2f %7.2f %8.2f\n",
+         "A  uniform kick", A.breaks, A.pct / kd, A.plugs / kd, A.truep / kd,
+         (A.plugs > 0) ? 100.0 * A.truep / A.plugs : 0.0,
          (A.apairs ? A.apartness / A.apairs : 0.0), A.distinct / kd,
-         1e3 * A.seedsecs / kd, 1e3 * A.secs / kd);
-  printf("  %-20s %6d  %6.1f %8.2f %7.2f %7.2f %8.2f %8.2f\n",
-         "B  weighted kick", B.breaks, B.pct / kd, B.truep / kd,
+         1e3 * (A.seedsecs + A.secs) / kd);
+  printf("  %-20s %6d  %6.1f %7.2f %7.2f %6.1f%% %7.2f %7.2f %8.2f\n",
+         "B  weighted kick", B.breaks, B.pct / kd, B.plugs / kd, B.truep / kd,
+         (B.plugs > 0) ? 100.0 * B.truep / B.plugs : 0.0,
          (B.apairs ? B.apartness / B.apairs : 0.0), B.distinct / kd,
-         1e3 * B.seedsecs / kd, 1e3 * B.secs / kd);
+         1e3 * (B.seedsecs + B.secs) / kd);
   const double za = only_a + only_b;
   printf("\n  paired: %d only A, %d only B", only_a, only_b);
   if (za > 0)
