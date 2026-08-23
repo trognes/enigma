@@ -51,10 +51,10 @@ unplugged. That is already a canonical form — no normalisation needed.
 **Per key, blocked, one cache line per lookup.**
 
 ```
-filter  : one flat byte array, K * bytes_per_key
-key i   : bytes [i*bytes_per_key, (i+1)*bytes_per_key)
+filter  : one flat byte array, 64-byte aligned, K * 64 * lines_per_key
+key i   : lines [i*lines_per_key, (i+1)*lines_per_key)
 lookup  : h = hash64(board, opt_seed)
-          block = key_base + (h >> 32) % blocks_per_key     // 64-byte block
+          block = key_base + 64 * ((h >> 32) % lines_per_key)
           pattern = k bits derived from (h & 0xffffffff)
           present = (block & pattern) == pattern            // ONE cache line
           insert  = block |= pattern
@@ -64,13 +64,29 @@ One 64-byte block per lookup means **one memory read**, which is the point of
 blocking. The cost is a slightly worse false-positive rate than an unblocked
 filter of the same size, because a block that happens to receive more items
 than average is disproportionately bad — but at 512-bit blocks that penalty is
-negligible:
+negligible, and it is what buys the single read:
 
 | bits/item | k | FP unblocked | FP blocked (512-bit) |
 |---:|---:|---:|---:|
 | 5.12 | 4 | 8.64% | 8.78% |
 | 8.00 | 6 | 2.16% | **2.33%** |
 | 10.24 | 7 | 0.73% | 0.86% |
+
+Smaller blocks make it worse fast — at 8 bits/item, 2.33% at 512 bits becomes
+2.50% at 256, 2.84% at 128 and 3.47% at 64 — so the block stays a full line.
+
+**A key's region must be a WHOLE NUMBER OF LINES.** An earlier draft of this
+document said the opposite ("do not round the per-key region up to a whole
+cache line ... only the *lookup* needs to hit one line"), and that is wrong:
+with `bytes_per_key = 100` the regions are not 64-byte aligned, so an aligned
+block is not *contained* in one — key 2 owns bytes [200, 300) and neither line
+[192, 256) nor [256, 320) fits inside it. The two ways out both fail. An
+unaligned 64-byte window straddles two cache lines 63/64 of the time, which
+is precisely the property blocking exists to provide. And letting neighbouring
+keys share a boundary line puts key *j*'s inserts into key *i*'s lookups
+*within* a pass — a data race at every chunk boundary, and the end of the
+determinism argument in §4. So the region is `64 * lines_per_key` bytes and
+the **effective** bits per item is reported after rounding.
 
 **Access is sequential, and that is a property worth protecting.** Restart is
 the outer loop, so a pass walks key 0…K−1 in order and touches each key's
@@ -82,31 +98,57 @@ reorganise the loop so that this stops being true.
 
 ### Sizing
 
-The natural target is **8 bits per item**, giving 2.33% FP. Memory is then
-`K × R` bytes, since one item is inserted per restart:
-
-| K | `-R` | bytes/key | bits/item | FP | total |
-|---:|---:|---:|---:|---:|---:|
-| 79.6 M | 64 | 64 (1 line) | 8.00 | 2.33% | **4.74 GiB** |
-| 79.6 M | 100 | 100 | 8.00 | 2.33% | 7.41 GiB |
-| 79.6 M | 100 | 64 (1 line) | 5.12 | 8.78% | 4.74 GiB |
-| 79.6 M | 128 | 128 (2 lines) | 8.00 | 2.33% | 9.49 GiB |
-
-**Do not round the per-key region up to a whole cache line.** At `-R 100` that
-turns 100 bytes into 128 and costs 2 GiB for nothing. A key's region is
-`bytes_per_key` bytes at byte granularity; blocks within it are 64-byte
-aligned relative to the array base, and the final partial block is simply
-smaller. Only the *lookup* needs to hit one line, not the whole region.
-
-**Sizing is budget-driven, not hard-coded.** The user gives a memory budget;
-the tool derives bits per item and reports what that implies:
+**Bits per item is the option, default 8**, and `k` follows from it
+(`k = round(0.693 · bits_per_item)`, clamped to 1…16) rather than being set
+separately. Memory is
 
 ```
-bits_per_item = budget_bytes * 8 / (K * R)
+lines_per_key = max(1, ceil(R * bits_per_item / 512))
+total         = K * 64 * lines_per_key
 ```
 
-and refuses (rather than silently degrading) below ~4 bits/item, where FP
-exceeds ~15% and the filter costs more coverage than it saves.
+Note the two roundings pull opposite ways and the tool must report both: at
+`-R 100` a default of 8 bits/item asks for 100 bytes and gets **128**, while
+at `-R 8` it asks for 8 and still gets 64. The feature only makes sense where
+`R * bits_per_item ≥ 512` — below that the rounding dominates and duplication
+is too rare to be worth the memory anyway (1.4% at `-R 8`).
+
+**The filter holds only DISTINCT seeds, so sizing on `R` is conservative.** A
+duplicate is detected and skipped, not re-inserted, so the load is
+`R × (1 − duplicate_rate)`: 83 items at `-R 100`, not 100. That is worth a
+whole step of the FP table.
+
+At `K` = 79.6 M, one line per key = **4.74 GiB**, two = 9.49 GiB:
+
+| `-R` | lines | total | items | bits/item | k | FP |
+|---:|---:|---:|---:|---:|---:|---:|
+| 64 | 1 | 4.74 GiB | 55.5 | 9.23 | 6 | 1.3% |
+| 100 | 1 | **4.74 GiB** | 83.0 | 6.17 | 4 | **5.3%** |
+| 100 | 2 | 9.49 GiB | 83.0 | 12.34 | 8 | 0.35% |
+| 1000 | 16 | 75.91 GiB | 562.0 | 14.58 | 9 | 0.14% |
+
+**Memory must grow with `-R` or the filter eats the coverage it saves.** Held
+at one line per key, the net gain in distinct seeds at matched wall time peaks
+and then goes negative:
+
+| `-R` | distinct, off | distinct, on | FP | net |
+|---:|---:|---:|---:|---:|
+| 64 | 55.5 | 59.9 | 1.9% | **+8.1%** |
+| 100 | 83.0 | 89.0 | 8.1% | +7.2% |
+| 128 | 102.6 | 108.1 | 14.4% | +5.4% |
+| 200 | 149.9 | 144.3 | 31.3% | **−3.7%** |
+
+That is the argument for sizing by bits per item rather than by a memory
+budget: bits per item is the quantity that has to stay fixed as `R` rises. A
+`--seed-dedup-max BYTES` cap is still useful, but it should **refuse** when
+the requested bits per item does not fit, naming what would fit, rather than
+silently thinning the filter into the negative row above.
+
+Two consequences worth stating plainly. At `K` = 79.6 M and a 7 GB ceiling,
+`-R 100` can afford **one** line per key, i.e. 6.17 bits/item and ~5.3% FP —
+the default of 8 does not fit. And at `-R 1000` on that keyspace nothing fits
+at all (75.9 GiB), so this feature is for `R` of order 100 on a large
+keyspace, or for high `R` on a small one.
 
 ### Hash
 
@@ -149,11 +191,18 @@ Cost of the barrier, at `T = 8`, `K = 79.6 M`, `-R 100`:
 
 ## 5. CLI
 
-- `--seed-dedup BYTES` — enable, with a memory budget (`4G`, `512M`). Off by
-  default; absent means the current behaviour, byte for byte.
-- Echo in `show_settings()`: budget, `bytes_per_key`, bits/item, `k`, and the
-  **expected false-positive rate**, because that is a coverage loss the user is
-  choosing to accept and it must not be buried.
+- `--seed-dedup` — enable. Off by default; absent means the current behaviour,
+  byte for byte.
+- `--seed-dedup-bits N` — bits per item, **default 8**, range ~4…24. Below 4
+  the FP exceeds ~15% and the filter costs more coverage than it saves, so
+  that is a refusal rather than a warning.
+- `--seed-dedup-max BYTES` — optional ceiling (`4G`, `512M`). It **refuses**
+  when the requested bits per item does not fit, naming the largest that does;
+  it never thins the filter silently.
+- Echo in `show_settings()`: `lines_per_key`, total bytes, the **effective**
+  bits per item after line rounding (which is not the requested figure — see
+  §3), `k`, and the **expected false-positive rate**, because that is a
+  coverage loss the user is choosing to accept and it must not be buried.
 - Final diagnostic: climbs skipped, as a count and a percentage, plus the
   observed duplicate rate. Without this the feature is invisible and its
   benefit unmeasurable.
@@ -210,13 +259,21 @@ saving looks. That is the same rule experiments D, E and F ran under, and the
 `score_iter` traps in `results-monoic-endtoend.txt` and
 `results-experiment-f.txt` are why the test has to be end to end.
 
-**Expected magnitude, stated up front so it can be wrong:** ~11% of compute at
-`-R 100`, minus ~2.3% of distinct seeds lost to false positives, minus ~0.1%
-barrier idle — call it 8–9% effective. On a flat part of the restart curve
-that is worth almost nothing; the case for building it rests on the claim that
-the curve is *not* flat for difficult messages, which `CLAUDE.md`'s restart
-ladder supports (recovery still climbing at `-R 5000` at L = 60–100) but which
-has not been measured at this keyspace scale.
+**Expected magnitude, stated up front so it can be wrong.** The right currency
+is **distinct seeds climbed at matched wall time**, not compute saved — a
+skipped duplicate is worth nothing on its own, and a false positive costs a
+distinct seed. At `-R 100`, `K` = 79.6 M and one line per key (5.3% FP), that
+is **+7.2%**; at two lines per key it would be ~+11%. Both are small, and on a
+flat part of the restart curve they are worth nothing at all. The case for
+building it rests on the claim that the curve is *not* flat for difficult
+messages, which `CLAUDE.md`'s restart ladder supports (recovery still climbing
+at `-R 5000` at L = 60–100) but which has not been measured at this keyspace
+scale.
+
+**So the honest prior is that this is a marginal feature**, and the §3 table
+says the margin can be negative if the filter is under-sized. It is worth
+building only because the same run that measures it also measures the restart
+curve at a scale nothing here has reached.
 
 ## 9. Deliberately not done
 
