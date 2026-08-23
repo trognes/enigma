@@ -1,9 +1,14 @@
-# A WEIGHTED KICK BUYS NOTHING THE SHIPPED SEARCH DOES NOT ALREADY HAVE.
-# Biasing the restart kick toward plugs that score well on their own is a real
-# effect -- worth +7% of breaks, confirmed on two independent seeds -- but ONLY
-# in configurations that are themselves ~27% below the shipped one, and no
-# weighted configuration reaches the plain uniform kick.  In the shipped
-# configuration it is a flat null.
+# A WEIGHTED KICK IS A LARGE WIN AT LOW RESTART COUNTS AND IS SUBSUMED BY
+# RESTARTS ABOVE R = 6.  In the SHIPPED configuration at 3200 keys it is worth
+# +29.5% of breaks at R = 1 (z = +3.79), +25.2% at R = 2 (pooled z = +5.57 over
+# two seeds), +8.8% at R = 4 (pooled z = +2.65), and nothing at R = 8
+# (z = -0.34).  It is also ~5% CHEAPER at every R, so these are wins on both
+# axes rather than trades.
+#
+# THE R SWEEP CAME LAST AND IT SHOULD HAVE COME FIRST.  Every table below the
+# next section was run at R = 8, which is past the crossover, so they measure
+# the regime where the lever is already dead and describe it as dead
+# everywhere.  Read the R sweep first; the rest is the anatomy of why it fades.
 #
 #   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
 #   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/wkick eval/proto_wkick.cc $objs
@@ -60,7 +65,47 @@
 #   softmax T=0.25      0.583            4.70x       6.42
 #
 # ============================================================================
-# END TO END, IN THE SHIPPED CONFIGURATION, IT IS A NULL
+# THE RESTART COUNT IS THE VARIABLE THAT MATTERS
+# ============================================================================
+#
+# Shipped configuration (kick 10, cap-4 climb under k, f10 continuation),
+# T = 1, 3200 keys per cell, paired:
+#
+#   R    uniform   weighted   onlyA/onlyB      z      effect   ms/key A -> B
+#   1      261       338        168/245     +3.79    +29.5%    0.52 -> 0.50
+#   2      393       492        182/281     +4.60    +25.2%    1.02 -> 0.98
+#   3      599       677        289/367     +3.05    +13.0%
+#   4      682       742        291/351     +2.37     +8.8%    2.03 -> 1.94
+#   5      773       844        292/363     +2.77     +9.2%
+#   6      893       903        337/347     +0.38     +1.1%
+#   8     1052      1043        346/337     -0.34     -0.9%    4.11 -> 3.88
+#
+#   second seed at R = 2 and R = 4: 420 -> 497 (z = +3.33) and 707 -> 741
+#   (z = +1.37), so pooled z = +5.57 and +2.65.  Same sign, smaller -- the
+#   first seed was the larger, as usual.
+#
+# THE CORRECTNESS ADVANTAGE IS CONSTANT; THE BREAK ADVANTAGE IS NOT.  The
+# weighted seeds hold ~18% correct plugs against ~15% at BOTH R = 1 and R = 8
+# (1.23 of 6.85 against 1.00 of 6.69, and 1.20 of 6.85 against 0.96 of 6.70).
+# So the lever delivers the same seed improvement at every budget, and only its
+# CONVERSION decays.  What changes is what the alternative supplies: at R = 1
+# there is no diversity to be had, so a better seed is the only thing available;
+# by R = 8 the restarts have supplied it and the bias is buying something
+# already in hand.
+#
+# THAT IS THE SAME SHAPE --polish HAS, which CLAUDE.md records as a lift that
+# "roughly halves R80 -> R160 and can vanish by R160".  A low-budget improvement
+# subsumed by restarts is a recurring pattern here rather than a property of
+# this lever.
+#
+# AND R = 4 IS OPERATIONAL, not academic.  CLAUDE.md's unknown-key budget
+# analysis puts the affordable restart count on a real full-keyspace sweep at
+# roughly 4 to 12 -- so the crossover sits inside the range a genuine attempt
+# runs at, and the +8.8% at R = 4 is in the part of it that a 24-hour exact
+# sweep can afford.
+#
+# ============================================================================
+# AT R = 8 IT IS A NULL, AND THE REST OF THIS FILE IS THAT REGIME
 # ============================================================================
 #
 # Arm A is perturb_steckerbrett(), the shipped uniform kick; arm B draws the
