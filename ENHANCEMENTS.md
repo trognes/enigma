@@ -753,11 +753,54 @@ reproduces `CLAUDE.md`'s restart ladder closely (0.425 distinct per restart at
 a seed already climbed. A **seed-level** cache is therefore a different
 proposition from the removed `--restart-tt`, which hashed *converged* boards
 after the expensive stage had run — but it adds no new reach, only cheaper
-coverage, and whether it pays end to end is unmeasured. **Designed, not built:
-`SEED_DEDUP.md`** — a per-key blocked Bloom filter over the stage-0 seed, one
-cache line per lookup, sized from a memory budget, with a pass barrier that
-keeps the skip decision `-T`-independent. It carries its own falsification
-rule: matched wall time end to end, or removed.
+coverage, and whether it pays end to end is unmeasured. **Now BUILT as
+`--seed-dedup`** (`src/dedup.cc`, design and findings in `SEED_DEDUP.md`): a
+per-key Bloom filter over the stage-0 seed with 8-byte blocks, one load per
+lookup, sized by bits per item, with a pass barrier that keeps the skip
+decision `-T`-independent. Verified correct and free when off — 604/604 in the
+suite, long-tier bench flat, both new CI cases injection-verified.
+
+**The compute saving is measured; the recovery gain is not.** At a fixed
+restart count on 26 keys it is **8.1% of wall time at `-R 1000`** (14.6% of
+seeds skipped) and **21.0% at `-R 10 000`** (40.7% skipped), answer unchanged,
+against an off-vs-off floor under 1% — `eval/results-seed-dedup.txt`. The
+saving is about **half** the skip rate at both budgets, because the cheap stage
+runs on every seed and only the target continuation is skipped. **Nothing shows
+it converts into breaks**: those runs hold `-R` fixed rather than spending the
+saved time on more restarts, and the end-to-end comparison that would have
+tested that was retired before it ran (`SEED_DEDUP.md` §8). So the ~+10.6%
+distinct-seeds figure stays arithmetic, and this entry is a measured compute
+reduction with an unmeasured effect on recovery.
+
+**The seed pool is far larger than any budget yet run reveals.** Rarefaction
+alone cannot say how much larger — the accumulation curve has not begun to
+saturate, so a saturating fit is unidentifiable, and the two obvious ones
+(Michaelis–Menten 2985, Weibull 3162) are refuted by the curve's own slope.
+The multiplicity distribution settles that half — `eval/chao_seeds.py` and
+`eval/results-seed-richness.txt` — and **because it was run at two budgets the
+bound made at the smaller one could be tested against the larger**:
+
+| `-R` (default kick) | observed | Chao1 bound | ratio | coverage |
+|---:|---:|---:|---:|---:|
+| 10 000 | 2 689.5 | ≥ 5 985.8 | 2.23× | 83.7% |
+| 50 000 | 6 608.3 | ≥ 12 103.6 | 1.83× | 93.3% |
+| **200 000** | **12 627.3** | **≥ 20 275.4** | 1.61× | 97.3% |
+
+**Each bound was tested by the next budget and all three held** — 5 986 against
+a later 6 608, 12 104 against 12 627 — and the last run's distinct count was
+predicted to within 4.3% *before it ran*. The 4-plug kick is the control that
+licenses reading any of this: it has closed (coverage 100.0%, Chao1 1.02×
+observed, pool ~172), though note it was itself 12% short at `-R 10 000`, so
+"saturated" there was a claim about slope rather than proof.
+
+**Chao1 has not converged** — still growing as `n^0.37` — so 2.0 × 10⁴ is a
+floor, not an answer; what converges is its ratio to observed. Refitting the
+curve's shape with 20× more data barely moves the asymptote (9.8 → 7.3 → 6.4
+× 10⁴ as data was added), which is the strongest available argument that ~6 ×
+10⁴ is the right order. So: **floor ~2 × 10⁴, best estimate ~6.4 × 10⁴**, a
+factor of three where it began as a decade. The useful form is the scaling:
+**it now takes ~4.7× the restarts to double the distinct seeds** (`R^0.45`;
+it was 3× below `-R 10 000`), so diversity gets dearer as you buy it.
 
 **For any follow-up: save the board strings.** This run stored plug counts and
 scores but not boards, so basin diversity had to be estimated from distinct

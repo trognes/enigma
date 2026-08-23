@@ -34,6 +34,7 @@
 #include "scoring.h"
 #include "plugboard.h"
 #include "crib.h"
+#include "dedup.h"
 #include "confidence.h"
 #include "exhaust.h"
 #include "keyspace.h"
@@ -169,6 +170,32 @@ int main(int argc, char * * argv)
                 crib_alignment_count(), (crib_alignment_count() == 1) ? "" : "s",
                 rej, g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
                 g_keys_analysed ? (100.0 * rej / g_keys_analysed) : 0.0);
+    }
+  /* --seed-dedup: without this line the feature is invisible. Every key is
+     still analysed, so the count above is unchanged, and plugboards scored
+     falls for reasons that could be anything.
+
+     The unit is a SEED, not a key: one seed is produced per (key, restart)
+     work item and it is that seed's full climb that is skipped, so the
+     denominator is the seed count. Dividing by the key count instead would
+     misreport by a factor of R.
+
+     "duplicate" is approximate by construction -- a Bloom false positive is
+     indistinguishable from a duplicate at run time -- and the settings echo
+     gives the expected rate so the two can be read together. The line reports
+     CLIMBS, not a compute saving: the cheap stage ran on every seed, since
+     that is what produced the seed being tested. */
+  if (seed_dedup_on())
+    {
+      const unsigned long long sk =
+        static_cast<unsigned long long>(seed_dedup_skipped());
+      const unsigned long long seeds =
+        static_cast<unsigned long long>(seed_dedup_seeds());
+      fprintf(stderr,
+              "Skipped %llu full climb%s on duplicate seeds of %llu (%.1f%%)\n",
+              sk, (sk == 1) ? "" : "s", seeds,
+              seeds ? (100.0 * static_cast<double>(sk)
+                       / static_cast<double>(seeds)) : 0.0);
     }
   fprintf(stderr, "Finished in %.2f s using %d thread%s\n",
           secs, opt_threads, (opt_threads == 1) ? "" : "s");

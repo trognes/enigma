@@ -33,3 +33,70 @@ k4f10 final, kick 10   (100 keys with a full 10000 dumps)
      4000    1073.4   73.2%        17.0%
     10000    1850.7   81.5%         nan%
 
+# ============================================================================
+# HOW MANY DISTINCT SEEDS EXIST?  THE CURVE FITS DO NOT SAY.
+# ============================================================================
+#
+# The tables above are rarefaction -- how many distinct seeds have been SEEN by
+# n restarts.  The asymptote is a different question, and fitting it to these
+# points does not answer it.
+#
+# THE kick-4 ARM IS THE CONTROL, and it shows the method works when a curve has
+# actually saturated.  Its local exponent has fallen to 0.14 and "next is new"
+# reads 0.0% by n = 4000, and all three estimators then agree:
+#
+#     Michaelis-Menten  126     Weibull  141     exponent-decline  156
+#     observed at n = 10000: 152.7
+#
+# ON THE DEFAULT KICK THEY DISAGREE BY 30x:
+#
+#     Michaelis-Menten  2985    Weibull  3162    exponent-decline  9.8e4
+#     observed at n = 10000: 2689.5
+#
+# THE TWO SATURATING FITS ARE REFUTED BY THEIR OWN DATA, and the argument needs
+# no extra measurement.  At the top of the range distinct seeds still grow as
+# n^0.63, so ONE more doubling of R -- 10000 to 20000 -- reaches
+# 2689.5 * 2^0.63 = 4163, which is already past both fitted asymptotes.  A model
+# whose ceiling is below what the next doubling attains is wrong whatever its
+# residuals look like; the good fit is an artefact of forcing saturation on a
+# curve that has not begun to.
+#
+# LOCAL EXPONENT d(log D)/d(log n), at the geometric midpoint of each interval:
+#
+#     n        16    64   256   715  1414  2828  6325
+#     kick 10  0.95  0.91 0.84  0.78 0.73  0.69  0.63     declining 0.125/decade
+#     kick 4   0.74  0.60 0.44  0.33 0.25  0.20  0.14     declining 0.239/decade
+#
+# WHAT CAN BE SAID, then, is a lower bound and a scaling law, not a number:
+#
+#   * AT LEAST 2690 distinct seeds per key -- observed, not estimated.
+#   * DISTINCT SEEDS SCALE AS ~R^0.63 at the top of the measured range, so
+#     TRIPLING R BUYS DOUBLE THE DISTINCT SEEDS (3^0.63 = 2.0).  This is the
+#     practically useful form and it is measured rather than extrapolated.
+#   * Extending the exponent's own decline (0.125 per decade, linear in log n)
+#     puts the asymptote near 1e5 per key, reached around R = 1e9, and puts
+#     1e4 distinct seeds at R = 1.1e5.  That extrapolates FIVE DECADES past the
+#     data on an assumption nothing here tests: an order of magnitude at best.
+#
+# COMBINATORICS CONSTRAINS NOTHING.  The seed carries ~10 plugs, not 4 -- the
+# k4 cap blocks ADDS only, and the default kick starts every restart at ten --
+# and there are ~1.5e14 ten-pair boards on 26 letters.  The limit is basin
+# structure.
+#
+# THE "next is new" COLUMN IS THE RIGHT STATISTIC AND IS TOO NOISY TO USE.  It
+# is Good-Turing's coverage deficit, so S >= D/coverage, but it is estimated
+# from ONE Bernoulli draw per key: at 100 keys it carries +-4-5pp, and its
+# implied estimates (1167 at n = 2000, 2033 at n = 4000) come out BELOW the
+# count already observed at n = 10000.  Richness needs the full multiplicity
+# distribution, which is what eval/chao_seeds.py collects.
+#
+# THAT MEASUREMENT HAS SINCE BEEN RUN -- eval/results-seed-richness.txt.  It
+# settles the negative half of the question and not the positive one: Chao1
+# gives a LOWER BOUND of 5986 distinct seeds per key under the default kick,
+# so the Michaelis-Menten (2985) and Weibull (3162) asymptotes above are wrong
+# by a second argument independent of the slope argument, and there is no
+# ceiling near 3000.  It does not pin the true value: 61% of the seeds found in
+# 10 000 restarts were seen exactly ONCE, and Chao1 is weakest exactly when
+# singletons dominate.  The control arm behaves as it should (Chao1 164.6
+# against an observed 152.7, coverage 99.8%), which is what licenses reading
+# the other two at all.

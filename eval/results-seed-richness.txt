@@ -1,0 +1,207 @@
+# HOW MANY DISTINCT SEEDS EXIST PER KEY?  AT LEAST ~2.0e4 under the default
+# kick, best estimate ~6.4e4.  Measured at THREE budgets, so each bound could
+# be CHECKED against what the next one found -- and all three held.  The
+# sections run in the order the runs did; the -R 200000 one at the end carries
+# the current numbers.
+#
+# python3 eval/chao_seeds.py                      (ARMS=... R=... KEYS=... )
+#
+# L=100, 100 keys, -R 10000 / 50000 / 200000, telegraphic German, boards from
+# --dump-all.
+# Companion to eval/results-rarefaction-restarts.txt, which measures how many
+# distinct seeds have been SEEN by n restarts and leaves the asymptote to a
+# curve fit.  This measures the MULTIPLICITY distribution instead, which is
+# what actually carries information about the unseen.
+#
+# ============================================================================
+# THE RESULT
+# ============================================================================
+#
+#   arm                       observed      f1      f2    Chao1   coverage
+#   kick 4  (CONTROL)            152.7    16.9    11.8    164.6      99.8%
+#   kick 10 (the default)       2689.5  1631.6   405.4   5985.8      83.7%
+#   kick 10, f10 final board    1850.7  1053.6   281.1   3832.2      89.5%
+#
+#   f1/f2 = singletons/doubletons: seeds seen exactly once / exactly twice.
+#   Chao1 (bias-corrected) = S_obs + f1(f1-1)/(2(f2+1)), a LOWER BOUND on
+#   richness.  Coverage = 1 - f1/n, the Good-Turing estimate of the sampled
+#   share of the probability mass.  All per key, then averaged: the pool is
+#   per key, which is the unit --seed-dedup filters over.
+#
+# ============================================================================
+# THE CONTROL IS WHAT MAKES THE HEADLINE READABLE
+# ============================================================================
+#
+# The 4-plug kick has genuinely saturated ("next is new" 0.0% by n = 4000), and
+# on it the estimator behaves: Chao1 lands 8% above the observed count and
+# coverage reads 99.8%.  It also falls inside the 126-156 the three curve fits
+# gave.  So on a saturated pool this method says "you have seen essentially all
+# of it" rather than inventing headroom.
+#
+# On the default kick the same estimator reads 2.23x observed and 83.7%
+# coverage.  The contrast is the evidence, not the absolute number.
+#
+# ============================================================================
+# TWO NUMBERS WORTH MORE THAN THE HEADLINE
+# ============================================================================
+#
+# 61% OF THE SEEDS FOUND IN 10 000 RESTARTS WERE SEEN EXACTLY ONCE
+# (1631.6 of 2689.5).  A sample dominated by singletons is the signature of a
+# pool nowhere near exhausted -- and it is measured, not fitted.
+#
+# 16.3% OF DRAWS AT -R 10000 ARE STILL NOVEL.  That is Good-Turing's coverage
+# deficit f1/n: even ten thousand restarts into one key, about one climb in six
+# lands somewhere the run has never been.  It also cross-checks the rarefaction
+# table's much noisier "next is new" column, which read 26.0% at n = 4000 --
+# same quantity, declining as it should.
+#
+# ============================================================================
+# WHAT THIS SETTLES, AND WHAT IT DOES NOT
+# ============================================================================
+#
+# SETTLED: the two saturating curve fits are wrong.  Michaelis-Menten (2985)
+# and Weibull (3162) both sit BELOW the Chao1 lower bound of 5986, so they are
+# refuted by a second argument independent of the slope argument in
+# results-rarefaction-restarts.txt.  There is no asymptote near 3000.
+#
+# NOT SETTLED: the actual richness.  Chao1 is a LOWER bound, and it is a weak
+# one exactly when singletons dominate the sample -- f1/f2 = 4.0 here, against
+# 1.4 on the saturated control.  So ~6000 is a floor, not an estimate.
+#
+# (The -R 50000 run below revises both halves of this: the floor rises to
+# ~12 000 and the range narrows to 1.2e4 - 7e4.  The figures in THIS section
+# are the -R 10000 ones, kept because the bound they state is what the larger
+# run then tested.)
+#
+# The practically useful form is measured rather than extrapolated: DISTINCT
+# SEEDS SCALE AS ~R^0.63 at the top of the -R 10000 range -- ~R^0.54 once the
+# -R 50000 points are added -- so tripling R buys double the distinct seeds,
+# quadrupling once you are out past 10 000.
+#
+# ============================================================================
+# WHAT IT MEANS FOR --seed-dedup
+# ============================================================================
+#
+# The filter is sized on RESTARTS, not on richness, so none of this changes the
+# sizing -- but it does say the duplicate rate has room to keep rising: even at
+# -R 50000 the pool is at best 55% sampled (6608.3 of >= 12104), so pushing R
+# higher goes on finding new seeds while the duplicate rate goes on growing.
+# Both the saving and the waste it removes scale together, which is why the
+# feature's payoff grows with -R rather than topping out.
+#
+# SCOPE: one length (L=100), one schedule, one corpus, 100 keys, kick 4 and 10
+# only.  Richness is a property of the basin structure, so it should be
+# expected to move with message length and with the scoring model.
+#
+# ============================================================================
+# -R 50000: BOTH BOUNDS CHECKED AGAINST OBSERVATION, AND BOTH HELD
+# ============================================================================
+#
+#   ARMS=kick4,kick10 R=50000 python3 eval/chao_seeds.py
+#
+#   arm                    observed      f1      f2     Chao1   coverage
+#   kick 4  (CONTROL)         170.9     6.8     5.7     175.0     100.0%
+#   kick 10 (the default)    6608.3  3355.1  1026.1   12103.6      93.3%
+#
+#   rarefaction, kick 10:
+#     n        8     32    128    512   1000   2000   4000  10000  20000  50000
+#     D      7.9   29.6  104.1  333.4  562.2  933.8 1504.6 2689.5 4039.4 6608.3
+#
+# THE PREDICTIONS MADE AT -R 10000 CAN NOW BE CHECKED, WHICH IS THE POINT OF
+# RUNNING THIS AT ALL:
+#
+#     arm       Chao1 bound at 10000     observed at 50000     verdict
+#     kick 4              >= 164.6                   170.9     held, +3.8%
+#     kick 10            >= 5985.8                  6608.3     held, +10.4%
+#
+# A lower bound that is checked twice and holds twice is worth more than one
+# asserted once.  Note also that the CONTROL was not finished at -R 10000
+# either -- 152.7 then, 170.9 now, 12% short -- so "saturated" was a statement
+# about the curve's slope, and the estimator corrected it in the right
+# direction.
+#
+# THE CONTROL HAS NOW CLOSED: coverage 100.0%, Chao1 1.02x observed, local
+# exponent 0.055.  Its pool is ~172 seeds and that figure is essentially exact.
+#
+# THE DEFAULT KICK HAS NOT.  Chao1 DOUBLED between the two budgets, 5986 ->
+# 12104, on a 5x larger sample.  A converging estimator would be flat; one that
+# doubles is saying the pool keeps opening up.  Coverage 83.7% -> 93.3%, and
+# 3355 of the 6608 seeds found were still seen exactly once.
+#
+# THE SCALING LAW HELD PREDICTIVELY.  The local exponent continued its steady
+# decline -- 0.634, 0.587, 0.537 over the three new intervals -- at 0.131 per
+# decade against the 0.125 fitted before those points existed:
+#
+#     n         16    64   256   715  1414  2828  6325 14142 31623
+#     kick 10  .953  .907  .840  .781  .732  .688  .634  .587  .537
+#     kick 4   .743  .600  .444  .331  .254  .198  .141  .090  .055
+#
+# So distinct seeds now go as ~R^0.54 at the top of the range, and QUADRUPLING
+# R DOUBLES THE DISTINCT SEEDS (it was tripling at -R 10000).  Re-extrapolating
+# the exponent's decline with three more points barely moves the asymptote:
+# 7.3e4 against the earlier 9.8e4.
+#
+# WHERE THIS LEAVES THE ANSWER: the floor rises from ~6e3 to ~1.2e4 (Chao1,
+# checked), the shape extrapolation says ~7e4, and the honest range is
+# 1.2e4 to ~7e4.  Still not a single number, but a decade narrower than before,
+# and both ends are now anchored by something that has been tested.
+
+# ============================================================================
+# -R 200000: A THIRD TEST, AND THE ESTIMATE TIGHTENS TO A FACTOR OF THREE
+# ============================================================================
+#
+#   ARMS=kick10 R=200000 KEYS=100 python3 eval/chao_seeds.py    (~23 min)
+#
+#   observed distinct  12627.3    f1 5394.4   f2 1905.6
+#   Chao1 (lower bound) 20275.4   = 1.61x observed
+#   Good-Turing coverage  97.3%
+#
+#   rarefaction:  ... 10000:2689.5  20000:4039.4  50000:6608.3
+#                     100000:9264.0  200000:12627.3
+#
+# PREDICTIONS WERE REGISTERED BEFORE THIS RUN, and all three held:
+#
+#   predicted ~13200 distinct        -> 12627.3        (-4.3%)
+#   clears the -R 50000 bound 12104  -> yes            (+4.3%)
+#   Chao1 rises by less than its previous doubling -> +67%, not +102%
+#
+# The exponent-decline model also called the two NEW local exponents to within
+# 0.011 (0.476 predicted against 0.487 observed, 0.437 against 0.447).  Those
+# are forecasts, not fits.
+#
+# THE THREE BUDGETS TOGETHER:
+#
+#     -R        observed     Chao1    ratio   coverage
+#     10000       2689.5    5985.8    2.23x      83.7%
+#     50000       6608.3   12103.6    1.83x      93.3%
+#    200000      12627.3   20275.4    1.61x      97.3%
+#
+# CHAO1 HAS NOT CONVERGED.  It is still growing as n^0.37 (n^0.44 over the
+# previous step), so 20275 is a floor and not an answer.  What IS converging is
+# the ratio to observed -- 2.23, 1.83, 1.61 -- which is what approach from
+# below looks like.
+#
+# REFITTING THE SHAPE WITH 20x MORE DATA BARELY MOVES THE ASYMPTOTE:
+#
+#     data through      asymptote     decline/decade
+#     -R 10000            9.8e4           0.1248
+#     -R 50000            7.3e4           0.1308
+#     -R 200000           6.4e4           0.1341
+#
+# Three independent fits, each on substantially more evidence, drifting gently
+# downward toward the same place.  That is the strongest argument available
+# here that ~6e4 is the right order, since nothing in the fit forces agreement
+# across refits.
+#
+# SO: floor ~2.0e4 (tested three times), best estimate ~6.4e4, and the honest
+# range is now a factor of three rather than the decade it started at.
+#
+# THE SCALING LAW, which is the part to use: distinct seeds now go as ~R^0.45 at
+# the top of the range, so it takes ~4.7x THE RESTARTS TO DOUBLE THE DISTINCT
+# SEEDS -- up from 3x at -R 10000 and 4x at 50000.  The cost of diversity rises
+# as you buy it.
+#
+# ONE CAUTION AGAINST OVER-READING 97.3% COVERAGE: that is coverage of
+# probability MASS, not of the count.  The 2.7% unsampled is spread over seeds
+# that are individually very rare, which is exactly why Chao1 still adds 7600 to
+# the observed count.  Mass and richness saturate at very different rates.

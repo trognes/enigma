@@ -64,7 +64,7 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
 ## Repository layout
 
 ```
-src/                      The program, as 20 modules (20 .cc, 21 .h -- 19
+src/                      The program, as 21 modules (21 .cc, 22 .h -- 20
                           module headers plus two that are header-only,
                           result.h and parallel.h). main.cc is only the run:
                           it calls parse_args() in args.cc and then sequences
@@ -77,11 +77,13 @@ README.md                 User-facing description and usage.
 CHANGELOG.md              Release history.
 CLAUDE.md                 This file.
 ENHANCEMENTS.md           The open issue list -- what is still worth doing.
-SEED_DEDUP.md             Design record for seed deduplication (planned, NOT
-                          built): skip the expensive target climb when a
-                          restart's cheap-stage seed has been seen before for
-                          that key.  Per-key blocked Bloom filter, pass
-                          barrier, budget-driven sizing.
+SEED_DEDUP.md             Design record for `--seed-dedup` (now BUILT, in
+                          src/dedup.cc): skip the target climb when a
+                          restart's stage-0 seed has already been climbed for
+                          that key.  Per-key Bloom filter with 8-byte blocks,
+                          pass barrier, bits-per-item sizing.  Carries the
+                          designs that were tried and retracted, and what the
+                          build itself taught.
 LICENSE                   GNU GPL v3.
 .gitignore                Editor backups, cipher*.txt, the built binary, the
                           `src/*.o` / `src/*.d` build products, and __pycache__.
@@ -604,6 +606,83 @@ are read from a **data directory** (filenames built as
   because a wrong *offset* is unrecoverable — it fails less often and worse.
   **That holds at L=300 and is gone by L=450** — see "How the split moves with
   length" below.
+- `--seed-dedup` / `--seed-dedup-bits N` / `--seed-dedup-max BYTES` **skip the
+  target climb when this restart's stage-0 seed has already been climbed for
+  this key** (needs `-c` and a staged `--score`; off by default). Under a
+  staged schedule the board after stage 0 is a deterministic function of
+  `(key, restart)` — the kick comes from `restart_seed()` and the capped climb
+  from it is deterministic — so two restarts reaching the same seed produce a
+  **byte-identical** result and the second climb is pure waste. Measured 17% of
+  seeds at `-R 100` and **73% at `-R 10 000`** (`eval/results-experiment-f.txt`
+  §7). Design, sizing and what the build taught: `SEED_DEDUP.md`.
+  - **Measured faster at a fixed restart count**, on 26 keys with the
+    recommended recipe (`eval/results-seed-dedup.txt`): **−8.1% of wall time at
+    `-R 1000`** (14.6% of seeds skipped) and **−21.0% at `-R 10 000`** (40.7%
+    skipped), answer identical, off-vs-off floor −0.6%/+0.9%. **The saving is
+    about HALF the skip rate** at both budgets, because the cheap stage runs on
+    every seed — it is what produces the seed being tested — so only the target
+    continuation is skipped; read a run's printed skip percentage as predicting
+    half that much time. Wall time **exceeds** `score_iter` here (−6.5% /
+    −18.3%), the counter understating the saving because `--polish`'s gain scan
+    runs outside the counted loop.
+  - **Not shown to convert into BREAKS.** Those runs hold `-R` fixed and
+    measure time saved rather than spending it on more restarts, and the
+    end-to-end comparison that would have tested that was retired before it ran
+    (`SEED_DEDUP.md` §8), so the distinct-seed figures there stay arithmetic.
+  - **Per-key Bloom filter, 8-byte blocks.** A lookup is one `uint64` load, one
+    AND and one compare. 8 divides 64, so an aligned word never straddles a
+    cache line — the single-read property comes for free rather than being
+    engineered — and the per-key region rounds up to 8 bytes rather than 64, so
+    at most 7 bytes per key are wasted instead of up to 63. That continuous
+    sizing is what makes the payoff **grow** with `-R` (+8.0% distinct seeds at
+    matched wall time at `-R 64`, +10.6% at 100, +32.5% at 1000) rather than
+    peaking and reversing as the filter saturates, which a fixed region size
+    does by `-R 200`.
+  - **`k` is not `0.693 × bits`.** Small blocks scatter their load (a block's
+    occupancy is Poisson, and a `k`-bit test grows as `load^k`), so the optimum
+    sits lower — 5 rather than 7 at 10 bits per item — and it is chosen
+    numerically at startup from the blocked FP formula rather than the textbook
+    one.
+  - **The echoed FP is AT FULL LOAD and is conservative by ~`k+1`.** Most
+    queries hit a part-filled filter, so the run-average is far below the
+    quoted rate: measured on 43 264 real seeds at 8 bits/item, **303 false
+    positives against the 1 301** the full-load figure implies. The echo also
+    reports the **provisioned** bits per item, not the effective one — the
+    latter divides by the realised distinct-seed count, which no run knows
+    before it has run.
+  - **No lock and no atomic on the filter**, because the sweep runs **one
+    restart pass at a time** and a key appears exactly once per pass (restart is
+    the outer dimension, so pass `p` is the work range `[p·keys, (p+1)·keys)`).
+    The `run_parallel` join at the end of each pass is the barrier; `-T`
+    independence is preserved and the skip count is part of that contract.
+  - **`--ring-stride` is allowed, and its refinement is SUSPENDED rather than
+    merely left alone.** The refinement reuses `search_worker` over its own key
+    space, whose indices start again at 0 and therefore **alias** the coarse
+    pass's per-key regions — unsuspended it both consumed those regions and had
+    its own climbs skipped against seeds they never produced (plugboards scored
+    2 275 780 → 2 495 481 once fixed). There is nothing to catch there anyway:
+    hundreds of keys against the coarse pass's millions.
+  - **The run reports the skips**, as `Skipped N full climbs on duplicate seeds
+    of M (P%)`. Without it the feature is invisible — every key is still
+    analysed, so that diagnostic is unchanged, and plugboards scored falls for
+    reasons that could be anything. The unit is a **seed**, not a key
+    (dividing by the key count is wrong by a factor of `R`), and it reports
+    **climbs, not compute**: the cheap stage ran on every seed, so `P%` of
+    climbs is ~0.64·`P%` of a `k4f10` run.
+  - **The TSan case for it needs a DEGENERATE fixture, and that is not
+    obvious.** Without the barrier a race needs two threads on the *same* key
+    at once, but key `k`'s items sit `R` apart in the work index while threads
+    hand out small consecutive chunks — so a 676-key sweep never overlaps and
+    TSan stays silent on genuinely broken code. The key count must be ≤ the
+    thread count (the CI case uses **one** key). Real kicks are load-bearing
+    too: under `--random 0` every restart yields the same seed, giving one
+    write and `R−1` reads, and read/read is not a race.
+  - Rejected with `-F`, `--exhaust`, `--crib`/`--crib-list`,
+    `--self-crib-seeds`, `--tune-phase`, `-A`, and any single-stage `--score`
+    (with one stage the "seed" would be the converged board, which is what the
+    removed `--restart-tt` measured down). `--seed-dedup-max` **refuses**,
+    naming what would fit, rather than thinning the filter into the range where
+    it costs more coverage than it saves.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,

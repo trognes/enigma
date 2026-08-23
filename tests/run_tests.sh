@@ -2086,6 +2086,157 @@ check "the echoed key reproduces the ciphertext (both)" \
 rm -f "$TMP_WO"
 
 echo
+echo "== Seed deduplication: --seed-dedup =="
+
+# Skip the target climb when this restart's stage-0 seed was already climbed for
+# this key.  The seed determines the climb, so a repeat is byte-identical work.
+#
+# THE FIXTURE IS --random 0, AND THAT IS THE WHOLE POINT.  With no kick every
+# restart climbs from the same unperturbed seed, so the duplicate count is an
+# EXACT expected value -- R-1 of R -- on 26 keys in a fraction of a second.  The
+# natural fixture (real kicks) duplicates ~1.4% at -R 8, which needs a large
+# sweep to assert anything and would be a slow check that catches less.  It also
+# pins the DENOMINATOR, which is the easy thing to get wrong: the unit is a SEED
+# (one per key x restart), not a key, so dividing by the key count would
+# misreport by a factor of R -- invisible at -R 1 and unmistakable across
+# -R 1/2/4.
+sd_pt="ENIGMACIPHERTOOLACOMMANDLINETOOLTHATSIMULATESANENIGMACIPHERMACHINEANDMOREUSEFULLYATTEMPTSTOBREAKENIGMACIPHERTEXT"
+sd_ct=$(run "$sd_pt" -i -u B -w 231 -r AAC -g QWE -s "AB CD EF GH IJ")
+# stderr of a dedup run: OPTS... -> the "Skipped ..." line
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+sd_err() { printf '%s' "$sd_ct" | "$ENIGMA" -c -q -l english -u B -w 231 \
+             -r AAC -g "$rgd" -S i4q10 "$@" 2>&1 >/dev/null; }
+sd_pct() { sd_err "$@" | sed -n 's/^Skipped .*(\([0-9.]*\)%)$/\1/p'; }
+sd_cnt() { sd_err "$@" | sed -n 's/^Skipped \([0-9]*\) .*/\1/p'; }
+sd_den() { sd_err "$@" | sed -n 's/^Skipped .* of \([0-9]*\) .*/\1/p'; }
+
+check "--seed-dedup skips nothing at -R 1" \
+  "$(sd_pct --seed-dedup -R 1 --random 0)" "0.0"
+check "--seed-dedup skips half at -R 2 (no kick: every seed repeats)" \
+  "$(sd_pct --seed-dedup -R 2 --random 0)" "50.0"
+check "--seed-dedup skips 3 of 4 at -R 4" \
+  "$(sd_pct --seed-dedup -R 4 --random 0)" "75.0"
+# The denominator is seeds, not keys: 26 keys x 4 restarts.
+check "--seed-dedup reports seeds, not keys, as the denominator" \
+  "$(sd_den --seed-dedup -R 4 --random 0)" "104"
+check "--seed-dedup skip count is exact (3 of every 4 seeds)" \
+  "$(sd_cnt --seed-dedup -R 4 --random 0)" "78"
+
+# The skip must not change the answer.  With --random 0 the skipped climbs would
+# have reproduced the kept one exactly, so this is an equivalence, not an
+# approximation -- if it fails, the filter is skipping something it should not.
+sd_plain=$(run "$sd_ct" -c -q -l english -u B -w 231 -r AAC -g "$rgd" \
+             -S i4q10 -R 4 --random 0 --polish)
+check "--seed-dedup does not change the recovered plaintext" \
+  "$(run "$sd_ct" -c -q -l english -u B -w 231 -r AAC -g "$rgd" -S i4q10 \
+       -R 4 --random 0 --polish --seed-dedup)" "$sd_plain"
+# ...and with no duplicates possible (-R 1) the staged climb it runs must be the
+# ordinary one, which is what makes the second copy of the stage loop safe.
+sd_one=$(run "$sd_ct" -c -q -l english -u B -w 231 -r AAC -g "$rgd" \
+           -S i4q10 -R 1)
+check "--seed-dedup at -R 1 equals the ordinary staged climb" \
+  "$(run "$sd_ct" -c -q -l english -u B -w 231 -r AAC -g "$rgd" -S i4q10 \
+       -R 1 --seed-dedup)" "$sd_one"
+
+# -T independence: the pass barrier exists so that the skip decision -- and so
+# the whole run -- does not depend on the thread count.  The COUNT is part of
+# that contract, not a by-product: a -T-dependent total means threads are
+# straddling passes on one key even if the winning board happens to agree.
+sd_t1=$(sd_cnt --seed-dedup -R 4 --random 0 -T 1)
+check "--seed-dedup skip count is -T-independent (2)" \
+  "$(sd_cnt --seed-dedup -R 4 --random 0 -T 2)" "$sd_t1"
+check "--seed-dedup skip count is -T-independent (4)" \
+  "$(sd_cnt --seed-dedup -R 4 --random 0 -T 4)" "$sd_t1"
+check "--seed-dedup result is -T-independent" \
+  "$(run "$sd_ct" -c -q -l english -u B -w 231 -r AAC -g "$rgd" -S i4q10 \
+       -R 4 --random 0 --seed-dedup -T 4)" \
+  "$(run "$sd_ct" -c -q -l english -u B -w 231 -r AAC -g "$rgd" -S i4q10 \
+       -R 4 --random 0 --seed-dedup -T 1)"
+
+# Off is off: no line, and the flag absent must leave the run alone.
+check "no --seed-dedup, no report line" \
+  "$(sd_err -R 4 --random 0 | grep -c '^Skipped')" "0"
+
+# A bigger filter cannot skip MORE than a smaller one: extra bits only remove
+# false positives.  Monotonicity is the cheap end-to-end sanity check on the
+# sizing arithmetic, and it holds whatever the true duplicate rate is.
+sd_lo=$(sd_cnt --seed-dedup --seed-dedup-bits 4 -R 8)
+sd_hi=$(sd_cnt --seed-dedup --seed-dedup-bits 24 -R 8)
+check "--seed-dedup-bits 24 skips no more than bits 4 (fewer false positives)" \
+  "$([ "$sd_hi" -le "$sd_lo" ] && echo yes)" "yes"
+
+# Refusals.  Each of these either installs its own starting board (so the
+# stage-0 board is not a function of (key, restart) alone) or re-encodes the
+# work index so "one key per pass" stops holding.  --ring-stride is NOT among
+# them: its coarse pass dedups normally and its refinement runs unfiltered.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+sd_bad() { printf '%s' "$sd_ct" | "$ENIGMA" -q -l english -u B -w 231 \
+             -r AAC -g "$rgd" "$@" 2>&1 >/dev/null; }
+check "--seed-dedup needs -c" \
+  "$(sd_bad --seed-dedup -S i4q10 | grep -c 'needs -c')" "1"
+check "--seed-dedup needs a staged schedule" \
+  "$(sd_bad -c --seed-dedup -S q | grep -c 'needs a staged')" "1"
+check "--seed-dedup rejects -A" \
+  "$(sd_bad -c --seed-dedup -S i4q10 -A 100 | grep -c 'not work with -A')" "1"
+check "--seed-dedup rejects -F" \
+  "$(sd_bad -c --seed-dedup -S i4q10 -F 10 | grep -c 'not work with -F')" "1"
+check "--seed-dedup rejects --exhaust" \
+  "$(sd_bad -c --seed-dedup -S i4q10 --exhaust 1 | grep -c 'exhaust')" "1"
+check "--seed-dedup rejects --crib" \
+  "$(sd_bad -c --seed-dedup -S i4q10 --crib ENIGMA | grep -c 'crib')" "1"
+check "--seed-dedup rejects --tune-phase" \
+  "$(sd_bad -c --seed-dedup -S i4q10 -r "A.." --tune-phase 2 \
+     | grep -c 'tune-phase')" "1"
+check "--seed-dedup-bits rejects 3 (too few for a usable filter)" \
+  "$(sd_bad -c --seed-dedup --seed-dedup-bits 3 -S i4q10 \
+     | grep -c 'Illegal bits per item')" "1"
+check "--seed-dedup-bits rejects 25" \
+  "$(sd_bad -c --seed-dedup --seed-dedup-bits 25 -S i4q10 \
+     | grep -c 'Illegal bits per item')" "1"
+# Silently doing nothing is the failure mode CLAUDE.md warns about, so a
+# sub-option without the flag it configures is fatal rather than ignored.
+check "--seed-dedup-bits without --seed-dedup is fatal" \
+  "$(sd_bad -c --seed-dedup-bits 8 -S i4q10 | grep -c 'need --seed-dedup')" "1"
+check "--seed-dedup-max without --seed-dedup is fatal" \
+  "$(sd_bad -c --seed-dedup-max 1G -S i4q10 | grep -c 'need --seed-dedup')" "1"
+# The ceiling REFUSES rather than thinning the filter, and names what would fit.
+sd_small=$(sd_bad -c --seed-dedup -S i4q10 -R 8 --seed-dedup-max 100)
+check "--seed-dedup-max refuses when the request does not fit" \
+  "$(printf '%s' "$sd_small" | grep -c 'over the --seed-dedup-max')" "1"
+check "--seed-dedup-max says what would fit instead" \
+  "$(printf '%s' "$sd_small" | grep -c 'seed-dedup-bits\|Nothing above')" "1"
+# Byte suffixes, since a memory budget misread by 1024x is a swap-death.
+check "--seed-dedup-max accepts a G suffix" \
+  "$(sd_bad -c --seed-dedup -S i4q10 -R 4 --seed-dedup-max 4G \
+     | grep -c 'over the --seed-dedup-max')" "0"
+check "--seed-dedup-max rejects junk" \
+  "$(sd_bad -c --seed-dedup -S i4q10 --seed-dedup-max 4Q \
+     | grep -c 'trailing characters')" "1"
+
+# --ring-stride composes: the coarse pass is filtered, the refinement is not.
+# -r AA. -g AA. is the smallest keyspace that satisfies --ring-stride's
+# precondition (ring2 AND start2 wildcarded) -- 676 keys rather than the
+# millions that wildcarding ring1/start1 as well would sweep under -c.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+sd_rs=$(printf '%s' "$sd_ct" | "$ENIGMA" -c -q -l english -u B -w 231 \
+          -r "AA." -g "AA." -S i4q10 -R 4 --random 0 --ring-stride 3 \
+          --seed-dedup -T 1 2>&1 >/dev/null)
+check "--seed-dedup works with --ring-stride (coarse pass filtered)" \
+  "$(printf '%s' "$sd_rs" | sed -n 's/^Skipped .*(\([0-9.]*\)%)$/\1/p')" "75.0"
+# 234 coarse keys x 4 restarts.  The refinement's 25 keys must be in NEITHER
+# counter: it reuses search_worker over its own key space, whose indices start
+# again at 0 and alias the coarse per-key regions, so an unsuspended filter both
+# consumes those regions and skips refinement climbs against seeds they never
+# produced.  A wrong denominator here is that bug, and it is otherwise silent.
+check "--ring-stride refinement is outside the filter (seed count)" \
+  "$(printf '%s' "$sd_rs" | sed -n 's/^Skipped .* of \([0-9]*\) .*/\1/p')" "936"
+check "--seed-dedup does not change a --ring-stride result" \
+  "$(run "$sd_ct" -c -q -l english -u B -w 231 -r "AA." -g "AA." -S i4q10 \
+       -R 4 --random 0 --ring-stride 3 --seed-dedup -T 1)" \
+  "$(run "$sd_ct" -c -q -l english -u B -w 231 -r "AA." -g "AA." -S i4q10 \
+       -R 4 --random 0 --ring-stride 3 -T 1)"
+
+echo
 echo "== Pre-flight: is this ciphertext even Enigma? =="
 
 # Enigma is a permutation cipher, so its output is near-flat.  A ciphertext

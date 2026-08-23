@@ -70,6 +70,9 @@ const double unit_no_score = -1e300;
 int parse_opt_int(const char * s, const char * what);
 double parse_opt_double(const char * s, const char * what);
 uint64_t parse_opt_u64(const char * s, const char * what);
+/* A byte count with an optional K/M/G (and optional trailing B) suffix, in
+   powers of 1024 -- --seed-dedup-max. */
+uint64_t parse_opt_bytes(const char * s, const char * what);
 
 inline int char2num(char x)
 {

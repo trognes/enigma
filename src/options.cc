@@ -376,6 +376,13 @@ int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force E extr
 int opt_confidence;
 
 int opt_ring_stride;
+/* --seed-dedup: skip the target climb when this restart's stage-0 seed has
+   already been climbed for this key.  --seed-dedup-bits is the Bloom filter's
+   bits per item (default 8) and --seed-dedup-max an optional memory ceiling
+   that REFUSES rather than thinning the filter.  See src/dedup.h. */
+int opt_seed_dedup;
+int opt_seed_dedup_bits;
+uint64_t opt_seed_dedup_max;
 /* --tune-phase N (0 = off): N starting phases per wheel for tune_phase() below.
    With it on, the sweep enumerates the middle and right wheels' OFFSETS only --
    26^3 per wheel order instead of 26^5 -- and their 26x26 phase subspace

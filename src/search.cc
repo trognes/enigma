@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "crib.h"
+#include "dedup.h"
 #include "keyspace.h"
 #include "machine.h"
 #include "options.h"
@@ -158,6 +159,38 @@ static double tune_phase(machine & m, uint64_t * rng, double score)
    climb is not run (REDESIGN Option A). With --restarts 0 there is a single un-kicked climb.
    Each restart draws from its own independent (key,restart) stream, so it is a self-contained
    unit of work; leaves m at this climb's converged board + plaintext and returns its score. */
+/* The staged climb with the seed-dedup gate between stage 0 and the rest.
+
+   Spelled out here rather than hooked into run_stages() so that plugboard.cc
+   keeps knowing nothing about the filter -- the same reason its own module
+   boundary is drawn where it is. The duplication is five lines and is checked
+   by construction: with the filter forced to answer "not present" this must be
+   byte-identical to the run_stages() path, which is verification check 2.
+
+   Only run_stages<false> is reproduced. The EX=true path belongs to --crib,
+   --exhaust and the self-crib seeder, all of which install their own starting
+   board and are refused by --seed-dedup for exactly that reason. */
+static double staged_with_dedup(machine & m, size_t key_index, bool & skipped)
+{
+  m.scoring = opt_stages[0].model;
+  double s = hillclimb<false>(m, opt_stages[0].cap);
+
+  /* The seed. Everything downstream of it is a deterministic function of this
+     board, so if it has been climbed for this key the result would be
+     byte-identical and the target climb is pure waste. */
+  if (seed_dedup_seen(key_index, m.steckerbrett))
+    {
+      skipped = true;
+      return unit_no_score;
+    }
+
+  for (int i = 1; i < opt_nstages; i++)
+    {
+      m.scoring = opt_stages[i].model;
+      s = hillclimb<false>(m, opt_stages[i].cap);
+    }
+  return s;
+}
 static double hillclimb_one(machine & m, size_t key_index, int restart)
 {
   init_steckerbrett(m, opt_steckerbrett);
@@ -165,7 +198,24 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   uint64_t rng = restart_seed(key_index, restart);
   if (opt_restarts >= 1)
     perturb_steckerbrett(m, & rng, opt_perturb);
-  double score = optimize_once(m, & rng);
+  double score;
+  if (seed_dedup_on())
+    {
+      bool skipped = false;
+      score = staged_with_dedup(m, key_index, skipped);
+      /* A skipped item produced no candidate at all, so it returns the same
+         sentinel a rejected crib key does and must reach none of the
+         per-climb reporting below: dump_all would print a row scoring
+         -1e300, and the doubling report would decode a board that was never
+         finished. It cannot win the merge either -- unit_no_score is below
+         score_min -- and it does not need to: the earlier restart that
+         reached this same seed is still in the sweep with a lower work
+         index, which is the index better_cand's tie-break already prefers. */
+      if (skipped)
+        return score;
+    }
+  else
+    score = optimize_once(m, & rng);
   if (opt_tune_phase > 0)
     score = tune_phase(m, & rng, score);
   if (opt_dump_all)
@@ -284,8 +334,8 @@ void search_worker(machine & m,
                    subst_table all,
                    size_t rsize, size_t gsize,
                    std::atomic<size_t> & next_key,
-                   size_t chunk,
-                   size_t restarts,
+                   size_t chunk_max,
+                   size_t idx_end,
                    best_result & best)
 {
   const size_t rg = rsize * gsize;
@@ -305,7 +355,7 @@ void search_worker(machine & m,
      sweep early. Taking the measured climb curve (87% at R=16, ~11.9% per restart):
      found by the quarter mark 40% against 22%, by halfway 64% against 44%, the same 87%
      at the end. */
-  const size_t total = nkeys * restarts;
+  const size_t total = idx_end;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
 
@@ -342,12 +392,34 @@ void search_worker(machine & m,
   const size_t tick_block = opt_hillclimb ? 64 : 4096;
   size_t since_tick = 0;
 
+  /* Hand-outs are sized by DURATION, not by a fixed fraction of the space. A
+     chunk of total/(threads*16) is minutes of work on a large sweep -- fine as
+     an amortisation of the atomic, ruinous as a tail: the main sweep now joins
+     once per restart pass (the pass barrier), so every over-long chunk is idle
+     time paid R times over. At the ~1600 climbs/s/thread of a big run the old
+     divisor gave ~6-minute chunks, i.e. ~5% of the wall clock in barrier tails.
+
+     Adapting inside the worker rather than precomputing a size handles every
+     regime with no calibration pass: a scanned item is ~0.3 us and a climbed
+     one ~1 ms, and the same code lands on ~10 s either way. Growth is capped at
+     4x per hand-out so one fast chunk cannot overshoot, and chunk_max keeps
+     enough chunks in a pass for the threads to balance at the end of it.
+     Chunking affects only WHICH thread sees an item, never that item's result,
+     so none of this is visible in the output. */
+  const double chunk_target_s = 10.0;
+  size_t chunk = opt_hillclimb ? 8 : 512;   /* bootstrap: ~10 ms either way */
+  if (chunk > chunk_max)
+    chunk = chunk_max;
+
   size_t start;
   while ((start = next_key.fetch_add(chunk)) < total)
     {
-      size_t end = start + chunk;
+      const size_t took = chunk;   /* the stride this hand-out used */
+      size_t end = start + took;
       if (end > total)
         end = total;
+      const std::chrono::steady_clock::time_point chunk_t0 =
+        std::chrono::steady_clock::now();
 
       for (size_t idx = start; idx < end; idx++)
         {
@@ -539,6 +611,24 @@ void search_worker(machine & m,
               local_best = best.score;         /* track the global best for the filter */
               local_best_idx = best.idx;
             }
+        }
+
+      /* Re-aim at chunk_target_s from what this hand-out actually cost. `end`
+         may have been clipped by `total`, so measure the items really done. */
+      const double secs =
+        std::chrono::duration<double>(std::chrono::steady_clock::now()
+                                      - chunk_t0).count();
+      const size_t did = end - start;
+      if ((secs > 0.0) && (did > 0))
+        {
+          double want = static_cast<double>(did) * (chunk_target_s / secs);
+          if (want > static_cast<double>(took) * 4.0)
+            want = static_cast<double>(took) * 4.0;   /* cap the growth rate */
+          if (want < 1.0)
+            want = 1.0;
+          chunk = static_cast<size_t>(want);
+          if (chunk > chunk_max)
+            chunk = chunk_max;
         }
     }
   /* The remainder below tick_block, so the last worker to finish takes the line
@@ -962,6 +1052,25 @@ double bruteforce(char * result, bool allow_empty)
   if (nthreads < 1)
     nthreads = 1;
 
+  /* The filter is sized on the keys THIS sweep will visit and the restarts it
+     will run, both known only now. Under --ring-stride that is the COARSE key
+     count, which is what total_keys already holds -- the refinement runs with
+     the filter off, since it is hundreds of keys against the coarse pass's
+     millions and has no duplication worth catching. */
+  if (! seed_dedup_init(total_keys, restarts_par))
+    fatal("--seed-dedup could not be configured");
+  if (seed_dedup_on())
+    {
+      /* The geometry belongs with the rest of the settings echo, but it cannot
+         be computed there: it depends on the resolved keyspace and restart
+         count, which build_key_space() decides. Printed here for the same
+         reason the middle-wheel collapse line is -- so the figure cannot drift
+         from the thing that was actually allocated. */
+      char geo[256];
+      seed_dedup_describe(geo, sizeof(geo));
+      fprintf(stderr, "Seed dedup: %s\n", geo);
+    }
+
   subst_table all = allocate_subst_tables(nwo);
 
   std::vector<machine *> machines(static_cast<size_t>(nthreads));
@@ -1082,7 +1191,10 @@ double bruteforce(char * result, bool allow_empty)
     }
   else
     {
-      size_t schunk = work_items / (static_cast<size_t>(nthreads) * 16);
+      /* A ceiling, not the chunk: search_worker grows its hand-outs toward a
+         target duration and clamps to this, which keeps at least ~4 chunks per
+         thread in a pass so the barrier's tail stays short. */
+      size_t schunk = total_keys / (static_cast<size_t>(nthreads) * 4);
       if (schunk < 1)
         schunk = 1;
       std::atomic<size_t> next_key{0};
@@ -1094,9 +1206,26 @@ double bruteforce(char * result, bool allow_empty)
           sweep_progress_arm(work_items,
                              (restarts_par > 0) ? restarts_par : 1);
         }
-      run_parallel(nthreads, [&](int t)
-        { search_worker(*machines[t], tasks, range, rc, gc, all,
-                        rsize, gsize, next_key, schunk, restarts_par, best); });
+      /* ONE run_parallel PER RESTART PASS, and its join is the pass barrier.
+         Restart is the outer dimension, so pass p is exactly the work range
+         [p*total_keys, (p+1)*total_keys) and every key appears in it once.
+         Splitting the sweep this way costs nothing on its own -- the items are
+         independent and the work index stays global, so which pass a thread is
+         in changes nothing about the result -- and it is what lets a per-key
+         structure be read and written across passes without a lock: no two
+         threads are ever in different passes on the same key.
+
+         Barrier cost is a tail of at most one chunk per thread per pass, which
+         the duration-sized hand-outs hold near 10 s against passes measured in
+         hours. */
+      for (size_t pass = 0; pass < restarts_par; pass++)
+        {
+          next_key.store(pass * total_keys, std::memory_order_relaxed);
+          const size_t pass_end = (pass + 1) * total_keys;
+          run_parallel(nthreads, [&](int t)
+            { search_worker(*machines[t], tasks, range, rc, gc, all,
+                            rsize, gsize, next_key, schunk, pass_end, best); });
+        }
       /* Disarm before anything else runs: the --ring-stride refinement reuses
          search_worker over its own key space and would push this past 100%. */
       sweep_progress_disarm();
@@ -1178,8 +1307,20 @@ double bruteforce(char * result, bool allow_empty)
          Kept a module of its own because it is the one part of the sweep with
          a separable contract -- and the one with a design document behind it. */
       if (opt_ring_stride > 1)
-        extra_keys_analysed = refine_ring_stride(machines, tasks, cur_wo, range,
-                                                 rc, gc, restarts_par, best);
+        {
+          /* THE REFINEMENT RUNS UNFILTERED, and saying so is not enough -- it
+             has to be enforced. It reuses search_worker over its OWN key
+             space, whose indices start again at 0 and therefore ALIAS the
+             coarse pass's per-key filter regions: unsuspended it would both
+             consume those regions and have its own climbs skipped by seeds it
+             never produced. There is nothing to catch there anyway (hundreds
+             of keys against the coarse pass's millions). Set and cleared from
+             this thread, outside the refinement's own fan-out and join. */
+          seed_dedup_suspend(true);
+          extra_keys_analysed = refine_ring_stride(machines, tasks, cur_wo, range,
+                                                   rc, gc, restarts_par, best);
+          seed_dedup_suspend(false);
+        }
 
       /* Guarded by opt_polish. This block shares its enclosing `if` with the
          --ring-stride refinement above (both need best.idx reconstructed once), and

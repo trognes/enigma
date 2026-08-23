@@ -1,0 +1,71 @@
+# --seed-dedup MEASURED END TO END on wall time: -8.1% at -R 1000, -21.0% at
+# -R 10000, with the recovered plaintext unchanged.
+#
+#   ./enigma -c -f -l english -u B -w 231 -r AAC -g AA. -S m4f10 -J --polish \
+#            -R <N> -T 4 [--seed-dedup] < ct
+#
+# 26 keys (start2 wildcarded, everything else pinned), a 130-letter message
+# enciphered under B231 AAC QWE with a 10-pair board, ENIGMA_SEED=0.  Min of 3
+# reps at -R 1000, min of 2 at -R 10000, on an otherwise idle box.
+#
+# ============================================================================
+# THE RESULT
+# ============================================================================
+#
+#   -R 1000            off        on          delta
+#     wall           4.103 s    3.770 s      -8.1%
+#     plugboards    59297159   55451709      -6.5%
+#     climbs skipped      --   3800/26000   (14.6%)
+#
+#   -R 10000           off        on          delta
+#     wall          40.373 s   31.906 s     -21.0%
+#     plugboards   593985591  485073349     -18.3%
+#     climbs skipped      --   105857/260000 (40.7%)
+#
+#   Recovered plaintext IDENTICAL in both arms at both budgets.
+#
+#   Self-control (off vs off, same command): -0.6% at -R 1000 and +0.9% at
+#   -R 10000, so both effects are an order of magnitude above the floor.  The
+#   -R 1000 comparison was also repeated and read -7.8% against the first
+#   arm's -8.1%.
+#
+# ============================================================================
+# THE SKIP RATE RISES WITH -R, AND THE WALL SAVING TRACKS IT AT ~0.5x
+# ============================================================================
+#
+#     -R        seeds skipped     wall saved     ratio
+#    1000           14.6%            8.1%        0.55
+#   10000           40.7%           21.0%        0.52
+#
+# A 2.8x rise in the duplicate rate over one decade of -R, with the saving a
+# near-constant fraction of it.  THAT FRACTION IS THE POINT, and it is not a
+# discrepancy: the cheap m4 stage runs on EVERY seed -- it is what produces the
+# seed being tested -- so only the f10 continuation is skipped.  A run's printed
+# skip percentage therefore predicts roughly half that much wall time saved,
+# which is the number to quote when sizing a real attempt.
+#
+# WALL TIME BEATS score_iter HERE, in the direction CLAUDE.md's standing warning
+# predicts: the counter counts calls through the fused score loop and misses the
+# gain scan --polish does outside it, so -6.5% / -18.3% UNDERSTATE the saving
+# against the -8.1% / -21.0% actually measured.  Judge this feature on wall time.
+#
+# ============================================================================
+# WHAT THIS DOES AND DOES NOT ESTABLISH
+# ============================================================================
+#
+# ESTABLISHED: the compute saving is real, observed rather than calculated, at
+# the restart budgets where duplication matters; and skipping does not change
+# the answer on these runs.
+#
+# NOT ESTABLISHED: that it converts into BREAKS.  These runs hold -R fixed and
+# measure the time saved; they do not spend the saved time on more restarts and
+# count messages broken.  That comparison was pre-registered in SEED_DEDUP.md
+# section 8 and then retired by the repository owner before it ran, so the
+# distinct-seed figures there (+10.6% at -R 100 and so on) remain arithmetic on
+# top of the duplicate and false-positive rates rather than an observation.
+#
+# SCOPE: one message, one schedule, one language, 26 keys, one machine.  The
+# 40.7% duplicate rate at -R 10000 is close to the 43.8% the 100-key rarefaction
+# measured at -R 1000 (eval/results-rarefaction-restarts.txt) -- different
+# message, schedule and kick, so that is a consistency check on the mechanism,
+# not a repeat of the same measurement.
