@@ -55,9 +55,20 @@ struct keep_worse
    tiny, mostly-pinned key space so the skipped ring2 values get exactly the
    treatment the coarse pass gave -- restarts, staged climb, everything. That is
    the whole reason it is not static, and the cost is nil: it is called once per
-   CHUNK (~16 x threads per sweep) with the per-key loop inside it, so a
+   CHUNK (a few per thread per sweep) with the per-key loop inside it, so a
    cross-unit call here is nothing like the per-move reads that decided the
-   plugboard module's boundary. */
+   plugboard module's boundary.
+
+   `idx_end` bounds the work range; the range's START is wherever `next_key`
+   already sits. The main sweep runs ONE PASS AT A TIME (restart-major, so a
+   pass is [p*keys, (p+1)*keys)) and the join at the end of each run_parallel
+   is the pass barrier. The refinement passes its whole space at once.
+
+   `chunk_max` is a CEILING, not the chunk: the worker starts small and grows
+   each hand-out toward a fixed target duration, so one atomic covers seconds
+   of work whatever the regime. A fixed divisor cannot do that -- an item costs
+   four orders of magnitude more under -c than in a scan, and on a long sweep
+   1/16th of a pass is minutes of tail idle at every barrier. */
 void search_worker(machine & m,
                    const std::vector<wheel_task> & tasks,
                    const search_range & range,
@@ -65,8 +76,8 @@ void search_worker(machine & m,
                    subst_table all,
                    size_t rsize, size_t gsize,
                    std::atomic<size_t> & next_key,
-                   size_t chunk,
-                   size_t restarts,
+                   size_t chunk_max,
+                   size_t idx_end,
                    best_result & best);
 
 /* Recover the plugboard for one key: -R restarts of the staged climb, or one

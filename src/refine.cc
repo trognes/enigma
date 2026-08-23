@@ -344,7 +344,7 @@ size_t refine_ring_stride(std::vector<machine *> & machines,
       std::atomic<size_t> rnext_key{0};
       run_parallel(rnthreads, [&](int t)
         { search_worker(*machines[t], rtasks, rrange, rrc, rgc, rall,
-                        rrsize, rgsize, rnext_key, rchunk, restarts_par, rbest); });
+                        rrsize, rgsize, rnext_key, rchunk, rwork, rbest); });
       /* rbest.idx is relative to whichever sub-search produced it, so remember the
          candidate pinned when the score last improved; the reconstruction below
          re-pins rrange to it. */

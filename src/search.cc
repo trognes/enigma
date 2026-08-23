@@ -284,8 +284,8 @@ void search_worker(machine & m,
                    subst_table all,
                    size_t rsize, size_t gsize,
                    std::atomic<size_t> & next_key,
-                   size_t chunk,
-                   size_t restarts,
+                   size_t chunk_max,
+                   size_t idx_end,
                    best_result & best)
 {
   const size_t rg = rsize * gsize;
@@ -305,7 +305,7 @@ void search_worker(machine & m,
      sweep early. Taking the measured climb curve (87% at R=16, ~11.9% per restart):
      found by the quarter mark 40% against 22%, by halfway 64% against 44%, the same 87%
      at the end. */
-  const size_t total = nkeys * restarts;
+  const size_t total = idx_end;
   const size_t rc12 = static_cast<size_t>(rc[1]) * rc[2];
   const size_t gc12 = static_cast<size_t>(gc[1]) * gc[2];
 
@@ -342,12 +342,34 @@ void search_worker(machine & m,
   const size_t tick_block = opt_hillclimb ? 64 : 4096;
   size_t since_tick = 0;
 
+  /* Hand-outs are sized by DURATION, not by a fixed fraction of the space. A
+     chunk of total/(threads*16) is minutes of work on a large sweep -- fine as
+     an amortisation of the atomic, ruinous as a tail: the main sweep now joins
+     once per restart pass (the pass barrier), so every over-long chunk is idle
+     time paid R times over. At the ~1600 climbs/s/thread of a big run the old
+     divisor gave ~6-minute chunks, i.e. ~5% of the wall clock in barrier tails.
+
+     Adapting inside the worker rather than precomputing a size handles every
+     regime with no calibration pass: a scanned item is ~0.3 us and a climbed
+     one ~1 ms, and the same code lands on ~10 s either way. Growth is capped at
+     4x per hand-out so one fast chunk cannot overshoot, and chunk_max keeps
+     enough chunks in a pass for the threads to balance at the end of it.
+     Chunking affects only WHICH thread sees an item, never that item's result,
+     so none of this is visible in the output. */
+  const double chunk_target_s = 10.0;
+  size_t chunk = opt_hillclimb ? 8 : 512;   /* bootstrap: ~10 ms either way */
+  if (chunk > chunk_max)
+    chunk = chunk_max;
+
   size_t start;
   while ((start = next_key.fetch_add(chunk)) < total)
     {
-      size_t end = start + chunk;
+      const size_t took = chunk;   /* the stride this hand-out used */
+      size_t end = start + took;
       if (end > total)
         end = total;
+      const std::chrono::steady_clock::time_point chunk_t0 =
+        std::chrono::steady_clock::now();
 
       for (size_t idx = start; idx < end; idx++)
         {
@@ -539,6 +561,24 @@ void search_worker(machine & m,
               local_best = best.score;         /* track the global best for the filter */
               local_best_idx = best.idx;
             }
+        }
+
+      /* Re-aim at chunk_target_s from what this hand-out actually cost. `end`
+         may have been clipped by `total`, so measure the items really done. */
+      const double secs =
+        std::chrono::duration<double>(std::chrono::steady_clock::now()
+                                      - chunk_t0).count();
+      const size_t did = end - start;
+      if ((secs > 0.0) && (did > 0))
+        {
+          double want = static_cast<double>(did) * (chunk_target_s / secs);
+          if (want > static_cast<double>(took) * 4.0)
+            want = static_cast<double>(took) * 4.0;   /* cap the growth rate */
+          if (want < 1.0)
+            want = 1.0;
+          chunk = static_cast<size_t>(want);
+          if (chunk > chunk_max)
+            chunk = chunk_max;
         }
     }
   /* The remainder below tick_block, so the last worker to finish takes the line
@@ -1082,7 +1122,10 @@ double bruteforce(char * result, bool allow_empty)
     }
   else
     {
-      size_t schunk = work_items / (static_cast<size_t>(nthreads) * 16);
+      /* A ceiling, not the chunk: search_worker grows its hand-outs toward a
+         target duration and clamps to this, which keeps at least ~4 chunks per
+         thread in a pass so the barrier's tail stays short. */
+      size_t schunk = total_keys / (static_cast<size_t>(nthreads) * 4);
       if (schunk < 1)
         schunk = 1;
       std::atomic<size_t> next_key{0};
@@ -1094,9 +1137,26 @@ double bruteforce(char * result, bool allow_empty)
           sweep_progress_arm(work_items,
                              (restarts_par > 0) ? restarts_par : 1);
         }
-      run_parallel(nthreads, [&](int t)
-        { search_worker(*machines[t], tasks, range, rc, gc, all,
-                        rsize, gsize, next_key, schunk, restarts_par, best); });
+      /* ONE run_parallel PER RESTART PASS, and its join is the pass barrier.
+         Restart is the outer dimension, so pass p is exactly the work range
+         [p*total_keys, (p+1)*total_keys) and every key appears in it once.
+         Splitting the sweep this way costs nothing on its own -- the items are
+         independent and the work index stays global, so which pass a thread is
+         in changes nothing about the result -- and it is what lets a per-key
+         structure be read and written across passes without a lock: no two
+         threads are ever in different passes on the same key.
+
+         Barrier cost is a tail of at most one chunk per thread per pass, which
+         the duration-sized hand-outs hold near 10 s against passes measured in
+         hours. */
+      for (size_t pass = 0; pass < restarts_par; pass++)
+        {
+          next_key.store(pass * total_keys, std::memory_order_relaxed);
+          const size_t pass_end = (pass + 1) * total_keys;
+          run_parallel(nthreads, [&](int t)
+            { search_worker(*machines[t], tasks, range, rc, gc, all,
+                            rsize, gsize, next_key, schunk, pass_end, best); });
+        }
       /* Disarm before anything else runs: the --ring-stride refinement reuses
          search_worker over its own key space and would push this past 100%. */
       sweep_progress_disarm();
