@@ -77,6 +77,11 @@ README.md                 User-facing description and usage.
 CHANGELOG.md              Release history.
 CLAUDE.md                 This file.
 ENHANCEMENTS.md           The open issue list -- what is still worth doing.
+SEED_DEDUP.md             Design record for seed deduplication (planned, NOT
+                          built): skip the expensive target climb when a
+                          restart's cheap-stage seed has been seen before for
+                          that key.  Per-key blocked Bloom filter, pass
+                          barrier, budget-driven sizing.
 LICENSE                   GNU GPL v3.
 .gitignore                Editor backups, cipher*.txt, the built binary, the
                           `src/*.o` / `src/*.d` build products, and __pycache__.
