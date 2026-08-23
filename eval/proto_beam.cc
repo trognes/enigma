@@ -176,9 +176,25 @@ struct beamset
 };
 
 /* `min_apart`: require a kept board to differ from every other in at least
-   this many plugged letters.  0 = the plain beam.  The point of the knob is
-   that a beam optimises SCORE and may return W boards from one basin, which
-   is the failure mode the rarefaction work documents for a small kick. */
+   this many plugged letters, AT THE FINAL LEVEL, scaled down proportionally
+   at the earlier ones.  0 = the plain beam.  The point of the knob is that a
+   beam optimises SCORE and may return W boards from one basin, which is the
+   failure mode the rarefaction work documents for a small kick.
+
+   THE SCALING IS NOT A REFINEMENT, IT IS WHAT MAKES A LARGE THRESHOLD LEGAL.
+   At level l a board holds l plugs, i.e. 2l cabled letters, so two boards can
+   differ in AT MOST 4l entries.  A flat threshold of 6 therefore rejects every
+   pair at level 1, where the maximum is 4, and the beam collapses to width 1 --
+   which is what a first version measured and mistook for "stronger separation
+   does not help".  Scaling asks for the same FRACTION of the reachable
+   separation at every level instead.
+
+   There is still a feasibility ceiling and it is combinatorial, not tunable:
+   W boards pairwise disjoint at level l need 2lW distinct letters, so at
+   26 letters a full-separation beam cannot exceed W = 13/l.  Past that the
+   constraint cannot be met, the kept set never fills, and the beam returns
+   FEWER than W seeds -- which is why `dseeds` has to be read alongside the
+   apartness whenever this knob is raised. */
 static void beam_seeds(ttab & T, const uint8_t * lp, int L, double lambda,
                        int W, int plugs, int min_apart,
                        std::vector<cand> & out, uint64_t * evals)
@@ -192,7 +208,12 @@ static void beam_seeds(ttab & T, const uint8_t * lp, int L, double lambda,
 
   for (int step = 0; step < plugs; step++)
     {
-      beamset next(W, min_apart);
+      /* the threshold for the level being BUILT, which is step + 1 */
+      const int lvl = step + 1;
+      const int thr = (min_apart > 0)
+                        ? std::max(3, (min_apart * lvl + plugs - 1) / plugs)
+                        : 0;
+      beamset next(W, thr);
       for (const cand & base : level)
         {
           int n[asize];
@@ -311,6 +332,7 @@ int main(int argc, char * * argv)
      continuation as separate basins. */
   struct arm { int breaks = 0; double pct = 0; double distinct = 0;
                double dseeds = 0; double apartness = 0; double plugs = 0;
+               int apairs = 0;   /* keys with >= 2 seeds */
                uint64_t iters = 0; double secs = 0; };
   arm A, B;
   double t_seed_A = 0, t_seed_B = 0;
@@ -447,8 +469,15 @@ int main(int argc, char * * argv)
                   sum += d;
                   np++;
                 }
+            /* A key returning one seed has NO pair, so it must not be
+               averaged in as a zero -- under a tight separation constraint
+               that is the common case and it made apartness read LOWER at
+               apart 16 than at 14. */
             if (np > 0)
-              acc.apartness += sum / static_cast<double>(np);
+              {
+                acc.apartness += sum / static_cast<double>(np);
+                acc.apairs++;
+              }
           }
 
           const uint64_t it0 = m.plugboards_scored;
@@ -488,12 +517,12 @@ int main(int argc, char * * argv)
   const double kd = KEYS;
   printf("  %-22s %6d  %6.1f %7.2f %7.2f %7.2f %7.2f %8.2f %8.2f\n",
          "A  kicked + cap-4 climb", A.breaks, A.pct / kd, A.plugs / kd,
-         A.dseeds / kd, A.apartness / kd, A.distinct / kd,
-         1e3 * t_seed_A / kd, 1e3 * A.secs / kd);
+         A.dseeds / kd, (A.apairs ? A.apartness / A.apairs : 0.0),
+         A.distinct / kd, 1e3 * t_seed_A / kd, 1e3 * A.secs / kd);
   printf("  %-22s %6d  %6.1f %7.2f %7.2f %7.2f %7.2f %8.2f %8.2f\n",
          "B  beam on T", B.breaks, B.pct / kd, B.plugs / kd,
-         B.dseeds / kd, B.apartness / kd, B.distinct / kd,
-         1e3 * t_seed_B / kd, 1e3 * B.secs / kd);
+         B.dseeds / kd, (B.apairs ? B.apartness / B.apairs : 0.0),
+         B.distinct / kd, 1e3 * t_seed_B / kd, 1e3 * B.secs / kd);
   printf("\n  seed generation %.1fx cheaper in B; total ms/key %.2f vs %.2f"
          " (%.2fx)\n",
          t_seed_A / t_seed_B,

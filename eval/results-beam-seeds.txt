@@ -187,12 +187,63 @@
 # the seed count -- it lost breaks by returning fewer seeds and would have been
 # reported as "diversity does not help".  It is a replacement rule now.
 #
-# apart >= 6 IS DEGENERATE, NOT INFORMATIVE.  At level 1 only two letters are
-# plugged, so no two candidates can differ by six; the beam collapses to width
-# 1 and returns one seed (24 breaks, 1.00 distinct).  A threshold that scales
-# with the level would be the way to test stronger separation.  apart = 4 is
-# the strongest setting that is reachable from level 2 onward, and it is what
-# the table above uses.
+# apart >= 6 WAS DEGENERATE UNDER A FLAT THRESHOLD, and that was the harness
+# again rather than the method: at level 1 a board holds one plug, so two
+# candidates can differ in AT MOST 4 entries and a flat 6 rejects every pair,
+# collapsing the beam to width 1.  The threshold now SCALES with the level --
+# the argument is the value at the final level, apportioned linearly before it
+# -- so a large setting is legal.  The section below sweeps it.
+#
+# ============================================================================
+# RAISING IT DOES BUY DIVERSITY.  IT DOES NOT BUY BREAKS.
+# ============================================================================
+#
+# The knob delivers exactly what it promises -- 400 keys, W = 8, depth 4, arm
+# A size-matched (kick 4, -M), which returns 132 breaks at 7.89 seeds and
+# 11.71 apart:
+#
+#   apart    0     4     5     6     8    10    12    14    16
+#   breaks  148   155   137   136   131   104    93    93    69
+#   dseeds 8.00  8.00  5.96  5.89  5.26  4.33  3.66  2.81  1.51
+#   apart  6.13  7.12  8.85  9.39 10.62 11.89 12.56 13.97 15.65
+#
+# APARTNESS RISES MONOTONICALLY, 6.13 -> 15.65, so the beam CAN be made as
+# diverse as the kicked arm and more.  At apart = 10 it reaches 11.89 against
+# the kicked arm's 11.71 -- a dead heat on diversity -- and breaks 104 against
+# 132.  THE DIVERSITY IS BOUGHT WITH SEEDS, ONE FOR ONE: the kept set stops
+# filling (8.00 -> 1.51), because a candidate good enough to enter is now also
+# required to be far from everything already kept.
+#
+# RAISING W DOES NOT BUY THEM BACK.  The fill saturates near W/2.6 rather than
+# approaching W, since the constraint bites harder the fuller the set gets:
+#
+#   W        apart 0: breaks / dseeds        apart 10: breaks / dseeds
+#    8            148 /  8.00                     104 /  4.33
+#   16            179 / 16.00                     130 /  7.18
+#   32            211 / 32.00                     174 / 12.64
+#   64            256 / 64.00                     222 / 24.05
+#
+# AND AT MATCHED COMPUTE IT IS A SMALL LOSS, which is the number that decides
+# it.  The constrained arm does win on breaks-per-SEED at large W -- 24.05
+# seeds returning 222 breaks against 32.00 seeds returning 211, the rarefaction
+# logic reasserting itself -- but the seeds are not what is paid for:
+#
+#   configuration          breaks    total ms/key    breaks per ms
+#   W =  32, apart  0        211         9.61            21.9
+#   W =  64, apart 10        222        10.86            20.4
+#   W =  64, apart  0        256        19.82            12.9
+#   W = 128, apart 10        261        25.89            10.1
+#
+# SO apart = 4 IS THE ONLY SETTING THAT PAYS, and the reason it is free is the
+# parity argument above: it rejects only d = 3, two boards sharing one cabled
+# letter, and such a candidate is readily replaced -- dseeds stays at 8.00.
+# Every stronger setting binds, and binding costs more than the diversity is
+# worth.
+#
+# THE CEILING IS COMBINATORIAL, NOT A TUNING FAILURE.  W boards pairwise
+# disjoint at l plugs need 2lW distinct letters, so with 26 letters and l = 4
+# no more than THREE fully-separated seeds exist at all.  A beam cannot be both
+# wide and fully diverse; a kick can, because it is not required to be good.
 #
 # ============================================================================
 # ONE HARNESS BUG WORTH RECORDING
