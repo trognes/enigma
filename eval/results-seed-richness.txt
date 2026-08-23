@@ -1,11 +1,12 @@
-# HOW MANY DISTINCT SEEDS EXIST PER KEY?  AT LEAST ~12 000 under the default
-# kick, and plausibly ~7e4.  Measured at two budgets, so the bound made at the
-# smaller one could be CHECKED against what the larger one found -- see the
-# -R 50000 section at the end, which is where the load-bearing evidence is.
+# HOW MANY DISTINCT SEEDS EXIST PER KEY?  AT LEAST ~2.0e4 under the default
+# kick, best estimate ~6.4e4.  Measured at THREE budgets, so each bound could
+# be CHECKED against what the next one found -- and all three held.  The
+# sections run in the order the runs did; the -R 200000 one at the end carries
+# the current numbers.
 #
 # python3 eval/chao_seeds.py                      (ARMS=... R=... KEYS=... )
 #
-# L=100, 100 keys, -R 10000 then -R 50000, telegraphic German, boards from
+# L=100, 100 keys, -R 10000 / 50000 / 200000, telegraphic German, boards from
 # --dump-all.
 # Companion to eval/results-rarefaction-restarts.txt, which measures how many
 # distinct seeds have been SEEN by n restarts and leaves the asymptote to a
@@ -144,3 +145,63 @@
 # checked), the shape extrapolation says ~7e4, and the honest range is
 # 1.2e4 to ~7e4.  Still not a single number, but a decade narrower than before,
 # and both ends are now anchored by something that has been tested.
+
+# ============================================================================
+# -R 200000: A THIRD TEST, AND THE ESTIMATE TIGHTENS TO A FACTOR OF THREE
+# ============================================================================
+#
+#   ARMS=kick10 R=200000 KEYS=100 python3 eval/chao_seeds.py    (~23 min)
+#
+#   observed distinct  12627.3    f1 5394.4   f2 1905.6
+#   Chao1 (lower bound) 20275.4   = 1.61x observed
+#   Good-Turing coverage  97.3%
+#
+#   rarefaction:  ... 10000:2689.5  20000:4039.4  50000:6608.3
+#                     100000:9264.0  200000:12627.3
+#
+# PREDICTIONS WERE REGISTERED BEFORE THIS RUN, and all three held:
+#
+#   predicted ~13200 distinct        -> 12627.3        (-4.3%)
+#   clears the -R 50000 bound 12104  -> yes            (+4.3%)
+#   Chao1 rises by less than its previous doubling -> +67%, not +102%
+#
+# The exponent-decline model also called the two NEW local exponents to within
+# 0.011 (0.476 predicted against 0.487 observed, 0.437 against 0.447).  Those
+# are forecasts, not fits.
+#
+# THE THREE BUDGETS TOGETHER:
+#
+#     -R        observed     Chao1    ratio   coverage
+#     10000       2689.5    5985.8    2.23x      83.7%
+#     50000       6608.3   12103.6    1.83x      93.3%
+#    200000      12627.3   20275.4    1.61x      97.3%
+#
+# CHAO1 HAS NOT CONVERGED.  It is still growing as n^0.37 (n^0.44 over the
+# previous step), so 20275 is a floor and not an answer.  What IS converging is
+# the ratio to observed -- 2.23, 1.83, 1.61 -- which is what approach from
+# below looks like.
+#
+# REFITTING THE SHAPE WITH 20x MORE DATA BARELY MOVES THE ASYMPTOTE:
+#
+#     data through      asymptote     decline/decade
+#     -R 10000            9.8e4           0.1248
+#     -R 50000            7.3e4           0.1308
+#     -R 200000           6.4e4           0.1341
+#
+# Three independent fits, each on substantially more evidence, drifting gently
+# downward toward the same place.  That is the strongest argument available
+# here that ~6e4 is the right order, since nothing in the fit forces agreement
+# across refits.
+#
+# SO: floor ~2.0e4 (tested three times), best estimate ~6.4e4, and the honest
+# range is now a factor of three rather than the decade it started at.
+#
+# THE SCALING LAW, which is the part to use: distinct seeds now go as ~R^0.45 at
+# the top of the range, so it takes ~4.7x THE RESTARTS TO DOUBLE THE DISTINCT
+# SEEDS -- up from 3x at -R 10000 and 4x at 50000.  The cost of diversity rises
+# as you buy it.
+#
+# ONE CAUTION AGAINST OVER-READING 97.3% COVERAGE: that is coverage of
+# probability MASS, not of the count.  The 2.7% unsampled is spread over seeds
+# that are individually very rare, which is exactly why Chao1 still adds 7600 to
+# the observed count.  Mass and richness saturate at very different rates.
