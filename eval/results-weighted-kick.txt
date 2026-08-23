@@ -1,9 +1,15 @@
-# A WEIGHTED KICK IS A LARGE WIN AT LOW RESTART COUNTS AND IS SUBSUMED BY
-# RESTARTS ABOVE R = 6.  In the SHIPPED configuration, at the temperature tuned
-# for each R and measured on HELD-OUT seeds, it is worth +28% of breaks at
-# R = 1 (z = +5.35), +22.5% at R = 2 (z = +5.74), +4.8% at R = 4 (z = +1.91)
-# and nothing at R = 8.  It is also ~5% CHEAPER at every R, so these are wins
-# on both axes rather than trades.
+# A WEIGHTED KICK IS A LARGE WIN AT LOW RESTART COUNTS AND FADES AS RESTARTS
+# GROW.  In the SHIPPED configuration on HELD-OUT seeds: +28% of breaks at
+# R = 1 (z = +5.35) and +22.5% at R = 2 (z = +5.74) at their tuned
+# temperatures, and ~+8% across R = 3..5 at a fixed T = 1 (z = +5.60 pooled).
+# From R = 6 it is ~+2.5% and NOT established (z = +1.99).  It is also ~5%
+# CHEAPER at every R, so these are wins on both axes rather than trades.
+#
+# NOTHING HERE IS A RECOMMENDATION YET.  This is a prototype against src/*.o,
+# not an option; it is measured on the PLUGBOARD TIER WITH THE ROTOR KEY GIVEN,
+# at one length, one corpus, with IC as the ranking model.  The break counts
+# are not the same quantity as the break RATES in CLAUDE.md's unknown-key
+# budget table, so the two must not be combined arithmetically.
 #
 # THE R SWEEP CAME LAST AND IT SHOULD HAVE COME FIRST.  Every table below the
 # next section was run at R = 8, which is past the crossover, so they measure
@@ -111,11 +117,31 @@
 #   6      +1.1%    +0.3%    -2.2%    -2.0%        -0.7%
 #   7      +4.1%    +3.0%    +2.3%    -4.5%        +1.2%
 #
-# THE CUTOFF AT R = 6 IS SHARP AND IT REPRODUCES.  R = 5 is worth +7 to +12%
-# and R = 6 is worth nothing at any temperature -- confirmed on two further
-# seeds at T = 1, reading +0.0% (z = 0.00) and +1.7% (z = +0.55) against the
-# tuning seed's +1.1%.  R = 7's +4.1% is z = +1.57, inside noise.  So the
-# lever is live through R = 5 and dead from R = 6, with no gentle shoulder.
+# HELD OUT AT A FIXED T = 1, which is what a single recommended setting would
+# actually deliver -- no per-R temperature selection.  Two fresh seeds, 3200
+# keys each:
+#
+#   R    held-out effects     mean    pooled z
+#   3     +3.3%, +13.0%      +8.2%     +2.78
+#   4     +4.8%, +11.6%      +8.2%     +3.31
+#   5     +8.7%,  +8.2%      +8.4%     +3.59
+#   6     +0.0%,  +1.7%      +0.8%     +0.39
+#   7     +4.9%,  +4.8%      +4.8%     +2.48
+#
+#   R = 3..5 pooled: 1693 only-A against 2035 only-B, z = +5.60.
+#
+# THERE IS NO SHARP CUTOFF AT R = 6, and an earlier version of this file said
+# there was.  R = 6 reads null on all three seeds (+1.1, +0.0, +1.7) while
+# R = 7 reads +4.9% on held-out seeds at z = +2.48 -- a real cutoff cannot
+# reverse.  R = 8 is null again.  Alternating null / positive / null is the
+# signature of scatter around a decaying trend, not a threshold, and it puts
+# the per-R resolution at about +-4pp even at 3200 keys x 3 seeds.
+#
+# THE DEFENSIBLE SUMMARY IS THEREFORE COARSER THAN A PER-R TABLE.  The effect
+# is ~+8% and firmly established for R = 3..5 (z = +5.60 pooled), and ~+2.5%
+# and NOT established for R = 6..8 (z = +1.99 pooled, which at three cells
+# selected after the fact is not evidence).  Do not read individual R rows as
+# resolved; read the two bands.
 #
 # WHAT RISES WITH R IS THE PENALTY FOR BEING TOO COLD, which is a sharper
 # statement than "T* rises".  T = 1 is best or near-best at every R in 3..7,
