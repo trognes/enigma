@@ -1,0 +1,194 @@
+# EXPERIMENT F -- selective promotion of cheap seeds: MEASURED, and it LOSES.
+#
+# eval/f_seed_instrumented.py   (the 500-key instrumented run -- everything
+#                                below unless another harness is named)
+# eval/f_seed_factorial.py      (model x kick factorial, 100 and 200 keys)
+# eval/f_seed_random.py         (the first probe: RANDOM, unclimbed seeds)
+# eval/results-experiment-f.csv (80 000 rows, 13 fields, the raw data)
+#
+# ENHANCEMENTS 2a experiment F.  L = 100, telegraphic German, rotor key GIVEN
+# and only the 10-pair plugboard hidden.  Each candidate is one cap-4 climb
+# (-S k4, -R 0, from a supplied kick) followed by the full -S f10 continuation,
+# both single climbs.  The split is verified BYTE-IDENTICAL to running
+# -S k4f10 -R 0 in one process, so this is the real schedule cut open in the
+# middle.  500 keys x 40 kicks x {4-plug, 10-plug} x {-M off, on} = 80 000
+# candidates.  Success = >= 50% of letters correct against the known plaintext.
+#
+# ============================================================================
+# 1.  THE HEADLINE: SELECTION BY SCORE DOES NOT PAY
+# ============================================================================
+#
+# Within a key, draw k candidates, promote the highest-scoring one to the full
+# climb.  Measured on the real data (4000 resamples per cell, -M off, 10-plug
+# kick).  "P(break) at budget 4" spends a fixed budget of 4 candidate-units
+# either way, where one unit is a full k4+f10 candidate:
+#
+#    k    by score_f   by score_k   ORACLE(correct)   cost   P(break) @ budget 4
+#    -      8.21% (base rate, no selection)           1.00        29.01%
+#    2     10.45%      10.38%          14.65%         1.34        28.14%
+#    3     12.70%      11.82%          17.45%         1.67        27.74%
+#    5     14.95%      13.88%          22.62%         2.34        24.14%
+#   10     18.12%      16.62%          30.30%         4.02        18.03%
+#   20     20.62%      18.00%          37.52%         7.38        11.76%
+#
+# SELECTION RAISES THE PER-SEED SUCCESS RATE -- best-of-10 more than doubles it
+# -- AND STILL LOSES, at every k.  The same compute spent on more independent
+# attempts always wins.  This is §6.10's rule again: a portfolio needs both
+# non-dominance AND a cheap split, and the split is not cheap enough.
+#
+# THE MATERIAL IS THERE; THE SCORES CANNOT SEE IT.  Selecting by the oracle
+# (true correct-plug count of the seed) gives 14.65% at k=2, which at budget 4
+# is ~37.8% against no-selection's 29.0% -- a real +8.8pp.  So an ideal
+# selector WOULD pay and the realizable ones do not.  That is the GA outcome
+# (PERFORMANCE 3.10) in a new place: crossover material present, unselectable.
+#
+# The gap, as AUC of "ranks a successful seed above an unsuccessful one":
+#
+#             score_k   score_f   k4_correct   k4_pct
+#   4p  -M0    0.590     0.591      0.743       0.737
+#   4p  -M1    0.583     0.543      0.728       0.719
+#  10p  -M0    0.677     0.687      0.831       0.829
+#  10p  -M1    0.622     0.575      0.782       0.771
+#
+# REALIZABLE ~0.69, ORACLE ~0.83.  That 0.14 of AUC is the whole difference
+# between losing and winning.
+#
+# THE -f RESCORE OF THE k4 BOARD BUYS NOTHING as a ranker: 0.687 against
+# score_k's 0.677, and about +1pp of promoted-seed success.  It cost half the
+# run's compute (69 ms against the k4 climb's 3 ms, both dominated by the -f
+# table load), so it is not worth repeating.
+#
+# ============================================================================
+# 2.  -M IS HARMFUL HERE, AND THE INSTRUMENTATION SAYS WHY
+# ============================================================================
+#
+#  kick -M | k4plugs k4corr k4%corr | f10plugs f10corr f10%corr |   brk
+#     4  0 |   4.00    0.81   11.89  |   8.79     1.80    17.41  | 9.05%
+#     4  1 |   4.00    0.44    9.03  |   8.80     1.30    12.83  | 4.95%
+#    10  0 |   6.69    0.97   11.35  |   9.29     1.61    15.75  | 8.21%
+#    10  1 |   4.87    0.47    8.72  |   8.98     1.22    12.28  | 4.62%
+#
+# -M ROUGHLY HALVES THE BREAK RATE, and it does so by DISCARDING CORRECT PLUGS:
+# mean correct plugs after the k4 stage falls 0.97 -> 0.47 with a 10-plug kick,
+# and that deficit carries straight into the final board (1.61 -> 1.22).
+# Forcing a descent to the cap cannot tell a correct plug from a spurious one,
+# so it sheds both.  Messages broken at least once falls 286 -> 240 (10-plug)
+# and 219 -> 200 (4-plug).
+#
+# This does NOT contradict CLAUDE.md's -M entry, which measures a win at
+# matched compute with restarts, a quad target and a cap at the TRUE plug
+# count.  Here there are no restarts (-R 0), the target is -f, and the cap-4
+# stage is exactly the place where discarding is most expensive.  The lesson
+# is that -M's value is regime-specific in both directions.
+#
+# The plug counts also reproduce standalone measurements exactly -- k4 lands on
+# 4.00 from a 4-plug kick and 6.69 from a 10-plug kick, going to 4.87 under -M
+# (independently measured 6.7 and 4.9) -- which is the harness checking out.
+#
+# ============================================================================
+# 3.  THE 10-PLUG KICK WINS, AND THE PER-TRIAL RATE SAYS THE OPPOSITE
+# ============================================================================
+#
+# THE TRAP, in one table (-M off, 20 000 trials per arm):
+#
+#            successful trials    of 20 000   distinct messages   per message
+#   4-plug         1 811             9.05%          219              8.27
+#  10-plug         1 642             8.21%          286              5.74
+#
+# The 4-plug kick wins 169 MORE TRIALS on 67 FEWER MESSAGES.  It re-breaks the
+# same messages: one of them succeeded on all 40 of its kicks, contributing 40
+# to the trial numerator and 1 to the message count.  A REPEAT SUCCESS IS WORTH
+# NOTHING -- once the plaintext is out, breaking it again adds no information --
+# so the trial rate rewards exactly the thing that has no value.
+#
+# On the metric that matters, messages broken at least once, the 10-plug kick
+# wins decisively: 286/500 against 219/500, paired, with 95 messages only the
+# 10-plug kick breaks against 28 only the 4-plug kick does, McNemar z = -6.04.
+#
+# THIS REPRODUCES THE ARCHIVE.  PERFORMANCE's "already shipped" summary records
+# "a small kick (--random 3/4) hurts, so the kick stays the default".  Same
+# conclusion, different harness, 500 fresh messages, and now with a mechanism.
+#
+# It also reproduces a 200-key run at the same settings (118/200 against
+# 100/200, z = -2.78, eval/f_seed_factorial.py), so it is not one sample.
+#
+# ============================================================================
+# 4.  THE MECHANISM: THE SMALL KICK COLLAPSES THE BASIN SET
+# ============================================================================
+#
+# Distinct outcomes over the 40 kicks of a key (-M off), counted by distinct
+# score values:
+#
+#                    distinct k4 seeds   distinct f10 boards   kick space size
+#    4-plug kick          21.9 / 40           19.8 / 40           1.6e08
+#   10-plug kick          36.7 / 40           32.8 / 40           1.5e14
+#
+# 45% OF 4-PLUG KICKS LAND SOMEWHERE ALREADY VISITED; only 8% of 10-plug kicks
+# do.  Everything in §3 follows from this: fewer distinct starting points ->
+# fewer distinct basins -> fewer distinct messages broken, but a higher
+# hit-rate on the ones reached.
+#
+# CLAUDE.md records distinct converged boards per restart falling with budget
+# -- 0.97 at -R 8, 0.79 at 100, 0.49 at 1000.  At 40 kicks the 10-plug arm
+# sits at 0.92, on that curve; the 4-plug arm sits at 0.55, far below it.  A
+# small kick induces at 40 restarts the basin collapse the default kick does
+# not reach until several hundred.
+#
+# ============================================================================
+# 5.  OUTCOMES ARE ALL-OR-NOTHING
+# ============================================================================
+#
+# Final board, -M off, 10-plug kick:
+#
+#   successes  n =  1 642   9.85 plugs, 9.33 of them CORRECT
+#   failures   n = 18 358   9.24 plugs, 0.92 of them correct
+#
+# Both land near the true count of 10 -- THE FAILURES ARE NOT OVER-PLUGGING,
+# THEY ARE PLUGGING WRONGLY.  And there is essentially no middle: a climb
+# either recovers nearly the whole board or almost none of it.  That settles
+# empirically something previously only assumed, namely that the >= 50%
+# success threshold is insensitive to where it is set.
+#
+# ============================================================================
+# 6.  A COST-MODEL CORRECTION WORTH KEEPING
+# ============================================================================
+#
+# Timed as separate processes the k4 stage looks like 3 ms against the f10
+# stage's 68 ms, i.e. ~4% of a candidate -- which would make generating extra
+# seeds nearly free and change the economics of §1 completely.  THAT READING IS
+# WRONG: the two processes load different tables (-S k4 never loads all8), so
+# the comparison is almost entirely startup.
+#
+# Measured IN-PROCESS instead, by differencing -S f10 against -S k4f10 at
+# -R 256 with the -R 0 startup subtracted: f10 stage 0.328 ms per restart, k4
+# stage 0.166 ms, so THE k4 STAGE IS 33.6% OF A CANDIDATE.  That is close to
+# the 41% PERFORMANCE 6.10 derives from score_iter ratios, and it is the figure
+# §1's cost column uses.
+#
+# ============================================================================
+# FOR THE NEXT RUN: SAVE THE BOARDS
+# ============================================================================
+#
+# This run recorded plug COUNTS and scores but not the board strings, and it
+# cost two things.  Seed and basin diversity (§4) had to be estimated from the
+# number of distinct SCORE values, which undercounts whenever two boards score
+# alike to four decimals.  And no board-level question can be asked of the
+# saved data at all: which plugs are found first, whether two arms converge on
+# the same optimum, how far apart converged boards are, whether the correct
+# plugs a seed carries are the ones the continuation keeps.  The strings are
+# already in hand where the row is written; two more columns cost only file
+# size.
+#
+# ============================================================================
+# SCOPE
+# ============================================================================
+#
+# L = 100 only.  Telegraphic German only.  Plugboard tier -- the rotor key is
+# given.  -R 0 throughout: every candidate is a SINGLE climb, deliberately, so
+# that the seed's influence is visible; nothing here describes behaviour at the
+# high -R the restart ladder recommends, and §6.10 established the pre-pass
+# ordering is restart-budget dependent.  k4 is the only pre-pass model in the
+# instrumented run; the m4/i4/k4 comparison is in eval/f_seed_factorial.py and
+# at 100 keys found k4 ahead of i4 by 2.33pp at the 10-plug kick (CI excluding
+# zero, sign test 37 keys to 19), with NO interaction between model and kick
+# size (+0.62pp, CI [-1.20, +2.45]).

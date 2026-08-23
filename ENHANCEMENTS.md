@@ -81,9 +81,9 @@ own status line before citing it:**
 | **A** | model versus cap | **measured** — model dominates cap 4× at L = 167 |
 | **B** | cap sweep | **blocked** — the IC pre-pass cap is inert in 1…4 |
 | **C** | third-moment coincidence Σf³ | **measured down** — never built |
-| **D** | best-of-two seeds per restart | open; crux unresolved |
+| **D** | best-of-two seeds per restart | **answered by F** — see F |
 | **E** | fuse mono and IC (`-S k`) | **measured, adopted** — see its note |
-| **F** | many cheap seeds, promote a subset | open; gated on D's crux |
+| **F** | many cheap seeds, promote a subset | **measured down** |
 
 Effect sizes carrying a CI are measurements; the rest is arithmetic on corpus
 statistics, kept because it is the design record.
@@ -390,6 +390,15 @@ model differs from the target, so that cannot be assumed — and if the
 correlation is weak, "keep the better seed" is picking at random for 1.39× the
 price. `--dump-all` over both arms on the same problems answers it offline.
 
+**MEASURED, BY EXPERIMENT F, AND D FALLS WITH IT.** The correlation is weak:
+AUC 0.687 for the target model's own score, 0.677 for the pre-pass model's
+(`eval/results-experiment-f.txt`). D is exactly F's `k = 2` row — best-of-two
+lifts a seed's success 8.21% → 10.45%, and at 1.34× cost that is a **net loss**
+at matched budget (28.14% against 29.01% at budget 4). So "keep the better
+seed" is not picking at random, but it does not pick well enough to pay for
+itself. The oracle would (14.65% at `k = 2`), which is the unselectability
+finding, not a reason to keep looking.
+
 **E. FUSE mono and IC into one pre-pass score, the way `-f` fuses `-a` with
 IC.** The most promising of these, and the cheapest to run.
 
@@ -572,8 +581,10 @@ invocation costs 0.111 s of which **0.105 s is process startup**; the
 `-R 0/8/64/256/1024` scaling check is the cheap diagnostic to run first.
 
 **F. Generate MANY cheap 4-plug seeds, promote only a subset to the full
-climb.** Experiment D keeps the better of two seeds; this generalises it in the
-direction that makes it a *search structure* rather than a tie-break — run `k`
+climb — MEASURED, and it LOSES.** (The design is below; the result is at the
+end of this item.) Experiment D keeps the better of two seeds; this
+generalises it in the direction that makes it a *search structure* rather than
+a tie-break — run `k`
 cap-4 climbs, rank the resulting boards, and pay for the expensive `f10`
 continuation on only the best `m < k`. Nothing measured; recorded before the
 code, like the rest of §2a.
@@ -686,6 +697,56 @@ not, record it as **unselectable and stop**: that is precisely the GA outcome
 (`archived/PERFORMANCE.md` §3.10 — the crossover material exists at ~8/10 but
 board-fitness picks only ~2.5/10), and the correct response is to record the
 ceiling, not to try a fourth selector until one wins.
+
+**THE RESULT: selection by score does not pay, and the oracle says why**
+(`eval/results-experiment-f.txt`, 80 000 candidates over 500 keys at L = 100,
+each a `k4` cap-4 climb plus the full `f10` continuation, the split verified
+byte-identical to `-S k4f10 -R 0`). Promote the best of `k` seeds by score,
+spending a fixed budget either way:
+
+| `k` | by `score_f` | oracle (correct plugs) | cost | P(break) at budget 4 |
+|---:|---:|---:|---:|---:|
+| — | 8.21% *(base)* | — | 1.00 | **29.01%** |
+| 2 | 10.45% | 14.65% | 1.34 | 28.14% |
+| 5 | 14.95% | 22.62% | 2.34 | 24.14% |
+| 10 | 18.12% | 30.30% | 4.02 | 18.03% |
+
+Selection more than doubles the per-seed success rate at `k = 10` and **still
+loses at every `k`** — more independent attempts always beat it. But the
+**oracle would win**: best-of-2 on true correct-plug count reaches ~37.8% at
+budget 4 against 29.0%, a real **+8.8pp**. So the stop rule above fires exactly
+as written — **unselectable, recorded, not iterated on**. As AUC, realizable
+scores reach ~0.69 against the oracle's ~0.83, and that 0.14 is the whole
+difference. The `-f` rescore of the `k4` board is *not* a better ranker than
+its own `k` score (0.687 vs 0.677) despite costing half the run.
+
+**F0 (diversity) passes outright** — the three models produce the same cap-4
+board from the same kick 0.0% of the time — but the more useful diversity
+finding is about the **kick**, not the model. Over the 40 kicks of a key, a
+4-plug kick yields only **21.9 distinct seeds of 40** against a 10-plug kick's
+**36.7**, so 45% of small kicks land somewhere already visited. That collapse
+is why the 10-plug kick breaks **286 of 500 messages against 219** (McNemar
+z = −6.04) while having a *lower* per-trial success rate (8.21% vs 9.05%) — the
+small kick piles repeat successes onto messages it has already broken, and a
+repeat is worth nothing. This independently reproduces the archive's *"a small
+kick (`--random 3/4`) hurts, so the kick stays the default"*, now with a
+mechanism.
+
+**Two by-products worth carrying forward.** `-M` roughly **halves** the break
+rate here by *discarding correct plugs* (mean correct after `k4` falls
+0.97 → 0.47), which does not contradict its documented win at matched compute
+with restarts and a true-count cap, but does show the sign is regime-dependent.
+And outcomes are **all-or-nothing**: successful climbs end with 9.33 correct
+plugs of 9.85, failures with 0.92 of 9.24 — the failures are not over-plugging,
+they are plugging *wrongly*, and there is almost nothing near the 50%
+threshold, so that threshold is insensitive.
+
+**For any follow-up: save the board strings.** This run stored plug counts and
+scores but not boards, so basin diversity had to be estimated from distinct
+*score* values (an undercount) and no board-level question — which plugs are
+found first, whether arms converge on the same optimum, whether a seed's
+correct plugs are the ones the continuation keeps — can be asked of the saved
+data at all.
 
 **The reframe worth keeping in view.** The pre-pass exists to place the first
 few plugs, and *scoring* is only one way to do that. Where a crib or a doubled
