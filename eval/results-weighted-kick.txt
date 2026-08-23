@@ -1,14 +1,18 @@
 # A WEIGHTED KICK IS A LARGE WIN AT LOW RESTART COUNTS AND IS SUBSUMED BY
-# RESTARTS ABOVE R = 6.  In the SHIPPED configuration at 3200 keys it is worth
-# +29.5% of breaks at R = 1 (z = +3.79), +25.2% at R = 2 (pooled z = +5.57 over
-# two seeds), +8.8% at R = 4 (pooled z = +2.65), and nothing at R = 8
-# (z = -0.34).  It is also ~5% CHEAPER at every R, so these are wins on both
-# axes rather than trades.
+# RESTARTS ABOVE R = 6.  In the SHIPPED configuration, at the temperature tuned
+# for each R and measured on HELD-OUT seeds, it is worth +28% of breaks at
+# R = 1 (z = +5.35), +22.5% at R = 2 (z = +5.74), +4.8% at R = 4 (z = +1.91)
+# and nothing at R = 8.  It is also ~5% CHEAPER at every R, so these are wins
+# on both axes rather than trades.
 #
 # THE R SWEEP CAME LAST AND IT SHOULD HAVE COME FIRST.  Every table below the
 # next section was run at R = 8, which is past the crossover, so they measure
 # the regime where the lever is already dead and describe it as dead
 # everywhere.  Read the R sweep first; the rest is the anatomy of why it fades.
+#
+# AND THE TEMPERATURE MUST BE TUNED PER R, which the same mistake hid: T = 1
+# was chosen from the R = 8 sweep, so the first R sweep ran the whole range at
+# a temperature tuned where the effect does not exist.
 #
 #   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
 #   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/wkick eval/proto_wkick.cc $objs
@@ -83,6 +87,39 @@
 #   second seed at R = 2 and R = 4: 420 -> 497 (z = +3.33) and 707 -> 741
 #   (z = +1.37), so pooled z = +5.57 and +2.65.  Same sign, smaller -- the
 #   first seed was the larger, as usual.
+#
+# THE OPTIMAL TEMPERATURE RISES WITH R, and that column is the mechanism stated
+# as a law.  Swept at 3200 keys per cell:
+#
+#   R      T = 2    1    0.7   0.5   0.35  0.25   uniform    T*
+#   1        278   338   332   373    353   397     261      0.25
+#   2         --   492    --   501    507   500     393      0.35
+#   4        748   742   748   753    713   706     682      0.50
+#   8         --  1043    --    --     --    --    1052     ~1.2
+#
+#   Colder is better when there are fewer restarts, because the bias is
+#   SUBSTITUTING for the diversity restarts would otherwise supply -- the fewer
+#   you have, the more bias you want.  T* roughly doubles from R = 1 to R = 4.
+#
+# IT DOES NOT EXTEND TO THE GREEDY LIMIT.  Below T = 0.25 at R = 1 the curve
+# plateaus and falls back: 0.15 / 0.1 / 0.05 / 0.02 give 361 / 357 / 367 / 380
+# against T = 0.25's 397.  That is the decoy peak asserting itself -- the IC
+# argmax at four plugs sits +8 sd above the null on boards holding under half
+# the true plugs (eval/results-seed-landscape.txt), so a kick cold enough to
+# land on it is worse than one merely biased toward it.  Enough bias to enrich,
+# not enough to commit.
+#
+# HELD-OUT CONFIRMATION, since T* was selected from the rows above.  Effects at
+# the tuned temperature on the tuning seed and two fresh ones:
+#
+#   R    T*     tuning seed    777       31337     held-out z
+#   1    0.25     +52.1%      +33.8%     +22.3%      +5.35
+#   2    0.35     +29.0%      +18.6%     +26.5%      +5.74
+#   4    0.50     +10.4%       +6.4%      +3.1%      +1.91
+#
+#   Every seed positive at every R.  The tuning seed is the largest in two of
+#   three rows, so quote the held-out figures; R = 1 and R = 2 are established
+#   and R = 4 is suggestive rather than settled.
 #
 # THE CORRECTNESS ADVANTAGE IS CONSTANT; THE BREAK ADVANTAGE IS NOT.  The
 # weighted seeds hold ~18% correct plugs against ~15% at BOTH R = 1 and R = 8
