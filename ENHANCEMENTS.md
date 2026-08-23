@@ -772,21 +772,32 @@ tested that was retired before it ran (`SEED_DEDUP.md` §8). So the ~+10.6%
 distinct-seeds figure stays arithmetic, and this entry is a measured compute
 reduction with an unmeasured effect on recovery.
 
-**The seed pool is much larger than 10 000 restarts reveal.** Rarefaction
+**The seed pool is far larger than any budget yet run reveals.** Rarefaction
 alone cannot say how much larger — the accumulation curve has not begun to
 saturate, so a saturating fit is unidentifiable, and the two obvious ones
-(Michaelis–Menten 2985, Weibull 3162) are refuted by the curve's own slope: at
-the top of the range distinct seeds still grow as `R^0.63`, so one more
-doubling of the budget reaches ~4160 and passes both. The multiplicity
-distribution settles that half (`eval/results-seed-richness.txt`,
-`eval/chao_seeds.py`): **Chao1 puts a lower bound of 5986 distinct seeds per
-key** under the default kick, against 2689.5 actually observed, with **61% of
-those seen exactly once** and **16.3% of draws still novel at `-R 10 000`**.
-The 4-plug kick is the control and behaves — Chao1 164.6 against an observed
-152.7, coverage 99.8% — which is what licenses reading the other arms. What
-stays open is the true richness: Chao1 is a *lower* bound and a weak one when
-singletons dominate, so the honest range is 6×10³ to ~10⁵. The measured and
-useful form is the scaling: **tripling `-R` buys double the distinct seeds**.
+(Michaelis–Menten 2985, Weibull 3162) are refuted by the curve's own slope.
+The multiplicity distribution settles that half — `eval/chao_seeds.py` and
+`eval/results-seed-richness.txt` — and **because it was run at two budgets the
+bound made at the smaller one could be tested against the larger**:
+
+| | kick 4 (control) | kick 10 (default) |
+|---|---:|---:|
+| distinct at `-R 10 000` | 152.7 | 2 689.5 |
+| Chao1 bound made there | ≥ 164.6 | ≥ 5 985.8 |
+| **distinct at `-R 50 000`** | **170.9** | **6 608.3** |
+| bound held? | yes, +3.8% | yes, +10.4% |
+| Chao1 now | 175.0 | **12 103.6** |
+| coverage | 100.0% | 93.3% |
+
+The control has closed — coverage 100.0%, Chao1 1.02× observed — which is what
+licenses reading the other arm; note it was itself 12% short at `-R 10 000`, so
+even there "saturated" was a claim about slope. The default kick has not:
+**Chao1 doubled** on a 5× larger sample, and 3 355 of the 6 608 seeds found
+were seen exactly once. So the floor is **~1.2 × 10⁴** and the shape
+extrapolation gives ~7 × 10⁴, a decade narrower than before and with both ends
+now anchored by something tested. The measured, useful form is the scaling:
+**quadrupling `-R` buys double the distinct seeds** (`R^0.54` at the top of the
+range; it was `R^0.63`, tripling, below 10 000).
 
 **For any follow-up: save the board strings.** This run stored plug counts and
 scores but not boards, so basin diversity had to be estimated from distinct

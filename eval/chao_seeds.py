@@ -42,39 +42,56 @@ for _ in range(KEYS):
     g="".join(chr(65+rng.randrange(26)) for _ in range(3))
     ls=rng.sample(letters,20)
     keys.append((pt,w,r,g," ".join(ls[i]+ls[i+1] for i in range(0,20,2))))
-ARMS=[("k4 seeds, kick 4  (CONTROL: saturated)", ["-S","k4","--random","4"]),
-      ("k4 seeds, kick 10 (the default)",        ["-S","k4","--random","10"]),
-      ("k4f10 final board, kick 10",        ["-S","k4f10","--random","10"])]
-def boards(job):
+ALL_ARMS={"kick4":  ("k4 seeds, kick 4  (CONTROL: saturated)",
+                     ["-S","k4","--random","4"]),
+          "kick10": ("k4 seeds, kick 10 (the default)",
+                     ["-S","k4","--random","10"]),
+          "final":  ("k4f10 final board, kick 10",
+                     ["-S","k4f10","--random","10"])}
+ARMS=[ALL_ARMS[a] for a in
+      os.environ.get("ARMS","kick4,kick10,final").split(",")]
+GRID=[n for n in [8,32,128,512,1000,2000,4000,10000,20000,50000] if n<=R]
+
+def stats(job):
+    """Run one key and reduce it IN THE WORKER to the summary statistics.
+
+    The boards are not returned.  Holding them costs ~90 bytes per restart per
+    key in CPython -- 450 MB at 100 keys x -R 50000, and it grows linearly with
+    a budget this measurement exists to push -- while the summary is a dozen
+    numbers.  Reducing here is what lets R rise without the harness becoming
+    the limit."""
     (pt,w,r,g,truth), args = job
     ct,_=pab.run(["-u","B","-w",w,"-r",r,"-g",g,"-s",truth],pt)
     p=subprocess.run(["./enigma","-u","B","-w",w,"-r",r,"-g",g,"-c","-J",
                       "-l","wehrmacht","-T","1","-R",str(R),"--dump-all"]+args,
                      input=ct,capture_output=True,text=True,env=env)
-    return [" ".join(l.split()[5:]) for l in p.stderr.splitlines()
-            if l.startswith("dumpall")]
-def stats(bl):
-    """Per-key richness statistics from one key's list of R boards."""
+    bl=[" ".join(l.split()[5:]) for l in p.stderr.splitlines()
+        if l.startswith("dumpall")]
+    if len(bl)<R:
+        return None
+    grid=[len(set(bl[:n])) for n in GRID]      # rarefaction, same key
     c=Counter(bl); s_obs=len(c)
     f=Counter(c.values()); f1=f[1]; f2=f[2]; n=len(bl)
     # Chao1, bias-corrected form -- defined even when f2 == 0, which the
     # classic f1^2/(2 f2) is not.
     chao=s_obs + f1*(f1-1)/(2.0*(f2+1))
     cov=1.0-f1/float(n)                       # Good-Turing sample coverage
-    return s_obs,f1,f2,chao,cov
+    return grid,s_obs,f1,f2,chao,cov
 print(f"richness of the seed pool, L={L}, {KEYS} keys, -R {R}, "
       f"boards from --dump-all\n")
 for lab,args in ARMS:
     with ThreadPoolExecutor(max_workers=4) as ex:
-        allb=[b for b in ex.map(boards,[(k,args) for k in keys]) if len(b)>=R]
-    st=[stats(b) for b in allb]
+        st=[x for x in ex.map(stats,[(k,args) for k in keys]) if x is not None]
     m=lambda i: statistics.mean(x[i] for x in st)
-    print(f"{lab}   ({len(allb)} keys with a full {R} dumps)")
-    print(f"   observed distinct      {m(0):>10.1f}")
-    print(f"   singletons f1          {m(1):>10.1f}")
-    print(f"   doubletons f2          {m(2):>10.1f}")
-    print(f"   Chao1 (lower bound)    {m(3):>10.1f}   "
-          f"= {m(3)/m(0):.2f}x observed")
-    print(f"   Good-Turing coverage   {100*m(4):>10.1f}%   "
-          f"({100*(1-m(4)):.1f}% of the mass never sampled)")
+    print(f"{lab}   ({len(st)} keys with a full {R} dumps)")
+    print("   rarefaction:  " + "  ".join(
+        f"{n}:{statistics.mean(x[0][j] for x in st):.1f}"
+        for j,n in enumerate(GRID)))
+    print(f"   observed distinct      {m(1):>10.1f}")
+    print(f"   singletons f1          {m(2):>10.1f}")
+    print(f"   doubletons f2          {m(3):>10.1f}")
+    print(f"   Chao1 (lower bound)    {m(4):>10.1f}   "
+          f"= {m(4)/m(1):.2f}x observed")
+    print(f"   Good-Turing coverage   {100*m(5):>10.1f}%   "
+          f"({100*(1-m(5)):.1f}% of the mass never sampled)")
     print()
