@@ -233,9 +233,51 @@ Cost of the barrier, at `T = 8`, `K = 79.6 M`, `-R 100`:
   to 8 bytes and the distinct-only load both move it; see §3), `k`, and the
   **expected false-positive rate**, because that is a coverage loss the user is
   choosing to accept and it must not be buried.
-- Final diagnostic: climbs skipped, as a count and a percentage, plus the
-  observed duplicate rate. Without this the feature is invisible and its
-  benefit unmeasurable.
+### Reporting the skips — required, not optional
+
+**The run must report how many restarts were skipped, as a count and a
+percentage.** Without it the feature is invisible: nothing else in the output
+moves in a way that identifies it (`Analysed N rotor combinations` is
+unchanged, since every key is still analysed, and `plugboards scored` falls
+for reasons that could be anything). It sits with the existing final
+diagnostics:
+
+```
+Skipped 13 542 118 duplicate restarts of 7 960 000 000 (17.0%)
+```
+
+Three things about that line:
+
+- **The unit is a restart, not a key.** No key is ever skipped — a key is
+  visited once per pass whatever the filter says. What is skipped is the
+  *target climb* of one `(key, restart)` work item, and the denominator is
+  therefore the work-item count `K × R`, not `K`. Calling them skipped *keys*
+  would misreport by a factor of `R`.
+- **The count is an upper bound on true duplicates**, because a false positive
+  is indistinguishable from a duplicate at run time — that is what a Bloom
+  filter is. At the §3 operating point the FP share of the skips is small
+  (~1.65% of distinct seeds against a 17% duplicate rate, so roughly 8% of the
+  reported skips are not duplicates), and the echo already gives the expected
+  FP rate, so the two can be read together. The word *duplicate* in the line is
+  therefore approximate by construction, and the manual should say so rather
+  than the line growing a caveat.
+- **The skipped work is not free.** The pre-pass still ran; only the target
+  climb was avoided. So the compute saved is the skip percentage times the
+  target stage's share (~64% at `-S k4f10`), and the line reports skips rather
+  than a saving for that reason — a "saved 17% of compute" line would be wrong.
+
+**Mid-run visibility matters more than the final line here**, because the runs
+this is for last days. The live sweep progress line already carries a pass
+field under a restart-major sweep, and a duplicate percentage fits inside the
+80-column budget:
+
+```
+Progress:  43% (pass 44/100, 3.4G / 7.9G keys) 11.0k/s, 4d2h left, 12% dup
+```
+
+That is 74 columns at the widths above; if a future field pushes it past 80
+the duplicate figure is the one to drop, since the final line always carries
+it.
 
 ## 6. Interactions — refuse rather than guess
 
@@ -266,10 +308,19 @@ accounting must still count the item, or the percentage and ETA go wrong.
    replaced by an exact `unordered_set`. The skipped set must be a superset
    with the difference explained entirely by false positives, and at a large
    `bits_per_item` the two must agree exactly.
-4. **`-T` independence.** Same output at `-T 1/2/4/8` with dedup on. This is
-   the check the whole barrier design exists for.
+4. **`-T` independence.** Same output at `-T 1/2/4/8` with dedup on, **and the
+   same reported skip count** — the counter is part of the contract, not a
+   by-product, so a `-T`-dependent total means the barrier is not doing its
+   job even if the winning board happens to agree.
 5. **Skip count matches prediction.** ~17% at `-R 100`, ~44% at `-R 1000`,
-   from `eval/results-experiment-f.txt` §7.
+   from `eval/results-experiment-f.txt` §7. Against the exact-set arm of
+   check 3 the Bloom count must exceed the exact one by the expected
+   false-positive share and no more.
+   **Also check the denominator**: the percentage is over `K × R` work items,
+   and the easiest way to get it wrong is to divide by `K`. A run at `-R 1`
+   should report 0.0%, and one at `-R 2` on a keyspace with a known duplicate
+   rate should report roughly half what `-R 4` does — a factor-of-`R` error is
+   invisible at `-R 1` and obvious across that pair.
 6. **TSan** with dedup on and `-T 4`. The suite's TSan job is a handful of
    hand-picked invocations; a new one is required here, because a path that
    spawns threads and touches shared state is exactly what it is for.
