@@ -82,6 +82,40 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--seed-dedup` — skip the target climb when this restart's stage-0 seed was
+  already climbed for this key.** Under a staged `--score` the board after
+  stage 0 is a deterministic function of `(key, restart)`, so two restarts
+  reaching the same seed produce a byte-identical result and the second climb
+  is pure waste — 17% of seeds at `-R 100` and **73% at `-R 10 000`**.
+  - **Per-key Bloom filter, 8-byte blocks**: a lookup is one `uint64` load, one
+    AND and one compare, and 8 divides 64 so an aligned word never straddles a
+    cache line. The per-key region rounds up to 8 bytes rather than 64, which
+    is what lets memory track `-R` continuously — the payoff then *grows* with
+    the restart budget (+8.0% distinct seeds at matched wall time at `-R 64`,
+    +10.6% at 100, +32.5% at 1000) instead of peaking and reversing.
+  - **`--seed-dedup-bits N`** sets bits per item `[8]`; **`--seed-dedup-max
+    BYTES`** caps the memory and **refuses**, naming what would fit, rather
+    than thinning the filter into the range where it costs more coverage than
+    it saves. `k` is chosen numerically from the *blocked* false-positive rate,
+    which is not the textbook `0.693 × bits` — small blocks scatter, so the
+    optimum sits lower.
+  - **The run reports the skips** (`Skipped N full climbs on duplicate seeds of
+    M (P%)`), because nothing else in the output identifies the feature. The
+    unit is a *seed*, not a key, and it reports *climbs*, not compute: the
+    cheap stage ran on every seed.
+  - **No lock and no atomic on the filter.** The sweep now runs one restart
+    pass at a time and a key appears exactly once per pass, so the
+    `run_parallel` join at each pass end is the barrier; `-T` independence is
+    preserved and the skip count is part of that contract.
+  - Off by default and byte-identical when absent; the long-tier benchmark is
+    flat on all four tiers. Needs `-c` and a staged schedule; rejected with
+    `-F`, `--exhaust`, `--crib`, `--self-crib-seeds`, `--tune-phase` and `-A`.
+    `--ring-stride` **is** supported: its coarse pass is filtered and its
+    refinement runs unfiltered.
+  - **Not yet shown to pay.** The mechanism and the arithmetic are measured;
+    the matched-wall-time end-to-end comparison its own falsification rule
+    demands has not been run. `SEED_DEDUP.md`.
+
 - **`--self-crib-tandem` — hypothesise a doubled word with no separator**
   (`SIEGFRIEDSIEGFRIED`), which `--self-crib-seeds` could not see at all: its 26
   guesses are on `steck[X]` and the separator anchor is what carries that guess
