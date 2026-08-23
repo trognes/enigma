@@ -106,11 +106,13 @@
 # is bounded by the cheap stage's 33.6% share of a candidate -- cutting that
 # share is exactly what moves the optimum toward stronger selection.
 #
-# ALSO NOT MEASURED: the beam.  The motivation for the whole exercise was
-# generating diverse seeds DIRECTLY -- exact gains for all 325 first plugs, then
-# branch on the top-W -- instead of kicking randomly and climbing.  The
-# arithmetic says a width-10 beam costs about half a kicked climb per seed and
-# yields seeds distinct by construction, but that is arithmetic, not a run.
+# THE BEAM -- the motivation for the whole exercise, generating diverse seeds
+# DIRECTLY instead of kicking randomly and climbing -- HAS SINCE BEEN RUN, and
+# the arithmetic below was the wrong half to reason from.  It costs ~5x less per
+# seed as predicted, and that buys the small-budget cells (107 breaks of 400
+# against 65 at 1 ms per key), but the seeds are NOT distinct by construction in
+# any useful sense: at equal seed count the beam converges to FEWER distinct
+# boards than kicks do and breaks fewer messages.  eval/results-beam-seeds.txt.
 #
 # SCOPE: one machine (reflector B, wheels 231), one language table, g++ -O3,
 # one box, single-threaded, toggles drawn uniformly rather than from a real
