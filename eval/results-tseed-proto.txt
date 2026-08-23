@@ -1,0 +1,117 @@
+# THE CAP-STAGE SCORE NEEDS NO DECODE, and the cost stops depending on L.
+# mono 5.4x, IC 6.8x, the k blend 4.5x cheaper per plug toggle at L=130 --
+# and 40x / 51x / 24x at L=1000, because the T form is FLAT in message length.
+#
+#   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/proto eval/proto_tseed.cc \
+#       $(ls src/*.o | grep -vE 'main\.o|enigma\.o')
+#   /tmp/proto <L> <toggles>
+#
+# A PROTOTYPE, not shipped code.  It links against the repo's own objects, so
+# the rotor core, the n-gram tables and the reference scorers are the real
+# ones and correctness is exact by construction rather than by a
+# re-implementation that might differ.
+#
+# ============================================================================
+# THE STRUCTURE
+# ============================================================================
+#
+# decode_at is steck[rows[i][steck[ct[i]]]].  Write q_i for the decrypt BEFORE
+# the exit plugboard, q_i = core_i[S[c_i]].  Then:
+#
+#   IC IS BLIND TO THE EXIT BOARD.  It is a function of the MULTISET of letter
+#   counts; the exit board is a bijection over the whole sequence, so it
+#   permutes the histogram and leaves that multiset alone.
+#
+#   MONO IS NOT BLIND, BUT NEEDS NO DECODE EITHER.  The exit board relabels the
+#   COEFFICIENTS instead: mono = sum_z n_z(q) * logp[S[z]].
+#
+# So both halves of the k pre-pass model are functions of ONE 26-vector:
+#
+#   n(q) = sum_c T[c][S[c]],   T[c][d][y] = #{i : c_i == c, core_i[d] == y}
+#
+# T is built once per key in L*26 increments (17 576 uint16 = 34 KB).  After
+# that a score costs O(26^2), a single-plug toggle O(26) -- delta =
+# -T[a][S[a]] -T[b][S[b]] +T[a][b] +T[b][a] -- and L HAS DROPPED OUT.
+#
+# ============================================================================
+# CORRECTNESS
+# ============================================================================
+#
+# 400 random boards (0-13 pairs) per length, against the repo's own scorers
+# reached through score_iter:
+#
+#   IC     max |T - reference|   0.0e+00   exact at every length
+#   k      max |T - reference|   0.0e+00   exact at every length
+#   mono   max |T - reference|  <=1.1e-13  float rounding in the affine only
+#
+# ============================================================================
+# COST PER PLUG TOGGLE, ns
+# ============================================================================
+#
+#     L      mono                IC                  k blend        build T
+#          now    T    x       now    T    x       now    T    x
+#    60    65.2  26.5  2.5     86.1  24.2  3.6    119.9  45.2  2.7     1.3 us
+#   130   137.2  26.9  5.1    159.3  23.1  6.9    200.1  47.8  4.2     2.8 us
+#   300   321.1  27.6 11.6    351.0  23.1 15.2    385.9  47.2  8.2     6.3 us
+#   600   641.4  26.5 24.2    667.9  23.4 28.6    675.0  47.3 14.3    12.6 us
+#  1000  1086.2  26.9 40.4   1190.1  23.3 51.1   1187.0  50.4 23.6    20.1 us
+#
+# THE T COLUMN IS CONSTANT to within 7% across a 17x range of L, which is the
+# claim the prototype exists to test.  The current scorers track L linearly, as
+# they must -- they decode every character.
+#
+# BREAK-EVEN ON THE PER-KEY T BUILD is ~17 toggles at L=130 (2.8 us / 157 ns
+# saved per k toggle) against the hundreds a cap-4 climb performs, so it
+# amortises about 20x over immediately and better at longer L.
+#
+# ============================================================================
+# IC vs MONO: THE ORDERING FLIPS
+# ============================================================================
+#
+# IN THE CURRENT CODE MONO IS CHEAPER, by 12% at L=130 (137 against 159 ns),
+# which is the opposite of the intuition that IC is "just counting".  The
+# reason is in the two loops: mono does isum += mono8[decode_at(...)], which
+# the compiler keeps in a register, while IC does freq[decode_at(...)]++ -- a
+# read-modify-write to memory, and consecutive characters frequently hit the
+# same bin, so it is a store-to-load forwarding chain.  That costs more than
+# the 26 ops IC saves by deferring its arithmetic to the end.
+#
+# IN THE T FORM IC IS THE CHEAPEST, 23.1 against mono's 26.9 at L=130.  It is a
+# pure integer sum n(n-1) over the updated histogram; mono pays an extra
+# indirection logp[S[z]] and has to track the two board entries the toggle
+# changed.
+#
+# AND THE BLEND STOPS BEING A PREMIUM.  Today k costs 47% more than IC alone
+# (200 against 159 at L=130) because it is a third decode variant; in the T
+# form it is 47.8 = 26.9 + 23.1, literally mono plus IC, because both fall out
+# of the same n.
+#
+# ============================================================================
+# WHAT THIS DOES AND DOES NOT REACH
+# ============================================================================
+#
+# IT REACHES THE PRE-PASS ONLY.  Bigrams and above depend on ADJACENT decrypted
+# letters, so the exit board does not cancel and there is no per-letter
+# histogram summary; f10 still has to decode.  That is the right split -- this
+# accelerates the cheap stage and leaves the expensive one alone -- but it caps
+# what the whole schedule can gain.
+#
+# THE GAIN IS SMALLEST WHERE THIS REPO CARES MOST.  At L=60 it is 2.7x on the k
+# blend against 23.6x at L=1000, because a short message's decode is already
+# cheap and T's own build is a larger share.  Short messages are the hard case.
+#
+# NOT MEASURED: whether a cheaper cap stage converts into anything.  It changes
+# what a seed COSTS, not what it is worth.  The one place that is already known
+# to matter is eval/results-seed-threshold.txt, where the mild-threshold gain
+# is bounded by the cheap stage's 33.6% share of a candidate -- cutting that
+# share is exactly what moves the optimum toward stronger selection.
+#
+# ALSO NOT MEASURED: the beam.  The motivation for the whole exercise was
+# generating diverse seeds DIRECTLY -- exact gains for all 325 first plugs, then
+# branch on the top-W -- instead of kicking randomly and climbing.  The
+# arithmetic says a width-10 beam costs about half a kicked climb per seed and
+# yields seeds distinct by construction, but that is arithmetic, not a run.
+#
+# SCOPE: one machine (reflector B, wheels 231), one language table, g++ -O3,
+# one box, single-threaded, toggles drawn uniformly rather than from a real
+# climb's move order.
