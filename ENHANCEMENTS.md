@@ -712,13 +712,38 @@ spending a fixed budget either way:
 | 10 | 18.12% | 30.30% | 4.02 | 18.03% |
 
 Selection more than doubles the per-seed success rate at `k = 10` and **still
-loses at every `k`** — more independent attempts always beat it. But the
+loses at every `k` TESTED** — more independent attempts beat it there. But the
 **oracle would win**: best-of-2 on true correct-plug count reaches ~37.8% at
-budget 4 against 29.0%, a real **+8.8pp**. So the stop rule above fires exactly
-as written — **unselectable, recorded, not iterated on**. As AUC, realizable
-scores reach ~0.69 against the oracle's ~0.83, and that 0.14 is the whole
-difference. The `-f` rescore of the `k4` board is *not* a better ranker than
-its own `k` score (0.687 vs 0.677) despite costing half the run.
+budget 4 against 29.0%, a real **+8.8pp**. So the stop rule above fires as
+written for this rule — **unselectable, recorded, not iterated on**. As AUC,
+realizable scores reach ~0.69 against the oracle's ~0.83, and that 0.14 is the
+whole difference. The `-f` rescore of the `k4` board is *not* a better ranker
+than its own `k` score (0.687 vs 0.677) despite costing half the run.
+
+> **"Unselectable" is right about the rule F tested and WRONG as a general
+> claim, and the plot is what exposed it** (`eval/plot_cap_vs_final.py`, then
+> `eval/seed_threshold.py` / `results-seed-threshold.txt`). Every cell above is
+> `m = 1` — keep one seed in `k` — which is the aggressive end, and the
+> aggressive end is where selection loses worst. Sweeping the **mild** end on
+> the same data: keeping the **top 20 of a key's 40** seeds is **+10% breaks
+> per unit compute** (95% CI [+6, +14], bootstrap over keys), and an absolute
+> cut-off keeping the top 25% is **+32%** [+24, +40].
+>
+> **F's `k = 2` is not the same rule as keeping half**, though the ratio is
+> identical: promoting the better of each *pair* measures −2%, taking the top
+> half of the key's seeds +10%. Pairing wastes selection — two strong seeds in
+> one pair promote only one, two weak ones promote one anyway.
+>
+> Two things keep this modest. The lift is steep (the top 1% of seeds break
+> **90%** of the time against an 8.2% base) but **the economics invert exactly
+> there**: a top-1% seed costs 100 cheap stages to find and yields −68%. And
+> the absolute cut-off's extra gain is largely **triage across keys** rather
+> than seed selection — pooled AUC 0.793 against a within-key 0.707, with 20%
+> of the cap-score variance between keys — which is what `-F` already does one
+> level up. The exploitable figure for choosing among one key's restarts is the
+> **+10%**, worth about what a 10% larger budget is worth. It is an accounting
+> exercise over F's existing trials under a measured cost model, **not** a
+> paired run; before acting on it, run it.
 
 **F0 (diversity) passes outright** — the three models produce the same cap-4
 board from the same kick 0.0% of the time — but the more useful diversity

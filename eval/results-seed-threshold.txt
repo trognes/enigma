@@ -1,0 +1,105 @@
+# A MILD seed threshold WINS, which experiment F's design could not have seen.
+# Top 20 of a key's 40 seeds is +10% breaks per unit compute; an absolute
+# cut-off keeping the top 25% is +32%.  Both intervals exclude zero.
+#
+# python3 eval/seed_threshold.py
+#
+# Same data as experiment F (eval/results-experiment-f.csv), default arm only
+# (10-plug kick, no -M): 20 000 candidates over 500 keys, L=100 telegraphic
+# German, base break rate 8.21%.  Cost model CHEAP=0.336 / CONT=0.664, the
+# in-process measurement in ENHANCEMENTS 2a.  Bootstrap over KEYS, 2000
+# resamples.
+#
+# This QUALIFIES a recorded conclusion.  ENHANCEMENTS 2a says selection by
+# score is "unselectable, recorded, not iterated on".  That is right for the
+# rule F tested and wrong as a general claim, and the gap was found by looking
+# at the scatter plot (eval/plot_cap_vs_final.py) and asking why the
+# right-hand seeds so obviously break more often.
+#
+# ============================================================================
+# THE LIFT IS STEEP -- AND THAT IS NOT THE SAME AS BEING USEFUL
+# ============================================================================
+#
+#   percentile of cap score       n   break%    lift
+#   bottom 50%              10000     2.9%    0.3x
+#   80-90                    2000    11.9%    1.5x
+#   90-95                    1000    23.2%    2.8x
+#   95-99                     800    45.6%    5.6x
+#   top 1%                    200    90.0%   11.0x
+#
+# THE ECONOMICS INVERT EXACTLY WHERE THE LIFT IS BEST.  A top-1% seed costs
+# 100 cheap stages to find, at 0.336 of a candidate each:
+#
+#   keep        P(brk|kept)  breaks/unit   vs base   95% CI
+#   all                8.2%       0.0821        --
+#   top 50%           13.6%       0.1015      +24%   [+19, +28]
+#   top 25%           21.8%       0.1086      +32%   [+24, +40]
+#   top 10%           38.8%       0.0965      +18%   [ +6, +29]
+#   top 5%            54.4%       0.0738      -10%   [-24,  +3]
+#   top 1%            90.0%       0.0264      -68%   [-78, -57]
+#
+# The most predictive seeds are the ones you cannot afford to go looking for.
+# That is the whole reason a steep lift curve does not settle the question, and
+# it is why reading the scatter plot alone would mislead.
+#
+# ============================================================================
+# WHY EXPERIMENT F MISSED IT: A DIFFERENT RULE AT THE SAME KEEP-RATIO
+# ============================================================================
+#
+# F swept k = 2, 5, 10 with m = 1 -- every cell it tested keeps ONE seed in k,
+# which is the aggressive end.  Per-key, that end is where selection loses
+# worst:
+#
+#   keep m of 40   breaks/unit   vs base   95% CI
+#   40 (all)            0.0821        --
+#   20                  0.0904       +10%   [ +6, +14]
+#   12                  0.0842        +3%   [ -3,  +8]   spans zero
+#    8                  0.0740       -10%   [-15,  -4]
+#    4                  0.0514       -37%
+#    1                  0.0163       -80%
+#
+# AND F's k=2 IS NOT THE SAME AS KEEPING HALF, though the ratio is identical:
+#
+#   best of each PAIR (F's k=2)   0.0808    -2%
+#   top HALF of the key's seeds   0.0904   +10%
+#
+# Pairing wastes selection.  Two strong seeds landing in one pair promote only
+# one of them; two weak ones promote one anyway.  A cut-off ranks all the
+# seeds against each other and keeps the actual top half.  So F's k=2 reading
+# of "no better than base" is correct about pairing and says nothing about
+# the mild threshold.
+#
+# ============================================================================
+# HOW MUCH OF THIS IS REALLY SEED SELECTION
+# ============================================================================
+#
+#   pooled AUC       0.793
+#   within-key AUC   0.707        (286 keys with both outcomes present)
+#   cap-score variance that is BETWEEN keys: 20%
+#
+# An ABSOLUTE cut-off does two jobs at once: it picks better seeds within a
+# key, and it declines to spend on keys where no seed clears the bar.  The
+# second is triage across keys, which is what -F already does one level up, so
+# the +32% should not be read as a seed-selection result.
+#
+# THE HONEST EXPLOITABLE FIGURE FOR CHOOSING AMONG A KEY'S RESTARTS IS +10%,
+# which is worth about what a 10% larger budget is worth.  Real, significant,
+# and modest.
+#
+# ============================================================================
+# SCOPE, AND WHAT WOULD CHANGE THE ANSWER
+# ============================================================================
+#
+# EVERY VERDICT HERE RIDES ON CHEAP=0.336.  A cheaper pre-pass moves the
+# optimum toward stronger selection and raises the gain; a dearer one removes
+# it.  That constant is a measurement for this schedule at this length, not a
+# property of the method.
+#
+# Plugboard tier with the rotor key GIVEN, one arm (10-plug kick, no -M), one
+# length, one corpus, one scoring schedule.  The -M arms discriminate far less
+# (AUC 0.62 against 0.79), so the mild threshold should not be assumed to help
+# there.
+#
+# NOT MEASURED END TO END.  This is an accounting exercise over an existing
+# trial set -- breaks per unit compute under a stated cost model -- not a
+# paired run of two configurations.  Before acting on the +10%, run it.
