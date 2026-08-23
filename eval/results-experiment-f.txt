@@ -134,6 +134,10 @@
 # small kick induces at 40 restarts the basin collapse the default kick does
 # not reach until several hundred.
 #
+# THESE ARE 40-RESTART FIGURES.  Duplication rises steeply with the budget and
+# the 4-plug kick saturates completely -- see §7, which carries the curve out
+# to -R 10 000.  Do not quote 7.4% as a general duplication rate.
+#
 # ============================================================================
 # 5.  OUTCOMES ARE ALL-OR-NOTHING
 # ============================================================================
@@ -196,6 +200,67 @@
 # doing that with the -S f10 startup gave NEGATIVE ms/climb for the k4-only
 # rows.  Difference two restart counts within each schedule instead; startup
 # then cancels without ever needing to be known.
+#
+# ============================================================================
+# 7.  DUPLICATION GROWS WITH THE RESTART BUDGET -- AND THE SMALL KICK
+#     SATURATES OUTRIGHT
+# ============================================================================
+#
+# §4's 7.4% duplication is a 40-RESTART figure and must not be read as a
+# general one.  Rarefaction over the budget (eval/rarefy_restarts.py, 100 keys,
+# L = 100; --dump-all yields all N boards from ONE invocation, so -R 10 000
+# costs ~2.7 s per key).  Duplicate % of the restarts drawn so far:
+#
+#        -R      4-plug seeds   10-plug seeds   10-plug FINAL boards
+#         8          17.1%           1.4%             7.6%
+#       128          66.8%          18.7%            32.7%
+#      1000          90.2%          43.8%            57.5%
+#      4000          96.6%          62.4%            73.2%
+#     10000          98.5%          73.1%            81.5%
+#
+# THE 4-PLUG KICK SATURATES.  It reaches only 152.7 distinct seeds from 10 000
+# restarts and its marginal novelty -- the chance the next restart is new --
+# hits 0% by n = 4000.  Past roughly 500 restarts a small kick does literally
+# nothing new; it has exhausted its reachable seed set.  That is a hard ceiling
+# on top of the diversity deficit in §4, not merely a slower rate.
+#
+# THE DEFAULT KICK DEGRADES BUT DOES NOT SATURATE: 73.1% duplicates at 10 000
+# with marginal novelty still ~25%.
+#
+# THIS REPRODUCES THE ARCHIVE'S RESTART LADDER.  CLAUDE.md records 0.49
+# distinct converged boards per restart at -R 1000 and 0.28 at -R 5000; the
+# final-board arm here gives 0.425 at 1000 and 0.268 at 4000.  Different
+# harness, different length, same curve.
+#
+# COSTED, using the measured 64% f10 share of a candidate (§6):
+#
+#      -R     wasted re-climbing    distinct outcomes per unit compute
+#                                   if duplicate SEEDS were skipped
+#     1000          ~28%                        1.18x
+#     4000          ~40%                        ~1.35x
+#    10000          ~47%                        1.51x
+#
+# A SEED-LEVEL CACHE IS A DIFFERENT PROPOSITION FROM --restart-tt, and the
+# distinction is where the duplicate is detected.  --restart-tt hashed
+# CONVERGED boards, by which point the expensive continuation is already paid
+# for; a duplicate SEED is visible after the cheap 36% stage and before the
+# 64% one.  It is also lossless: identical seed gives byte-identical output
+# (verified 6/6 directly, and deterministic by construction under -R 0).
+#
+# TWO THINGS THIS DOES NOT SAY.  Dedup adds NO NEW REACH, only cheaper
+# coverage -- the recovery ladder is still climbing at -R 5000 because the ~27%
+# of restarts that are new still occasionally find better basins, and skipping
+# duplicates creates none of those.  And the final-board arm is consistently
+# WORSE than the seed arm (81.5% against 73.1% at 10 000), i.e. the climb
+# funnels distinct seeds into a smaller set of optima, so even perfect seed
+# dedup leaves downstream duplication that only a different search would reach.
+# Whether dedup pays end to end is UNMEASURED.
+#
+# A NOTE ON HOW §4's FIGURE WAS FIRST READ.  It was cited here as consistent
+# with the archive's basis for removing --restart-tt ("restarts almost never
+# revisit a basin").  CLAUDE.md warns explicitly against exactly that reading
+# -- "do not cite this sentence as closing tabu at high -R" -- and the table
+# above is why: the premise holds at -R 8 and fails by -R 1000.
 #
 # ============================================================================
 # FOR THE NEXT RUN: SAVE THE BOARDS

@@ -741,6 +741,20 @@ plugs of 9.85, failures with 0.92 of 9.24 — the failures are not over-plugging
 they are plugging *wrongly*, and there is almost nothing near the 50%
 threshold, so that threshold is insensitive.
 
+**Duplication is a 40-restart figure, and it explodes with the budget.** The
+7.4% above is measured at 40 kicks; carried out to `-R 10 000` on 100 keys
+(`eval/rarefy_restarts.py`), duplicate seeds reach **43.8% at `-R 1000`** and
+**73.1% at `-R 10 000`** under the default kick — and the 4-plug kick
+**saturates outright**, reaching only 152.7 distinct seeds from 10 000
+restarts with marginal novelty at 0% by n = 4000. The final-board arm
+reproduces `CLAUDE.md`'s restart ladder closely (0.425 distinct per restart at
+`-R 1000` against its 0.49; 0.268 at 4000 against its 0.28 at 5000). Costed,
+~28% of the budget at `-R 1000` and **~47% at `-R 10 000`** goes on re-climbing
+a seed already climbed. A **seed-level** cache is therefore a different
+proposition from the removed `--restart-tt`, which hashed *converged* boards
+after the expensive stage had run — but it adds no new reach, only cheaper
+coverage, and whether it pays end to end is unmeasured.
+
 **For any follow-up: save the board strings.** This run stored plug counts and
 scores but not boards, so basin diversity had to be estimated from distinct
 *score* values (an undercount) and no board-level question — which plugs are
