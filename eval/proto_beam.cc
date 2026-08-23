@@ -23,7 +23,7 @@
 
      objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
      g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/beam eval/proto_beam.cc $objs
-     /tmp/beam [keys] [kicked W] [beam W] [L] [apart]
+     /tmp/beam [keys] [kicked W] [beam W] [L] [apart] [beam plugs]
 */
 
 #include "common.h"
@@ -244,6 +244,7 @@ int main(int argc, char * * argv)
   const int WB   = (argc > 3) ? atoi(argv[3]) : WA;   /* beam width */
   const int L    = (argc > 4) ? atoi(argv[4]) : 100;
   const int APART = (argc > 5) ? atoi(argv[5]) : 0;   /* diversity filter */
+  const int DEPTH = (argc > 6) ? atoi(argv[6]) : 4;   /* beam plugs */
 
   opt_language = "wehrmacht";
   opt_datadir = "ngrams";
@@ -289,7 +290,15 @@ int main(int argc, char * * argv)
   std::mt19937_64 rng(20260823);
   char truth[maxlen + 1];
 
+  /* `dseeds` counts DISTINCT seeds, `apartness` their mean pairwise
+     letters-apart, and `distinct` the distinct boards their continuations
+     converge to.  The three are not the same question and the first two were
+     missing for a while: the beam's seeds are distinct by construction (the
+     beamset rejects a duplicate), so counting them says nothing on its own --
+     what matters is how FAR apart they are, and how many survive the
+     continuation as separate basins. */
   struct arm { int breaks = 0; double pct = 0; double distinct = 0;
+               double dseeds = 0; double apartness = 0; double plugs = 0;
                uint64_t iters = 0; double secs = 0; };
   arm A, B;
   double t_seed_A = 0, t_seed_B = 0;
@@ -373,7 +382,7 @@ int main(int argc, char * * argv)
       build_T(m, T);
       std::vector<cand> beam;
       uint64_t bevals = 0;
-      beam_seeds(T, lp8, L, lambda, WB, 4, APART, beam, & bevals);
+      beam_seeds(T, lp8, L, lambda, WB, DEPTH, APART, beam, & bevals);
       for (const cand & c : beam)
         seedsB.push_back(board_key(c.S));
       auto tb1 = std::chrono::steady_clock::now();
@@ -387,6 +396,47 @@ int main(int argc, char * * argv)
           arm & acc = a ? B : A;
           int best = 0;
           std::set<std::string> finals;
+
+          /* seed diversity, before any continuation runs */
+          acc.dseeds += static_cast<double>(
+              std::set<std::string>(seeds.begin(), seeds.end()).size());
+          {
+            /* Plug count, because the two arms do NOT produce the same kind
+               of board: without -M the cap blocks only ADDS, so a 10-plug
+               kick climbed under cap 4 converges still holding ~10 plugs,
+               while the beam builds exactly 4 from empty. */
+            double pl = 0;
+            for (const std::string & sd : seeds)
+              {
+                int p = 0;
+                for (int z = 0; z < asize; z++)
+                  {
+                    if (sd[z] != z)
+                      p++;
+                  }
+                pl += p / 2.0;
+              }
+            acc.plugs += pl / static_cast<double>(seeds.size());
+          }
+          {
+            double sum = 0;
+            long np = 0;
+            for (size_t i = 0; i < seeds.size(); i++)
+              for (size_t j = i + 1; j < seeds.size(); j++)
+                {
+                  int d = 0;
+                  for (int z = 0; z < asize; z++)
+                    {
+                      if (seeds[i][z] != seeds[j][z])
+                        d++;
+                    }
+                  sum += d;
+                  np++;
+                }
+            if (np > 0)
+              acc.apartness += sum / static_cast<double>(np);
+          }
+
           const uint64_t it0 = m.plugboards_scored;
           auto tc0 = std::chrono::steady_clock::now();
           for (const std::string & sd : seeds)
@@ -412,20 +462,23 @@ int main(int argc, char * * argv)
       if (broke[1] && ! broke[0]) only_b++;
     }
 
-  printf("beam vs kicked seeds: %d keys, %d kicked / %d beam, L = %d%s\n",
-         KEYS, WA, WB, L,
+  printf("beam vs kicked seeds: %d keys, %d kicked / %d beam to %d plugs,"
+         " L = %d%s\n", KEYS, WA, WB, DEPTH, L,
          (APART > 0) ? ", diversity filter on" : "");
   printf("telegraphic German, rotor key given, 10-pair board hidden,\n");
   printf("seeds -> the SAME hillclimb<false> at cap 10 under -f\n\n");
-  printf("  %-22s %8s %8s %10s %10s %9s\n",
-         "arm", "breaks", "mean%", "distinct", "seed ms", "climb ms");
+  printf("  %-22s %7s %7s %7s %7s %7s %7s %8s %8s\n",
+         "arm", "breaks", "mean%", "plugs", "dseeds", "apart", "finals",
+         "seed ms", "climb ms");
   const double kd = KEYS;
-  printf("  %-22s %6d   %7.1f %9.2f %10.2f %9.2f\n", "A  kicked + cap-4 climb",
-         A.breaks, A.pct / kd, A.distinct / kd, 1e3 * t_seed_A / kd,
-         1e3 * A.secs / kd);
-  printf("  %-22s %6d   %7.1f %9.2f %10.2f %9.2f\n", "B  beam on T",
-         B.breaks, B.pct / kd, B.distinct / kd, 1e3 * t_seed_B / kd,
-         1e3 * B.secs / kd);
+  printf("  %-22s %6d  %6.1f %7.2f %7.2f %7.2f %7.2f %8.2f %8.2f\n",
+         "A  kicked + cap-4 climb", A.breaks, A.pct / kd, A.plugs / kd,
+         A.dseeds / kd, A.apartness / kd, A.distinct / kd,
+         1e3 * t_seed_A / kd, 1e3 * A.secs / kd);
+  printf("  %-22s %6d  %6.1f %7.2f %7.2f %7.2f %7.2f %8.2f %8.2f\n",
+         "B  beam on T", B.breaks, B.pct / kd, B.plugs / kd,
+         B.dseeds / kd, B.apartness / kd, B.distinct / kd,
+         1e3 * t_seed_B / kd, 1e3 * B.secs / kd);
   printf("\n  seed generation %.1fx cheaper in B; total ms/key %.2f vs %.2f"
          " (%.2fx)\n",
          t_seed_A / t_seed_B,

@@ -57,6 +57,56 @@
 # for kicks to supply plenty of diverse seeds, cheapness stops mattering.
 #
 # ============================================================================
+# DISTINCT SEEDS IS THE WRONG MEASURE.  THE BEAM WINS IT AND LOSES ANYWAY.
+# ============================================================================
+#
+# The tables above counted distinct CONTINUATIONS and never counted the seeds
+# themselves, which left the obvious question unanswered.  Counted now, at 200
+# keys, W = 8 both arms:
+#
+#   arm       breaks   plugs   distinct seeds   mean apart   distinct finals
+#   kicked      87      6.70        7.86           17.10          7.30
+#   beam        74      4.00        8.00            6.20          6.45
+#
+# THE BEAM RETURNS MORE DISTINCT SEEDS THAN KICKS DO -- 8.00 of 8 against 7.86,
+# because `beamset` rejects a duplicate outright while two kicks can climb to
+# the same board (which is exactly what --seed-dedup exists to skip).  So a
+# distinct-seed count says the beam is the MORE diverse arm, and it is not.
+#
+# `apart` is the measure that works: the mean pairwise number of the 26 board
+# entries on which two seeds differ.  17.10 for kicks against 6.20 for the
+# beam, i.e. kicked seeds share almost nothing while beam seeds share most of
+# their plugs.  That is STRUCTURAL: a width-W beam at depth 4 has W leaves but
+# they hang off shared ancestors, so the level-1 and level-2 choices are common
+# to most of the beam.  Kicks have no shared ancestry at all.  "Distinct" is
+# satisfied by one plug of difference; "far apart" is not, and only the second
+# predicts distinct basins after the continuation.
+#
+# ============================================================================
+# TWO CONFOUNDS CHECKED, AND NEITHER IS THE EXPLANATION
+# ============================================================================
+#
+# THE ARMS DO NOT PRODUCE THE SAME KIND OF BOARD.  Arm A's seeds carry 6.70
+# plugs, not 4 -- without -M the cap blocks only ADDS, so a 10-plug kick
+# climbed under cap 4 converges still holding ~6.7 (the effect the -M entry in
+# CLAUDE.md documents).  The beam builds exactly 4 from empty.  So arm A is
+# what the k4f10 schedule DOES and the depth-4 beam is what it SAYS, and the
+# comparison confounded seed construction with seed size.
+#
+# Matching the size does not rescue it (200 keys, W = 8, kicked = 87 breaks):
+#
+#   beam depth    4     5     6     7     8    10
+#   breaks       74    77    70    65    72    68
+#   mean apart  6.20  6.38  6.42  6.34  6.46  6.65
+#   finals      6.45  6.00  5.59  5.28  5.03  4.66
+#
+# Depth 6 matches arm A's plug count and still loses 70 to 87.  APARTNESS IS
+# FLAT IN DEPTH (6.2 - 6.7 throughout) while distinct finals FALL steadily,
+# 6.45 -> 4.66: a deeper beam commits harder to its shared prefix, so its
+# leaves converge to fewer basins.  The size confound is real and is not the
+# mechanism.
+#
+# ============================================================================
 # THE SEPARATION CONSTRAINT HELPS A LITTLE, AND ITS FIRST VERSION COULD NOT
 # ============================================================================
 #
@@ -66,6 +116,21 @@
 #
 #   W = 16:  apart 0 -> 88 breaks,  apart 4 -> 92
 #   W = 32:  apart 0 -> 110,        apart 4 -> 120
+#
+# AND IT HELPS EXACTLY IN PROPORTION TO THE APARTNESS IT BUYS, which is the
+# check that turns the knob from a knob into evidence (200 keys, W = 16):
+#
+#   arm / setting     breaks    mean apart    distinct finals
+#   beam apart 0        88          6.73           11.68
+#   beam apart 4        92          8.26           12.20
+#   kicked             115         17.20           13.84
+#
+# apart = 2 and 3 are INERT, byte-identical to 0: a board differing by one plug
+# already differs in at least 2 entries, so nothing below 4 rejects anything
+# the duplicate check does not.  apart = 4 moves apartness 6.73 -> 8.26 and
+# breaks 88 -> 92, still half of the kicked arm's separation.  So the
+# constraint works in the right direction and cannot reach far enough: it
+# prunes within a beam whose candidates already share their ancestry.
 #
 # A FIRST VERSION FILTERED THE FINISHED BEAM instead, which could only SHRINK
 # the seed count -- it lost breaks by returning fewer seeds and would have been
