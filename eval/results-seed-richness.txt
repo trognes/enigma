@@ -1,0 +1,86 @@
+# HOW MANY DISTINCT SEEDS EXIST PER KEY?  At least ~6000 under the default
+# kick -- 2.2x what 10 000 restarts actually found -- and plausibly far more.
+#
+# python3 eval/chao_seeds.py
+#
+# L=100, 100 keys, -R 10000, telegraphic German, boards from --dump-all.
+# Companion to eval/results-rarefaction-restarts.txt, which measures how many
+# distinct seeds have been SEEN by n restarts and leaves the asymptote to a
+# curve fit.  This measures the MULTIPLICITY distribution instead, which is
+# what actually carries information about the unseen.
+#
+# ============================================================================
+# THE RESULT
+# ============================================================================
+#
+#   arm                       observed      f1      f2    Chao1   coverage
+#   kick 4  (CONTROL)            152.7    16.9    11.8    164.6      99.8%
+#   kick 10 (the default)       2689.5  1631.6   405.4   5985.8      83.7%
+#   kick 10, f10 final board    1850.7  1053.6   281.1   3832.2      89.5%
+#
+#   f1/f2 = singletons/doubletons: seeds seen exactly once / exactly twice.
+#   Chao1 (bias-corrected) = S_obs + f1(f1-1)/(2(f2+1)), a LOWER BOUND on
+#   richness.  Coverage = 1 - f1/n, the Good-Turing estimate of the sampled
+#   share of the probability mass.  All per key, then averaged: the pool is
+#   per key, which is the unit --seed-dedup filters over.
+#
+# ============================================================================
+# THE CONTROL IS WHAT MAKES THE HEADLINE READABLE
+# ============================================================================
+#
+# The 4-plug kick has genuinely saturated ("next is new" 0.0% by n = 4000), and
+# on it the estimator behaves: Chao1 lands 8% above the observed count and
+# coverage reads 99.8%.  It also falls inside the 126-156 the three curve fits
+# gave.  So on a saturated pool this method says "you have seen essentially all
+# of it" rather than inventing headroom.
+#
+# On the default kick the same estimator reads 2.23x observed and 83.7%
+# coverage.  The contrast is the evidence, not the absolute number.
+#
+# ============================================================================
+# TWO NUMBERS WORTH MORE THAN THE HEADLINE
+# ============================================================================
+#
+# 61% OF THE SEEDS FOUND IN 10 000 RESTARTS WERE SEEN EXACTLY ONCE
+# (1631.6 of 2689.5).  A sample dominated by singletons is the signature of a
+# pool nowhere near exhausted -- and it is measured, not fitted.
+#
+# 16.3% OF DRAWS AT -R 10000 ARE STILL NOVEL.  That is Good-Turing's coverage
+# deficit f1/n: even ten thousand restarts into one key, about one climb in six
+# lands somewhere the run has never been.  It also cross-checks the rarefaction
+# table's much noisier "next is new" column, which read 26.0% at n = 4000 --
+# same quantity, declining as it should.
+#
+# ============================================================================
+# WHAT THIS SETTLES, AND WHAT IT DOES NOT
+# ============================================================================
+#
+# SETTLED: the two saturating curve fits are wrong.  Michaelis-Menten (2985)
+# and Weibull (3162) both sit BELOW the Chao1 lower bound of 5986, so they are
+# refuted by a second argument independent of the slope argument in
+# results-rarefaction-restarts.txt.  There is no asymptote near 3000.
+#
+# NOT SETTLED: the actual richness.  Chao1 is a LOWER bound, and it is a weak
+# one exactly when singletons dominate the sample -- f1/f2 = 4.0 here, against
+# 1.4 on the saturated control.  So ~6000 is a floor, not an estimate; the
+# exponent-decline extrapolation in the companion file suggests ~1e5, five
+# decades past the data.  The honest range is 6e3 to ~1e5, and nothing here
+# narrows it further.
+#
+# The practically useful form is unchanged and is measured rather than
+# extrapolated: DISTINCT SEEDS SCALE AS ~R^0.63 at the top of the range, so
+# tripling R buys double the distinct seeds.
+#
+# ============================================================================
+# WHAT IT MEANS FOR --seed-dedup
+# ============================================================================
+#
+# The filter is sized on RESTARTS, not on richness, so none of this changes the
+# sizing -- but it does say the duplicate rate has room to keep rising: at
+# -R 10000 the pool is at best 45% sampled (2689.5 of >= 5986), so pushing R
+# higher goes on finding new seeds while the 73.1% duplicate rate goes on
+# growing.  Both the saving and the waste it removes scale together.
+#
+# SCOPE: one length (L=100), one schedule, one corpus, 100 keys, kick 4 and 10
+# only.  Richness is a property of the basin structure, so it should be
+# expected to move with message length and with the scoring model.

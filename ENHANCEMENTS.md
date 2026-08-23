@@ -772,6 +772,22 @@ tested that was retired before it ran (`SEED_DEDUP.md` §8). So the ~+10.6%
 distinct-seeds figure stays arithmetic, and this entry is a measured compute
 reduction with an unmeasured effect on recovery.
 
+**The seed pool is much larger than 10 000 restarts reveal.** Rarefaction
+alone cannot say how much larger — the accumulation curve has not begun to
+saturate, so a saturating fit is unidentifiable, and the two obvious ones
+(Michaelis–Menten 2985, Weibull 3162) are refuted by the curve's own slope: at
+the top of the range distinct seeds still grow as `R^0.63`, so one more
+doubling of the budget reaches ~4160 and passes both. The multiplicity
+distribution settles that half (`eval/results-seed-richness.txt`,
+`eval/chao_seeds.py`): **Chao1 puts a lower bound of 5986 distinct seeds per
+key** under the default kick, against 2689.5 actually observed, with **61% of
+those seen exactly once** and **16.3% of draws still novel at `-R 10 000`**.
+The 4-plug kick is the control and behaves — Chao1 164.6 against an observed
+152.7, coverage 99.8% — which is what licenses reading the other arms. What
+stays open is the true richness: Chao1 is a *lower* bound and a weak one when
+singletons dominate, so the honest range is 6×10³ to ~10⁵. The measured and
+useful form is the scaling: **tripling `-R` buys double the distinct seeds**.
+
 **For any follow-up: save the board strings.** This run stored plug counts and
 scores but not boards, so basin diversity had to be estimated from distinct
 *score* values (an undercount) and no board-level question — which plugs are
