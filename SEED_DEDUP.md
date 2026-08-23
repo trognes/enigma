@@ -6,9 +6,11 @@ and it is kept in that shape: the reasoning that led to each decision is worth
 more than a description of the result. §10 records what implementation changed,
 and the retracted designs stay in place rather than being tidied away.
 
-**What is and is not measured**: the feature is verified correct and free when
-off, and its benefit is the measured duplicate rate plus the arithmetic in §3.
-It has NOT been measured end to end, and — see §8 — it is not going to be.
+**What is and is not measured**: the feature is verified correct, free when
+off, and **measured faster at a fixed restart count** — −8.1% of wall time at
+`-R 1000` and −21.0% at `-R 10 000`, answer unchanged
+(`eval/results-seed-dedup.txt`). What is *not* measured is whether that time
+converts into breaks; see §8.
 
 ## 1. What it does, and the one number that justifies it
 
@@ -399,16 +401,28 @@ below as a commitment that anything will be enforced.
 
 So the honest statement of what is known:
 
-- **Measured**: the mechanism. Duplicate seeds are 17% at `-R 100` and 73.1%
+- **Measured — the mechanism.** Duplicate seeds are 17% at `-R 100` and 73.1%
   at `-R 10 000` (`eval/results-experiment-f.txt` §7), the seed determines the
   climb byte for byte, and the filter skips them at the false-positive rates in
   §3. The implementation is verified correct (§7, §10) and costs nothing when
   off.
-- **Arithmetic on top of that**: +10.6% distinct seeds climbed at matched wall
-  time at `-R 100` on a 79.6 M-key sweep, rising with `-R`. That is a
-  calculation from the duplicate rate and the FP rate, not an observation.
-- **Not measured**: whether any of it converts into breaks. Nothing here shows
-  a recovery improvement, and no run is planned.
+- **Measured — the compute saving, end to end on wall time.** On 26 keys with
+  the recommended recipe (`eval/results-seed-dedup.txt`): **−8.1% at `-R 1000`**
+  (14.6% of seeds skipped) and **−21.0% at `-R 10 000`** (40.7% skipped), with
+  the recovered plaintext **identical** in both arms and an off-vs-off control
+  of −0.6% / +0.9%. So the saving is an observation, not a calculation — and
+  the wall figure **exceeds** the `score_iter` one (−6.5% / −18.3%), the
+  counter understating it because `--polish`'s gain scan runs outside the
+  counted loop.
+- **The saving is about HALF the skip rate**, at both budgets (0.55 and 0.52),
+  because the cheap stage runs on every seed — it is what produces the seed
+  being tested — so only the target continuation is skipped. A run's printed
+  skip percentage predicts roughly half that much time saved.
+- **Not measured**: whether any of it converts into breaks. Those runs hold
+  `-R` fixed and measure time saved; they do not spend the saved time on more
+  restarts and count messages broken. The distinct-seed figures below (+10.6%
+  at `-R 100` and so on) therefore remain arithmetic, and no such run is
+  planned.
 
 The original wording follows, as the record of what the test would have been.
 

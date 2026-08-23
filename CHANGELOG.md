@@ -112,10 +112,13 @@ existing command lines can behave differently or stop working.
     `-F`, `--exhaust`, `--crib`, `--self-crib-seeds`, `--tune-phase` and `-A`.
     `--ring-stride` **is** supported: its coarse pass is filtered and its
     refinement runs unfiltered.
-  - **The measured part is the mechanism, not a recovery gain.** Duplicate
-    seeds and the false-positive rate are measured; the distinct-seed figures
-    above follow from them by arithmetic. Nothing shows it converts into
-    breaks, and no end-to-end comparison is planned. `SEED_DEDUP.md` §8.
+  - **Measured faster at a fixed restart count**: −8.1% of wall time at
+    `-R 1000` and −21.0% at `-R 10 000` on 26 keys, with the recovered
+    plaintext unchanged and an off-vs-off control under 1%
+    (`eval/results-seed-dedup.txt`). The saving is about half the skip rate,
+    since the cheap stage runs on every seed and only the target continuation
+    is skipped. **Not** shown to convert into breaks — those runs hold `-R`
+    fixed, and the end-to-end comparison was retired before it ran.
 
 - **`--self-crib-tandem` — hypothesise a doubled word with no separator**
   (`SIEGFRIEDSIEGFRIED`), which `--self-crib-seeds` could not see at all: its 26

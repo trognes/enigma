@@ -615,9 +615,20 @@ are read from a **data directory** (filenames built as
   **byte-identical** result and the second climb is pure waste. Measured 17% of
   seeds at `-R 100` and **73% at `-R 10 000`** (`eval/results-experiment-f.txt`
   §7). Design, sizing and what the build taught: `SEED_DEDUP.md`.
-  **The benefit is calculated, not observed**: the duplicate rate and the
-  false-positive rate are measured, the distinct-seed gain follows from them by
-  arithmetic, and no end-to-end recovery comparison was run (§8 there).
+  - **Measured faster at a fixed restart count**, on 26 keys with the
+    recommended recipe (`eval/results-seed-dedup.txt`): **−8.1% of wall time at
+    `-R 1000`** (14.6% of seeds skipped) and **−21.0% at `-R 10 000`** (40.7%
+    skipped), answer identical, off-vs-off floor −0.6%/+0.9%. **The saving is
+    about HALF the skip rate** at both budgets, because the cheap stage runs on
+    every seed — it is what produces the seed being tested — so only the target
+    continuation is skipped; read a run's printed skip percentage as predicting
+    half that much time. Wall time **exceeds** `score_iter` here (−6.5% /
+    −18.3%), the counter understating the saving because `--polish`'s gain scan
+    runs outside the counted loop.
+  - **Not shown to convert into BREAKS.** Those runs hold `-R` fixed and
+    measure time saved rather than spending it on more restarts, and the
+    end-to-end comparison that would have tested that was retired before it ran
+    (`SEED_DEDUP.md` §8), so the distinct-seed figures there stay arithmetic.
   - **Per-key Bloom filter, 8-byte blocks.** A lookup is one `uint64` load, one
     AND and one compare. 8 divides 64, so an aligned word never straddles a
     cache line — the single-read property comes for free rather than being

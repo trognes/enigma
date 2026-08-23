@@ -760,14 +760,17 @@ lookup, sized by bits per item, with a pass barrier that keeps the skip
 decision `-T`-independent. Verified correct and free when off — 604/604 in the
 suite, long-tier bench flat, both new CI cases injection-verified.
 
-**What is measured is the mechanism, not a recovery gain.** Duplicate seeds are
-17% at `-R 100` and 73% at `-R 10 000`, the seed determines the climb byte for
-byte, and skipping them works out to ~+10.6% distinct seeds climbed at matched
-wall time on a 79.6 M-key sweep — an arithmetic consequence of those two rates,
-not an observation. **Nothing here shows it converts into breaks**, and the
-end-to-end comparison that would have tested it was retired before it ran
-(`SEED_DEDUP.md` §8). So this is not in the same evidential class as the
-measured entries above; it is a compute reduction with a calculated benefit.
+**The compute saving is measured; the recovery gain is not.** At a fixed
+restart count on 26 keys it is **8.1% of wall time at `-R 1000`** (14.6% of
+seeds skipped) and **21.0% at `-R 10 000`** (40.7% skipped), answer unchanged,
+against an off-vs-off floor under 1% — `eval/results-seed-dedup.txt`. The
+saving is about **half** the skip rate at both budgets, because the cheap stage
+runs on every seed and only the target continuation is skipped. **Nothing shows
+it converts into breaks**: those runs hold `-R` fixed rather than spending the
+saved time on more restarts, and the end-to-end comparison that would have
+tested that was retired before it ran (`SEED_DEDUP.md` §8). So the ~+10.6%
+distinct-seeds figure stays arithmetic, and this entry is a measured compute
+reduction with an unmeasured effect on recovery.
 
 **For any follow-up: save the board strings.** This run stored plug counts and
 scores but not boards, so basin diversity had to be estimated from distinct
