@@ -170,9 +170,15 @@
 #   beam apart 4        92          8.26           12.20
 #   kicked             115         17.20           13.84
 #
-# apart = 2 and 3 are INERT, byte-identical to 0: a board differing by one plug
-# already differs in at least 2 entries, so nothing below 4 rejects anything
-# the duplicate check does not.  apart = 4 moves apartness 6.73 -> 8.26 and
+# apart = 2 and 3 are INERT, byte-identical to 0, and the reason PREDICTS it
+# rather than describing it: WITHIN A LEVEL EVERY CANDIDATE HAS THE SAME PLUG
+# COUNT, which makes the distance skip values.  d = 1 is impossible for any two
+# involutions (if position i differs, its partner must differ too); d = 2 is
+# impossible at equal plug count, since it requires one board to hold exactly
+# one plug the other lacks; so the smallest real separation is d = 3, two
+# boards sharing one cabled letter -- (A,B) against (A,C).  apart = 4 is
+# therefore the first threshold that can reject anything the duplicate check
+# does not.  It moves apartness 6.73 -> 8.26 and
 # breaks 88 -> 92, still half of the kicked arm's separation.  So the
 # constraint works in the right direction and cannot reach far enough: it
 # prunes within a beam whose candidates already share their ancestry.
