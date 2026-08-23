@@ -753,11 +753,20 @@ reproduces `CLAUDE.md`'s restart ladder closely (0.425 distinct per restart at
 a seed already climbed. A **seed-level** cache is therefore a different
 proposition from the removed `--restart-tt`, which hashed *converged* boards
 after the expensive stage had run — but it adds no new reach, only cheaper
-coverage, and whether it pays end to end is unmeasured. **Designed, not built:
-`SEED_DEDUP.md`** — a per-key blocked Bloom filter over the stage-0 seed, one
-cache line per lookup, sized from a memory budget, with a pass barrier that
-keeps the skip decision `-T`-independent. It carries its own falsification
-rule: matched wall time end to end, or removed.
+coverage, and whether it pays end to end is unmeasured. **Now BUILT as
+`--seed-dedup`** (`src/dedup.cc`, design and findings in `SEED_DEDUP.md`): a
+per-key Bloom filter over the stage-0 seed with 8-byte blocks, one load per
+lookup, sized by bits per item, with a pass barrier that keeps the skip
+decision `-T`-independent. Verified correct and free when off — 604/604 in the
+suite, long-tier bench flat, both new CI cases injection-verified.
+
+**It has NOT been shown to pay.** Its own falsification rule is a matched
+wall-time end-to-end comparison, and that run has not happened; what is
+measured is the mechanism (17% of seeds skipped at `-R 100`, 73% at
+`-R 10 000`) and the arithmetic that turns it into ~+10.6% distinct seeds at
+matched wall time on a 79.6 M-key sweep. That is a modest effect, of the order
+of a restart-count change, and the rule stands: if it does not break more
+messages at matched wall time, it is recorded as measured-down and removed.
 
 **For any follow-up: save the board strings.** This run stored plug counts and
 scores but not boards, so basin diversity had to be estimated from distinct

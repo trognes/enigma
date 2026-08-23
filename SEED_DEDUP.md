@@ -1,8 +1,14 @@
 # Seed deduplication — design
 
-**Status: planned, not built.** This is the design record; nothing in `src/`
-implements it yet. Written before the code, as `ENHANCEMENTS.md` §2a's
-experiments were.
+**Status: BUILT** (`--seed-dedup`, `src/dedup.cc`). This began as the design
+record, written before the code as `ENHANCEMENTS.md` §2a's experiments were,
+and it is kept in that shape: the reasoning that led to each decision is worth
+more than a description of the result. §10 records what implementation changed,
+and the retracted designs stay in place rather than being tidied away.
+
+**What it still owes is the measurement in §8**, which has not been run: the
+feature is verified correct and free when off, and it is NOT yet shown to break
+more messages at matched wall time.
 
 ## 1. What it does, and the one number that justifies it
 
@@ -324,15 +330,19 @@ accounting must still count the item, or the percentage and ETA go wrong.
 
 ## 7. Verification
 
+*Status of each is in §10.*
+
 1. **Off is byte-identical.** With the flag absent, output and `score_iter`
    match the current binary exactly on a matrix of invocations.
-2. **A disabled filter is byte-identical.** With the filter forced to always
-   answer "not present", output matches dedup-off — proving the skip path is
-   the only difference.
-3. **Exact-set equivalence.** On a small keyspace, run with the Bloom filter
-   replaced by an exact `unordered_set`. The skipped set must be a superset
-   with the difference explained entirely by false positives, and at a large
-   `bits_per_item` the two must agree exactly.
+2. **A disabled filter is byte-identical.** Run at `-R 1`, where no duplicate
+   can exist: the result must equal the ordinary staged climb. This is what
+   makes the second copy of the stage loop safe, and it is cheaper and less
+   invasive than the forced-"not present" build first proposed.
+3. **Skipping does not change the answer.** Under `--random 0` every restart
+   climbs from the same seed, so the skipped climbs would have reproduced the
+   kept one exactly: an equivalence, not an approximation. A monotonicity check
+   stands in for the exact-set arm — a larger `bits_per_item` can only skip
+   FEWER seeds, since extra bits remove only false positives.
 4. **`-T` independence.** Same output at `-T 1/2/4/8` with dedup on, **and the
    same reported skip count** — the counter is part of the contract, not a
    by-product, so a `-T`-dependent total means the barrier is not doing its
@@ -418,3 +428,87 @@ has reached.
   pass, and the determinism argument in §4 collapses.
 - **No adaptive resizing.** A Bloom filter cannot grow; the budget is fixed at
   startup from `K` and `R`, both known then.
+
+## 10. What implementation changed
+
+The design above is as written before the code, with the corrections marked in
+place. This section is what the build itself taught.
+
+**Verification, as run.** 1 and 2 pass on a matrix of invocations (the barrier
+that precedes the filter is separately byte-identical over 14 invocations at
+`-T` 1/2/4). 3 passes as re-specified. 4 passes: the skip count is identical at
+`-T` 1/2/4/8, and so is the result. 5 is the `--random 0` fixture and is exact
+— 0.0 / 50.0 / 75.0% at `-R` 1/2/4 on 26 keys, with the denominator asserted at
+936 under `--ring-stride` so the refinement's keys are provably in neither
+counter. 6 is measured: 5.8% duplicates at `-R 64` on real kicks. 7 is two new
+CI cases, both injection-verified. 8 is flat: `make bench LONG=1` against the
+pre-change base reads +0.6 / −1.2 / +0.4 / −1.1% on the four tiers with the
+flag off.
+
+**The `--ring-stride` refinement had to be SUSPENDED, not merely left alone.**
+§6 says it runs unfiltered; saying so is not enough. It reuses `search_worker`
+over its own key space, whose indices start again at 0 and therefore **alias**
+the coarse pass's per-key regions — so it both consumed those regions and had
+its own climbs skipped against seeds they never produced. Plugboards scored
+went 2 275 780 → 2 495 481 once suspended, i.e. the refinement had been losing
+about 9% of its work to a filter that knew nothing about it. Caught by the test
+asserting the exact skip percentage, which read 75.8% instead of 75.0%.
+
+**The TSan case could not fail as first written, and the reason generalises.**
+Injecting the bug — the pass loop replaced by a single `run_parallel` — left it
+silent. Two separate corrections were needed:
+
+- **The fixture must be degenerate.** Without the barrier a race needs two
+  threads on the *same* key at once, but key `k`'s items sit `R` apart in the
+  work index while threads hand out small consecutive chunks. On a 676-key
+  sweep the threads are always on different keys, so there is nothing to
+  observe. The key count has to be at most the thread count; the shipped case
+  uses **one** key.
+- **`--random 0` is exactly wrong here**, which is the opposite of what it is
+  right for in the functional tests. With every seed identical there is one
+  write and `R−1` reads, and read/read is not a race. Real kicks make every
+  restart a write.
+
+With `-r AAA -g AAA -c -R 64 --random 10 -T 8` it exits 66 on the broken build
+and 0 on the good one.
+
+**A false lead, recorded so it is not re-derived.** The first explanation for
+TSan's silence was that the relaxed atomic counters were masking the race —
+TSan does not model relaxed ordering precisely, so an atomic RMW before each
+filter access could plausibly build a happens-before chain through it. The
+counters were rewritten thread-local with a per-pass flush on that basis. It is
+**false**: TSan reports the race with the atomics in place. The real cause was a
+**stale object file** — the `Makefile` does not track `EXTRA_CXXFLAGS`, so a
+sanitizer build over existing `-O2` objects leaves part of the program
+uninstrumented. `make clean` first. The thread-local counters were reverted,
+since their only justification had evaporated.
+
+**The echoed false-positive rate is at FULL LOAD and is conservative by about
+`k+1`.** Measured across `bits_per_item` on 43 264 real seeds at `-R 64`:
+
+| bits/item | echoed FP | skips | excess over true duplicates |
+|---:|---:|---:|---:|
+| 24 | 0.09% | 5.8% | — (taken as the baseline) |
+| 12 | 0.95% | 6.0% | 102 |
+| 8 | 3.19% | 6.4% | 303 |
+| 6 | 6.60% | 7.3% | 669 |
+| 4 | 15.22% | 10.1% | 1 878 |
+
+At 8 bits the full-load figure implies ~1 301 false positives and 303 were
+observed — 4.3× fewer, against the 5× that `1/(k+1)` predicts for `k` = 4,
+because a `k`-bit test grows as `load^k` and most queries hit a part-filled
+filter. Quoting the full-load rate overstates the coverage being given up
+rather than understating it, which is the right direction, and the echo now
+says "at full load" so the two figures cannot be confused.
+
+**The settings echo cannot report the effective bits per item**, and this was
+found before coding rather than after: the effective figure divides by the
+realised distinct-seed count, which no run knows in advance. The echo prints
+the provisioned figure; the realised rate follows from the final skip line.
+
+**Two things the design did not anticipate needing.** A skipped item must
+return before `dump_all` and the doubling report — the first would print a row
+scoring `-1e300` and the second would decode a board that was never finished.
+And the reporting had to distinguish `--seed-dedup-bits` unset from set, so
+that a sub-option given without the flag it configures is fatal rather than
+silently inert.
