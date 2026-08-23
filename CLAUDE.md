@@ -82,8 +82,8 @@ SEED_DEDUP.md             Design record for `--seed-dedup` (now BUILT, in
                           restart's stage-0 seed has already been climbed for
                           that key.  Per-key Bloom filter with 8-byte blocks,
                           pass barrier, bits-per-item sizing.  Carries the
-                          designs that were tried and retracted, and the
-                          falsification rule the feature still owes.
+                          designs that were tried and retracted, and what the
+                          build itself taught.
 LICENSE                   GNU GPL v3.
 .gitignore                Editor backups, cipher*.txt, the built binary, the
                           `src/*.o` / `src/*.d` build products, and __pycache__.
@@ -614,7 +614,10 @@ are read from a **data directory** (filenames built as
   from it is deterministic — so two restarts reaching the same seed produce a
   **byte-identical** result and the second climb is pure waste. Measured 17% of
   seeds at `-R 100` and **73% at `-R 10 000`** (`eval/results-experiment-f.txt`
-  §7). Design, sizing and the falsification rule: `SEED_DEDUP.md`.
+  §7). Design, sizing and what the build taught: `SEED_DEDUP.md`.
+  **The benefit is calculated, not observed**: the duplicate rate and the
+  false-positive rate are measured, the distinct-seed gain follows from them by
+  arithmetic, and no end-to-end recovery comparison was run (§8 there).
   - **Per-key Bloom filter, 8-byte blocks.** A lookup is one `uint64` load, one
     AND and one compare. 8 divides 64, so an aligned word never straddles a
     cache line — the single-read property comes for free rather than being

@@ -760,13 +760,14 @@ lookup, sized by bits per item, with a pass barrier that keeps the skip
 decision `-T`-independent. Verified correct and free when off — 604/604 in the
 suite, long-tier bench flat, both new CI cases injection-verified.
 
-**It has NOT been shown to pay.** Its own falsification rule is a matched
-wall-time end-to-end comparison, and that run has not happened; what is
-measured is the mechanism (17% of seeds skipped at `-R 100`, 73% at
-`-R 10 000`) and the arithmetic that turns it into ~+10.6% distinct seeds at
-matched wall time on a 79.6 M-key sweep. That is a modest effect, of the order
-of a restart-count change, and the rule stands: if it does not break more
-messages at matched wall time, it is recorded as measured-down and removed.
+**What is measured is the mechanism, not a recovery gain.** Duplicate seeds are
+17% at `-R 100` and 73% at `-R 10 000`, the seed determines the climb byte for
+byte, and skipping them works out to ~+10.6% distinct seeds climbed at matched
+wall time on a 79.6 M-key sweep — an arithmetic consequence of those two rates,
+not an observation. **Nothing here shows it converts into breaks**, and the
+end-to-end comparison that would have tested it was retired before it ran
+(`SEED_DEDUP.md` §8). So this is not in the same evidential class as the
+measured entries above; it is a compute reduction with a calculated benefit.
 
 **For any follow-up: save the board strings.** This run stored plug counts and
 scores but not boards, so basin diversity had to be estimated from distinct

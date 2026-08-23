@@ -6,9 +6,9 @@ and it is kept in that shape: the reasoning that led to each decision is worth
 more than a description of the result. §10 records what implementation changed,
 and the retracted designs stay in place rather than being tidied away.
 
-**What it still owes is the measurement in §8**, which has not been run: the
-feature is verified correct and free when off, and it is NOT yet shown to break
-more messages at matched wall time.
+**What is and is not measured**: the feature is verified correct and free when
+off, and its benefit is the measured duplicate rate plus the arithmetic in §3.
+It has NOT been measured end to end, and — see §8 — it is not going to be.
 
 ## 1. What it does, and the one number that justifies it
 
@@ -387,18 +387,30 @@ determinism regression from the barrier arrives in the same commit as the
 filter and gets attributed to it — and of the two, the barrier is where such a
 bug is more likely and harder to see.
 
-## 8. Falsification, in advance
+## 8. What is measured, and what is not
 
-The saving is compute, not recovery. It converts into breaks only where
-restarts still pay, so the pre-registered test is an **end-to-end, matched
-wall time** comparison on hard cases — short messages at a restart count where
-the ladder is still climbing — not a `score_iter` or wall-clock ratio.
+**This section pre-registered a falsification test — an end-to-end, matched
+wall time comparison, with the feature to be removed if dedup-on did not break
+more messages than dedup-off. That test was retired by the repository owner
+before it ran, and the feature stays.** The pre-registration is left here
+rather than deleted, because a design record that quietly drops the test it set
+itself is worse than one that says what happened; but do not read the paragraph
+below as a commitment that anything will be enforced.
 
-If at matched wall time dedup-on does not break more messages than dedup-off,
-the feature is recorded as measured-down and removed, however good the compute
-saving looks. That is the same rule experiments D, E and F ran under, and the
-`score_iter` traps in `results-monoic-endtoend.txt` and
-`results-experiment-f.txt` are why the test has to be end to end.
+So the honest statement of what is known:
+
+- **Measured**: the mechanism. Duplicate seeds are 17% at `-R 100` and 73.1%
+  at `-R 10 000` (`eval/results-experiment-f.txt` §7), the seed determines the
+  climb byte for byte, and the filter skips them at the false-positive rates in
+  §3. The implementation is verified correct (§7, §10) and costs nothing when
+  off.
+- **Arithmetic on top of that**: +10.6% distinct seeds climbed at matched wall
+  time at `-R 100` on a 79.6 M-key sweep, rising with `-R`. That is a
+  calculation from the duplicate rate and the FP rate, not an observation.
+- **Not measured**: whether any of it converts into breaks. Nothing here shows
+  a recovery improvement, and no run is planned.
+
+The original wording follows, as the record of what the test would have been.
 
 **Expected magnitude, stated up front so it can be wrong.** The right currency
 is **distinct seeds climbed at matched wall time**, not compute saved — a
@@ -412,10 +424,10 @@ climbing at `-R 5000` at L = 60–100) but which has not been measured at this
 keyspace scale.
 
 **+10.6% at the operating point is a modest effect**, of the order of a
-restart-count change, and it should be judged as one — the reason to build it
-is that the effect *grows* with `-R` while the alternatives do not, and that
-the run measuring it also measures the restart curve at a scale nothing here
-has reached.
+restart-count change, and it should be judged as one. What argues for it over
+simply raising `-R` is that the effect *grows* with the restart budget while
+the duplicate work it removes grows with it too — but that is the argument,
+not a result.
 
 ## 9. Deliberately not done
 

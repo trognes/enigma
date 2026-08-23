@@ -112,9 +112,10 @@ existing command lines can behave differently or stop working.
     `-F`, `--exhaust`, `--crib`, `--self-crib-seeds`, `--tune-phase` and `-A`.
     `--ring-stride` **is** supported: its coarse pass is filtered and its
     refinement runs unfiltered.
-  - **Not yet shown to pay.** The mechanism and the arithmetic are measured;
-    the matched-wall-time end-to-end comparison its own falsification rule
-    demands has not been run. `SEED_DEDUP.md`.
+  - **The measured part is the mechanism, not a recovery gain.** Duplicate
+    seeds and the false-positive rate are measured; the distinct-seed figures
+    above follow from them by arithmetic. Nothing shows it converts into
+    breaks, and no end-to-end comparison is planned. `SEED_DEDUP.md` §8.
 
 - **`--self-crib-tandem` — hypothesise a doubled word with no separator**
   (`SIEGFRIEDSIEGFRIED`), which `--self-crib-seeds` could not see at all: its 26
