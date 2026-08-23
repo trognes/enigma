@@ -1,3 +1,16 @@
+# >>> WRONG CORPUS.  EVERY NUMBER BELOW IS ON ENGLISH PROSE, NOT TELEGRAPHIC
+# >>> GERMAN, AND THE TABLES SAYING OTHERWISE ARE MISLABELLED.  The harness
+# >>> read eval/corpus-tune-phase-ab.txt, which is this repo's own README text,
+# >>> while scoring with -l wehrmacht -- the prose/telegraphic mismatch
+# >>> CLAUDE.md prices at -10.2pp.  Both arms saw the same text and the same
+# >>> scorer, so each A/B is INTERNALLY valid and the relative conclusions are
+# >>> probably intact; but the absolute break rates are not operational, and
+# >>> nothing rules out the mismatch changing an arm ordering.  The file now
+# >>> reads eval/corpus-hgnord.txt (the authentic HG Nord DECRYPT fields, as
+# >>> eval/prepass_ab.py uses) and everything here needs re-running before it
+# >>> is quoted.  Found while writing eval/proto_seeddist.cc, which copied the
+# >>> same setup block.
+#
 # A BEAM ON T BEATS KICKED SEEDS AT SMALL BUDGETS AND LOSES AT LARGE ONES.
 # At matched wall time it breaks 107 of 400 against 65 (z = +4.5) with 1 ms per
 # key, and 213 against 236 (z = -2.4) with 8 ms.  The crossover sits at about
@@ -23,8 +36,10 @@
 #                        (eval/results-tseed-proto.txt) so nothing is decoded.
 #
 # Both then hand every seed to the SAME continuation: hillclimb<false> at cap
-# 10 under -f.  400 keys per cell, L=100 telegraphic German, rotor key given,
-# 10-pair board hidden, a trial counted broken at >= 50% of letters.
+# 10 under -f.  400 keys per cell, L=100, rotor key given, 10-pair board
+# hidden, a trial counted broken at >= 50% of letters.  THE PLAINTEXT WAS
+# ENGLISH PROSE, not the telegraphic German named below -- see the warning at
+# the top of the file.
 #
 # ============================================================================
 # MATCHED WALL TIME

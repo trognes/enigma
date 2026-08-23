@@ -1,0 +1,117 @@
+# THE IC OPTIMUM AT FOUR PLUGS IS NOT THE TRUTH, AND IT BEATS THE TRUTH.
+# Averaged over 100 keys at L=100, the best four-plug subset of the REAL board
+# scores +5.34 sd against the random four-plug null -- a strong signal -- while
+# a beam optimising IC reaches +8.13 sd on boards sharing only 0.70 of 4 plugs
+# with it.  So the score a seed search maximises has its argmax somewhere the
+# truth is not, and that gap is what limits direct seed generation.
+#
+#   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
+#   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/dist eval/proto_seeddist.cc $objs
+#   /tmp/dist [L] [plugs] [samples] [show] [seed] [keys]
+#
+# A PROTOTYPE, not shipped code.  Scores come from the T representation
+# (eval/results-tseed-proto.txt), which is exact for IC, so nothing is decoded
+# and 200 000 boards cost milliseconds.  Plaintext is eval/corpus-hgnord.txt --
+# the DECRYPT fields of the authentic HG Nord messages, the same corpus
+# eval/prepass_ab.py uses.  Rotor key given, a 10-pair board hidden.
+#
+# ============================================================================
+# ONE KEY IN FULL -- L=100, wheels B 231, true board
+#   AH BR CM DE FJ NZ PX QU ST VW
+# ============================================================================
+#
+# 200 000 random four-plug boards, the null a seed search must beat:
+#   mean 0.03907   sd 0.00263
+#   min 0.03111   p1 0.03374   p50 0.03879   p99 0.04606   max 0.05495
+#
+#   0.03291  -2.3 sd |*
+#   0.03394  -2.0 sd |*****
+#   0.03496  -1.6 sd |***************
+#   0.03599  -1.2 sd |****************************
+#   0.03702  -0.8 sd |*****************************************
+#   0.03805  -0.4 sd |*********************************
+#   0.03907  +0.0 sd |********************************
+#   0.04010  +0.4 sd |***************************
+#   0.04113  +0.8 sd |*********************
+#   0.04215  +1.2 sd |**************
+#   0.04318  +1.6 sd |*************
+#   0.04421  +2.0 sd |*******
+#   0.04524  +2.3 sd |****
+#   0.04626  +2.7 sd |**
+#   0.04729  +3.1 sd |*
+#
+# reference points on that key:
+#   empty board (0 plugs)     0.03980   +0.28 sd   62.1 pctile
+#   worst true-plug subset    0.03535   -1.41 sd    5.8
+#   BEST true-plug subset     0.04566   +2.50 sd   98.6   = AH BR NZ VW
+#   IC beam top-1             0.06101   +8.33 sd  100.0   = EF HO PW RY
+#
+# THE BEAM'S TOP EIGHT ON THIS KEY HOLD ONE TRUE PLUG BETWEEN THEM -- BR, in
+# the fourth entry -- and they are near-copies of each other: HO appears in
+# seven of the eight, and FIVE are the identical triple HO PW RY with only the
+# fourth plug varied (EF, DL, LU, TZ, FU).  That is the shared-ancestry
+# crowding eval/results-beam-seeds.txt measures as an apartness of ~6.2, here
+# in the raw.
+#
+# THIS KEY IS THE UNFAVOURABLE TAIL AND WAS NEARLY REPORTED AS TYPICAL.  On the
+# next three seeds the best true subset scored +8.73, +6.65 and +8.44 sd -- at
+# the very top -- and the beam's top-1 held 2, 1 and 3 true plugs.  A single
+# key cannot distinguish "the score is blind" from "this key was hard", which
+# is why the survey below exists.
+#
+# ============================================================================
+# THE SURVEY: THE GAP IS REAL, AND IT CLOSES WITH LENGTH
+# ============================================================================
+#
+# 100 keys per row, 20 000 null samples each, four plugs:
+#
+#   L     best TRUE   beam top-1   gap    truth at 100th   true plugs in
+#          subset                          pctile          top-1     top-8
+#   60     +4.35 sd    +8.71 sd   4.36     26 of 100       0.47/4     0.82
+#  100     +5.34       +8.13      2.79     69 of 100       0.70/4     1.47
+#  167     +6.96       +8.34      1.38     89 of 100       1.68/4     2.89
+#
+# TWO THINGS ARE TRUE AT ONCE AND BOTH MATTER.
+#
+# IC AT FOUR PLUGS IS A GENUINE SIGNAL.  The truth sits 4.4 to 7.0 sd above a
+# random four-plug board and is the single best board in the sample on 89% of
+# keys at L=167.  A seed ranking on IC -- which is what --self-crib-seeds and
+# --crib-seeds do -- is reading something real, and this is the measurement
+# that says so directly rather than by its downstream effect.
+#
+# BUT ITS ARGMAX IS NOT THE TRUTH.  An optimiser reaches +8.1 to +8.7 sd at
+# every length, ABOVE the truth in every row, on boards holding well under half
+# the true plugs.  The four-plug IC surface has a higher peak somewhere else,
+# so a search that climbs it lands there BY DESIGN.  That is not a beam defect
+# and no diversity pressure fixes it: the whole IC-extreme family is wrong
+# together, which is exactly why raising `apart` bought separation without
+# buying breaks (eval/results-beam-seeds.txt).
+#
+# THE GAP IS A LENGTH EFFECT, and it closes from the truth's side, not the
+# optimum's.  The beam's peak is flat in L (+8.7 / +8.1 / +8.3) while the
+# truth climbs +4.35 -> +6.96, so the two converge because more text makes the
+# real board score better, not because the decoys get worse.  At 167 letters
+# the gap is 1.38 sd and the beam recovers 1.68 of 4 plugs; at 60 it is 4.36 sd
+# and 0.47.  SHORT MESSAGES ARE WHERE DIRECT SEED GENERATION FAILS, which is
+# the same place everything else in this repo is hard.
+#
+# ============================================================================
+# WHAT IT DOES NOT SAY
+# ============================================================================
+#
+# IC ONLY.  The shipped pre-pass is `k` (mono + lambda*L*IC), and mono may well
+# rank the truth differently -- the same T build gives both, so this is cheap
+# to extend and simply was not run.
+#
+# FOUR PLUGS ONLY, and the cap is a choice rather than a fact: the k4f10
+# schedule says four, but the shipped kick actually converges at ~6.7 plugs
+# (eval/results-beam-seeds.txt), so the operational seed is bigger than the
+# board measured here.
+#
+# THE SUBSET CEILING IS NOT THE ONLY WAY TO BE RIGHT.  "Best true-plug subset"
+# is the best a seed of exactly-true plugs could score; a seed holding two true
+# plugs and two wrong ones may still land the continuation in the right basin,
+# and nothing here measures basins -- only score.  eval/results-beam-seeds.txt
+# measures the outcome.
+#
+# ONE MACHINE (reflector B, wheels drawn from I-V), one corpus, g++ -O3.
