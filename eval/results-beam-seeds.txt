@@ -3,9 +3,15 @@
 # key, and 213 against 236 (z = -2.4) with 8 ms.  The crossover sits at about
 # 4 ms per key -- eight kicked seeds.
 #
-#   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/beam eval/proto_beam.cc \
-#       $(ls src/*.o | grep -vE 'main\.o|enigma\.o')
-#   /tmp/beam [keys] [kicked W] [beam W] [L] [apart]
+# AND THE SAME SHAPE APPEARS IN DEPTH once the arms are made to produce boards
+# of the SAME SIZE (a 4-pair kick under -M, not the shipped 10-pair one): the
+# beam is ahead at 4 and 5 plugs, level at 6, behind from 7.  Read the two
+# matched sections below before the unmatched tables -- one headline here was
+# an artefact of the size difference and is corrected there.
+#
+#   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
+#   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/beam eval/proto_beam.cc $objs
+#   /tmp/beam [keys] [kicked W] [beam W] [L] [apart] [plugs] [kick size] [-M]
 #
 # A PROTOTYPE, not shipped code.  It links against the repo's objects, so the
 # kick (perturb_steckerbrett), both climbs (hillclimb<false>) and the scorers
@@ -42,8 +48,13 @@
 # equal seed count: 21.4 for the beam against 25.9 for kicks at W = 32.
 #
 # ============================================================================
-# AT EQUAL SEED COUNT THE BEAM IS SIMPLY WORSE, AND THE GAP WIDENS
+# AT EQUAL SEED COUNT AND UNMATCHED SIZE THE BEAM LOSES -- SUPERSEDED BELOW
 # ============================================================================
+#
+# KEPT AS THE MEASUREMENT THAT MISLED.  Arm A here is the SHIPPED kick, whose
+# seeds carry 6.7 plugs against the beam's 4, so this compares two things at
+# once.  Matched for size the d = 4 cell reverses (148 against 132 of 400).
+# The section "TWO CONFOUNDS" below has the corrected form.
 #
 #   W       kicked brk / distinct     beam brk / distinct     (200 keys)
 #    4          51 /  3.83                52 /  3.43
@@ -51,10 +62,11 @@
 #   16         115 / 13.84                88 / 11.68
 #   32         151 / 25.87               110 / 21.43
 #
-# So the beam's whole advantage is COST, not seed quality: ~5x cheaper to
-# produce a seed (0.25 ms against 2.01 ms for eight), and that is what buys the
-# extra seeds that win the small-budget cells.  Once the budget is large enough
-# for kicks to supply plenty of diverse seeds, cheapness stops mattering.
+# The reading taken from this at the time -- "the beam's whole advantage is
+# COST, not seed quality" -- is half right.  The cost advantage is real but
+# smaller than the 5x here (most of that 5x is the shipped kick shedding six
+# unwanted plugs, not the beam being fast), and at equal SIZE the beam's seeds
+# are not worse at shallow depth.  What survives is the diversity ceiling.
 #
 # ============================================================================
 # DISTINCT SEEDS IS THE WRONG MEASURE.  THE BEAM WINS IT AND LOSES ANYWAY.
@@ -83,7 +95,7 @@
 # predicts distinct basins after the continuation.
 #
 # ============================================================================
-# TWO CONFOUNDS CHECKED, AND NEITHER IS THE EXPLANATION
+# TWO CONFOUNDS CHECKED.  ONE IS REAL AND REVERSES A HEADLINE.
 # ============================================================================
 #
 # THE ARMS DO NOT PRODUCE THE SAME KIND OF BOARD.  Arm A's seeds carry 6.70
@@ -93,18 +105,51 @@
 # what the k4f10 schedule DOES and the depth-4 beam is what it SAYS, and the
 # comparison confounded seed construction with seed size.
 #
-# Matching the size does not rescue it (200 keys, W = 8, kicked = 87 breaks):
+# DEEPENING THE BEAM ALONE DOES NOT CLOSE IT (200 keys, W = 8, shipped arm A =
+# 87 breaks):
 #
 #   beam depth    4     5     6     7     8    10
 #   breaks       74    77    70    65    72    68
 #   mean apart  6.20  6.38  6.42  6.34  6.46  6.65
 #   finals      6.45  6.00  5.59  5.28  5.03  4.66
 #
-# Depth 6 matches arm A's plug count and still loses 70 to 87.  APARTNESS IS
-# FLAT IN DEPTH (6.2 - 6.7 throughout) while distinct finals FALL steadily,
-# 6.45 -> 4.66: a deeper beam commits harder to its shared prefix, so its
-# leaves converge to fewer basins.  The size confound is real and is not the
-# mechanism.
+# -- but that is still not a matched comparison, because it deepens ONE arm.
+# The clean form is to shrink the KICK to the same size and turn -M on, so the
+# cap becomes a strict descent target and arm A converges to exactly d plugs
+# too.  THAT REVERSES THE HEADLINE AT SHALLOW DEPTH.  400 keys, W = 8 both
+# arms, both producing exactly d plugs, McNemar z on the paired discordants:
+#
+#    d    A brk  A apart  A seedms   B brk  B apart  B seedms   only A/B     z
+#    4     132    11.71     0.44      148     6.13     0.29      40/56    +1.63
+#    5     147    13.94     0.64      160     6.27     0.34      43/56    +1.31
+#    6     144    15.97     0.92      149     6.40     0.40      48/53    +0.50
+#    7     156    17.60     1.20      140     6.28     0.44      61/45    -1.55
+#    8     172    19.17     1.61      146     6.32     0.48      58/32    -2.74
+#   10     167    21.07     2.65      140     6.46     0.54      56/29    -3.01
+#
+#   reference: the SHIPPED arm A -- kick 10, no -M, 6.71 plugs -- breaks 180 of
+#   400 at 17.13 apart and 2.14 ms of seed time.
+#
+# SO "AT EQUAL SEED COUNT THE BEAM IS SIMPLY WORSE" WAS AN ARTEFACT OF THE SIZE
+# CONFOUND, and the table above that says so is the unmatched one.  At d = 4
+# and 5 the beam WINS on equal terms (neither cell reaches |z| = 2, so call it
+# ahead-or-level rather than established); the crossover sits at d = 6 and only
+# past it does the kicked arm win, significantly from d = 8.
+#
+# THE MECHANISM IS NOW VISIBLE AS A DIVERGENCE, not a level difference.  A
+# KICKED ARM GETS MORE DIVERSE AS IT DEEPENS -- apart 11.71 -> 21.07, since a
+# bigger kick scatters further -- WHILE THE BEAM STAYS FLAT AT ~6.3 AT EVERY
+# DEPTH and its distinct finals FALL, 6.34 -> 4.47.  Both arms start from the
+# same place at d = 4; the beam simply cannot follow.  A deeper beam commits
+# harder to its shared prefix, so its extra plugs buy quality and cost
+# coverage.
+#
+# THE COST GAP NARROWS THE SAME WAY.  A 4-pair kick under -M converges fast
+# (0.44 ms against the shipped 10-pair kick's 2.14), so the beam's seed-cost
+# advantage at matched size is 1.5x at d = 4, not the 7x the shipped comparison
+# shows -- most of that 7x was the cost of shedding six unwanted plugs.  It
+# widens again with depth (3.4x at d = 8) because the kicked climb pays for
+# depth and the beam nearly does not.
 #
 # ============================================================================
 # THE SEPARATION CONSTRAINT HELPS A LITTLE, AND ITS FIRST VERSION COULD NOT

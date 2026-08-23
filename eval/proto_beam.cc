@@ -3,6 +3,10 @@
 
    Arm A (what ships): W random 10-plug kicks, each climbed to cap 4 under the
    k model -- the real perturb_steckerbrett and the real hillclimb<false>.
+   The kick size and -M are arguments, because the shipped setting does NOT
+   produce a 4-plug seed (the cap blocks only adds, so it converges holding
+   ~6.7) and the beam does: `KICK = DEPTH` with -M on is the size-matched arm,
+   and it is the one that answers whether the beam loses for being a beam.
    Arm B (the proposal): a width-W beam from the EMPTY board, adding one plug
    at a time to 4, scored on the T representation (eval/proto_tseed.cc) so no
    candidate is ever decoded.
@@ -23,7 +27,8 @@
 
      objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
      g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/beam eval/proto_beam.cc $objs
-     /tmp/beam [keys] [kicked W] [beam W] [L] [apart] [beam plugs]
+     /tmp/beam [keys] [kicked W] [beam W] [L] [apart] [plugs]
+               [kick size] [-M]
 */
 
 #include "common.h"
@@ -244,7 +249,14 @@ int main(int argc, char * * argv)
   const int WB   = (argc > 3) ? atoi(argv[3]) : WA;   /* beam width */
   const int L    = (argc > 4) ? atoi(argv[4]) : 100;
   const int APART = (argc > 5) ? atoi(argv[5]) : 0;   /* diversity filter */
-  const int DEPTH = (argc > 6) ? atoi(argv[6]) : 4;   /* beam plugs */
+  const int DEPTH = (argc > 6) ? atoi(argv[6]) : 4;   /* plugs, BOTH arms */
+  /* Arm A's kick size and -M.  The default (10, off) is what ships, and it
+     does NOT produce a DEPTH-plug seed: without -M the cap blocks only ADDS,
+     so a 10-plug kick climbed under cap 4 converges holding ~6.7.  Passing
+     `KICK = DEPTH` with -M on makes the arms produce boards of the same size,
+     which is the only way to ask whether the beam's loss is about size. */
+  const int KICK  = (argc > 7) ? atoi(argv[7]) : 10;
+  const int CAPM  = (argc > 8) ? atoi(argv[8]) : 0;
 
   opt_language = "wehrmacht";
   opt_datadir = "ngrams";
@@ -368,9 +380,11 @@ int main(int argc, char * * argv)
         {
           init_steckerbrett(m, "");
           uint64_t s = rng();
-          perturb_steckerbrett(m, & s, 10);
+          perturb_steckerbrett(m, & s, KICK);
           m.scoring = SCORE_MONOIC;
-          hillclimb<false>(m, 4);
+          opt_capmerge = CAPM;
+          hillclimb<false>(m, DEPTH);
+          opt_capmerge = 0;
           seedsA.push_back(board_key(m.steckerbrett));
         }
       auto ta1 = std::chrono::steady_clock::now();
@@ -462,9 +476,10 @@ int main(int argc, char * * argv)
       if (broke[1] && ! broke[0]) only_b++;
     }
 
-  printf("beam vs kicked seeds: %d keys, %d kicked / %d beam to %d plugs,"
+  printf("beam vs kicked seeds: %d keys, %d kicked / %d beam, %d plugs,"
          " L = %d%s\n", KEYS, WA, WB, DEPTH, L,
          (APART > 0) ? ", diversity filter on" : "");
+  printf("arm A kick = %d pairs, -M %s\n", KICK, CAPM ? "on" : "off");
   printf("telegraphic German, rotor key given, 10-pair board hidden,\n");
   printf("seeds -> the SAME hillclimb<false> at cap 10 under -f\n\n");
   printf("  %-22s %7s %7s %7s %7s %7s %7s %8s %8s\n",
