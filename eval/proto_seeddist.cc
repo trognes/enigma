@@ -195,10 +195,10 @@ int main(int argc, char * * argv)
   const uint64_t SEED = (argc > 5)
                           ? strtoull(argv[5], nullptr, 10) : 20260823ULL;
   /* KEYS > 1 switches to the SURVEY, which is what says whether the single
-     key dumped below is representative.  It is not optional colour: the first
-     key inspected here had its best true-plug quadruple at +2.5 sd while the
-     beam reached +8.3 on boards holding no true plug at all, and three other
-     keys had the truth AT the top.  One example cannot tell those apart. */
+     key dumped below is representative.  It is not optional colour: keys
+     differ enormously here -- one key's best true-plug quadruple scores
+     +2.5 sd while its neighbours reach +8.5, and a single dump cannot tell
+     "the score is blind" from "this key was hard". */
   const int KEYS = (argc > 6) ? atoi(argv[6]) : 1;
 
   opt_language = "wehrmacht";
@@ -308,9 +308,8 @@ int main(int argc, char * * argv)
 
     /* HOW MANY TRUE PLUGS BEFORE THE SCORE NOTICES?  Bucketing the null by
        the number of true plugs a board happens to contain answers directly
-       what the single-key dump only hints at: of 20 boards drawn there, the
-       ONE holding a true plug scored at the 4.7th percentile -- worse than
-       most boards holding none. */
+       what a single-key dump cannot: whether holding SOME true plugs lifts
+       the score at all, or only a full set does. */
     double bmean[5] = {0, 0, 0, 0, 0};
     long bcount[5] = {0, 0, 0, 0, 0};
 

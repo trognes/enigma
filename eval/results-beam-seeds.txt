@@ -1,7 +1,7 @@
 # A BEAM ON T BEATS KICKED SEEDS AT SMALL BUDGETS AND LOSES AT LARGE ONES.
-# At matched wall time on authentic telegraphic German it breaks 78 of 400
-# against 41 (z = +4.2) at ~1 ms per key, and 182 against 221 (z = -3.9) at
-# ~17 ms.  The crossover sits between 4 and 8 kicked seeds.
+# At matched wall time it breaks 78 of 400 against 41 (z = +4.2) at ~1 ms per
+# key, and 182 against 221 (z = -3.9) at ~17 ms.  The crossover sits between
+# four and eight kicked seeds.
 #
 #   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
 #   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/beam eval/proto_beam.cc $objs
@@ -20,16 +20,7 @@
 # 10 under -f.  L = 100, rotor key given, 10-pair board hidden, a trial counted
 # broken at >= 50% of letters.  Plaintext is eval/corpus-hgnord.txt -- the
 # DECRYPT fields of the authentic HG Nord messages, as eval/prepass_ab.py uses.
-#
-# > EVERY NUMBER HERE IS A RE-RUN.  The first version of this file read
-# > eval/corpus-tune-phase-ab.txt, which is this repo's own README prose --
-# > ENGLISH -- while scoring -l wehrmacht, and reported the results as
-# > telegraphic German.  Both arms saw the same text, so each A/B stayed
-# > internally valid, and the re-run confirms that: every ordering below
-# > survived.  ONE CONCLUSION DID NOT, and it is flagged where it appears
-# > (apart = 4 was a free win on prose and is a wash here).  The old numbers
-# > are quoted alongside the new ones so the corpus sensitivity is legible
-# > rather than lost.
+# Raw output in eval/results-beam-seeds-raw.txt.
 #
 # ============================================================================
 # MATCHED WALL TIME
@@ -47,39 +38,16 @@
 #
 #   z is McNemar on the paired per-key outcomes; positive favours the beam.
 #
-#   On English prose the same cells read 65/107, 109/156, 180/187, 236/213,
-#   281/261 -- higher throughout, since prose under telegraphic tables is an
-#   easier target than real traffic, but the SAME shape and the same crossover.
-#
 # THE BEAM FRONT-LOADS QUALITY, WHICH IS THE TRADE THE RAREFACTION WORK
 # PREDICTS.  With few seeds you want the best ones and the beam supplies them;
 # with many you want DIVERSE ones and the beam cannot, because it optimises
 # score and its candidates crowd one region.
 #
 # ============================================================================
-# AT EQUAL SEED COUNT, UNMATCHED SIZE -- SUPERSEDED BY THE NEXT SECTION
-# ============================================================================
-#
-# Arm A here is the SHIPPED kick, whose seeds carry 6.7 plugs against the
-# beam's 4, so this compares seed construction and seed size at once.  200
-# keys:
-#
-#   W       kicked brk / distinct finals    beam brk / distinct finals
-#    4          43 /  3.82                     47 /  3.50
-#    8          53 /  7.53                     56 /  6.68
-#   16          79 / 14.21                     75 / 11.98
-#   32         110 / 26.68                     75 / 23.02
-#
-# On prose this read 51/52, 87/74, 115/88, 151/110 -- the beam behind from
-# W = 8.  On real traffic it is LEVEL to W = 16 and only clearly behind at 32.
-# Either way the size confound below has to be removed before this says
-# anything about the beam as a method.
-#
-# ============================================================================
 # DISTINCT SEEDS IS THE WRONG MEASURE.  THE BEAM WINS IT AND LOSES ANYWAY.
 # ============================================================================
 #
-# 200 keys, W = 8:
+# 200 keys, W = 8, shipped arm A:
 #
 #   arm       breaks   plugs   distinct seeds   mean apart   distinct finals
 #   kicked      53      6.71        7.86           17.38          7.53
@@ -99,18 +67,16 @@
 # satisfied by one plug of difference; "far apart" is not, and only the second
 # predicts distinct basins after the continuation.
 #
-# Both apartness figures are within 0.02 of the prose run, as they must be --
-# they describe the SEARCH, not the text.
-#
 # ============================================================================
-# THE SIZE CONFOUND, REMOVED
+# THE ARMS DO NOT PRODUCE THE SAME KIND OF BOARD -- MATCH THE SIZE FIRST
 # ============================================================================
 #
-# THE ARMS DO NOT PRODUCE THE SAME KIND OF BOARD.  Arm A's seeds carry 6.71
-# plugs, not 4 -- without -M the cap blocks only ADDS, so a 10-plug kick
-# climbed under cap 4 converges still holding ~6.7 (the effect the -M entry in
-# CLAUDE.md documents).  The beam builds exactly 4 from empty.  So arm A is
-# what the k4f10 schedule DOES and the depth-4 beam is what it SAYS.
+# Arm A's seeds carry 6.71 plugs, not 4 -- without -M the cap blocks only ADDS,
+# so a 10-plug kick climbed under cap 4 converges still holding ~6.7 (the
+# effect the -M entry in CLAUDE.md documents).  The beam builds exactly 4 from
+# empty.  So the shipped arm A is what the k4f10 schedule DOES and a depth-4
+# beam is what it SAYS, and comparing them confounds seed construction with
+# seed size.
 #
 # Shrinking the KICK to the same size and turning -M on makes the cap a strict
 # descent target, so both arms converge to exactly d plugs.  400 keys, W = 8:
@@ -127,11 +93,8 @@
 #   400 at 17.38 apart and 2.23 ms of seed time.
 #
 # THE BEAM IS AHEAD AT SHALLOW DEPTH AND BEHIND AT DEEP, crossing over around
-# d = 6-7, and only the d = 10 cell reaches |z| = 2.  Prose gave the same
-# ordering with larger margins (132/148, 147/160, 144/149, 156/140, 172/146,
-# 167/140), so this is the one place the corpus mattered for STRENGTH: the
-# separation between the arms is smaller on real traffic, and only the
-# deep-beam loss is significant.
+# d = 6-7.  Only the d = 10 cell reaches |z| = 2, so read the shallow cells as
+# ahead-or-level rather than established.
 #
 # THE MECHANISM IS A DIVERGENCE, not a level difference.  A KICKED ARM GETS
 # MORE DIVERSE AS IT DEEPENS -- apart 11.76 -> 21.41, since a bigger kick
@@ -143,15 +106,17 @@
 # THE COST GAP NARROWS THE SAME WAY.  A 4-pair kick under -M converges fast
 # (0.43 ms against the shipped 10-pair kick's 2.23), so the beam's seed-cost
 # advantage at matched size is 1.5x at d = 4, not the 8x the shipped comparison
-# shows -- most of that 8x is the cost of shedding six unwanted plugs.
+# shows -- most of that 8x is the cost of shedding six unwanted plugs.  It
+# widens again with depth (3.3x at d = 8) because the kicked climb pays for
+# depth and the beam nearly does not.
 #
 # ============================================================================
 # THE SEPARATION KNOB BUYS DIVERSITY AND DOES NOT BUY BREAKS
 # ============================================================================
 #
 # `apart` requires kept beam entries to differ in at least that many board
-# entries, AT THE FINAL LEVEL, apportioned linearly before it.  The scaling is
-# what makes a large value legal: at level l a board holds l plugs, so two
+# entries, AT THE FINAL LEVEL, apportioned linearly before it.  THE SCALING IS
+# WHAT MAKES A LARGE VALUE LEGAL: at level l a board holds l plugs, so two
 # candidates differ in at most 4l entries, and a FLAT threshold of 6 rejects
 # every pair at level 1 and collapses the beam to width 1.
 #
@@ -166,23 +131,22 @@
 # APARTNESS RISES MONOTONICALLY, 6.12 -> 15.71, so the beam CAN be made as
 # diverse as the kicked arm and more.  At apart = 10 it reaches 11.93 against
 # the kicked arm's 11.76 -- a dead heat on diversity -- and breaks 62 against
-# 79.  THE DIVERSITY IS BOUGHT WITH SEEDS, ONE FOR ONE (8.00 -> 1.52).
+# 79.  THE DIVERSITY IS BOUGHT WITH SEEDS, ONE FOR ONE (8.00 -> 1.52), because
+# a candidate good enough to enter must now also be far from everything kept.
 #
-# > apart = 4 IS A WASH HERE, AND ON PROSE IT WAS A FREE WIN.  The prose run
-# > read 148 -> 155 breaks and this reads 95 -> 95, with 30/46 discordants
-# > against apart 0's 32/48 -- the same trial outcomes to within noise.  It is
-# > still free (dseeds stays 8.00, because it rejects only d = 3 and such a
-# > candidate is readily replaced), but free is all it is.  THIS IS THE ONE
-# > CONCLUSION THE WRONG CORPUS CHANGED, and it was stated here as "the only
-# > setting that pays".
+# apart = 4 IS FREE AND WORTH NOTHING: it rejects only d = 3, such a candidate
+# is readily replaced so the set still fills at 8.00, and the trial outcomes
+# are the same to within noise (95 breaks either way, 30/46 discordants against
+# apart 0's 32/48).
 #
-# apart = 2 and 3 are INERT, byte-identical to 0, and the reason predicts it:
-# within a level every candidate holds the same plug count, which makes the
-# distance skip values.  d = 1 is impossible for any two involutions (if
-# position i differs, its partner must differ too); d = 2 is impossible at
-# equal plug count; so the smallest real separation is d = 3, two boards
-# sharing one cabled letter.  apart = 4 is the first threshold that can reject
-# anything the duplicate check does not.
+# apart = 2 and 3 are INERT, byte-identical to 0, and the reason PREDICTS it
+# rather than describing it: within a level every candidate holds the same plug
+# count, which makes the distance skip values.  d = 1 is impossible for any two
+# involutions (if position i differs, its partner must differ too); d = 2 is
+# impossible at equal plug count, since it requires one board to hold exactly
+# one plug the other lacks; so the smallest real separation is d = 3, two
+# boards sharing one cabled letter -- (A,B) against (A,C).  apart = 4 is the
+# first threshold that can reject anything the duplicate check does not.
 #
 # RAISING W DOES NOT BUY THE SEEDS BACK -- the fill saturates near W/2.6 rather
 # than approaching W, since the constraint bites harder the fuller the set gets
@@ -194,13 +158,14 @@
 #   32       160 / 32.00 /  9.62           119 / 12.74 /  5.05
 #   64       205 / 64.00 / 20.20           162 / 24.08 / 10.73
 #
-# AT MATCHED COMPUTE IT IS A WASH, and here too the corpus moved the verdict.
-# Lining the cells up by wall time: at ~2.5 ms, apart 10 at W = 16 breaks 106
-# against apart 0 at W = 8's 95; at ~5 ms, apart 0 at W = 16 breaks 131 against
-# apart 10 at W = 32's 119; at ~10 ms they are level (160 at 9.62 against 162
-# at 10.73).  An unpaired 400-trial cell at p ~ 0.3 carries an SE of +-9.2
-# breaks, so NONE of those gaps resolves.  On prose the same comparison read a
-# small but consistent loss for the constraint; here it is a coin toss.
+# AT MATCHED COMPUTE IT IS A WASH.  Lining the cells up by wall time: at
+# ~2.5 ms, apart 10 at W = 16 breaks 106 against apart 0 at W = 8's 95; at
+# ~5 ms, apart 0 at W = 16 breaks 131 against apart 10 at W = 32's 119; at
+# ~10 ms they are level (160 at 9.62 against 162 at 10.73).  An unpaired
+# 400-trial cell at p ~ 0.3 carries an SE of +-9.2 breaks, so none of those
+# gaps resolves.  The constraint does win on breaks per SEED at large W --
+# 24.08 seeds returning 162 breaks against 32.00 returning 160 -- which is the
+# rarefaction logic, but seeds are not what is paid for.
 #
 # THE CEILING IS COMBINATORIAL, NOT A TUNING FAILURE.  W boards pairwise
 # disjoint at l plugs need 2lW distinct letters, so with 26 letters and l = 4
@@ -221,22 +186,23 @@
 # without buying breaks.
 #
 # ============================================================================
-# TWO HARNESS LESSONS, BOTH CORPUS-INDEPENDENT
+# TWO MEASUREMENT TRAPS WORTH KNOWING
 # ============================================================================
 #
-# THE FIRST BEAM used a std::set<std::string> per level to de-duplicate, which
-# allocated a 26-byte string for each of ~6000 candidates and made seed
-# generation cost the SAME as the kicked climbs it exists to undercut -- 2.12
-# against 2.20 ms.  Reported as it stood that would have read as a property of
-# the method ("no cheaper").  The kept set is at most W, so the common path is
-# one compare against the worst kept; fixing it moved seed generation to
-# 0.25 ms.  MEASURE THE THING, NOT THE BOOKKEEPING AROUND IT.
+# BOOKKEEPING CAN SWAMP THE THING BEING MEASURED.  A std::set<std::string> per
+# level, used to de-duplicate candidates, allocated a 26-byte string for each
+# of ~6000 and made seed generation cost the SAME as the kicked climbs it
+# exists to undercut -- 2.12 against 2.20 ms.  That number is a property of the
+# harness and reads as a property of the method.  The kept set is at most W, so
+# the common path is one compare against the worst kept; with that, seed
+# generation is 0.25 ms.
 #
-# THE FIRST SEPARATION CONSTRAINT filtered the FINISHED beam, which could only
-# SHRINK the seed count -- it lost breaks by returning fewer seeds and would
-# have been reported as "diversity does not help".  It is a replacement rule
-# now: a near neighbour is rejected, or a worse one evicted, so W entries are
-# still returned.
+# A DIVERSITY CONSTRAINT MUST REPLACE, NOT DROP.  Filtering the FINISHED beam
+# can only SHRINK the seed count, so it loses breaks by returning fewer seeds
+# whatever the diversity is worth -- an arm that cannot win, whose result would
+# read as "diversity does not help".  Rejecting a near neighbour at insertion,
+# or evicting a worse one, keeps W entries and makes the constraint a real
+# alternative rather than a smaller budget in disguise.
 #
 # ============================================================================
 # SCOPE

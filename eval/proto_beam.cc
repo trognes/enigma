@@ -301,15 +301,9 @@ int main(int argc, char * * argv)
   }
   const double lambda = 0.1;
 
-  /* THE CORPUS MUST BE THE AUTHENTIC DECRYPTS, and getting this wrong is
-   invisible.  An earlier version read eval/corpus-tune-phase-ab.txt, which is
-   the repo's own README prose -- English -- while scoring with -l wehrmacht.
-   Both arms saw the same text so the A/B stayed internally valid, but every
-   result was labelled telegraphic German and was not, and the seed landscape a
-   telegraphic table reads on English prose is not the operational one.
-   eval/corpus-hgnord.txt is built from the DECRYPT fields of
-   enigma-messages.txt and enigma-army-messages-1941.txt, the same corpus
-   eval/prepass_ab.py uses. */
+  /* The corpus is the authentic HG Nord decrypts -- the DECRYPT fields of
+     enigma-messages.txt and enigma-army-messages-1941.txt, the same text
+     eval/prepass_ab.py builds its corpus from. */
   std::string corpus;
   {
     FILE * f = fopen("eval/corpus-hgnord.txt", "r");

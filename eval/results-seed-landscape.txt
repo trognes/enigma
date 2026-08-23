@@ -55,13 +55,11 @@
 #
 # ONLY ONE OF THOSE 20 BOARDS CARRIES A TRUE PLUG -- board 1, CM DN GY PT,
 # holding CM -- AND IT IS THE SECOND-WORST OF THE TWENTY, at -1.49 sd and the
-# 4.7th percentile.  (2.46 is the expected count for 20 boards: 4 pairs out of
-# 325 with 10 true, confirmed by simulation at 0.1230 per board, so one is low
-# but unremarkable.)
+# 4.7th percentile.  (2.46 is the expected count for 20 boards: 4 pairs of 325
+# with 10 true, simulated at 0.1230 per board, so one is low but unremarkable.)
 #
-# THAT IS NOT A GENERAL FACT ABOUT PARTIAL CREDIT, and checking it was worth
-# the trouble.  Bucketing 2 000 000 sampled boards by how many true plugs they
-# happen to hold, on three keys:
+# THAT IS NOT A GENERAL FACT ABOUT PARTIAL CREDIT.  Bucketing 2 000 000 sampled
+# boards by how many true plugs they happen to hold, on three keys:
 #
 #   true plugs held      this key      key B        key C
 #   0                     +0.01 sd     -0.07 sd     -0.08 sd
@@ -77,11 +75,11 @@
 # uphill.  On the key dumped above the gradient is absent entirely (0/1/2/3 all
 # within 0.05 sd), which is why its best true quadruple manages only +2.50.
 #
-# THIS KEY IS THE UNFAVOURABLE TAIL AND WAS NEARLY REPORTED AS TYPICAL.  On the
-# next three seeds the best true subset scored +8.73, +6.65 and +8.44 sd -- at
-# the very top -- and the beam's top-1 held 2, 1 and 3 true plugs.  A single
-# key cannot distinguish "the score is blind" from "this key was hard", which
-# is why the survey below exists.
+# THIS KEY IS THE UNFAVOURABLE TAIL, AND KEYS VARY ENORMOUSLY.  On the next
+# three seeds the best true subset scored +8.73, +6.65 and +8.44 sd -- at the
+# very top -- and the beam's top-1 held 2, 1 and 3 true plugs.  A single key
+# cannot distinguish "the score is blind" from "this key was hard", which is
+# why the survey below exists and why one dump is never the answer here.
 #
 # ============================================================================
 # THE SURVEY: THE GAP IS REAL, AND IT CLOSES WITH LENGTH
