@@ -306,6 +306,14 @@ int main(int argc, char * * argv)
     clear_board(S);
     const double ic_empty = ic_of(T, S, L);
 
+    /* HOW MANY TRUE PLUGS BEFORE THE SCORE NOTICES?  Bucketing the null by
+       the number of true plugs a board happens to contain answers directly
+       what the single-key dump only hints at: of 20 boards drawn there, the
+       ONE holding a true plug scored at the 4.7th percentile -- worse than
+       most boards holding none. */
+    double bmean[5] = {0, 0, 0, 0, 0};
+    long bcount[5] = {0, 0, 0, 0, 0};
+
     std::vector<double> pop;
     pop.reserve(static_cast<size_t>(SAMPLES));
     std::vector<std::pair<double, std::string> > shown;
@@ -314,6 +322,18 @@ int main(int argc, char * * argv)
         random_board(S, PLUGS, rng);
         const double v = ic_of(T, S, L);
         pop.push_back(v);
+        {
+          int nt = 0;
+          for (int q = 0; q < asize; q++)
+            {
+              if ((S[q] > q) && (m.steckerbrett[q] == S[q]))
+                nt++;
+            }
+          if (nt > 4)
+            nt = 4;
+          bmean[nt] += v;
+          bcount[nt]++;
+        }
         if (i < SHOW)
           shown.push_back(std::make_pair(v, board_str(S)));
       }
@@ -432,6 +452,20 @@ int main(int argc, char * * argv)
     for (const std::pair<double, std::string> & p : shown)
       printf("  %-32s %9.5f %+8.2f %7.2f%%\n", p.second.c_str(), p.first,
              (p.first - mean) / sd, rank_of(p.first));
+    printf("\n");
+
+    printf("the same %d boards, bucketed by how many TRUE plugs they hold:\n",
+           SAMPLES);
+    printf("  %-12s %10s %10s %8s\n", "true plugs", "boards", "mean IC",
+           "sd");
+    for (int q = 0; q <= PLUGS; q++)
+      {
+        if (bcount[q] == 0)
+          continue;
+        const double mu = bmean[q] / static_cast<double>(bcount[q]);
+        printf("  %-12d %10ld %10.5f %+8.2f\n", q, bcount[q], mu,
+               (mu - mean) / sd);
+      }
     printf("\n");
 
     printf("reference points:\n");

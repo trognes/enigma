@@ -53,6 +53,30 @@
 # crowding eval/results-beam-seeds.txt measures as an apartness of ~6.2, here
 # in the raw.
 #
+# ONLY ONE OF THOSE 20 BOARDS CARRIES A TRUE PLUG -- board 1, CM DN GY PT,
+# holding CM -- AND IT IS THE SECOND-WORST OF THE TWENTY, at -1.49 sd and the
+# 4.7th percentile.  (2.46 is the expected count for 20 boards: 4 pairs out of
+# 325 with 10 true, confirmed by simulation at 0.1230 per board, so one is low
+# but unremarkable.)
+#
+# THAT IS NOT A GENERAL FACT ABOUT PARTIAL CREDIT, and checking it was worth
+# the trouble.  Bucketing 2 000 000 sampled boards by how many true plugs they
+# happen to hold, on three keys:
+#
+#   true plugs held      this key      key B        key C
+#   0                     +0.01 sd     -0.07 sd     -0.08 sd
+#   1                     -0.05        +0.46        +0.56
+#   2                     -0.05        +1.31        +1.38
+#   3                     -0.03        +2.44        +2.34
+#
+# ON A TYPICAL KEY EACH CORRECT PLUG IS WORTH ABOUT +0.5 sd and the credit is
+# close to linear -- so the surface DOES have a gradient pointing at the truth,
+# and a greedy or beam construction has something real to climb.  The trouble
+# is the scale: three correct plugs reach ~+2.4 sd while the decoy optimum sits
+# at +8, so steepest ascent walks away from the truth even though the truth is
+# uphill.  On the key dumped above the gradient is absent entirely (0/1/2/3 all
+# within 0.05 sd), which is why its best true quadruple manages only +2.50.
+#
 # THIS KEY IS THE UNFAVOURABLE TAIL AND WAS NEARLY REPORTED AS TYPICAL.  On the
 # next three seeds the best true subset scored +8.73, +6.65 and +8.44 sd -- at
 # the very top -- and the beam's top-1 held 2, 1 and 3 true plugs.  A single

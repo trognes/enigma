@@ -1,0 +1,111 @@
+=== 1. MATCHED WALL TIME (400 keys, shipped arm A: kick 10, no -M) ===
+2/3            A: brk   41 pct  20.5 plugs  6.71 dseed   1.99 apart  17.39 fin   1.97 seed   0.53 climb   0.53
+               B: brk   78 pct  28.8 plugs  4.00 dseed   3.00 apart   4.86 fin   2.70 seed   0.12 climb   0.80
+                  21 keys broken only by A, 58 only by B
+4/7            A: brk   85 pct  31.5 plugs  6.70 dseed   3.97 apart  17.22 fin   3.85 seed   1.08 climb   1.01
+               B: brk  118 pct  38.5 plugs  4.00 dseed   7.00 apart   5.91 fin   5.71 seed   0.24 climb   1.79
+                  27 keys broken only by A, 60 only by B
+8/14           A: brk  106 pct  37.7 plugs  6.72 dseed   7.87 apart  17.38 fin   7.54 seed   2.23 climb   2.09
+               B: brk  120 pct  40.0 plugs  4.00 dseed  14.00 apart   6.71 fin  11.24 seed   0.50 climb   3.74
+                  36 keys broken only by A, 50 only by B
+16/27          A: brk  169 pct  52.0 plugs  6.68 dseed  15.39 apart  17.23 fin  14.21 seed   4.44 climb   4.16
+               B: brk  156 pct  48.4 plugs  4.00 dseed  27.00 apart   7.34 fin  19.43 seed   1.00 climb   7.24
+                  53 keys broken only by A, 40 only by B
+32/54          A: brk  221 pct  62.0 plugs  6.73 dseed  30.09 apart  17.40 fin  26.85 seed   8.92 climb   8.24
+               B: brk  182 pct  54.0 plugs  4.00 dseed  54.00 apart   8.04 fin  36.16 seed   2.25 climb  14.39
+                  69 keys broken only by A, 30 only by B
+
+=== 2. EQUAL SEED COUNT, shipped arm A (200 keys) ===
+W=4            A: brk   43 pct  31.1 plugs  6.68 dseed   3.96 apart  17.08 fin   3.82 seed   1.13 climb   1.09
+               B: brk   47 pct  32.5 plugs  4.00 dseed   4.00 apart   5.18 fin   3.50 seed   0.15 climb   1.08
+                  13 keys broken only by A, 17 only by B
+W=8            A: brk   53 pct  37.7 plugs  6.71 dseed   7.86 apart  17.38 fin   7.53 seed   2.16 climb   2.02
+               B: brk   56 pct  37.0 plugs  4.00 dseed   8.00 apart   6.12 fin   6.68 seed   0.28 climb   2.05
+                  19 keys broken only by A, 22 only by B
+W=16           A: brk   79 pct  50.4 plugs  6.68 dseed  15.38 apart  17.19 fin  14.21 seed   5.30 climb   4.23
+               B: brk   75 pct  45.7 plugs  4.00 dseed  16.00 apart   6.71 fin  11.98 seed   0.56 climb   4.35
+                  24 keys broken only by A, 20 only by B
+W=32           A: brk  110 pct  61.6 plugs  6.70 dseed  29.91 apart  17.23 fin  26.68 seed   8.86 climb   8.24
+               B: brk   75 pct  46.9 plugs  4.00 dseed  32.00 apart   7.56 fin  23.02 seed   1.20 climb   8.58
+                  45 keys broken only by A, 10 only by B
+
+=== 3. BEAM DEPTH SWEEP vs shipped arm A (200 keys, W=8) ===
+depth=4        A: brk   53 pct  37.7 plugs  6.71 dseed   7.86 apart  17.38 fin   7.53 seed   2.24 climb   2.06
+               B: brk   56 pct  37.0 plugs  4.00 dseed   8.00 apart   6.12 fin   6.68 seed   0.28 climb   2.08
+                  19 keys broken only by A, 22 only by B
+depth=5        A: brk   53 pct  37.5 plugs  6.74 dseed   7.83 apart  17.40 fin   7.53 seed   2.20 climb   2.13
+               B: brk   51 pct  34.9 plugs  5.00 dseed   8.00 apart   6.33 fin   6.28 seed   0.35 climb   2.05
+                  23 keys broken only by A, 21 only by B
+depth=6        A: brk   53 pct  37.5 plugs  6.89 dseed   7.76 apart  17.63 fin   7.45 seed   2.24 climb   2.13
+               B: brk   54 pct  36.0 plugs  6.00 dseed   8.00 apart   6.43 fin   5.84 seed   0.40 climb   1.99
+                  20 keys broken only by A, 21 only by B
+depth=7        A: brk   58 pct  39.0 plugs  7.31 dseed   7.67 apart  18.23 fin   7.41 seed   2.28 climb   2.06
+               B: brk   55 pct  34.9 plugs  7.00 dseed   8.00 apart   6.34 fin   5.32 seed   0.44 climb   1.99
+                  25 keys broken only by A, 22 only by B
+depth=8        A: brk   66 pct  43.1 plugs  8.05 dseed   7.71 apart  19.51 fin   7.50 seed   2.40 climb   2.11
+               B: brk   58 pct  36.1 plugs  8.00 dseed   8.00 apart   6.43 fin   5.03 seed   0.48 climb   1.94
+                  27 keys broken only by A, 19 only by B
+depth=10       A: brk   54 pct  37.6 plugs  9.76 dseed   7.64 apart  21.60 fin   7.43 seed   2.80 climb   2.04
+               B: brk   51 pct  33.3 plugs 10.00 dseed   8.00 apart   6.45 fin   4.64 seed   0.51 climb   1.96
+                  26 keys broken only by A, 23 only by B
+
+=== 4. SIZE-MATCHED (400 keys, W=8, kick=d, -M on) ===
+d=4            A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.43 climb   2.33
+               B: brk   95 pct  34.0 plugs  4.00 dseed   8.00 apart   6.12 fin   6.74 seed   0.29 climb   2.13
+                  32 keys broken only by A, 48 only by B
+d=5            A: brk   84 pct  32.7 plugs  5.00 dseed   7.97 apart  14.07 fin   7.77 seed   0.68 climb   2.33
+               B: brk   95 pct  33.0 plugs  5.00 dseed   8.00 apart   6.38 fin   6.36 seed   0.35 climb   2.10
+                  38 keys broken only by A, 49 only by B
+d=6            A: brk   94 pct  34.2 plugs  6.00 dseed   7.99 apart  15.99 fin   7.77 seed   0.90 climb   2.33
+               B: brk   96 pct  33.3 plugs  6.00 dseed   8.00 apart   6.53 fin   5.98 seed   0.40 climb   2.07
+                  44 keys broken only by A, 46 only by B
+d=7            A: brk  107 pct  37.2 plugs  7.00 dseed   7.97 apart  17.77 fin   7.72 seed   1.19 climb   2.18
+               B: brk   99 pct  33.3 plugs  7.00 dseed   8.00 apart   6.61 fin   5.53 seed   0.45 climb   1.98
+                  41 keys broken only by A, 33 only by B
+d=8            A: brk   98 pct  35.1 plugs  7.99 dseed   7.93 apart  19.17 fin   7.65 seed   1.56 climb   2.29
+               B: brk  102 pct  33.8 plugs  8.00 dseed   8.00 apart   6.58 fin   5.11 seed   0.47 climb   2.01
+                  36 keys broken only by A, 40 only by B
+d=10           A: brk  111 pct  38.2 plugs  9.73 dseed   7.74 apart  21.41 fin   7.50 seed   2.41 climb   2.07
+               B: brk   92 pct  31.7 plugs 10.00 dseed   8.00 apart   6.56 fin   4.84 seed   0.51 climb   1.98
+                  48 keys broken only by A, 29 only by B
+
+=== 5. APART SWEEP (400 keys, W=8, depth 4, size-matched) ===
+apart=0        A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.42 climb   2.25
+               B: brk   95 pct  34.0 plugs  4.00 dseed   8.00 apart   6.12 fin   6.74 seed   0.28 climb   2.07
+                  32 keys broken only by A, 48 only by B
+apart=4        A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.42 climb   2.29
+               B: brk   95 pct  33.9 plugs  4.00 dseed   8.00 apart   7.21 fin   6.89 seed   0.29 climb   2.10
+                  30 keys broken only by A, 46 only by B
+apart=5        A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.43 climb   2.35
+               B: brk   85 pct  32.0 plugs  4.00 dseed   5.99 apart   8.97 fin   5.67 seed   0.31 climb   1.61
+                  36 keys broken only by A, 42 only by B
+apart=6        A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.47 climb   2.45
+               B: brk   86 pct  31.8 plugs  4.00 dseed   6.02 apart   9.45 fin   5.79 seed   0.31 climb   1.71
+                  39 keys broken only by A, 46 only by B
+apart=8        A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.44 climb   2.43
+               B: brk   74 pct  29.2 plugs  4.00 dseed   5.27 apart  10.58 fin   5.14 seed   0.33 climb   1.50
+                  42 keys broken only by A, 37 only by B
+apart=10       A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.42 climb   2.36
+               B: brk   62 pct  26.6 plugs  4.00 dseed   4.20 apart  11.93 fin   4.17 seed   0.28 climb   1.17
+                  50 keys broken only by A, 33 only by B
+apart=12       A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.43 climb   2.32
+               B: brk   61 pct  25.7 plugs  4.00 dseed   3.60 apart  12.64 fin   3.58 seed   0.28 climb   0.99
+                  50 keys broken only by A, 32 only by B
+apart=14       A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.43 climb   2.32
+               B: brk   55 pct  23.8 plugs  4.00 dseed   2.81 apart  14.05 fin   2.80 seed   0.28 climb   0.77
+                  49 keys broken only by A, 25 only by B
+apart=16       A: brk   79 pct  32.3 plugs  4.00 dseed   7.93 apart  11.76 fin   7.71 seed   0.43 climb   2.38
+               B: brk   37 pct  17.9 plugs  4.00 dseed   1.52 apart  15.71 fin   1.51 seed   0.22 climb   0.42
+                  56 keys broken only by A, 14 only by B
+
+=== 6. W x APART (400 keys, depth 4, size-matched) ===
+W=8    apart=0   brk   95 dseed   8.00 apart   6.12 fin   6.74  TOTAL ms/key 2.39
+W=8    apart=10  brk   62 dseed   4.20 apart  11.93 fin   4.17  TOTAL ms/key 1.35
+W=16   apart=0   brk  131 dseed  16.00 apart   6.85 fin  12.29  TOTAL ms/key 4.83
+W=16   apart=10  brk  106 dseed   7.21 apart  12.14 fin   7.07  TOTAL ms/key 2.59
+W=32   apart=0   brk  160 dseed  32.00 apart   7.61 fin  22.82  TOTAL ms/key 9.62
+W=32   apart=10  brk  119 dseed  12.74 apart  12.36 fin  12.36  TOTAL ms/key 5.05
+W=64   apart=0   brk  205 dseed  64.00 apart   8.19 fin  42.37  TOTAL ms/key 20.20
+W=64   apart=10  brk  162 dseed  24.08 apart  12.57 fin  23.19  TOTAL ms/key 10.73
+
+DONE
