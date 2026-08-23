@@ -28,8 +28,12 @@
 
      objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
      g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/wkick eval/proto_wkick.cc $objs
-     /tmp/wkick [keys] [restarts] [L] [temperature] [kick] [-M] [cap]
-*/
+     /tmp/wkick [keys] [restarts] [L] [temperature] [kick] [-M] [cap] [seed]
+
+   cap = 0 SKIPS the cap climb, handing the kicked board straight to the
+   continuation.  That is not a realistic configuration -- it is the ablation
+   that says how much of the bias the cap climb erases before the continuation
+   ever sees it. */
 
 #include "common.h"
 #include "machine.h"
@@ -245,6 +249,11 @@ int main(int argc, char * * argv)
   const int KICK  = (argc > 5) ? atoi(argv[5]) : 10;
   const int CAPM  = (argc > 6) ? atoi(argv[6]) : 0;
   const int CAP   = (argc > 7) ? atoi(argv[7]) : 4;
+  /* An INDEPENDENT SEED, because a positive cell found by sweeping is a
+     hypothesis and not yet a result -- this harness has been run over enough
+     cells that one z = 2 among them is unremarkable. */
+  const uint64_t SEED = (argc > 8)
+                          ? strtoull(argv[8], nullptr, 10) : 20260824ULL;
 
   opt_language = "wehrmacht";
   opt_datadir = "ngrams";
@@ -282,7 +291,7 @@ int main(int argc, char * * argv)
     malloc(sizeof(unsigned char) * asize * asize * asize * asize));
   m.greek = -1; m.greek_offset = 0; m.report = false; m.plugboards_scored = 0;
 
-  std::mt19937_64 rng(20260824);
+  std::mt19937_64 rng(SEED);
   char truth[maxlen + 1];
 
   struct arm { int breaks = 0; double pct = 0; double distinct = 0;
@@ -358,10 +367,13 @@ int main(int argc, char * * argv)
           init_steckerbrett(m, "");
           uint64_t s = rng();
           perturb_steckerbrett(m, & s, KICK);
-          m.scoring = SCORE_MONOIC;
-          opt_capmerge = CAPM;
-          hillclimb<false>(m, CAP);
-          opt_capmerge = 0;
+          if (CAP > 0)
+            {
+              m.scoring = SCORE_MONOIC;
+              opt_capmerge = CAPM;
+              hillclimb<false>(m, CAP);
+              opt_capmerge = 0;
+            }
           seedsA.push_back(board_key(m.steckerbrett));
         }
       auto ta1 = std::chrono::steady_clock::now();
@@ -378,10 +390,13 @@ int main(int argc, char * * argv)
           init_steckerbrett(m, "");
           uint64_t s = rng();
           weighted_kick(m, P, KICK, s);
-          m.scoring = SCORE_MONOIC;
-          opt_capmerge = CAPM;
-          hillclimb<false>(m, CAP);
-          opt_capmerge = 0;
+          if (CAP > 0)
+            {
+              m.scoring = SCORE_MONOIC;
+              opt_capmerge = CAPM;
+              hillclimb<false>(m, CAP);
+              opt_capmerge = 0;
+            }
           seedsB.push_back(board_key(m.steckerbrett));
         }
       auto tb1 = std::chrono::steady_clock::now();

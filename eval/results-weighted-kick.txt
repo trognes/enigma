@@ -1,11 +1,14 @@
-# A WEIGHTED KICK IS A NULL.  Biasing the restart kick toward plugs that score
-# well on their own raises the seeds' true-plug count by 25% and changes the
-# break rate by nothing: 1043 of 3200 against the uniform kick's 1052,
-# z = -0.34.  The lever works and does not convert.
+# A WEIGHTED KICK BUYS NOTHING THE SHIPPED SEARCH DOES NOT ALREADY HAVE.
+# Biasing the restart kick toward plugs that score well on their own is a real
+# effect -- worth +7% of breaks, confirmed on two independent seeds -- but ONLY
+# in configurations that are themselves ~27% below the shipped one, and no
+# weighted configuration reaches the plain uniform kick.  In the shipped
+# configuration it is a flat null.
 #
 #   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
 #   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/wkick eval/proto_wkick.cc $objs
-#   /tmp/wkick [keys] [restarts] [L] [temperature] [kick] [-M] [cap]
+#   /tmp/wkick [keys] [restarts] [L] [temperature] [kick] [-M] [cap] [seed]
+#     cap = 0 skips the cap climb -- the ablation, not a configuration
 #
 #   eval/proto_plugrank.cc measures the mechanism this rests on.
 #
@@ -57,7 +60,7 @@
 #   softmax T=0.25      0.583            4.70x       6.42
 #
 # ============================================================================
-# END TO END IT IS A NULL
+# END TO END, IN THE SHIPPED CONFIGURATION, IT IS A NULL
 # ============================================================================
 #
 # Arm A is perturb_steckerbrett(), the shipped uniform kick; arm B draws the
@@ -100,6 +103,65 @@
 # restart budget.
 #
 # ============================================================================
+# BUT IT IS NOT A NULL EVERYWHERE -- AND WHERE IT WORKS DOES NOT HELP
+# ============================================================================
+#
+# The rows above use the shipped kick of TEN pairs, and ten pairs occupy 20 of
+# the 26 letters -- so by the last picks almost nothing is legal and the
+# weighting has no room to act.  Measured, the bias is diluted at two separate
+# stages before the continuation ever sees it:
+#
+#   true plugs in the raw 4-plug kick, T = 1     0.124 -> 0.263    +111%
+#   ... in the seed after the cap-4 climb        0.43  -> 0.47     +9%
+#   ... at kick 10 (dilution + climb)            0.93  -> 1.14     +23%
+#
+# SO THE CAP CLIMB ERASES MOST OF WHAT THE KICK PUTS IN.  It is a strong enough
+# optimiser to forget where it started, which is the more interesting of the
+# two erasures and is confirmed by ablating it -- handing the kicked board
+# straight to the continuation with no cap climb at all (400 keys, kick 4):
+#
+#   T          uniform   weighted   B true/seed   B apart      z
+#   0 (ctrl)      69        64         0.12        13.43     -0.61
+#   1             69        71         0.25        12.74     +0.24
+#   0.5           69        95         0.43        10.23     +2.91
+#   0.25          69        77         0.56         6.46     +0.98
+#
+# With no climb the full bias survives and it converts: +38% of breaks at
+# T = 0.5.  But the whole arm sits far below the climbed one (95 against the
+# climbed uniform's 91 at the same budget, and against 128 for the shipped
+# kick), so this is a mechanism demonstration, not a recipe.
+#
+# THE UNDILUTED CONFIGURATION IS A REAL WIN, CONFIRMED.  At kick 4 with -M,
+# so the seed is forced to exactly four plugs, 3200 keys:
+#
+#   seed          T      uniform   weighted   onlyA/onlyB      z
+#   20260824     1.0       716       741       296/321      +1.01
+#   20260824     0.7       716       767       265/316      +2.12
+#   777          0.7       695       742       269/316      +1.94
+#
+#   pooled over the two independent seeds at T = 0.7: 534 only-A against 632
+#   only-B, z = +2.87, effect +7.1% and +6.8% -- the same size twice.
+#
+# AND IT STILL DOES NOT HELP, which is what the grid says.  Sweeping kick size
+# against -M at T = 0.7 (400 keys):
+#
+#   config              uniform   weighted      z
+#   kick 10, -M off        128       121      -0.76      <- the shipped kick
+#   kick 10, -M on          94       114      +2.11
+#   kick  6, -M off        122       116      -0.74
+#   kick  6, -M on          92       100      +0.92
+#   kick  4, -M on          91       109      +2.12
+#   kick  4, -M off        110       116      +0.77
+#
+# WEIGHTING HELPS EXACTLY WHERE -M IS ON, and -M on is itself the handicapped
+# arm -- 94, 92, 91 against 128, 122, 110.  The best weighted cell in the whole
+# grid is 121 and the best uniform cell is 128.  So the bias substitutes for
+# plugs the climb would otherwise have had to find: it pays when the seed is
+# small and forced, and adds nothing once the seed is allowed to grow.  A +7%
+# improvement to a configuration 27% below the baseline is not a route to more
+# breaks.
+#
+# ============================================================================
 # WHAT THIS REFUTES
 # ============================================================================
 #
@@ -107,7 +169,8 @@
 # insufficient.  That diagnosis predicted a sampler with independent draws and
 # graceful diversity decay would convert where the beam did not.  This is that
 # sampler -- at T = 1 it holds 15.34 apartness against the beam's 6.12, well
-# inside the kick's own 17.3 -- and it converts nothing.
+# inside the kick's own 17.3 -- and in the shipped configuration it converts
+# nothing.
 #
 # So it is not HOW the seeds are correlated.  A seed carrying 1.20 true plugs
 # instead of 0.96 does not land the f10 continuation in a different basin often
@@ -157,9 +220,14 @@
 # SCOPE
 # ============================================================================
 #
-# One length (L = 100), one corpus, R = 8, kick 10 with no -M -- the shipped
-# configuration.  IC only as the ranking model; the shipped pre-pass is k
-# (mono + lambda*L*IC) and the same T build yields both, so a mono or blended
-# ranking is cheap to try and was not.  Nothing here varies R, and the beam
-# work found the seed/diversity trade to be budget-dependent, so a null at
-# R = 8 does not settle R = 1000.
+# One length (L = 100), one corpus, R = 8.  IC only as the ranking model; the
+# shipped pre-pass is k (mono + lambda*L*IC) and the same T build yields both,
+# so a mono or blended ranking is cheap to try and was not.  Nothing here
+# varies R, and the beam work found the seed/diversity trade to be
+# budget-dependent, so a null at R = 8 does not settle R = 1000.
+#
+# THE GRID IS AT 400 KEYS and only the kick-4 cell was carried to 3200 and a
+# second seed.  The kick-10-with--M cell reads z = +2.11 on the same 400-key
+# footing and was not confirmed, so treat it as the same effect appearing
+# again rather than as an independent result -- it changes nothing either way,
+# since its 114 is still below the uniform baseline's 128.
