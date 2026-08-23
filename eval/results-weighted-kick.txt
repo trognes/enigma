@@ -101,6 +101,34 @@
 #   SUBSTITUTING for the diversity restarts would otherwise supply -- the fewer
 #   you have, the more bias you want.  T* roughly doubles from R = 1 to R = 4.
 #
+# THE OPERATIONAL RANGE, SWEPT.  R = 3..7 against four temperatures, 3200 keys
+# per cell, effect on breaks over the paired uniform arm:
+#
+#   R     T = 1   T = 0.7  T = 0.5  T = 0.35    mean over T
+#   3     +13.0%   +10.2%   +12.7%   +10.5%       +11.6%
+#   4      +8.8%    +9.7%   +10.4%    +4.5%        +8.3%
+#   5      +9.2%   +11.6%    +5.3%    +2.1%        +7.0%
+#   6      +1.1%    +0.3%    -2.2%    -2.0%        -0.7%
+#   7      +4.1%    +3.0%    +2.3%    -4.5%        +1.2%
+#
+# THE CUTOFF AT R = 6 IS SHARP AND IT REPRODUCES.  R = 5 is worth +7 to +12%
+# and R = 6 is worth nothing at any temperature -- confirmed on two further
+# seeds at T = 1, reading +0.0% (z = 0.00) and +1.7% (z = +0.55) against the
+# tuning seed's +1.1%.  R = 7's +4.1% is z = +1.57, inside noise.  So the
+# lever is live through R = 5 and dead from R = 6, with no gentle shoulder.
+#
+# WHAT RISES WITH R IS THE PENALTY FOR BEING TOO COLD, which is a sharper
+# statement than "T* rises".  T = 1 is best or near-best at every R in 3..7,
+# while T = 0.35 decays from +10.5% at R = 3 to -4.5% at R = 7 -- the cold
+# settings are the ones that go negative.  Below R = 3 cold wins outright
+# (T* = 0.25 at R = 1), so the safe rule across the whole range is cold only
+# when restarts are very few, and T ~ 0.7-1 otherwise.
+#
+# THAT PUTS THE USEFUL BAND AT R = 1..5 AND THE OPERATIONAL PART AT 4..5.
+# CLAUDE.md's unknown-key budget analysis affords roughly R = 4..12 on a real
+# full-keyspace sweep, so the overlap is its bottom two rungs: +8.3% and +7.0%
+# mean over temperature, +10.4% and +11.6% at the best one.
+#
 # IT DOES NOT EXTEND TO THE GREEDY LIMIT.  Below T = 0.25 at R = 1 the curve
 # plateaus and falls back: 0.15 / 0.1 / 0.05 / 0.02 give 361 / 357 / 367 / 380
 # against T = 0.25's 397.  That is the decoy peak asserting itself -- the IC
