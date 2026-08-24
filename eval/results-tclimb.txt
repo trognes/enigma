@@ -107,7 +107,32 @@
 # ONE BOX, g++ -O3, one corpus.  The regression question -- whether the
 # restructured move loop costs anything on the paths that do NOT benefit -- is
 # `make bench`, not this file, because the climb move loop is documented
-# aliasing-sensitive at ~18% and this harness cannot resolve that.
+# aliasing-sensitive at ~18% and this harness cannot resolve that.  Run:
+#
+#   make bench LONG=1 BASE=origin/dev
+#
+#   tier         quick     long
+#   search       +3.1%    +1.7%
+#   hillclimb    +6.5%    +1.6%
+#   fused        -2.4%    -0.4%
+#   crib         +2.0%    -0.7%
+#   RESULT: no regression > 10%
+#
+# ALL FOUR TIERS ARE CONTROLS HERE, which is worth stating plainly: `search`
+# and `crib` run without -c, and `hillclimb`/`fused` climb in -q and -f.  Not
+# one of them uses a low-order stage, so `make bench` CANNOT SEE THIS WIN AT
+# ALL -- it answers only "did the restructured move loop cost anything on the
+# paths that gain nothing", which is exactly the question worth asking.
+#
+# THE ONE CELL THAT LOOKED LIKE SOMETHING WAS QUICK-TIER hillclimb, and the
+# long tier is what settled it.  It read +6.8% and then +6.5% on two separate
+# runs -- reproducible, and CLAUDE.md warns that reproducing a number on the
+# same box is not evidence it is real, because a container's bias is stable
+# within a session.  At the long tier's larger problem size and repetition
+# count the same cell reads +1.6%.  A genuine per-iteration cost holds across
+# tiers (that is what made the earlier `crib` and `fused` gains believable);
+# this does not, so it is scatter.  `search` moving +1.7 to +3.1% on a scan
+# path this change cannot reach says the same about the day's floor.
 #
 # ============================================================================
 # 4. THE RESYNC IS LOAD-BEARING FOR TERMINATION, WHICH IS NOT OBVIOUS

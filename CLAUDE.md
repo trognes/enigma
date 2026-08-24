@@ -2976,6 +2976,18 @@ the failure-shape table above.
 > restarts at fixed wall time, which the search playbook makes the primary
 > lever. `eval/results-tclimb.txt`.
 >
+> **`make bench` cannot see this win, and that is the point of running it.**
+> All four tiers are controls: `search` and `crib` run without `-c`, and
+> `hillclimb`/`fused` climb in `-q` and `-f`, so not one uses a low-order
+> stage. What it answers is whether the restructured move loop cost anything
+> on the paths that gain nothing — `LONG=1 BASE=origin/dev` read +1.7 / +1.6 /
+> −0.4 / −0.7%, no regression. Quick-tier `hillclimb` read **+6.8% and then
+> +6.5%** on two separate runs and was the one cell worth chasing; the long
+> tier's +1.6% is what settled it. A genuine per-iteration cost **holds across
+> tiers** — that is what made the earlier `crib` and `fused` gains believable —
+> and a reproducible quick-tier number does not become real by repeating,
+> because a container's bias is stable within a session.
+>
 > Two things that are easy to get wrong here. **Only `i`/`m`/`k` benefit** —
 > b/t/q/a/f are additive over positions and have no histogram form, so the
 > `f10` target is untouched and 39–54% is the hard ceiling. And **the resync
