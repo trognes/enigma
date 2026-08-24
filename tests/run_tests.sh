@@ -3099,10 +3099,6 @@ check "\$ENIGMA_LOGLIN rejects a partial weight vector" \
   "$(printf 'AAAA' | env ENIGMA_LOGLIN=1,0.6 "$ENIGMA" -q -l english \
      >/dev/null 2>&1; echo $?)" "1"
 
-echo
-echo "passed: $pass, failed: $fail"
-[ "$fail" -eq 0 ]
-
 echo "== Biased restart kick: --biased-random =="
 
 # Draw the kick's pairs from exp(z / T) over the 325 single-plug IC z-scores
@@ -3267,3 +3263,15 @@ hist_m4_ct=$(run "$hist_pt" -i -4 -u b -w B317 -r AAAA -g BQMW \
 hist_ct=$hist_m4_ct
 hist_same "histogram climb: M4 is byte-identical" \
   -4 -u b -w B317 -r AAAA -g B"$rgd" -S k4f10 -J
+
+# THE SUMMARY AND THE GATE MUST BE THE LAST THING IN THIS FILE.  They were once
+# in the middle, with 166 lines of checks after them, and the cost was not the
+# undercounted tally -- it was that `[ "$fail" -eq 0 ]` was no longer the last
+# command, so the script's exit status came from whatever check ran last.  A
+# trailing check could print FAIL while the suite exited 0, and 23 checks (the
+# --biased-random and histogram sections) sat below the line where that was
+# true.  Verified by injecting a failing check at the end: exit 0 before, exit
+# 1 after.  Append new sections ABOVE this block.
+echo
+echo "passed: $pass, failed: $fail"
+[ "$fail" -eq 0 ]
