@@ -84,8 +84,17 @@
 #   400         40.8%                 77.5%                -31.6%
 #
 # which lands inside the -21 / -25 / -27.5 / -31.2% the prototype projected.
-# Read the headline as ~25-32% off a k4f10 climb at operational length, with
-# the direct whole-climb readings scattering around it on a +/-10% instrument.
+#
+# >>> SUPERSEDED, AND OVERSTATED: the real figure is 1.2x at L=100 and ~1.28x
+# >>> at L=167, i.e. 10-23% of the wall -- NOT 25-32%.  See
+# >>> eval/results-histspeed.txt, which measures it directly (ENIGMA_HIST=1
+# >>> against 0 on one binary, three seeds per cell, with a control) instead of
+# >>> deriving it as share x saving from two figures that each carry this
+# >>> harness's +/-10% floor.  Multiplying two noisy numbers compounds the
+# >>> error, and the product ALSO overshoots systematically, because ~60-83 ns
+# >>> of every cap-stage call is the climb's own per-move work that the
+# >>> histogram form does not remove.  The cap-stage column below stands; the
+# >>> whole-climb derivation from it does not.
 #
 # Under -c the climb is essentially the whole run, so this is restarts bought
 # at fixed wall time -- and CLAUDE.md's search playbook makes -R the primary
