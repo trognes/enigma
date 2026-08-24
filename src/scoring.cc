@@ -376,10 +376,22 @@ const uint16_t * cooc_col(int c, int d)
   return hist_scratch.t + (static_cast<size_t>(c) * asize + d) * asize;
 }
 
-/* n = sum_c T[c][S[c]] for the board now on the machine. O(26^2). Called once
-   per climb and again after every ACCEPTED move -- about once per 325 probes,
-   so recomputing from scratch there costs about two columns amortised and
-   removes a whole class of incremental-state bugs. */
+/* n = sum_c T[c][S[c]] for the board now on the machine. O(26^2) = 26 columns.
+   Called once per climb and again after every ACCEPTED move.
+
+   FROM SCRATCH RATHER THAN INCREMENTALLY, deliberately. Applying the probe's
+   own 2-4 column delta would be cheaper, but it can drift -- applied twice,
+   missed, or applied against the wrong old value -- and drift here does not
+   misscore politely, it HANGS the steepest-ascent loop (see the injection
+   note in tests/run_tests.sh). Recomputing cannot drift.
+
+   MEASURED COST, and note the recommended recipe is the expensive case: 1
+   resync per 63 probes under -J, and 1 per 284 under steepest ascent (which
+   takes at most one move per 325-pair scan). Against a probe's ~6.95 columns
+   that is 6.0% of probe work under -J and 1.3% under steepest -- real, but
+   paid inside a change worth 1.2-1.3x, and the price of a form that cannot
+   drift. An incremental delta would cut it to well under 1%; it has not been
+   done because the failure mode is a hang, not a wrong answer. */
 void hist_resync(machine & m)
 {
   int * const n = hist_scratch.n;

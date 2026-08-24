@@ -779,7 +779,8 @@ static void firstimprove_sweep(machine & m, int max_pairs)
         {
           stale = 0;
           if (hist_on)
-            hist_resync(m);   /* the board moved; ~1 per 325 probes */
+            hist_resync(m);   /* the board moved; measured 1 per 63
+                                 probes under -J */
           report_climb_progress(m, cur);
           pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
           for (int j = 0; j < asize; j++)
@@ -978,7 +979,9 @@ double hillclimb(machine & m, int max_pairs)
                   best_score = move_score;
                   report_climb_progress(m, best_score);
                   if (hist_on)
-                    hist_resync(m);   /* the board moved; ~1 per 325 probes.
+                    hist_resync(m);   /* the board moved; measured 1 per 284
+                                         probes here, steepest ascent taking
+                                         at most one move per 325-pair scan.
                                          LOAD-BEARING FOR TERMINATION, not just
                                          for the answer: this loop repeats
                                          while best_score > last_best, and a

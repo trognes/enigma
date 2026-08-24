@@ -3012,11 +3012,16 @@ the failure-shape table above.
 > b/t/q/a/f are additive over positions and have no histogram form, so the
 > `f10` target is untouched and 39–54% is the hard ceiling. And **the resync
 > after an accepted move is load-bearing for TERMINATION, not just for the
-> answer**: `n` is recomputed from scratch on acceptance (~1 per 325 probes, so
-> two columns amortised), and injecting a stale histogram makes the
+> answer**: `n` is recomputed from scratch on acceptance rather than updated
+> by the probe's own delta, and injecting a stale histogram makes the
 > steepest-ascent loop — which repeats while `best_score > last_best` — never
 > converge rather than merely misscore. Two of three injections **hang**; a CI
-> failure here can present as a timeout rather than a `FAIL` line.
+> failure here can present as a timeout rather than a `FAIL` line. The resync
+> is **1 per 63 probes under `-J`** and 1 per 284 under steepest ascent —
+> measured, and the recommended recipe is the expensive one — costing 6.0% and
+> 1.3% of probe work respectively. An earlier version of this entry said "~1
+> per 325 probes, so two columns amortised"; 325 is the steepest-ascent scan
+> width, not the measured rate on the path that matters.
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
 spent when hill-climbing. That is why the rotor stack is precomputed into

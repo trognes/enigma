@@ -148,9 +148,19 @@
 # ============================================================================
 #
 # n is recomputed from scratch after an ACCEPTED move rather than maintained
-# incrementally: acceptances are about 1 per 325 probes, so that costs two
-# columns amortised and removes a class of incremental-state bugs.  Three
-# injections, against the 11 checks in tests/run_tests.sh:
+# incrementally, which removes a class of incremental-state bugs.  MEASURED
+# cost, by instrumenting the probe and resync counts:
+#
+#   -J (the recommended recipe)   1 resync per  63 probes   6.0% of probe work
+#   steepest ascent               1 resync per 284 probes   1.3%
+#
+# against a probe's mean 6.95 columns.  An earlier version of this file said
+# "about 1 per 325 probes, so two columns amortised" -- 325 is the width of a
+# steepest-ascent scan, not a measured rate, and it is 4.5x off on the -J path
+# the recommendation actually uses.  An incremental delta would cut the 6.0%
+# to well under 1%; it has not been done because of the failure mode below.
+#
+# Three injections, against the 11 checks in tests/run_tests.sh:
 #
 #   drop the first-improvement hist_resync     8 of 11 FAIL
 #   drop the steepest-ascent hist_resync       HANGS
