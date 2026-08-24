@@ -1,0 +1,143 @@
+# THE HISTOGRAM-FORM CAP STAGE, AS SHIPPED: BYTE-IDENTICAL, AND THE PRE-PASS
+# IS NOW LENGTH-INDEPENDENT.
+#
+#   make
+#   python3 eval/capstage_share.py --lengths 60 100 200 400 \
+#          --pre k4 --target f10
+#
+# The prototype and the projection are eval/results-tclimb-proto.txt; this is
+# what the implementation actually measures.  The derivation lives above
+# hist_probe() in src/scoring.cc and is not repeated here.
+#
+# ============================================================================
+# 1. BYTE-IDENTITY -- THE CLAIM THE WHOLE THING RESTS ON
+# ============================================================================
+#
+# A climb that scores differently makes different decisions, and then every
+# tuning number in CLAUDE.md would have to be re-measured.  Identical scores
+# mean the shipped answer is unchanged bit for bit and only `make bench` has to
+# be re-run.  Checked against a binary built from origin/dev, comparing the
+# --dump-all multiset (every converged climb, not just the winner) AND the
+# plugboards-scored counter:
+#
+#   66 cells   {i, m, k, q, f10, i4f10, m4f10, k4f10, i6q, k4i6f10, i4q6}
+#              x {plain, --polish, --cascade} x {steepest, -J}
+#   plus       -M, --no-repair, -s, --no-plug, --soft-plug, --random 4,
+#              --biased-random, -A, --ring-stride 3, Norway, M4
+#   plus       -T 1 / 4 / 8
+#
+# All identical.  q and f10 are in that list as CONTROLS -- they have no
+# histogram form, so they exercise the restructured loop without the fast path.
+#
+# ONE THING LOOKED LIKE A DIFFERENCE AND WAS NOT.  At -T 4 the progress lines
+# differ between runs -- but they differ between two runs of the ORIGIN/DEV
+# BINARY too (3 distinct hashes over 5 repetitions), which is the documented
+# contract: which candidate WINS is -T-deterministic, which lines are DISPLAYED
+# is thread-timing dependent.  Compare the dumped boards and the counter, never
+# the whole stderr.
+#
+# THE COUNTER BELONGS IN THE COMPARISON.  The boards compare the ENDPOINTS of
+# each climb; the counter compares how many scorings it took to reach them, so
+# a fast path that took a different route to the same answer fails on the
+# counter while the boards agree.  Measured by injection -- see section 4.
+#
+# ENIGMA_HIST=0 sends the same climb back through the decoders, so
+# tests/run_tests.sh can check the identity forever rather than only against a
+# hand-built reference binary on the day it landed.
+#
+# ============================================================================
+# 2. WHAT IT COSTS NOW -- paired, same trials, min of 3, slope-fitted
+# ============================================================================
+#
+# Fit the per-restart SLOPE; do not subtract a startup floor.  `-S k4` loads 26
+# monogram numbers (~5 ms) and `-S k4f10` also loads the 0.45 MB all8 table
+# (~75 ms), so subtracting one floor from both understates the pre-pass by
+# 2-3x.  And run both arms over the SAME length list -- the harness draws its
+# trials from one RNG stream, so a different --lengths gives a different
+# message and the arms stop being paired.
+#
+#     L      cap stage us/restart            whole climb us/restart
+#    60      214.4 ->  124.1   -42.1%        380.8 ->   337.8   -11.3%
+#   100      269.2 ->  129.8   -51.8%        512.6 ->   401.8   -21.6%
+#   200      364.1 ->  116.3   -68.1%        811.5 ->   605.3   -25.4%
+#   400      530.3 ->  119.1   -77.5%       1298.3 ->   811.6   -37.5%
+#
+# THE PRE-PASS IS NOW FLAT IN MESSAGE LENGTH -- 116 to 130 us per restart at
+# every length, against 214 to 530 before.  That is the structural result, and
+# it is what the design predicted: what is left of the stage is 26-wide
+# arithmetic, and only the f10 target still scales with L.
+#
+# TRUST THE CAP-STAGE COLUMN, NOT THE WHOLE-CLIMB ONE.  A control -- `-S f10`
+# alone, a path this change does not touch -- read +11.7 / -8.9 / -0.9 / +3.1%
+# across the four lengths, so this harness has a floor of about +/-10% per cell
+# at min-of-3.  The cap-stage numbers are 4-8x that and are safe; the
+# whole-climb numbers carry it, which is why they scatter (the L=60 cell
+# implies the f10 half got SLOWER, which cannot be causal).
+#
+# The better-conditioned estimate multiplies two figures from the same run --
+# the pre-pass's share of the climb and the improvement in it:
+#
+#     L    pre share (base)   x   cap-stage saving   =   whole climb
+#    60         56.3%                 42.1%                -23.7%
+#   100         52.5%                 51.8%                -27.2%
+#   200         44.9%                 68.1%                -30.6%
+#   400         40.8%                 77.5%                -31.6%
+#
+# which lands inside the -21 / -25 / -27.5 / -31.2% the prototype projected.
+# Read the headline as ~25-32% off a k4f10 climb at operational length, with
+# the direct whole-climb readings scattering around it on a +/-10% instrument.
+#
+# Under -c the climb is essentially the whole run, so this is restarts bought
+# at fixed wall time -- and CLAUDE.md's search playbook makes -R the primary
+# quality lever.  It buys NO quality per restart: the output is identical.
+#
+# ============================================================================
+# 3. SCOPE
+# ============================================================================
+#
+# ONLY i/m/k STAGES.  b/t/q/a/f are additive over positions and have no
+# histogram form, so a schedule whose stages are all high-order gains nothing.
+# The f10 TARGET is untouched in every case, which is the ceiling: the pre-pass
+# is 39-54% of the climb (all three of k4, i4 and m4 measured), so no
+# arrangement of this can win more than that.
+#
+# NOT the simulated-annealing path (-A), which keeps its own move loop and its
+# own decode.  Not the gain cascade (--cascade / --polish), which is quad-only.
+#
+# ONE BOX, g++ -O3, one corpus.  The regression question -- whether the
+# restructured move loop costs anything on the paths that do NOT benefit -- is
+# `make bench`, not this file, because the climb move loop is documented
+# aliasing-sensitive at ~18% and this harness cannot resolve that.
+#
+# ============================================================================
+# 4. THE RESYNC IS LOAD-BEARING FOR TERMINATION, WHICH IS NOT OBVIOUS
+# ============================================================================
+#
+# n is recomputed from scratch after an ACCEPTED move rather than maintained
+# incrementally: acceptances are about 1 per 325 probes, so that costs two
+# columns amortised and removes a class of incremental-state bugs.  Three
+# injections, against the 11 checks in tests/run_tests.sh:
+#
+#   drop the first-improvement hist_resync     8 of 11 FAIL
+#   drop the steepest-ascent hist_resync       HANGS
+#   build the table once (stale across keys)   HANGS
+#
+# The two hangs are the interesting half.  The steepest-ascent loop repeats
+# while `best_score > last_best`, and a histogram that no longer matches the
+# board can keep that comparison true forever -- so a mismatch does not merely
+# misscore, it never converges.  A CI failure here may therefore present as a
+# timeout rather than as a FAIL line.
+#
+# ============================================================================
+# 5. THE TABLE IS SHARED WITH --biased-random
+# ============================================================================
+#
+# That flag already built exactly this table per work item to score all 325
+# single plugs.  It now calls the same cooc_build()/cooc_col() rather than
+# keeping a private copy; two would be 68 KB of thread-local storage per worker
+# for one thing, and at the 256-thread maximum that is 18 MB.
+#
+# Three other places score many boards per key with IC or mono and share the
+# precondition, none of them measured here: -F tier 1 (a capped IC climb per
+# key -- this IS the pre-pass, and -F exists purely as a throughput tool),
+# --self-crib-seeds and --crib-seeds (both IC-rank a set of hypotheses).

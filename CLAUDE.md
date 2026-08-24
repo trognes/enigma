@@ -1089,6 +1089,10 @@ are read from a **data directory** (filenames built as
     table rather than from decoding — ~15 µs at L=100 against ~44 µs of
     ordinary decoding, and **flat in message length** where decoding is linear.
     Measured ~5% *cheaper* per key overall, the biased seeds converging faster.
+    **That table is now shared with the low-order climb stages** rather than
+    private here (`cooc_build`/`cooc_col` in `src/scoring.cc` — see "The
+    low-order climb stages score from a histogram" below); two copies would be
+    68 KB of thread-local storage per worker for one table.
   - **`T ≈ 1` is the safe setting and both extremes are worse.** Cold wins only
     when restarts are very few (`T* ≈ 0.25` at `-R 1`), and past `T = 0.25`
     the curve falls back — that is the decoy peak asserting itself, so a kick
@@ -2933,6 +2937,54 @@ the failure-shape table above.
 > there is no longer 1% in it to win, so SIMD cannot repay a NEON path for the
 > arm64 CI. Profile the regime you are actually changing before believing any
 > share-of-runtime figure below.
+
+> **The low-order climb stages score from a HISTOGRAM, not by decoding — and
+> the pre-pass is now flat in message length.** `decode_at` is
+> `steck[rows[i][steck[ct[i]]]]`; write `q_i = rows[i][steck[ct[i]]]` for the
+> decrypt *before* the exit board and `n` for its histogram. The scorers build
+> `freq[]` over the decrypt *after* it, but `steck` is an involution and hence
+> a bijection, so `freq[steck[y]] == n_y` — **`freq` is `n` permuted**. IC is
+> therefore blind to the exit board entirely and mono only relabels its
+> coefficients, so `-S i`, `-S m` and `-S k` are all functions of one 26-bin
+> vector. And `n = Σ_c T[c][S[c]]` for a per-key table
+> `T[c][d][y] = #{i : ct_i == c, rows_i[d] == y}`, so a plugboard toggle swaps
+> 2–4 columns: **O(26) where decoding is O(L)**.
+>
+> **It is BYTE-IDENTICAL, and that is the only reason it is worth having.**
+> Both decoders accumulate in integers (`long isum`, `int coin`) before the
+> single float division, and integer addition is associative — so summing over
+> 26 bins instead of over `L` positions yields the *same integers*. A climb
+> that scored differently would make different decisions and every tuning
+> number in this file would have to be re-measured; identical scores mean only
+> `make bench` has to be. Verified against `origin/dev` over 66 schedule ×
+> finisher × climb-rule cells plus `-M`, `-s`, `--no-plug`, `--soft-plug`,
+> `--random`, `--biased-random`, `--ring-stride`, `-A`, Norway and M4, at
+> `-T` 1/4/8 — comparing the `--dump-all` multiset **and** the
+> plugboards-scored counter.
+>
+> **`ENIGMA_HIST=0` sends the same climb back through the decoders**, a
+> measurement-and-test switch in the shape of `ENIGMA_REFINE_WINDOW`. Without
+> it the identity would only ever have been checkable against a hand-built
+> reference binary, i.e. never again after the day it landed;
+> `tests/run_tests.sh` now runs 11 checks comparing the two paths.
+>
+> **Worth ~25–32% of a `k4f10` climb**, growing with length, because the
+> pre-pass is ~half the toggles and 39–54% of the wall (measured for `k4`, `i4`
+> and `m4` alike). Per restart the cap stage goes 214→124 µs at L=60 and
+> **530→119 µs at L=400** — *flat*, where it used to scale with the message.
+> Since it is byte-identical it buys **no quality per restart**; the payoff is
+> restarts at fixed wall time, which the search playbook makes the primary
+> lever. `eval/results-tclimb.txt`.
+>
+> Two things that are easy to get wrong here. **Only `i`/`m`/`k` benefit** —
+> b/t/q/a/f are additive over positions and have no histogram form, so the
+> `f10` target is untouched and 39–54% is the hard ceiling. And **the resync
+> after an accepted move is load-bearing for TERMINATION, not just for the
+> answer**: `n` is recomputed from scratch on acceptance (~1 per 325 probes, so
+> two columns amortised), and injecting a stale histogram makes the
+> steepest-ascent loop — which repeats while `best_score > last_best` — never
+> converge rather than merely misscore. Two of three injections **hang**; a CI
+> failure here can present as a timeout rather than a `FAIL` line.
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
 spent when hill-climbing. That is why the rotor stack is precomputed into
