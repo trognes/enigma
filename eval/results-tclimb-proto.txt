@@ -1,0 +1,233 @@
+# THE CAP-STAGE PRE-PASS CAN RUN ON THE CO-OCCURRENCE TABLE INSTEAD OF BY
+# DECODING: BYTE-IDENTICAL, AND A PROJECTED 21-31% OFF THE WHOLE CLIMB.
+#
+#   make
+#   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
+#   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/tclimb eval/proto_tclimb.cc $objs
+#   /tmp/tclimb <L> 200 400            # identity, case mix, toggle cost
+#   python3 eval/capstage_share.py --pre k4 --target f10
+#
+# This is a PROTOTYPE MEASUREMENT AND A PROJECTION, not an end-to-end result.
+# Nothing in src/ was changed.  What is measured: that the T form produces the
+# same bits, what the real climb's toggle mix is, and what a toggle costs each
+# way.  What is projected: what that is worth on a whole k4f10 climb.
+#
+# ============================================================================
+# 1. THE IDENTITY, AND WHY IT IS AN IDENTITY RATHER THAN AN APPROXIMATION
+# ============================================================================
+#
+# decode_at is steck[rows[i][steck[ct[i]]]].  Write
+#
+#   q_i = rows[i][steck[ct[i]]]        the decrypt BEFORE the exit board
+#   n_y = #{i : q_i == y}              its histogram
+#
+# The scorers build freq[] over the decrypt AFTER the exit board -- but steck
+# is an involution, hence a bijection, so freq[steck[y]] == n_y: freq is n
+# PERMUTED.  Therefore
+#
+#   IC    sum_z freq[z](freq[z]-1)  ==  sum_y n_y(n_y-1)          (permutation)
+#   mono  sum_z freq[z]*mono8[z]    ==  sum_y n_y*mono8[S[y]]     (relabelling)
+#
+# so IC IS BLIND TO THE EXIT BOARD ENTIRELY and mono only relabels its
+# coefficients.  And n is itself a sum of columns of one per-key table:
+#
+#   T[c][d][y] = #{i : ct[i] == c and rows[i][d] == y}
+#   n = sum_c T[c][S[c]]
+#
+# so changing S at one position swaps one column of T for another.  Both
+# scorers accumulate in INTEGERS (long isum, int coin) before the single
+# float division, so the T form yields the same integers and the identical
+# double falls out.  Not "close to" -- the same bits.
+#
+# T is 26^3 uint16 = 35 152 bytes, built in L x 26 increments.
+#
+# ============================================================================
+# 2. BYTE-IDENTITY, OVER THE MOVES THE CLIMB ACTUALLY MAKES
+# ============================================================================
+#
+# eval/results-tseed-proto.txt checked only ONE PLUG ADDED TO AN EMPTY BOARD.
+# That is not what a cap-4 pre-pass does: it starts from a 10-plug kick with
+# adds blocked, so the operator's expensive cases dominate.  Checked here over
+# the real four-case toggle, walking the board so later states are reachable
+# ones, plus try_repair's 2-plug re-pair, at L = 60/100/200/400:
+#
+#   toggle (add/remove/move/merge)  7698 checked   IC 0  mono 0  k 0 mismatches
+#   re-pair (try_repair M1/M2)      3344 checked   0 mismatches
+#
+# try_repair had to be checked separately: it is not reachable from the toggle
+# operator (it rewires TWO existing plugs into the other pairing, changing S at
+# four positions with the plug count unchanged) and it fires at every
+# convergence unless --no-repair.  It already carries the delta shape --
+# rp_pos[4]/rp_val[4] in plugboard.cc -- so it needs no new machinery.
+#
+# BYTE-IDENTITY IS THE WHOLE PRECONDITION.  A climb that scores differently
+# makes different decisions, and then every tuning number in CLAUDE.md would
+# have to be re-measured.  Identical scores mean the shipped answer is
+# unchanged bit for bit and only `make bench` has to be re-run.
+#
+# ============================================================================
+# 3. THE CASE MIX -- THE REASON THE OLD 4-51x FIGURE WAS OPTIMISTIC
+# ============================================================================
+#
+#   case                       entries changed   T columns touched
+#   add     (both ends free)          2                4
+#   remove  (already paired)          2                4
+#   move    (one end plugged)         3                6
+#   merge   (both plugged)            4                8
+#
+# A full 325-pair scan, by how many plugs the board holds:
+#
+#    plugs     add   remove    move    merge   mean columns touched
+#       10    4.6%     3.1%   36.9%    55.4%   6.95
+#        8   13.8%     2.5%   49.2%    34.5%   6.36
+#        6   28.0%     1.8%   51.7%    18.5%   5.77
+#        4   47.1%     1.2%   44.3%     7.4%   5.18
+#        2   71.1%     0.6%   27.1%     1.2%   4.59
+#
+# The kick is 10 pairs by default and the cap only blocks ADDS (CLAUDE.md's
+# "-M" entry), so the pre-pass runs at 6-10 plugs throughout -- 5.8-7.0
+# columns, not the 4 the earlier prototype measured.  The per-toggle numbers
+# below were taken on a 10-plug board, the worst case, so they are if anything
+# a little pessimistic.
+#
+# ============================================================================
+# 4. COST PER TOGGLE -- min of 5 runs, one key, g++ -O3
+# ============================================================================
+#
+#      L        model    decode ns   T-form ns       x
+#     60         mono         81.5        43.4    1.88
+#     60           IC         99.0        32.1    3.08
+#     60   k (mono+IC)       117.6        47.3    2.49
+#    100         mono        121.9        44.5    2.74
+#    100           IC        144.4        32.4    4.46
+#    100   k (mono+IC)       160.4        47.9    3.35
+#    200         mono        220.3        43.3    5.09
+#    200           IC        265.0        32.5    8.15
+#    200   k (mono+IC)       272.4        47.7    5.71
+#    400         mono        420.1        42.9    9.79
+#    400           IC        475.6        32.3   14.72
+#    400   k (mono+IC)       481.9        47.5   10.15
+#
+#   build T, once per work item:  1.26 / 2.07 / 3.97 / 7.59 us
+#
+# THE T FORM IS FLAT IN MESSAGE LENGTH AND DECODING IS LINEAR, so the ratio
+# grows without bound: 2.5x at L=60 and 10x at L=400 for k, 3.1x and 14.7x for
+# IC.  That is the structural fact, and it is why this is worth doing at
+# operational length even though it is marginal at L=60.
+#
+# Building T costs 0.4-1.5% of one restart's cap stage, so it does not matter
+# where it is built.  It depends on (rows, ciphertext) -- the rotor key -- not
+# on the board, so one build serves all 325 x however-many-passes toggles.
+#
+# ============================================================================
+# 5. HOW BIG THE CAP STAGE ACTUALLY IS -- SLOPE-FITTED, NOT FLOOR-SUBTRACTED
+# ============================================================================
+#
+# MEASURE THIS BY THE SLOPE IN -R, NOT BY SUBTRACTING A STARTUP FLOOR.  The
+# arms have DIFFERENT floors -- `-S k4` loads 26 monogram numbers (~5 ms) while
+# `-S k4f10` also loads the 0.45 MB all8 table (~75 ms) -- so subtracting one
+# measured floor from both understates the pre-pass by 2-3x.  Doing exactly
+# that is how an earlier reading of this put the cap stage at 7-34% of the run.
+#
+# eval/capstage_share.py, -R 0 vs -R 200, min of 3, -c -J -l wehrmacht:
+#
+#     L   pre us/rs   calls  ns/call   all us/rs   calls   pre % wall  % calls
+#    k4 / f10
+#    60       208.4    1174    177.4       386.6    2250        53.9%    52.2%
+#   100       259.4    1173    221.0       520.4    2194        49.8%    53.5%
+#   200       360.1    1049    343.3       842.4    2099        42.7%    50.0%
+#   400       530.5     939    564.8      1283.7    1832        41.3%    51.3%
+#    i4 / f10
+#    60       173.2    1073    161.4       405.9    2257        42.7%    47.5%
+#   100       224.3    1057    212.3       532.5    2284        42.1%    46.3%
+#   200       341.3    1002    340.4       860.2    2152        39.7%    46.6%
+#   400       584.4     996    586.9      1370.3    1928        42.6%    51.7%
+#    m4 / f10
+#    60       127.8    1263    101.1       315.8    2415        40.5%    52.3%
+#   100       179.4    1280    140.2       437.6    2391        41.0%    53.5%
+#   200       297.8    1220    244.1       753.2    2246        39.5%    54.3%
+#   400       515.8    1170    441.0      1325.6    2109        38.9%    55.5%
+#
+# The pre-pass is ~HALF the climb's toggles and 39-54% of its wall time, for
+# all three recommended pre-passes.  That is the ceiling on what this can win.
+#
+# ============================================================================
+# 6. THE PROJECTION
+# ============================================================================
+#
+# The real ns/call above EXCEEDS the prototype's decode arm by a steady
+# 60-83 ns.  That difference is the climb's own per-move work -- the -J move
+# ordering, the cap check, the plug_fixed read, the comparison -- which the T
+# form does NOT remove.  So the projection keeps it and replaces only the
+# scoring:
+#
+#   new ns/call = (real ns/call - prototype decode ns) + prototype T-form ns
+#
+#     L   overhead   new ns/call    cap stage us/rs     whole climb us/rs
+#    60      59.9         107.2      208.4 ->  125.9    386.6 ->  305.3  -21.0%
+#   100      60.7         108.6      259.4 ->  127.4    520.4 ->  390.5  -25.0%
+#   200      70.9         118.6      360.1 ->  124.4    842.4 ->  610.7  -27.5%
+#   400      83.1         130.6      530.5 ->  122.6   1283.7 ->  883.4  -31.2%
+#
+# (T build included.)  THE CAP STAGE BECOMES ROUGHLY LENGTH-INDEPENDENT --
+# ~125 us/restart at every length -- which is the whole point: what is left of
+# it is 26-wide arithmetic, and only the f10 target still scales with L.
+#
+# Under -c the climb is essentially the whole run, so this is ~21-31% off a
+# k4f10 sweep at operational length.  Since it is byte-identical, the payoff is
+# entirely in restarts bought at fixed wall time, and CLAUDE.md's search
+# playbook makes -R the primary quality lever.
+#
+# ============================================================================
+# 7. WHAT THIS DOES NOT ESTABLISH, AND WHAT COULD GO WRONG
+# ============================================================================
+#
+# IT IS A PROJECTION.  No src/ code was changed and no end-to-end A/B was run.
+# The number to believe is `make bench BASE=...` after an implementation, not
+# this table.
+#
+# THE MOVE LOOP IS DOCUMENTED ALIASING-SENSITIVE.  CLAUDE.md's Part D finding
+# is that routing plug_fixed through a struct member or an opaque pointer cost
+# ~18% on one compiler or the other, which is most of what this projects to
+# win.  A 35 KB table reached through a pointer, plus an incrementally
+# maintained n[26], is exactly the kind of change that provoked it.  This has
+# to be benched under BOTH g++ and clang, and the projection should be treated
+# as an upper bound until it is.
+#
+# IT ONLY TOUCHES i/m/k STAGES.  A schedule whose first stage is b/t/q/a/f
+# gains nothing -- those are not functions of the letter histogram.  The f10
+# target is untouched in every case, which is why the ceiling is section 5's
+# 39-54%.
+#
+# ONE KEY, ONE CORPUS, ONE BOX, g++ -O3.  The per-toggle microbenchmark has
+# ~20% run-to-run scatter (k at L=100 read 160 / 172 / 209 ns across runs);
+# section 4 is min-of-5 and the projection uses those minima, so it is the
+# optimistic end of the scatter for the decode arm and equally for the T arm.
+#
+# THE OVERHEAD SUBTRACTION IS AN ASSUMPTION.  It assumes the climb's non-
+# scoring per-move cost is unchanged by the rewrite.  It will in fact rise a
+# little: n[26] must be re-synced when a move is ACCEPTED, which happens about
+# once per 325 scanned moves, so the term is small but it is not zero.
+#
+# ============================================================================
+# 8. THE INFRASTRUCTURE IS ALREADY THERE, AND THREE OTHER CALLERS WANT IT
+# ============================================================================
+#
+# --biased-random ALREADY BUILDS THIS TABLE.  biasscratch.t in plugboard.cc is
+# 26^3 uint16 with the same meaning, built per work item and used to score all
+# 325 single plugs.  An implementation should share it rather than add a
+# second one.
+#
+# Three other places score many boards per key with IC or mono and would take
+# the same 3-15x:
+#
+#   -F tier 1        a capped IC climb per key -- this IS the pre-pass, and -F
+#                    exists purely as a throughput tool
+#   --self-crib-seeds  IC-ranks every surviving hypothesis's decrypt
+#   --crib-seeds       the same, for a swept crib's survivors
+#   --confidence     under -c each null sample is a full climb, so it inherits
+#                    whatever the climb gets
+#
+# None of these was measured here.  They are listed because they share the
+# precondition -- many boards, one key, a histogram-only model -- and an
+# implementation that puts T on the machine makes them reachable.
