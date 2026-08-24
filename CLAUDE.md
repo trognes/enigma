@@ -1052,6 +1052,38 @@ are read from a **data directory** (filenames built as
   legal control (no perturbation — N restarts then repeat the seed climb). Needs
   `-c` (errors otherwise, since a kick does nothing in a bare rotor scan).
   Replaces the old `-S rN` token.
+- `--biased-random T` (long-only) **bias the kick toward plugs that score well
+  on their own** (**tentatively recommended at low `-R` only**; 0 = off, the
+  uniform kick). Instead of drawing the kick's pairs uniformly, draw them with
+  probability `exp(z / T)` over the 325 **single-plug index-of-coincidence**
+  z-scores. `T` is in **sd units** — the scores are z-scored per key, because
+  IC's absolute level wanders by key while its spread is what carries the
+  signal, so one temperature means the same thing everywhere. Large `T` tends
+  to the uniform kick, small `T` to the greedy argmax. Needs `-c`, `-R ≥ 1` and
+  `--random ≥ 1`; rejected with `-A`, `--crib`/`--crib-list`, `--exhaust` and
+  `--self-crib-seeds`, which install their own starting board.
+  `-T`-deterministic.
+  - **There IS signal in a single plug, which is not obvious and is what the
+    flag rests on.** A true plug is enriched in the top of that ranking —
+    12.1% of true plugs land in the top 10 of 325 against 3.1% by chance at
+    L=100, and a true plug's mean rank is 110 of 325 against 163.
+  - **That is not in tension with the joint argmax being a decoy.** The
+    four-plug IC optimum sits +8 sd above the null on boards holding under
+    half the true plugs, *above* the truth at every length. Sampling exploits
+    the marginal signal without committing to the joint optimum, which is why
+    this is a weighted kick and not a beam — a beam over the same scores loses
+    at every budget past ~8 seeds (`eval/results-beam-seeds.txt`).
+  - **It costs nothing.** All 325 scores come from a per-key co-occurrence
+    table rather than from decoding — ~15 µs at L=100 against ~44 µs of
+    ordinary decoding, and **flat in message length** where decoding is linear.
+    Measured ~5% *cheaper* per key overall, the biased seeds converging faster.
+  - **`T ≈ 1` is the safe setting and both extremes are worse.** Cold wins only
+    when restarts are very few (`T* ≈ 0.25` at `-R 1`), and past `T = 0.25`
+    the curve falls back — that is the decoy peak asserting itself, so a kick
+    cold enough to *land* on the argmax is worse than one merely biased toward
+    it. `T = 0.35` goes outright negative by `-R 7`.
+  - **The scores are IC only**, where the shipped pre-pass is `k`
+    (mono + λ·L·IC). The same table yields mono for free and it was not tried.
 - `--exhaust E` (long-only) **partial plugboard exhaustion** (**not
   recommended** — measured, dominated; §3.6 in `archived/PERFORMANCE.md`): force
   `E` **extra** plug pairs among the free letters (on top of any `-s` pairs) —
@@ -1120,6 +1152,31 @@ are read from a **data directory** (filenames built as
   > blocks *adds*, and the default `--random 10` kick starts every restart at
   > ten plugs, so a tight cap has nothing to block. Sweeping such a cap
   > measures nothing; use `-M`, or a kick smaller than the cap.
+  >
+  > **That inertness is RELATIVE, and a cap AT the kick size is a different
+  > climb that is materially WORSE.** The reason 1…4 are interchangeable is
+  > that all of them sit below the kick, so the cap only ever blocks adds; at
+  > `k10` with a 10-pair kick the pre-pass may instead *keep* all ten plugs,
+  > and it does. Paired against `k4`, uniform kick 10, 3200 keys per seed:
+  > 1052/962, 1024/978, 1057/1023 — **pooled z = −3.51**, all three seeds
+  > negative, effects −8.6%, −4.5%, −3.2%. So do not read "the cap is inert"
+  > as "the cap does not matter"; raise it to the kick size and the schedule
+  > loses ~5%.
+  >
+  > The mechanism is this section's own pre-pass trap, in the cap rather than
+  > the model: filling the board under `k` means the **weaker** model places
+  > all ten plugs and `f10` inherits its mistakes instead of doing the
+  > placement itself. A cap of 4 leaves `f10` the real work.
+  >
+  > Two metric traps came with it. Read raw, the cap-10 seeds look *better* —
+  > more true plugs (1.09 against 0.92) and more pairwise apartness (21.7
+  > against 17.3) — but they hold **more plugs** (9.77 against 6.69), and
+  > neither column is comparable across board sizes: the correctness
+  > *fraction* falls (11.2% against 13.8%) and apartness per plug falls with
+  > it. And the unpaired hint pointed the wrong way — two independent 400-key
+  > cells read 132 for cap 10 against 128 for cap 4 and looked like a small
+  > win, where paired at the same 400 keys they read 128 against 127.
+  > `eval/results-weighted-kick.txt`.
 
   **The recommended target is now `a` (weighted), staged as
   `--score m4a10`** (mono pre-pass then

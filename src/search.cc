@@ -197,7 +197,21 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
   apply_soft_plug(m);            /* before the kick -- see the opt_soft_plug note */
   uint64_t rng = restart_seed(key_index, restart);
   if (opt_restarts >= 1)
-    perturb_steckerbrett(m, & rng, opt_perturb);
+    {
+      /* --biased-random rebuilds its per-key weights here rather than at the
+         key setup above, because restart-major means every work item is a
+         new key anyway -- so "once per key" and "once per item" are the same
+         thing, and keeping it beside the kick keeps the two in one place. */
+      if (opt_biased_random > 0.0)
+        {
+          biased_kick_prepare(m);
+          biased_perturb(m, & rng, opt_perturb);
+        }
+      else
+        {
+          perturb_steckerbrett(m, & rng, opt_perturb);
+        }
+    }
   double score;
   if (seed_dedup_on())
     {

@@ -248,6 +248,14 @@ fprintf(out, "  %-24s %s\n", "--crib-rerank F",
   fprintf(out, "  %-24s %s\n", "--random K",
           "Random-kick size: plug pairs injected per restart");
   fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = no kick, a control) [10]");
+  fprintf(out, "  %-24s %s\n", "--biased-random T",
+          "Bias the kick toward plugs scoring well on their");
+  fprintf(out, "  %-24s %s\n", "",
+          "own index of coincidence: softmax at temperature");
+  fprintf(out, "  %-24s %s\n", "",
+          "T (sd units). Worth ~+8% of breaks at -R 3..5");
+  fprintf(out, "  %-24s %s\n", "",
+          "and nothing from -R 6 up. Try T=1. [0 = off]");
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
@@ -421,8 +429,15 @@ void show_settings()
   if (opt_hillclimb && (opt_anneal > 0))
     fprintf(stderr, "            simulated annealing, %d moves\n", opt_anneal);
   if (opt_hillclimb && (opt_restarts >= 1))
-    fprintf(stderr, "            %d restarts, %d-pair kick\n",
-            opt_restarts, opt_perturb);
+    fprintf(stderr, "            %d restarts, %d-pair kick%s\n",
+            opt_restarts, opt_perturb,
+            (opt_biased_random > 0.0) ? ", IC-biased" : "");
+  /* The temperature on its own line, because it is the whole behaviour of the
+     flag and a reader joining at the progress lines cannot otherwise tell a
+     biased run from a uniform one. */
+  if (opt_hillclimb && (opt_biased_random > 0.0))
+    fprintf(stderr, "            kick bias: softmax T = %g over 325 "
+            "single-plug IC scores\n", opt_biased_random);
   if (opt_hillclimb && opt_staged && (opt_anneal == 0))
     fprintf(stderr, "            staged: %s\n", opt_staged);
   if (opt_hillclimb && opt_exhaust)

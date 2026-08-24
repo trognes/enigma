@@ -35,6 +35,10 @@ void apply_soft_plug(machine & m);
 /* Inject k random plug pairs (the --random kick) among the letters that are
    both unplugged and unfixed. */
 void perturb_steckerbrett(machine & m, uint64_t * rng, int k);
+/* --biased-random: prepare() rebuilds the per-key weights (once per work
+   item, before the kick), perturb() draws from them.  See plugboard.cc. */
+void biased_kick_prepare(machine & m);
+void biased_perturb(machine & m, uint64_t * rng, int k);
 
 /* One climb to convergence, capped at max_pairs plugs. EX selects the pin set:
    false = the global -s/--no-plug mark, true = this worker's copy plus whatever

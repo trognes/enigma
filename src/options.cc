@@ -342,6 +342,16 @@ int opt_nstages;    /* number of model stages in opt_stages[] */
 int opt_perturb;    /* --random K: random plug pairs injected per restart, 0..13
                               (K=0 is legal -- a no-perturbation control). */
 
+/* --biased-random T: draw the restart kick's pairs with probability
+   exp(z / T) over the 325 single-plug IC z-scores instead of uniformly
+   (0 = off, the uniform kick).  T is in units of sd because the scores are
+   z-scored per key -- IC's absolute level wanders by key while its spread is
+   what carries the signal, so one temperature means the same thing
+   everywhere.  Large T tends to the uniform kick and small T to the greedy
+   argmax; the useful range is measured at 0.25..1, and BOTH ends are worse
+   than the middle -- see eval/results-weighted-kick.txt. */
+double opt_biased_random;
+
 bool opt_random_set;             /* was --random passed explicitly? (errors without -c) */
 int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force E extra plug
                               pairs among the free letters (on top of any -s pairs), trying

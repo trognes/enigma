@@ -56,6 +56,7 @@ extern int opt_capmerge;
 extern int opt_no_repair;
 extern int opt_restarts;
 extern int opt_perturb;
+extern double opt_biased_random;
 extern bool opt_random_set;
 extern int opt_exhaust;
 extern int opt_anneal;
