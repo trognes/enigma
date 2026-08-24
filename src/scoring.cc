@@ -280,6 +280,184 @@ double ic_score_decode(machine & m)
         / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
 }
 
+/* --- histogram-form scoring: the low-order models without decoding ------
+
+   IC, mono and k are all functions of ONE 26-bin histogram, and that histogram
+   is a sum of columns of a per-key table -- so a plugboard toggle costs O(26)
+   here where decoding costs O(L). Measured 2.5x at L = 60 and 10x at L = 400
+   for k, 3.1x and 14.7x for IC; the T form is FLAT in message length where
+   decoding is linear, so the ratio grows without bound
+   (eval/results-tclimb-proto.txt). Only the low-order CLIMB STAGES can use it
+   -- b/t/q/a/f are additive over positions and have no such form.
+
+   WHY IT IS AN IDENTITY AND NOT AN APPROXIMATION. decode_at is
+   steck[rows[i][steck[ct[i]]]]. Write q_i = rows[i][steck[ct[i]]] for the
+   decrypt BEFORE the exit board and n for its histogram. The decoders above
+   build freq[] over the decrypt AFTER it -- but steck is an involution, hence
+   a bijection, so freq[steck[y]] == n_y: freq is n PERMUTED. Therefore
+
+     IC    sum_z freq[z](freq[z]-1)  ==  sum_y n_y(n_y-1)       (permutation)
+     mono  sum_z freq[z]*mono8[z]    ==  sum_y n_y*mono8[S[y]]  (relabelling)
+
+   so IC IS BLIND TO THE EXIT BOARD ENTIRELY and mono only relabels its
+   coefficients. Both decoders accumulate in INTEGERS (long isum, int coin)
+   before the single float division, and integer addition is associative, so
+   summing over 26 bins instead of over L positions yields the SAME integers
+   and the identical double. Not "close to" -- the same bits. That is the whole
+   precondition: a climb that scored differently would make different
+   decisions, and every tuning result in CLAUDE.md would have to be re-measured.
+
+   Verified over the moves the climb actually makes -- the real four-case
+   toggle operator (add / remove / move / merge) walked so later boards are
+   reachable states, and try_repair's 2-plug re-pair -- 0 mismatches for all
+   three models at L = 60/100/200/400 (eval/proto_tclimb.cc). */
+
+/* T[c][d][y] = #{i : ct_i == c and rows_i[d] == y}. 26^3 uint16 = 34 KB,
+   thread_local rather than a machine member for the reason machine.h gives:
+   inlining 34 KB would push the hot per-character tables to large struct
+   offsets, worth 20-60% on some targets. Plain array and no constructor --
+   a std::vector member gives the struct a throwing constructor, which
+   clang-tidy rejects at thread_local storage duration
+   (bugprone-throwing-static-initialization). */
+struct histscratch
+{
+  uint16_t t[asize * asize * asize];
+  int n[asize];   /* histogram of the board the climb is sitting on */
+};
+static thread_local histscratch hist_scratch;
+
+/* ENIGMA_HIST=0 turns the fast path off and sends these stages back through
+   the decoders. A MEASUREMENT AND TEST switch, not an option: the two paths
+   are byte-identical by construction, so this exists so that identity can be
+   CHECKED -- tests/run_tests.sh runs the same climb both ways and compares.
+   Without it the claim would only ever have been verifiable against a
+   hand-built reference binary, i.e. never again after the day it landed.
+   Default on; empty means unset, as for every other ENIGMA_* override. */
+static bool g_hist_enabled = true;
+
+void hist_init()
+{
+  const char * v = getenv("ENIGMA_HIST");
+  if ((v != nullptr) && (*v != 0))
+    g_hist_enabled = (parse_opt_int(v, "$ENIGMA_HIST") != 0);
+}
+
+/* Does this model have a histogram form at all? */
+bool hist_model(int scoring)
+{
+  return g_hist_enabled
+         && ((scoring == SCORE_IC) || (scoring == SCORE_MONO)
+             || (scoring == SCORE_MONOIC));
+}
+
+/* Build T for the key the machine is currently set to. It depends on
+   (rows, ciphertext) and NOT on the board, so one build serves every toggle of
+   every pass -- 1.3 us at L = 60 rising to 7.6 us at L = 400, which is 0.4-1.5%
+   of one restart's cap stage. Rebuilt per hillclimb() call rather than per key,
+   deliberately: --tune-phase re-runs setup_mapping between climbs, and a stale
+   T would change results silently, which is a far worse failure than 1% of a
+   stage. */
+void cooc_build(machine & m)
+{
+  uint16_t * const t = hist_scratch.t;
+  memset(t, 0, sizeof hist_scratch.t);
+  for (int i = 0; i < textlength; i++)
+    {
+      const int c = num_ciphertext[i];
+      const unsigned char * __restrict row = m.rows[i];
+      uint16_t * const base = t + static_cast<size_t>(c) * asize * asize;
+      for (int d = 0; d < asize; d++)
+        base[d * asize + row[d]]++;
+    }
+}
+
+const uint16_t * cooc_col(int c, int d)
+{
+  return hist_scratch.t + (static_cast<size_t>(c) * asize + d) * asize;
+}
+
+/* n = sum_c T[c][S[c]] for the board now on the machine. O(26^2). Called once
+   per climb and again after every ACCEPTED move -- about once per 325 probes,
+   so recomputing from scratch there costs about two columns amortised and
+   removes a whole class of incremental-state bugs. */
+void hist_resync(machine & m)
+{
+  int * const n = hist_scratch.n;
+  for (int y = 0; y < asize; y++)
+    n[y] = 0;
+  for (int c = 0; c < asize; c++)
+    {
+      const uint16_t * const col = cooc_col(c, m.steckerbrett[c]);
+      for (int y = 0; y < asize; y++)
+        n[y] += col[y];
+    }
+}
+
+/* Score the board that WOULD result from setting S[pos[k]] = val[k] for k <
+   cnt, WITHOUT touching the board: the caller's probe needs no mutate/restore
+   pair at all. `pos` holds distinct letters (the toggle operator's four cases
+   and try_repair's re-pair all name each changed letter once), cnt <= 4.
+
+   Drop-in for score_iter() on the same hypothetical board, m.plugboards_scored
+   included -- so the diagnostic stays comparable across this change and the
+   harnesses that read it keep working. */
+double hist_probe(machine & m, const int * pos, const int * val, int cnt)
+{
+  m.plugboards_scored++;
+
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const int * __restrict n0 = hist_scratch.n;
+
+  int n[asize];
+  for (int y = 0; y < asize; y++)
+    n[y] = n0[y];
+  for (int k = 0; k < cnt; k++)
+    {
+      const uint16_t * __restrict rm = cooc_col(pos[k], steck[pos[k]]);
+      const uint16_t * __restrict ad = cooc_col(pos[k], val[k]);
+      for (int y = 0; y < asize; y++)
+        n[y] += ad[y] - rm[y];
+    }
+
+  if (m.scoring == SCORE_IC)
+    {
+      int coin = 0;
+      for (int y = 0; y < asize; y++)
+        coin += n[y] * (n[y] - 1);
+      return (textlength > 1)
+        ? static_cast<double>(coin)
+            / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
+    }
+
+  /* mono relabels its coefficients by the board, so the cnt changed positions
+     need their terms corrected -- everything else reads S unchanged. */
+  long isum = 0;
+  int coin = 0;
+  for (int y = 0; y < asize; y++)
+    {
+      isum += static_cast<long>(n[y]) * mono8[steck[y]];
+      coin += n[y] * (n[y] - 1);
+    }
+  for (int k = 0; k < cnt; k++)
+    isum += static_cast<long>(n[pos[k]])
+            * (mono8[val[k]] - mono8[steck[pos[k]]]);
+
+  const double mono = static_cast<double>(isum) / ngram_scale[SCORE_MONO]
+                      + textlength * ngram_bias[SCORE_MONO];
+  if (m.scoring == SCORE_MONO)
+    {
+      /* score_iter normalises SCORE_MONO by nterms = textlength (SCORE_MONOIC
+         is already per-symbol and is left alone), so the /L belongs here. */
+      return (textlength > 0) ? mono / textlength : mono;
+    }
+
+  const double ic = (textlength > 1)
+    ? static_cast<double>(coin)
+        / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
+  return mono / (textlength > 0 ? textlength : 1)
+         + g_monoic_lambda * textlength * ic;
+}
+
 
 /* ENIGMA_IC_BLEND probe (archived/PERFORMANCE.md 6.4): fuse the index of coincidence into the
    target score as `per-symbol ngram + lambda*IC` instead of STAGING IC then quad. The

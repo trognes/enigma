@@ -3176,3 +3176,94 @@ check "--biased-random still recovers the plaintext" \
   "$(printf '%s' "$br_ct2" | ENIGMA_SEED=0 "$ENIGMA" -c -f -l wehrmacht \
        -S k4f10 -u B -w 231 -r AAA -g QMW -R 8 --biased-random 1 2>/dev/null)" \
   "$br_pt2"
+
+echo "== Histogram-form low-order climb (-S i/m/k) =="
+
+# IC, mono and k are functions of one 26-bin histogram of the decrypt taken
+# BEFORE the exit plugboard, and that histogram is a sum of columns of a
+# per-key co-occurrence table -- so a toggle costs O(26) instead of O(L).  The
+# whole feature rests on the two paths being BYTE-IDENTICAL, so what is checked
+# here is exactly that: ENIGMA_HIST=0 sends the same climb back through the
+# decoders, and every converged board, every plug, and the plugboards-scored
+# counter must come out the same.
+#
+# THE COUNTER IS PART OF THE ASSERTION, not decoration.  The dumped boards
+# compare the ENDPOINTS of each climb; the counter compares how many scorings
+# it took to get there, so a fast path that reached the same answer by a
+# different route -- or that silently skipped work -- fails here even when the
+# boards agree.
+#
+# VERIFIED BY INJECTION, and two of the three do not fail, they HANG.  Removing
+# the hist_resync() in the first-improvement loop fails 8 of these 11 checks
+# outright.  Removing the one in the steepest-ascent scan, or building the
+# co-occurrence table only once so it goes stale across keys, makes the climb
+# NEVER CONVERGE: the steepest loop repeats while `best_score > last_best`, and
+# with a histogram that no longer matches the board that comparison can stay
+# true forever.  So the resync is load-bearing for TERMINATION and not only for
+# the answer -- and a CI failure here may present as a timeout rather than as a
+# FAIL line.
+#
+# 26 keys, deliberately: this asserts that two runs AGREE, which needs no
+# breadth (see $rgd above).  --dump-all reports every converged climb rather
+# than only the winner, so it compares -R x 26 boards, not one.
+hist_both() {
+  _h=$1; shift
+  printf '%s' "$hist_ct" | ENIGMA_SEED=0 ENIGMA_HIST="$_h" "$ENIGMA" \
+    -c -l wehrmacht -R 3 --dump-all "$@" 2>&1 \
+    | grep -E 'dumpall|Analysed' | sort
+}
+hist_same() {
+  _name=$1; shift
+  check "$_name" "$(hist_both 1 "$@" | md5sum)" "$(hist_both 0 "$@" | md5sum)"
+}
+
+hist_pt="ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEINSZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFT"
+hist_ct=$(run "$hist_pt" -i -u B -w 231 -r AAA -g QMW \
+           -s "AH BR CM DE FJ NZ PX QU ST VW")
+
+# A non-empty comparison is the precondition for the rest: an option typo would
+# make both arms print nothing and every check below would pass vacuously.
+check "histogram identity fixture produces boards to compare" \
+  "$(hist_both 1 -u B -w 231 -r AAA -g "$rgd" -S k4f10 -J \
+       | grep -c dumpall)" "78"
+
+# The three models, each as a bare target and as the cap stage of the
+# recommended recipe.  -J and steepest ascent are different move loops and both
+# carry the fast path.
+hist_same "histogram climb: -S i is byte-identical" \
+  -u B -w 231 -r AAA -g "$rgd" -S i -J
+hist_same "histogram climb: -S m is byte-identical" \
+  -u B -w 231 -r AAA -g "$rgd" -S m -J
+hist_same "histogram climb: -S k is byte-identical" \
+  -u B -w 231 -r AAA -g "$rgd" -S k -J
+hist_same "histogram climb: -S k4f10 -J is byte-identical" \
+  -u B -w 231 -r AAA -g "$rgd" -S k4f10 -J --polish
+hist_same "histogram climb: -S i4f10 steepest is byte-identical" \
+  -u B -w 231 -r AAA -g "$rgd" -S i4f10
+# -M makes the cap a strict descent target, so the pre-pass converges from a
+# different direction and exercises the merge/remove cases the default's
+# over-cap board does not.
+hist_same "histogram climb: -S i4q6 -M is byte-identical" \
+  -u B -w 231 -r AAA -g "$rgd" -S i4q6 -M
+# -s pins letters the climb may not rewire, so the toggle plan must agree with
+# the mutate/restore path about which moves exist at all.
+hist_same "histogram climb: -s pins are byte-identical" \
+  -u B -w 231 -r AAA -g "$rgd" -S k4f10 -J -s "AH BR"
+# --biased-random shares the co-occurrence table with the climb; if either
+# rebuilt it at the wrong moment the other would read a stale one.
+hist_same "histogram climb: --biased-random shares the table safely" \
+  -u B -w 231 -r AAA -g "$rgd" -S k4f10 -J --biased-random 1
+
+# The table is keyed on the ROTOR STACK, and Norway and M4 reach it through a
+# rotor-index translation and a folded Greek wheel respectively -- the two
+# places a wheel-table bug hides while every standard-mode test passes.
+hist_n_ct=$(run "$hist_pt" -i -n -u N -w 123 -r AAA -g QMW \
+             -s "AH BR CM DE FJ NZ")
+hist_ct=$hist_n_ct
+hist_same "histogram climb: Norway is byte-identical" \
+  -n -u N -w 123 -r AAA -g "$rgd" -S k4f10 -J
+hist_m4_ct=$(run "$hist_pt" -i -4 -u b -w B317 -r AAAA -g BQMW \
+              -s "AH BR CM DE FJ NZ")
+hist_ct=$hist_m4_ct
+hist_same "histogram climb: M4 is byte-identical" \
+  -4 -u b -w B317 -r AAAA -g B"$rgd" -S k4f10 -J
