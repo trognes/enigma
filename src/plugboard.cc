@@ -872,6 +872,231 @@ double hillclimb(machine & m, int max_pairs)
    token) into a new basin, near the typical plug count so the staged climb need not
    tear down a near-saturated board (CODE_REVIEW §9). With k=0 it is a no-op (so r0
    makes restarts identical -- a useful control). */
+/* ------------------------------------------------------ --biased-random --- */
+
+/* Draw the restart kick's pairs with probability exp(z / T) over the 325
+   single-plug INDEX-OF-COINCIDENCE z-scores, instead of uniformly.
+
+   WHY THERE IS ANYTHING TO BIAS TOWARD.  A true plug is enriched in the top of
+   that ranking -- 12.1% of true plugs land in the top 10 of 325 against 3.1%
+   by chance at L = 100, and the mean rank of a true plug is 110 of 325 against
+   163 (eval/proto_plugrank.cc).  So a plug's own IC says something about
+   whether that cable is on the board, even though the JOINT four-plug IC
+   argmax is a decoy that outscores the truth (eval/results-seed-landscape.txt).
+   Sampling rather than maximising is what exploits the first without walking
+   into the second, which is why this is a weighted kick and not a beam.
+
+   WHERE IT PAYS, AND WHERE IT DOES NOT.  Measured worth ~+8% of breaks at
+   R = 3..5 and ~+28% at R = 1, and NOTHING from about R = 6 up: the bias
+   substitutes for the diversity that restarts would otherwise supply, so it
+   fades exactly as restarts become plentiful.  Every number is at L = 100 on
+   the plugboard tier with the rotor key given.  eval/results-weighted-kick.txt.
+
+   THE SCORES COME FROM A CO-OCCURRENCE TABLE, NOT FROM DECODING.  decode_at is
+   steck[rows[i][steck[ct[i]]]], and IC is a function of the letter-count
+   MULTISET, which the exit plugboard only permutes -- so IC depends on the
+   board through one 26-vector, n(q) = sum_c T[c][S[c]], where
+   T[c][d][y] = #{i : ct_i == c, rows_i[d] == y}.  T is built once per key in
+   L*26 increments and a single-plug board's histogram is then an O(26) delta
+   from the empty one.  All 325 scores cost ~15 us at L = 100, against ~44 us
+   of ordinary decoding, and the T form is FLAT in message length where
+   decoding is linear (eval/results-tseed-proto.txt).
+
+   The scratch is thread_local rather than a `machine` member because the table
+   is 34 KB: inlining it would push the hot per-character tables to large
+   struct offsets, which machine.h documents as costing 20-60% on some targets.
+   Nothing here is read by the climb's move loop -- only once per kick -- so
+   the plug_fixed storage warning in that file does not apply. */
+
+static const int bias_npairs = asize * (asize - 1) / 2;   /* 325 */
+
+/* PLAIN ARRAYS AND NO CONSTRUCTOR, deliberately.  A std::vector member gives
+   the struct a throwing constructor, and clang-tidy rejects that at
+   thread_local storage duration (bugprone-throwing-static-initialization) --
+   an exception thrown there cannot be caught.  Trivial members are
+   zero-initialised instead, which costs 36 KB of TLS per worker whether the
+   option is used or not; at the 256-thread maximum that is 9 MB against a
+   precompute guard of 16 GiB. */
+struct biasscratch
+{
+  uint16_t t[asize * asize * asize];  /* co-occurrence counts */
+  double cum[bias_npairs];            /* prefix sums of exp(z / T) */
+  unsigned char pa[bias_npairs];
+  unsigned char pb[bias_npairs];
+};
+
+static thread_local biasscratch bias_scratch;
+
+/* Rebuild the table and the weights for the key the machine is currently set
+   to. Called once per work item, before the kick. */
+void biased_kick_prepare(machine & m)
+{
+  biasscratch & b = bias_scratch;
+  uint16_t * const t = b.t;
+  memset(t, 0, sizeof b.t);
+  for (int i = 0; i < textlength; i++)
+    {
+      const int c = num_ciphertext[i];
+      const unsigned char * __restrict row = m.rows[i];
+      uint16_t * const base = t + static_cast<size_t>(c) * asize * asize;
+      for (int d = 0; d < asize; d++)
+        {
+          base[d * asize + row[d]]++;
+        }
+    }
+
+  /* the empty board's histogram: S is the identity, so the diagonal */
+  int n0[asize];
+  for (int y = 0; y < asize; y++)
+    {
+      n0[y] = 0;
+    }
+  for (int c = 0; c < asize; c++)
+    {
+      const uint16_t * const col = t + (static_cast<size_t>(c) * asize + c) * asize;
+      for (int y = 0; y < asize; y++)
+        {
+          n0[y] += col[y];
+        }
+    }
+
+  double sc[bias_npairs];
+  int n = 0;
+  for (int a = 0; a < asize; a++)
+    {
+      for (int bb = a + 1; bb < asize; bb++)
+        {
+          /* plugging (a,bb) on an empty board swaps two columns of T */
+          const uint16_t * const ma = t + (static_cast<size_t>(a) * asize + a) * asize;
+          const uint16_t * const mb = t + (static_cast<size_t>(bb) * asize + bb) * asize;
+          const uint16_t * const qa = t + (static_cast<size_t>(a) * asize + bb) * asize;
+          const uint16_t * const qb = t + (static_cast<size_t>(bb) * asize + a) * asize;
+          long coin = 0;
+          for (int y = 0; y < asize; y++)
+            {
+              const int nn = n0[y] - ma[y] - mb[y] + qa[y] + qb[y];
+              coin += static_cast<long>(nn) * (nn - 1);
+            }
+          b.pa[n] = static_cast<unsigned char>(a);
+          b.pb[n] = static_cast<unsigned char>(bb);
+          sc[n] = static_cast<double>(coin);
+          n++;
+        }
+    }
+
+  /* z-score, then softmax. The IC denominator L*(L-1) is a positive constant
+     across the 325 and cancels in the z, so it is never formed. */
+  double mu = 0;
+  for (int i = 0; i < n; i++)
+    {
+      mu += sc[i];
+    }
+  mu /= n;
+  double var = 0;
+  for (int i = 0; i < n; i++)
+    {
+      var += (sc[i] - mu) * (sc[i] - mu);
+    }
+  const double sd = sqrt(var / (n - 1));
+  double run = 0;
+  for (int i = 0; i < n; i++)
+    {
+      /* A degenerate spread (every pair scoring alike) falls back to uniform
+         rather than dividing by ~0 and producing inf weights. */
+      const double w = (sd > 0.0)
+                         ? exp(((sc[i] - mu) / sd) / opt_biased_random) : 1.0;
+      run += w;
+      b.cum[i] = run;
+    }
+}
+
+/* The biased counterpart of perturb_steckerbrett(): same contract -- k pairs
+   among letters that are free (self-steckered and not plug_fixed), fewer if
+   the board cannot supply them -- drawn from the weights instead of uniformly.
+
+   REJECTION, NOT RENORMALISATION.  Redrawing on a conflict IS drawing from the
+   legal set renormalised, so the two are the same distribution and the choice
+   is pure cost; rejection is ~6 draws for 4 pairs at T >= 1 where an explicit
+   renormalise is 4 x 325.  The exact pass is kept as a FALLBACK because
+   rejection degrades as the board fills and as T falls -- and its failure mode
+   is silent truncation, a kick that returns fewer pairs than asked, which
+   would change what is being measured rather than how long it takes. */
+void biased_perturb(machine & m, uint64_t * rng, int k)
+{
+  const biasscratch & b = bias_scratch;
+  const double total = b.cum[bias_npairs - 1];
+  if (!(total > 0.0))
+    {
+      perturb_steckerbrett(m, rng, k);      /* degenerate: keep the contract */
+      return;
+    }
+
+  for (int got = 0; got < k; got++)
+    {
+      int pick = -1;
+      for (int tries = 0; tries < 32; tries++)
+        {
+          const double x = (static_cast<double>(splitmix64(rng) >> 11)
+                            / 9007199254740992.0) * total;
+          const int i = static_cast<int>(
+            std::lower_bound(b.cum, b.cum + bias_npairs, x) - b.cum);
+          if (i >= bias_npairs)
+            {
+              continue;
+            }
+          const int aa = b.pa[i], bb = b.pb[i];
+          if ((m.steckerbrett[aa] != aa) || (m.steckerbrett[bb] != bb)
+              || plug_fixed[aa] || plug_fixed[bb])
+            {
+              continue;                     /* not free: reject and redraw */
+            }
+          pick = i;
+          break;
+        }
+      if (pick < 0)
+        {
+          double tot = 0;
+          for (int i = 0; i < bias_npairs; i++)
+            {
+              const int aa = b.pa[i], bb = b.pb[i];
+              if ((m.steckerbrett[aa] == aa) && (m.steckerbrett[bb] == bb)
+                  && (! plug_fixed[aa]) && (! plug_fixed[bb]))
+                {
+                  tot += (i > 0) ? (b.cum[i] - b.cum[i - 1]) : b.cum[0];
+                }
+            }
+          if (!(tot > 0.0))
+            {
+              return;                       /* no free pair left */
+            }
+          double x = (static_cast<double>(splitmix64(rng) >> 11)
+                      / 9007199254740992.0) * tot;
+          for (int i = 0; i < bias_npairs; i++)
+            {
+              const int aa = b.pa[i], bb = b.pb[i];
+              if ((m.steckerbrett[aa] != aa) || (m.steckerbrett[bb] != bb)
+                  || plug_fixed[aa] || plug_fixed[bb])
+                {
+                  continue;
+                }
+              x -= (i > 0) ? (b.cum[i] - b.cum[i - 1]) : b.cum[0];
+              if (x <= 0)
+                {
+                  pick = i;
+                  break;
+                }
+            }
+          if (pick < 0)
+            {
+              return;
+            }
+        }
+      const int aa = b.pa[pick], bb = b.pb[pick];
+      m.steckerbrett[aa] = static_cast<unsigned char>(bb);
+      m.steckerbrett[bb] = static_cast<unsigned char>(aa);
+    }
+}
+
 void perturb_steckerbrett(machine & m, uint64_t * rng, int k)
 {
   unsigned char freelet[asize];

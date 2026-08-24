@@ -3102,3 +3102,77 @@ check "\$ENIGMA_LOGLIN rejects a partial weight vector" \
 echo
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
+
+echo "== Biased restart kick: --biased-random =="
+
+# Draw the kick's pairs from exp(z / T) over the 325 single-plug IC z-scores
+# instead of uniformly.  Measured worth ~+8% of breaks at -R 3..5 and nothing
+# from -R 6 up (eval/results-weighted-kick.txt).
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+br_bad() { printf 'AAAA' | "$ENIGMA" "$@" 2>&1 >/dev/null; }
+
+br_err=$(br_bad -c -q -l english -R 2 --biased-random 0.001)
+check "--biased-random rejects an out-of-range temperature" \
+  "$(printf '%s' "$br_err" | grep -c 'Illegal --biased-random')" "1"
+br_err=$(br_bad -q -l english -R 2 --biased-random 1)
+check "--biased-random needs -c" \
+  "$(printf '%s' "$br_err" | grep -c 'biased-random needs -c')" "1"
+br_err=$(br_bad -c -q -l english -R 0 --biased-random 1)
+check "--biased-random needs at least one restart" \
+  "$(printf '%s' "$br_err" | grep -c 'needs --restarts 1 or more')" "1"
+br_err=$(br_bad -c -q -l english -R 2 --random 0 --biased-random 1)
+check "--biased-random needs a non-empty kick" \
+  "$(printf '%s' "$br_err" | grep -c 'needs --random 1 or more')" "1"
+br_err=$(br_bad -c -q -l english -R 2 -A 100 --biased-random 1)
+check "--biased-random rejects -A" \
+  "$(printf '%s' "$br_err" | grep -c 'not supported with -A')" "1"
+br_err=$(br_bad -c -q -l english -R 2 --exhaust 1 --biased-random 1)
+check "--biased-random rejects --exhaust" \
+  "$(printf '%s' "$br_err" | grep -c 'not supported with --exhaust')" "1"
+
+# A 60-letter message with a 10-pair board hidden: hard enough that the kick
+# actually matters, small enough to be instant.
+br_pt="ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEIN"
+br_ct=$(run "$br_pt" -i -u B -w 231 -r AAA -g QMW -s "AH BR CM DE FJ NZ PX QU ST VW")
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+br_run() { printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -q -l english \
+             -u B -w 231 -r AAA -g QMW -R 4 "$@" 2>&1 >/dev/null; }
+br_scored() { br_run "$@" | sed -n 's/.*scored \([0-9]*\) plugboards.*/\1/p'; }
+
+check "--biased-random is echoed with its temperature" \
+  "$(br_run --biased-random 1 | grep -c 'kick bias: softmax T = 1')" "1"
+check "--biased-random marks the kick line" \
+  "$(br_run --biased-random 1 | grep -c '4 restarts, 10-pair kick, IC-biased')" "1"
+check "no --biased-random leaves the kick line unmarked" \
+  "$(br_run | grep -c '4 restarts, 10-pair kick$')" "1"
+
+# THE CHECK THAT CAN ACTUALLY FAIL.  Everything above passes if the flag is
+# parsed and then ignored; this one does not.  A no-op biased_perturb() -- or
+# one wired so the uniform path still runs -- gives the SAME plugboard count as
+# the unbiased run, because the RNG stream and the climb are otherwise
+# identical.  Verified by stubbing biased_perturb() to call
+# perturb_steckerbrett(): this check fails and the six validation checks above
+# do not.
+check "--biased-random actually changes the search" \
+  "$([ "$(br_scored --biased-random 0.35)" != "$(br_scored)" ] && echo differs)" \
+  "differs"
+
+# -T independence: the weights come from the key alone and the draw from the
+# per-(key,restart) stream, so neither depends on how the work was split.
+br_t1=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -q -l english \
+          -u B -w 231 -r AAA -g QM. -R 4 --biased-random 1 -T 1 2>/dev/null)
+br_t4=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -q -l english \
+          -u B -w 231 -r AAA -g QM. -R 4 --biased-random 1 -T 4 2>/dev/null)
+check "--biased-random is -T independent" "$br_t1" "$br_t4"
+
+# And it still recovers, which a badly-normalised weight vector would break by
+# concentrating every kick on one pair.  A LONGER fixture than the one above:
+# 60 letters against a 10-pair board recovers only ~15% of the time even
+# working correctly, so a check on it would fail for reasons that have nothing
+# to do with the flag.
+br_pt2="ANXPANZXGRUPPEXVIERXSIEGFRIEDSIEGFRIEDTONIXDIVXSTEHTSEITXEINSZWOXSIEBENXEINSEINSNULLNULLXUHRMITANFAENGENAMUNTERKUNFTSRAUMXKANNNIQTEINFLIESZENXDAXDRITT"
+br_ct2=$(run "$br_pt2" -i -u B -w 231 -r AAA -g QMW -s "AH BR CM DE FJ NZ PX QU ST VW")
+check "--biased-random still recovers the plaintext" \
+  "$(printf '%s' "$br_ct2" | ENIGMA_SEED=0 "$ENIGMA" -c -f -l wehrmacht \
+       -S k4f10 -u B -w 231 -r AAA -g QMW -R 8 --biased-random 1 2>/dev/null)" \
+  "$br_pt2"

@@ -1,0 +1,102 @@
+# --biased-random ON THE SHIPPED BINARY: ~+9% of breaks at -R 1..5, ~+3% and
+# not established above.  Pooled over R = 1..5, 699 breaks against 761,
+# z = +2.56; over R = 6..10, 1057 against 1093, z = +1.46.  Every one of the
+# ten cells is positive and NOT ONE of them resolves on its own.
+#
+#   make
+#   python3 eval/biased_kick_ab.py --trials 600 --length 100 \
+#       --restarts 0 1 2 3 4 5 6 7 8 9 10 --temp 1 --seed 1
+#
+# This is the REAL BINARY, not eval/proto_wkick.cc, and the full recommended
+# telegraphic recipe: -c -J --polish -f -l wehrmacht -S k4f10.  Both arms get
+# the same trial -- same excerpt, same rotor key, same hidden 10-pair board --
+# and differ only by --biased-random 1.  Authentic HG Nord decrypts, L = 100,
+# 600 trials per cell, rotor key GIVEN.
+#
+# ============================================================================
+# THE SWEEP
+# ============================================================================
+#
+#    R   uniform  biased   effect   onlyU/onlyB      z    mean%U  mean%B
+#    0      110     110     +0.0%       0/0       +0.00    25.1    25.1
+#    1       91     101    +11.0%      48/58      +0.97    21.7    23.5
+#    2      123     139    +13.0%      52/68      +1.46    27.0    29.7
+#    3      140     152     +8.6%      53/65      +1.10    29.8    31.9
+#    4      163     177     +8.6%      55/69      +1.26    33.5    35.5
+#    5      182     192     +5.5%      54/64      +0.92    36.5    38.0
+#    6      192     201     +4.7%      54/63      +0.83    38.1    39.4
+#    7      205     209     +2.0%      58/62      +0.37    40.1    40.8
+#    8      210     220     +4.8%      54/64      +0.92    40.8    42.2
+#    9      221     230     +4.1%      57/66      +0.81    42.6    43.7
+#   10      229     233     +1.7%      61/65      +0.36    43.8    44.1
+#
+#   R = 0 is a BASELINE ONLY.  With -R 0 there is a single unperturbed climb
+#   and therefore no kick, so --biased-random is refused there by design and
+#   the arms are identical by construction, not by measurement.
+#
+#   pooled  R = 1..5    699 -> 761   +9.3%   262/324   z = +2.56
+#           R = 6..10  1057 -> 1093  +3.4%   284/320   z = +1.46
+#           R = 1..10  1756 -> 1854  +6.4%   546/644   z = +2.84
+#
+# READ THE BANDS, NOT THE ROWS.  Ten of ten cells positive is itself evidence
+# (P = 2^-10 under a fair coin) but no single cell clears |z| = 2 at 600
+# trials, and the per-cell scatter is ~4pp.  Resolving individual R values on
+# the shipped binary needs roughly 4x these trials -- the prototype reached
+# z = +3..+5 only because 3200 trials per cell are cheap when there is no
+# process to start.
+#
+# THE DECAY IS MONOTONE HERE, which it was not in the prototype: 11.0, 13.0,
+# 8.6, 8.6, 5.5, 4.7, 2.0, 4.8, 4.1, 1.7.  The prototype's alternating
+# null/positive/null around R = 6..8 was scatter, and this sweep -- a different
+# harness, a different pipeline, a different trial set -- shows the smooth
+# curve that scatter was hiding.  There is no cutoff, only a fade.
+#
+# ============================================================================
+# THE ONE OPERATIONAL SURPRISE: AT -R 1, DO NOT KICK AT ALL
+# ============================================================================
+#
+# -R 0 breaks 110 of 600.  Uniform -R 1 breaks 91 and biased -R 1 breaks 101 --
+# BOTH BELOW IT.  That is not a defect of the bias: -R 0 is one deterministic
+# climb from the seed with NO kick, while -R N is N kicked climbs and does not
+# additionally run the unkicked one (the -R entry in CLAUDE.md says so).  So
+# -R 1 trades a good unkicked climb for one kicked climb, and loses.
+#
+# The bias recovers about half of what the kick gives away, and does not close
+# it.  If the budget is one climb, spend it on -R 0.
+#
+# ============================================================================
+# WHAT THIS DOES AND DOES NOT ESTABLISH
+# ============================================================================
+#
+# IT IS THE PLUGBOARD TIER WITH THE ROTOR KEY GIVEN.  A real sweep is strictly
+# harder -- the true key must additionally outscore millions of competitors --
+# and these break COUNTS are not the break RATES in CLAUDE.md's unknown-key
+# budget table.  The two must not be combined arithmetically.
+#
+# ONE LENGTH (L = 100), one corpus, one temperature (T = 1), one seed.  The
+# temperature was fixed at 1 rather than tuned per R deliberately: it is what a
+# single recommended setting delivers, and the prototype work found T* rising
+# with R, so a per-R tuned run would read higher and mean less.
+#
+# IC ONLY as the ranking model, where the shipped pre-pass is k
+# (mono + lambda*L*IC).  The same co-occurrence table yields mono for free and
+# it has not been tried.
+#
+# NOT MEASURED AT HIGH -R.  The sweep stops at 10.  CLAUDE.md recommends
+# spending on restarts "until the curve flattens (~-R 16)", which is past
+# everything here.
+#
+# ============================================================================
+# COST
+# ============================================================================
+#
+# The 325 scores come from a per-key co-occurrence table rather than from
+# decoding -- ~15 us at L = 100 against ~44 us of ordinary decoding, and flat
+# in message length where decoding is linear (eval/results-tseed-proto.txt).
+# The prototype measured the biased arm ~5% CHEAPER per key overall, its seeds
+# converging faster; this harness times whole process invocations, where
+# startup dominates at low R, so it does not measure that usefully.
+#
+# make bench BASE=origin/dev across the implementation: search +2.0%,
+# hillclimb -1.3%, fused -1.1%, crib +2.2% -- no regression, as expected from
+# a branch taken once per work item and never inside the score loop.

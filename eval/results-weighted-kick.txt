@@ -1,14 +1,29 @@
-# A WEIGHTED KICK BUYS NOTHING THE SHIPPED SEARCH DOES NOT ALREADY HAVE.
-# Biasing the restart kick toward plugs that score well on their own is a real
-# effect -- worth +7% of breaks, confirmed on two independent seeds -- but ONLY
-# in configurations that are themselves ~27% below the shipped one, and no
-# weighted configuration reaches the plain uniform kick.  In the shipped
-# configuration it is a flat null.
+# A WEIGHTED KICK IS A LARGE WIN AT LOW RESTART COUNTS AND FADES AS RESTARTS
+# GROW.  In the SHIPPED configuration on HELD-OUT seeds: +28% of breaks at
+# R = 1 (z = +5.35) and +22.5% at R = 2 (z = +5.74) at their tuned
+# temperatures, and ~+8% across R = 3..5 at a fixed T = 1 (z = +5.60 pooled).
+# From R = 6 it is ~+2.5% and NOT established (z = +1.99).  It is also ~5%
+# CHEAPER at every R, so these are wins on both axes rather than trades.
+#
+# NOTHING HERE IS A RECOMMENDATION YET.  This is a prototype against src/*.o,
+# not an option; it is measured on the PLUGBOARD TIER WITH THE ROTOR KEY GIVEN,
+# at one length, one corpus, with IC as the ranking model.  The break counts
+# are not the same quantity as the break RATES in CLAUDE.md's unknown-key
+# budget table, so the two must not be combined arithmetically.
+#
+# THE R SWEEP CAME LAST AND IT SHOULD HAVE COME FIRST.  Every table below the
+# next section was run at R = 8, which is past the crossover, so they measure
+# the regime where the lever is already dead and describe it as dead
+# everywhere.  Read the R sweep first; the rest is the anatomy of why it fades.
+#
+# AND THE TEMPERATURE MUST BE TUNED PER R, which the same mistake hid: T = 1
+# was chosen from the R = 8 sweep, so the first R sweep ran the whole range at
+# a temperature tuned where the effect does not exist.
 #
 #   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
 #   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/wkick eval/proto_wkick.cc $objs
 #   /tmp/wkick [keys] [restarts] [L] [temperature] [kick] [-M] [cap] [seed]
-#     cap = 0 skips the cap climb -- the ablation, not a configuration
+#     cap = 0 skips the cap climb -- both an ablation and a real arm
 #
 #   eval/proto_plugrank.cc measures the mechanism this rests on.
 #
@@ -60,7 +75,128 @@
 #   softmax T=0.25      0.583            4.70x       6.42
 #
 # ============================================================================
-# END TO END, IN THE SHIPPED CONFIGURATION, IT IS A NULL
+# THE RESTART COUNT IS THE VARIABLE THAT MATTERS
+# ============================================================================
+#
+# Shipped configuration (kick 10, cap-4 climb under k, f10 continuation),
+# T = 1, 3200 keys per cell, paired:
+#
+#   R    uniform   weighted   onlyA/onlyB      z      effect   ms/key A -> B
+#   1      261       338        168/245     +3.79    +29.5%    0.52 -> 0.50
+#   2      393       492        182/281     +4.60    +25.2%    1.02 -> 0.98
+#   3      599       677        289/367     +3.05    +13.0%
+#   4      682       742        291/351     +2.37     +8.8%    2.03 -> 1.94
+#   5      773       844        292/363     +2.77     +9.2%
+#   6      893       903        337/347     +0.38     +1.1%
+#   8     1052      1043        346/337     -0.34     -0.9%    4.11 -> 3.88
+#
+#   second seed at R = 2 and R = 4: 420 -> 497 (z = +3.33) and 707 -> 741
+#   (z = +1.37), so pooled z = +5.57 and +2.65.  Same sign, smaller -- the
+#   first seed was the larger, as usual.
+#
+# THE OPTIMAL TEMPERATURE RISES WITH R, and that column is the mechanism stated
+# as a law.  Swept at 3200 keys per cell:
+#
+#   R      T = 2    1    0.7   0.5   0.35  0.25   uniform    T*
+#   1        278   338   332   373    353   397     261      0.25
+#   2         --   492    --   501    507   500     393      0.35
+#   4        748   742   748   753    713   706     682      0.50
+#   8         --  1043    --    --     --    --    1052     ~1.2
+#
+#   Colder is better when there are fewer restarts, because the bias is
+#   SUBSTITUTING for the diversity restarts would otherwise supply -- the fewer
+#   you have, the more bias you want.  T* roughly doubles from R = 1 to R = 4.
+#
+# THE OPERATIONAL RANGE, SWEPT.  R = 3..7 against four temperatures, 3200 keys
+# per cell, effect on breaks over the paired uniform arm:
+#
+#   R     T = 1   T = 0.7  T = 0.5  T = 0.35    mean over T
+#   3     +13.0%   +10.2%   +12.7%   +10.5%       +11.6%
+#   4      +8.8%    +9.7%   +10.4%    +4.5%        +8.3%
+#   5      +9.2%   +11.6%    +5.3%    +2.1%        +7.0%
+#   6      +1.1%    +0.3%    -2.2%    -2.0%        -0.7%
+#   7      +4.1%    +3.0%    +2.3%    -4.5%        +1.2%
+#
+# HELD OUT AT A FIXED T = 1, which is what a single recommended setting would
+# actually deliver -- no per-R temperature selection.  Two fresh seeds, 3200
+# keys each:
+#
+#   R    held-out effects     mean    pooled z
+#   3     +3.3%, +13.0%      +8.2%     +2.78
+#   4     +4.8%, +11.6%      +8.2%     +3.31
+#   5     +8.7%,  +8.2%      +8.4%     +3.59
+#   6     +0.0%,  +1.7%      +0.8%     +0.39
+#   7     +4.9%,  +4.8%      +4.8%     +2.48
+#
+#   R = 3..5 pooled: 1693 only-A against 2035 only-B, z = +5.60.
+#
+# THERE IS NO SHARP CUTOFF AT R = 6, and an earlier version of this file said
+# there was.  R = 6 reads null on all three seeds (+1.1, +0.0, +1.7) while
+# R = 7 reads +4.9% on held-out seeds at z = +2.48 -- a real cutoff cannot
+# reverse.  R = 8 is null again.  Alternating null / positive / null is the
+# signature of scatter around a decaying trend, not a threshold, and it puts
+# the per-R resolution at about +-4pp even at 3200 keys x 3 seeds.
+#
+# THE DEFENSIBLE SUMMARY IS THEREFORE COARSER THAN A PER-R TABLE.  The effect
+# is ~+8% and firmly established for R = 3..5 (z = +5.60 pooled), and ~+2.5%
+# and NOT established for R = 6..8 (z = +1.99 pooled, which at three cells
+# selected after the fact is not evidence).  Do not read individual R rows as
+# resolved; read the two bands.
+#
+# WHAT RISES WITH R IS THE PENALTY FOR BEING TOO COLD, which is a sharper
+# statement than "T* rises".  T = 1 is best or near-best at every R in 3..7,
+# while T = 0.35 decays from +10.5% at R = 3 to -4.5% at R = 7 -- the cold
+# settings are the ones that go negative.  Below R = 3 cold wins outright
+# (T* = 0.25 at R = 1), so the safe rule across the whole range is cold only
+# when restarts are very few, and T ~ 0.7-1 otherwise.
+#
+# THAT PUTS THE USEFUL BAND AT R = 1..5 AND THE OPERATIONAL PART AT 4..5.
+# CLAUDE.md's unknown-key budget analysis affords roughly R = 4..12 on a real
+# full-keyspace sweep, so the overlap is its bottom two rungs: +8.3% and +7.0%
+# mean over temperature, +10.4% and +11.6% at the best one.
+#
+# IT DOES NOT EXTEND TO THE GREEDY LIMIT.  Below T = 0.25 at R = 1 the curve
+# plateaus and falls back: 0.15 / 0.1 / 0.05 / 0.02 give 361 / 357 / 367 / 380
+# against T = 0.25's 397.  That is the decoy peak asserting itself -- the IC
+# argmax at four plugs sits +8 sd above the null on boards holding under half
+# the true plugs (eval/results-seed-landscape.txt), so a kick cold enough to
+# land on it is worse than one merely biased toward it.  Enough bias to enrich,
+# not enough to commit.
+#
+# HELD-OUT CONFIRMATION, since T* was selected from the rows above.  Effects at
+# the tuned temperature on the tuning seed and two fresh ones:
+#
+#   R    T*     tuning seed    777       31337     held-out z
+#   1    0.25     +52.1%      +33.8%     +22.3%      +5.35
+#   2    0.35     +29.0%      +18.6%     +26.5%      +5.74
+#   4    0.50     +10.4%       +6.4%      +3.1%      +1.91
+#
+#   Every seed positive at every R.  The tuning seed is the largest in two of
+#   three rows, so quote the held-out figures; R = 1 and R = 2 are established
+#   and R = 4 is suggestive rather than settled.
+#
+# THE CORRECTNESS ADVANTAGE IS CONSTANT; THE BREAK ADVANTAGE IS NOT.  The
+# weighted seeds hold ~18% correct plugs against ~15% at BOTH R = 1 and R = 8
+# (1.23 of 6.85 against 1.00 of 6.69, and 1.20 of 6.85 against 0.96 of 6.70).
+# So the lever delivers the same seed improvement at every budget, and only its
+# CONVERSION decays.  What changes is what the alternative supplies: at R = 1
+# there is no diversity to be had, so a better seed is the only thing available;
+# by R = 8 the restarts have supplied it and the bias is buying something
+# already in hand.
+#
+# THAT IS THE SAME SHAPE --polish HAS, which CLAUDE.md records as a lift that
+# "roughly halves R80 -> R160 and can vanish by R160".  A low-budget improvement
+# subsumed by restarts is a recurring pattern here rather than a property of
+# this lever.
+#
+# AND R = 4 IS OPERATIONAL, not academic.  CLAUDE.md's unknown-key budget
+# analysis puts the affordable restart count on a real full-keyspace sweep at
+# roughly 4 to 12 -- so the crossover sits inside the range a genuine attempt
+# runs at, and the +8.8% at R = 4 is in the part of it that a 24-hour exact
+# sweep can afford.
+#
+# ============================================================================
+# AT R = 8 IT IS A NULL, AND THE REST OF THIS FILE IS THAT REGIME
 # ============================================================================
 #
 # Arm A is perturb_steckerbrett(), the shipped uniform kick; arm B draws the
@@ -127,9 +263,9 @@
 #   0.25          69        77         0.56         6.46     +0.98
 #
 # With no climb the full bias survives and it converts: +38% of breaks at
-# T = 0.5.  But the whole arm sits far below the climbed one (95 against the
-# climbed uniform's 91 at the same budget, and against 128 for the shipped
-# kick), so this is a mechanism demonstration, not a recipe.
+# T = 0.5.  At equal R the whole arm sits far below the climbed one (95 against
+# 128 for the shipped kick) -- but it is also much cheaper, so the fair test is
+# matched compute, which the section "WITHOUT THE CAP CLIMB" below runs.
 #
 # THE UNDILUTED CONFIGURATION IS A REAL WIN, CONFIRMED.  At kick 4 with -M,
 # so the seed is forced to exactly four plugs, 3200 keys:
@@ -160,6 +296,133 @@
 # small and forced, and adds nothing once the seed is allowed to grow.  A +7%
 # improvement to a configuration 27% below the baseline is not a route to more
 # breaks.
+#
+# ============================================================================
+# WITHOUT THE CAP CLIMB IT IS A REAL CONFIGURATION -- AND STILL DOES NOT WIN
+# ============================================================================
+#
+# The ablation above is also a proposal: if the cap climb is what erases the
+# bias, DROP IT and hand the weighted kick straight to the f10 continuation.
+# That makes the arm cheaper as well as biased, so it deserves a matched-
+# compute test rather than the equal-R one the ablation got.
+#
+# IT IS PROPERLY TUNED.  T = 0.5 is an interior optimum, not an edge (400 keys,
+# kick 4, R = 13):
+#
+#   T        1     0.7    0.5    0.35   0.25
+#   breaks  104    113    125    112    101
+#   true    0.25   0.32   0.43   0.51   0.56
+#   apart  12.73  11.81  10.27   8.28   6.35
+#
+#   Note the optimum sits where neither true-plug count nor apartness is
+#   extremal -- it is the trade between them that peaks, which is the clearest
+#   evidence in this file that both halves matter.
+#
+#   READ AS BREAKS AGAINST CORRECTNESS, that row is the whole line of work in
+#   one curve.  The seeds hold exactly four plugs, so the true-plug count is a
+#   fraction directly:
+#
+#     correct plugs   6.3%   8.0%   10.8%   12.8%   14.0%
+#     breaks           104    113     125     112     101
+#
+#   BREAKS PEAK NEAR 11% CORRECT AND FALL ON BOTH SIDES.  Below it there is too
+#   little signal; above it too much diversity has been paid for the
+#   correctness.  For scale: chance is 3.1%, and the IC beam -- the purest
+#   four-plug board any method here produces -- sits at 17.9%
+#   (eval/results-seed-landscape.txt), well past the peak, which is the
+#   quantitative form of why it loses.
+#
+#   THE SHIPPED SEED IS NOT ON THIS CURVE AT ALL, and that is the point.  It is
+#   nominally cap 4 but carries 6.7 plugs holding 0.93 true -- a lower FRACTION
+#   (13.9%) than the beam and more than double the absolute count of any true
+#   four-plug board here.  It wins by not respecting the cap.
+#
+# AND IT IS 42% CHEAPER, so it buys ~1.7x the restarts.  The two compute curves
+# (400 keys, L = 100), shipped against no-climb weighted:
+#
+#      shipped: cap-4 climb, kick 10      no-climb weighted: T = 0.5, kick 4
+#      R     breaks    ms/key             R     breaks    ms/key
+#      4       85       1.97               8       95       2.34
+#      8      128       4.05              13      125       4.00
+#     13      171       7.04              16      123       4.78
+#     16      171       8.06              20      140       6.02
+#     20      194       9.90              26      137       7.80
+#     26      193      12.95              32      164       9.47
+#
+# LEVEL AT ~4 ms AND BEATEN ABOVE IT.  At 4 ms the two are 128 against 125,
+# inside the +-9.2 SE of a 400-trial cell; by ~9.5 ms it is 194 against 164,
+# more than three SE apart, and the gap grows with budget.  So dropping the cap
+# climb closes nearly all of the deficit the with-climb weighted arm carried --
+# it is the best weighted configuration measured anywhere in this file -- and
+# it does not cross.
+#
+# THE REASON IS THAT THE CAP CLIMB IS PRODUCTIVE WORK, NOT OVERHEAD.  It turns
+# a uniform 10-plug kick into a seed holding 0.93 true plugs; the weighted
+# 4-plug kick delivers 0.43.  The climb does more for the board than the bias
+# does, it does it on every restart, and the 42% saved by skipping it does not
+# buy enough extra restarts to make up the difference.
+#
+# ONE SHAPE WORTH KEEPING.  Without the climb, the UNIFORM arm collapses as the
+# kick grows while the weighted arm does not (400 keys, T = 0.5):
+#
+#   kick        4     6     8    10
+#   uniform    69    61    57    39
+#   weighted   95    79    83    92
+#
+# More random plugs is more damage with nothing to repair it; more WEIGHTED
+# plugs brings true plugs along too (0.12 -> 0.82 across that row).  So the
+# bias substitutes for the climb's repair -- which is the same substitution
+# seen under -M, in a setting where the climb is absent rather than
+# constrained, and it is still a substitution rather than an addition.
+#
+# ============================================================================
+# LETTING THE PRE-PASS FILL THE BOARD IS WORSE -- cap 10 AGAINST cap 4
+# ============================================================================
+#
+# Raising the PRE-PASS cap from 4 to 10, so the k climb may keep all ten plugs
+# the kick laid down rather than only blocking adds, is a different schedule
+# and not a weighting question at all.  Weighting adds nothing there either
+# (400 keys, R = 8, uniform baseline 127 for that configuration: T = 2 reads
+# 134, T = 1 125, T = 0.5 123, T = 0.25 103), but the UNIFORM arm is worth a
+# paired test on its own.
+#
+#   PAIRED, arm A cap 4 against arm B cap 10, uniform kick 10:
+#
+#     seed        cap 4   cap 10   onlyA/onlyB      z     effect
+#     20260824     1052     962      436/346      -3.22   -8.6%
+#     777          1024     978      418/372      -1.64   -4.5%
+#     31337        1057     1023     406/372      -1.22   -3.2%
+#
+#     pooled 1260 only-A against 1090 only-B, z = -3.51.  All three seeds
+#     negative; the seed that first showed it is the largest, which is the
+#     usual regression to the mean and a reason to quote the pooled figure
+#     rather than the -8.6%.
+#
+# THE UNPAIRED HINT POINTED THE OTHER WAY.  Two independent 400-key cells read
+# 132 for cap 10 against 128 for cap 4 and looked like a small win; paired at
+# the same 400 keys they read 128 against 127, and only power resolves it.
+# That is the case for pairing in one example.
+#
+# `apart` AND `trueplg` ARE NOT COMPARABLE ACROSS BOARD SIZES, and reading them
+# raw here inverts the conclusion.  At 800 keys:
+#
+#     pre-pass   plugs   true plugs   correct %   apart   apart/plug
+#     cap 4       6.69      0.92        13.8%     17.27      1.29
+#     cap 10      9.77      1.09        11.2%     21.72      1.11
+#
+# Cap 10 holds MORE true plugs in absolute count and a LOWER fraction, and its
+# higher apartness is board size -- a 9.77-plug board has 19.5 non-fixed
+# entries against 13.4, so more room to differ.  Normalised, correctness and
+# diversity both fall, which is what the break count does.  Taken raw the two
+# columns say cap 10 improved on both, which is the opposite of the truth.
+#
+# THE MECHANISM IS THE PRE-PASS TRAP CLAUDE.md ALREADY DOCUMENTS, in its cap
+# rather than its model: filling the board under k means the WEAKER model
+# places all ten plugs and f10 inherits its mistakes instead of doing the
+# placement itself.  A cap of 4 leaves f10 the real work.  This extends the
+# documented "a stage cap in 1..4 is INERT on an IC pre-pass" -- inert relative
+# to each other, because below the kick size a cap only blocks adds, but a cap
+# AT the kick size is a different climb and is materially worse.
 #
 # ============================================================================
 # WHAT THIS REFUTES

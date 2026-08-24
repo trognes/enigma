@@ -79,6 +79,7 @@ void parse_args(int argc, char * * argv)
   opt_crib_seeds = 0;
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
+  opt_biased_random = 0.0;         /* --biased-random T (0 = uniform kick) */
   opt_random_set = false;
   opt_exhaust = 0;    /* --exhaust E forced pairs, 0 = off */
   opt_staged = 0;   /* --score schedule string, or 0 for the single-model climb */
@@ -109,6 +110,7 @@ void parse_args(int argc, char * * argv)
          OPT_NOPLUG, OPT_SOFTPLUG, OPT_SCSEEDS, OPT_SCLEN, OPT_SCSIG,
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
          OPT_CRIBLIST, OPT_NOCRIBREORDER, OPT_TUNEPHASE, OPT_CONFIDENCE,
+         OPT_BIASEDRANDOM,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
          OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_SCTANDEM,
          OPT_SEEDDEDUP, OPT_SEEDDEDUPBITS, OPT_SEEDDEDUPMAX };
@@ -149,6 +151,7 @@ void parse_args(int argc, char * * argv)
       { "version",        no_argument,       nullptr, 'v' },
       { "help",           no_argument,       nullptr, 'h' },
       { "random",         required_argument, nullptr, OPT_RANDOM  },
+      { "biased-random",  required_argument, nullptr, OPT_BIASEDRANDOM },
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-all",       no_argument,       nullptr, OPT_DUMPALL },
@@ -271,6 +274,9 @@ void parse_args(int argc, char * * argv)
         case OPT_RANDOM:
           opt_perturb = parse_opt_int(optarg, "--random");
           opt_random_set = true;
+          break;
+        case OPT_BIASEDRANDOM:
+          opt_biased_random = parse_opt_double(optarg, "--biased-random");
           break;
         case OPT_EXHAUST:
           opt_exhaust = parse_opt_int(optarg, "--exhaust");
@@ -822,6 +828,39 @@ void parse_args(int argc, char * * argv)
   /* --random K is the kick size (plug pairs injected per restart); K=0 is a legal control. */
   if ((opt_perturb < 0) || (opt_perturb > pairs_uncapped))
     fatal("Illegal kick size (--random must be 0 to 13 plug pairs)");
+
+  /* --biased-random T: the kick, drawn from exp(z / T) over the single-plug IC
+     scores instead of uniformly. Rejected wherever the kick is not the thing
+     that starts the climb -- those sites call perturb_steckerbrett() at their
+     own seeding points, so the flag would silently do nothing rather than
+     being wrong, which is the worse failure of the two. */
+  if (opt_biased_random != 0.0)
+    {
+      if ((opt_biased_random < 0.01) || (opt_biased_random > 100.0))
+        fatal("Illegal --biased-random temperature (must be 0.01 to 100, or 0 "
+              "for the uniform kick)");
+      if (! opt_hillclimb)
+        fatal("--biased-random needs -c (it biases the plugboard kick, and a "
+              "bare rotor scan has none)");
+      if (opt_restarts < 1)
+        fatal("--biased-random needs --restarts 1 or more (with -R 0 there is "
+              "no kick to bias)");
+      if (opt_perturb < 1)
+        fatal("--biased-random needs --random 1 or more (with a kick of zero "
+              "pairs there is nothing to draw)");
+      if (opt_anneal > 0)
+        fatal("--biased-random is not supported with -A (simulated annealing "
+              "seeds itself and never calls the kick)");
+      if (opt_crib_text || opt_crib_list)
+        fatal("--biased-random is not supported with --crib/--crib-list (the "
+              "crib deduction installs its own starting board)");
+      if (opt_exhaust > 0)
+        fatal("--biased-random is not supported with --exhaust (which pins its "
+              "own forced pairs)");
+      if (opt_self_crib_seeds > 0)
+        fatal("--biased-random is not supported with --self-crib-seeds (the "
+              "deduction installs its own starting board)");
+    }
 
   /* Expand the --score schedule into opt_stages[] and set opt_scoring to the target
      (last) stage. Validates the schedule syntax; fatal() on error. With no --score

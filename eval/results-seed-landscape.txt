@@ -93,6 +93,18 @@
 #  100     +5.34       +8.13      2.79     69 of 100       0.70/4     1.47
 #  167     +6.96       +8.34      1.38     89 of 100       1.68/4     2.89
 #
+# TRUE PLUGS PER BEAM SEED, the figure comparable with the kicked arms in
+# eval/results-weighted-kick.txt (200 keys): 0.72 of 4 at L = 100 and 1.51 at
+# L = 167 -- essentially the top-1 figure, so the beam's whole width is equally
+# correct rather than just its best board.  Top-1 flatters it (one board of
+# eight) and the top-8 union flatters it differently (a count over eight), so
+# neither of those columns may be compared with a per-seed mean.
+#
+# AT 17.9% CORRECT PLUGS THAT IS THE PUREST FOUR-PLUG BOARD ANY METHOD HERE
+# PRODUCES -- 5.8x chance -- AND IT IS THE METHOD THAT LOSES.  The break rate
+# against true-plug fraction has an interior optimum near 11%, measured in
+# eval/results-weighted-kick.txt; the beam sits well past it.
+#
 # TWO THINGS ARE TRUE AT ONCE AND BOTH MATTER.
 #
 # IC AT FOUR PLUGS IS A GENUINE SIGNAL.  The truth sits 4.4 to 7.0 sd above a
