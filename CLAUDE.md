@@ -1063,6 +1063,18 @@ are read from a **data directory** (filenames built as
   `--random ≥ 1`; rejected with `-A`, `--crib`/`--crib-list`, `--exhaust` and
   `--self-crib-seeds`, which install their own starting board.
   `-T`-deterministic.
+  - **Measured on the SHIPPED binary**, full recommended recipe, authentic HG
+    Nord decrypts at L=100, 600 paired trials per cell, rotor key given
+    (`eval/results-biased-kick.txt`): **+9.3% of breaks pooled over `-R` 1–5**
+    (699 → 761, z = +2.56) and **+3.4% over 6–10** (1057 → 1093, z = +1.46,
+    not established). All ten cells positive, none resolving alone — read the
+    bands, not the rows. The decay is monotone: 11.0, 13.0, 8.6, 8.6, 5.5,
+    4.7, 2.0, 4.8, 4.1, 1.7.
+  - **At `-R 1` do not kick at all.** `-R 0` breaks 110 of 600 while uniform
+    `-R 1` breaks 91 and biased `-R 1` breaks 101 — *both below it*, because
+    `-R N` runs N kicked climbs and does **not** additionally run the unkicked
+    seed climb. The bias recovers about half of what the kick gives away and
+    does not close it. One climb of budget belongs on `-R 0`.
   - **There IS signal in a single plug, which is not obvious and is what the
     flag rests on.** A true plug is enriched in the top of that ranking —
     12.1% of true plugs land in the top 10 of 325 against 3.1% by chance at
@@ -1081,7 +1093,11 @@ are read from a **data directory** (filenames built as
     when restarts are very few (`T* ≈ 0.25` at `-R 1`), and past `T = 0.25`
     the curve falls back — that is the decoy peak asserting itself, so a kick
     cold enough to *land* on the argmax is worse than one merely biased toward
-    it. `T = 0.35` goes outright negative by `-R 7`.
+    it. `T = 0.35` goes outright negative by `-R 7`. Those temperature figures
+    are the **prototype's** (`eval/results-weighted-kick.txt`); the shipped
+    measurement fixes `T = 1` throughout, deliberately, since that is what a
+    single recommended setting delivers and a per-R tuned run would read
+    higher and mean less.
   - **The scores are IC only**, where the shipped pre-pass is `k`
     (mono + λ·L·IC). The same table yields mono for free and it was not tried.
 - `--exhaust E` (long-only) **partial plugboard exhaustion** (**not

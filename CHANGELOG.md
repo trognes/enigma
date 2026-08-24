@@ -6,6 +6,35 @@ existing command lines can behave differently or stop working.
 
 ## Unreleased
 
+### Added
+
+- **`--biased-random T` — draw the restart kick from the single-plug index of
+  coincidence instead of uniformly.** Each of the 325 possible single plugs is
+  scored on its own IC, z-scored per key, and the kick's pairs are drawn with
+  probability `exp(z / T)` rather than uniformly. Off by default; needs `-c`,
+  `-R ≥ 1` and `--random ≥ 1`, and is refused with `-A`, `--crib`/`--crib-list`,
+  `--exhaust` and `--self-crib-seeds`, which install their own starting board.
+  - **There is signal in a single plug**, which is what the option rests on:
+    a true plug lands in the top 10 of 325 12.1% of the time against 3.1% by
+    chance, and its mean rank is 110 of 325 against 163. That is not in
+    tension with the *joint* four-plug IC optimum being a decoy that outscores
+    the truth — sampling exploits the marginal signal without committing to
+    the joint one, which is why this is a weighted kick and not a beam.
+  - **Measured +9.3% of breaks pooled over `-R` 1–5** (699 → 761, z = +2.56)
+    and +3.4% over `-R` 6–10 (z = +1.46, not established), on authentic
+    telegraphic German at 100 letters with the rotor key given, 600 paired
+    trials per cell (`eval/results-biased-kick.txt`). All ten cells positive,
+    none resolving alone. The bias substitutes for the diversity that restarts
+    supply, so it fades as restarts grow.
+  - **The scores cost nothing.** They come from a per-key co-occurrence table
+    rather than from decoding — ~15 µs at 100 letters against ~44 µs of
+    ordinary decoding, and **flat in message length** where decoding is linear.
+    `make bench` is unchanged: the branch is taken once per work item and never
+    inside the score loop.
+  - **`T ≈ 1` is the safe setting** and both extremes are worse. At `-R 1`,
+    note that `-R 0` (one unperturbed climb, no kick) beats *both* arms — the
+    bias recovers about half of what a single kick gives away.
+
 ### Changed
 
 - **A numeric option given a non-number is now rejected instead of read as

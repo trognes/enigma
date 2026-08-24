@@ -531,6 +531,18 @@ thread count for a given seed.
 - **`-d dir`** — Directory holding the n-gram files (else `$ENIGMA_DATA`, else
   `ngrams`) `[ngrams]`
 - **`-T N`** — Worker threads for the search, 1–256 `[1]`
+- **`--biased-random T`** — Draw the restart kick's plug pairs with probability
+  `exp(z / T)` over the 325 **single-plug index-of-coincidence** z-scores,
+  instead of uniformly. `T` is in sd units (the scores are z-scored per key);
+  large `T` tends to the uniform kick, small `T` to the greedy argmax, and both
+  extremes are worse than the middle — **try `T = 1`**. A true plug is enriched
+  in the top of that ranking (12.1% of true plugs in the top 10 of 325 against
+  3.1% by chance), and all 325 scores cost ~15 µs per key from a co-occurrence
+  table rather than by decoding, flat in message length. Measured **+9.3% of
+  breaks pooled over `-R` 1–5** and +3.4% over 6–10 (not established) on
+  authentic telegraphic German at 100 letters with the rotor key given — the
+  bias substitutes for the diversity restarts supply, so it fades as restarts
+  grow. Needs `-c`, `-R ≥ 1` and `--random ≥ 1`. Off by default `[0 = off]`.
 - **`--seed-dedup`** — Skip the target climb when this restart's stage-0 seed
   was already climbed for this key. Under a staged `--score` the seed
   determines the climb exactly, so a repeat is byte-identical work — and
