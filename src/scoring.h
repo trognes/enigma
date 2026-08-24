@@ -44,6 +44,28 @@ extern uint8_t all8[asize][asize][asize][asize];
 extern double ngram_scale[SCORE_MONOIC + 1];
 extern double ngram_bias[SCORE_MONOIC + 1];
 
+/* --- histogram-form scoring for the low-order climb stages --------------
+   IC, mono and k (-S i / m / k) are functions of one 26-bin histogram of the
+   decrypt taken BEFORE the exit plugboard, and that histogram is a sum of
+   columns of a per-key co-occurrence table -- so a plugboard toggle costs
+   O(26) instead of O(L), and the result is BYTE-IDENTICAL to decoding. See
+   the derivation above hist_probe() in scoring.cc.
+
+   Usage from a climb: cooc_build() once (it depends on the key, not the
+   board), hist_resync() to take the histogram of the board being sat on, then
+   hist_probe() per candidate move, and hist_resync() again after any move that
+   is KEPT. cooc_col() is exposed for --biased-random, which scores all 325
+   single plugs off the same table. */
+/* Read the ENIGMA_HIST override. Called once from main(), before the search.
+   The switch exists so the two paths can be COMPARED in the test suite; the
+   default is on and the paths are byte-identical. */
+void hist_init();
+bool hist_model(int scoring);
+void cooc_build(machine & m);
+const uint16_t * cooc_col(int c, int d);
+void hist_resync(machine & m);
+double hist_probe(machine & m, const int * pos, const int * val, int cnt);
+
 /* Read the ENIGMA_IC_BLEND override for -f's IC weight. Called once from
    main(), before the search. */
 void ic_blend_init();

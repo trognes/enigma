@@ -37,6 +37,36 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The low-order climb stages (`-S i`/`m`/`k`) now score from a histogram
+  instead of by decoding — byte-identical output, ~25–32% off a staged
+  climb.** IC, monogram and the mono+IC blend are all functions of one 26-bin
+  histogram of the decrypt taken *before* the exit plugboard, and that
+  histogram is a sum of columns of a per-key co-occurrence table — so a
+  plugboard toggle costs O(26) where decoding costs O(*L*). Nothing about a
+  run's *result* changes; the pre-pass simply stops being the larger half of
+  the climb.
+  - **It is an identity, not an approximation.** The plugboard is an
+    involution, hence a bijection, so the histogram the decoders build is the
+    same one permuted: the index of coincidence is blind to the exit board
+    entirely and the monogram score only relabels its coefficients. Both
+    accumulate in integers before their single float division, so summing over
+    26 bins instead of over *L* positions yields the same integers and the
+    identical result — the same bits, not a close approximation.
+  - **The pre-pass is now flat in message length.** Per restart it costs
+    214 → 124 µs at *L* = 60 and **530 → 119 µs at *L* = 400**, where it
+    previously scaled with the message. It was ~half a staged climb's toggles
+    and 39–54% of its wall time (measured for `k4`, `i4` and `m4` alike), which
+    is also the ceiling: the high-order target stage is untouched, since
+    bigrams and above are additive over positions and have no histogram form.
+  - **The payoff is restarts at fixed wall time, not quality per restart** —
+    the output is identical, so it buys exactly what `-R` buys.
+  - **`ENIGMA_HIST=0`** sends the same climb back through the decoders. A
+    measurement-and-test switch rather than an option: it is what lets the test
+    suite check the identity on every run rather than only against a
+    hand-built reference binary.
+  - `--biased-random` already built the same table to score its 325 single
+    plugs and now shares it, rather than keeping a second copy.
+
 - **A numeric option given a non-number is now rejected instead of read as
   0.** `atoi`/`atof` cannot
   report failure — they return 0 for a string that is not a number at all —

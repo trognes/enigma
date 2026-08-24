@@ -122,6 +122,51 @@ void init_plug_fixed(const char * steckerbrett_string, const char * no_plug_stri
 
 /* --- plugboard hill-climb (steckerbrett) -------------------------------- */
 
+/* What a toggle of (a,b) does to the board, WITHOUT applying it: the letters
+   whose partner changes and what it changes to. Four cases -- both ends free
+   is an ADD (2 letters), already paired a REMOVE (2), one end plugged a MOVE
+   of that plug's endpoint (3), both ends plugged to different partners a MERGE
+   (4). Every named letter is distinct, which is what hist_probe() relies on.
+
+   This exists for the histogram fast path: scoring by decoding needs the board
+   mutated, scoring from the co-occurrence table needs only to be TOLD what
+   would change. The letters are the same ones the mutate/restore code below
+   computes anyway (x, y, sa, sb), so the plan is free where it is used. */
+static inline int toggle_plan(const unsigned char * steck, int a, int b,
+                              int * pos, int * val)
+{
+  const int x = steck[a], y = steck[b];
+  pos[0] = a;
+  pos[1] = b;
+  if (x == b)                            /* already paired: REMOVE */
+    {
+      val[0] = a;
+      val[1] = b;
+      return 2;
+    }
+  val[0] = b;
+  val[1] = a;
+  if ((x == a) && (y == b))              /* both free: ADD */
+    return 2;
+  if (x == a)                            /* a free, b plugged: MOVE */
+    {
+      pos[2] = y;
+      val[2] = y;
+      return 3;
+    }
+  if (y == b)                            /* b free, a plugged: MOVE */
+    {
+      pos[2] = x;
+      val[2] = x;
+      return 3;
+    }
+  pos[2] = x;                            /* both plugged: MERGE */
+  val[2] = x;
+  pos[3] = y;
+  val[3] = y;
+  return 4;
+}
+
 /* Last-resort "re-pair" move: take two existing plugs {a-x},{b-y} to the OTHER
    pairing of their four letters ({a-b,x-y} or {a-y,x-b}), keeping the plug count. A
    single switch cannot reach these (it would first drop to one plug, often a worse
@@ -149,36 +194,59 @@ static bool try_repair(machine & m, double cur_score)
   int rp_val[4] = { 0, 0, 0, 0 };
   bool found = false;
 
+  /* The re-pair is a 4-position change with the plug count unchanged, so it
+     has the same histogram form the toggle operator does (-S i/m/k). It fires
+     at every convergence, and at ten plugs that is 2 x 45 scorings against a
+     pass's 325, so it is worth the same fast path. The caller built the
+     table. */
+  const bool hist_on = hist_model(m.scoring);
+
   for (int i = 0; i < np; i++)
     for (int j = i + 1; j < np; j++)
       {
         int a = plo[i], x = phi[i], b = plo[j], y = phi[j];
 
-        /* M1: {a-b, x-y} */
-        m.steckerbrett[a] = b; m.steckerbrett[b] = a;
-        m.steckerbrett[x] = y; m.steckerbrett[y] = x;
-        double s1 = score_iter(m);
+        int p1[4], v1[4], p2[4], v2[4];
+        p1[0] = a; v1[0] = b; p1[1] = b; v1[1] = a;
+        p1[2] = x; v1[2] = y; p1[3] = y; v1[3] = x;
+        p2[0] = a; v2[0] = y; p2[1] = y; v2[1] = a;
+        p2[2] = x; v2[2] = b; p2[3] = b; v2[3] = x;
+
+        double s1, s2;
+        if (hist_on)
+          {
+            s1 = hist_probe(m, p1, v1, 4);
+            s2 = hist_probe(m, p2, v2, 4);
+          }
+        else
+          {
+            /* M1: {a-b, x-y} */
+            m.steckerbrett[a] = b; m.steckerbrett[b] = a;
+            m.steckerbrett[x] = y; m.steckerbrett[y] = x;
+            s1 = score_iter(m);
+
+            /* M2: {a-y, x-b} */
+            m.steckerbrett[a] = y; m.steckerbrett[y] = a;
+            m.steckerbrett[x] = b; m.steckerbrett[b] = x;
+            s2 = score_iter(m);
+
+            /* restore {a-x, b-y} */
+            m.steckerbrett[a] = x; m.steckerbrett[x] = a;
+            m.steckerbrett[b] = y; m.steckerbrett[y] = b;
+          }
+
         if (s1 > best)
           {
             best = s1; found = true;
-            rp_pos[0] = a; rp_val[0] = b; rp_pos[1] = b; rp_val[1] = a;
-            rp_pos[2] = x; rp_val[2] = y; rp_pos[3] = y; rp_val[3] = x;
+            memcpy(rp_pos, p1, sizeof rp_pos);
+            memcpy(rp_val, v1, sizeof rp_val);
           }
-
-        /* M2: {a-y, x-b} */
-        m.steckerbrett[a] = y; m.steckerbrett[y] = a;
-        m.steckerbrett[x] = b; m.steckerbrett[b] = x;
-        double s2 = score_iter(m);
         if (s2 > best)
           {
             best = s2; found = true;
-            rp_pos[0] = a; rp_val[0] = y; rp_pos[1] = y; rp_val[1] = a;
-            rp_pos[2] = x; rp_val[2] = b; rp_pos[3] = b; rp_val[3] = x;
+            memcpy(rp_pos, p2, sizeof rp_pos);
+            memcpy(rp_val, v2, sizeof rp_val);
           }
-
-        /* restore {a-x, b-y} */
-        m.steckerbrett[a] = x; m.steckerbrett[x] = a;
-        m.steckerbrett[b] = y; m.steckerbrett[y] = b;
       }
 
   if (found)
@@ -550,6 +618,14 @@ static void firstimprove_sweep(machine & m, int max_pairs)
   static const pairtab P = make_pairtab();
 
   unsigned char * __restrict steck = m.steckerbrett;
+
+  /* Histogram form for -S i/m/k (see hist_probe in scoring.cc). The caller
+     built the table; this sweep only has to keep the histogram in step with
+     the board, which it does on acceptance. */
+  const bool hist_on = hist_model(m.scoring);
+  if (hist_on)
+    hist_resync(m);
+
   double cur = score_iter(m);
 
   int pairs = 0;
@@ -574,6 +650,12 @@ static void firstimprove_sweep(machine & m, int max_pairs)
   /* Score the toggle on (a,b) against the current board, leaving the board unchanged. */
   auto probe_toggle = [&](int a, int b) -> double
   {
+    if (hist_on)
+      {
+        int pos[4], val[4];
+        const int cnt = toggle_plan(steck, a, b, pos, val);
+        return hist_probe(m, pos, val, cnt);
+      }
     double s;
     if (steck[a] == b)                             /* REMOVE a-b */
       {
@@ -644,7 +726,23 @@ static void firstimprove_sweep(machine & m, int max_pairs)
 
       bool improved = false;
 
-      if (steck[a] == b)                             /* REMOVE a-b */
+      if (hist_on)
+        {
+          /* Probe without touching the board, then apply only if it wins --
+             the reverse of the mutate-then-maybe-restore below, and the same
+             decision on the same score. */
+          int pos[4], val[4];
+          const int cnt = toggle_plan(steck, a, b, pos, val);
+          const double s = hist_probe(m, pos, val, cnt);
+          if (s > cur)
+            {
+              for (int k = 0; k < cnt; k++)
+                steck[pos[k]] = static_cast<unsigned char>(val[k]);
+              cur = s;
+              improved = true;
+            }
+        }
+      else if (steck[a] == b)                        /* REMOVE a-b */
         {
           steck[a] = static_cast<unsigned char>(a);
           steck[b] = static_cast<unsigned char>(b);
@@ -680,6 +778,8 @@ static void firstimprove_sweep(machine & m, int max_pairs)
       if (improved)
         {
           stale = 0;
+          if (hist_on)
+            hist_resync(m);   /* the board moved; ~1 per 325 probes */
           report_climb_progress(m, cur);
           pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
           for (int j = 0; j < asize; j++)
@@ -705,10 +805,24 @@ double hillclimb(machine & m, int max_pairs)
      baseline is byte-identical). */
   const bool firstimp = (opt_firstimprove != 0);
 
+  /* Histogram form for the low-order stages (-S i/m/k): byte-identical, and
+     O(26) per probe instead of O(L). The table depends on the KEY, so it is
+     built here rather than per key -- --tune-phase re-runs setup_mapping
+     between climbs, and a stale table would change results silently. */
+  const bool hist_on = hist_model(m.scoring);
+  if (hist_on)
+    cooc_build(m);   /* per CALL, not per key -- a stale table hangs the
+                        climb rather than merely misscoring it */
+
   bool progress;
   do
     {
       progress = false;
+
+      /* Any move kept by the previous round (a re-pair, a cascade) moved the
+         board out from under the histogram. */
+      if (hist_on)
+        hist_resync(m);
 
       double cur;   /* converged score, handed to the re-pair barrier */
 
@@ -774,26 +888,57 @@ double hillclimb(machine & m, int max_pairs)
                           continue;                    /* -M: block count-preserving MOVE (0) */
                       }
 
-                    int new_kind, x = 0, y = 0, xx = 0, yy = 0;
-                    if (paired)
+                    int new_kind = paired ? 1 : 0;
+                    double score;
+
+                    if (hist_on)
                       {
-                        m.steckerbrett[a] = a;         /* REMOVE a-b */
-                        m.steckerbrett[b] = b;
-                        new_kind = 1;
+                        /* Histogram form: no mutate/restore at all, the plan
+                           is enough. Byte-identical to the branch below. */
+                        int pos[4], val[4];
+                        const int cnt = toggle_plan(m.steckerbrett, a, b,
+                                                    pos, val);
+                        score = hist_probe(m, pos, val, cnt);
                       }
                     else
                       {
-                        x = sa; y = sb;
-                        xx = m.steckerbrett[x];
-                        yy = m.steckerbrett[y];
-                        m.steckerbrett[x] = x;         /* force a-b: ADD / MOVE / MERGE */
-                        m.steckerbrett[y] = y;
-                        m.steckerbrett[a] = b;
-                        m.steckerbrett[b] = a;
-                        new_kind = 0;
-                      }
+                        int x = 0, y = 0, xx = 0, yy = 0;
+                        if (paired)
+                          {
+                            m.steckerbrett[a] = a;     /* REMOVE a-b */
+                            m.steckerbrett[b] = b;
+                          }
+                        else
+                          {
+                            x = sa; y = sb;
+                            xx = m.steckerbrett[x];
+                            yy = m.steckerbrett[y];
+                            /* force a-b: ADD / MOVE / MERGE */
+                            m.steckerbrett[x] = x;
+                            m.steckerbrett[y] = y;
+                            m.steckerbrett[a] = b;
+                            m.steckerbrett[b] = a;
+                          }
 
-                    double score = score_iter(m);
+                        score = score_iter(m);
+
+                        /* Restore before the comparison rather than after it:
+                           the comparison reads no board state, so this is a
+                           pure reordering, and it keeps the mutate/restore
+                           pair inside the branch that needs it. */
+                        if (paired)
+                          {
+                            m.steckerbrett[a] = b;     /* restore REMOVE */
+                            m.steckerbrett[b] = a;
+                          }
+                        else
+                          {
+                            m.steckerbrett[a] = sa;    /* restore force */
+                            m.steckerbrett[b] = sb;
+                            m.steckerbrett[x] = xx;
+                            m.steckerbrett[y] = yy;
+                          }
+                      }
 
                     /* steepest ascent; on an equal score a switch (add/move/merge) wins the tie
                        over a removal, so a converged board keeps the plugs the score justifies. */
@@ -805,19 +950,6 @@ double hillclimb(machine & m, int max_pairs)
                         move_kind = new_kind;
                         move_a = a;
                         move_b = b;
-                      }
-
-                    if (paired)
-                      {
-                        m.steckerbrett[a] = b;         /* restore REMOVE */
-                        m.steckerbrett[b] = a;
-                      }
-                    else
-                      {
-                        m.steckerbrett[a] = sa;        /* restore force */
-                        m.steckerbrett[b] = sb;
-                        m.steckerbrett[x] = xx;
-                        m.steckerbrett[y] = yy;
                       }
                   }
 
@@ -845,6 +977,14 @@ double hillclimb(machine & m, int max_pairs)
 
                   best_score = move_score;
                   report_climb_progress(m, best_score);
+                  if (hist_on)
+                    hist_resync(m);   /* the board moved; ~1 per 325 probes.
+                                         LOAD-BEARING FOR TERMINATION, not just
+                                         for the answer: this loop repeats
+                                         while best_score > last_best, and a
+                                         histogram that no longer matches the
+                                         board can keep that true forever
+                                         (measured -- the injection hangs). */
                 }
             }
           while (best_score > last_best);
@@ -902,11 +1042,9 @@ double hillclimb(machine & m, int max_pairs)
    of ordinary decoding, and the T form is FLAT in message length where
    decoding is linear (eval/results-tseed-proto.txt).
 
-   The scratch is thread_local rather than a `machine` member because the table
-   is 34 KB: inlining it would push the hot per-character tables to large
-   struct offsets, which machine.h documents as costing 20-60% on some targets.
-   Nothing here is read by the climb's move loop -- only once per kick -- so
-   the plug_fixed storage warning in that file does not apply. */
+   THAT TABLE IS NOW SHARED with the low-order climb stages, which score off
+   the same identity (cooc_build / cooc_col in scoring.cc).  It used to be
+   private here; two copies would be 68 KB of TLS per worker for one table. */
 
 static const int bias_npairs = asize * (asize - 1) / 2;   /* 325 */
 
@@ -914,12 +1052,9 @@ static const int bias_npairs = asize * (asize - 1) / 2;   /* 325 */
    the struct a throwing constructor, and clang-tidy rejects that at
    thread_local storage duration (bugprone-throwing-static-initialization) --
    an exception thrown there cannot be caught.  Trivial members are
-   zero-initialised instead, which costs 36 KB of TLS per worker whether the
-   option is used or not; at the 256-thread maximum that is 9 MB against a
-   precompute guard of 16 GiB. */
+   zero-initialised instead. */
 struct biasscratch
 {
-  uint16_t t[asize * asize * asize];  /* co-occurrence counts */
   double cum[bias_npairs];            /* prefix sums of exp(z / T) */
   unsigned char pa[bias_npairs];
   unsigned char pb[bias_npairs];
@@ -932,18 +1067,7 @@ static thread_local biasscratch bias_scratch;
 void biased_kick_prepare(machine & m)
 {
   biasscratch & b = bias_scratch;
-  uint16_t * const t = b.t;
-  memset(t, 0, sizeof b.t);
-  for (int i = 0; i < textlength; i++)
-    {
-      const int c = num_ciphertext[i];
-      const unsigned char * __restrict row = m.rows[i];
-      uint16_t * const base = t + static_cast<size_t>(c) * asize * asize;
-      for (int d = 0; d < asize; d++)
-        {
-          base[d * asize + row[d]]++;
-        }
-    }
+  cooc_build(m);
 
   /* the empty board's histogram: S is the identity, so the diagonal */
   int n0[asize];
@@ -953,7 +1077,7 @@ void biased_kick_prepare(machine & m)
     }
   for (int c = 0; c < asize; c++)
     {
-      const uint16_t * const col = t + (static_cast<size_t>(c) * asize + c) * asize;
+      const uint16_t * const col = cooc_col(c, c);
       for (int y = 0; y < asize; y++)
         {
           n0[y] += col[y];
@@ -967,10 +1091,10 @@ void biased_kick_prepare(machine & m)
       for (int bb = a + 1; bb < asize; bb++)
         {
           /* plugging (a,bb) on an empty board swaps two columns of T */
-          const uint16_t * const ma = t + (static_cast<size_t>(a) * asize + a) * asize;
-          const uint16_t * const mb = t + (static_cast<size_t>(bb) * asize + bb) * asize;
-          const uint16_t * const qa = t + (static_cast<size_t>(a) * asize + bb) * asize;
-          const uint16_t * const qb = t + (static_cast<size_t>(bb) * asize + a) * asize;
+          const uint16_t * const ma = cooc_col(a, a);
+          const uint16_t * const mb = cooc_col(bb, bb);
+          const uint16_t * const qa = cooc_col(a, bb);
+          const uint16_t * const qb = cooc_col(bb, a);
           long coin = 0;
           for (int y = 0; y < asize; y++)
             {
