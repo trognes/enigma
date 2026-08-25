@@ -1,0 +1,112 @@
+# WHAT THE HISTOGRAM PRE-PASS IS ACTUALLY WORTH: 1.2x AT L=100, 1.28x AT
+# L=167 -- NOT THE 25-32% FIRST REPORTED.
+#
+#   make
+#   for s in 1 2 3; do python3 eval/histspeed.py --lengths 100 167 \
+#       --schedules m4f10 i4f10 k4f10 --restarts 400 --reps 5 \
+#       --seed $s --control; done
+#
+# ============================================================================
+# 1. THE NUMBERS
+# ============================================================================
+#
+# ENIGMA_HIST=1 against ENIGMA_HIST=0 on the SAME BINARY, -c -J -l wehrmacht,
+# authentic HG Nord decrypts, slope-fitted at -R 400, min of 5 reps, three
+# independent seeds per cell:
+#
+#     L  schedule   speedup, 3 seeds        mean    wall saved
+#   100     m4f10   1.18x  1.10x  1.05x    1.11x        -9.9%
+#   100     i4f10   1.22x  1.18x  1.19x    1.20x       -16.4%
+#   100     k4f10   1.26x  1.23x  1.27x    1.25x       -20.2%
+#   167     m4f10   1.26x  1.27x  1.27x    1.27x       -21.1%
+#   167     i4f10   1.33x  1.28x  1.28x    1.30x       -22.9%
+#   167     k4f10   1.23x  1.30x  1.27x    1.27x       -21.1%
+#
+#   control (HIST=1 vs HIST=1, pure noise by construction, n=18):
+#     median 1.9%, worst 8.4%;  L=100 median 0.9%, L=167 median 4.9%
+#
+# Pooled over all 18 cells: mean 1.23x, range 1.05x to 1.33x.
+#
+# READ THE CONTROL BEFORE THE ROWS.  Most cells sit 2-5x outside the noise
+# floor and are safe.  The exception is m4f10 at L=100, whose three seeds run
+# 1.18/1.10/1.05x against a worst-case control of 8.4% -- that cell is only
+# marginally resolved and should be read as "smallest of the six", not as
+# 1.11x precisely.
+#
+# ============================================================================
+# 2. THE CORRECTION -- AND WHY THE FIRST NUMBER WAS WRONG
+# ============================================================================
+#
+# CLAUDE.md, CHANGELOG.md and eval/results-tclimb.txt said 25-32%.  That was
+# not measured; it was DERIVED, as
+#
+#   whole-climb saving  =  pre-pass share of the climb  x  saving within it
+#
+# from eval/capstage_share.py, which has a +/-10% per-cell noise floor -- its
+# own -S f10 control (a path the change cannot touch) read +11.7 / -8.9 /
+# -0.9 / +3.1%.  MULTIPLYING TWO NOISY FIGURES COMPOUNDS THE ERROR RATHER THAN
+# AVERAGING IT OUT, and both factors happened to sit high.
+#
+# There is a second, systematic reason the product overshoots, and it survives
+# any amount of averaging: the formula treats the whole cap stage as scoring,
+# but ~60-83 ns of each call is the climb's OWN per-move work -- the -J move
+# ordering, the cap check, the plug_fixed read, the comparison -- which the
+# histogram form does not remove.  So the saving within the stage is always
+# less than the scorer's per-toggle ratio implies.  Worked at L=100:
+#
+#     schedule   share   scorer ratio   predicted   MEASURED
+#      m4f10     41.0%       2.74x        1.35x      1.11x
+#      i4f10     42.1%       4.46x        1.48x      1.20x
+#      k4f10     49.8%       3.35x        1.54x      1.25x
+#
+# Every prediction is high by 20-25%, in the same direction, which is what a
+# systematic term looks like as opposed to scatter.
+#
+# WHAT WAS NEVER IN DOUBT is the cap stage itself, which was measured on the
+# better-conditioned axis throughout: it collapses 42-78% and becomes FLAT IN
+# MESSAGE LENGTH -- 116-130 us per restart at every length against 214-530
+# before (eval/results-tclimb.txt section 2).  The overstatement is confined
+# to the whole-climb figure derived from it.  Byte-identity is untouched by
+# any of this: it is a claim about output, not about timing.
+#
+# ============================================================================
+# 3. WHAT THE SHAPE OF THE TABLE SAYS
+# ============================================================================
+#
+# THE WIN GROWS WITH LENGTH, as the design predicts: the histogram form is
+# flat in L where decoding is linear, so the ratio has to widen.  Averaged
+# over the three schedules it is 1.19x at L=100 and 1.28x at L=167.
+#
+# MONO GAINS LEAST, AND THAT IS THE SAME FACT FROM THE OTHER SIDE.  The
+# monogram decoder is the cheapest of the three to begin with (81.5 ns against
+# IC's 99.0 and k's 117.6 at L=60), so it has the least to give up.  At L=167
+# the three schedules converge (1.27 / 1.30 / 1.27x) because by then the
+# decode cost dominates whatever the model.
+#
+# THE SPREAD ACROSS SCHEDULES IS SMALL ENOUGH TO IGNORE OPERATIONALLY.  Six
+# cells span 1.11x to 1.30x; the recommended telegraphic recipe (k4f10) sits
+# at 1.25-1.27x at both lengths, and the choice of pre-pass model should keep
+# being made on RECOVERY -- where k4f10 beats i4f10 by 5.01pp at L=167 -- and
+# not on this table.
+#
+# ============================================================================
+# 4. SCOPE
+# ============================================================================
+#
+# THIS IS THE CLIMB, NOT A WHOLE RUN.  A real sweep pays the n-gram load once
+# and amortises it over every key, so for a sweep the climb speedup is
+# effectively the run speedup; for a single short invocation it is not, since
+# startup can be most of the wall time (measured 0.105 s of a 0.111 s run at
+# -R 8, eval/results-monoic-endtoend.txt).
+#
+# IT BUYS NO QUALITY PER RESTART.  The output is byte-identical, so the entire
+# payoff is restarts at fixed wall time.  What ~1.25x buys on the recovery
+# curve is NOT measured here: it is about a third of a doubling, against a
+# curve documented at roughly +8pp of breaks per doubling around -R 8, so the
+# arithmetic suggests ~+2-3pp -- which is a prediction from two separate
+# measurements, not a result.  A paired recovery A/B at matched wall time is
+# the run that would settle it.
+#
+# ONE BOX, g++ -O3, -T 1, wehrmacht, one message per (length, seed).  The
+# three seeds vary the message, the rotor key and the hidden 10-pair board
+# together, so they bound trial-to-trial variation but not machine-to-machine.

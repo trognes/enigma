@@ -38,13 +38,13 @@ existing command lines can behave differently or stop working.
 ### Changed
 
 - **The low-order climb stages (`-S i`/`m`/`k`) now score from a histogram
-  instead of by decoding — byte-identical output, ~25–32% off a staged
-  climb.** IC, monogram and the mono+IC blend are all functions of one 26-bin
-  histogram of the decrypt taken *before* the exit plugboard, and that
-  histogram is a sum of columns of a per-key co-occurrence table — so a
-  plugboard toggle costs O(26) where decoding costs O(*L*). Nothing about a
-  run's *result* changes; the pre-pass simply stops being the larger half of
-  the climb.
+  instead of by decoding — byte-identical output, and a staged climb runs
+  1.2× faster at 100 letters and ~1.28× at 167.** IC, monogram and the
+  mono+IC blend are all functions of one 26-bin histogram of the decrypt taken
+  *before* the exit plugboard, and that histogram is a sum of columns of a
+  per-key co-occurrence table — so a plugboard toggle costs O(26) where
+  decoding costs O(*L*). Nothing about a run's *result* changes; the pre-pass
+  simply stops being the larger half of the climb.
   - **It is an identity, not an approximation.** The plugboard is an
     involution, hence a bijection, so the histogram the decoders build is the
     same one permuted: the index of coincidence is blind to the exit board
@@ -54,10 +54,15 @@ existing command lines can behave differently or stop working.
     identical result — the same bits, not a close approximation.
   - **The pre-pass is now flat in message length.** Per restart it costs
     214 → 124 µs at *L* = 60 and **530 → 119 µs at *L* = 400**, where it
-    previously scaled with the message. It was ~half a staged climb's toggles
-    and 39–54% of its wall time (measured for `k4`, `i4` and `m4` alike), which
-    is also the ceiling: the high-order target stage is untouched, since
-    bigrams and above are additive over positions and have no histogram form.
+    previously scaled with the message. The high-order target stage is
+    untouched — bigrams and above are additive over positions and have no
+    histogram form — which is why the whole-climb figure is 1.2–1.3× rather
+    than the several-fold speedup the pre-pass alone shows.
+  - Measured per schedule, `ENIGMA_HIST=1` against `0` on one binary, three
+    seeds per cell against a noise-floor control: at *L* = 100, `m4f10` 1.11×,
+    `i4f10` 1.20×, `k4f10` 1.25×; at *L* = 167, 1.27× / 1.30× / 1.27×. The win
+    grows with length because the histogram form is flat where decoding is
+    linear.
   - **The payoff is restarts at fixed wall time, not quality per restart** —
     the output is identical, so it buys exactly what `-R` buys.
   - **`ENIGMA_HIST=0`** sends the same climb back through the decoders. A

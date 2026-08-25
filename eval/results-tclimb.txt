@@ -84,8 +84,17 @@
 #   400         40.8%                 77.5%                -31.6%
 #
 # which lands inside the -21 / -25 / -27.5 / -31.2% the prototype projected.
-# Read the headline as ~25-32% off a k4f10 climb at operational length, with
-# the direct whole-climb readings scattering around it on a +/-10% instrument.
+#
+# >>> SUPERSEDED, AND OVERSTATED: the real figure is 1.2x at L=100 and ~1.28x
+# >>> at L=167, i.e. 10-23% of the wall -- NOT 25-32%.  See
+# >>> eval/results-histspeed.txt, which measures it directly (ENIGMA_HIST=1
+# >>> against 0 on one binary, three seeds per cell, with a control) instead of
+# >>> deriving it as share x saving from two figures that each carry this
+# >>> harness's +/-10% floor.  Multiplying two noisy numbers compounds the
+# >>> error, and the product ALSO overshoots systematically, because ~60-83 ns
+# >>> of every cap-stage call is the climb's own per-move work that the
+# >>> histogram form does not remove.  The cap-stage column below stands; the
+# >>> whole-climb derivation from it does not.
 #
 # Under -c the climb is essentially the whole run, so this is restarts bought
 # at fixed wall time -- and CLAUDE.md's search playbook makes -R the primary
@@ -139,9 +148,19 @@
 # ============================================================================
 #
 # n is recomputed from scratch after an ACCEPTED move rather than maintained
-# incrementally: acceptances are about 1 per 325 probes, so that costs two
-# columns amortised and removes a class of incremental-state bugs.  Three
-# injections, against the 11 checks in tests/run_tests.sh:
+# incrementally, which removes a class of incremental-state bugs.  MEASURED
+# cost, by instrumenting the probe and resync counts:
+#
+#   -J (the recommended recipe)   1 resync per  63 probes   6.0% of probe work
+#   steepest ascent               1 resync per 284 probes   1.3%
+#
+# against a probe's mean 6.95 columns.  An earlier version of this file said
+# "about 1 per 325 probes, so two columns amortised" -- 325 is the width of a
+# steepest-ascent scan, not a measured rate, and it is 4.5x off on the -J path
+# the recommendation actually uses.  An incremental delta would cut the 6.0%
+# to well under 1%; it has not been done because of the failure mode below.
+#
+# Three injections, against the 11 checks in tests/run_tests.sh:
 #
 #   drop the first-improvement hist_resync     8 of 11 FAIL
 #   drop the steepest-ascent hist_resync       HANGS

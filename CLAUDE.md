@@ -2968,13 +2968,33 @@ the failure-shape table above.
 > reference binary, i.e. never again after the day it landed;
 > `tests/run_tests.sh` now runs 11 checks comparing the two paths.
 >
-> **Worth ~25–32% of a `k4f10` climb**, growing with length, because the
-> pre-pass is ~half the toggles and 39–54% of the wall (measured for `k4`, `i4`
-> and `m4` alike). Per restart the cap stage goes 214→124 µs at L=60 and
-> **530→119 µs at L=400** — *flat*, where it used to scale with the message.
-> Since it is byte-identical it buys **no quality per restart**; the payoff is
-> restarts at fixed wall time, which the search playbook makes the primary
-> lever. `eval/results-tclimb.txt`.
+> **Worth 1.2× at L=100 and ~1.28× at L=167**, i.e. 10–23% of a staged
+> climb's wall time, growing with length because the histogram form is flat in
+> `L` where decoding is linear. Measured directly, `ENIGMA_HIST=1` against `0`
+> on one binary, three seeds per cell against a control (`eval/histspeed.py`,
+> `eval/results-histspeed.txt`):
+>
+> | | `m4f10` | `i4f10` | `k4f10` |
+> |---|---:|---:|---:|
+> | L=100 | 1.11× | 1.20× | **1.25×** |
+> | L=167 | 1.27× | 1.30× | **1.27×** |
+>
+> Per restart the cap stage itself goes 214→124 µs at L=60 and **530→119 µs at
+> L=400** — *flat*, where it used to scale with the message. Since the climb is
+> byte-identical it buys **no quality per restart**; the payoff is restarts at
+> fixed wall time, which the search playbook makes the primary lever.
+>
+> **An earlier version of this entry said 25–32%, and that was wrong — do not
+> reinstate it from the cap-stage numbers.** It was derived as *pre-pass share
+> × saving within it*, from a harness with a ±10% per-cell floor, and
+> multiplying two noisy figures compounds the error instead of averaging it.
+> Worse, the product overshoots *systematically*: ~60–83 ns of every cap-stage
+> call is the climb's own per-move work — the `-J` ordering, the cap check, the
+> `plug_fixed` read — which the histogram form does not remove, so the saving
+> within the stage is always less than the scorer's per-toggle ratio implies.
+> At L=100 the formula predicted 1.35/1.48/1.54× where the truth is
+> 1.11/1.20/1.25×: high by 20–25% in every cell, which is the signature of a
+> missing term rather than scatter.
 >
 > **`make bench` cannot see this win, and that is the point of running it.**
 > All four tiers are controls: `search` and `crib` run without `-c`, and
@@ -2992,11 +3012,28 @@ the failure-shape table above.
 > b/t/q/a/f are additive over positions and have no histogram form, so the
 > `f10` target is untouched and 39–54% is the hard ceiling. And **the resync
 > after an accepted move is load-bearing for TERMINATION, not just for the
-> answer**: `n` is recomputed from scratch on acceptance (~1 per 325 probes, so
-> two columns amortised), and injecting a stale histogram makes the
+> answer**: `n` is recomputed from scratch on acceptance rather than updated
+> by the probe's own delta, and injecting a stale histogram makes the
 > steepest-ascent loop — which repeats while `best_score > last_best` — never
 > converge rather than merely misscore. Two of three injections **hang**; a CI
-> failure here can present as a timeout rather than a `FAIL` line.
+> failure here can present as a timeout rather than a `FAIL` line. The resync
+> happens **1 per 63 probes under `-J`** and 1 per 284 under steepest ascent —
+> measured, and the recommended recipe is the expensive one. (An earlier
+> version of this entry said "~1 per 325 probes, so two columns amortised";
+> 325 is the steepest-ascent scan width, not a measured rate.)
+>
+> **An accepted toggle is committed INCREMENTALLY — histogram first, then the
+> board — and that order is load-bearing.** `hist_apply()` reads `S[pos[k]]` as
+> the letter's *old* partner, so moving the board first subtracts a column that
+> is no longer there. Both statements live inside one `commit_toggle()` so
+> there is nothing to reorder, and **`ENIGMA_HIST=2` checks the invariant after
+> every commit** (a suite check runs under it). Worth **−7.9% of the cap
+> stage's column traffic** — histogram maintenance falls from 10.5% to 2.7% —
+> which is the deterministic axis; on wall time it reads −2.2% against a
+> self-control of +1.8%, i.e. **not resolvable**, so the justification is the
+> counter and not a clock. Injecting the wrong order is instructive: it
+> **hangs** on one fixture and **silently finishes wrong** on another, and
+> `ENIGMA_HIST=2` names it in both.
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
 spent when hill-climbing. That is why the rotor stack is precomputed into

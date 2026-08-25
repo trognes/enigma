@@ -167,6 +167,28 @@ static inline int toggle_plan(const unsigned char * steck, int a, int b,
   return 4;
 }
 
+/* Apply an accepted toggle: the histogram FIRST, then the board.
+
+   THE ORDER IS NOT OPTIONAL, and is the whole reason this is one function.
+   hist_apply() reads S[pos[k]] as the letter's OLD partner, so moving the
+   board first makes it subtract a column that is no longer there -- and that
+   drift does not misscore politely, it HANGS the steepest-ascent loop, which
+   repeats while best_score > last_best.  Two adjacent statements in a caller
+   would work today and rot the first time someone reordered them; here there
+   is nothing to reorder.  ENIGMA_HIST=2 checks the invariant after every
+   commit, so if it ever does come apart the run says so instead of
+   spinning. */
+static inline void commit_toggle(machine & m, const int * pos, const int * val,
+                                 int cnt, bool hist_on)
+{
+  if (hist_on)
+    hist_apply(m, pos, val, cnt);
+  for (int k = 0; k < cnt; k++)
+    m.steckerbrett[pos[k]] = static_cast<unsigned char>(val[k]);
+  if (hist_on)
+    hist_verify(m);
+}
+
 /* Last-resort "re-pair" move: take two existing plugs {a-x},{b-y} to the OTHER
    pairing of their four letters ({a-b,x-y} or {a-y,x-b}), keeping the plug count. A
    single switch cannot reach these (it would first drop to one plug, often a worse
@@ -736,8 +758,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
           const double s = hist_probe(m, pos, val, cnt);
           if (s > cur)
             {
-              for (int k = 0; k < cnt; k++)
-                steck[pos[k]] = static_cast<unsigned char>(val[k]);
+              commit_toggle(m, pos, val, cnt, true);
               cur = s;
               improved = true;
             }
@@ -778,8 +799,6 @@ static void firstimprove_sweep(machine & m, int max_pairs)
       if (improved)
         {
           stale = 0;
-          if (hist_on)
-            hist_resync(m);   /* the board moved; ~1 per 325 probes */
           report_climb_progress(m, cur);
           pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
           for (int j = 0; j < asize; j++)
@@ -958,33 +977,20 @@ double hillclimb(machine & m, int max_pairs)
                   int a = move_a;
                   int b = move_b;
 
-                  if (move_kind == 1)
-                    {
-                      /* remove the a-b plug, freeing both ends */
-                      m.steckerbrett[a] = a;
-                      m.steckerbrett[b] = b;
-                    }
-                  else
-                    {
-                      /* switch plugs */
-                      int x = m.steckerbrett[a];
-                      int y = m.steckerbrett[b];
-                      m.steckerbrett[x] = x;
-                      m.steckerbrett[y] = y;
-                      m.steckerbrett[a] = b;
-                      m.steckerbrett[b] = a;
-                    }
+                  /* Every probe restored the board (or, on the histogram
+                     path, never touched it), so the plan built here is
+                     against the same board the winning probe was scored
+                     against -- which is what lets the histogram be committed
+                     from it.  toggle_plan reproduces the old remove/switch
+                     mutation exactly: a REMOVE is {a,b} -> {a,b}, and the
+                     force cases eject x and y to themselves before pairing
+                     a with b. */
+                  int pos[4], val[4];
+                  const int cnt = toggle_plan(m.steckerbrett, a, b, pos, val);
+                  commit_toggle(m, pos, val, cnt, hist_on);
 
                   best_score = move_score;
                   report_climb_progress(m, best_score);
-                  if (hist_on)
-                    hist_resync(m);   /* the board moved; ~1 per 325 probes.
-                                         LOAD-BEARING FOR TERMINATION, not just
-                                         for the answer: this loop repeats
-                                         while best_score > last_best, and a
-                                         histogram that no longer matches the
-                                         board can keep that true forever
-                                         (measured -- the injection hangs). */
                 }
             }
           while (best_score > last_best);
