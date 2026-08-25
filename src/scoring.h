@@ -64,6 +64,11 @@ bool hist_model(int scoring);
 void cooc_build(machine & m);
 const uint16_t * cooc_col(int c, int d);
 void hist_resync(machine & m);
+/* Commit an accepted toggle to the histogram. MUST be called BEFORE the board
+   moves -- the delta reads the old partners. ENIGMA_HIST=2 makes hist_verify
+   check that afterwards; it is a no-op otherwise. */
+void hist_apply(machine & m, const int * pos, const int * val, int cnt);
+void hist_verify(machine & m);
 double hist_probe(machine & m, const int * pos, const int * val, int cnt);
 
 /* Read the ENIGMA_IC_BLEND override for -f's IC weight. Called once from

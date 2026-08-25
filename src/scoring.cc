@@ -326,20 +326,30 @@ struct histscratch
 };
 static thread_local histscratch hist_scratch;
 
-/* ENIGMA_HIST=0 turns the fast path off and sends these stages back through
-   the decoders. A MEASUREMENT AND TEST switch, not an option: the two paths
+/* ENIGMA_HIST selects the path: 0 sends these stages back through the
+   decoders, 1 (the default) is the fast path, 2 is the fast path with the
+   drift self-check above. A MEASUREMENT AND TEST switch, not an
+   option: the two paths
    are byte-identical by construction, so this exists so that identity can be
    CHECKED -- tests/run_tests.sh runs the same climb both ways and compares.
    Without it the claim would only ever have been verifiable against a
    hand-built reference binary, i.e. never again after the day it landed.
    Default on; empty means unset, as for every other ENIGMA_* override. */
 static bool g_hist_enabled = true;
+/* ENIGMA_HIST=2 turns on a self-check: after every committed move, recompute
+   n from scratch and compare. Off by default and one predictable branch when
+   off, called once per accepted move rather than per probe. */
+static bool g_hist_check = false;
 
 void hist_init()
 {
   const char * v = getenv("ENIGMA_HIST");
   if ((v != nullptr) && (*v != 0))
-    g_hist_enabled = (parse_opt_int(v, "$ENIGMA_HIST") != 0);
+    {
+      const int k = parse_opt_int(v, "$ENIGMA_HIST");
+      g_hist_enabled = (k != 0);
+      g_hist_check = (k == 2);   /* 2 = fast path plus the drift self-check */
+    }
 }
 
 /* Does this model have a histogram form at all? */
@@ -377,21 +387,13 @@ const uint16_t * cooc_col(int c, int d)
 }
 
 /* n = sum_c T[c][S[c]] for the board now on the machine. O(26^2) = 26 columns.
-   Called once per climb and again after every ACCEPTED move.
-
-   FROM SCRATCH RATHER THAN INCREMENTALLY, deliberately. Applying the probe's
-   own 2-4 column delta would be cheaper, but it can drift -- applied twice,
-   missed, or applied against the wrong old value -- and drift here does not
-   misscore politely, it HANGS the steepest-ascent loop (see the injection
-   note in tests/run_tests.sh). Recomputing cannot drift.
-
-   MEASURED COST, and note the recommended recipe is the expensive case: 1
-   resync per 63 probes under -J, and 1 per 284 under steepest ascent (which
-   takes at most one move per 325-pair scan). Against a probe's ~6.95 columns
-   that is 6.0% of probe work under -J and 1.3% under steepest -- real, but
-   paid inside a change worth 1.2-1.3x, and the price of a form that cannot
-   drift. An incremental delta would cut it to well under 1%; it has not been
-   done because the failure mode is a hang, not a wrong answer. */
+   Called once per climb, and after any board move the climb did not commit
+   through hist_apply() -- a re-pair or a gain cascade, both of which mutate
+   the board on their own terms and are rare enough that a full rebuild there
+   is free. Accepted TOGGLES go through hist_apply() instead, which took
+   histogram maintenance from 10.5% of the cap stage's column traffic to
+   2.7% (measured: 89 076 columns over 3 426 resyncs, against 9 500 over 2 964
+   applies plus 12 012 over the 462 rebuilds that remain). */
 void hist_resync(machine & m)
 {
   int * const n = hist_scratch.n;
@@ -403,6 +405,51 @@ void hist_resync(machine & m)
       for (int y = 0; y < asize; y++)
         n[y] += col[y];
     }
+}
+
+/* Commit an accepted toggle to n: the same 2-4 column delta the probe already
+   computed, applied for real. 3.5 columns on average against hist_resync's
+   26, and accepted moves are 1 in 63 probes under -J, so this is 6.0% of
+   probe work down to 0.8%.
+
+   IT MUST BE CALLED BEFORE THE BOARD MOVES. The delta reads S[pos[k]] as the
+   OLD partner, so committing the board first silently subtracts the wrong
+   column -- and the resulting drift does not misscore politely, it HANGS the
+   steepest-ascent loop, which repeats while best_score > last_best. That is
+   why the two live behind one helper in plugboard.cc that does them in order,
+   and why ENIGMA_HIST=2 exists to catch it if they ever come apart. */
+void hist_apply(machine & m, const int * pos, const int * val, int cnt)
+{
+  int * const n = hist_scratch.n;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  for (int k = 0; k < cnt; k++)
+    {
+      const uint16_t * __restrict rm = cooc_col(pos[k], steck[pos[k]]);
+      const uint16_t * __restrict ad = cooc_col(pos[k], val[k]);
+      for (int y = 0; y < asize; y++)
+        n[y] += ad[y] - rm[y];
+    }
+}
+
+/* Under ENIGMA_HIST=2, assert that n still describes the board. Called after
+   the board has moved, so it recomputes and compares. */
+void hist_verify(machine & m)
+{
+  if (! g_hist_check)
+    return;
+  int want[asize];
+  for (int y = 0; y < asize; y++)
+    want[y] = 0;
+  for (int c = 0; c < asize; c++)
+    {
+      const uint16_t * const col = cooc_col(c, m.steckerbrett[c]);
+      for (int y = 0; y < asize; y++)
+        want[y] += col[y];
+    }
+  for (int y = 0; y < asize; y++)
+    if (want[y] != hist_scratch.n[y])
+      fatal("ENIGMA_HIST=2: the incremental histogram has drifted from the "
+            "board");
 }
 
 /* Score the board that WOULD result from setting S[pos[k]] = val[k] for k <

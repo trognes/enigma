@@ -3250,6 +3250,19 @@ hist_same "histogram climb: -s pins are byte-identical" \
 hist_same "histogram climb: --biased-random shares the table safely" \
   -u B -w 231 -r AAA -g "$rgd" -S k4f10 -J --biased-random 1
 
+# ENIGMA_HIST=2 adds a self-check: after every committed move it recomputes the
+# histogram from the board and compares.  The climb commits an accepted toggle
+# INCREMENTALLY -- the histogram from the old board, then the board -- and if
+# those two ever come apart the result is not a wrong number, it is a run that
+# either hangs or silently finishes wrong (both observed, depending on the
+# fixture).  This check is what turns that into a named failure.  Verified by
+# injection: swapping the two statements in commit_toggle() makes it exit 1
+# saying the histogram drifted.
+check "histogram climb: no drift under the ENIGMA_HIST=2 self-check" \
+  "$(printf '%s' "$hist_ct" | ENIGMA_SEED=0 ENIGMA_HIST=2 "$ENIGMA" \
+       -c -l wehrmacht -R 3 -u B -w 231 -r AAA -g "$rgd" -S k4f10 -J \
+       --polish >/dev/null 2>&1; echo $?)" "0"
+
 # The table is keyed on the ROTOR STACK, and Norway and M4 reach it through a
 # rotor-index translation and a folded Greek wheel respectively -- the two
 # places a wheel-table bug hides while every standard-mode test passes.

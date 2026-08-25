@@ -3017,11 +3017,23 @@ the failure-shape table above.
 > steepest-ascent loop — which repeats while `best_score > last_best` — never
 > converge rather than merely misscore. Two of three injections **hang**; a CI
 > failure here can present as a timeout rather than a `FAIL` line. The resync
-> is **1 per 63 probes under `-J`** and 1 per 284 under steepest ascent —
-> measured, and the recommended recipe is the expensive one — costing 6.0% and
-> 1.3% of probe work respectively. An earlier version of this entry said "~1
-> per 325 probes, so two columns amortised"; 325 is the steepest-ascent scan
-> width, not the measured rate on the path that matters.
+> happens **1 per 63 probes under `-J`** and 1 per 284 under steepest ascent —
+> measured, and the recommended recipe is the expensive one. (An earlier
+> version of this entry said "~1 per 325 probes, so two columns amortised";
+> 325 is the steepest-ascent scan width, not a measured rate.)
+>
+> **An accepted toggle is committed INCREMENTALLY — histogram first, then the
+> board — and that order is load-bearing.** `hist_apply()` reads `S[pos[k]]` as
+> the letter's *old* partner, so moving the board first subtracts a column that
+> is no longer there. Both statements live inside one `commit_toggle()` so
+> there is nothing to reorder, and **`ENIGMA_HIST=2` checks the invariant after
+> every commit** (a suite check runs under it). Worth **−7.9% of the cap
+> stage's column traffic** — histogram maintenance falls from 10.5% to 2.7% —
+> which is the deterministic axis; on wall time it reads −2.2% against a
+> self-control of +1.8%, i.e. **not resolvable**, so the justification is the
+> counter and not a clock. Injecting the wrong order is instructive: it
+> **hangs** on one fixture and **silently finishes wrong** on another, and
+> `ENIGMA_HIST=2` names it in both.
 
 The n-gram score loop (`quadgram_score_decode`) is where ~99% of runtime is
 spent when hill-climbing. That is why the rotor stack is precomputed into
