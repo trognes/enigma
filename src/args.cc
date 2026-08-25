@@ -860,6 +860,21 @@ void parse_args(int argc, char * * argv)
       if (opt_self_crib_seeds > 0)
         fatal("--biased-random is not supported with --self-crib-seeds (the "
               "deduction installs its own starting board)");
+      /* $ENIGMA_KICK_RANK=k ranks the 325 single plugs by mono+IC instead of
+         IC, which reads the monogram table and so needs a language.  IC needs
+         neither, which is why the default asks for neither.  Refuse rather
+         than rank on an all-zero mono8: that degenerates to IC exactly, so a
+         forgotten -l would read as "k makes no difference" instead of as a
+         mistake -- the worst possible failure for a flag that exists to be
+         A/B'd. */
+      if (kick_rank_model() == SCORE_MONOIC)
+        {
+          if (opt_language == nullptr)
+            fatal("$ENIGMA_KICK_RANK=k ranks the kick by mono+IC, which needs "
+                  "-l <language> for the monogram table (the default IC "
+                  "ranking needs no language)");
+          load_table(SCORE_MONO);
+        }
     }
 
   /* Expand the --score schedule into opt_stages[] and set opt_scoring to the target

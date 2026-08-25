@@ -3161,6 +3161,40 @@ br_t4=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -q -l english \
           -u B -w 231 -r AAA -g QM. -R 4 --biased-random 1 -T 4 2>/dev/null)
 check "--biased-random is -T independent" "$br_t1" "$br_t4"
 
+# $ENIGMA_KICK_RANK=k ranks the 325 single plugs by mono+IC instead of IC.
+# The default stays IC, which needs no language; k reads the monogram table and
+# so needs one.
+check "\$ENIGMA_KICK_RANK rejects a value that is not i or k" \
+  "$(printf 'AAAA' | env ENIGMA_KICK_RANK=zz "$ENIGMA" -c -q -l english \
+       -R 2 --biased-random 1 2>&1 >/dev/null \
+     | grep -c 'must be i or k')" "1"
+# REFUSING is the point, not a nicety: with no monogram table mono8 is all
+# zeros, so k would collapse to exactly IC -- a forgotten -l would read as "k
+# makes no difference" rather than as a mistake, which is the worst possible
+# failure for a switch that exists to be A/B'd.
+check "\$ENIGMA_KICK_RANK=k refuses without a language" \
+  "$(printf 'AAAA' | env ENIGMA_KICK_RANK=k "$ENIGMA" -c -i \
+       -R 2 --biased-random 1 -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null \
+     | grep -c 'needs -l')" "1"
+# It must actually change the search -- a switch that silently does nothing
+# would pass every other check here.
+br_ki=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 ENIGMA_KICK_RANK=i "$ENIGMA" \
+          -c -f -l wehrmacht -S k4f10 -u B -w 231 -r AAA -g QM. -R 4 \
+          --biased-random 1 --dump-all 2>&1 | grep dumpall | sort | md5sum)
+br_kk=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 ENIGMA_KICK_RANK=k "$ENIGMA" \
+          -c -f -l wehrmacht -S k4f10 -u B -w 231 -r AAA -g QM. -R 4 \
+          --biased-random 1 --dump-all 2>&1 | grep dumpall | sort | md5sum)
+check "\$ENIGMA_KICK_RANK=k changes the kick" \
+  "$([ "$br_ki" != "$br_kk" ] && echo differs)" "differs"
+# and stays -T-independent: the weights come from the key alone either way.
+br_k1=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 ENIGMA_KICK_RANK=k "$ENIGMA" \
+          -c -f -l wehrmacht -S k4f10 -u B -w 231 -r AAA -g QM. -R 4 \
+          --biased-random 1 -T 1 2>/dev/null)
+br_k4=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 ENIGMA_KICK_RANK=k "$ENIGMA" \
+          -c -f -l wehrmacht -S k4f10 -u B -w 231 -r AAA -g QM. -R 4 \
+          --biased-random 1 -T 4 2>/dev/null)
+check "\$ENIGMA_KICK_RANK=k is -T independent" "$br_k1" "$br_k4"
+
 # And it still recovers, which a badly-normalised weight vector would break by
 # concentrating every kick on one pair.  A LONGER fixture than the one above:
 # 60 letters against a 10-pair board recovers only ~15% of the time even

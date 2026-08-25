@@ -1075,47 +1075,24 @@ void biased_kick_prepare(machine & m)
   biasscratch & b = bias_scratch;
   cooc_build(m);
 
-  /* the empty board's histogram: S is the identity, so the diagonal */
-  int n0[asize];
-  for (int y = 0; y < asize; y++)
-    {
-      n0[y] = 0;
-    }
-  for (int c = 0; c < asize; c++)
-    {
-      const uint16_t * const col = cooc_col(c, c);
-      for (int y = 0; y < asize; y++)
-        {
-          n0[y] += col[y];
-        }
-    }
-
   double sc[bias_npairs];
-  int n = 0;
-  for (int a = 0; a < asize; a++)
-    {
+  cooc_plug_scores(m, kick_rank_model(), sc);
+  const int n = bias_npairs;
+  {
+    int i = 0;
+    for (int a = 0; a < asize; a++)
       for (int bb = a + 1; bb < asize; bb++)
         {
-          /* plugging (a,bb) on an empty board swaps two columns of T */
-          const uint16_t * const ma = cooc_col(a, a);
-          const uint16_t * const mb = cooc_col(bb, bb);
-          const uint16_t * const qa = cooc_col(a, bb);
-          const uint16_t * const qb = cooc_col(bb, a);
-          long coin = 0;
-          for (int y = 0; y < asize; y++)
-            {
-              const int nn = n0[y] - ma[y] - mb[y] + qa[y] + qb[y];
-              coin += static_cast<long>(nn) * (nn - 1);
-            }
-          b.pa[n] = static_cast<unsigned char>(a);
-          b.pb[n] = static_cast<unsigned char>(bb);
-          sc[n] = static_cast<double>(coin);
-          n++;
+          b.pa[i] = static_cast<unsigned char>(a);
+          b.pb[i] = static_cast<unsigned char>(bb);
+          i++;
         }
-    }
+  }
 
-  /* z-score, then softmax. The IC denominator L*(L-1) is a positive constant
-     across the 325 and cancels in the z, so it is never formed. */
+  /* z-score, then softmax. Z-scoring is what makes one temperature mean the
+     same thing for either ranking model: IC's absolute level wanders by key
+     and k's units are not IC's at all, but the SPREAD is what carries the
+     signal in both. */
   double mu = 0;
   for (int i = 0; i < n; i++)
     {
