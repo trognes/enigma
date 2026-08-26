@@ -1102,8 +1102,32 @@ are read from a **data directory** (filenames built as
     measurement fixes `T = 1` throughout, deliberately, since that is what a
     single recommended setting delivers and a per-R tuned run would read
     higher and mean less.
-  - **The scores are IC only**, where the shipped pre-pass is `k`
-    (mono + λ·L·IC). The same table yields mono for free and it was not tried.
+  - **The scores are IC only, and ranking them by `k` instead was tried and
+    MEASURED DOWN**: −3.9% of breaks pooled over `-R` 1–5 (2017 → 1938,
+    z = −3.08, all five cells negative) on 600 paired trials per cell at
+    L=167. `$ENIGMA_KICK_RANK=i|k` selects it; the default `i` is the shipped
+    behaviour. `eval/results-kickrank-ab.txt`.
+    - **The offline probe predicted the wrong DIRECTION**, which is worse than
+      the "predicts ordering, not magnitude" caveat recorded for `-S k`'s own
+      probe. It was not a bad probe — `k` really does rank single plugs
+      better, landing 0.398 true plugs per 4-pair kick against IC's 0.362 at
+      L=167. The failure is that the quantity is not the objective: more true
+      plugs in a seed is not more breaks, because the kick's job is *where it
+      puts the climb*, not how right it already is. Treat an offline seeding
+      probe as justifying a recovery run, never as evidence of its sign.
+    - **"`k` is sharper, so it needs a warmer `T`" is refuted, not untested.**
+      At `T = 1` both models put 24.0% / 24.1% of the softmax mass on their
+      top 10 and draw from an effective pool of 174 / 175 of 325 — the
+      z-scoring equalises the shape, not just the spread. A temperature
+      retune is not the fix.
+    - **The open hypothesis is REDUNDANCY**: the pre-pass here *is* `k`, so a
+      `k`-ranked kick seeds the climb into basins that pre-pass already
+      favours, where IC is partly independent. That predicts `k` should stop
+      losing under an `i4f10` pre-pass. Not run.
+    - Ranking by `k` costs a **language**, where IC needs none; with no
+      monogram table `mono8` is all zeros and `k` collapses to exactly IC, so
+      a missing `-l` would read as "no difference" rather than as a mistake.
+      It is refused instead.
 - `--exhaust E` (long-only) **partial plugboard exhaustion** (**not
   recommended** — measured, dominated; §3.6 in `archived/PERFORMANCE.md`): force
   `E` **extra** plug pairs among the free letters (on top of any `-s` pairs) —
