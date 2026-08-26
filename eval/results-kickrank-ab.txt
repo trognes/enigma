@@ -1,0 +1,215 @@
+# RANKING THE KICK BY k: NO MEASURABLE DIFFERENCE UNDER THE RECOMMENDED
+# PRE-PASS, A REAL WIN UNDER THE WEAKER ONE -- AND A z = -3.08 THAT DID NOT
+# REPLICATE.
+#
+#   make
+#   for S in k4f10 i4f10; do for L in 60 80 100 120 167; do
+#     python3 eval/kick_rank_ab.py --trials 1500 --length $L \
+#         --restarts 1 2 3 4 5 --temp 1 --seed 1 --schedule $S --jobs 4
+#   done; done
+#
+# --biased-random ranks its 325 single plugs by IC.  k (mono + lambda*L*IC)
+# beats IC as the cap-stage PRE-PASS by 5.01pp, and the offline probe said k
+# ranks single plugs better too (eval/results-kickrank.txt).  Whether that
+# converts into breaks is this file.
+#
+# Paired throughout: same excerpt, rotor key, hidden 10-pair board and
+# temperature in both arms, differing only by $ENIGMA_KICK_RANK.  Authentic HG
+# Nord decrypts, rotor key GIVEN, -c -J --polish -f -l wehrmacht, -R 1..5.
+#
+# ============================================================================
+# 1. THE ANSWER
+# ============================================================================
+#
+# FIRST, SO IT IS NOT MISREAD: k4f10 IS THE WINNING PRE-PASS, at every length
+# and by a wide margin -- best-of-each-schedule 1085 against 971 at L=80, 2949
+# against 2590 at L=120, 5156 against 4830 at L=167 -- and section 5 shows it
+# costs no more wall time to get there.  Everything below is about the KICK's
+# ranking model, a second and much smaller lever, measured within each
+# pre-pass.  The pre-pass choice dominates it by roughly 4x.
+#
+#   pre-pass   IC-rank -> k-rank   effect        z    paired trials
+#     k4f10      12059 -> 12112     +0.4%    +0.70           22 500
+#     i4f10      10737 -> 11147     +3.8%    +5.35           22 500
+#
+# UNDER THE RECOMMENDED PRE-PASS THE RANKING MODEL DOES NOT MATTER.  The
+# default stays IC, and nothing is given up for it -- IC needs no language
+# where k reads the monogram table.
+#
+# UNDER i4f10 IT DOES: +3.8%, positive in all six cells, z = +5.35.  So the
+# kick's model matters when the pre-pass is the weaker i4 and stops mattering
+# under the better k4.  Two readings, and this design does NOT separate them:
+# the kick may want a statistic the pre-pass is not already using, or i4f10
+# may simply leave more headroom for any seeding to help.  k4f10 beats i4f10
+# at every length either way, so neither reading changes a recommendation.
+#
+# Every cell, k-rank against IC-rank:
+#
+#            L    seed  trials       IC ->      k   effect        z
+#   k4f10   60       1     600      170 ->    184    +8.2%    +1.03
+#           80       1    1500     1056 ->   1085    +2.7%    +0.93
+#          100       1     600      761 ->    804    +5.7%    +1.84
+#          120       1    1500     2949 ->   2945    -0.1%    -0.10
+#          167       1     600     2017 ->   1938    -3.9%    -3.08
+#          167       2    1500     5106 ->   5156    +1.0%    +1.20
+#   i4f10   60       1     600      172 ->    177    +2.9%    +0.34
+#           80       1    1500      846 ->    971   +14.8%    +4.23
+#          100       1     600      650 ->    664    +2.2%    +0.62
+#          120       1    1500     2497 ->   2590    +3.7%    +2.31
+#          167       1     600     1819 ->   1915    +5.3%    +3.48
+#          167       2    1500     4753 ->   4830    +1.6%    +1.78
+#
+# BEST CONFIGURATION, best-of-each-schedule at 1500 trials: k4f10 wins every
+# length -- 1085 against 971 at L=80, 2949 against 2590 at 120, 5156 against
+# 4830 at 167.  THE PRE-PASS CHOICE DOMINATES THE KICK CHOICE by roughly 4x.
+#
+# ============================================================================
+# 2. THE CELL THAT DID NOT REPLICATE -- THE MOST USEFUL THING HERE
+# ============================================================================
+#
+# The first run of this measured k DOWN, and did it convincingly:
+#
+#   L=167, k4f10, seed 1, 3000 paired trials    2017 -> 1938   -3.9%   z=-3.08
+#     ...with ALL FIVE restart cells negative and mean %-correct agreeing in
+#     every one of them.
+#
+# A held-out seed with 2.5x the trials read the other way:
+#
+#   L=167, k4f10, seed 2, 7500 paired trials    5106 -> 5156   +1.0%   z=+1.20
+#
+#   both seeds pooled:  1215 / 1186 discordant,  z = -0.59
+#
+# So a pooled z past 3, over five internally-consistent cells, on 3000 paired
+# trials, was NOT ENOUGH.  This file's own advice elsewhere -- that repeating
+# a number on one box is not evidence it is real, because the bias is stable
+# within a session -- turns out to apply to a paired recovery A/B too, with
+# the trial SET playing the role of the box.  Hold out a seed.
+#
+# ============================================================================
+# 3. A MECHANISM WAS BUILT ON THAT NUMBER AND HAS BEEN RETRACTED
+# ============================================================================
+#
+# With seed 1 alone the two schedules flipped sign (-3.9% under k4f10, +5.3%
+# under i4f10, interaction z = +4.62), and the MATCHED pairings both lost to
+# the MIXED ones:
+#
+#   pre-pass k4:  matched (k kick) 1938   mixed (IC kick) 2017
+#   pre-pass i4:  matched (IC kick) 1819  mixed (k kick)  1915
+#
+# That reads as a principle -- the kick should DISAGREE with the pre-pass, so
+# a better kick model is not a better one but a different one.  It is an
+# appealing story and it rested entirely on the one cell that did not
+# replicate.  Only the i4 half survives, and "k helps under i4, does nothing
+# under k4" is a much weaker statement than "matched pairings lose".
+#
+# BEWARE A RESULT THAT ARRIVES WITH ITS OWN EXPLANATION ATTACHED.  The
+# mechanism made the number feel understood, which made it feel solid.
+#
+# ============================================================================
+# 4. WHAT STILL HOLDS FROM THE FIRST WRITEUP
+# ============================================================================
+#
+# THE OFFLINE PROBE DID NOT PREDICT THE END-TO-END RESULT.  k really does rank
+# single plugs better -- 0.398 true plugs per 4-pair kick against IC's 0.362
+# at L=167 -- and under the recommended pre-pass that converts to +0.4%,
+# i.e. nothing.  More true plugs in a seed is not more breaks, because the
+# kick's job is WHERE IT PUTS THE CLIMB, not how right it already is.  Treat
+# an offline seeding probe as justifying a recovery run, never as evidence of
+# its sign or size.
+#
+# "k IS SHARPER AND NEEDS A WARMER T" IS REFUTED.  At T = 1 both models put
+# 24.0% / 24.1% of the softmax mass on their top 10 and draw from effective
+# pools of 174 / 175 of 325: the z-scoring equalises the shape, not merely the
+# spread.
+#
+# ============================================================================
+# 5. TIMING -- THE A/B MATCHED -R, NOT WALL TIME
+# ============================================================================
+#
+# Slope-fitted per-restart cost, min of 6, --biased-random 1, against a
+# self-control floor of ~0.9%:
+#
+#     variant                 L=167     L=100
+#     k4f10 + IC-rank        742.5     680.5
+#     k4f10 +  k-rank        755.0     717.2
+#     i4f10 + IC-rank        748.3     683.4
+#     i4f10 +  k-rank        760.4     721.6
+#
+# THE PRE-PASS CHOICE IS FREE.  k4f10 against i4f10 differs by 0.8% and 0.4%,
+# both inside the floor -- so k4f10's advantage is quality at no cost, which
+# is a cleaner recommendation than it would be if it bought breaks with time.
+#
+# k-RANKING COSTS +1.7% AT L=167 AND +5.4% AT L=100, consistent in direction
+# under both schedules.  The kick prep is FLAT in message length (a 26^3 table
+# plus 325 x 26 monogram multiply-adds) while the climb grows with L, so the
+# fixed extra is a larger fraction at shorter lengths.
+#
+# SO THE A/B GAVE THE k ARMS 2-5% MORE COMPUTE.  Priced against the restart
+# curve in the strongest cell (i4f10, L=80, where breaks rise 22 per extra
+# restart near R=3), 5% more compute is worth about +3 breaks against the +22
+# measured -- so ~86% of k-ranking's gain under i4f10 survives, and it should
+# be read as
+# roughly +3.3% rather than +3.8% at matched wall time.  The k4f10 null moves
+# slightly further toward zero and stays a null.  Neither conclusion changes.
+#
+# ONE INEFFICIENCY THIS EXPOSED, deliberately left alone: with
+# --biased-random on, the co-occurrence table is now built TWICE per restart
+# -- once in biased_kick_prepare() and once at the top of hillclimb() -- since
+# the two came to share it across separate changes.  It is 2-8 us against a
+# ~700 us restart, i.e. 0.3-1%.  Removing it means tracking whether the table
+# is still valid for the current machine state, which is exactly the staleness
+# class that HANGS the climb rather than misscoring it (see
+# eval/results-tclimb.txt section 4).  Not worth the risk for 0.3%.
+#
+# ============================================================================
+# 6. AT EQUAL COMPUTE -- k-RANKING IS A WASH UNDER k4f10
+# ============================================================================
+#
+# The A/B matched -R, and k-ranking costs more per restart, so the arms were
+# not equal-compute.  Correcting for it: compare breaks_k(R) against
+# breaks_IC(R x ratio), interpolating IC's own measured restart curve, over
+# all twelve cells.
+#
+#   pre-pass   matched -R   ratio 1.02   ratio 1.035   ratio 1.05
+#     k4f10        +0.4%        -0.0%         -0.4%        -0.7%
+#     i4f10        +3.8%        +3.4%         +3.0%        +2.7%
+#
+# UNDER THE RECOMMENDED PRE-PASS IT IS A WASH: k-ranking converts its small
+# quality edge exactly into its cost.  Under i4f10 it clears the cost with
+# room to spare.  THE CONCLUSION IS INSENSITIVE TO THE RATIO across the whole
+# plausible 2-5% range, which is what makes it usable -- see below.
+#
+# Cell by cell at 3.5%, k4f10: +6.5, +4.4, -4.5, +1.5, -1.2, +0.3.  So four of
+# six stay positive even after paying, and the pooled wash comes from the one
+# large negative being the L=167 seed-1 cell that did not replicate, sitting
+# beside its replication at +0.3.  Nothing resolves either way.
+#
+# DO NOT RUN THE FULL BREAKS-VS-COMPUTE CURVE TO SETTLE THIS.  Resolving a
+# +0.4% matched-R effect to z = 2 needs ~8x the trials already spent
+# (~185 000 paired trials, hours), and the equal-compute correction puts the
+# true effect at or below zero -- so the most likely outcome of that spend is
+# a confirmed null.  The cheap interpolation above is the whole answer.
+#
+# THE TIMING INSTRUMENT FAILED THE DAY THIS WAS RUN, which is why the table is
+# a sensitivity band and not a point estimate.  Self-control ratios (the same
+# arm timed twice) spanned 0.946 to 1.056 -- +/-5%, against a 2-5% effect --
+# and the same cell read 680 us/restart in one session and 408 in another.
+# Wall-clock ratios at this scale need a quiet box; the band sidesteps the
+# problem because every ratio in it gives the same answer.
+#
+# ============================================================================
+# 7. SCOPE
+# ============================================================================
+#
+# Five lengths, two schedules, T = 1, rotor key given, wehrmacht, -R 1..5.
+# Two seeds only at L=167; the L=80 and L=120 cells are single-seed and 1500
+# trials, so by this file's own section 2 they should not be read as settled
+# either.  k-RANKING'S GAIN UNDER i4f10 is the finding that survives
+# replication in the sense that matters -- positive in six cells across five
+# lengths and two seeds -- but no such cell has been re-run on held-out trials
+# at fixed length.
+#
+# SAY "k-RANKING UNDER i4f10", NEVER "THE i4f10 RESULT".  i4f10 is the WORSE
+# PRE-PASS and loses to k4f10 at every length measured; the only thing true of
+# it here is that the kick's ranking model matters under it.  The shorthand
+# reads as though i4f10 won something, which inverts the actual finding.

@@ -50,6 +50,10 @@ struct stats
   long   t10 = 0, t25 = 0, t50 = 0, t100 = 0;
   double drawn = 0;          /* true plugs in a 4-plug softmax kick, T = 1 */
   long   draws = 0;
+  double top10w = 0;         /* softmax mass on the top 10 of 325 */
+  double effn = 0;           /* exp(entropy): effective number of pairs the
+                                kick can draw from -- 325 = uniform */
+  long   nkeys = 0;
 };
 
 static void tally(const double * sc, const unsigned char * tb, stats & s,
@@ -107,6 +111,35 @@ static void tally(const double * sc, const unsigned char * tb, stats & s,
       cum[j] = run;
     }
 
+  /* How CONCENTRATED the weights are, at the same T.  z-scoring equalises the
+     spread but not the SHAPE, so one model can still put far more mass on its
+     top few pairs -- and this flag's own history says a kick cold enough to
+     land on the joint argmax loses to one merely biased toward it. */
+  {
+    std::vector<double> w(P.size());
+    double tot = 0;
+    for (size_t j = 0; j < P.size(); j++)
+      {
+        w[j] = (sd > 0.0) ? exp((P[j].sc - mu) / sd) : 1.0;
+        tot += w[j];
+      }
+    std::vector<double> ws(w);
+    std::sort(ws.begin(), ws.end(), std::greater<double>());
+    double t10 = 0;
+    for (int j = 0; j < 10; j++)
+      t10 += ws[static_cast<size_t>(j)];
+    s.top10w += t10 / tot;
+    double H = 0;
+    for (size_t j = 0; j < P.size(); j++)
+      {
+        const double pj = w[j] / tot;
+        if (pj > 0.0)
+          H -= pj * log(pj);
+      }
+    s.effn += exp(H);
+    s.nkeys++;
+  }
+
   for (int rep = 0; rep < 40; rep++)
     {
       bool used[asize] = {false};
@@ -134,13 +167,16 @@ static void tally(const double * sc, const unsigned char * tb, stats & s,
 
 static void report(const char * name, const stats & s)
 {
-  printf("  %-6s  %7.1f  %6.1f%%  %6.1f%%  %6.1f%%  %6.1f%%   %6.3f\n",
+  printf("  %-6s  %7.1f  %6.1f%%  %6.1f%%  %6.1f%%  %6.1f%%   %6.3f"
+         "  %6.1f%%  %6.0f\n",
          name, s.sum_rank / static_cast<double>(s.n),
          100.0 * static_cast<double>(s.t10) / static_cast<double>(s.n),
          100.0 * static_cast<double>(s.t25) / static_cast<double>(s.n),
          100.0 * static_cast<double>(s.t50) / static_cast<double>(s.n),
          100.0 * static_cast<double>(s.t100) / static_cast<double>(s.n),
-         s.drawn / static_cast<double>(s.draws));
+         s.drawn / static_cast<double>(s.draws),
+         100.0 * s.top10w / static_cast<double>(s.nkeys),
+         s.effn / static_cast<double>(s.nkeys));
 }
 
 int main(int argc, char * * argv)
@@ -231,10 +267,13 @@ int main(int argc, char * * argv)
   printf("TRUE-PLUG ENRICHMENT in the 325 single-plug ranking\n");
   printf("L = %d, %d keys, 10-pair board hidden, rotor key given, "
          "wehrmacht\n\n", L, KEYS);
-  printf("  %-6s  %7s  %7s  %7s  %7s  %7s   %6s\n",
-         "model", "meanrk", "top10", "top25", "top50", "top100", "kick");
-  printf("  %-6s  %7.1f  %6.1f%%  %6.1f%%  %6.1f%%  %6.1f%%   %6.3f\n",
-         "chance", 163.0, 3.1, 7.7, 15.4, 30.8, 4.0 * 10.0 / 325.0 * 1.0);
+  printf("  %-6s  %7s  %7s  %7s  %7s  %7s   %6s  %7s  %6s\n",
+         "model", "meanrk", "top10", "top25", "top50", "top100", "kick",
+         "top10w", "effN");
+  printf("  %-6s  %7.1f  %6.1f%%  %6.1f%%  %6.1f%%  %6.1f%%   %6.3f"
+         "  %6.1f%%  %6.0f\n",
+         "chance", 163.0, 3.1, 7.7, 15.4, 30.8, 4.0 * 10.0 / 325.0 * 1.0,
+         100.0 * 10.0 / 325.0, 325.0);
   report("IC", sic);
   report("k", sk);
   printf("\n  meanrk: mean rank of a true plug, 1 = best of 325 (lower is\n"

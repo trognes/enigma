@@ -1102,8 +1102,57 @@ are read from a **data directory** (filenames built as
     measurement fixes `T = 1` throughout, deliberately, since that is what a
     single recommended setting delivers and a per-R tuned run would read
     higher and mean less.
-  - **The scores are IC only**, where the shipped pre-pass is `k`
-    (mono + λ·L·IC). The same table yields mono for free and it was not tried.
+  - **The scores are IC only, and ranking by `k` instead makes NO MEASURABLE
+    DIFFERENCE under the recommended pre-pass** — +0.4% of breaks
+    (12 059 → 12 112, z = +0.70) pooled over six cells and 22 500 paired
+    trials at L = 60…167 with `-S k4f10`. `$ENIGMA_KICK_RANK=i|k` selects it;
+    the default `i` stays, because IC needs **no language** where `k` reads
+    the monogram table, and nothing is being given up for that.
+    `eval/results-kickrank-ab.txt`.
+    - **Under an `i4f10` pre-pass `k`-ranking IS a win**: +3.8%
+      (10 737 → 11 147, z = +5.35), positive in all six cells — call it
+      +3.0% at matched compute, since ranking by `k` costs a few percent more
+      per restart and the A/B matched `-R`. **Under `k4f10` the same
+      correction takes the +0.4% to −0.0…−0.7%, i.e. a wash** — it converts
+      its small edge exactly into its cost, and that holds across the whole
+      2–5% range the cost ratio could plausibly take. **The pre-pass choice
+      itself is free**: `k4f10` and `i4f10` differ by under 1% of wall, inside
+      the self-control floor, so `k4f10` buys its breaks with nothing. So the
+      kick's
+      model matters when the pre-pass is the weaker `i4` and stops mattering
+      under the better `k4`. Two readings, not separated: the kick may want a
+      statistic the pre-pass is **not already using**, or `i4f10` may simply
+      leave more headroom for any seeding to help. `k4f10` beats `i4f10` at
+      every length either way, so this changes no recommendation.
+    - **A z = −3.08 HERE DID NOT REPLICATE, and that is the durable lesson.**
+      The first run of this measured `k` DOWN at L=167 under `k4f10`: −3.9%,
+      2017 → 1938, all five restart cells negative, 3000 paired trials. A
+      held-out seed with 2.5× the trials read **+1.0% (z = +1.20)**, and the
+      two pool to **z = −0.59**. A single-seed pooled z past 3 was not enough
+      — the same warning this file gives about repeating a bench number on
+      one box, in a different instrument.
+    - **A whole mechanism was built on that number and had to be retracted.**
+      The flip looked like evidence that a kick must DISAGREE with the
+      pre-pass, since matched pairings (`k4`+`k`, `i4`+IC) both lost to mixed
+      ones — an appealing story resting on one non-replicating cell. Only the
+      `i4` half survives. Beware a result that arrives with its own
+      explanation attached.
+    - **The offline probe predicted the wrong direction on the original run**,
+      which is why it is worth keeping the caveat even now that the end-to-end
+      effect is ~zero: `k` really does rank single plugs better (0.398 true
+      plugs per 4-pair kick against IC's 0.362 at L=167), and that did not
+      convert. More true plugs in a seed is not more breaks, because the
+      kick's job is *where it puts the climb*, not how right it already is.
+      Treat an offline seeding probe as justifying a recovery run, never as
+      evidence of its sign.
+    - **"`k` is sharper, so it needs a warmer `T`" is refuted, not untested.**
+      At `T = 1` both models put 24.0% / 24.1% of the softmax mass on their
+      top 10 and draw from an effective pool of 174 / 175 of 325 — the
+      z-scoring equalises the shape, not just the spread.
+    - Ranking by `k` costs a **language**, where IC needs none; with no
+      monogram table `mono8` is all zeros and `k` collapses to exactly IC, so
+      a missing `-l` would read as "no difference" rather than as a mistake.
+      It is refused instead.
 - `--exhaust E` (long-only) **partial plugboard exhaustion** (**not
   recommended** — measured, dominated; §3.6 in `archived/PERFORMANCE.md`): force
   `E` **extra** plug pairs among the free letters (on top of any `-s` pairs) —
