@@ -248,14 +248,24 @@ fprintf(out, "  %-24s %s\n", "--crib-rerank F",
   fprintf(out, "  %-24s %s\n", "--random K",
           "Random-kick size: plug pairs injected per restart");
   fprintf(out, "  %-24s %s\n", "", "(needs -c; 0 = no kick, a control) [10]");
+  /* The measured numbers, not the prototype's.  An earlier version of this
+     text said "nothing from -R 6 up", which came from the prototype's
+     alternating null/positive pattern around -R 6..8; the shipped-binary
+     measurement found that was scatter and the decay is a monotone FADE with
+     no cutoff (eval/results-biased-kick.txt).  The -R 1 line is here because
+     it is the one thing a reader could act on wrongly: -R N runs N KICKED
+     climbs and does not additionally run the unkicked one, so at a budget of
+     one climb the kick is a net loss against -R 0. */
   fprintf(out, "  %-24s %s\n", "--biased-random T",
           "Bias the kick toward plugs scoring well on their");
   fprintf(out, "  %-24s %s\n", "",
           "own index of coincidence: softmax at temperature");
   fprintf(out, "  %-24s %s\n", "",
-          "T (sd units). Worth ~+8% of breaks at -R 3..5");
+          "T (sd units). ~+9% of breaks at -R 1..5, fading");
   fprintf(out, "  %-24s %s\n", "",
-          "and nothing from -R 6 up. Try T=1. [0 = off]");
+          "to ~+3% at -R 6..10. At -R 1 prefer -R 0 (no kick");
+  fprintf(out, "  %-24s %s\n", "",
+          "at all) -- it breaks more. Try T=1. [0 = off]");
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
