@@ -452,6 +452,113 @@ void hist_verify(machine & m)
             "board");
 }
 
+/* Which model --biased-random ranks its 325 single plugs by. IC is the
+   shipped default and needs no language; ENIGMA_KICK_RANK=k selects the
+   mono+IC blend instead -- the model the recommended telegraphic pre-pass
+   uses, and the one measured 5.01pp better in THAT role, which is the whole
+   reason this switch exists to be A/B'd.
+
+   RANKING BY k COSTS SOMETHING IC DOES NOT: a language. IC is
+   language-independent, so --biased-random works today under `-i` or a
+   mismatched `-l`; k reads the monogram table and needs one. args.cc loads it
+   when this is set, and refuses if there is no -l to load it from -- silently
+   ranking on an all-zero mono8 would degenerate to IC and look like a null
+   result rather than a mistake. */
+static int g_kick_rank = SCORE_IC;
+
+int kick_rank_model()
+{
+  return g_kick_rank;
+}
+
+void kick_rank_init()
+{
+  const char * v = getenv("ENIGMA_KICK_RANK");
+  if ((v == nullptr) || (*v == 0))
+    return;
+  if ((v[0] == 'k') && (v[1] == 0))
+    g_kick_rank = SCORE_MONOIC;
+  else if ((v[0] == 'i') && (v[1] == 0))
+    g_kick_rank = SCORE_IC;
+  else
+    fatal("$ENIGMA_KICK_RANK must be i or k");
+}
+
+/* Score all 325 SINGLE-PLUG boards -- plug (a,b) on an otherwise empty board
+   -- straight from the co-occurrence table, in the a<b order the caller walks.
+   325 O(26) deltas instead of 325 decodes, and flat in message length.
+
+   `model` is SCORE_IC or SCORE_MONOIC. The caller z-scores the result, so any
+   positive affine transform of it is irrelevant -- which is why IC's L*(L-1)
+   denominator is never formed. It is NOT irrelevant for k, whose two halves
+   have to be combined in their real units before the z, so that one is formed.
+
+   Deliberately does NOT bump m.plugboards_scored: this prepares a kick, and
+   counting it would move a reported diagnostic for every --biased-random run.
+
+   Requires mono8 to be loaded for SCORE_MONOIC -- see the load in args.cc.
+   With no monogram table these come back as pure IC scaled, silently, which
+   is exactly the bug the loader guard exists to prevent. */
+void cooc_plug_scores(machine & m, int model, double * out)
+{
+  (void) m;
+  int n0[asize];                 /* empty board: S is the identity, so the
+                                    diagonal of T */
+  for (int y = 0; y < asize; y++)
+    n0[y] = 0;
+  for (int c = 0; c < asize; c++)
+    {
+      const uint16_t * const col = cooc_col(c, c);
+      for (int y = 0; y < asize; y++)
+        n0[y] += col[y];
+    }
+
+  const bool want_mono = (model == SCORE_MONOIC);
+  const double icdiv = (textlength > 1)
+    ? static_cast<double>(textlength) * (textlength - 1) : 1.0;
+
+  int i = 0;
+  for (int a = 0; a < asize; a++)
+    for (int b = a + 1; b < asize; b++)
+      {
+        /* plugging (a,b) on an empty board swaps two columns of T */
+        const uint16_t * const ma = cooc_col(a, a);
+        const uint16_t * const mb = cooc_col(b, b);
+        const uint16_t * const qa = cooc_col(a, b);
+        const uint16_t * const qb = cooc_col(b, a);
+        long coin = 0;
+        long isum = 0;
+        int na = 0, nb = 0;
+        for (int y = 0; y < asize; y++)
+          {
+            const int nn = n0[y] - ma[y] - mb[y] + qa[y] + qb[y];
+            coin += static_cast<long>(nn) * (nn - 1);
+            if (want_mono)
+              {
+                isum += static_cast<long>(nn) * mono8[y];
+                if (y == a)
+                  na = nn;
+                if (y == b)
+                  nb = nn;
+              }
+          }
+        if (! want_mono)
+          {
+            out[i++] = static_cast<double>(coin);
+            continue;
+          }
+        /* the board relabels mono's coefficients at a and b only */
+        isum += static_cast<long>(na) * (mono8[b] - mono8[a]);
+        isum += static_cast<long>(nb) * (mono8[a] - mono8[b]);
+        const double mono = static_cast<double>(isum) / ngram_scale[SCORE_MONO]
+                            + textlength * ngram_bias[SCORE_MONO];
+        const double ic = (textlength > 1)
+          ? static_cast<double>(coin) / icdiv : 0.0;
+        out[i++] = mono / (textlength > 0 ? textlength : 1)
+                   + g_monoic_lambda * textlength * ic;
+      }
+}
+
 /* Score the board that WOULD result from setting S[pos[k]] = val[k] for k <
    cnt, WITHOUT touching the board: the caller's probe needs no mutate/restore
    pair at all. `pos` holds distinct letters (the toggle operator's four cases

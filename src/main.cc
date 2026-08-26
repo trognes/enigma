@@ -55,6 +55,10 @@ int main(int argc, char * * argv)
 {
   auto t_start = std::chrono::steady_clock::now();
 
+  /* Reads only the environment, and parse_args needs the answer: ranking
+     the kick by k means the monogram table has to be loaded. */
+  kick_rank_init();
+
   parse_args(argc, argv);
 
   ic_blend_init();

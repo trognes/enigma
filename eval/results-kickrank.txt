@@ -1,0 +1,84 @@
+# k RANKS SINGLE PLUGS BETTER THAN IC -- OFFLINE PROBE ONLY, NOT AN
+# END-TO-END RESULT.
+#
+#   make
+#   objs=$(ls src/[a-z]*.o | grep -vE 'main.o|enigma.o')
+#   g++ -std=c++17 -O3 -pthread -Isrc -o /tmp/kr eval/proto_kickrank.cc $objs
+#   for L in 60 100 167; do /tmp/kr $L 300; done
+#
+# --biased-random draws its kick from exp(z / T) over the 325 SINGLE-PLUG
+# scores, and it ranks them by the index of coincidence -- because that is what
+# the prototype happened to use, not because it was chosen against anything.
+# Meanwhile k (mono + lambda*L*IC) beat IC decisively as the CAP-STAGE PRE-PASS
+# model, +5.01pp of exact recovery at L=167 over five seeds.  Those are not the
+# same job: a pre-pass climbs a board of several plugs under a cap, this ranks
+# 325 boards holding exactly ONE plug.  So it is a separate question.
+#
+# ============================================================================
+# THE PROBE
+# ============================================================================
+#
+# 300 keys per length, 10-pair board hidden, rotor key given, wehrmacht,
+# authentic HG Nord decrypts.  Both models scored from the SAME co-occurrence
+# table on the SAME keys, through the SHIPPED cooc_plug_scores() rather than a
+# reimplementation.
+#
+#     L  model   meanrk   top10   top25   top50  top100     kick
+#        chance   163.0    3.1%    7.7%   15.4%   30.8%    0.123
+#    60      IC   133.9    6.9%   14.6%   25.5%   43.4%    0.199
+#    60       k   118.7    9.5%   18.7%   30.4%   50.3%    0.222
+#   100      IC   114.6   10.9%   20.2%   33.1%   51.5%    0.254
+#   100       k   103.6   13.4%   24.0%   38.6%   56.8%    0.266
+#   167      IC    87.2   18.6%   30.9%   46.3%   65.1%    0.362
+#   167       k    77.7   21.7%   36.5%   51.2%   69.1%    0.398
+#
+#   meanrk = mean rank of a true plug, 1 = best of 325, lower better.
+#   kick   = TRUE plugs landed by a 4-pair softmax kick at T = 1, drawn by
+#            REJECTION exactly as biased_perturb does.  Both models draw
+#            against the same random stream, so that column is paired.
+#
+# k WINS EVERY CELL ON EVERY MEASURE.  The operational column -- true plugs
+# actually landed by the kick -- is +11.6% at L=60, +4.7% at L=100 and +9.9%
+# at L=167.
+#
+# ============================================================================
+# WHAT THIS DOES NOT SAY
+# ============================================================================
+#
+# IT IS A PROBE, AND CLAUDE.md ALREADY RECORDS WHAT PROBES ARE GOOD FOR: the
+# mono+IC pre-pass work found its AUC probe "predicts the ORDERING and not the
+# magnitude", with the implied conversion spanning 6x across lengths.  So this
+# justifies STARTING an end-to-end A/B; it does not size one.
+#
+# THE GAIN IS SMALLEST AT L=100, which is exactly where the shipped
+# --biased-random measurement lives (eval/results-biased-kick.txt, 600 paired
+# trials at L=100).  So the end-to-end effect may be least visible in the one
+# regime already instrumented.  Worth choosing the A/B length deliberately
+# rather than by habit.
+#
+# NOTHING IS MEASURED ON RECOVERY.  More true plugs in the kick is not more
+# breaks: the kick seeds a climb that then has to converge, and CLAUDE.md's
+# search playbook records repeatedly that better seeds do not reliably convert
+# once restarts are plentiful -- which is why --biased-random pays at -R 1..5
+# and fades to nothing by -R 10.
+#
+# ============================================================================
+# THE IMPLEMENTATION, AND ONE THING IT HAD TO GUARD
+# ============================================================================
+#
+# $ENIGMA_KICK_RANK = i (default) or k.  The default is byte-identical to dev,
+# verified at T = 1 / 0.5 / 2 against a binary built from origin/dev, and k is
+# -T-deterministic like the rest of the flag.
+#
+# RANKING BY k COSTS A LANGUAGE, WHICH IC DOES NOT.  IC needs no n-gram table,
+# so --biased-random works today under -i or a mismatched -l; k reads mono8.
+# With no monogram table loaded mono8 is ALL ZEROS, and k then collapses to
+# exactly IC -- so a forgotten -l would read as "k makes no difference"
+# rather than as a mistake, which is the worst failure available to a switch
+# whose only purpose is to be A/B'd.  args.cc therefore refuses k without -l
+# instead of ranking on zeros, and a test asserts it.
+#
+# That cost is real but small in practice: the recommended telegraphic recipe
+# carries -l wehrmacht anyway.  It would matter if k ever became the default,
+# since it would make a language mandatory for a flag that currently needs
+# none.

@@ -70,6 +70,14 @@ void hist_resync(machine & m);
 void hist_apply(machine & m, const int * pos, const int * val, int cnt);
 void hist_verify(machine & m);
 double hist_probe(machine & m, const int * pos, const int * val, int cnt);
+/* All 325 single-plug scores from the same table, for --biased-random's kick
+   weights. model is SCORE_IC or SCORE_MONOIC; out is filled in a<b order. */
+void cooc_plug_scores(machine & m, int model, double * out);
+/* Which model --biased-random ranks by: SCORE_IC (default) or SCORE_MONOIC,
+   selected by $ENIGMA_KICK_RANK=i|k. Ranking by k needs the monogram table,
+   so it needs a language; args.cc loads it and refuses without one. */
+void kick_rank_init();
+int kick_rank_model();
 
 /* Read the ENIGMA_IC_BLEND override for -f's IC weight. Called once from
    main(), before the search. */
