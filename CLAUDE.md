@@ -1110,7 +1110,11 @@ are read from a **data directory** (filenames built as
     the monogram table, and nothing is being given up for that.
     `eval/results-kickrank-ab.txt`.
     - **Under an `i4f10` pre-pass `k`-ranking IS a win**: +3.8%
-      (10 737 → 11 147, z = +5.35), positive in all six cells. So the kick's
+      (10 737 → 11 147, z = +5.35), positive in all six cells — call it
+      +3.3% at matched wall time, since ranking by `k` costs 1.7–5.4% more
+      per restart and the A/B matched `-R`. **The pre-pass choice itself is
+      free**: `k4f10` and `i4f10` differ by under 1% of wall, inside the
+      self-control floor, so `k4f10` buys its breaks with nothing. So the kick's
       model matters when the pre-pass is the weaker `i4` and stops mattering
       under the better `k4`. Two readings, not separated: the kick may want a
       statistic the pre-pass is **not already using**, or `i4f10` may simply
