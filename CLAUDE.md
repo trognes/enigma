@@ -1102,28 +1102,45 @@ are read from a **data directory** (filenames built as
     measurement fixes `T = 1` throughout, deliberately, since that is what a
     single recommended setting delivers and a per-R tuned run would read
     higher and mean less.
-  - **The scores are IC only, and ranking them by `k` instead was tried and
-    MEASURED DOWN**: −3.9% of breaks pooled over `-R` 1–5 (2017 → 1938,
-    z = −3.08, all five cells negative) on 600 paired trials per cell at
-    L=167. `$ENIGMA_KICK_RANK=i|k` selects it; the default `i` is the shipped
-    behaviour. `eval/results-kickrank-ab.txt`.
-    - **The offline probe predicted the wrong DIRECTION**, which is worse than
-      the "predicts ordering, not magnitude" caveat recorded for `-S k`'s own
-      probe. It was not a bad probe — `k` really does rank single plugs
-      better, landing 0.398 true plugs per 4-pair kick against IC's 0.362 at
-      L=167. The failure is that the quantity is not the objective: more true
-      plugs in a seed is not more breaks, because the kick's job is *where it
-      puts the climb*, not how right it already is. Treat an offline seeding
-      probe as justifying a recovery run, never as evidence of its sign.
+  - **The scores are IC only, and ranking by `k` instead makes NO MEASURABLE
+    DIFFERENCE under the recommended pre-pass** — +0.4% of breaks
+    (12 059 → 12 112, z = +0.70) pooled over six cells and 22 500 paired
+    trials at L = 60…167 with `-S k4f10`. `$ENIGMA_KICK_RANK=i|k` selects it;
+    the default `i` stays, because IC needs **no language** where `k` reads
+    the monogram table, and nothing is being given up for that.
+    `eval/results-kickrank-ab.txt`.
+    - **Under an `i4f10` pre-pass `k`-ranking IS a win**: +3.8%
+      (10 737 → 11 147, z = +5.35), positive in all six cells. So the kick's
+      model matters when the pre-pass is the weaker `i4` and stops mattering
+      under the better `k4`. Two readings, not separated: the kick may want a
+      statistic the pre-pass is **not already using**, or `i4f10` may simply
+      leave more headroom for any seeding to help. `k4f10` beats `i4f10` at
+      every length either way, so this changes no recommendation.
+    - **A z = −3.08 HERE DID NOT REPLICATE, and that is the durable lesson.**
+      The first run of this measured `k` DOWN at L=167 under `k4f10`: −3.9%,
+      2017 → 1938, all five restart cells negative, 3000 paired trials. A
+      held-out seed with 2.5× the trials read **+1.0% (z = +1.20)**, and the
+      two pool to **z = −0.59**. A single-seed pooled z past 3 was not enough
+      — the same warning this file gives about repeating a bench number on
+      one box, in a different instrument.
+    - **A whole mechanism was built on that number and had to be retracted.**
+      The flip looked like evidence that a kick must DISAGREE with the
+      pre-pass, since matched pairings (`k4`+`k`, `i4`+IC) both lost to mixed
+      ones — an appealing story resting on one non-replicating cell. Only the
+      `i4` half survives. Beware a result that arrives with its own
+      explanation attached.
+    - **The offline probe predicted the wrong direction on the original run**,
+      which is why it is worth keeping the caveat even now that the end-to-end
+      effect is ~zero: `k` really does rank single plugs better (0.398 true
+      plugs per 4-pair kick against IC's 0.362 at L=167), and that did not
+      convert. More true plugs in a seed is not more breaks, because the
+      kick's job is *where it puts the climb*, not how right it already is.
+      Treat an offline seeding probe as justifying a recovery run, never as
+      evidence of its sign.
     - **"`k` is sharper, so it needs a warmer `T`" is refuted, not untested.**
       At `T = 1` both models put 24.0% / 24.1% of the softmax mass on their
       top 10 and draw from an effective pool of 174 / 175 of 325 — the
-      z-scoring equalises the shape, not just the spread. A temperature
-      retune is not the fix.
-    - **The open hypothesis is REDUNDANCY**: the pre-pass here *is* `k`, so a
-      `k`-ranked kick seeds the climb into basins that pre-pass already
-      favours, where IC is partly independent. That predicts `k` should stop
-      losing under an `i4f10` pre-pass. Not run.
+      z-scoring equalises the shape, not just the spread.
     - Ranking by `k` costs a **language**, where IC needs none; with no
       monogram table `mono8` is all zeros and `k` collapses to exactly IC, so
       a missing `-l` would read as "no difference" rather than as a mistake.

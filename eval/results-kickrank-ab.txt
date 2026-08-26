@@ -1,112 +1,128 @@
-# RANKING THE KICK BY k IS MEASURED DOWN: -3.9% OF BREAKS, z = -3.08.
-# THE OFFLINE PROBE PREDICTED THE WRONG DIRECTION.
+# RANKING THE KICK BY k: NO MEASURABLE DIFFERENCE UNDER THE RECOMMENDED
+# PRE-PASS, A REAL WIN UNDER THE WEAKER ONE -- AND A z = -3.08 THAT DID NOT
+# REPLICATE.
 #
 #   make
-#   python3 eval/kick_rank_ab.py --trials 600 --length 167 \
-#       --restarts 1 2 3 4 5 --temp 1 --seed 1
+#   for S in k4f10 i4f10; do for L in 60 80 100 120 167; do
+#     python3 eval/kick_rank_ab.py --trials 1500 --length $L \
+#         --restarts 1 2 3 4 5 --temp 1 --seed 1 --schedule $S --jobs 4
+#   done; done
 #
 # --biased-random ranks its 325 single plugs by IC.  k (mono + lambda*L*IC)
-# beats IC as the cap-stage pre-pass by 5.01pp, and the offline probe said k
-# also ranks SINGLE PLUGS better at every length -- +9.9% more true plugs
-# landed by the kick at L=167 (eval/results-kickrank.txt).  So the end-to-end
-# run was expected to confirm it.  It did the opposite.
+# beats IC as the cap-stage PRE-PASS by 5.01pp, and the offline probe said k
+# ranks single plugs better too (eval/results-kickrank.txt).  Whether that
+# converts into breaks is this file.
+#
+# Paired throughout: same excerpt, rotor key, hidden 10-pair board and
+# temperature in both arms, differing only by $ENIGMA_KICK_RANK.  Authentic HG
+# Nord decrypts, rotor key GIVEN, -c -J --polish -f -l wehrmacht, -R 1..5.
 #
 # ============================================================================
-# 1. THE RESULT
+# 1. THE ANSWER
 # ============================================================================
 #
-# Paired, same trial in both arms -- same excerpt, same rotor key, same hidden
-# 10-pair board, same T = 1 -- differing only by $ENIGMA_KICK_RANK.  Authentic
-# HG Nord decrypts, L = 167, rotor key GIVEN, recommended recipe
-# (-c -J --polish -f -l wehrmacht -S k4f10), 600 trials per cell.
+#   pre-pass   IC-rank -> k-rank   effect        z    paired trials
+#     k4f10      12059 -> 12112     +0.4%    +0.70           22 500
+#     i4f10      10737 -> 11147     +3.8%    +5.35           22 500
 #
-#     R      IC       k    effect   onlyIC/onlyK      z   mean%IC  mean%k
-#     1     321     303     -5.6%          89/71  -1.42     56.8    54.1
-#     2     386     366     -5.2%          81/61  -1.68     66.8    64.0
-#     3     418     408     -2.4%          68/58  -0.89     71.9    70.6
-#     4     438     421     -3.9%          67/50  -1.57     75.1    72.5
-#     5     454     440     -3.1%          63/49  -1.32     77.5    75.4
+# UNDER THE RECOMMENDED PRE-PASS THE RANKING MODEL DOES NOT MATTER.  The
+# default stays IC, and nothing is given up for it -- IC needs no language
+# where k reads the monogram table.
 #
-#   pooled  2017 -> 1938   -3.9%        368/289  z = -3.08
+# UNDER i4f10 IT DOES: +3.8%, positive in all six cells, z = +5.35.  So the
+# kick's model matters when the pre-pass is the weaker i4 and stops mattering
+# under the better k4.  Two readings, and this design does NOT separate them:
+# the kick may want a statistic the pre-pass is not already using, or i4f10
+# may simply leave more headroom for any seeding to help.  k4f10 beats i4f10
+# at every length either way, so neither reading changes a recommendation.
 #
-# NO SINGLE CELL RESOLVES, and the bands are what to read: five of five
-# negative (P = 2^-5 = 3% under a fair coin) with a pooled z past 3.  Mean
-# %-correct agrees in every cell, which is the graded, lower-variance signal.
+# Every cell, k-rank against IC-rank:
 #
-# k also costs slightly MORE per key -- it computes the monogram half as well
-# -- so at matched wall time rather than matched -R it would read a little
-# worse still.  Not measured; the effect is small beside 3.9%.
+#            L    seed  trials       IC ->      k   effect        z
+#   k4f10   60       1     600      170 ->    184    +8.2%    +1.03
+#           80       1    1500     1056 ->   1085    +2.7%    +0.93
+#          100       1     600      761 ->    804    +5.7%    +1.84
+#          120       1    1500     2949 ->   2945    -0.1%    -0.10
+#          167       1     600     2017 ->   1938    -3.9%    -3.08
+#          167       2    1500     5106 ->   5156    +1.0%    +1.20
+#   i4f10   60       1     600      172 ->    177    +2.9%    +0.34
+#           80       1    1500      846 ->    971   +14.8%    +4.23
+#          100       1     600      650 ->    664    +2.2%    +0.62
+#          120       1    1500     2497 ->   2590    +3.7%    +2.31
+#          167       1     600     1819 ->   1915    +5.3%    +3.48
+#          167       2    1500     4753 ->   4830    +1.6%    +1.78
 #
-# ============================================================================
-# 2. THE OBVIOUS EXPLANATION IS WRONG
-# ============================================================================
-#
-# This flag's own history says a kick cold enough to LAND on the joint argmax
-# loses to one merely biased toward it -- the four-plug IC optimum is a decoy
-# that outscores the truth.  So the natural reading is that k is simply
-# SHARPER at the same temperature, and needs a warmer one.
-#
-# MEASURED, AND IT IS NOT.  Extending the probe to report how concentrated the
-# softmax weights are, at T = 1, L = 167, 300 keys:
-#
-#     model   mass on the top 10 of 325   effective pool size exp(H)
-#        IC                       24.0%                       174
-#         k                       24.1%                       175
-#
-# Identical to within a tenth of a point.  z-scoring equalises the SPREAD, and
-# it turns out to equalise the shape here too: the two kicks draw from
-# equally-sized effective pools.  So "k is colder" is refuted, and a
-# temperature retune is not the fix.
+# BEST CONFIGURATION, best-of-each-schedule at 1500 trials: k4f10 wins every
+# length -- 1085 against 971 at L=80, 2949 against 2590 at 120, 5156 against
+# 4830 at 167.  THE PRE-PASS CHOICE DOMINATES THE KICK CHOICE by roughly 4x.
 #
 # ============================================================================
-# 3. WHAT IS LEFT, AND IT IS A HYPOTHESIS
+# 2. THE CELL THAT DID NOT REPLICATE -- THE MOST USEFUL THING HERE
 # ============================================================================
 #
-# k lands MORE TRUE PLUGS (0.398 against 0.362 per 4-pair kick) and BREAKS
-# FEWER MESSAGES.  Those two facts have to be reconciled and this run does not
-# do it.  The candidate worth testing:
+# The first run of this measured k DOWN, and did it convincingly:
 #
-#   THE KICK MAY WANT TO BE DECORRELATED FROM THE CLIMB'S OWN OBJECTIVE.  The
-#   pre-pass in this recipe IS k (-S k4f10).  A k-ranked kick therefore seeds
-#   the climb into basins the k pre-pass already favours, so the two agree and
-#   the kick adds little; IC is a partly INDEPENDENT statistic, and its
-#   disagreements are exactly where a kick has something to contribute.  On
-#   that reading, a better kick model is not a better one but a different one.
+#   L=167, k4f10, seed 1, 3000 paired trials    2017 -> 1938   -3.9%   z=-3.08
+#     ...with ALL FIVE restart cells negative and mean %-correct agreeing in
+#     every one of them.
 #
-#   It predicts a clean test: run the same A/B under an `i4f10` pre-pass.  If
-#   redundancy is the mechanism, k-ranking should stop losing there -- because
-#   it is then the decorrelated one -- and IC-ranking should be the redundant
-#   arm.  NOT RUN.
+# A held-out seed with 2.5x the trials read the other way:
 #
-# A second, duller possibility that the same test does not separate: the extra
-# true plugs k finds may be ones the climb recovers unaided, so landing them
-# in the kick buys nothing while displacing plugs that were worth seeding.
+#   L=167, k4f10, seed 2, 7500 paired trials    5106 -> 5156   +1.0%   z=+1.20
+#
+#   both seeds pooled:  1215 / 1186 discordant,  z = -0.59
+#
+# So a pooled z past 3, over five internally-consistent cells, on 3000 paired
+# trials, was NOT ENOUGH.  This file's own advice elsewhere -- that repeating
+# a number on one box is not evidence it is real, because the bias is stable
+# within a session -- turns out to apply to a paired recovery A/B too, with
+# the trial SET playing the role of the box.  Hold out a seed.
 #
 # ============================================================================
-# 4. THE LESSON ABOUT PROBES, WHICH IS THE DURABLE PART
+# 3. A MECHANISM WAS BUILT ON THAT NUMBER AND HAS BEEN RETRACTED
 # ============================================================================
 #
-# CLAUDE.md already records that the mono+IC AUC probe "predicts the ORDERING
-# and not the magnitude".  THIS IS WORSE THAN THAT: the probe got the ORDERING
-# wrong.  It was not a bad probe -- it measured exactly what it claimed, true
-# plugs landed by the shipped sampler, paired against the same random stream,
-# and k really does land more.  The failure is that the quantity is not the
-# objective: more true plugs in a seed is not more breaks, because the kick's
-# job is where it puts the climb, not how right it already is.
+# With seed 1 alone the two schedules flipped sign (-3.9% under k4f10, +5.3%
+# under i4f10, interaction z = +4.62), and the MATCHED pairings both lost to
+# the MIXED ones:
 #
-# So the note in CLAUDE.md should read that an offline probe justifies
-# STARTING a recovery run and is not evidence of the sign of one, in either
-# direction.  This is the second time in this feature's history that a seeding
-# idea looked good offline and lost end to end (the beam over the same scores
-# was the first, eval/results-beam-seeds.txt).
+#   pre-pass k4:  matched (k kick) 1938   mixed (IC kick) 2017
+#   pre-pass i4:  matched (IC kick) 1819  mixed (k kick)  1915
+#
+# That reads as a principle -- the kick should DISAGREE with the pre-pass, so
+# a better kick model is not a better one but a different one.  It is an
+# appealing story and it rested entirely on the one cell that did not
+# replicate.  Only the i4 half survives, and "k helps under i4, does nothing
+# under k4" is a much weaker statement than "matched pairings lose".
+#
+# BEWARE A RESULT THAT ARRIVES WITH ITS OWN EXPLANATION ATTACHED.  The
+# mechanism made the number feel understood, which made it feel solid.
 #
 # ============================================================================
-# 5. STATUS
+# 4. WHAT STILL HOLDS FROM THE FIRST WRITEUP
 # ============================================================================
 #
-# $ENIGMA_KICK_RANK stays, default i, which is byte-identical to the shipped
-# behaviour.  It is now a measurement switch with a measured answer rather
-# than an open question, and it is what any retest of section 3 would use.
+# THE OFFLINE PROBE DID NOT PREDICT THE END-TO-END RESULT.  k really does rank
+# single plugs better -- 0.398 true plugs per 4-pair kick against IC's 0.362
+# at L=167 -- and under the recommended pre-pass that converts to +0.4%,
+# i.e. nothing.  More true plugs in a seed is not more breaks, because the
+# kick's job is WHERE IT PUTS THE CLIMB, not how right it already is.  Treat
+# an offline seeding probe as justifying a recovery run, never as evidence of
+# its sign or size.
 #
-# ONE LENGTH (167), one temperature (T = 1), one seed, one pre-pass (k4f10),
-# rotor key given.  The pre-pass is the variable section 3 wants changed.
+# "k IS SHARPER AND NEEDS A WARMER T" IS REFUTED.  At T = 1 both models put
+# 24.0% / 24.1% of the softmax mass on their top 10 and draw from effective
+# pools of 174 / 175 of 325: the z-scoring equalises the shape, not merely the
+# spread.
+#
+# ============================================================================
+# 5. SCOPE
+# ============================================================================
+#
+# Five lengths, two schedules, T = 1, rotor key given, wehrmacht, -R 1..5.
+# Two seeds only at L=167; the L=80 and L=120 cells are single-seed and 1500
+# trials, so by this file's own section 2 they should not be read as settled
+# either.  The i4f10 result is the one that survives replication in the sense
+# that matters -- it is positive in six cells across five lengths and two
+# seeds -- but no i4f10 cell has been re-run on held-out trials at fixed
+# length.
