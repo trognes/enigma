@@ -162,7 +162,43 @@
 # eval/results-tclimb.txt section 4).  Not worth the risk for 0.3%.
 #
 # ============================================================================
-# 6. SCOPE
+# 6. AT EQUAL COMPUTE -- k-RANKING IS A WASH UNDER k4f10
+# ============================================================================
+#
+# The A/B matched -R, and k-ranking costs more per restart, so the arms were
+# not equal-compute.  Correcting for it: compare breaks_k(R) against
+# breaks_IC(R x ratio), interpolating IC's own measured restart curve, over
+# all twelve cells.
+#
+#   pre-pass   matched -R   ratio 1.02   ratio 1.035   ratio 1.05
+#     k4f10        +0.4%        -0.0%         -0.4%        -0.7%
+#     i4f10        +3.8%        +3.4%         +3.0%        +2.7%
+#
+# UNDER THE RECOMMENDED PRE-PASS IT IS A WASH: k-ranking converts its small
+# quality edge exactly into its cost.  Under i4f10 it clears the cost with
+# room to spare.  THE CONCLUSION IS INSENSITIVE TO THE RATIO across the whole
+# plausible 2-5% range, which is what makes it usable -- see below.
+#
+# Cell by cell at 3.5%, k4f10: +6.5, +4.4, -4.5, +1.5, -1.2, +0.3.  So four of
+# six stay positive even after paying, and the pooled wash comes from the one
+# large negative being the L=167 seed-1 cell that did not replicate, sitting
+# beside its replication at +0.3.  Nothing resolves either way.
+#
+# DO NOT RUN THE FULL BREAKS-VS-COMPUTE CURVE TO SETTLE THIS.  Resolving a
+# +0.4% matched-R effect to z = 2 needs ~8x the trials already spent
+# (~185 000 paired trials, hours), and the equal-compute correction puts the
+# true effect at or below zero -- so the most likely outcome of that spend is
+# a confirmed null.  The cheap interpolation above is the whole answer.
+#
+# THE TIMING INSTRUMENT FAILED THE DAY THIS WAS RUN, which is why the table is
+# a sensitivity band and not a point estimate.  Self-control ratios (the same
+# arm timed twice) spanned 0.946 to 1.056 -- +/-5%, against a 2-5% effect --
+# and the same cell read 680 us/restart in one session and 408 in another.
+# Wall-clock ratios at this scale need a quiet box; the band sidesteps the
+# problem because every ratio in it gives the same answer.
+#
+# ============================================================================
+# 7. SCOPE
 # ============================================================================
 #
 # Five lengths, two schedules, T = 1, rotor key given, wehrmacht, -R 1..5.

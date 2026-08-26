@@ -1111,8 +1111,11 @@ are read from a **data directory** (filenames built as
     `eval/results-kickrank-ab.txt`.
     - **Under an `i4f10` pre-pass `k`-ranking IS a win**: +3.8%
       (10 737 → 11 147, z = +5.35), positive in all six cells — call it
-      +3.3% at matched wall time, since ranking by `k` costs 1.7–5.4% more
-      per restart and the A/B matched `-R`. **The pre-pass choice itself is
+      +3.0% at matched compute, since ranking by `k` costs a few percent more
+      per restart and the A/B matched `-R`. **Under `k4f10` the same
+      correction takes the +0.4% to −0.0…−0.7%, i.e. a wash** — it converts
+      its small edge exactly into its cost, and that holds across the whole
+      2–5% range the cost ratio could plausibly take. **The pre-pass choice itself is
       free**: `k4f10` and `i4f10` differ by under 1% of wall, inside the
       self-control floor, so `k4f10` buys its breaks with nothing. So the kick's
       model matters when the pre-pass is the weaker `i4` and stops mattering
