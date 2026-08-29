@@ -164,6 +164,32 @@ data_for() {
   else printf '%s' "$HEAD_DATA"; fi
 }
 
+# Read every n-gram table into the page cache before any timing starts, and
+# fault in both binaries.
+#
+# `min_time` wraps the WHOLE invocation, so a cold table read lands inside a
+# measured run rather than beside it. The two arms do not share the cost: an
+# A/B has two SEPARATE copies on disk (HEAD_DATA and BASE_DATA, ~27 MB each),
+# so whichever arm touches a table first pays for it, and the long tiers take
+# no warm-up run to absorb it. `icscan` reads no table at all -- ~6ms of
+# startup against ~32ms for `search` -- so leaving this to chance would make
+# the two scan tiers differ by more than the model they are meant to isolate.
+#
+# Cheap insurance rather than a proven fix: on a LONG=1 run the quick tiers
+# have already touched these files by the time the long tiers start, so this
+# only bites when the cache is evicted in between or a subset is run.
+warm_cache() {
+  for _d in "$HEAD_DATA" "$BASE_DATA"; do
+    { [ -n "$_d" ] && [ -d "$_d" ]; } || continue
+    cat "$_d"/*.txt >/dev/null 2>&1 || true
+  done
+  for _b in "$HEAD_BIN" "$BASE_BIN"; do
+    { [ -n "$_b" ] && [ -x "$_b" ]; } || continue
+    printf 'ABCDEFGHIJ' | "$_b" -i -u B -w 123 -r AAA -g AAA \
+      >/dev/null 2>&1 || true
+  done
+}
+
 # trunc LEN -> first LEN characters of the English benchmark plaintext (shares
 # the passage used by the cracking tests in run_tests.sh).
 PT="THEQUICKANALYSISOFLANGUAGESTATISTICSSHOWSTHATENGLISHTEXTHASAMUCHHIGHERINDEXOFCOINCIDENCETHANRANDOMLYCHOSENLETTERSBECAUSESOMELETTERSLIKEEANDTOCCURFARMOREOFTENTHANOTHERSWHENWEEXAMINEALONGPASSAGEOFORDINARYPROSEWEFINDTHATCERTAINCOMMONWORDSANDLETTERPATTERNSREPEATSOOFTEN"
@@ -315,6 +341,8 @@ fi
 printf 'LONG=%s  SCALE=%s  quick reps=%s  long reps=%s\n\n' \
   "$LONG" "$SCALE" "$QUICK_REPS" "$LONG_REPS"
 sum_header
+
+warm_cache
 
 # --- search: brute-force scan, no plugboard (wildcard wheels + start) ---------
 ct_s=$(encrypt "$(trunc 80)" "")
