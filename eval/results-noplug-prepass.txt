@@ -89,3 +89,51 @@ discordant A/B 50/56   z = +0.58   (positive favours B)
 #       --exclude 6
 #   python3 eval/noplug_prepass_ab.py --trials 600 --length 100 \
 #       --restarts 8 --kick 4 --exclude 6 --jobs 4
+
+# FULL STRICTNESS SWEEP, --exclude 1..12, 600 trials, one pass.  Arm A is
+# computed once per trial and the f10 continuations memoised by (key, seed)
+# across arms.  --exclude 0 is the null control: no letters pinned, so arm B
+# must be byte-identical to arm A.
+
+# L=100, 600 trials, -S i4 then f10, --random 4, -R 8 both arms
+ excl  letters      >=50%   mean%  seeds   effect       z
+    A       26    114/600    26.4   6.87       --      --
+    0       26    114/600    26.4   6.87    +0.0pp   +0.00
+    1       25    127/600    29.1   6.80    +2.2pp   +1.46
+    2       24    114/600    27.4   6.76    +0.0pp   +0.00
+    3       23    121/600    27.7   6.73    +1.2pp   +0.73
+    4       22    125/600    28.7   6.59    +1.8pp   +1.08
+    5       21    120/600    28.0   6.53    +1.0pp   +0.61
+    6       20    120/600    27.2   6.32    +1.0pp   +0.58
+    7       19    122/600    27.8   6.23    +1.3pp   +0.77
+    8       18    114/600    26.6   6.05    +0.0pp   +0.00
+    9       17     97/600    24.9   5.85    -2.8pp   -1.64
+   10       16     99/600    24.5   5.57    -2.5pp   -1.45
+   11       15     98/600    23.9   5.38    -2.7pp   -1.55
+   12       14     86/600    22.3   5.08    -4.7pp   -2.67
+
+# THE SAFE RANGE IS THE FINDING: harmless to ~8 excluded letters, harmful
+# beyond, crossing over at ~18 letters retained.  Every mild cell is >= 0,
+# every strict cell is negative, and the mean %-correct and the seed count both
+# track monotonically.  The negative half is mechanically explained -- diversity
+# falls 6.87 -> 5.08 across the sweep, and past ~8 that tax overwhelms whatever
+# sharpening the restriction buys.
+#
+# DO NOT READ THE POSITIVE HALF AS A SMALL WIN.  The largest gain sits at
+# --exclude 1, where the mechanism can barely act: one letter removes 25 of 325
+# moves and costs 0.07 of a seed.  If restricting to high-SNR plugs genuinely
+# helped, the effect would BUILD with strictness before the diversity tax bit,
+# not peak at the weakest possible dose.  Cells 1-8 look like noise around zero
+# (mean +1.06pp, range 0.0-2.2, no cell above z = 1.46) sitting on a real
+# negative trend that starts at 9.  Twelve cells at +/-3.4pp each guarantee one
+# impressive-looking cell by chance; picking --exclude 1 on this evidence would
+# be exactly that mistake.
+#
+# Settling whether the mild region is +1pp rather than 0 needs ~4800 trials at
+# ONE level.  Choose it on mechanism (--exclude 5 or 6, removing a meaningful
+# share of low-SNR moves at negligible diversity cost), never on this sweep's
+# maximum.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --exclude-sweep 1 2 3 4 5 6 7 8 9 10 \
+#       11 12 --trials 600 --length 100 --restarts 8 --kick 4 --jobs 4
