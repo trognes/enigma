@@ -168,9 +168,11 @@ base-vs-base controls (run 1 / run 2):
 | g++ x86_64 | **−7.5 / −6.7** | +4.4 / +2.8 | −0.1 / +0.2 | −0.2 / **+2.4** |
 | clang x86_64 | −1.5 / +4.4 | +5.3 / −1.5 | −0.4 / −0.2 | +0.6 / −0.0 |
 
-`icscan` holds within ±0.6% in **15 of 16** readings, the exception being
-+2.4% on g++ x86_64 long — so it is the tightest tier, but its floor is
-**−0.4…+2.4%**, not the ±0.6% one run suggested. `search` spans −7.5…+9.1%.
+`icscan` holds within ±0.7% in **25 of 26** readings across four control
+runs, the single exception being +2.4% (g++ x86_64 long, before
+`warm_cache`) — so it is the tightest tier, but its floor is **−0.7…+2.4%**,
+not the ±0.6% one run suggested. Restricted to the runs *with* `warm_cache`
+it holds **−0.7…+0.5%**. `search` spans −7.5…+9.1% without it.
 
 **Two hypotheses died in the second run, and one survived — then `warm_cache`
 killed it.** Run 1 had all four `search` long cells positive, which looked
