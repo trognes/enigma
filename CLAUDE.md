@@ -3111,29 +3111,43 @@ win and was removed too; the scalar fused loop is the current form.
 > loops (`quadgram`, `allgram`, `trigram`, `bigram`, `monogram`) carry a
 > `SCORE_UNROLL` pragma; `ngram_ic_decode` — the `-f` loop — is unrolled **by
 > hand**, with four private histograms summed at the end. Both are
-> byte-identical (the accumulators are integer sums). **The size depends on
-> the CPU, and on `fused` it ranges from −18.6% to nothing.** On arm64 it is
-> large and reproducible; on the GitHub g++ x86_64 runner it is neutral to
-> mildly negative; on one local x86 CPU it is −5.8%.
+> byte-identical (the accumulators are integer sums). Measured on the two
+> Bench cells that can measure (see below): `fused` long **−18.7% on g++
+> arm64 and −13.7% on clang arm64**, and on `search`/`hillclimb` long −12.5%
+> / −15.6% (g++ arm64) and −3.7% / −6.4% (clang arm64). On x86_64 the same
+> change reads −8.5% (clang, 3/3 negative) and **−0.7%, i.e. nothing** (g++).
 >
-> **The two arm64 Bench cells are the instrument for scorer work; g++ x86_64
-> is a smoke test.** The Bench matrix was run twice on byte-identical code
-> (a comment-only commit re-ran it), which is a free four-cell control. g++
-> arm64 reproduced its ABSOLUTE timings to the hundredth of a second — search
-> base 0.68 / head 0.60 twice over — so its percentages moved ≤1.2 points and
-> its `fused` long tier read −18.9 then −18.6. **g++ x86_64 moved 8.2 points
-> on `search` quick on identical code**, with the base time itself going
-> 0.64 → 0.70 s. That contradicts the +0.9%/+0.2% worst case recorded for that
-> cell below, so **a documented noise floor is workload- and run-specific, not
-> a property of the runner**: PR #205's control was one run on a fixed pair of
-> binaries, where two runs twenty minutes apart additionally sample whichever
-> host the job lands on.
+> **THE arm64 BENCH CELLS ARE THE INSTRUMENT FOR SCORER WORK; THE x86_64
+> CELLS CANNOT MEASURE AT THIS RESOLUTION.** Three comment-only commits
+> re-ran the matrix on byte-identical binaries, which makes the base column a
+> free control — the base binary is fixed by construction, so any movement in
+> its *absolute* time is pure instrument:
+>
+> | cell | `fused` long, 3 runs | mean | base seconds | var |
+> |---|---|---:|---|---:|
+> | g++ arm64 | −18.9 / −18.6 / −18.7 | −18.7 | 20.59 / 20.53 / 20.59 | 0.3% |
+> | clang arm64 | −14.2 / −13.5 / −13.3 | −13.7 | 17.07 / 16.97 / 16.96 | 0.6% |
+> | clang x86_64 | −5.5 / −8.2 / −11.9 | −8.5 | 16.37 / 11.89 / 20.92 | 76% |
+> | g++ x86_64 | −0.1 / +3.0 / −4.9 | −0.7 | 18.09 / 20.06 / 23.18 | 28% |
+>
+> The arm64 runners are essentially deterministic — identical work three runs
+> apart lands within 0.06 s. The x86_64 runners ran *the same base binary* in
+> 11.89 s once and 20.92 s another time, so no x86_64 percentage means
+> anything at the few-percent level. **Watch the base column**: it needs no
+> reasoning about percentages and it is printed on every line.
+>
+> This does not retire the ±0.5%/±4.5% per-tier floors documented below, but
+> it does bound how far one may be carried: **a noise floor is workload- AND
+> run-specific.** PR #205's +0.9% control for g++ x86_64 was one run on a
+> fixed pair of binaries; it cannot see host-to-host variation, and reading it
+> as a property of the runner produced a "regression" here that three runs
+> average to −0.7%.
 >
 > **A control must share the workload's bottleneck to bound its noise.** The
-> `crib` tier read −0.5…+0.9% in all sixteen cells across both runs and looked
-> like proof the runners were quiet. It is deduction-bound (`crib_try` is
-> 63.6% of it), so it stays flat through exactly the disturbance that moves
-> the gather-bound tiers by eight points.
+> `crib` tier read −0.5…+1.2% in all twenty-four cells across the three runs
+> and looked like proof the runners were quiet. It is deduction-bound
+> (`crib_try` is 63.6% of it), so it stays flat through exactly the
+> disturbance that moves the gather-bound tiers by eight points.
 >
 > **The pragma alone makes the `-f` loop SLOWER — +11.7% on g++ `fused`
 > long.** That loop does `freq[d]++`, and four increments scheduled together

@@ -8,16 +8,16 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
-- **The pure-gather scorer loops are unrolled 4x — 5–15% faster under g++,
-  neutral under clang.** `quadgram`, `allgram`, `trigram`, `bigram` and
-  `monogram` carry a `SCORE_UNROLL` pragma (`#pragma GCC unroll 4` /
-  `#pragma clang loop unroll_count(4)`). Measured against a same-hour
-  base-vs-base control of ±1.4% (long) and ±2.7% (quick): g++ `search` −8.2 /
-  −8.9%, `hillclimb` −10.1 / −8.9%. The CI matrix puts the g++ figure at
-  −4.7…−6.2% on x86_64 and −11.1…−15.3% on arm64, and clang at −3.1…−6.3%
-  (arm64) against +2.4…+4.0% (x86_64, the matrix cell whose own control is
-  ±9%, so unresolvable). No regression on either compiler. Byte-identical —
-  the accumulator is an integer sum, so splitting it changes nothing.
+- **The pure-gather scorer loops are unrolled 4x — 12–16% faster under g++
+  and 4–6% under clang on arm64.** `quadgram`, `allgram`, `trigram`,
+  `bigram` and `monogram` carry a `SCORE_UNROLL` pragma —
+  `#pragma GCC unroll 4` / `#pragma clang loop unroll_count(4)`. Measured
+  against a same-hour base-vs-base control: g++ `search` −8.2 / −8.9%,
+  `hillclimb` −10.1 / −8.9%.
+  On the arm64 CI cells — the only ones that reproduce (see below) — `search`
+  long is −12.5% (g++) / −3.7% (clang) and `hillclimb` long −15.6% / −6.4%,
+  each with a spread under 1.5 points across three runs. Byte-identical — the
+  accumulator is an integer sum, so splitting it changes nothing.
   - **The three scorers that also do `freq[d]++` are deliberately NOT
     unrolled** — `ic`, `monoic` and `ngram_ic` (`-f`). Unrolling those
     *regresses*: g++ `fused` long read **+11.7%** with all eight loops
@@ -41,13 +41,14 @@ existing command lines can behave differently or stop working.
   single-pass and the merge is O(alphabet), not O(message). Byte-identical:
   the counts are the same integers whichever array they land in, and the
   n-gram terms are added in the same order into the same `long`.
-  - **The size depends on the CPU.** The Bench matrix ran twice on
-    byte-identical code, so its run-to-run spread is known: arm64 reproduces
-    to ≤1.2 points (g++ arm64 gave identical absolute timings both runs) and
-    reads `fused` long at **−18.9 / −18.6%**; clang arm64 −14.2 / −13.5%;
-    clang x86_64 −5.5 / −8.2%; a local g++ x86_64 box −5.8%. The GitHub g++
-    x86_64 runner reads −0.1 / +3.0% — **neutral there**, and that cell moved
-    8.2 points on identical code, so it cannot resolve a change this size.
+  - **The size depends on the target.** The Bench matrix ran three times on
+    byte-identical code, so its run-to-run spread is known — and the arm64
+    runners are deterministic (the same base binary times to within 0.06 s
+    across all three) while the x86_64 runners vary by 28–76% in absolute
+    throughput and cannot resolve a change this size. Taking the arm64 cells
+    as the instrument, `fused` long is **−18.7% (g++ arm64, ±0.3)** and
+    **−13.7% (clang arm64, ±0.9)**; on x86_64 it reads −8.5% under clang
+    (3/3 negative) and **−0.7% under g++, i.e. nothing**.
   - The hot loop goes 25.0 → 18.2 instructions per character under g++ and
     24.0 → 18.5 under clang, loads unchanged at ~6.
   - The preceding entry's conclusion that the `freq[d]++` loops "cannot be
