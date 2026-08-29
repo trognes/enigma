@@ -382,3 +382,69 @@ inherent to the work; it was an artefact of four copies sharing one
 accumulator.  Any per-iteration accumulator that unrolling would serialise is
 a candidate for the same treatment: give each copy its own and merge at the
 end, as long as the merge is O(alphabet) and not O(L).
+
+
+THE CI MATRIX RE-MEASURES BOTH PARTS, AND IT REVISES THE -f HEADLINE
+====================================================================
+
+CLAUDE.md's rule is that for anything under a few percent the CI matrix is the
+measurement and the local run is a smoke test, because a container's bias is
+stable WITHIN a session -- so a number reproduced twice on one box is not
+thereby real.  The Bench workflow ran all four cells against the same base
+(dev), i.e. the same comparison as the local runs above.
+
+  cell           search q/l    hillclimb q/l    FUSED q/l     crib q/l
+  g++ x86_64    -4.8 / -5.4    -4.7 /  -6.2   +8.1 /  -0.1   -0.0 / +0.1
+  g++ arm64    -11.1 /-12.0   -13.5 / -15.3  -11.4 / -18.9   -0.3 / -0.4
+  clang x86_64  +2.4 / +3.4    +2.4 /  +4.0   -2.2 /  -5.5   -0.4 / -0.2
+  clang arm64   -3.4 / -4.4    -3.1 /  -6.3   -8.5 / -14.2   +0.4 / -0.5
+
+**THE RUNNERS WERE QUIET, and the crib tier is what says so.**  It reads
+-0.5%..+0.4% in all eight cells.  It is not a code control -- it runs -q, one
+of the unrolled loops -- but it is deduction-bound (crib_try is 63.6% of it,
+and most keys are rejected before anything is scored), so its flatness rules
+out machine interference, which is the alternative explanation for any single
+cell blowing up.
+
+**POOLING THE SIX INDEPENDENT LONG-TIER FUSED READINGS** -- four runner cells
+plus the two local ones -- gives -0.1, -5.5, -5.8, -12.3, -14.2, -18.9.  Every
+one is a gain or nothing; the median is about -9% and the mean -9.5%.  On the
+quick tier five of six are gains and one is not.
+
+**SO THE HONEST -f CLAIM IS A RANGE, NOT THE -6%/-12% THE LOCAL RUN GAVE.**
+The change is worth nothing to -19% depending on the machine, and the local
+pair sat in the middle of that spread rather than measuring it.
+
+**THE ONE ADVERSE READING IS g++ x86_64 QUICK, +8.1%**, against that cell's
+own documented base-vs-base control of +0.9% quick / +0.2% long -- the
+tightest control in the matrix, so it is outside its floor and is not scatter
+in the ordinary sense.  Three things bound it:
+
+  - the SAME CELL's long tier reads -0.1%, so on that machine the change is
+    neutral, not harmful;
+  - the local box is ALSO g++ x86_64 and read -3.1 / -5.8, so this is a CPU
+    MODEL difference, not a compiler or architecture one -- two g++ x86_64
+    measurements of identical code disagree by 5.7 points on the long tier;
+  - the quick tier's fused base is 0.44 s with a ~0.1 s process startup inside
+    it, which is where code-layout effects land hardest (CLAUDE.md records a
+    +11-19% flagged cell that objdump showed was pure code placement).
+
+It is not resolved.  What can be said is that it is one cell of eight, its
+own long tier contradicts it, and nothing in the matrix approaches the 25%
+blocking threshold or even trips the 10% advisory one.
+
+**THE GATHER-LOOP HEADLINE ALSO WIDENS.**  "~9% under g++" was the local
+reading; the runners say -4.7..-6.2% on g++ x86_64 and -11.1..-15.3% on g++
+arm64, so the honest figure is 5-15% under g++ with arm64 at the top of it.
+Clang was documented as neutral and the runners agree on arm64 (-3.1..-6.3%,
+i.e. a mild gain) but read +2.4..+4.0% on x86_64 -- that cell's own control is
++1.8% quick and -9.0% long on search, the loosest in the matrix, so a move of
+that size there says nothing either way.
+
+**WHAT THIS COST TO LEARN.**  Nothing was wrong with the local measurement as
+a measurement -- the controls were run, the increment was calibrated against
+drift, and the effect was real on that box.  What it could not do is tell a
+machine-specific effect from a general one, and only a different instrument
+can.  The local run's job was to establish the mechanism works; the matrix's
+job is to say how much it is worth, and the two answers differ by more than
+the local run's own error bars suggested was possible.

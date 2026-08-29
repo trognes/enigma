@@ -3111,8 +3111,16 @@ win and was removed too; the scalar fused loop is the current form.
 > loops (`quadgram`, `allgram`, `trigram`, `bigram`, `monogram`) carry a
 > `SCORE_UNROLL` pragma; `ngram_ic_decode` — the `-f` loop — is unrolled **by
 > hand**, with four private histograms summed at the end. Both are
-> byte-identical (the accumulators are integer sums). Worth ~9% under g++ on
-> `search`/`hillclimb`, and on `fused` −5.8% (g++) / −12.3% (clang).
+> byte-identical (the accumulators are integer sums). Worth 5–15% under g++ on
+> `search`/`hillclimb`, and on `fused` **anything from nothing to −19%
+> depending on the CPU** — six independent long-tier readings against `dev`
+> (the four CI cells plus two local) give −0.1, −5.5, −5.8, −12.3, −14.2 and
+> −18.9%. **The spread is between CPU MODELS, not compilers or
+> architectures**: two g++ x86_64 measurements of identical code disagree by
+> 5.7 points, and that cell's quick tier is the one adverse reading in the set
+> at +8.1% against its own ±0.9% control. Take the range, not a single box's
+> number — this is the clearest case in the file of a local measurement being
+> sound as a measurement and still not generalising.
 >
 > **The pragma alone makes the `-f` loop SLOWER — +11.7% on g++ `fused`
 > long.** That loop does `freq[d]++`, and four increments scheduled together

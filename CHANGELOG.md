@@ -8,14 +8,16 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
-- **The pure-gather scorer loops are unrolled 4x — about 9% faster under g++,
+- **The pure-gather scorer loops are unrolled 4x — 5–15% faster under g++,
   neutral under clang.** `quadgram`, `allgram`, `trigram`, `bigram` and
   `monogram` carry a `SCORE_UNROLL` pragma (`#pragma GCC unroll 4` /
   `#pragma clang loop unroll_count(4)`). Measured against a same-hour
   base-vs-base control of ±1.4% (long) and ±2.7% (quick): g++ `search` −8.2 /
-  −8.9%, `hillclimb` −10.1 / −8.9%; clang within ±3% everywhere, no regression
-  on either compiler. Byte-identical — the accumulator is an integer sum, so
-  splitting it changes nothing.
+  −8.9%, `hillclimb` −10.1 / −8.9%. The CI matrix puts the g++ figure at
+  −4.7…−6.2% on x86_64 and −11.1…−15.3% on arm64, and clang at −3.1…−6.3%
+  (arm64) against +2.4…+4.0% (x86_64, the matrix cell whose own control is
+  ±9%, so unresolvable). No regression on either compiler. Byte-identical —
+  the accumulator is an integer sum, so splitting it changes nothing.
   - **The three scorers that also do `freq[d]++` are deliberately NOT
     unrolled** — `ic`, `monoic` and `ngram_ic` (`-f`). Unrolling those
     *regresses*: g++ `fused` long read **+11.7%** with all eight loops
@@ -29,8 +31,9 @@ existing command lines can behave differently or stop working.
     0% (the loop is not front-end bound), and removing one of six loads gained
     7% under g++ but cost clang 3–5% on a model the recipe does not recommend.
 
-- **`-f` is unrolled too, by giving each unrolled copy its own histogram — 6%
-  faster under g++ and 12% under clang.** `ngram_ic_decode` accumulates into
+- **`-f` is unrolled too, by giving each unrolled copy its own histogram —
+  worth nothing to 19% depending on the machine.** `ngram_ic_decode`
+  accumulates into
   four private counter arrays (`f0`…`f3`) that are summed over the 26 bins at
   the end, so the four `freq[]` increments in one iteration touch four
   different arrays and the store-forwarding collision above is removed by
@@ -38,11 +41,15 @@ existing command lines can behave differently or stop working.
   single-pass and the merge is O(alphabet), not O(message). Byte-identical:
   the counts are the same integers whichever array they land in, and the
   n-gram terms are added in the same order into the same `long`.
-  - Measured against `origin/dev`, `fused` tier: g++ −3.1 / −5.8% (quick /
-    long), clang −11.2 / −12.3%, against control-tier drift of 0.1–2.4 points
-    on the three unchanged tiers. The hot loop goes 25.0 → 18.2 instructions
-    per character under g++ and 24.0 → 18.5 under clang, loads unchanged at
-    ~6.
+  - Six independent long-tier `fused` readings against `dev` — the four CI
+    matrix cells plus two local — give **−0.1, −5.5, −5.8, −12.3, −14.2 and
+    −18.9%**, median ~−9%. Five of six quick-tier readings agree; the
+    exception is g++ x86_64 at **+8.1%**, whose own long tier reads −0.1% and
+    whose sibling local box (also g++ x86_64) reads −5.8%, so the spread is
+    between CPU models rather than compilers or architectures. Not resolved;
+    no cell trips the 10% advisory threshold. The hot loop goes 25.0 → 18.2
+    instructions per character under g++ and 24.0 → 18.5 under clang, loads
+    unchanged at ~6.
   - The preceding entry's conclusion that the `freq[d]++` loops "cannot be
     unrolled profitably" held for the loop as written and not for the work it
     does: the serialised store was an artefact of four copies sharing one
