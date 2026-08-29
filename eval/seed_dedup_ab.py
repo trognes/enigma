@@ -94,6 +94,11 @@ def main():
     ap.add_argument("--seed", type=int, default=17)
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--timing", action="store_true")
+    ap.add_argument("--skip-ladder", type=int, nargs="+", default=None,
+                    help="report the skip rate at each -R over --trials keys. "
+                         "This is the quantity that decides everything: the "
+                         "saving is ~0.53x the skip rate, so a budget where "
+                         "dedup rarely fires cannot fund extra restarts.")
     args = ap.parse_args()
 
     if not os.path.exists(ENIGMA):
@@ -112,41 +117,86 @@ def main():
             cmd += ["--seed-dedup"]
         return run(cmd, ct)
 
+    if args.skip_ladder:
+        specs = make_specs(corpus, L, args.trials, args.seed)
+        cases = []
+        for pt, w, r, g, pb in specs:
+            key = ["-u", "B", "-w", w, "-r", r, "-g", g]
+            ct, _ = run(key + ["-s", pb], pt)
+            cases.append((key, ct))
+        print(f"# skip rate, L={L}, -S {args.schedule} --random {args.kick}, "
+              f"{len(cases)} keys")
+        print(f"{'R':>7} {'skipped':>9} {'of seeds':>9} {'skip%':>7} "
+              f"{'saving':>8} {'affords':>9}")
+        for R in args.skip_ladder:
+            sk = tot = 0
+            for key, ct in cases:
+                _, err = climb(key, ct, R, True)
+                m = re.search(r"Skipped (\d+) full climbs on duplicate seeds "
+                              r"of (\d+)", err)
+                if m:
+                    sk += int(m.group(1))
+                    tot += int(m.group(2))
+            rate = sk / tot if tot else 0.0
+            sav = 0.53 * rate          # the documented ~half-the-skip-rate rule
+            print(f"{R:>7} {sk:>9} {tot:>9} {100.0 * rate:>6.1f}% "
+                  f"{100.0 * sav:>7.1f}% {R / (1.0 - sav):>9.1f}")
+        return
+
     if args.timing:
+        # THE COST MUST BE A SLOPE, NOT A TOTAL.  ~0.105 s of every invocation
+        # is process startup, which is 18% of a whole run at -R 1000 and 96%
+        # at -R 10 -- so comparing totals understates the saving badly at high
+        # -R and reports pure noise at low -R.  Fit time against R instead and
+        # solve for the restart count arm B affords, startup included once.
         specs = make_specs(corpus, L, 6, args.seed)
         cases = []
         for pt, w, r, g, pb in specs:
             key = ["-u", "B", "-w", w, "-r", r, "-g", g]
             ct, _ = run(key + ["-s", pb], pt)
             cases.append((key, ct))
-        print(f"# whole-run cost, L={L}, -S {args.schedule} "
-              f"--random {args.kick}, {len(cases)} keys, min of 3 reps, "
-              f"single-threaded")
-        got = {}
+        R = args.restarts
+        ladder = sorted({0, R, 2 * R, 4 * R})
+        print(f"# cost, L={L}, -S {args.schedule} --random {args.kick}, "
+              f"{len(cases)} keys, min of 3 reps, single-threaded")
+        print(f"{'dedup':>6} " + " ".join(f"{'R=' + str(x):>9}" for x in ladder)
+              + f" {'us/restart':>11} {'skip@R':>8}")
+        fit = {}
         for dedup in (False, True):
-            best = None
-            for _ in range(3):
-                t0 = time.perf_counter()
-                for key, ct in cases:
-                    climb(key, ct, args.restarts, dedup)
-                t = time.perf_counter() - t0
-                best = t if best is None else min(best, t)
-            got[dedup] = best
-            print(f"  --seed-dedup {'on ' if dedup else 'off'}  "
-                  f"{best:8.3f} s for {len(cases)} keys at "
-                  f"-R {args.restarts}")
-        # report the skip rate the run itself prints, so the saving can be
-        # checked against the ~0.53x-of-skip-rate rule
-        _, err = climb(cases[0][0], cases[0][1], args.restarts, True)
-        m = re.search(r"Skipped (\d+) full climbs on duplicate seeds of "
-                      r"(\d+) \(([0-9.]+)%\)", err)
-        if m:
-            print(f"  skip rate {m.group(3)}%  "
-                  f"({m.group(1)} of {m.group(2)} seeds)")
-        if got[True] > 0:
-            sav = 1.0 - got[True] / got[False]
-            print(f"\nsaving {100.0 * sav:.1f}% of wall time -> arm B affords "
-                  f"-R {round(args.restarts / (1.0 - sav))} at arm A's cost")
+            times = []
+            for x in ladder:
+                best = None
+                for _ in range(3):
+                    t0 = time.perf_counter()
+                    for key, ct in cases:
+                        climb(key, ct, x, dedup)
+                    t = time.perf_counter() - t0
+                    best = t if best is None else min(best, t)
+                times.append(best)
+            n = len(ladder)
+            mx = sum(ladder) / n
+            my = sum(times) / n
+            num = sum((a - mx) * (b - my) for a, b in zip(ladder, times))
+            den = sum((a - mx) ** 2 for a in ladder)
+            slope = num / den
+            fit[dedup] = (slope, my - slope * mx)
+            skip = ""
+            if dedup:
+                _, err = climb(cases[0][0], cases[0][1], R, True)
+                m = re.search(r"Skipped (\d+) full climbs on duplicate seeds "
+                              r"of (\d+) \(([0-9.]+)%\)", err)
+                skip = (m.group(3) + "%") if m else "n/a"
+            print(f"{'on' if dedup else 'off':>6} "
+                  + " ".join(f"{t:9.3f}" for t in times)
+                  + f" {slope * 1e6 / len(cases):11.1f} {skip:>8}")
+        sa, ia = fit[False]
+        sb, _ = fit[True]
+        if sb > 0:
+            # arm A's whole-run cost at R, solved for arm B's restart count
+            cost_a = ia + sa * R
+            rb = (cost_a - ia) / sb
+            print(f"\nper-restart saving {100.0 * (1.0 - sb / sa):.1f}%  ->  "
+                  f"arm B affords -R {rb:.1f} at arm A's -R {R} cost")
         return
 
     rb = args.restarts_b or args.restarts
