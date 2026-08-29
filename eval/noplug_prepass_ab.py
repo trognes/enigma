@@ -127,6 +127,12 @@ def main():
     ap.add_argument("--timing", action="store_true",
                     help="fit the per-restart cost of the stage-0 climb in "
                          "each arm; single-threaded, wants a quiet box")
+    ap.add_argument("--seed-ladder", type=int, nargs="+", default=None,
+                    help="distinct stage-0 seeds per arm at each -R. Arm B "
+                         "explores less at equal restarts, so the plain "
+                         "comparison confounds 'restricting the letters' with "
+                         "'reducing exploration'; this is what sets B's "
+                         "restart count for the diversity-matched run.")
     args = ap.parse_args()
 
     if not os.path.exists(ENIGMA):
@@ -134,6 +140,35 @@ def main():
 
     corpus = corpus_text()
     L = args.length
+
+    if args.seed_ladder:
+        specs = make_specs(corpus, L, args.trials, args.seed)
+        cases = []
+        for pt, w, r, g, pb in specs:
+            key = ["-u", "B", "-w", w, "-r", r, "-g", g]
+            ct, _ = run(key + ["-s", pb], pt)
+            cases.append((key, ct, rare_half(ct)))
+        print(f"# distinct stage-0 seeds, L={L}, -S {args.pre} "
+              f"--random {args.kick}, {len(cases)} keys")
+        print(f"{'R':>5} {'A all 26':>10} {'B freq 13':>11} {'B/A':>7}")
+
+        def distinct(arm, R):
+            tot = 0
+            for key, ct, rare in cases:
+                cmd = key + ["-c", "-J", "-S", args.pre, "-l", args.lang,
+                             "-T", 1, "-e", "7", "-R", R,
+                             "--random", args.kick, "--dump-all"]
+                if arm == "B":
+                    cmd += ["--no-plug", rare]
+                _, err = run(cmd, ct)
+                tot += len({b for _, b in dumped(err)})
+            return tot / len(cases)
+
+        for R in args.seed_ladder:
+            a = distinct("A", R)
+            b = distinct("B", R)
+            print(f"{R:>5} {a:>10.2f} {b:>11.2f} {b / a if a else 0:>7.3f}")
+        return
 
     if args.timing:
         # Slope over several R, never a floor subtraction: at -R 8 a whole
