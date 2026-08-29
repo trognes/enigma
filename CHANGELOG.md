@@ -23,12 +23,34 @@ existing command lines can behave differently or stop working.
     increments scheduled together collide about 30% of the time across 26
     bins, turning store-to-load forwarding into a stall. Unrolling helps the
     load dependency and hurts the store one.
-  - So `-q`, `-a`, `-t`, `-b`, `-m` and every scan path gain; **`-f` does
-    not**, its loop being the one that cannot be unrolled profitably.
+  - So `-q`, `-a`, `-t`, `-b`, `-m` and every scan path gain from the pragma.
   - Two earlier attempts on the same loop measured down and are recorded in
     `eval/results-scoreloop-insns.txt`: shaving 21% of the instructions bought
     0% (the loop is not front-end bound), and removing one of six loads gained
     7% under g++ but cost clang 3–5% on a model the recipe does not recommend.
+
+- **`-f` is unrolled too, by giving each unrolled copy its own histogram — 6%
+  faster under g++ and 12% under clang.** `ngram_ic_decode` accumulates into
+  four private counter arrays (`f0`…`f3`) that are summed over the 26 bins at
+  the end, so the four `freq[]` increments in one iteration touch four
+  different arrays and the store-forwarding collision above is removed by
+  construction rather than avoided by leaving the loop rolled. The loop stays
+  single-pass and the merge is O(alphabet), not O(message). Byte-identical:
+  the counts are the same integers whichever array they land in, and the
+  n-gram terms are added in the same order into the same `long`.
+  - Measured against `origin/dev`, `fused` tier: g++ −3.1 / −5.8% (quick /
+    long), clang −11.2 / −12.3%, against control-tier drift of 0.1–2.4 points
+    on the three unchanged tiers. The hot loop goes 25.0 → 18.2 instructions
+    per character under g++ and 24.0 → 18.5 under clang, loads unchanged at
+    ~6.
+  - The preceding entry's conclusion that the `freq[d]++` loops "cannot be
+    unrolled profitably" held for the loop as written and not for the work it
+    does: the serialised store was an artefact of four copies sharing one
+    accumulator. `ic` and `monoic` keep the rolled form: the same treatment
+    would apply to them, but during a climb they are served by the
+    histogram/`cooc_col` path rather than by decoding, so their loop runs
+    once per climb start and resync rather than per toggle and there is
+    little there to win.
 
 ### Added
 

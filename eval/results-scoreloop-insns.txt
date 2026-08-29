@@ -306,3 +306,79 @@ whichever behaviour that loop has and stopped.  Applying it to all eight at
 once produced the contrast between the two loop shapes, and the contrast is
 what identified the store as the cause.  The instruction to make every scoring
 scheme fast is what surfaced the mechanism.
+
+
+THE FOURTH LEVER: PER-COPY HISTOGRAMS, SO THE -f LOOP CAN UNROLL TOO
+====================================================================
+
+The third lever left a named gap: -f gains nothing, because ngram_ic_decode
+does freq[d]++ per character and unrolling four of those together collides.
+But that is a diagnosis, and a diagnosis names its own fix.  Give each
+unrolled copy its OWN counter array:
+
+  int f0[asize], f1[asize], f2[asize], f3[asize];
+  ...
+  f0[d0]++;  f1[d1]++;  f2[d2]++;  f3[d3]++;
+  ...
+  for (int j = 0; j < asize; j++)
+    { const int n = f0[j] + f1[j] + f2[j] + f3[j]; coin += n * (n - 1); }
+
+Four increments in one iteration now touch four DIFFERENT arrays, so they
+cannot collide -- the ~30% store-forwarding stall is removed by construction
+rather than avoided by leaving the loop rolled.  The loop stays SINGLE-PASS
+(the n-gram term and the histogram are still accumulated in one walk), and the
+merge is 26 iterations against L.
+
+It is byte-identical for the same reason the histogram form itself is: the
+counts are the same integers whichever array they land in, and the n-gram
+terms are added in the same order into the same long.
+
+**THE SHAPE.**  The hot loop is now 73 instructions and 25 loads per FOUR
+characters under g++ -- 18.2 insns/char against 25.0 rolled, with loads
+unchanged at ~6/char.  Clang lands at 18.5.  Both compilers converge on the
+same shape from different starting points (g++ 25.0, clang 24.0), which is
+what a loop whose remaining cost is the dependent load chain should look like.
+
+**MEASURED, BASE = origin/dev, so these tables carry the gather-loop unroll
+AND this change together:**
+
+  tier          g++ quick  g++ long   clang quick  clang long
+  search            -9.6%     -9.6%         +0.1%       -3.1%
+  hillclimb        -10.6%    -10.5%         +3.0%       +0.1%
+  fused             -3.1%     -5.8%        -11.2%      -12.3%
+  crib              -1.6%     +0.9%         -1.3%       -0.7%
+
+**THE INCREMENT OVER THE GATHER-ONLY FORM** -- same base, and every control
+tier is unchanged code between the two head variants, so their movement is the
+cross-run drift and calibrates the fused column:
+
+  tier          g++ quick  g++ long   clang quick  clang long
+  search            -1.4      -0.7          +0.5        -0.2
+  hillclimb         -0.5      -1.6          +2.4        +0.1
+  crib              -2.4      -0.2          -1.7        -1.2
+  FUSED             -1.8      -8.5         -10.8       -11.8
+
+Drift on the six control cells runs 0.1 to 2.4 points.  Three of the four
+fused increments are 8.5 to 11.8 -- four to fifty times that -- and the fourth
+(g++ quick, -1.8) sits inside it.  So the effect is established on g++ long
+and on both clang tiers, and the g++ quick tier is simply too coarse to see
+it, which is what the quick tier is for.
+
+**RESULT: -f is no longer the exception.**  It gains 6% under g++ and 12%
+under clang, on top of the ~9% the gather loops already give g++ on search and
+hillclimb.  The recommended model is now the one with the largest measured
+win on the compiler where it was previously flat.
+
+**WHY THE TWO COMPILERS DIFFER SO MUCH IN SIZE** (-6% vs -12%) is not
+resolved.  The instruction shapes are nearly identical afterwards, so it is a
+difference in what the ROLLED form cost each of them, not in what the unrolled
+form buys.  It does not affect the decision -- both are wins, well outside
+drift, on both tiers.
+
+**THE GENERAL LESSON, which is the part worth carrying forward.**  "This loop
+does a read-modify-write, so do not unroll it" was the right call with the
+loop as written, and the wrong conclusion about the loop.  The store was not
+inherent to the work; it was an artefact of four copies sharing one
+accumulator.  Any per-iteration accumulator that unrolling would serialise is
+a candidate for the same treatment: give each copy its own and merge at the
+end, as long as the merge is O(alphabet) and not O(L).

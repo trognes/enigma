@@ -3106,6 +3106,38 @@ reason the fused form is kept (measurement PR #77, store-variant commit
 needs it per-scoring). An even earlier 16-byte-blocked decode was never shown to
 win and was removed too; the scalar fused loop is the current form.
 
+> **The scorer loops are UNROLLED 4×, and the split between the two ways of
+> doing it is the thing to know before touching them.** The five pure-gather
+> loops (`quadgram`, `allgram`, `trigram`, `bigram`, `monogram`) carry a
+> `SCORE_UNROLL` pragma; `ngram_ic_decode` — the `-f` loop — is unrolled **by
+> hand**, with four private histograms summed at the end. Both are
+> byte-identical (the accumulators are integer sums). Worth ~9% under g++ on
+> `search`/`hillclimb`, and on `fused` −5.8% (g++) / −12.3% (clang).
+>
+> **The pragma alone makes the `-f` loop SLOWER — +11.7% on g++ `fused`
+> long.** That loop does `freq[d]++`, and four increments scheduled together
+> collide across 26 bins about 30% of the time, so the store-to-load
+> forwarding the rolled loop spaces out becomes a stall. Unrolling improves
+> the dependent load chain and worsens the store one; a loop with no store
+> comes out ahead and a loop with one does not.
+>
+> **Per-copy accumulators are what convert the second case into the first**,
+> and the general lesson is worth more than the instance: the serialised store
+> was an artefact of four unrolled copies sharing one accumulator, not
+> something inherent to the work. Any per-iteration accumulator that unrolling
+> would serialise is a candidate for the same treatment — give each copy its
+> own and merge at the end — **provided the merge is O(alphabet) and not
+> O(message)**, which is what keeps the loop single-pass. `ic` and `monoic`
+> have the same shape and are deliberately left rolled: during a climb they
+> are served by the histogram/`cooc_col` path rather than by decoding, so
+> their loop runs once per climb start and resync rather than per toggle.
+>
+> Instruction count is **not** the constraint on these loops and two earlier
+> attempts proved it: shaving 21% of the instructions bought 0%, and removing
+> one of six loads gained 7% under g++ while costing clang 3–5%.
+> `eval/results-scoreloop-insns.txt` has all four levers, including the two
+> that measured down.
+
 The tables the scorers read are **uint8 fixed-point**
 (`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),
 not float,
