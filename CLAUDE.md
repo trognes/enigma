@@ -189,15 +189,17 @@ hits `search` and cannot touch `icscan`, which is the observed shape. Reading
 both directories once before any timing takes that cell from −7.5 / −6.6% to
 **+1.4%**, and the whole matrix tightens with it:
 
-| run | `warm_cache` | `search` spread | worst cell anywhere |
-|---|---|---|---|
-| 1 | no | −7.5…+9.1 | +9.1 |
-| 2 | no | −6.7…+4.4 | −6.7 |
-| 3 | **yes** | **−0.2…+2.1** | −4.1 |
+| run | `warm_cache` | that cell's `search` quick | worst cell anywhere |
+|---|---|---:|---:|
+| 1 | no | −7.5 | +9.1 |
+| 2 | no | −6.7 | −6.7 |
+| 3 | **yes** | **+1.4** | −4.1 |
+| 4 | **yes** | **−0.5** | **+0.6** |
 
-In run 3 all sixteen scan-tier readings sit within ±2.1% and 36 of 40 cells
-within ±1%. **One run with the treatment, so treat the size as provisional** —
-but the prediction was made before the run and landed on the named cell.
+Confirmed at n=2 on each arm, and the prediction was registered *before* run 3
+— the commit naming this cell as the thing to watch also named `warm_cache` as
+the candidate. In run 4 all ten cells on that runner sit within **±0.6%**,
+where the same cell had been reading ±7% on byte-identical binaries.
 
 **The general rule this keeps re-teaching: do not write a noise floor into
 this file from ONE run.** Three claims in this section's history — a +8.1%

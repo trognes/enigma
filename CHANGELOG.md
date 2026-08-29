@@ -35,9 +35,9 @@ existing command lines can behave differently or stop working.
   model they exist to isolate.
   - Measured on repeated base-vs-base controls (identical binaries): `search`
     quick on g++ x86_64 read **−7.5% then −6.7%** without the warm-up and
-    **+1.4%** with it, and the whole matrix tightened — `search`'s spread goes
-    from −7.5…+9.1% across two runs to **−0.2…+2.1%**, with 36 of 40 cells
-    within ±1%. One run with the treatment, so the size is provisional.
+    **+1.4% then −0.5%** with it — n=2 on each arm. In the last of those runs
+    all ten cells on that runner sit within **±0.6%**, where the same cell had
+    been reading ±7% on byte-identical binaries.
   - ~0.3 s, once, before any timing.
 
 - **The pure-gather scorer loops are unrolled 4x — 12–16% faster under g++
