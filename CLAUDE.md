@@ -172,15 +172,32 @@ base-vs-base controls (run 1 / run 2):
 +2.4% on g++ x86_64 long — so it is the tightest tier, but its floor is
 **−0.4…+2.4%**, not the ±0.6% one run suggested. `search` spans −7.5…+9.1%.
 
-**Two hypotheses died in the second run, and one survived.** Run 1 had all
-four `search` long cells positive, which looked like an ordering bias (head is
-timed before base, and the long tiers take no warm-up run). Run 2 reads
-+0.1 / −0.2 / +2.8 / −1.5 — mixed signs, so **there is no systematic ordering
-effect**, and the +9.1% on g++ arm64 was a one-off (it re-reads +0.1%). What
-*did* reproduce is **`search` quick on g++ x86_64 at −7.5% then −6.7%**, i.e.
-head consistently ~7% faster on byte-identical binaries, which no ordering
-story explains (head is timed first, so a warm-up effect would favour base).
-Unexplained; treat that cell's `search` quick as uninformative.
+**Two hypotheses died in the second run, and one survived — then `warm_cache`
+killed it.** Run 1 had all four `search` long cells positive, which looked
+like an ordering bias (head is timed before base, and the long tiers take no
+warm-up run). Run 2 reads +0.1 / −0.2 / +2.8 / −1.5 — mixed signs, so **there
+is no systematic ordering effect**, and the +9.1% on g++ arm64 was a one-off
+(it re-reads +0.1%). What *did* reproduce is **`search` quick on g++ x86_64 at
+−7.5% then −6.7%** — head consistently ~7% faster on byte-identical binaries,
+which no ordering story explains, since head is timed first and a warm-up
+effect would favour base.
+
+**`warm_cache()` accounts for it.** An A/B reads **two separate ~27 MB copies**
+of the tables (`HEAD_DATA` and `BASE_DATA`), `min_time` wraps the whole
+invocation, and `icscan` reads no table at all — so an uncontrolled page cache
+hits `search` and cannot touch `icscan`, which is the observed shape. Reading
+both directories once before any timing takes that cell from −7.5 / −6.6% to
+**+1.4%**, and the whole matrix tightens with it:
+
+| run | `warm_cache` | `search` spread | worst cell anywhere |
+|---|---|---|---|
+| 1 | no | −7.5…+9.1 | +9.1 |
+| 2 | no | −6.7…+4.4 | −6.7 |
+| 3 | **yes** | **−0.2…+2.1** | −4.1 |
+
+In run 3 all sixteen scan-tier readings sit within ±2.1% and 36 of 40 cells
+within ±1%. **One run with the treatment, so treat the size as provisional** —
+but the prediction was made before the run and landed on the named cell.
 
 **The general rule this keeps re-teaching: do not write a noise floor into
 this file from ONE run.** Three claims in this section's history — a +8.1%

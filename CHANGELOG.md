@@ -26,6 +26,20 @@ existing command lines can behave differently or stop working.
   - Costs ~3 s on the quick suite and ~20 s on the long one (doubled under
     `BASE=`), which is the price of covering the default model.
 
+- **`make bench` warms the n-gram page cache and both binaries before the
+  first tier.** An A/B reads **two separate ~27 MB copies** of the tables
+  (`HEAD_DATA` and `BASE_DATA`), and `min_time` wraps the whole invocation, so
+  a cold read lands inside a measured run rather than beside it. `icscan`
+  reads no table at all, so an uncontrolled cache hits `search` and cannot
+  touch `icscan` — which would make the two scan tiers differ by more than the
+  model they exist to isolate.
+  - Measured on repeated base-vs-base controls (identical binaries): `search`
+    quick on g++ x86_64 read **−7.5% then −6.7%** without the warm-up and
+    **+1.4%** with it, and the whole matrix tightened — `search`'s spread goes
+    from −7.5…+9.1% across two runs to **−0.2…+2.1%**, with 36 of 40 cells
+    within ±1%. One run with the treatment, so the size is provisional.
+  - ~0.3 s, once, before any timing.
+
 - **The pure-gather scorer loops are unrolled 4x — 12–16% faster under g++
   and 4–6% under clang on arm64.** `quadgram`, `allgram`, `trigram`,
   `bigram` and `monogram` carry a `SCORE_UNROLL` pragma —
