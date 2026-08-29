@@ -280,16 +280,37 @@ static double monoic_score_decode(machine & m)
 
 double ic_score_decode(machine & m)
 {
-  int freq[asize];
-  for(int j=0; j<asize; j++)
-    freq[j] = 0;
+  /* FOUR HISTOGRAMS, ONE PER UNROLLED COPY -- ngram_ic_decode carries the full
+     rationale and this is the same shape.  SCORE_UNROLL alone makes a freq[]++
+     loop SLOWER: four increments scheduled together collide across 26 bins
+     about 30% of the time, so the store-to-load forwarding the rolled loop
+     spaces out becomes a stall.  Private arrays cannot collide, so the loop
+     unrolls like a gather loop instead.
+
+     This is the DEFAULT model's scan path -- a bare `./enigma < cipher.txt` --
+     and it went unmeasured until the icscan bench tier was added, because
+     search and crib run -q, fused runs -f, and under -c the low-order models
+     are served by the histogram/cooc_col path rather than by decoding.
+
+     Byte-identical: the counts are the same integers whichever array they land
+     in, and the coincidence sum is over their total. */
+  int f0[asize], f1[asize], f2[asize], f3[asize];
+  for (int j = 0; j < asize; j++)
+    { f0[j] = 0; f1[j] = 0; f2[j] = 0; f3[j] = 0; }
 
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
-  /* NOT unrolled: see SCORE_UNROLL. */
-  for (int i = 0; i < textlength; i++)
-    freq[decode_at(steck, rows, ct, i)]++;
+  int i = 0;
+  for (; i + 3 < textlength; i += 4)
+    {
+      f0[decode_at(steck, rows, ct, i)]++;
+      f1[decode_at(steck, rows, ct, i + 1)]++;
+      f2[decode_at(steck, rows, ct, i + 2)]++;
+      f3[decode_at(steck, rows, ct, i + 3)]++;
+    }
+  for (; i < textlength; i++)
+    f0[decode_at(steck, rows, ct, i)]++;
 
   /* Accumulate the coincidence count in an INT, not a double. Every freq[]
      entry is at most textlength <= maxlen, so each product fits an int and the
@@ -306,7 +327,10 @@ double ic_score_decode(machine & m)
                 "IC coincidence sum must fit an int");
   int coin = 0;
   for (int j = 0; j < asize; j++)
-    coin += freq[j] * (freq[j] - 1);
+    {
+      const int n = f0[j] + f1[j] + f2[j] + f3[j];
+      coin += n * (n - 1);
+    }
   return (textlength > 1)
     ? static_cast<double>(coin)
         / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
