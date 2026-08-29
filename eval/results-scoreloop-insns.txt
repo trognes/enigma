@@ -119,3 +119,123 @@ Reproduce: the three variants are one edit each to quadgram_score_decode()
 and allgram_score_decode() in src/scoring.cc; count with
   objdump -dC --no-show-raw-insn src/scoring.o | sed -n '/score_iter/,$p'
 and look for the backward jne loops containing movzbl.
+
+
+THE FOLLOW-UP: REDUCING LOAD COUNT -- REAL, BUT ON THE WRONG MODEL
+==================================================================
+
+The prediction above was that load count, not instruction count, is the
+binding constraint.  Tested by removing one of the six loads.
+
+**The change.**  setup_mapping(m, true) copies every row into the contiguous
+mapping[] and points rows[i] at it, so on the HILL-CLIMB path
+rows[i] == &m.mapping[i][0] and the row address advances by a constant asize.
+Walking it (row += asize) instead of loading an 8-byte pointer takes the loop
+from six loads per character to five.  The SCAN path points rows[] into
+subst_array with no such stride and keeps the indexed form.
+
+Applied to quadgram_score_decode (-q) and ngram_ic_decode (-f).  Note the
+second one: the earlier attempt changed -q and -a and missed -f entirely.
+
+  loop                        insns  loads  8-byte ptr loads
+  indexed (scan, unchanged)      24      6                 1
+  contiguous (climb)             24      5                 0
+
+**The measurement has its control built in.**  search and crib run without -c,
+so they take the indexed branch and execute byte-identical code -- their
+movement in the same run IS that run's floor, measured simultaneously rather
+than in a separate job on a box in a different state.  That is the flaw in the
+instruction-shaving A/B above, where fused read -8.7% and its own control read
++1.1% thirteen minutes later.
+
+  tier         g++ treat   g++ floor   clang treat   clang floor
+  hillclimb q      -7.3%        0.9%         +5.1%         3.4%
+  hillclimb l      -6.6%        2.3%         +3.2%         0.6%
+  fused q          -6.0%        5.8%         +2.6%         1.0%
+  fused l          -4.2%        1.1%         -3.4%         1.8%
+  search/crib   +0.3..+4.1  (controls)   -0.1..+2.0   (controls)
+
+**g++: a clear win.**  All four treatment cells negative; hillclimb clears its
+floor by ~3x on both tiers.
+
+**clang: a small regression on hillclimb** (+3..+5% against a tight floor),
+fused ambiguous (-3.4 long, +2.6 quick, both near the floor).  Clang still
+loads the pointer in the indexed form -- verified by disassembly, ptrloads=1
+per character -- so it is not that the change is redundant there; clang simply
+does not convert the saved load, and it unrolls these loops 2x where g++ does
+not, which may be where the difference lives.
+
+**Absolute times are what make this shippable.**  hillclimb long is
+g++ 15.04 -> 14.04 s and clang 12.21 -> 12.60 s.  Clang was ~20% faster before
+and remains faster after; the change narrows the gap, handing most of a 7% gain
+to the slower, default compiler for ~3% off the faster one.  Both are far
+inside the 10% CI report and 25% block thresholds.
+
+**So the headline finding stands and is now two-sided**: instruction count is
+not the constraint (21% fewer bought 0%), load count partly is (17% fewer buys
+5-7% under g++), and the remainder is presumably the four-deep dependent chain
+ct -> steck -> rows -> steck, which no reordering removes.
+
+Byte-identity: 135 cells (120 climb over eleven schedules x five climb-option
+combinations x -T {1,4}, plus 15 covering Norway, M4, plain scan under -q/-f/-a,
+-F, --ring-stride, --confidence, --exhaust, --soft-plug and -A), 0 differing,
+plus a short-text guard at L = 1..7.  Suite 632/632.
+
+
+ISOLATING THE -f PATH KILLS IT: THE GAIN WAS NEVER THERE
+--------------------------------------------------------
+
+The split above -- g++ +7% and clang -3..5% on hillclimb -- has a mechanism,
+and the mechanism suggested a fix: apply the walk only where it wins on BOTH
+compilers, which the disassembly said was ngram_ic_decode (-f).
+
+**WHY THE SPLIT HAPPENS.**  clang unrolls the quadgram loops 2x and leaves
+ngram_ic_decode rolled.  Walking the row needs TWO induction variables (i for
+ct[i], plus the row pointer) where the indexed form needs one, so under
+unrolling the added increment costs more than the removed load:
+
+  loop (per character)      clang insns  clang loads  unrolled
+  quadgram indexed                 18.5            6  2x
+  quadgram contiguous              20.0            5  2x
+  ngram_ic indexed                 24              6  no
+  ngram_ic contiguous              24              5  no
+
+Rolled, instruction count is identical and the saved load is pure gain; that
+is why -q regressed under clang and -f did not.
+
+**BUT ISOLATING -f SHOWS THE -f GAIN WAS NOISE.**  The -f code is IDENTICAL in
+the two variants, so these four cells measure one thing twice:
+
+  fused tier            g++ quick  g++ long  clang quick  clang long
+  inside full change        -6.0%     -4.2%        +2.6%       -3.4%
+  ISOLATED (-f only)        +1.4%     -1.7%        +1.8%       +2.0%
+
+The isolated run carries three control tiers (search, hillclimb, crib -- all
+now unchanged code) reading -2.0%..+1.4%, so it is the trustworthy one, and it
+says the -f path gains NOTHING.  The earlier fused improvements were noise
+riding alongside the real effect in the neighbouring function.
+
+**WHAT ACTUALLY EXISTS**, therefore:
+
+  - a real ~7% g++ win on hillclimb (-q), reproduced on both tiers against
+    in-run controls;
+  - a real ~3-5% clang loss on the same;
+  - nothing measurable on -f, under either compiler.
+
+**SO IT IS NOT WORTH SHIPPING.**  -q is not the recommended model.  The change
+optimises a model nobody is told to use, in opposite directions on the two
+compilers, and does nothing for the one that matters.  Code reverted; the
+finding kept.
+
+**A refinement of the headline worth carrying.**  Removing a load pays in
+quadgram (pure gather loop) and not in ngram_ic_decode (same loop plus a
+freq[d]++ store per character).  So "the loop is load-bound" is too coarse:
+the quad loop is, and adding one store per character is enough to change the
+balance.  Any future attempt should measure the two separately rather than
+assuming what helps one helps the other.
+
+**One measurement caveat on all of the above.**  The box drifted ~7% across
+the session -- hillclimb long base ran 15.04, 16.06 and 13.23 s in different
+runs -- so only within-run treatment-versus-control contrasts are meaningful
+here, and no cross-run comparison in this file should be read as a difference
+between variants.
