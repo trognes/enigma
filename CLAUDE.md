@@ -163,10 +163,10 @@ cells.** The PR adding it changed no source, so its Bench run was a free
 
 | cell | `search` q/l | `icscan` q/l | `hillclimb` | `fused` | `crib` |
 |---|---:|---:|---:|---:|---:|
-| g++ arm64 | +0.0 / **+9.1** | −0.1 / −0.4 | +0.0/+0.0 | +0.1/+0.4 | −0.3/+0.1 |
+| g++ arm64 | +0.0 / +9.1 | −0.1 / −0.4 | +0.0/+0.0 | +0.1/+0.4 | −0.3/+0.1 |
 | clang arm64 | −0.2 / +0.5 | −0.1 / +0.2 | −0.1/+0.1 | −0.2/−0.0 | +0.1/+0.0 |
-| g++ x86_64 | **−7.5** / +4.4 | −0.1 / −0.2 | −0.7/+0.9 | +0.2/+3.8 | −0.0/−0.2 |
-| clang x86_64 | −1.5 / **+5.3** | −0.4 / +0.6 | +1.1/−1.5 | +0.4/−0.9 | −0.4/+1.4 |
+| g++ x86_64 | −7.5 / +4.4 | −0.1 / −0.2 | −0.7/+0.9 | +0.2/+3.8 | −0.0/−0.2 |
+| clang x86_64 | −1.5 / +5.3 | −0.4 / +0.6 | +1.1/−1.5 | +0.4/−0.9 | −0.4/+1.4 |
 
 `icscan` spans **−0.4…+0.6%** across all eight readings while `search` spans
 −7.5…+9.1% — on the same runners, same key space, same ciphertext, differing
