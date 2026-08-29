@@ -712,9 +712,9 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
      Giving each unrolled copy its OWN counter array removes the collision by
      construction -- four separate arrays cannot alias -- so the loop unrolls
      like a gather loop and the histogram is recovered by summing them.  Worth
-     nothing to -19% on the fused long tier depending on the CPU (six
-     independent readings: -0.1, -5.5, -5.8, -12.3, -14.2, -18.9; the spread
-     is between CPU models, not compilers).  The reduction is 26*3 adds per
+     -18.6..-18.9% on the fused long tier on arm64 (reproduced to 0.3 points),
+     -5.8% on one local x86 CPU, and NOTHING on the GitHub g++ x86_64 runner
+     -- the size is CPU-dependent.  The reduction is 26*3 adds per
      call, about 0.5 per character at operational length, against a
      4x-unrolled body.  It stays SINGLE-PASS and decodes each character once,
      so this is not the two-pass form rejected above.

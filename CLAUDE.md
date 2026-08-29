@@ -3111,16 +3111,29 @@ win and was removed too; the scalar fused loop is the current form.
 > loops (`quadgram`, `allgram`, `trigram`, `bigram`, `monogram`) carry a
 > `SCORE_UNROLL` pragma; `ngram_ic_decode` — the `-f` loop — is unrolled **by
 > hand**, with four private histograms summed at the end. Both are
-> byte-identical (the accumulators are integer sums). Worth 5–15% under g++ on
-> `search`/`hillclimb`, and on `fused` **anything from nothing to −19%
-> depending on the CPU** — six independent long-tier readings against `dev`
-> (the four CI cells plus two local) give −0.1, −5.5, −5.8, −12.3, −14.2 and
-> −18.9%. **The spread is between CPU MODELS, not compilers or
-> architectures**: two g++ x86_64 measurements of identical code disagree by
-> 5.7 points, and that cell's quick tier is the one adverse reading in the set
-> at +8.1% against its own ±0.9% control. Take the range, not a single box's
-> number — this is the clearest case in the file of a local measurement being
-> sound as a measurement and still not generalising.
+> byte-identical (the accumulators are integer sums). **The size depends on
+> the CPU, and on `fused` it ranges from −18.6% to nothing.** On arm64 it is
+> large and reproducible; on the GitHub g++ x86_64 runner it is neutral to
+> mildly negative; on one local x86 CPU it is −5.8%.
+>
+> **The two arm64 Bench cells are the instrument for scorer work; g++ x86_64
+> is a smoke test.** The Bench matrix was run twice on byte-identical code
+> (a comment-only commit re-ran it), which is a free four-cell control. g++
+> arm64 reproduced its ABSOLUTE timings to the hundredth of a second — search
+> base 0.68 / head 0.60 twice over — so its percentages moved ≤1.2 points and
+> its `fused` long tier read −18.9 then −18.6. **g++ x86_64 moved 8.2 points
+> on `search` quick on identical code**, with the base time itself going
+> 0.64 → 0.70 s. That contradicts the +0.9%/+0.2% worst case recorded for that
+> cell below, so **a documented noise floor is workload- and run-specific, not
+> a property of the runner**: PR #205's control was one run on a fixed pair of
+> binaries, where two runs twenty minutes apart additionally sample whichever
+> host the job lands on.
+>
+> **A control must share the workload's bottleneck to bound its noise.** The
+> `crib` tier read −0.5…+0.9% in all sixteen cells across both runs and looked
+> like proof the runners were quiet. It is deduction-bound (`crib_try` is
+> 63.6% of it), so it stays flat through exactly the disturbance that moves
+> the gather-bound tiers by eight points.
 >
 > **The pragma alone makes the `-f` loop SLOWER — +11.7% on g++ `fused`
 > long.** That loop does `freq[d]++`, and four increments scheduled together

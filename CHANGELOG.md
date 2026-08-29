@@ -41,15 +41,15 @@ existing command lines can behave differently or stop working.
   single-pass and the merge is O(alphabet), not O(message). Byte-identical:
   the counts are the same integers whichever array they land in, and the
   n-gram terms are added in the same order into the same `long`.
-  - Six independent long-tier `fused` readings against `dev` — the four CI
-    matrix cells plus two local — give **−0.1, −5.5, −5.8, −12.3, −14.2 and
-    −18.9%**, median ~−9%. Five of six quick-tier readings agree; the
-    exception is g++ x86_64 at **+8.1%**, whose own long tier reads −0.1% and
-    whose sibling local box (also g++ x86_64) reads −5.8%, so the spread is
-    between CPU models rather than compilers or architectures. Not resolved;
-    no cell trips the 10% advisory threshold. The hot loop goes 25.0 → 18.2
-    instructions per character under g++ and 24.0 → 18.5 under clang, loads
-    unchanged at ~6.
+  - **The size depends on the CPU.** The Bench matrix ran twice on
+    byte-identical code, so its run-to-run spread is known: arm64 reproduces
+    to ≤1.2 points (g++ arm64 gave identical absolute timings both runs) and
+    reads `fused` long at **−18.9 / −18.6%**; clang arm64 −14.2 / −13.5%;
+    clang x86_64 −5.5 / −8.2%; a local g++ x86_64 box −5.8%. The GitHub g++
+    x86_64 runner reads −0.1 / +3.0% — **neutral there**, and that cell moved
+    8.2 points on identical code, so it cannot resolve a change this size.
+  - The hot loop goes 25.0 → 18.2 instructions per character under g++ and
+    24.0 → 18.5 under clang, loads unchanged at ~6.
   - The preceding entry's conclusion that the `freq[d]++` loops "cannot be
     unrolled profitably" held for the loop as written and not for the work it
     does: the serialised store was an artefact of four copies sharing one
