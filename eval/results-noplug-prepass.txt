@@ -137,3 +137,46 @@ discordant A/B 50/56   z = +0.58   (positive favours B)
 # Reproduce:
 #   python3 eval/noplug_prepass_ab.py --exclude-sweep 1 2 3 4 5 6 7 8 9 10 \
 #       11 12 --trials 600 --length 100 --restarts 8 --kick 4 --jobs 4
+
+# THE SAME SWEEP AT 4800 TRIALS -- AND IT REVERSES THE 600-TRIAL READING.
+
+# L=100, 4800 trials, -S i4 then f10, --random 4, -R 8 both arms
+ excl  letters      >=50%   mean%  seeds   effect       z
+    A       26  1066/4800    29.1   6.87       --      --
+    0       26  1066/4800    29.1   6.87    +0.0pp   +0.00
+    1       25  1036/4800    29.0   6.81    -0.6pp   -1.14
+    2       24  1063/4800    29.4   6.72    -0.1pp   -0.11
+    3       23  1037/4800    29.1   6.68    -0.6pp   -1.04
+    4       22  1003/4800    28.2   6.52    -1.3pp   -2.25
+    5       21  1000/4800    28.1   6.48    -1.4pp   -2.41
+    6       20   946/4800    27.2   6.31    -2.5pp   -4.23
+    7       19   923/4800    27.2   6.24    -3.0pp   -5.00
+
+# THE IDEA IS DEAD.  Every level is <= 0, monotone in strictness, reaching
+# z = -5.00.  There is no positive region and no safe range: the restriction is
+# already harmful at --exclude 4, where the 600-trial sweep read +1.8pp, and
+# --exclude 6 -- the "+1.0pp hint" that prompted all of this -- is -2.5pp.  The
+# earlier claim of "harmless to ~8 excluded letters" was wrong.
+#
+# The whole effect is DIVERSITY.  Seeds fall 6.87 -> 6.24 across the sweep and
+# the loss tracks them at ~4.8pp per lost seed, which also reconciles the
+# --exclude 13 pair: -4.5pp at equal restarts, -1.5pp once diversity was
+# restored.  Nothing is left for the frequency mechanism to contribute.
+#
+# THE METHODOLOGICAL LESSON IS THE MORE VALUABLE HALF.  The 600-trial sweep had
+# all seven mild cells >= 0, which looked like structure and was not: the cells
+# are NOT INDEPENDENT.  Every cell is compared against the SAME arm A on the
+# SAME trials, so arm A's own luck is common mode across the whole profile --
+# and arm A was unlucky in that sample, 114/600 = 19.0% and mean 26.4 against
+# 22.2% and 29.1 here.  A low control lifts every B cell together, so "seven of
+# seven positive" was close to ONE observation, not seven.  Reading the BAND as
+# evidence was the error, even after the individual cells had been discounted.
+#
+# Two rules follow for any sweep sharing one control arm.  Judge a profile by
+# its SHAPE against strictness, never by the sign of the band, since the band
+# can translate wholesale.  And size the control arm as if it were the only
+# measurement, because in effect it is.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --exclude-sweep 1 2 3 4 5 6 7 \
+#       --trials 4800 --length 100 --restarts 8 --kick 4 --jobs 4

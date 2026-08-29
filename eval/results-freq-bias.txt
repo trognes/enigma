@@ -106,6 +106,29 @@ frequent letters is found 1.54x more often (10.0% against 6.5%).
 WHAT DOES NOT FOLLOW: restricting the pre-pass to the frequent letters
 ----------------------------------------------------------------------
 
+SETTLED AT 4800 TRIALS, AND IT LOSES AT EVERY STRICTNESS.  Sweeping how many
+of the rarest letters are pinned (eval/results-noplug-prepass.txt for the full
+table), effect against the unrestricted arm:
+
+  excluded    1      2      3      4      5      6      7
+  effect   -0.6   -0.1   -0.6   -1.3   -1.4   -2.5   -3.0  pp
+  z        -1.14  -0.11  -1.04  -2.25  -2.41  -4.23  -5.00
+
+Every level is <= 0, monotone in strictness, and the loss tracks the distinct
+seed count (6.87 -> 6.24) at ~4.8pp per lost seed.  The restriction is pure
+diversity tax with nothing on the other side, at any dose.  The rest of this
+section is the history that led there, and one number in it -- a "+1.0pp hint"
+at --exclude 6 from 600 trials -- is REFUTED: that cell is -2.5pp.
+
+The 600-trial sweep showed all seven mild cells >= 0 and it was an artefact of
+the design, worth knowing before running another one: every cell shares the
+same arm A on the same trials, so the control's own luck is COMMON MODE and
+the whole profile translates together.  Arm A drew 19.0% there against 22.2%
+at 4800, lifting every B cell at once, so "seven of seven positive" was close
+to one observation rather than seven.  Judge such a sweep by the SHAPE of the
+profile against strictness, never by the sign of the band; and size the
+control arm as though it were the only measurement, because in effect it is.
+
 MEASURED END TO END AND IT LOSES (eval/noplug_prepass_ab.py).  600 paired
 trials, L = 100, -R 8, --random 4, -J, -S i4 then f10, rotor key given,
 10-pair board hidden, winner chosen by SCORE.  Arm B pins the rare 13 letters
