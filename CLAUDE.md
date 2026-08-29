@@ -156,6 +156,28 @@ coverage** while the scorer loops were being rewritten around it. It is also
 the cleanest tier here, because it loads no n-gram table: ~6 ms of startup
 against a ~0.8 s scan (99.2%), where `search` carries ~32 ms (96.3%) and
 `min_time` wraps the whole invocation.
+
+**`icscan` measured the TIGHTEST floor of the five tiers, in all four CI
+cells.** The PR adding it changed no source, so its Bench run was a free
+20-cell base-vs-base control on identical binaries:
+
+| cell | `search` q/l | `icscan` q/l | `hillclimb` | `fused` | `crib` |
+|---|---:|---:|---:|---:|---:|
+| g++ arm64 | +0.0 / **+9.1** | −0.1 / −0.4 | +0.0/+0.0 | +0.1/+0.4 | −0.3/+0.1 |
+| clang arm64 | −0.2 / +0.5 | −0.1 / +0.2 | −0.1/+0.1 | −0.2/−0.0 | +0.1/+0.0 |
+| g++ x86_64 | **−7.5** / +4.4 | −0.1 / −0.2 | −0.7/+0.9 | +0.2/+3.8 | −0.0/−0.2 |
+| clang x86_64 | −1.5 / **+5.3** | −0.4 / +0.6 | +1.1/−1.5 | +0.4/−0.9 | −0.4/+1.4 |
+
+`icscan` spans **−0.4…+0.6%** across all eight readings while `search` spans
+−7.5…+9.1% — on the same runners, same key space, same ciphertext, differing
+only in the model. **But `search` is also the FIRST tier run in each group and
+`icscan` the second, so position and model are perfectly confounded here and
+this control cannot separate them.** Swapping the two `bench` lines and
+re-running would: if `icscan` goes loose and `search` tight it is ordering
+(head is timed before base, and the long tiers take no warm-up run, so the
+first long tier is biased against head — all four `search` long cells read
+positive), and if the floors follow the models it is the quad table's cache
+residency. Until that is run, do not cite either explanation.
 `crib` is the only tier that exercises `crib_try` (63.6% of a crib sweep) at
 all, and it earned its keep: a 26-letter prologue added to `crib_try` — to seed
 the deduction from `-s`/`--no-plug` pins — cost **+48% quick and +51% long**
