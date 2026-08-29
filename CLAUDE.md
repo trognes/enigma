@@ -157,27 +157,36 @@ the cleanest tier here, because it loads no n-gram table: ~6 ms of startup
 against a ~0.8 s scan (99.2%), where `search` carries ~32 ms (96.3%) and
 `min_time` wraps the whole invocation.
 
-**`icscan` measured the TIGHTEST floor of the five tiers, in all four CI
-cells.** The PR adding it changed no source, so its Bench run was a free
-20-cell base-vs-base control on identical binaries:
+**`icscan` measures a tight floor, and `search` does not.** Two docs-only
+commits re-ran the matrix on identical binaries, giving **two** free 20-cell
+base-vs-base controls (run 1 / run 2):
 
-| cell | `search` q/l | `icscan` q/l | `hillclimb` | `fused` | `crib` |
-|---|---:|---:|---:|---:|---:|
-| g++ arm64 | +0.0 / +9.1 | −0.1 / −0.4 | +0.0/+0.0 | +0.1/+0.4 | −0.3/+0.1 |
-| clang arm64 | −0.2 / +0.5 | −0.1 / +0.2 | −0.1/+0.1 | −0.2/−0.0 | +0.1/+0.0 |
-| g++ x86_64 | −7.5 / +4.4 | −0.1 / −0.2 | −0.7/+0.9 | +0.2/+3.8 | −0.0/−0.2 |
-| clang x86_64 | −1.5 / +5.3 | −0.4 / +0.6 | +1.1/−1.5 | +0.4/−0.9 | −0.4/+1.4 |
+| cell | `search` q | `search` l | `icscan` q | `icscan` l |
+|---|---:|---:|---:|---:|
+| g++ arm64 | +0.0 / −0.2 | **+9.1 / +0.1** | −0.1 / −0.0 | −0.4 / +0.2 |
+| clang arm64 | −0.2 / −0.4 | +0.5 / −0.2 | −0.1 / −0.0 | +0.2 / +0.0 |
+| g++ x86_64 | **−7.5 / −6.7** | +4.4 / +2.8 | −0.1 / +0.2 | −0.2 / **+2.4** |
+| clang x86_64 | −1.5 / +4.4 | +5.3 / −1.5 | −0.4 / −0.2 | +0.6 / −0.0 |
 
-`icscan` spans **−0.4…+0.6%** across all eight readings while `search` spans
-−7.5…+9.1% — on the same runners, same key space, same ciphertext, differing
-only in the model. **But `search` is also the FIRST tier run in each group and
-`icscan` the second, so position and model are perfectly confounded here and
-this control cannot separate them.** Swapping the two `bench` lines and
-re-running would: if `icscan` goes loose and `search` tight it is ordering
-(head is timed before base, and the long tiers take no warm-up run, so the
-first long tier is biased against head — all four `search` long cells read
-positive), and if the floors follow the models it is the quad table's cache
-residency. Until that is run, do not cite either explanation.
+`icscan` holds within ±0.6% in **15 of 16** readings, the exception being
++2.4% on g++ x86_64 long — so it is the tightest tier, but its floor is
+**−0.4…+2.4%**, not the ±0.6% one run suggested. `search` spans −7.5…+9.1%.
+
+**Two hypotheses died in the second run, and one survived.** Run 1 had all
+four `search` long cells positive, which looked like an ordering bias (head is
+timed before base, and the long tiers take no warm-up run). Run 2 reads
++0.1 / −0.2 / +2.8 / −1.5 — mixed signs, so **there is no systematic ordering
+effect**, and the +9.1% on g++ arm64 was a one-off (it re-reads +0.1%). What
+*did* reproduce is **`search` quick on g++ x86_64 at −7.5% then −6.7%**, i.e.
+head consistently ~7% faster on byte-identical binaries, which no ordering
+story explains (head is timed first, so a warm-up effect would favour base).
+Unexplained; treat that cell's `search` quick as uninformative.
+
+**The general rule this keeps re-teaching: do not write a noise floor into
+this file from ONE run.** Three claims in this section's history — a +8.1%
+"regression", a "spread between CPU models", an "all four positive" ordering
+bias — each came from a single run's pattern and each was withdrawn by the
+next. A tier floor needs at least two controls before it is quoted.
 `crib` is the only tier that exercises `crib_try` (63.6% of a crib sweep) at
 all, and it earned its keep: a 26-letter prologue added to `crib_try` — to seed
 the deduction from `-s`/`--no-plug` pins — cost **+48% quick and +51% long**
