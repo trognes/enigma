@@ -1,0 +1,576 @@
+SHAVING INSTRUCTIONS OFF THE QUAD-SHAPED SCORE LOOP -- MEASURED DOWN
+====================================================================
+
+The -q / -a inner loop is ~99% of a -c run, and g++ -O3 emitted 24
+instructions per character for it, of which five looked free to remove.
+Removing them does not buy throughput.  Recorded so the next reader does not
+repeat it, and because the reason generalises.
+
+
+WHAT LOOKED WASTEFUL
+--------------------
+
+  19f3: movslq %r8d,%r14          sign-extend c
+  19f9: imul   $0x44a8,%rcx,%rcx  a * 17576
+  1a20: movslq %r9d,%rax          sign-extend b
+  1a23: imul   $0x2a4,%rax,%rax   b * 676
+  1a34: movslq %r9d,%rcx          sign-extend b AGAIN, same register
+
+Three sign extensions -- one of them twice from the same register -- purely
+because decode_at() returns int while the index arithmetic is 64-bit.  And the
+4-D index rebuilt from scratch every character, although consecutive windows
+(a,b,c,d) -> (b,c,d,e) share three letters.
+
+
+THE VARIANTS, AND WHY NONE OF THEM IS FREE
+------------------------------------------
+
+  variant                        insns  imul  movslq  loop-carried chain
+  original, int                     24     2       3  none
+  unsigned, Horner index            21     3       0  none
+  unsigned, flat index              21     3       0  none
+  unsigned + rolling context        19     2       0  imul -> sub -> imul
+
+Two things cancel the paper gain.
+
+**unsigned costs an imul.**  With int, g++ sign-extends and then reaches x*26
+through LEAs; with unsigned it stays in 32-bit and emits imul instead.  So
+removing three movslq buys one imul.  A wash, in two different spellings of
+the index -- Horner and flat give identical code.
+
+**The rolling context creates a dependency that did not exist.**  Carrying
+ctx is the only variant that reaches 19 instructions, and it is also the only
+one where each iteration's index depends on the previous one: ctx --imul-->
+idx --sub--> ctx', about 4 cycles of loop-carried latency.  The original
+computes each index from three independently available letters, so its
+iterations are fully independent and out-of-order execution overlaps them.
+Fewer instructions, longer critical path.
+
+Note the trap inside the trap: the obvious rolling update
+(ctx - a*asize^2)*asize + d costs two multiplies and leaves THREE imul in the
+loop, one MORE than rebuilding the index outright.  Taking the next context
+from the index instead -- idx = a*asize^3 + next -- gets back to two.  That is
+the difference between a 21-instruction loop and a 19-instruction one.
+
+
+THE MEASUREMENT
+---------------
+
+make bench LONG=1 BASE=origin/dev, g++, rolling-context variant, with a
+base-vs-base control of origin/dev against itself on the same box:
+
+  tier         A/B quick   A/B long   control quick   control long
+  search           -0.9%      -0.6%           -3.0%          -0.6%
+  hillclimb        +8.2%      +4.9%           +0.9%          -2.3%
+  fused            +6.7%      -8.7%           -5.8%          +1.1%
+  crib             +0.6%      -0.2%           +0.9%          -0.1%
+
+**Only hillclimb measures the change, and it reads as a REGRESSION** -- both
+tiers positive, the long one above its own control.  Nothing here is a win.
+
+Byte-identity of the change itself was verified rather than assumed (123 cells
+over ten schedules x six climb-option combinations x -T {1,4}, plus Norway,
+M4, the plain scan, -F, --ring-stride, --confidence, --exhaust, --soft-plug
+and ENIGMA_HIST; 0 differing; suite 632/632).  So the regression is a
+throughput effect, not a behaviour change.
+
+
+TWO ERRORS WORTH MORE THAN THE RESULT
+-------------------------------------
+
+**-f DOES NOT USE THE FUNCTION THAT WAS CHANGED.**  The fused path goes
+through ngram_ic_decode(), which takes the table as a parameter and
+accumulates the IC histogram in the same pass; quadgram_score_decode() and
+allgram_score_decode() serve -q and -a.  Disassembling score_iter() shows
+three quad-shaped loops, and it is easy to see "both quad loops changed" and
+assume -f is covered.  It is not: the third loop, 25 instructions with the
+extra freq[d]++, is the one the recommended recipe actually runs.  So this
+work optimised the two models the recommendation does not use.
+
+**That accident produced a free noise control, and it is the sharpest number
+in the run.**  Because the fused tier's code was byte-identical across the
+A/B, its **-8.7% on the long tier is pure measurement noise** -- on a tier
+whose own base-vs-base control read +1.1% in the very next run.  Two
+independent estimates of the same floor, 10 points apart.  That is the
+CLAUDE.md warning in its strongest observed form: a container's bias is stable
+within a session, so repeating a number does not make it real, and only a
+different instrument settles anything under ~10% on this tier.
+
+
+WHAT THIS SAYS FOR NEXT TIME
+----------------------------
+
+The loop is **not front-end bound**.  Instruction count fell 24 -> 19, a 21%
+reduction, and throughput did not improve on any tier that measures it.  So
+the binding constraint is elsewhere -- most plausibly the six loads per
+character against two load ports (~3 cycles/iteration), or the four-deep
+dependent load chain ct -> steck -> rows -> steck.
+
+**Stop shaving instructions here.**  The remaining lever on this loop is
+reducing LOAD COUNT, and there is one candidate: rows[] is an array of 8-byte
+pointers, and within a run where only the right wheel steps rows[i+1] ==
+rows[i] + 26, so a run-structured scorer could advance the row by addition
+instead of loading a pointer -- one fewer load of six.  setup_mapping()
+already computes those runs (notch_gap).  Note this is NOT the measured-down
+"2-byte row index instead of the 8-byte pointer" (+26%, archived/
+IMPROVEMENTS.md §4), which changed the storage rather than removing the load.
+
+Reproduce: the three variants are one edit each to quadgram_score_decode()
+and allgram_score_decode() in src/scoring.cc; count with
+  objdump -dC --no-show-raw-insn src/scoring.o | sed -n '/score_iter/,$p'
+and look for the backward jne loops containing movzbl.
+
+
+THE FOLLOW-UP: REDUCING LOAD COUNT -- REAL, BUT ON THE WRONG MODEL
+==================================================================
+
+The prediction above was that load count, not instruction count, is the
+binding constraint.  Tested by removing one of the six loads.
+
+**The change.**  setup_mapping(m, true) copies every row into the contiguous
+mapping[] and points rows[i] at it, so on the HILL-CLIMB path
+rows[i] == &m.mapping[i][0] and the row address advances by a constant asize.
+Walking it (row += asize) instead of loading an 8-byte pointer takes the loop
+from six loads per character to five.  The SCAN path points rows[] into
+subst_array with no such stride and keeps the indexed form.
+
+Applied to quadgram_score_decode (-q) and ngram_ic_decode (-f).  Note the
+second one: the earlier attempt changed -q and -a and missed -f entirely.
+
+  loop                        insns  loads  8-byte ptr loads
+  indexed (scan, unchanged)      24      6                 1
+  contiguous (climb)             24      5                 0
+
+**The measurement has its control built in.**  search and crib run without -c,
+so they take the indexed branch and execute byte-identical code -- their
+movement in the same run IS that run's floor, measured simultaneously rather
+than in a separate job on a box in a different state.  That is the flaw in the
+instruction-shaving A/B above, where fused read -8.7% and its own control read
++1.1% thirteen minutes later.
+
+  tier         g++ treat   g++ floor   clang treat   clang floor
+  hillclimb q      -7.3%        0.9%         +5.1%         3.4%
+  hillclimb l      -6.6%        2.3%         +3.2%         0.6%
+  fused q          -6.0%        5.8%         +2.6%         1.0%
+  fused l          -4.2%        1.1%         -3.4%         1.8%
+  search/crib   +0.3..+4.1  (controls)   -0.1..+2.0   (controls)
+
+**g++: a clear win.**  All four treatment cells negative; hillclimb clears its
+floor by ~3x on both tiers.
+
+**clang: a small regression on hillclimb** (+3..+5% against a tight floor),
+fused ambiguous (-3.4 long, +2.6 quick, both near the floor).  Clang still
+loads the pointer in the indexed form -- verified by disassembly, ptrloads=1
+per character -- so it is not that the change is redundant there; clang simply
+does not convert the saved load, and it unrolls these loops 2x where g++ does
+not, which may be where the difference lives.
+
+**Absolute times are what make this shippable.**  hillclimb long is
+g++ 15.04 -> 14.04 s and clang 12.21 -> 12.60 s.  Clang was ~20% faster before
+and remains faster after; the change narrows the gap, handing most of a 7% gain
+to the slower, default compiler for ~3% off the faster one.  Both are far
+inside the 10% CI report and 25% block thresholds.
+
+**So the headline finding stands and is now two-sided**: instruction count is
+not the constraint (21% fewer bought 0%), load count partly is (17% fewer buys
+5-7% under g++), and the remainder is presumably the four-deep dependent chain
+ct -> steck -> rows -> steck, which no reordering removes.
+
+Byte-identity: 135 cells (120 climb over eleven schedules x five climb-option
+combinations x -T {1,4}, plus 15 covering Norway, M4, plain scan under -q/-f/-a,
+-F, --ring-stride, --confidence, --exhaust, --soft-plug and -A), 0 differing,
+plus a short-text guard at L = 1..7.  Suite 632/632.
+
+
+ISOLATING THE -f PATH KILLS IT: THE GAIN WAS NEVER THERE
+--------------------------------------------------------
+
+The split above -- g++ +7% and clang -3..5% on hillclimb -- has a mechanism,
+and the mechanism suggested a fix: apply the walk only where it wins on BOTH
+compilers, which the disassembly said was ngram_ic_decode (-f).
+
+**WHY THE SPLIT HAPPENS.**  clang unrolls the quadgram loops 2x and leaves
+ngram_ic_decode rolled.  Walking the row needs TWO induction variables (i for
+ct[i], plus the row pointer) where the indexed form needs one, so under
+unrolling the added increment costs more than the removed load:
+
+  loop (per character)      clang insns  clang loads  unrolled
+  quadgram indexed                 18.5            6  2x
+  quadgram contiguous              20.0            5  2x
+  ngram_ic indexed                 24              6  no
+  ngram_ic contiguous              24              5  no
+
+Rolled, instruction count is identical and the saved load is pure gain; that
+is why -q regressed under clang and -f did not.
+
+**BUT ISOLATING -f SHOWS THE -f GAIN WAS NOISE.**  The -f code is IDENTICAL in
+the two variants, so these four cells measure one thing twice:
+
+  fused tier            g++ quick  g++ long  clang quick  clang long
+  inside full change        -6.0%     -4.2%        +2.6%       -3.4%
+  ISOLATED (-f only)        +1.4%     -1.7%        +1.8%       +2.0%
+
+The isolated run carries three control tiers (search, hillclimb, crib -- all
+now unchanged code) reading -2.0%..+1.4%, so it is the trustworthy one, and it
+says the -f path gains NOTHING.  The earlier fused improvements were noise
+riding alongside the real effect in the neighbouring function.
+
+**WHAT ACTUALLY EXISTS**, therefore:
+
+  - a real ~7% g++ win on hillclimb (-q), reproduced on both tiers against
+    in-run controls;
+  - a real ~3-5% clang loss on the same;
+  - nothing measurable on -f, under either compiler.
+
+**SO IT IS NOT WORTH SHIPPING.**  -q is not the recommended model.  The change
+optimises a model nobody is told to use, in opposite directions on the two
+compilers, and does nothing for the one that matters.  Code reverted; the
+finding kept.
+
+**A refinement of the headline worth carrying.**  Removing a load pays in
+quadgram (pure gather loop) and not in ngram_ic_decode (same loop plus a
+freq[d]++ store per character).  So "the loop is load-bound" is too coarse:
+the quad loop is, and adding one store per character is enough to change the
+balance.  Any future attempt should measure the two separately rather than
+assuming what helps one helps the other.
+
+**One measurement caveat on all of the above.**  The box drifted ~7% across
+the session -- hillclimb long base ran 15.04, 16.06 and 13.23 s in different
+runs -- so only within-run treatment-versus-control contrasts are meaningful
+here, and no cross-run comparison in this file should be read as a difference
+between variants.
+
+
+THE THIRD LEVER: UNROLLING -- AND IT SPLITS BY LOOP SHAPE, NOT BY COMPILER
+==========================================================================
+
+Neither of the first two levers shipped.  This one does.  The question that
+started it: since clang unrolls the quadgram loops 2x and g++ unrolls nothing,
+can a pragma fix the split?  The answer is yes, but in the opposite direction
+from the obvious one -- do not DISABLE clang's unrolling (its unrolled indexed
+loop is its fastest form), FORCE unrolling where the compiler declined.
+
+  #if defined(__clang__)
+  #define SCORE_UNROLL _Pragma("clang loop unroll_count(4)")
+  #elif defined(__GNUC__)
+  #define SCORE_UNROLL _Pragma("GCC unroll 4")
+  #endif
+
+**The shape, per character, before any timing:**
+
+  loop            g++ base  g++ u4   clang base  clang u4   loads
+  quad/all            24.0    19.8         18.5      16.5    6 (all)
+  ngram_ic            25.0    21.8         24.0      17.5    6 (all)
+
+Load count is untouched, so this is the OTHER lever: fewer loop-control
+instructions, and more importantly four independent copies of the four-deep
+dependent chain ct -> steck -> rows -> steck in flight at once.
+
+**APPLIED TO ALL EIGHT SCORER LOOPS IT SPLITS SHARPLY** (g++, against a
+base-vs-base control of +-1.4% long, +-2.7% quick measured the same hour):
+
+  tier          all 8 loops   gather-only   clang gather-only
+  search q            -7.0%         -8.2%               -0.4%
+  search l           -11.8%         -8.9%               -2.9%
+  hillclimb q        -12.0%        -10.1%               +0.6%
+  hillclimb l         -9.8%         -8.9%               +0.0%
+  fused q             -4.2%         -1.3%               -0.4%
+  fused l            +11.7%         +2.7%               -0.5%
+  crib             +0.0/+0.9    +0.8/+1.1           +0.4/+0.5
+
+**THE SPLIT IS BY LOOP SHAPE AND IT HAS A MECHANISM.**  The loops that gain
+(quad, all, tri, bi, mono) are PURE GATHERS -- load, accumulate in a register.
+The loops that regress (ic, monoic, ngram_ic, i.e. -f) each do freq[d]++, a
+read-modify-write to memory.  Unrolling schedules four of those increments
+together, and four random letters out of 26 collide about 30% of the time, so
+store-to-load forwarding the rolled loop spaces out becomes a stall.
+Unrolling improves the load dependency and worsens the store one; only loops
+without the store come out ahead.
+
+Excluding the three store loops takes fused long from +11.7% to +2.7% while
+the gather loops keep -9%.  That is the shipped form.
+
+**RESULT: ~9% under g++ on search and hillclimb, clang neutral, no regression
+on either compiler.**  Six to twelve times the floor, reproduced across quick
+and long and across two independent runs.  It covers -q, -a, -t, -b, -m and
+every scan path.
+
+**-f GAINS NOTHING, and that is the honest gap.**  Its loop is the one that
+cannot be unrolled profitably, so the recommended model is untouched.  The
+residual g++ fused long +2.7% reads -0.5% under clang and sits inside the g++
+control's own +-2.7%, so it is most likely code layout from neighbouring loops
+changing size rather than a real cost -- but it is not resolved.
+
+**WHY THIS WAS FOUND AT ALL.**  Applying the pragma to ONE loop would have hit
+whichever behaviour that loop has and stopped.  Applying it to all eight at
+once produced the contrast between the two loop shapes, and the contrast is
+what identified the store as the cause.  The instruction to make every scoring
+scheme fast is what surfaced the mechanism.
+
+
+THE FOURTH LEVER: PER-COPY HISTOGRAMS, SO THE -f LOOP CAN UNROLL TOO
+====================================================================
+
+The third lever left a named gap: -f gains nothing, because ngram_ic_decode
+does freq[d]++ per character and unrolling four of those together collides.
+But that is a diagnosis, and a diagnosis names its own fix.  Give each
+unrolled copy its OWN counter array:
+
+  int f0[asize], f1[asize], f2[asize], f3[asize];
+  ...
+  f0[d0]++;  f1[d1]++;  f2[d2]++;  f3[d3]++;
+  ...
+  for (int j = 0; j < asize; j++)
+    { const int n = f0[j] + f1[j] + f2[j] + f3[j]; coin += n * (n - 1); }
+
+Four increments in one iteration now touch four DIFFERENT arrays, so they
+cannot collide -- the ~30% store-forwarding stall is removed by construction
+rather than avoided by leaving the loop rolled.  The loop stays SINGLE-PASS
+(the n-gram term and the histogram are still accumulated in one walk), and the
+merge is 26 iterations against L.
+
+It is byte-identical for the same reason the histogram form itself is: the
+counts are the same integers whichever array they land in, and the n-gram
+terms are added in the same order into the same long.
+
+**THE SHAPE.**  The hot loop is now 73 instructions and 25 loads per FOUR
+characters under g++ -- 18.2 insns/char against 25.0 rolled, with loads
+unchanged at ~6/char.  Clang lands at 18.5.  Both compilers converge on the
+same shape from different starting points (g++ 25.0, clang 24.0), which is
+what a loop whose remaining cost is the dependent load chain should look like.
+
+**MEASURED, BASE = origin/dev, so these tables carry the gather-loop unroll
+AND this change together:**
+
+  tier          g++ quick  g++ long   clang quick  clang long
+  search            -9.6%     -9.6%         +0.1%       -3.1%
+  hillclimb        -10.6%    -10.5%         +3.0%       +0.1%
+  fused             -3.1%     -5.8%        -11.2%      -12.3%
+  crib              -1.6%     +0.9%         -1.3%       -0.7%
+
+**THE INCREMENT OVER THE GATHER-ONLY FORM** -- same base, and every control
+tier is unchanged code between the two head variants, so their movement is the
+cross-run drift and calibrates the fused column:
+
+  tier          g++ quick  g++ long   clang quick  clang long
+  search            -1.4      -0.7          +0.5        -0.2
+  hillclimb         -0.5      -1.6          +2.4        +0.1
+  crib              -2.4      -0.2          -1.7        -1.2
+  FUSED             -1.8      -8.5         -10.8       -11.8
+
+Drift on the six control cells runs 0.1 to 2.4 points.  Three of the four
+fused increments are 8.5 to 11.8 -- four to fifty times that -- and the fourth
+(g++ quick, -1.8) sits inside it.  So the effect is established on g++ long
+and on both clang tiers, and the g++ quick tier is simply too coarse to see
+it, which is what the quick tier is for.
+
+**RESULT: -f is no longer the exception.**  It gains 6% under g++ and 12%
+under clang, on top of the ~9% the gather loops already give g++ on search and
+hillclimb.  The recommended model is now the one with the largest measured
+win on the compiler where it was previously flat.
+
+**WHY THE TWO COMPILERS DIFFER SO MUCH IN SIZE** (-6% vs -12%) is not
+resolved.  The instruction shapes are nearly identical afterwards, so it is a
+difference in what the ROLLED form cost each of them, not in what the unrolled
+form buys.  It does not affect the decision -- both are wins, well outside
+drift, on both tiers.
+
+**THE GENERAL LESSON, which is the part worth carrying forward.**  "This loop
+does a read-modify-write, so do not unroll it" was the right call with the
+loop as written, and the wrong conclusion about the loop.  The store was not
+inherent to the work; it was an artefact of four copies sharing one
+accumulator.  Any per-iteration accumulator that unrolling would serialise is
+a candidate for the same treatment: give each copy its own and merge at the
+end, as long as the merge is O(alphabet) and not O(L).
+
+
+THE CI MATRIX RE-MEASURES BOTH PARTS, AND IT REVISES THE -f HEADLINE
+====================================================================
+
+CLAUDE.md's rule is that for anything under a few percent the CI matrix is the
+measurement and the local run is a smoke test, because a container's bias is
+stable WITHIN a session -- so a number reproduced twice on one box is not
+thereby real.  The Bench workflow ran all four cells against the same base
+(dev), i.e. the same comparison as the local runs above.
+
+  cell           search q/l    hillclimb q/l    FUSED q/l     crib q/l
+  g++ x86_64    -4.8 / -5.4    -4.7 /  -6.2   +8.1 /  -0.1   -0.0 / +0.1
+  g++ arm64    -11.1 /-12.0   -13.5 / -15.3  -11.4 / -18.9   -0.3 / -0.4
+  clang x86_64  +2.4 / +3.4    +2.4 /  +4.0   -2.2 /  -5.5   -0.4 / -0.2
+  clang arm64   -3.4 / -4.4    -3.1 /  -6.3   -8.5 / -14.2   +0.4 / -0.5
+
+**THE RUNNERS WERE QUIET, and the crib tier is what says so.**  It reads
+-0.5%..+0.4% in all eight cells.  It is not a code control -- it runs -q, one
+of the unrolled loops -- but it is deduction-bound (crib_try is 63.6% of it,
+and most keys are rejected before anything is scored), so its flatness rules
+out machine interference, which is the alternative explanation for any single
+cell blowing up.
+
+**POOLING THE SIX INDEPENDENT LONG-TIER FUSED READINGS** -- four runner cells
+plus the two local ones -- gives -0.1, -5.5, -5.8, -12.3, -14.2, -18.9.  Every
+one is a gain or nothing; the median is about -9% and the mean -9.5%.  On the
+quick tier five of six are gains and one is not.
+
+**SO THE HONEST -f CLAIM IS A RANGE, NOT THE -6%/-12% THE LOCAL RUN GAVE.**
+The change is worth nothing to -19% depending on the machine, and the local
+pair sat in the middle of that spread rather than measuring it.
+
+**THE ONE ADVERSE READING IS g++ x86_64 QUICK, +8.1%**, against that cell's
+own documented base-vs-base control of +0.9% quick / +0.2% long -- the
+tightest control in the matrix, so it is outside its floor and is not scatter
+in the ordinary sense.  Three things bound it:
+
+  - the SAME CELL's long tier reads -0.1%, so on that machine the change is
+    neutral, not harmful;
+  - the local box is ALSO g++ x86_64 and read -3.1 / -5.8, so this is a CPU
+    MODEL difference, not a compiler or architecture one -- two g++ x86_64
+    measurements of identical code disagree by 5.7 points on the long tier;
+  - the quick tier's fused base is 0.44 s with a ~0.1 s process startup inside
+    it, which is where code-layout effects land hardest (CLAUDE.md records a
+    +11-19% flagged cell that objdump showed was pure code placement).
+
+It is not resolved.  What can be said is that it is one cell of eight, its
+own long tier contradicts it, and nothing in the matrix approaches the 25%
+blocking threshold or even trips the 10% advisory one.
+
+**THE GATHER-LOOP HEADLINE ALSO WIDENS.**  "~9% under g++" was the local
+reading; the runners say -4.7..-6.2% on g++ x86_64 and -11.1..-15.3% on g++
+arm64, so the honest figure is 5-15% under g++ with arm64 at the top of it.
+Clang was documented as neutral and the runners agree on arm64 (-3.1..-6.3%,
+i.e. a mild gain) but read +2.4..+4.0% on x86_64 -- that cell's own control is
++1.8% quick and -9.0% long on search, the loosest in the matrix, so a move of
+that size there says nothing either way.
+
+**WHAT THIS COST TO LEARN.**  Nothing was wrong with the local measurement as
+a measurement -- the controls were run, the increment was calibrated against
+drift, and the effect was real on that box.  What it could not do is tell a
+machine-specific effect from a general one, and only a different instrument
+can.  The local run's job was to establish the mechanism works; the matrix's
+job is to say how much it is worth, and the two answers differ by more than
+the local run's own error bars suggested was possible.
+
+
+THE MATRIX WAS RUN TWICE ON BYTE-IDENTICAL CODE, AND ONE CELL IS NOT AN
+INSTRUMENT
+=======================================================================
+
+The commit that recorded the section above changed only comment text and
+Markdown, so its Bench run compared the SAME two binaries against the SAME
+base a second time.  Every difference between the two runs is therefore pure
+measurement, on a four-cell matrix, for free -- the same trick PR #205 used,
+arriving by accident.
+
+  cell          tier         run 1        run 2       spread q/l
+  g++ arm64     search   -11.1/-12.0  -12.3/-12.3     1.2 / 0.3
+                hillcl   -13.5/-15.3  -13.9/-15.7     0.4 / 0.4
+                FUSED    -11.4/-18.9  -11.5/-18.6     0.1 / 0.3
+  clang arm64   search    -3.4/ -4.4   -3.8/ -3.9     0.4 / 0.5
+                hillcl    -3.1/ -6.3   -5.7/ -6.5     2.6 / 0.2
+                FUSED     -8.5/-14.2   -7.6/-13.5     0.9 / 0.7
+  clang x86_64  search    +2.4/ +3.4   +0.4/ +2.6     2.0 / 0.8
+                hillcl    +2.4/ +4.0   +1.8/ +7.3     0.6 / 3.3
+                FUSED     -2.2/ -5.5   -1.9/ -8.2     0.3 / 2.7
+  g++ x86_64    search    -4.8/ -5.4  -13.0/-11.0   **8.2 / 5.6**
+                hillcl    -4.7/ -6.2  -10.4/ -4.1   **5.7 / 2.1**
+                FUSED     +8.1/ -0.1  +15.7/ +3.0   **7.6 / 3.1**
+
+**THE ARM64 CELLS REPRODUCE TO THE HUNDREDTH OF A SECOND.**  g++ arm64 gave
+byte-identical ABSOLUTE timings in both runs -- search base 0.68 / head 0.60
+twice over, fused base 0.47 / head 0.42 twice over -- so its eight percentages
+move by at most 1.2 points, and its fused long tier lands on -18.9 and -18.6.
+clang arm64 is nearly as good.  Those are the cells to believe.
+
+**g++ x86_64 IS NOT AN INSTRUMENT AT THIS RESOLUTION.**  Identical code moved
+8.2 points on search quick, and the absolute base time went 0.64 -> 0.70 s
+between runs.  That directly contradicts what this repo has documented for
+that cell -- PR #205 measured its worst case at +0.9% quick and +0.2% long --
+so **the floor is workload-dependent, not a property of the runner**.  #205
+controlled it on a fixed pair of binaries in one run; this is two runs
+separated by twenty minutes, which additionally samples whatever host the job
+lands on.
+
+**WHICH RETRACTS THE PREVIOUS SECTION'S CENTRAL CLAIM.**  That section called
++8.1% "outside its floor and not scatter in the ordinary sense", on the
+strength of the +0.9% control.  The floor there is ~8 points for this
+workload, so +8.1% was inside it and the sentence was wrong.  The three
+bounding arguments offered alongside it happen to survive, but they were
+supporting a conclusion that had no basis.
+
+**WHAT IS LEFT, STATED AT THE RESOLUTION THE DATA SUPPORTS.**  Four readings
+of fused on the GitHub g++ x86_64 runner: +8.1 / -0.1 / +15.7 / +3.0.  The
+long tier averages +1.5 and the quick tier cannot resolve anything.  My local
+box is also g++ x86_64 -- a different CPU model -- and reads -3.1 / -5.8.  So
+on that runner the -f change is **neutral, possibly mildly negative**, where
+on arm64 it is -18.6..-18.9 and reproducible to 0.3 points.  The change is a
+large win on ARM, a moderate win on one x86 CPU, and nothing on another.
+
+**THE CRIB TIER WAS A WEAKER CONTROL THAN THE PREVIOUS SECTION CLAIMED.**  It
+did read -0.5..+0.9 in all sixteen cells across both runs, and that IS a real
+signal -- but it is deduction-bound, so it stays flat through exactly the
+disturbance that moves the gather-bound tiers by eight points.  A control has
+to share the workload's bottleneck to bound its noise.  Reading crib's
+flatness as "the runners were quiet" was the same category error as reading a
+tight base-vs-base control as bounding a cross-run comparison.
+
+**THE PRACTICAL RULE THIS LEAVES.**  For this repo's scorer work, take the two
+arm64 Bench cells as the measurement, clang x86_64 as a weak second opinion,
+and g++ x86_64 as a smoke test only.  That is nearly the opposite of the
+emphasis in CLAUDE.md, which flags clang x86_64 as the noisy cell on the
+strength of one -9.0% search-long control -- true, and not the whole picture.
+
+
+N=3: THE x86_64 RUNNERS' ABSOLUTE THROUGHPUT IS NOT STABLE; THE arm64 ONES ARE
+==============================================================================
+
+A third comment-only commit re-ran the matrix again, so there are now THREE
+readings of one A/B on byte-identical binaries.  The percentages are the
+usual argument; the BASE ABSOLUTE TIMES settle it, because the base binary
+never changed and its wall time should be a constant.
+
+  fused long   run 1   run 2   run 3    mean   spread | base s (3 runs)  var
+  g++ arm64    -18.9   -18.6   -18.7   -18.7     0.3  | 20.59 20.53 20.59  0.3%
+  clang arm64  -14.2   -13.5   -13.3   -13.7     0.9  | 17.07 16.97 16.96  0.6%
+  clang x86    -5.5    -8.2   -11.9    -8.5      6.4  | 16.37 11.89 20.92   76%
+  g++ x86      -0.1    +3.0    -4.9    -0.7      7.9  | 18.09 20.06 23.18   28%
+
+**THE arm64 RUNNERS ARE ESSENTIALLY DETERMINISTIC.**  Identical work, three
+runs, twenty minutes apart: 20.59 / 20.53 / 20.59 s.  The gather tiers are the
+same -- g++ arm64 hillclimb long reads -15.3 / -15.7 / -15.7 and clang arm64
+-6.3 / -6.5 / -6.3, spreads of 0.4 and 0.2 points.
+
+**THE x86_64 RUNNERS VARY BY 28% AND 76% IN ABSOLUTE THROUGHPUT.**  clang x86
+ran the same base binary in 11.89 s once and 20.92 s another time.  No
+percentage computed on that host means anything at the few-percent level, and
+the earlier attempt to reason about its floor from a documented control was
+misconceived twice over -- the control was measured on a different workload
+AND within a single run, so it could not see this at all.
+
+**FINAL NUMBERS FOR THE -f CHANGE**, taking the arm64 cells as the instrument
+and the x86 cells as weak evidence:
+
+  g++ arm64     -18.7%   (+-0.3)   large win, reproducible
+  clang arm64   -13.7%   (+-0.9)   large win, reproducible
+  clang x86     -8.5%    (-5.5..-11.9)  win, size unresolved, 3/3 negative
+  g++ x86       -0.7%    (-4.9..+3.0)   INDISTINGUISHABLE FROM ZERO
+  local g++ x86 -5.8%    single box, different CPU model
+
+And for the gather-loop unroll, on the two cells that can measure:
+
+  hillclimb long   g++ arm64 -15.6%   clang arm64 -6.4%
+  search    long   g++ arm64 -12.5%   clang arm64 -3.7%
+
+**THE "+8.1% MIGHT BE A REGRESSION" WORRY IS DEAD.**  Three readings of that
+cell average -0.7%.  It was never a regression, and it was never a
+CPU-specific cost either -- the second section's "the spread is between CPU
+MODELS" reading was itself over-confident.  Some of the spread may well be
+CPU model (GitHub's x86 pool is heterogeneous), but 76% variation in base
+throughput is co-tenancy and frequency, not microarchitecture, and nothing
+here separates the two.
+
+**THE METHOD THAT WORKED, IN ONE LINE.**  Watch the BASE column.  It is a
+free, always-available control -- the base binary is fixed by construction,
+so any movement in its absolute time is pure instrument, and no reasoning
+about percentages is needed to see it.  Three CLAUDE.md-documented traps
+(a tight control that did not transfer, a flat neighbouring tier that shared
+no bottleneck, and a number reproduced on one box) were all avoidable by
+reading one column that was printed on every line the whole time.

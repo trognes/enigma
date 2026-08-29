@@ -3106,6 +3106,73 @@ reason the fused form is kept (measurement PR #77, store-variant commit
 needs it per-scoring). An even earlier 16-byte-blocked decode was never shown to
 win and was removed too; the scalar fused loop is the current form.
 
+> **The scorer loops are UNROLLED 4×, and the split between the two ways of
+> doing it is the thing to know before touching them.** The five pure-gather
+> loops (`quadgram`, `allgram`, `trigram`, `bigram`, `monogram`) carry a
+> `SCORE_UNROLL` pragma; `ngram_ic_decode` — the `-f` loop — is unrolled **by
+> hand**, with four private histograms summed at the end. Both are
+> byte-identical (the accumulators are integer sums). Measured on the two
+> Bench cells that can measure (see below): `fused` long **−18.7% on g++
+> arm64 and −13.7% on clang arm64**, and on `search`/`hillclimb` long −12.5%
+> / −15.6% (g++ arm64) and −3.7% / −6.4% (clang arm64). On x86_64 the same
+> change reads −8.5% (clang, 3/3 negative) and **−0.7%, i.e. nothing** (g++).
+>
+> **THE arm64 BENCH CELLS ARE THE INSTRUMENT FOR SCORER WORK; THE x86_64
+> CELLS CANNOT MEASURE AT THIS RESOLUTION.** Three comment-only commits
+> re-ran the matrix on byte-identical binaries, which makes the base column a
+> free control — the base binary is fixed by construction, so any movement in
+> its *absolute* time is pure instrument:
+>
+> | cell | `fused` long, 3 runs | mean | base seconds | var |
+> |---|---|---:|---|---:|
+> | g++ arm64 | −18.9 / −18.6 / −18.7 | −18.7 | 20.59 / 20.53 / 20.59 | 0.3% |
+> | clang arm64 | −14.2 / −13.5 / −13.3 | −13.7 | 17.07 / 16.97 / 16.96 | 0.6% |
+> | clang x86_64 | −5.5 / −8.2 / −11.9 | −8.5 | 16.37 / 11.89 / 20.92 | 76% |
+> | g++ x86_64 | −0.1 / +3.0 / −4.9 | −0.7 | 18.09 / 20.06 / 23.18 | 28% |
+>
+> The arm64 runners are essentially deterministic — identical work three runs
+> apart lands within 0.06 s. The x86_64 runners ran *the same base binary* in
+> 11.89 s once and 20.92 s another time, so no x86_64 percentage means
+> anything at the few-percent level. **Watch the base column**: it needs no
+> reasoning about percentages and it is printed on every line.
+>
+> This does not retire the ±0.5%/±4.5% per-tier floors documented below, but
+> it does bound how far one may be carried: **a noise floor is workload- AND
+> run-specific.** PR #205's +0.9% control for g++ x86_64 was one run on a
+> fixed pair of binaries; it cannot see host-to-host variation, and reading it
+> as a property of the runner produced a "regression" here that three runs
+> average to −0.7%.
+>
+> **A control must share the workload's bottleneck to bound its noise.** The
+> `crib` tier read −0.5…+1.2% in all twenty-four cells across the three runs
+> and looked like proof the runners were quiet. It is deduction-bound
+> (`crib_try` is 63.6% of it), so it stays flat through exactly the
+> disturbance that moves the gather-bound tiers by eight points.
+>
+> **The pragma alone makes the `-f` loop SLOWER — +11.7% on g++ `fused`
+> long.** That loop does `freq[d]++`, and four increments scheduled together
+> collide across 26 bins about 30% of the time, so the store-to-load
+> forwarding the rolled loop spaces out becomes a stall. Unrolling improves
+> the dependent load chain and worsens the store one; a loop with no store
+> comes out ahead and a loop with one does not.
+>
+> **Per-copy accumulators are what convert the second case into the first**,
+> and the general lesson is worth more than the instance: the serialised store
+> was an artefact of four unrolled copies sharing one accumulator, not
+> something inherent to the work. Any per-iteration accumulator that unrolling
+> would serialise is a candidate for the same treatment — give each copy its
+> own and merge at the end — **provided the merge is O(alphabet) and not
+> O(message)**, which is what keeps the loop single-pass. `ic` and `monoic`
+> have the same shape and are deliberately left rolled: during a climb they
+> are served by the histogram/`cooc_col` path rather than by decoding, so
+> their loop runs once per climb start and resync rather than per toggle.
+>
+> Instruction count is **not** the constraint on these loops and two earlier
+> attempts proved it: shaving 21% of the instructions bought 0%, and removing
+> one of six loads gained 7% under g++ while costing clang 3–5%.
+> `eval/results-scoreloop-insns.txt` has all four levers, including the two
+> that measured down.
+
 The tables the scorers read are **uint8 fixed-point**
 (`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),
 not float,

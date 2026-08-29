@@ -52,6 +52,31 @@ uint8_t all8[asize][asize][asize][asize];
    pre-roll decodes in bounds and reproduce the old `i < textlength-(n-1)` loops
    (which simply ran zero times for shorter input). */
 
+/* Force unrolling of the scorer decode loops.  Neither compiler unrolls
+   ngram_ic_decode and g++ unrolls none of them (measured: see
+   eval/results-scoreloop-insns.txt).  The aim is LATENCY, not instruction
+   count -- instruction count is measured NOT to be the constraint here, while
+   the four-deep dependent load chain ct -> steck -> rows -> steck is a
+   candidate, and unrolling lets the scheduler overlap that chain across
+   iterations.
+
+   APPLIED ONLY TO THE PURE-GATHER LOOPS, and the exclusion is measured.  The
+   scorers that also do freq[d]++ -- ic, monoic and ngram_ic (-f) -- REGRESS
+   when unrolled: g++ fused long read +11.7% against a 1.4% base-vs-base floor,
+   while the gather-only loops read -7 to -12% on search and hillclimb against
+   the same floor.  The mechanism is the read-modify-write: unrolling schedules
+   four freq[] increments close together, and four random letters out of 26
+   collide about 30% of the time, so the store-to-load forwarding the rolled
+   loop spaces out becomes a stall.  Unrolling improves the load dependency and
+   worsens the store one; only loops without the store are net ahead. */
+#if defined(__clang__)
+#define SCORE_UNROLL _Pragma("clang loop unroll_count(4)")
+#elif defined(__GNUC__)
+#define SCORE_UNROLL _Pragma("GCC unroll 4")
+#else
+#define SCORE_UNROLL
+#endif
+
 static double quadgram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
@@ -66,6 +91,7 @@ static double quadgram_score_decode(machine & m)
   int b = decode_at(steck, rows, ct, 1);
   int c = decode_at(steck, rows, ct, 2);
   long isum = 0;   /* sum uint8 fixed-point (exact, order-independent) */
+  SCORE_UNROLL
   for (int i = 3; i < textlength; i++)
     {
       int d = decode_at(steck, rows, ct, i);
@@ -96,6 +122,7 @@ static double allgram_score_decode(machine & m)
   int b = decode_at(steck, rows, ct, 1);
   int c = decode_at(steck, rows, ct, 2);
   long isum = 0;
+  SCORE_UNROLL
   for (int i = 3; i < textlength; i++)
     {
       int d = decode_at(steck, rows, ct, i);
@@ -121,6 +148,7 @@ static double trigram_score_decode(machine & m)
   int a = decode_at(steck, rows, ct, 0);
   int b = decode_at(steck, rows, ct, 1);
   long isum = 0;
+  SCORE_UNROLL
   for (int i = 2; i < textlength; i++)
     {
       int c = decode_at(steck, rows, ct, i);
@@ -144,6 +172,7 @@ static double bigram_score_decode(machine & m)
 
   int a = decode_at(steck, rows, ct, 0);
   long isum = 0;
+  SCORE_UNROLL
   for (int i = 1; i < textlength; i++)
     {
       int b = decode_at(steck, rows, ct, i);
@@ -161,6 +190,7 @@ static double monogram_score_decode(machine & m)
   const unsigned char * const * __restrict rows = m.rows;
 
   long isum = 0;
+  SCORE_UNROLL
   for (int i = 0; i < textlength; i++)
     isum += mono8[decode_at(steck, rows, ct, i)];
   return static_cast<double>(isum) / ngram_scale[SCORE_MONO] + textlength * ngram_bias[SCORE_MONO];
@@ -227,6 +257,7 @@ static double monoic_score_decode(machine & m)
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
+  /* NOT unrolled: see SCORE_UNROLL. */
   for (int i = 0; i < textlength; i++)
     freq[decode_at(steck, rows, ct, i)]++;
 
@@ -256,6 +287,7 @@ double ic_score_decode(machine & m)
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
+  /* NOT unrolled: see SCORE_UNROLL. */
   for (int i = 0; i < textlength; i++)
     freq[decode_at(steck, rows, ct, i)]++;
 
@@ -666,9 +698,32 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
 
-  int freq[asize];
+  /* FOUR HISTOGRAMS, ONE PER UNROLLED COPY -- the whole point of this
+     function's shape.
+
+     The body is unrolled BY HAND rather than by SCORE_UNROLL, because the
+     pragma alone makes this loop SLOWER.  It does freq[d]++, a
+     read-modify-write, and unrolling schedules four of those together where
+     four random letters out of 26 collide about 30% of the time, turning
+     store-to-load forwarding into a stall.  Measured, the pragma costs +11.7%
+     on the g++ fused long tier while the pure-gather loops gain 7-12%
+     (eval/results-scoreloop-insns.txt).
+
+     Giving each unrolled copy its OWN counter array removes the collision by
+     construction -- four separate arrays cannot alias -- so the loop unrolls
+     like a gather loop and the histogram is recovered by summing them.  Worth
+     -18.6..-18.9% on the fused long tier on arm64 (reproduced to 0.3 points),
+     -5.8% on one local x86 CPU, and NOTHING on the GitHub g++ x86_64 runner
+     -- the size is CPU-dependent.  The reduction is 26*3 adds per
+     call, about 0.5 per character at operational length, against a
+     4x-unrolled body.  It stays SINGLE-PASS and decodes each character once,
+     so this is not the two-pass form rejected above.
+
+     Byte-identical: the counts are the same integers whichever array they land
+     in, and the n-gram terms are added in the same order. */
+  int f0[asize], f1[asize], f2[asize], f3[asize];
   for (int j = 0; j < asize; j++)
-    freq[j] = 0;
+    { f0[j] = 0; f1[j] = 0; f2[j] = 0; f3[j] = 0; }
 
   *ic_out = 0.0;
   if (textlength < 4)
@@ -677,12 +732,31 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   int a = decode_at(steck, rows, ct, 0);
   int b = decode_at(steck, rows, ct, 1);
   int c = decode_at(steck, rows, ct, 2);
-  freq[a]++; freq[b]++; freq[c]++;
+  f0[a]++; f1[b]++; f2[c]++;
   long isum = 0;
-  for (int i = 3; i < textlength; i++)
+  int i = 3;
+  for (; i + 3 < textlength; i += 4)
     {
-      int d = decode_at(steck, rows, ct, i);
-      freq[d]++;
+      const int d0 = decode_at(steck, rows, ct, i);
+      const int d1 = decode_at(steck, rows, ct, i + 1);
+      const int d2 = decode_at(steck, rows, ct, i + 2);
+      const int d3 = decode_at(steck, rows, ct, i + 3);
+      f0[d0]++;
+      f1[d1]++;
+      f2[d2]++;
+      f3[d3]++;
+      isum += table[a][b][c][d0];
+      isum += table[b][c][d0][d1];
+      isum += table[c][d0][d1][d2];
+      isum += table[d0][d1][d2][d3];
+      a = d1;
+      b = d2;
+      c = d3;
+    }
+  for (; i < textlength; i++)
+    {
+      const int d = decode_at(steck, rows, ct, i);
+      f0[d]++;
       isum += table[a][b][c][d];
       a = b;
       b = c;
@@ -691,7 +765,10 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
 
   int coin = 0;                      /* see ic_score_decode: int, not double */
   for (int j = 0; j < asize; j++)
-    coin += freq[j] * (freq[j] - 1);
+    {
+      const int n = f0[j] + f1[j] + f2[j] + f3[j];
+      coin += n * (n - 1);
+    }
   *ic_out = (textlength > 1)
     ? static_cast<double>(coin)
         / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
