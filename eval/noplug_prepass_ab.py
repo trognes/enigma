@@ -137,6 +137,13 @@ def main():
     ap.add_argument("--timing", action="store_true",
                     help="fit the per-restart cost of the stage-0 climb in "
                          "each arm; single-threaded, wants a quiet box")
+    ap.add_argument("--exclude-sweep", type=int, nargs="+", default=None,
+                    help="sweep the restriction strictness: arm B pins the N "
+                         "rarest letters, for each N given. Arm A is computed "
+                         "once per trial and the f10 continuations are "
+                         "memoised by seed across arms, so the sweep costs far "
+                         "less than one run per level. --exclude 0 is added as "
+                         "a null control and must read 0 discordant.")
     ap.add_argument("--seed-ladder", type=int, nargs="+", default=None,
                     help="distinct stage-0 seeds per arm at each -R. Arm B "
                          "explores less at equal restarts, so the plain "
@@ -150,6 +157,83 @@ def main():
 
     corpus = corpus_text()
     L = args.length
+
+    if args.exclude_sweep:
+        # Arm A is identical in every cell, so it is computed ONCE per trial;
+        # and the f10 continuation depends only on (key, seed), so it is
+        # memoised per trial across all arms -- neighbouring exclusion levels
+        # share many seeds.  --exclude 0 is prepended as a null control: with
+        # no letters pinned arm B is byte-identical to arm A, so that row must
+        # read 0 discordant or the harness is wrong.
+        levels = [0] + [n for n in args.exclude_sweep if n != 0]
+        specs = make_specs(corpus, L, args.trials, args.seed)
+        print(f"# L={L}, {args.trials} trials, -S {args.pre} then "
+              f"{args.target}, --random {args.kick}, -R {args.restarts} both "
+              f"arms, rotor key given, 10-pair board hidden", file=sys.stderr)
+
+        def trial_sweep(spec):
+            pt, w, r, g, pb = spec
+            key = ["-u", "B", "-w", w, "-r", r, "-g", g]
+            ct, _ = run(key + ["-s", pb], pt)
+            memo = {}
+
+            def cont(s):
+                if s not in memo:
+                    cmd = key + ["-c", "-J", "-S", args.target, "-l",
+                                 args.lang, "-T", 1, "-e", "7", "-R", 0,
+                                 "--dump-all"]
+                    if s:
+                        cmd += ["--soft-plug", s.replace(" ", "")]
+                    o, e = run(cmd, ct)
+                    d = dumped(e)
+                    if not d:
+                        sys.exit("continuation produced no dumpall line:\n"
+                                 + " ".join(str(x) for x in cmd) + "\n" + e)
+                    memo[s] = (d[0][0], o)
+                return memo[s]
+
+            def arm(excl):
+                cmd = key + ["-c", "-J", "-S", args.pre, "-l", args.lang,
+                             "-T", 1, "-e", "7", "-R", args.restarts,
+                             "--random", args.kick, "--dump-all"]
+                if excl > 0:
+                    cmd += ["--no-plug", rare_n(ct, excl)]
+                _, err = run(cmd, ct)
+                seeds = {b for _, b in dumped(err)}
+                best = None
+                for s in seeds:
+                    v = cont(s)
+                    if (best is None) or (v[0] > best[0]):
+                        best = v
+                c = sum(x == y for x, y in zip(best[1], pt)) if best else 0
+                return (2 * c >= L, 100.0 * c / L, len(seeds))
+
+            base = arm(0) if 0 in levels else None
+            return [arm(n) if n != 0 else base for n in levels], base
+
+        if args.jobs > 1:
+            with concurrent.futures.ThreadPoolExecutor(args.jobs) as ex:
+                res = list(ex.map(trial_sweep, specs))
+        else:
+            res = [trial_sweep(sp) for sp in specs]
+
+        n = len(res)
+        aa = sum(1 for _, b in res if b[0])
+        ap_ = sum(b[1] for _, b in res) / n
+        print(f"{'excl':>5} {'letters':>8} {'>=50%':>10} {'mean%':>7} "
+              f"{'seeds':>6} {'effect':>8} {'z':>7}")
+        print(f"{'A':>5} {26:>8} {str(aa) + '/' + str(n):>10} {ap_:>7.1f} "
+              f"{sum(b[2] for _, b in res) / n:>6.2f} {'--':>8} {'--':>7}")
+        for i, lv in enumerate(levels):
+            hit = sum(1 for r_, _ in res if r_[i][0])
+            pc = sum(r_[i][1] for r_, _ in res) / n
+            sd = sum(r_[i][2] for r_, _ in res) / n
+            oa = sum(1 for r_, b in res if b[0] and not r_[i][0])
+            ob = sum(1 for r_, b in res if r_[i][0] and not b[0])
+            print(f"{lv:>5} {26 - lv:>8} {str(hit) + '/' + str(n):>10} "
+                  f"{pc:>7.1f} {sd:>6.2f} {100.0 * (ob - oa) / n:>+7.1f}pp "
+                  f"{mcnemar(oa, ob):>+7.2f}")
+        return
 
     if args.seed_ladder:
         specs = make_specs(corpus, L, args.trials, args.seed)
