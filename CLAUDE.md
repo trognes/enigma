@@ -134,17 +134,28 @@ make crackquality         # build, then run tests/crack_quality.py (cracking qua
 ```
 
 `make bench` (`tests/bench.sh`) benchmarks the hot paths **separately** —
-`search` (brute-force scan, no plugboard), `hillclimb` (the `-c` plugboard loop
+`search` (brute-force scan, no plugboard), **`icscan`** (the same scan under
+`-i`, the default model), `hillclimb` (the `-c` plugboard loop
 under `-q`), **`fused`** (the same climb under `-f`, the recommended model) and
 **`crib`** (a `--crib` sweep) — because a change can regress one without
-touching the others. The last two exist because coverage gaps are where the
-wins hide: `hillclimb` runs `-q`, which computes no index of coincidence, so it
+touching the others. Three of the five exist because coverage gaps are where
+the wins hide: `hillclimb` runs `-q`, which computes no index of coincidence,
+so it
 cannot see anything inside `ngram_ic_decode` — and that function is **91.9% of
 a `-f -c` run**, where a 10.5% item sat unnoticed until the three regimes were
 profiled separately (PR #152). `fused` differs from `hillclimb` only in the
 model, so a delta between the two rows is the scorer and nothing else;
 verified by A/B-ing across the change it was built to catch, where `fused`
 read −3.6/−4.1/−4.1% while `hillclimb` read +4.0/+5.3/−2.4%, i.e. noise.
+**`icscan` pairs with `search` the same way**, and it closed the largest gap of
+the three: `-i` is what a bare `./enigma < cipher.txt` runs, and nothing else
+covers `ic_score_decode` — `search` and `crib` run `-q`, `fused` runs `-f`, and
+under `-c` the low-order models are served by the histogram/`cooc_col` path
+rather than by decoding at all. So the **tool's default invocation had no
+coverage** while the scorer loops were being rewritten around it. It is also
+the cleanest tier here, because it loads no n-gram table: ~6 ms of startup
+against a ~0.8 s scan (99.2%), where `search` carries ~32 ms (96.3%) and
+`min_time` wraps the whole invocation.
 `crib` is the only tier that exercises `crib_try` (63.6% of a crib sweep) at
 all, and it earned its keep: a 26-letter prologue added to `crib_try` — to seed
 the deduction from `-s`/`--no-plug` pins — cost **+48% quick and +51% long**
@@ -3046,9 +3057,11 @@ the failure-shape table above.
 > missing term rather than scatter.
 >
 > **`make bench` cannot see this win, and that is the point of running it.**
-> All four tiers are controls: `search` and `crib` run without `-c`, and
+> Every tier is a control: `search`, `icscan` and `crib` run without `-c`, and
 > `hillclimb`/`fused` climb in `-q` and `-f`, so not one uses a low-order
-> stage. What it answers is whether the restructured move loop cost anything
+> stage — `icscan` least of all, since the histogram path is climb-only and it
+> scans. (The four percentages below predate `icscan`.)
+> What it answers is whether the restructured move loop cost anything
 > on the paths that gain nothing — `LONG=1 BASE=origin/dev` read +1.7 / +1.6 /
 > −0.4 / −0.7%, no regression. Quick-tier `hillclimb` read **+6.8% and then
 > +6.5%** on two separate runs and was the one cell worth chasing; the long

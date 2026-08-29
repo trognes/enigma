@@ -14,6 +14,18 @@
 #                  (`precompute` + `setup_mapping` + `decode` + `score`, once
 #                  per key). Amplified by wildcarding the wheel order and start
 #                  position so the scan dominates process startup / file I/O.
+#   * icscan    -- the SAME scan under `-i`, the DEFAULT model. Identical to
+#                  the `search` row except for the model, so a delta between
+#                  the two is the scorer and nothing else -- the same pairing
+#                  `fused` has with `hillclimb`. It exists because `-i` is what
+#                  a bare `./enigma < cipher.txt` runs, and nothing else here
+#                  touches `ic_score_decode`: `search` and `crib` run `-q`,
+#                  `fused` runs `-f`, and under `-c` the low-order models are
+#                  served by the histogram/`cooc_col` path rather than by
+#                  decoding at all. So the tool's default invocation had no
+#                  coverage. It also loads no n-gram table, which makes it the
+#                  cleanest tier here: ~6ms of startup against a ~0.8s scan
+#                  (99.2%), where `search` carries ~32ms (96.3%).
 #   * hillclimb -- the plugboard optimisation loop (`-c`). A short, deliberately
 #                  hard ciphertext (many plugboard pairs) is recovered while
 #                  wildcarding the start position, so each of the start
@@ -311,6 +323,12 @@ ct_s=$(encrypt "$(trunc 80)" "")
 # the rightmost ring wildcarded. Verified against the binary's own count.
 bench search quick 2741856 keys - "$ct_s" -q -u B -w ... -g ... -x 3 -l english
 
+# --- icscan: the same scan under -i, the default model -----------------------
+# Identical to the row above except for the model, so a delta between them is
+# the scorer and nothing else. No -l: IC needs no language, and passing one
+# would load a table this model never reads.
+bench icscan quick 2741856 keys - "$ct_s" -i -u B -w ... -g ... -x 3
+
 # --- hillclimb: recover a 6-pair plugboard, wildcard start (-c) ---------------
 pb="AB CD EF GH IJ KL"
 pt_h=$(trunc 80)
@@ -337,6 +355,7 @@ if [ "$LONG" = 1 ]; then
   ct_sl=$(encrypt "$(trunc 120)" "")
   # 3-permutations of wheels 1..5 (-x 5) x 26 ring2 x 26^3 = 27418560 keys
   bench search long 27418560 keys - "$ct_sl" -q -u B -w ... -g ... -x 5 -l english
+  bench icscan long 27418560 keys - "$ct_sl" -i -u B -w ... -g ... -x 5
 
   pt_hl=$(trunc 160)
   ct_hl=$(encrypt "$pt_hl" "$pb")
