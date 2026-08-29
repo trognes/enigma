@@ -1,0 +1,226 @@
+WHAT THE LOW-ORDER PRE-PASS CAN SEE: ciphertext frequency and the plugboard
+===========================================================================
+
+  eval/proto_freqbias.cc      the 325-plug IC ranking, by letter frequency
+  eval/seed_letter_bias.py    which letters a -S k4 seed actually plugs
+
+Authentic HG Nord decrypts, rotor key given, 10-pair board hidden,
+wehrmacht tables, ENIGMA_SEED=0.
+
+
+THE STRUCTURE
+-------------
+
+IC reads only the histogram of the decrypt taken BEFORE the exit board, and
+cooc_col(c, d) accumulates only over positions where ct_i == c -- so that
+column's total mass IS count(c).  Plugging (a,b) on an empty board perturbs
+the histogram by -ma -mb +qa +qb, of mass exactly count(a) + count(b) =: m.
+
+Two consequences, and only the second survives measurement.
+
+The EXIT board is invisible to IC (steck is an involution, so the post-board
+histogram is the pre-board one permuted, and IC is permutation-invariant).
+That is already exploited -- it is the basis of the histogram-form scoring in
+src/scoring.cc.
+
+A systematic upward drift with m does NOT exist.  Writing n = n0 + delta, the
+term ||delta||^2 is strictly positive and proportional to m, which looks like
+a first-order bias -- but delta is not independent of n0.  ma is literally a
+component of n0 (n0 = sum_c cooc_col(c,c)), so -2<n0,ma> cancels the +||ma||^2
+exactly in expectation.  Measured corr(IC score, m) = -0.003 / +0.012 /
+-0.017 / -0.011 / -0.025 at L = 100 / 40 / 60 / 167 / 300.  There is nothing
+there.
+
+
+INFLUENCE, NOT IMPROVEMENT
+--------------------------
+
+325 plugs in quintiles by m, scores centred per key, x1000, L = 100, 800 keys:
+
+  quintile   mean m   wrong mu   wrong sd   true mu
+         1      4.2      +0.28      11.68     +5.43
+         3      7.5      -0.36      15.01     +9.13
+         5     11.5      -0.83      18.14    +13.58
+
+A WRONG plug on frequent letters does not improve the IC -- its mean effect is
+flat and slightly negative (-0.046 sd at the top quintile), monotone and
+consistently signed at L = 60/100/167.  What grows is the SPREAD, as sqrt(m):
+1.55x over a 2.74x range in m, against sqrt(2.74) = 1.66, which is the
+random-sign sum over ~m bins.  The TRUE-plug mean grows as m itself, 2.5x over
+the same range.
+
+So SNR grows as sqrt(m).  A correct plug on frequent letters is genuinely more
+detectable, by about the square root of the frequency ratio.
+
+
+THE RANKING IS THEREFORE ALREADY CORRECT -- do not "de-bias" it
+--------------------------------------------------------------
+
+True-plug mean rank of 325 under the raw IC ranking, split at each key's
+median count sum (chance = 163.0):
+
+    L      all   frequent    rare    gap as % of the enrichment
+   40    141.8      136.2   150.6    68%
+   60    132.7      127.3   140.7    44%
+  100    111.7      103.0   122.4    38%
+  167     89.2       79.4   101.0    29%
+  300     55.6       49.3    63.3    13%
+
+The heterogeneity is largest exactly where signal is scarcest: at forty
+letters nearly the whole of IC's single-plug enrichment is carried by the
+frequent half.
+
+But correcting for it buys NOTHING.  Residualising the score on m, or
+studentising by sqrt(m), moves the mean rank by under a point at every length
+(L = 100: raw 111.7, resid 111.3, stud 111.9).  The reason is that the signal
+scales with m as well as the noise, so the frequency weighting is not a
+miscalibration -- it is the correct weighting.  Studentising stops rare-letter
+true plugs competing against high-variance frequent-letter decoys, but strips
+frequent-letter true plugs of an advantage they earned; the two cancel, and it
+redistributes rank between the halves without changing the total.
+
+
+DOES THE PRE-PASS ACT ON THIS?  YES, AT ABOUT THE PREDICTED STRENGTH
+--------------------------------------------------------------------
+
+-S k4, L = 100, plug-weighted mean ciphertext count over unweighted:
+
+                              -R 300 (kicked)   -R 0 (IC alone)
+  seed plugs per board                   7.65              4.00
+  plug-weighted / unweighted            1.034             1.106
+  true plug found, frequent letters     97.7%             10.0%
+  true plug found, rare letters         87.4%              6.5%
+
+THE KICKED COLUMN MEASURES THE KICK, NOT IC, and this is the easy mistake:
+with the default 10-pair kick a k4 cap only blocks ADDS, so the seed keeps
+7.65 plugs, most of them the kick's uniform draws.  Any arithmetic treating
+the stage-0 seed as a 4-plug board is about the wrong object.  At -R 0 the cap
+binds exactly (4.00) and every plug is IC's own choice.
+
+The 1.106 enrichment sits at the sqrt rate the SNR argument predicts.  For
+c ~ Binomial(100, 1/26), selection proportional to sqrt(count) gives 1.140 and
+proportional to count gives 1.250; no bias gives 1.000.  And a true plug on
+frequent letters is found 1.54x more often (10.0% against 6.5%).
+
+
+WHAT DOES NOT FOLLOW: restricting the pre-pass to the frequent letters
+----------------------------------------------------------------------
+
+SETTLED AT 4800 TRIALS, AND IT LOSES AT EVERY STRICTNESS.  Sweeping how many
+of the rarest letters are pinned (eval/results-noplug-prepass.txt for the full
+table), effect against the unrestricted arm:
+
+  excluded    1      2      3      4      5      6      7
+  effect   -0.6   -0.1   -0.6   -1.3   -1.4   -2.5   -3.0  pp
+  z        -1.14  -0.11  -1.04  -2.25  -2.41  -4.23  -5.00
+
+Every level is <= 0, monotone in strictness, and the loss tracks the distinct
+seed count (6.87 -> 6.24) at ~4.8pp per lost seed.  The restriction is pure
+diversity tax with nothing on the other side, at any dose.  The rest of this
+section is the history that led there, and one number in it -- a "+1.0pp hint"
+at --exclude 6 from 600 trials -- is REFUTED: that cell is -2.5pp.
+
+The 600-trial sweep showed all seven mild cells >= 0 and it was an artefact of
+the design, worth knowing before running another one: every cell shares the
+same arm A on the same trials, so the control's own luck is COMMON MODE and
+the whole profile translates together.  Arm A drew 19.0% there against 22.2%
+at 4800, lifting every B cell at once, so "seven of seven positive" was close
+to one observation rather than seven.  Judge such a sweep by the SHAPE of the
+profile against strictness, never by the sign of the band; and size the
+control arm as though it were the only measurement, because in effect it is.
+
+MEASURED END TO END AND IT LOSES (eval/noplug_prepass_ab.py).  600 paired
+trials, L = 100, -R 8, --random 4, -J, -S i4 then f10, rotor key given,
+10-pair board hidden, winner chosen by SCORE.  Arm B pins the rare 13 letters
+empty with --no-plug through stage 0 only; the f10 continuation has every
+letter free in both arms, and the frequent half is chosen from the ciphertext,
+so arm B is a realizable attack rather than an oracle.
+
+  arm                 restarts   >=50% of letters   mean %correct   seeds
+  A  all 26 letters          8         114/600             26.4      6.87
+  B  frequent 13 only        8          87/600             22.4      4.62
+
+Discordant 67 only-A against 40 only-B, McNemar z = -2.61 (p = 0.009).  That
+is -4.5pp absolute, 95% CI [1.1, 7.9] against B, a 24% RELATIVE loss of
+breaks, and the lower-variance mean agrees at -4.0pp.
+
+AND THE SAVING CANNOT BUY IT BACK.  Fitted as a slope over -R 0/128/512/1024
+(never a floor subtraction -- at -R 8 an invocation is ~95% process startup):
+
+  stage 0 alone     A  67.0 us/restart    B  36.5    B is 1.84x cheaper
+  full i4f10        A 443.2 us/restart
+
+so the f10 continuation is ~376 us and identical in both arms, putting B at
+412.7 against 443.2 overall -- only 7.4% cheaper, i.e. -R 8.6 at A's cost.
+Interpolating the documented climb curve (-R 2/4/8/16 -> 50/68/79/87% at
+L = 167) a 1.074x restart increase is worth about +0.8pp against the 4.5pp
+lost.  Breaking even would need a ~1.6x whole-run saving, which is more than
+the entire pre-pass costs at this kick.
+
+NOTE THE KICK SIZE SETS THE LEVER.  At --random 4 the pre-pass is only 15% of
+the staged climb, well under the 39-54% documented for the default 10-pair
+kick: from a 4-pair kick the cap-4 stage starts already at the cap and barely
+moves.  A larger kick would give the restriction more to save -- and also more
+seed diversity to destroy.
+
+THE MECHANISM IS THE SEED COLUMN: 4.62 distinct seeds of 8 against 6.87, a 33%
+collapse.  That is the trade predicted before the run -- ~4x fewer reachable
+true plugs against ~1.5x better per-plug accuracy -- and it lands the same way
+the 10-plug-versus-4-plug kick result did (ENHANCEMENTS.md: the bigger kick
+breaks 286 of 500 against 219 while having a LOWER per-trial success rate).
+Diversity beats per-draw accuracy here, twice now.
+
+AND MOST OF THE LOSS IS THAT COLLAPSE, NOT THE RESTRICTION
+-----------------------------------------------------------
+
+The run above compares the arms at equal RESTARTS, which confounds
+"restricting the pre-pass" with "exploring less".  --seed-ladder separates
+them: arm A at -R 8 reaches 6.70 distinct seeds and arm B needs -R 17 to reach
+6.67, i.e. 2.13x the restarts.  Re-run at that pair, same 600 trials:
+
+  comparison                       arm A      arm B    effect        z
+  equal restarts     8 vs 8      114/600     87/600    -4.5pp    -2.61
+  matched diversity  8 vs 17     114/600    105/600    -1.5pp    -0.87
+
+The residual is -1.5pp with a 95% CI of [-4.9, +1.9], and the mean %-correct
+agrees at -1.5pp (26.4 against 24.9).  So roughly 3.0 of the original 4.5pp
+was exploration and the rest does not resolve.  Arm B was in fact given
+slightly MORE diversity than A (7.05 against 6.87 realised) and still came out
+behind on the point estimate.
+
+The practical verdict does not soften, it changes shape: the restriction needs
+2.13x the restarts to draw LEVEL, and level is the best reading available.  It
+buys nothing; it merely stops actively costing once you pay to undo its own
+side effect.  Settling whether the -1.5pp residual is real would take ~2400
+trials, which does not change that.
+
+THE COSTS ARE EVEN ONLY BECAUSE DUPLICATE SEEDS ARE CLIMBED ONCE, and that
+ties this to --seed-dedup.  Stage 0 is 8 x 67.0 = 536 us for A against
+17 x 36.5 = 620 us for B, and the continuations are 6.70 against 6.67 climbs
+at ~376 us, so 3055 us against 3128 us -- within 2.4%.  In the shipped tool
+arm B would run 17 f10 climbs against 8 and cost about double, unless
+duplicate seeds are skipped.  Arm B's duplicate rate at -R 17 is 61%, well
+above the 43% an unrestricted -R 1000 reaches, so a restricted pre-pass is
+exactly the regime where --seed-dedup pays: the restriction is affordable only
+because the flag exists, and even then it does not win.
+
+The finding's real content is the opposite of an opportunity: the pre-pass is
+ALREADY selecting frequent letters, at about the strength the theory predicts,
+so there is no headroom in steering it further.
+
+
+ONE SCOPE LIMIT: THIS IS AN IC PROPERTY AND DOES NOT TRANSFER TO -f
+-------------------------------------------------------------------
+
+The frequency weighting exists because the exit board is invisible to IC.  For
+the n-gram targets it is fully visible -- p_i = steck[q_i] -- so a plug (a,b)
+additionally affects every position where the pre-exit decrypt lands on a or b,
+which is n_a + n_b ~ 2L/26 positions regardless of how rare a and b are in the
+CIPHERTEXT.  At L = 100 that is a roughly constant floor of ~7.7 positions on
+top of the entry side's 4.2 (quintile 1) to 11.5 (quintile 5), so the influence
+ratio falls from 2.74x for IC to about 1.6x for the target model.
+
+Rare-letter plugs are therefore much less neglected by -f than by the pre-pass,
+which is the division of labour the staged schedule already has.  A break needs
+all ten pairs; rare ones are only cheap to ignore in the stage that could not
+see them anyway.

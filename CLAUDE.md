@@ -3609,9 +3609,29 @@ budget: measured over 350 trials at each of four lengths
 0.28 at 5000** — so at five thousand restarts **72% of them rediscover a basin
 already found**, which is exactly what a visited-set would forbid. The premise
 "nothing to forbid" is therefore false in the regime where restarts are the
-recommended lever; whether forbidding helps is still open, since the basins a
-tabu set would push the climb into may simply be worse. Do not cite this
-sentence as closing tabu at high `-R`. And an oracle probe of the GA
+recommended lever — **and forbidding is now measured, and does not pay**
+(`eval/results-tabu-probe.txt`). **Tabu's ceiling is a restart count**: if `R`
+restarts reach `D` distinct basins, a *perfect* visited-set yields `R` distinct
+basins, which is the search `R·(R/D)` plain restarts already performs — so the
+measured `R` → `R·(R/D)` gain bounds tabu without implementing it. At L=100 on
+telegraphic traffic (100 trials, board hidden, rotor key given, the recommended
+recipe) that bound is **+4 breaks of 100 at both `-R` 100 and 1000**, while the
+duplication it feeds on grows 2.4× (27.8% → 65.4% of restarts). Those are one
+fact: restarts duplicate more *because* the basin set is being exhausted, so a
+forced draw reaches deeper into an already picked-over set, and the ceiling
+flattens at the rate the duplication grows. **The ceiling is not free either** —
+a basin is known only *at convergence*, so a visited-set cannot skip a duplicate
+climb, only reject its result and kick again, which costs a full extra climb.
+Tabu at this level does not substitute for compute; it *is* compute, plus
+bookkeeping, and it is dominated by the 1.4×/2.3× plain `-R` increase that buys
+the same thing with no new code. The version that saves work is the one already
+shipped: **`--seed-dedup` tests before the climb** and catches 16.4% of restarts
+at `-R 100` and 43.5% at `-R 1000` — 59% and 77% of all the duplication present,
+a share that *rises* with budget — leaving tabu a residual of ~11–13pp that is
+flat in `R` and unreachable pre-climb by construction. The precondition was not
+the problem: at L=100 the failures are **search** failures (52 of 53 at
+`-R 100`, 28 of 30 at `-R 2040`, against 1–2 scoring failures), so the headroom
+exploration would have to convert does exist. And an oracle probe of the GA
 precondition
 (`archived/PERFORMANCE.md` §3.10) found the crossover *material* exists (correct
 plugs union to ~8/10 across restarts) but is **unselectable** — board-fitness

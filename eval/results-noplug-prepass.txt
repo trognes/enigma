@@ -1,0 +1,182 @@
+# L=100, 600 trials, -S i4 then f10, --random 4, rotor key given, 10-pair board hidden
+ arm  restarts  >=50% of letters  mean %correct  distinct seeds
+   A         8           114/600           26.4            6.87
+   B         8            87/600           22.4            4.62
+
+discordant A/B 67/40   z = -2.61   (positive favours B)
+
+# stage-0 cost, L=100, -S i4 --random 4, 8 keys, min of 3 reps, slope-fitted
+#  arm       R=0     R=128     R=512    R=1024  us/restart
+#    A     0.027     0.097     0.306     0.576        67.0
+#    B     0.027     0.064     0.176     0.326        36.5
+# full i4f10, arm A: 443.2 us/restart, so the f10 continuation is ~376 us and
+# identical in both arms -- B is 412.7 against 443.2 overall, 7.4% cheaper,
+# i.e. -R 8.6 at A's cost, worth ~+0.8pp against the 4.5pp lost.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --trials 600 --length 100 --jobs 4
+#   python3 eval/noplug_prepass_ab.py --timing --length 100
+#   python3 eval/noplug_prepass_ab.py --timing --length 100 --pre i4f10
+#
+# Reading: eval/results-freq-bias.txt, final section.
+
+# DIVERSITY-MATCHED RE-RUN.  The comparison above holds restarts equal, which
+# confounds the restriction with the exploration it destroys.  --seed-ladder
+# (L=100, -S i4 --random 4, 40 keys) gives distinct stage-0 seeds per arm:
+#
+#     R   A all 26   B freq 13     B/A
+#     8       6.70        4.45   0.664
+#    13      10.43        5.85   0.561
+#    16      12.07        6.40   0.530
+#    17      12.65        6.67   0.528
+#    24      16.48        8.03   0.487
+#
+# so A at -R 8 is matched by B at -R 17, 2.13x the restarts.  The falling ratio
+# is itself a finding: B's seed pool is smaller, so matching gets dearer with
+# budget.  Re-run at that pair, 600 trials:
+
+# L=100, 600 trials, -S i4 then f10, --random 4, rotor key given, board hidden
+ arm  restarts  >=50% of letters  mean %correct  distinct seeds
+   A         8           114/600           26.4            6.87
+   B        17           105/600           24.9            7.05
+
+discordant A/B 58/49   z = -0.87   (positive favours B)
+
+# -1.5pp, 95% CI [-4.9, +1.9] -- so ~3.0 of the original 4.5pp was exploration
+# and the residual does not resolve.  B was given slightly MORE diversity than
+# A (7.05 vs 6.87) and still trailed on the point estimate.  The restriction
+# needs 2.13x the restarts to draw level, and level is the best reading.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --seed-ladder 8 13 16 17 24 --trials 40
+#   python3 eval/noplug_prepass_ab.py --trials 600 --length 100 \
+#       --restarts 8 --restarts-b 17 --kick 4 --jobs 4
+
+# HOW STRICT SHOULD THE RESTRICTION BE?  --exclude N pins the N rarest
+# ciphertext letters during stage 0.  At N=13 a true pair falls entirely inside
+# the allowed set only ~24% of the time; at N=6 it is ~58%.  The milder
+# restriction also barely costs diversity (B/A = 0.966 at -R 8, against 0.664
+# at N=13), so equal restarts is already near-matched and, with stage 0 using
+# 190 of 325 moves, within ~3% on cost.
+
+# L=100, 600 trials, -S i4 then f10, --random 4, --exclude 6, -R 8 both arms
+ arm  restarts  >=50% of letters  mean %correct  distinct seeds
+   A         8           114/600           26.4            6.87
+   B         8           120/600           27.2            6.32
+
+discordant A/B 50/56   z = +0.58   (positive favours B)
+
+# Across the three cells run:
+#
+#   restriction                    A        B    effect       z   Bseeds/A
+#   frequent 13, -R 8 vs 8   114/600   87/600    -4.5pp   -2.61      0.67
+#   frequent 13, -R 8 vs 17  114/600  105/600    -1.5pp   -0.87      1.03
+#   frequent 20, -R 8 vs 8   114/600  120/600    +1.0pp   +0.58      0.92
+#
+# Monotone in strictness, and only the mildest restriction is on the positive
+# side, with the mean %-correct agreeing (27.2 against 26.4) and arm B doing it
+# on FEWER distinct seeds and ~3% less compute.  But +1.0pp carries a 95% CI of
+# [-2.4, +4.4]: a hint, not a result.  Settling it needs ~2400 trials for z~2
+# and ~5400 for z~3.
+#
+# Weigh that against eval/results-freq-bias.txt: the pre-pass already selects
+# frequent letters at 1.106x against the 1.140x that sqrt(count)-proportional
+# selection predicts, so there is little headroom left to steer -- which is
+# consistent with a true effect near, but not necessarily at, zero.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --seed-ladder 8 9 10 12 --trials 40 \
+#       --exclude 6
+#   python3 eval/noplug_prepass_ab.py --trials 600 --length 100 \
+#       --restarts 8 --kick 4 --exclude 6 --jobs 4
+
+# FULL STRICTNESS SWEEP, --exclude 1..12, 600 trials, one pass.  Arm A is
+# computed once per trial and the f10 continuations memoised by (key, seed)
+# across arms.  --exclude 0 is the null control: no letters pinned, so arm B
+# must be byte-identical to arm A.
+
+# L=100, 600 trials, -S i4 then f10, --random 4, -R 8 both arms
+ excl  letters      >=50%   mean%  seeds   effect       z
+    A       26    114/600    26.4   6.87       --      --
+    0       26    114/600    26.4   6.87    +0.0pp   +0.00
+    1       25    127/600    29.1   6.80    +2.2pp   +1.46
+    2       24    114/600    27.4   6.76    +0.0pp   +0.00
+    3       23    121/600    27.7   6.73    +1.2pp   +0.73
+    4       22    125/600    28.7   6.59    +1.8pp   +1.08
+    5       21    120/600    28.0   6.53    +1.0pp   +0.61
+    6       20    120/600    27.2   6.32    +1.0pp   +0.58
+    7       19    122/600    27.8   6.23    +1.3pp   +0.77
+    8       18    114/600    26.6   6.05    +0.0pp   +0.00
+    9       17     97/600    24.9   5.85    -2.8pp   -1.64
+   10       16     99/600    24.5   5.57    -2.5pp   -1.45
+   11       15     98/600    23.9   5.38    -2.7pp   -1.55
+   12       14     86/600    22.3   5.08    -4.7pp   -2.67
+
+# THE SAFE RANGE IS THE FINDING: harmless to ~8 excluded letters, harmful
+# beyond, crossing over at ~18 letters retained.  Every mild cell is >= 0,
+# every strict cell is negative, and the mean %-correct and the seed count both
+# track monotonically.  The negative half is mechanically explained -- diversity
+# falls 6.87 -> 5.08 across the sweep, and past ~8 that tax overwhelms whatever
+# sharpening the restriction buys.
+#
+# DO NOT READ THE POSITIVE HALF AS A SMALL WIN.  The largest gain sits at
+# --exclude 1, where the mechanism can barely act: one letter removes 25 of 325
+# moves and costs 0.07 of a seed.  If restricting to high-SNR plugs genuinely
+# helped, the effect would BUILD with strictness before the diversity tax bit,
+# not peak at the weakest possible dose.  Cells 1-8 look like noise around zero
+# (mean +1.06pp, range 0.0-2.2, no cell above z = 1.46) sitting on a real
+# negative trend that starts at 9.  Twelve cells at +/-3.4pp each guarantee one
+# impressive-looking cell by chance; picking --exclude 1 on this evidence would
+# be exactly that mistake.
+#
+# Settling whether the mild region is +1pp rather than 0 needs ~4800 trials at
+# ONE level.  Choose it on mechanism (--exclude 5 or 6, removing a meaningful
+# share of low-SNR moves at negligible diversity cost), never on this sweep's
+# maximum.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --exclude-sweep 1 2 3 4 5 6 7 8 9 10 \
+#       11 12 --trials 600 --length 100 --restarts 8 --kick 4 --jobs 4
+
+# THE SAME SWEEP AT 4800 TRIALS -- AND IT REVERSES THE 600-TRIAL READING.
+
+# L=100, 4800 trials, -S i4 then f10, --random 4, -R 8 both arms
+ excl  letters      >=50%   mean%  seeds   effect       z
+    A       26  1066/4800    29.1   6.87       --      --
+    0       26  1066/4800    29.1   6.87    +0.0pp   +0.00
+    1       25  1036/4800    29.0   6.81    -0.6pp   -1.14
+    2       24  1063/4800    29.4   6.72    -0.1pp   -0.11
+    3       23  1037/4800    29.1   6.68    -0.6pp   -1.04
+    4       22  1003/4800    28.2   6.52    -1.3pp   -2.25
+    5       21  1000/4800    28.1   6.48    -1.4pp   -2.41
+    6       20   946/4800    27.2   6.31    -2.5pp   -4.23
+    7       19   923/4800    27.2   6.24    -3.0pp   -5.00
+
+# THE IDEA IS DEAD.  Every level is <= 0, monotone in strictness, reaching
+# z = -5.00.  There is no positive region and no safe range: the restriction is
+# already harmful at --exclude 4, where the 600-trial sweep read +1.8pp, and
+# --exclude 6 -- the "+1.0pp hint" that prompted all of this -- is -2.5pp.  The
+# earlier claim of "harmless to ~8 excluded letters" was wrong.
+#
+# The whole effect is DIVERSITY.  Seeds fall 6.87 -> 6.24 across the sweep and
+# the loss tracks them at ~4.8pp per lost seed, which also reconciles the
+# --exclude 13 pair: -4.5pp at equal restarts, -1.5pp once diversity was
+# restored.  Nothing is left for the frequency mechanism to contribute.
+#
+# THE METHODOLOGICAL LESSON IS THE MORE VALUABLE HALF.  The 600-trial sweep had
+# all seven mild cells >= 0, which looked like structure and was not: the cells
+# are NOT INDEPENDENT.  Every cell is compared against the SAME arm A on the
+# SAME trials, so arm A's own luck is common mode across the whole profile --
+# and arm A was unlucky in that sample, 114/600 = 19.0% and mean 26.4 against
+# 22.2% and 29.1 here.  A low control lifts every B cell together, so "seven of
+# seven positive" was close to ONE observation, not seven.  Reading the BAND as
+# evidence was the error, even after the individual cells had been discounted.
+#
+# Two rules follow for any sweep sharing one control arm.  Judge a profile by
+# its SHAPE against strictness, never by the sign of the band, since the band
+# can translate wholesale.  And size the control arm as if it were the only
+# measurement, because in effect it is.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --exclude-sweep 1 2 3 4 5 6 7 \
+#       --trials 4800 --length 100 --restarts 8 --kick 4 --jobs 4
