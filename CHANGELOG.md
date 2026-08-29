@@ -29,6 +29,9 @@ existing command lines can behave differently or stop working.
   - **On x86_64 the object code is unchanged**, verified instruction-for-
     instruction against the previous revision under both compilers — so there
     is provably no regression there, rather than one measured back to zero.
+    The gated build confirms it on the clock: `icscan` reads **+0.2 / +0.1%**
+    (g++) and **+0.1 / +0.3%** (clang), inside the ±0.5% floor, while the
+    arm64 win is untouched at **−6.4 / −8.3%** and **−4.7 / −6.6%**.
   - `IC_UNROLL_HIST` is a value, not an `#if defined(__aarch64__)`, so **both
     paths compile everywhere**: `-DIC_UNROLL_HIST=1` builds the arm64 form on
     x86, which is what allows the two to be checked against each other
