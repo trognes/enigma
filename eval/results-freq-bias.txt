@@ -147,6 +147,40 @@ the 10-plug-versus-4-plug kick result did (ENHANCEMENTS.md: the bigger kick
 breaks 286 of 500 against 219 while having a LOWER per-trial success rate).
 Diversity beats per-draw accuracy here, twice now.
 
+AND MOST OF THE LOSS IS THAT COLLAPSE, NOT THE RESTRICTION
+-----------------------------------------------------------
+
+The run above compares the arms at equal RESTARTS, which confounds
+"restricting the pre-pass" with "exploring less".  --seed-ladder separates
+them: arm A at -R 8 reaches 6.70 distinct seeds and arm B needs -R 17 to reach
+6.67, i.e. 2.13x the restarts.  Re-run at that pair, same 600 trials:
+
+  comparison                       arm A      arm B    effect        z
+  equal restarts     8 vs 8      114/600     87/600    -4.5pp    -2.61
+  matched diversity  8 vs 17     114/600    105/600    -1.5pp    -0.87
+
+The residual is -1.5pp with a 95% CI of [-4.9, +1.9], and the mean %-correct
+agrees at -1.5pp (26.4 against 24.9).  So roughly 3.0 of the original 4.5pp
+was exploration and the rest does not resolve.  Arm B was in fact given
+slightly MORE diversity than A (7.05 against 6.87 realised) and still came out
+behind on the point estimate.
+
+The practical verdict does not soften, it changes shape: the restriction needs
+2.13x the restarts to draw LEVEL, and level is the best reading available.  It
+buys nothing; it merely stops actively costing once you pay to undo its own
+side effect.  Settling whether the -1.5pp residual is real would take ~2400
+trials, which does not change that.
+
+THE COSTS ARE EVEN ONLY BECAUSE DUPLICATE SEEDS ARE CLIMBED ONCE, and that
+ties this to --seed-dedup.  Stage 0 is 8 x 67.0 = 536 us for A against
+17 x 36.5 = 620 us for B, and the continuations are 6.70 against 6.67 climbs
+at ~376 us, so 3055 us against 3128 us -- within 2.4%.  In the shipped tool
+arm B would run 17 f10 climbs against 8 and cost about double, unless
+duplicate seeds are skipped.  Arm B's duplicate rate at -R 17 is 61%, well
+above the 43% an unrestricted -R 1000 reaches, so a restricted pre-pass is
+exactly the regime where --seed-dedup pays: the restriction is affordable only
+because the flag exists, and even then it does not win.
+
 The finding's real content is the opposite of an opportunity: the pre-pass is
 ALREADY selecting frequent letters, at about the strength the theory predicts,
 so there is no headroom in steering it further.
