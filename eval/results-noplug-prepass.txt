@@ -51,3 +51,41 @@ discordant A/B 58/49   z = -0.87   (positive favours B)
 #   python3 eval/noplug_prepass_ab.py --seed-ladder 8 13 16 17 24 --trials 40
 #   python3 eval/noplug_prepass_ab.py --trials 600 --length 100 \
 #       --restarts 8 --restarts-b 17 --kick 4 --jobs 4
+
+# HOW STRICT SHOULD THE RESTRICTION BE?  --exclude N pins the N rarest
+# ciphertext letters during stage 0.  At N=13 a true pair falls entirely inside
+# the allowed set only ~24% of the time; at N=6 it is ~58%.  The milder
+# restriction also barely costs diversity (B/A = 0.966 at -R 8, against 0.664
+# at N=13), so equal restarts is already near-matched and, with stage 0 using
+# 190 of 325 moves, within ~3% on cost.
+
+# L=100, 600 trials, -S i4 then f10, --random 4, --exclude 6, -R 8 both arms
+ arm  restarts  >=50% of letters  mean %correct  distinct seeds
+   A         8           114/600           26.4            6.87
+   B         8           120/600           27.2            6.32
+
+discordant A/B 50/56   z = +0.58   (positive favours B)
+
+# Across the three cells run:
+#
+#   restriction                    A        B    effect       z   Bseeds/A
+#   frequent 13, -R 8 vs 8   114/600   87/600    -4.5pp   -2.61      0.67
+#   frequent 13, -R 8 vs 17  114/600  105/600    -1.5pp   -0.87      1.03
+#   frequent 20, -R 8 vs 8   114/600  120/600    +1.0pp   +0.58      0.92
+#
+# Monotone in strictness, and only the mildest restriction is on the positive
+# side, with the mean %-correct agreeing (27.2 against 26.4) and arm B doing it
+# on FEWER distinct seeds and ~3% less compute.  But +1.0pp carries a 95% CI of
+# [-2.4, +4.4]: a hint, not a result.  Settling it needs ~2400 trials for z~2
+# and ~5400 for z~3.
+#
+# Weigh that against eval/results-freq-bias.txt: the pre-pass already selects
+# frequent letters at 1.106x against the 1.140x that sqrt(count)-proportional
+# selection predicts, so there is little headroom left to steer -- which is
+# consistent with a true effect near, but not necessarily at, zero.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --seed-ladder 8 9 10 12 --trials 40 \
+#       --exclude 6
+#   python3 eval/noplug_prepass_ab.py --trials 600 --length 100 \
+#       --restarts 8 --kick 4 --exclude 6 --jobs 4
