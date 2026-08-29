@@ -54,6 +54,30 @@
    At forty letters nearly the whole of IC's single-plug signal is carried by
    the frequent half.
 
+   A FREQUENT-LETTER PLUG DOES NOT IMPROVE THE IC, IT ONLY MOVES IT FURTHER --
+   the quintile table answers that directly.  At L = 100, 800 keys, scores
+   centred per key and shown x1000:
+
+     quintile   mean m   wrong mu   wrong sd   true mu
+            1      4.2      +0.28      11.68     +5.43
+            3      7.5      -0.36      15.01     +9.13
+            5     11.5      -0.83      18.14    +13.58
+
+   The wrong-plug mean is flat and if anything slightly NEGATIVE (-0.046 sd at
+   quintile 5), consistently signed and monotone at L = 60/100/167 alike, so
+   there is no upward drift to remove.  The sd grows as sqrt(m) -- 1.55x for a
+   2.74x range in m, against sqrt(2.74) = 1.66 -- which is the random-sign sum
+   over ~m bins.  The true-plug mean grows as m itself, 2.5x over the same
+   range.  So SNR grows as sqrt(m): a correct plug on frequent letters is
+   genuinely more detectable, by about the square root of the frequency ratio.
+
+   THAT is why studentising is a wash rather than a small win.  Dividing by
+   sqrt(m) equalises the noise, which stops rare-letter true plugs competing
+   against high-variance frequent-letter decoys, but it also strips
+   frequent-letter true plugs of an advantage they have actually earned.  The
+   two effects cancel: it redistributes rank between the halves and leaves the
+   total where it was.
+
    BUT CORRECTING IT BUYS NOTHING: raw / resid / stud land within a point of
    each other at every length (111.7 / 111.3 / 111.9 at L = 100), because the
    SIGNAL scales with m as well as the noise -- a plug on frequent letters
@@ -186,6 +210,16 @@ int main(int argc, char * * argv)
   double sum_r = 0;              /* mean correlation of raw score with m */
   long   nkeys = 0;
 
+  /* Does a plug on a frequent letter IMPROVE the IC, or merely INFLUENCE it
+     more?  Split the 325 into quintiles by m = count(a) + count(b) -- per key,
+     so the quintiles mean the same thing at every length -- and report the
+     mean and sd of the key-centred score in each, for wrong and true plugs
+     separately.  A systematic improvement shows up as a rising mean on the
+     WRONG plugs; a pure influence effect shows up as a rising sd with the
+     mean flat, and then the true plugs' mean is the signal riding on it. */
+  double q_m[5] = {0}, w_s[5] = {0}, w_q[5] = {0}, t_s[5] = {0}, t_q[5] = {0};
+  long   w_n[5] = {0}, t_n[5] = {0};
+
   std::vector<double> sc(NPAIRS), rs(NPAIRS), st(NPAIRS);
   std::vector<double> mm(NPAIRS);
 
@@ -276,6 +310,35 @@ int main(int argc, char * * argv)
       tally(rs, tb, res);
       tally(st, tb, stu);
 
+      /* quintiles of m, this key's own scores centred on this key's mean */
+      {
+        std::vector<int> bym(NPAIRS);
+        for (int j = 0; j < NPAIRS; j++) bym[static_cast<size_t>(j)] = j;
+        std::sort(bym.begin(), bym.end(),
+                  [&mm](int x, int y)
+                  { return mm[static_cast<size_t>(x)]
+                           < mm[static_cast<size_t>(y)]; });
+        const double mu = sy / nn;
+        for (size_t p = 0; p < bym.size(); p++)
+          {
+            const int j = bym[p];
+            int qi = static_cast<int>(p * 5 / bym.size());
+            if (qi > 4) qi = 4;
+            const double v = sc[static_cast<size_t>(j)] - mu;
+            q_m[qi] += mm[static_cast<size_t>(j)];
+            /* recover (a, b) to ask whether this plug is a true one */
+            int a = 0, b = 0, run = 0;
+            for (a = 0; a < asize; a++)
+              {
+                const int wide = asize - 1 - a;
+                if (j < run + wide) { b = a + 1 + (j - run); break; }
+                run += wide;
+              }
+            if (tb[a] == b) { t_s[qi] += v; t_q[qi] += v * v; t_n[qi]++; }
+            else            { w_s[qi] += v; w_q[qi] += v * v; w_n[qi]++; }
+          }
+      }
+
       /* the split: true plugs whose own count sum is below / above this key's
          median count sum over all 325 pairs */
       std::vector<double> ms(mm);
@@ -318,6 +381,22 @@ int main(int argc, char * * argv)
   report("raw", raw);
   report("resid", res);
   report("stud", stu);
+  printf("\n  IMPROVE or merely INFLUENCE?  325 plugs in quintiles by\n"
+         "  m = count(a)+count(b), scores centred per key (x1000):\n");
+  printf("  %-9s %6s   %8s %8s   %8s %8s\n",
+         "quintile", "mean m", "wrong mu", "wrong sd", "true mu", "true sd");
+  for (int q = 0; q < 5; q++)
+    {
+      const double wn = static_cast<double>(w_n[q]);
+      const double tn = static_cast<double>(t_n[q]);
+      const double wmu = w_s[q] / wn;
+      const double tmu = t_s[q] / tn;
+      printf("  %-9d %6.1f   %+8.3f %8.3f   %+8.3f %8.3f\n", q + 1,
+             q_m[q] / (wn + tn), 1000.0 * wmu,
+             1000.0 * sqrt(w_q[q] / wn - wmu * wmu),
+             1000.0 * tmu, 1000.0 * sqrt(t_q[q] / tn - tmu * tmu));
+    }
+
   printf("\n  raw ranking, true plugs split at this key's median count sum:\n");
   printf("    frequent letters  mean rank %6.1f  (n = %ld)\n",
          hi_rank / static_cast<double>(hi_n), hi_n);
