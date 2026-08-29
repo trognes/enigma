@@ -103,15 +103,49 @@ proportional to count gives 1.250; no bias gives 1.000.  And a true plug on
 frequent letters is found 1.54x more often (10.0% against 6.5%).
 
 
-WHAT DOES NOT FOLLOW: restricting the pre-pass to high-m plugs
---------------------------------------------------------------
+WHAT DOES NOT FOLLOW: restricting the pre-pass to the frequent letters
+----------------------------------------------------------------------
 
-The obvious action -- cut the cap stage's move set to the top quartile by m,
-81 of 325 -- does not survive its own arithmetic.  It would reduce the
-reachable true plugs by ~4x in order to raise the per-plug hit rate by ~1.5x.
-It would make the cap stage ~4x cheaper in probes, and the cap stage is 39-54%
-of a staged climb, so ~1.2-1.3x more restarts at fixed wall time -- but paid
-for in quality, and the restart lever is available without the risk.
+MEASURED END TO END AND IT LOSES (eval/noplug_prepass_ab.py).  600 paired
+trials, L = 100, -R 8, --random 4, -J, -S i4 then f10, rotor key given,
+10-pair board hidden, winner chosen by SCORE.  Arm B pins the rare 13 letters
+empty with --no-plug through stage 0 only; the f10 continuation has every
+letter free in both arms, and the frequent half is chosen from the ciphertext,
+so arm B is a realizable attack rather than an oracle.
+
+  arm                 restarts   >=50% of letters   mean %correct   seeds
+  A  all 26 letters          8         114/600             26.4      6.87
+  B  frequent 13 only        8          87/600             22.4      4.62
+
+Discordant 67 only-A against 40 only-B, McNemar z = -2.61 (p = 0.009).  That
+is -4.5pp absolute, 95% CI [1.1, 7.9] against B, a 24% RELATIVE loss of
+breaks, and the lower-variance mean agrees at -4.0pp.
+
+AND THE SAVING CANNOT BUY IT BACK.  Fitted as a slope over -R 0/128/512/1024
+(never a floor subtraction -- at -R 8 an invocation is ~95% process startup):
+
+  stage 0 alone     A  67.0 us/restart    B  36.5    B is 1.84x cheaper
+  full i4f10        A 443.2 us/restart
+
+so the f10 continuation is ~376 us and identical in both arms, putting B at
+412.7 against 443.2 overall -- only 7.4% cheaper, i.e. -R 8.6 at A's cost.
+Interpolating the documented climb curve (-R 2/4/8/16 -> 50/68/79/87% at
+L = 167) a 1.074x restart increase is worth about +0.8pp against the 4.5pp
+lost.  Breaking even would need a ~1.6x whole-run saving, which is more than
+the entire pre-pass costs at this kick.
+
+NOTE THE KICK SIZE SETS THE LEVER.  At --random 4 the pre-pass is only 15% of
+the staged climb, well under the 39-54% documented for the default 10-pair
+kick: from a 4-pair kick the cap-4 stage starts already at the cap and barely
+moves.  A larger kick would give the restriction more to save -- and also more
+seed diversity to destroy.
+
+THE MECHANISM IS THE SEED COLUMN: 4.62 distinct seeds of 8 against 6.87, a 33%
+collapse.  That is the trade predicted before the run -- ~4x fewer reachable
+true plugs against ~1.5x better per-plug accuracy -- and it lands the same way
+the 10-plug-versus-4-plug kick result did (ENHANCEMENTS.md: the bigger kick
+breaks 286 of 500 against 219 while having a LOWER per-trial success rate).
+Diversity beats per-draw accuracy here, twice now.
 
 The finding's real content is the opposite of an opportunity: the pre-pass is
 ALREADY selecting frequent letters, at about the strength the theory predicts,

@@ -1,0 +1,21 @@
+# L=100, 600 trials, -S i4 then f10, --random 4, rotor key given, 10-pair board hidden
+ arm  restarts  >=50% of letters  mean %correct  distinct seeds
+   A         8           114/600           26.4            6.87
+   B         8            87/600           22.4            4.62
+
+discordant A/B 67/40   z = -2.61   (positive favours B)
+
+# stage-0 cost, L=100, -S i4 --random 4, 8 keys, min of 3 reps, slope-fitted
+#  arm       R=0     R=128     R=512    R=1024  us/restart
+#    A     0.027     0.097     0.306     0.576        67.0
+#    B     0.027     0.064     0.176     0.326        36.5
+# full i4f10, arm A: 443.2 us/restart, so the f10 continuation is ~376 us and
+# identical in both arms -- B is 412.7 against 443.2 overall, 7.4% cheaper,
+# i.e. -R 8.6 at A's cost, worth ~+0.8pp against the 4.5pp lost.
+#
+# Reproduce:
+#   python3 eval/noplug_prepass_ab.py --trials 600 --length 100 --jobs 4
+#   python3 eval/noplug_prepass_ab.py --timing --length 100
+#   python3 eval/noplug_prepass_ab.py --timing --length 100 --pre i4f10
+#
+# Reading: eval/results-freq-bias.txt, final section.
