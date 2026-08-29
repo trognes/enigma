@@ -6,6 +6,30 @@ existing command lines can behave differently or stop working.
 
 ## Unreleased
 
+### Changed
+
+- **The pure-gather scorer loops are unrolled 4x — about 9% faster under g++,
+  neutral under clang.** `quadgram`, `allgram`, `trigram`, `bigram` and
+  `monogram` carry a `SCORE_UNROLL` pragma (`#pragma GCC unroll 4` /
+  `#pragma clang loop unroll_count(4)`). Measured against a same-hour
+  base-vs-base control of ±1.4% (long) and ±2.7% (quick): g++ `search` −8.2 /
+  −8.9%, `hillclimb` −10.1 / −8.9%; clang within ±3% everywhere, no regression
+  on either compiler. Byte-identical — the accumulator is an integer sum, so
+  splitting it changes nothing.
+  - **The three scorers that also do `freq[d]++` are deliberately NOT
+    unrolled** — `ic`, `monoic` and `ngram_ic` (`-f`). Unrolling those
+    *regresses*: g++ `fused` long read **+11.7%** with all eight loops
+    unrolled, against +2.7% with the store loops left rolled. Four `freq[]`
+    increments scheduled together collide about 30% of the time across 26
+    bins, turning store-to-load forwarding into a stall. Unrolling helps the
+    load dependency and hurts the store one.
+  - So `-q`, `-a`, `-t`, `-b`, `-m` and every scan path gain; **`-f` does
+    not**, its loop being the one that cannot be unrolled profitably.
+  - Two earlier attempts on the same loop measured down and are recorded in
+    `eval/results-scoreloop-insns.txt`: shaving 21% of the instructions bought
+    0% (the loop is not front-end bound), and removing one of six loads gained
+    7% under g++ but cost clang 3–5% on a model the recipe does not recommend.
+
 ### Added
 
 - **`--biased-random T` — draw the restart kick from the single-plug index of

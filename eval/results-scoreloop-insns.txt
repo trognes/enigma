@@ -239,3 +239,70 @@ the session -- hillclimb long base ran 15.04, 16.06 and 13.23 s in different
 runs -- so only within-run treatment-versus-control contrasts are meaningful
 here, and no cross-run comparison in this file should be read as a difference
 between variants.
+
+
+THE THIRD LEVER: UNROLLING -- AND IT SPLITS BY LOOP SHAPE, NOT BY COMPILER
+==========================================================================
+
+Neither of the first two levers shipped.  This one does.  The question that
+started it: since clang unrolls the quadgram loops 2x and g++ unrolls nothing,
+can a pragma fix the split?  The answer is yes, but in the opposite direction
+from the obvious one -- do not DISABLE clang's unrolling (its unrolled indexed
+loop is its fastest form), FORCE unrolling where the compiler declined.
+
+  #if defined(__clang__)
+  #define SCORE_UNROLL _Pragma("clang loop unroll_count(4)")
+  #elif defined(__GNUC__)
+  #define SCORE_UNROLL _Pragma("GCC unroll 4")
+  #endif
+
+**The shape, per character, before any timing:**
+
+  loop            g++ base  g++ u4   clang base  clang u4   loads
+  quad/all            24.0    19.8         18.5      16.5    6 (all)
+  ngram_ic            25.0    21.8         24.0      17.5    6 (all)
+
+Load count is untouched, so this is the OTHER lever: fewer loop-control
+instructions, and more importantly four independent copies of the four-deep
+dependent chain ct -> steck -> rows -> steck in flight at once.
+
+**APPLIED TO ALL EIGHT SCORER LOOPS IT SPLITS SHARPLY** (g++, against a
+base-vs-base control of +-1.4% long, +-2.7% quick measured the same hour):
+
+  tier          all 8 loops   gather-only   clang gather-only
+  search q            -7.0%         -8.2%               -0.4%
+  search l           -11.8%         -8.9%               -2.9%
+  hillclimb q        -12.0%        -10.1%               +0.6%
+  hillclimb l         -9.8%         -8.9%               +0.0%
+  fused q             -4.2%         -1.3%               -0.4%
+  fused l            +11.7%         +2.7%               -0.5%
+  crib             +0.0/+0.9    +0.8/+1.1           +0.4/+0.5
+
+**THE SPLIT IS BY LOOP SHAPE AND IT HAS A MECHANISM.**  The loops that gain
+(quad, all, tri, bi, mono) are PURE GATHERS -- load, accumulate in a register.
+The loops that regress (ic, monoic, ngram_ic, i.e. -f) each do freq[d]++, a
+read-modify-write to memory.  Unrolling schedules four of those increments
+together, and four random letters out of 26 collide about 30% of the time, so
+store-to-load forwarding the rolled loop spaces out becomes a stall.
+Unrolling improves the load dependency and worsens the store one; only loops
+without the store come out ahead.
+
+Excluding the three store loops takes fused long from +11.7% to +2.7% while
+the gather loops keep -9%.  That is the shipped form.
+
+**RESULT: ~9% under g++ on search and hillclimb, clang neutral, no regression
+on either compiler.**  Six to twelve times the floor, reproduced across quick
+and long and across two independent runs.  It covers -q, -a, -t, -b, -m and
+every scan path.
+
+**-f GAINS NOTHING, and that is the honest gap.**  Its loop is the one that
+cannot be unrolled profitably, so the recommended model is untouched.  The
+residual g++ fused long +2.7% reads -0.5% under clang and sits inside the g++
+control's own +-2.7%, so it is most likely code layout from neighbouring loops
+changing size rather than a real cost -- but it is not resolved.
+
+**WHY THIS WAS FOUND AT ALL.**  Applying the pragma to ONE loop would have hit
+whichever behaviour that loop has and stopped.  Applying it to all eight at
+once produced the contrast between the two loop shapes, and the contrast is
+what identified the store as the cause.  The instruction to make every scoring
+scheme fast is what surfaced the mechanism.
