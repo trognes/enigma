@@ -9,12 +9,17 @@ ones.  Its arithmetic is not obviously favourable (it cuts the reachable true
 plugs ~4x to raise the per-plug hit rate ~1.5x), so it is measured end to end.
 
   arm A   kick and i4 pre-pass over all 26 letters
-  arm B   kick and i4 pre-pass over the FREQUENT 13 only, the rare 13 pinned
-          empty with --no-plug
+  arm B   kick and i4 pre-pass over the FREQUENT 26 - N only, the N rarest
+          pinned empty with --no-plug (--exclude N, default 13)
 
 In BOTH arms the f10 continuation runs with every letter free, so the
-restriction applies to stage 0 alone.  The frequent half is chosen from the
+restriction applies to stage 0 alone.  The frequent set is chosen from the
 CIPHERTEXT, so arm B is a realizable attack and not an oracle.
+
+--exclude sets how strict the restriction is.  At N = 13 a true pair falls
+entirely inside the allowed set only ~24% of the time, so most true plugs are
+unreachable in stage 0; at N = 6 it is ~58%.  Arm B also explores less at
+equal restarts, so --seed-ladder is what sets its matched restart count.
 
 HOW, WITH NO CODE.  --no-plug pins for the whole run, so the two stages have to
 be separate invocations -- which CLAUDE.md's own harness note already covers:
@@ -78,9 +83,10 @@ def dumped(err):
     return out
 
 
-def rare_half(ct):
-    """The 13 least frequent letters of the ciphertext, ties by letter."""
-    return "".join(sorted(sorted(LET, key=lambda c: (ct.count(c), c))[:13]))
+def rare_n(ct, n):
+    """The n least frequent letters of the ciphertext, ties by letter -- the
+    ones arm B pins empty, so the pre-pass works on the other 26 - n."""
+    return "".join(sorted(sorted(LET, key=lambda c: (ct.count(c), c))[:n]))
 
 
 def mcnemar(only_a, only_b):
@@ -119,6 +125,10 @@ def main():
                     help="if set, arm B runs this many restarts instead -- "
                          "for the matched-COST comparison once --timing has "
                          "said what B's saving buys")
+    ap.add_argument("--exclude", type=int, default=13,
+                    help="how many of the RAREST ciphertext letters arm B "
+                         "pins empty during stage 0 (13 = the frequent half; "
+                         "6 leaves the frequent 20)")
     ap.add_argument("--pre", default="i4")
     ap.add_argument("--target", default="f10")
     ap.add_argument("--lang", default="wehrmacht")
@@ -147,10 +157,11 @@ def main():
         for pt, w, r, g, pb in specs:
             key = ["-u", "B", "-w", w, "-r", r, "-g", g]
             ct, _ = run(key + ["-s", pb], pt)
-            cases.append((key, ct, rare_half(ct)))
+            cases.append((key, ct, rare_n(ct, args.exclude)))
         print(f"# distinct stage-0 seeds, L={L}, -S {args.pre} "
               f"--random {args.kick}, {len(cases)} keys")
-        print(f"{'R':>5} {'A all 26':>10} {'B freq 13':>11} {'B/A':>7}")
+        lab = "B freq " + str(26 - args.exclude)
+        print(f"{'R':>5} {'A all 26':>10} {lab:>11} {'B/A':>7}")
 
         def distinct(arm, R):
             tot = 0
@@ -186,7 +197,7 @@ def main():
         for pt, w, r, g, pb in specs:
             key = ["-u", "B", "-w", w, "-r", r, "-g", g]
             ct, _ = run(key + ["-s", pb], pt)
-            cases.append((key, ct, rare_half(ct)))
+            cases.append((key, ct, rare_n(ct, args.exclude)))
         slope = {}
         for arm in ("A", "B"):
             times = []
@@ -231,7 +242,7 @@ def main():
         pt, w, r, g, pb = spec
         key = ["-u", "B", "-w", w, "-r", r, "-g", g]
         ct, _ = run(key + ["-s", pb], pt)
-        rare = rare_half(ct)
+        rare = rare_n(ct, args.exclude)
         out = []
         for arm in ("A", "B"):
             R = args.restarts
