@@ -8,6 +8,38 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **`make bench` gains an `icscan` tier — the default model had no coverage.**
+  `-i` is what a bare `./enigma < cipher.txt` runs, and nothing in the harness
+  touched `ic_score_decode`: `search` and `crib` run `-q`, `fused` runs `-f`,
+  and under `-c` the low-order models are served by the histogram/`cooc_col`
+  path rather than by decoding at all. The scorer loops were rewritten twice
+  in this release with the tool's default invocation unmeasured.
+  - **Paired with `search`** — identical ciphertext and key space, differing
+    only in the model, the same relationship `fused` has with `hillclimb` — so
+    a delta between the two rows is the scorer and nothing else. 2 741 856
+    keys quick, 27 418 560 long, matching `search` exactly.
+  - **The cleanest tier in the harness**, because IC needs no language and so
+    loads no n-gram table: ~6 ms of startup against a ~0.8 s scan (99.2%),
+    where `search` carries ~32 ms (96.3%). `min_time` wraps the whole
+    invocation, so that margin is the tier's immunity to startup effects
+    being misread as throughput.
+  - Costs ~3 s on the quick suite and ~20 s on the long one (doubled under
+    `BASE=`), which is the price of covering the default model.
+
+- **`make bench` warms the n-gram page cache and both binaries before the
+  first tier.** An A/B reads **two separate ~27 MB copies** of the tables
+  (`HEAD_DATA` and `BASE_DATA`), and `min_time` wraps the whole invocation, so
+  a cold read lands inside a measured run rather than beside it. `icscan`
+  reads no table at all, so an uncontrolled cache hits `search` and cannot
+  touch `icscan` — which would make the two scan tiers differ by more than the
+  model they exist to isolate.
+  - Measured on repeated base-vs-base controls (identical binaries): `search`
+    quick on g++ x86_64 read **−7.5% then −6.7%** without the warm-up and
+    **+1.4% then −0.5%** with it — n=2 on each arm. In the last of those runs
+    all ten cells on that runner sit within **±0.6%**, where the same cell had
+    been reading ±7% on byte-identical binaries.
+  - ~0.3 s, once, before any timing.
+
 - **The pure-gather scorer loops are unrolled 4x — 12–16% faster under g++
   and 4–6% under clang on arm64.** `quadgram`, `allgram`, `trigram`,
   `bigram` and `monogram` carry a `SCORE_UNROLL` pragma —

@@ -14,6 +14,18 @@
 #                  (`precompute` + `setup_mapping` + `decode` + `score`, once
 #                  per key). Amplified by wildcarding the wheel order and start
 #                  position so the scan dominates process startup / file I/O.
+#   * icscan    -- the SAME scan under `-i`, the DEFAULT model. Identical to
+#                  the `search` row except for the model, so a delta between
+#                  the two is the scorer and nothing else -- the same pairing
+#                  `fused` has with `hillclimb`. It exists because `-i` is what
+#                  a bare `./enigma < cipher.txt` runs, and nothing else here
+#                  touches `ic_score_decode`: `search` and `crib` run `-q`,
+#                  `fused` runs `-f`, and under `-c` the low-order models are
+#                  served by the histogram/`cooc_col` path rather than by
+#                  decoding at all. So the tool's default invocation had no
+#                  coverage. It also loads no n-gram table, which makes it the
+#                  cleanest tier here: ~6ms of startup against a ~0.8s scan
+#                  (99.2%), where `search` carries ~32ms (96.3%).
 #   * hillclimb -- the plugboard optimisation loop (`-c`). A short, deliberately
 #                  hard ciphertext (many plugboard pairs) is recovered while
 #                  wildcarding the start position, so each of the start
@@ -150,6 +162,32 @@ fi
 data_for() {
   if [ -n "${BASE_BIN:-}" ] && [ "$1" = "$BASE_BIN" ]; then printf '%s' "$BASE_DATA"
   else printf '%s' "$HEAD_DATA"; fi
+}
+
+# Read every n-gram table into the page cache before any timing starts, and
+# fault in both binaries.
+#
+# `min_time` wraps the WHOLE invocation, so a cold table read lands inside a
+# measured run rather than beside it. The two arms do not share the cost: an
+# A/B has two SEPARATE copies on disk (HEAD_DATA and BASE_DATA, ~27 MB each),
+# so whichever arm touches a table first pays for it, and the long tiers take
+# no warm-up run to absorb it. `icscan` reads no table at all -- ~6ms of
+# startup against ~32ms for `search` -- so leaving this to chance would make
+# the two scan tiers differ by more than the model they are meant to isolate.
+#
+# Cheap insurance rather than a proven fix: on a LONG=1 run the quick tiers
+# have already touched these files by the time the long tiers start, so this
+# only bites when the cache is evicted in between or a subset is run.
+warm_cache() {
+  for _d in "$HEAD_DATA" "$BASE_DATA"; do
+    { [ -n "$_d" ] && [ -d "$_d" ]; } || continue
+    cat "$_d"/*.txt >/dev/null 2>&1 || true
+  done
+  for _b in "$HEAD_BIN" "$BASE_BIN"; do
+    { [ -n "$_b" ] && [ -x "$_b" ]; } || continue
+    printf 'ABCDEFGHIJ' | "$_b" -i -u B -w 123 -r AAA -g AAA \
+      >/dev/null 2>&1 || true
+  done
 }
 
 # trunc LEN -> first LEN characters of the English benchmark plaintext (shares
@@ -304,12 +342,20 @@ printf 'LONG=%s  SCALE=%s  quick reps=%s  long reps=%s\n\n' \
   "$LONG" "$SCALE" "$QUICK_REPS" "$LONG_REPS"
 sum_header
 
+warm_cache
+
 # --- search: brute-force scan, no plugboard (wildcard wheels + start) ---------
 ct_s=$(encrypt "$(trunc 80)" "")
 # 3-permutations of wheels 1..3 (-x 3) x 26 ring2 x 26^3 starts = 2741856 keys.
 # The ring2 factor is easy to miss: no -r is given, so the default "AA." leaves
 # the rightmost ring wildcarded. Verified against the binary's own count.
 bench search quick 2741856 keys - "$ct_s" -q -u B -w ... -g ... -x 3 -l english
+
+# --- icscan: the same scan under -i, the default model -----------------------
+# Identical to the row above except for the model, so a delta between them is
+# the scorer and nothing else. No -l: IC needs no language, and passing one
+# would load a table this model never reads.
+bench icscan quick 2741856 keys - "$ct_s" -i -u B -w ... -g ... -x 3
 
 # --- hillclimb: recover a 6-pair plugboard, wildcard start (-c) ---------------
 pb="AB CD EF GH IJ KL"
@@ -337,6 +383,7 @@ if [ "$LONG" = 1 ]; then
   ct_sl=$(encrypt "$(trunc 120)" "")
   # 3-permutations of wheels 1..5 (-x 5) x 26 ring2 x 26^3 = 27418560 keys
   bench search long 27418560 keys - "$ct_sl" -q -u B -w ... -g ... -x 5 -l english
+  bench icscan long 27418560 keys - "$ct_sl" -i -u B -w ... -g ... -x 5
 
   pt_hl=$(trunc 160)
   ct_hl=$(encrypt "$pt_hl" "$pb")
