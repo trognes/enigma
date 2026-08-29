@@ -8,6 +8,36 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **`ic_score_decode` is unrolled 4x with a private histogram per copy — on
+  arm64 only.** The default model's scan loop, and the first change measured
+  by the `icscan` bench tier. The split is measured, against `icscan`'s
+  calibrated −0.7…+0.5% floor with the four other tiers flat as controls:
+
+  | | `icscan` quick | `icscan` long |
+  |---|---:|---:|
+  | g++ arm64 | **−5.9%** | **−8.0%** |
+  | clang arm64 | **−4.8%** | **−7.0%** |
+  | g++ x86_64 | +16.0% | +9.6% |
+  | clang x86_64 | +22.3% | +11.9% |
+
+  - **Both compilers agree within each architecture**, so it is an
+    architecture split rather than a compiler one. The likely reason is that
+    the 26-bin merge is a *fixed* cost while this decoder's per-character body
+    is tiny — five loads, no table lookup — where `ngram_ic_decode` amortises
+    the same 26 iterations against four table gathers per character. The
+    split is measured; that explanation is inference.
+  - **On x86_64 the object code is unchanged**, verified instruction-for-
+    instruction against the previous revision under both compilers — so there
+    is provably no regression there, rather than one measured back to zero.
+  - `IC_UNROLL_HIST` is a value, not an `#if defined(__aarch64__)`, so **both
+    paths compile everywhere**: `-DIC_UNROLL_HIST=1` builds the arm64 form on
+    x86, which is what allows the two to be checked against each other
+    without an arm64 machine (28 cases, 0 differing). Otherwise the unrolled
+    path would only ever be compiled by the arm64 CI cells.
+  - `__aarch64__` is an empirical proxy for "narrow enough reorder buffer that
+    static unrolling pays" — where this was measured, not a claim about every
+    ARM or x86 part.
+
 - **`make bench` gains an `icscan` tier — the default model had no coverage.**
   `-i` is what a bare `./enigma < cipher.txt` runs, and nothing in the harness
   touched `ic_score_decode`: `search` and `crib` run `-q`, `fused` runs `-f`,

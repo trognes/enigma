@@ -278,39 +278,81 @@ static double monoic_score_decode(machine & m)
          + g_monoic_lambda * textlength * ic;
 }
 
+/* IC_UNROLL_HIST -- unroll this decoder 4x with a private histogram per copy.
+   ON FOR arm64 ONLY, and the split is measured rather than assumed.  Applying
+   the ngram_ic_decode treatment here reads, on the icscan bench tier against a
+   calibrated -0.7..+0.5% floor, with all four other tiers flat as controls:
+
+     g++ arm64    -5.9% quick  -8.0% long      clang arm64   -4.8%  -7.0%
+     g++ x86_64  +16.0% quick  +9.6% long      clang x86_64 +22.3% +11.9%
+
+   Both compilers agree WITHIN each architecture, so it is an architecture
+   split, not a compiler one.  The likely reason is that the 26-bin merge is a
+   FIXED cost and this decoder's per-character body is tiny -- five loads and
+   no table lookup -- where ngram_ic_decode amortises the same 26 iterations
+   against four table gathers per character.  Same fixed cost, four times less
+   to hide it behind.  That the sign flips by architecture fits unrolling
+   standing in for out-of-order window size: the arm64 cores gain from four
+   independent copies of the dependent load chain, the wider x86 cores were
+   already extracting that and are left paying only the merge.  The split is
+   measured; that explanation is inference.
+
+   `__aarch64__` is an EMPIRICAL PROXY for "narrow enough reorder buffer that
+   static unrolling pays", which no macro can express -- it is where this was
+   measured, not a claim about every ARM or every x86 part.
+
+   Defined as a value rather than tested with `#if defined(__aarch64__)` so
+   BOTH paths compile everywhere: -DIC_UNROLL_HIST=1 on an x86 box builds the
+   arm64 form, which is what lets the two be checked against each other
+   without an arm64 machine.  Without that, the unrolled path would only ever
+   be compiled by the arm64 CI cells. */
+#ifndef IC_UNROLL_HIST
+#if defined(__aarch64__)
+#define IC_UNROLL_HIST 1
+#else
+#define IC_UNROLL_HIST 0
+#endif
+#endif
+
 double ic_score_decode(machine & m)
 {
-  /* FOUR HISTOGRAMS, ONE PER UNROLLED COPY -- ngram_ic_decode carries the full
-     rationale and this is the same shape.  SCORE_UNROLL alone makes a freq[]++
-     loop SLOWER: four increments scheduled together collide across 26 bins
-     about 30% of the time, so the store-to-load forwarding the rolled loop
-     spaces out becomes a stall.  Private arrays cannot collide, so the loop
-     unrolls like a gather loop instead.
-
-     This is the DEFAULT model's scan path -- a bare `./enigma < cipher.txt` --
-     and it went unmeasured until the icscan bench tier was added, because
-     search and crib run -q, fused runs -f, and under -c the low-order models
-     are served by the histogram/cooc_col path rather than by decoding.
-
-     Byte-identical: the counts are the same integers whichever array they land
-     in, and the coincidence sum is over their total. */
-  int f0[asize], f1[asize], f2[asize], f3[asize];
-  for (int j = 0; j < asize; j++)
-    { f0[j] = 0; f1[j] = 0; f2[j] = 0; f3[j] = 0; }
-
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
+
+  int freq[asize];
+  for (int j = 0; j < asize; j++)
+    freq[j] = 0;
+
+#if IC_UNROLL_HIST
+  /* FOUR HISTOGRAMS, ONE PER UNROLLED COPY.  SCORE_UNROLL alone makes a
+     freq[]++ loop SLOWER: four increments scheduled together collide across 26
+     bins about 30% of the time, so the store-to-load forwarding the rolled
+     loop spaces out becomes a stall.  Private arrays cannot collide, so the
+     loop unrolls like a gather loop instead.  Summed back into freq[] rather
+     than into the coincidence count directly, so everything below this point
+     is shared with the rolled form and cannot drift from it. */
+  int f1[asize], f2[asize], f3[asize];
+  for (int j = 0; j < asize; j++)
+    { f1[j] = 0; f2[j] = 0; f3[j] = 0; }
   int i = 0;
   for (; i + 3 < textlength; i += 4)
     {
-      f0[decode_at(steck, rows, ct, i)]++;
+      freq[decode_at(steck, rows, ct, i)]++;
       f1[decode_at(steck, rows, ct, i + 1)]++;
       f2[decode_at(steck, rows, ct, i + 2)]++;
       f3[decode_at(steck, rows, ct, i + 3)]++;
     }
   for (; i < textlength; i++)
-    f0[decode_at(steck, rows, ct, i)]++;
+    freq[decode_at(steck, rows, ct, i)]++;
+  for (int j = 0; j < asize; j++)
+    freq[j] += f1[j] + f2[j] + f3[j];
+#else
+  /* NOT unrolled: see IC_UNROLL_HIST above -- it measured +10..22% on x86_64,
+     where it measured -5..8% on arm64. */
+  for (int i = 0; i < textlength; i++)
+    freq[decode_at(steck, rows, ct, i)]++;
+#endif
 
   /* Accumulate the coincidence count in an INT, not a double. Every freq[]
      entry is at most textlength <= maxlen, so each product fits an int and the
@@ -327,10 +369,7 @@ double ic_score_decode(machine & m)
                 "IC coincidence sum must fit an int");
   int coin = 0;
   for (int j = 0; j < asize; j++)
-    {
-      const int n = f0[j] + f1[j] + f2[j] + f3[j];
-      coin += n * (n - 1);
-    }
+    coin += freq[j] * (freq[j] - 1);
   return (textlength > 1)
     ? static_cast<double>(coin)
         / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
