@@ -1,0 +1,113 @@
+name: Release Bench
+
+# Cumulative drift against the last RELEASE, which the per-PR guard cannot see.
+#
+# The Bench workflow A/Bs every pull request against its own base, so it catches
+# a regression introduced by that PR and nothing else. Twenty PRs each landing
+# a 1% slowdown pass it twenty times and cost 20% between them. CLAUDE.md has
+# recommended `make bench BASE=<release tag>` for exactly this since the src/
+# split, and doing it by hand is how it gets forgotten -- the one time it was
+# run it took a release-tag comparison to establish that nineteen modules and
+# ~30 newly-extern symbols had cost nothing measurable, which no per-PR run
+# could have shown.
+#
+# NOT run on pull requests. The per-PR guard already covers "did this change
+# regress anything", the answer here barely moves between two adjacent commits,
+# and doubling the bench matrix on every PR would buy nothing for the wall time.
+# Weekly, plus manual dispatch when a release is being prepared.
+#
+# EXPECT LARGE NEGATIVE NUMBERS. Against v2.1.0 the search tier ran -62% before
+# this file existed; a cell near 0% is not "no regression", it means a tier has
+# gained nothing in a whole release cycle, and a POSITIVE cell is the alarm.
+# That inverts how the per-PR job reads, so the two are kept as separate
+# workflows rather than a third trigger on one.
+#
+# READ THE arm64 CELLS FIRST. Repeated base-vs-base controls on byte-identical
+# binaries put the two arm64 runners at <=1.2 points -- g++ arm64 has
+# reproduced identical absolute timings across three separate runs -- while the
+# x86_64 runners have varied 28-76% in absolute throughput between runs of the
+# same binary. The x86_64 cells are a smoke test here, not a measurement.
+#
+# Tiers whose options postdate the release report `n/a -- base lacks these
+# options` rather than a fake regression (min_time returns empty on a non-zero
+# exit). Against v2.1.0 that is the crib tier, and it is counted and reported
+# at the end so partial coverage is never silent.
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'      # Mondays 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      base:
+        description: >-
+          Ref to compare against. Default: the highest v* tag by version sort.
+        required: false
+        type: string
+
+concurrency:
+  group: release-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-bench:
+    name: vs release (${{ matrix.cxx }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     arch: x86_64, cxx: g++ }
+          - { os: ubuntu-24.04,     arch: x86_64, cxx: clang++ }
+          - { os: ubuntu-24.04-arm, arch: arm64,  cxx: g++ }
+          - { os: ubuntu-24.04-arm, arch: arm64,  cxx: clang++ }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # the A/B builds BASE from a git worktree, and the
+                           # tag lookup below needs the tags
+
+      - name: Resolve the base ref
+        id: base
+        # The dispatch input and the tag name reach the shell through the
+        # environment, never through ${{ }} interpolation into the script body:
+        # a ref named `x"; rm -rf /; #` would otherwise be pasted in verbatim.
+        env:
+          BASE_INPUT: ${{ inputs.base }}
+        run: |
+          ref="$BASE_INPUT"
+          if [ -z "$ref" ]; then
+            # Highest v* tag by version sort. --sort=-v:refname orders 2.1.0
+            # above 2.0.0 and above 1.10.0, which a plain lexical sort does not.
+            ref=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          fi
+          if [ -z "$ref" ]; then
+            echo "no v* tag found and no base input given" >&2
+            exit 1
+          fi
+          if ! git rev-parse --verify --quiet "$ref^{commit}" >/dev/null; then
+            echo "base ref '$ref' does not resolve to a commit" >&2
+            exit 1
+          fi
+          sha=$(git rev-parse --short "$ref^{commit}")
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Comparing against $ref ($sha)"
+
+      - name: Compiler and machine
+        run: |
+          ${{ matrix.cxx }} --version
+          uname -m
+          nproc
+
+      - name: Build
+        run: make CXX=${{ matrix.cxx }}
+
+      - name: Bench vs ${{ steps.base.outputs.ref }}
+        env:
+          # Same two levels as the per-PR job, and for the same reason: 10%
+          # reports, 25% blocks. A cell 25% SLOWER than a release is not
+          # scatter -- it is 2.5x the worst floor ever recorded here, and
+          # against a base this old the expected direction is faster.
+          FAIL_OVER: 25
+          BASE_REF: ${{ steps.base.outputs.ref }}
+          CXX_SEL: ${{ matrix.cxx }}
+        run: make bench CXX="$CXX_SEL" LONG=1 BASE="$BASE_REF"

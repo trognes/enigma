@@ -3572,7 +3572,21 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   a **±10% floor on the clang `hillclimb` tier**, which is where an
   intermediate revision's flagged +11–19% cell came from — `objdump` showed the
   score loop was 118 instructions in both builds with only addresses differing,
-  i.e. pure code placement. Measure the floor wherever you are judging, and do
+  i.e. pure code placement.
+  **A second `Release Bench` workflow (`.github/workflows/release-bench.yml`)
+  covers what the per-PR guard structurally cannot: CUMULATIVE drift.** Twenty
+  PRs each landing 1% pass the per-PR gate twenty times and cost 20% between
+  them, and the one time a release-tag comparison was run by hand it was what
+  established that the `src/` split had cost nothing. It runs the same four-cell
+  matrix against the highest `v*` tag (or a ref given to `workflow_dispatch`),
+  **weekly rather than per-PR** — the answer barely moves between adjacent
+  commits, and doubling the bench matrix on every PR would buy nothing.
+  **Read it the opposite way round to the per-PR job**: large negative numbers
+  are expected (`search` was −62% against v2.1.0), a cell near 0% means a tier
+  gained nothing in a whole release cycle, and a POSITIVE cell is the alarm.
+  Tiers whose options postdate the tag report `n/a` and are counted, so partial
+  coverage is never silent — against v2.1.0 that is `crib`.
+  Measure the floor wherever you are judging, and do
   not import a number measured somewhere else.
 - **Every check in `tests/run_tests.sh` must be QUICK — size the keyspace to the
   property under test, not to realism.** The sanitizer job runs the *whole*
