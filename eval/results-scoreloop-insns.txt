@@ -899,3 +899,34 @@ survives.
 WHAT REMAINS IS FEWER CALLS, NOT CHEAPER ONES.  That is what -K did (325 fewer
 full decodes per restart) and what --seed-dedup did (whole climbs skipped),
 and hist_probe at 22.7% of instructions is a call-count story too.
+
+
+THE REVERT GAVE A FREE CONTROL, AND IT CUTS BOTH WAYS
+-------------------------------------------------------
+
+The revert commit leaves src/ byte-identical to the base it is benched
+against, so its Bench run is a base-vs-base control on the arm64 cells --
+the same accident PR #205 exploited, arriving for free again:
+
+    cell           search q/l    icscan q/l   hillclimb q/l   FUSED q/l
+    g++ arm64     +0.1 / -8.7   -0.2 / +0.1    +0.2 / -0.0   -0.4 / -0.3
+    clang arm64   -0.8 / -0.5   -0.0 / +0.0    -0.0 / -0.0   -0.1 / -0.2
+
+FIRST, IT STRENGTHENS THE RESULT ABOVE.  The tier that decided the factored
+probe reads -0.3% and -0.2% on the two cells that judged it, against the
++30.7% and +35.7% those same cells measured -- a floor two orders of
+magnitude below the effect.  icscan and hillclimb are equally tight.
+
+SECOND, IT QUALIFIES "THE arm64 CELLS REPRODUCE TO THE HUNDREDTH OF A SECOND".
+That claim was earned on the FUSED tier and it still holds there.  It does not
+transfer: g++ arm64 SEARCH LONG moved -8.7% on identical binaries, base 9.10 s
+against head 8.31 s.  Watching the base column identifies which side was
+disturbed -- clang arm64 ran the same tier at 6.64 s, and this cell's own
+earlier runs sat near 8.3 s, so it is the BASE reading that is anomalous, not
+the head.
+
+So a noise floor is per TIER as well as per cell, per workload and per run,
+and the one number this file has repeatedly been tempted to quote as "the
+arm64 floor" is really "the arm64 fused floor".  Which is the same lesson as
+the crib tier's flatness earlier in this file: a control bounds the noise of
+the tier it was measured on, and nothing else.
