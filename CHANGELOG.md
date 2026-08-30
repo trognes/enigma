@@ -127,13 +127,15 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
-- **`--ic-order` — rank `-J`'s move-ordering scan by the index of coincidence
-  instead of by the target model.** `-J` builds its visit order by scoring all
-  325 toggles once per restart, and with a fused or quad target each of those
-  probes is a full decode — measured 21–23% of a climb's scored plugboards at
-  `-R 64`, a share that grows with message length because the scan is linear in
-  `L` where the histogram form is flat. This ranks them from the per-key
-  co-occurrence table in O(26) a move. Off by default; needs `-c` and `-J`.
+- **`-K` / `--ic-order` — `-J` with its move-ordering scan ranked by the index
+  of coincidence instead of by the target model.** `-J` builds its visit order
+  by scoring all 325 toggles once per restart, and with a fused or quad target
+  each of those probes is a full decode — measured 21–23% of a climb's scored
+  plugboards at `-R 64`, a share that grows with message length because the
+  scan is linear in `L` where the histogram form is flat. `-K` ranks them from
+  the per-key co-occurrence table in O(26) a move. It is a climb rule in its
+  own right, so it **replaces `-J`** rather than modifying it, and needs only
+  `-c`; `-J -K` is agreement and is accepted silently. Off by default.
   - **A search change, not a speedup.** An IC order is not a target-model
     order, so the climb visits moves differently and can converge somewhere
     else — cheaper per restart is worthless if it recovers less. Measured on
@@ -157,7 +159,7 @@ existing command lines can behave differently or stop working.
   - **The compute split has the same cause as the quality one.** A low-order
     stage's probe is already O(26) and exact, so a `k4`/`i4`/`m4` pre-pass
     costs the same either way and only the fused target stage's scans are ever
-    replaced. With every stage low-order the option is inert, and the run says
+    replaced. With every stage low-order `-K` is exactly `-J`, and the run says
     so rather than leaving the reader to infer it from an unchanged answer.
   - **Default off pending prose**, which is unmeasured and which is known not
     to follow telegraphic results for scoring changes. Nothing measured is

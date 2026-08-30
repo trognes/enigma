@@ -204,9 +204,11 @@ int opt_firstimprove;
    truly set. Off by default; needs -c. */
 int opt_dynorder;
 
-/* --ic-order: rank -J's move-ordering scan by the INDEX OF COINCIDENCE, in
+/* -K: -J with its move-ordering scan ranked by the INDEX OF COINCIDENCE, in
    O(26) per move from the co-occurrence table, instead of by the target model
-   at O(L) per move (a full decode each). Needs -c and -J; off by default.
+   at O(L) per move (a full decode each). A climb rule in its own right rather
+   than a modifier -- it sets opt_firstimprove and opt_dynorder itself, so it
+   REPLACES -J and needs only -c. Off by default.
 
    It only ever applies to a stage whose model has no histogram form -- with a
    low-order target the ordering scan is already O(26) and exact, so there is

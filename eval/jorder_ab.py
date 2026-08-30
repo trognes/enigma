@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Is an IC move-order as good as a target-model move-order for -J?
+"""Is -K (IC-ranked move order) as good as -J (target-model order)?
 
     python3 eval/jorder_ab.py --length 167 --trials 400 --seed 4242
 
@@ -10,7 +10,7 @@ FULL DECODE, and the scan is 20-23% of the climb's scored plugboards (measured
 at -R 64: 20 800 of 91 451 at L=100, of 98 081 at L=167).  Its share grows with
 message length, because it is linear in L where the histogram form is flat.
 
-`--ic-order` ranks that scan by the index of coincidence instead,
+`-K` is the same climb with that scan ranked by the index of coincidence,
 computed from the co-occurrence table in O(26) per move.  Measured on one
 167-letter fixture that takes the run from 7 535 643 plugboards scored to
 5 546 450 -- a 26% cut in scoring work.
@@ -20,7 +20,7 @@ order, so the climb visits moves differently and can converge somewhere else.
 Cheaper per restart is worthless if it recovers less, and the two effects have
 to be weighed against each other rather than one assumed.  Hence this harness:
 paired trials, same excerpts, same keys, same boards, arms differing only in
-that one flag.
+-J against -K.
 
 WHY WEHRMACHT.  The recommended recipe for real traffic is `-f -l wehrmacht
 -S k4f10 -J`, and CLAUDE.md records that scoring results do not transfer
@@ -133,12 +133,12 @@ def main():
 
         # Rotor key GIVEN, board hidden: this isolates the plugboard climb,
         # which is the only thing the move order touches.
-        base = key + ["-c", "-J", "-S", args.schedule, "-f",
+        base = key + ["-c", "-S", args.schedule, "-f",
                       "-l", "wehrmacht", "-R", args.restarts, "-T", 1]
         got = {}
         b50 = {}
-        for arm, extra in (("target", []), ("ic", ["--ic-order"])):
-            out, err = run(base + extra, ct)
+        for arm, flag in (("target", "-J"), ("ic", "-K")):
+            out, err = run(base + [flag], ct)
             got[arm] = out
             pc = pct_correct(out, pt)
             b50[arm] = pc >= 50.0
@@ -170,7 +170,7 @@ def main():
               f"{z:+.2f}\t{tot['target'][0] / n:.2f}\t{tot['ic'][0] / n:.2f}\t"
               f"{tot['target'][1]}\t{tot['ic'][1]}\t{dc:+.1f}")
         return
-    print(f"# L={L}, {n} paired trials, -f -l wehrmacht -c -J "
+    print(f"# L={L}, {n} paired trials, -f -l wehrmacht -c -J/-K "
           f"-S {args.schedule} -R {args.restarts}, {args.plugs}-pair board "
           f"hidden, rotor key given, seed {args.seed}")
     print(f"{'arm':8s} {'BREAK50':>9s} {'mean %correct':>14s} {'exact':>10s} "

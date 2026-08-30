@@ -1015,11 +1015,15 @@ are read from a **data directory** (filenames built as
   count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected**
   (`archived/PERFORMANCE.md` §7.2).
-- `--ic-order` **rank `-J`'s move-ordering scan by the index of coincidence**
-  (needs `-c` and `-J`; off by default). That scan scores all 325 toggles once
-  per restart, and with a fused or quad target every one of them is a **full
+- `-K` **IC-ordered first-improvement climb** (needs `-c`; off by default).
+  `-J` with its move-ordering scan ranked by the **index of coincidence**
+  instead of by the target model — a climb rule in its own right, so it
+  **replaces `-J`** rather than modifying it (`-K` sets the first-improvement
+  climb and the dynamic order itself; `-J -K` is agreement and is accepted
+  silently). Long form `--ic-order`. That scan scores all 325 toggles once per
+  restart, and with a fused or quad target every one of them is a **full
   decode** — measured 21–23% of a climb's scored plugboards at `-R 64`, a share
-  that grows with message length because the scan is linear in `L`. This ranks
+  that grows with message length because the scan is linear in `L`. `-K` ranks
   them from the co-occurrence table instead, in **O(26) per move**.
   - **It is a SEARCH change, not a speedup.** An IC order is not a target-model
     order, so the climb visits moves differently and can converge somewhere
@@ -1049,9 +1053,9 @@ are read from a **data directory** (filenames built as
     `probe_toggle` already takes the O(26) histogram path for a low-order
     stage, so a `k4`/`i4`/`m4` pre-pass costs the same either way and only the
     fused **target** stage's scans are ever replaced. With no pre-pass at all
-    every scan in the run is replaced and the saving doubles. It is inert when
-    *every* stage is low-order, and says so rather than leaving the reader to
-    infer it from an unchanged answer.
+    every scan in the run is replaced and the saving doubles. With *every*
+    stage low-order `-K` is exactly `-J`, and the run says so rather than
+    leaving the reader to infer it from an unchanged answer.
   - **The one adverse cell did not replicate**: `k4f10` L=100 `-R 128` read
     z = +2.26 on the first seed and −0.45 on the second (pooled +1.28). It
     looked like "IC ordering degrades at high restart budgets", which would
@@ -1061,8 +1065,8 @@ are read from a **data directory** (filenames built as
     records does not follow telegraphic results for scoring changes. Nothing
     measured is worse, so default-on is defensible on this evidence; the safe
     reading is the narrow one — **if you run a fused target with no low-order
-    pre-pass, use it.** `-q` and `-a` targets pay the same full-decode scan and
-    should behave like `f10`, but were not run.
+    pre-pass, use `-K` in place of `-J`.** `-q` and `-a` targets pay the same
+    full-decode scan and should behave like `f10`, but were not run.
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what
   the plug cap means during the climb: by default the cap is only a *growth
   ceiling* (at/over the cap, a brand-new **add** is blocked but count-preserving

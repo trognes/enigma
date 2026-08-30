@@ -3207,71 +3207,82 @@ check "--biased-random still recovers the plaintext" \
        -S k4f10 -u B -w 231 -r AAA -g QMW -R 8 --biased-random 1 2>/dev/null)" \
   "$br_pt2"
 
-echo "== IC move ordering: --ic-order =="
+echo "== IC-ordered first-improvement climb: -K =="
 
 # -J builds its move-visit order by scoring all 325 toggles once per restart.
-# With a fused or quad target each of those probes is a FULL DECODE; --ic-order
-# ranks them by the index of coincidence from the co-occurrence table instead,
-# O(26) a move.  Measured cheaper everywhere and better on the schedules whose
-# pre-pass does not already supply IC (eval/results-jorder.txt).
+# With a fused or quad target each of those probes is a FULL DECODE; -K is the
+# same climb with that scan ranked by the index of coincidence from the
+# co-occurrence table instead, O(26) a move.  Measured cheaper than -J
+# everywhere and better on the schedules whose pre-pass does not already supply
+# IC (eval/results-jorder.txt).
 # shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
 jo_bad() { printf 'AAAA' | "$ENIGMA" "$@" 2>&1 >/dev/null; }
 
-jo_err=$(jo_bad -q -l english --ic-order)
-check "--ic-order needs -c" \
-  "$(printf '%s' "$jo_err" | grep -c 'ic-order) needs the plugboard')" "1"
-jo_err=$(jo_bad -c -q -l english --ic-order)
-check "--ic-order needs -J" \
-  "$(printf '%s' "$jo_err" | grep -c 'needs the dynamic move order')" "1"
+jo_err=$(jo_bad -q -l english -K)
+check "-K needs -c" \
+  "$(printf '%s' "$jo_err" | grep -c '(-K) needs the plugboard')" "1"
 
 # The model is not baked in: one check below runs a low-order target, and two
-# scoring selectors that disagree are a fatal error.
+# scoring selectors that disagree are a fatal error.  Nor is the climb rule --
+# -K supplies its own, and the point of several checks here is what it does
+# WITHOUT -J on the command line.
 # shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
-jo_run() { printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -J \
+jo_run() { printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c \
              -u B -w 231 -r AAA -g QMW -R 8 "$@" 2>&1 >/dev/null; }
 jo_scored() { jo_run "$@" | sed -n 's/.*scored \([0-9]*\) plugboards.*/\1/p'; }
 jo_f="-f -l wehrmacht -S f10"
 
+# -K REPLACES -J rather than modifying it, so it has to turn the
+# first-improvement climb on by itself.  Wired as a modifier it would silently
+# run a steepest-ascent climb, which the echo names and the next check prices.
 # shellcheck disable=SC2086  # jo_f is a deliberate multi-word option list
-check "--ic-order is echoed on the climb line" \
-  "$(jo_run $jo_f --ic-order \
-     | grep -c 'dynamic move order, ranked by IC')" "1"
+check "-K implies -J" \
+  "$(jo_run $jo_f -K | grep -c 'dynamic move order, ranked by IC')" "1"
 # shellcheck disable=SC2086
-check "no --ic-order leaves the climb line unmarked" \
-  "$(jo_run $jo_f | grep -c 'dynamic move order)$')" "1"
+check "-J alone leaves the climb line unmarked" \
+  "$(jo_run $jo_f -J | grep -c 'dynamic move order)$')" "1"
+# ... and -J -K is agreement, not a conflict: both ask for the dynamic order,
+# and -K additionally says how to rank it.
+# shellcheck disable=SC2086
+check "-J -K is accepted and equals -K" \
+  "$(jo_scored $jo_f -J -K)" "$(jo_scored $jo_f -K)"
+# shellcheck disable=SC2086
+check "--ic-order is the long form of -K" \
+  "$(jo_scored $jo_f --ic-order)" "$(jo_scored $jo_f -K)"
 
 # THE CHECK THAT CAN ACTUALLY FAIL.  Every check above passes if the flag is
 # parsed, echoed and then ignored.  This one does not: replacing 325 full
 # decodes per restart with 325 O(26) probes cannot leave the plugboards-scored
 # counter where it was, and the two orders converge differently besides.
 # shellcheck disable=SC2086
-check "--ic-order actually changes the search" \
-  "$([ "$(jo_scored $jo_f --ic-order)" != "$(jo_scored $jo_f)" ] \
+check "-K actually changes the search" \
+  "$([ "$(jo_scored $jo_f -K)" != "$(jo_scored $jo_f -J)" ] \
     && echo differs)" "differs"
 
-# It applies per STAGE, not per run: a low-order stage's probe is already O(26)
-# and exact, so only the fused target's scans are ever replaced.  With EVERY
-# stage low-order there is nothing to replace, and the run says so rather than
-# leaving the reader to infer it from an unchanged answer.
-check "--ic-order warns when every stage is low-order" \
-  "$(jo_run -i --ic-order | grep -c 'ic-order has no effect')" "1"
-check "--ic-order is inert when every stage is low-order" \
-  "$(jo_scored -i --ic-order)" "$(jo_scored -i)"
+# The IC ranking applies per STAGE, not per run: a low-order stage's probe is
+# already O(26) and exact, so only the fused target's scans are ever replaced.
+# With EVERY stage low-order there is nothing to replace and -K is exactly -J,
+# which the run says rather than leaving it to be inferred from an unchanged
+# answer.
+check "-K warns when every stage is low-order" \
+  "$(jo_run -i -K | grep -c 'K is exactly -J')" "1"
+check "-K is exactly -J when every stage is low-order" \
+  "$(jo_scored -i -K)" "$(jo_scored -i -J)"
 
 # -T independence: the order comes from the key and the starting board, neither
 # of which depends on how the work was split.
-jo_t1=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -J -f -l wehrmacht \
-          -S f10 -u B -w 231 -r AAA -g QM. -R 8 --ic-order -T 1 2>/dev/null)
-jo_t4=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -J -f -l wehrmacht \
-          -S f10 -u B -w 231 -r AAA -g QM. -R 8 --ic-order -T 4 2>/dev/null)
-check "--ic-order is -T independent" "$jo_t1" "$jo_t4"
+jo_t1=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -K -f -l wehrmacht \
+          -S f10 -u B -w 231 -r AAA -g QM. -R 8 -T 1 2>/dev/null)
+jo_t4=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -K -f -l wehrmacht \
+          -S f10 -u B -w 231 -r AAA -g QM. -R 8 -T 4 2>/dev/null)
+check "-K is -T independent" "$jo_t1" "$jo_t4"
 
 # And it still recovers.  The longer fixture again, for the reason given above:
 # 60 letters against a 10-pair board fails often enough working correctly that
 # a check on it would be about the message, not the flag.
-check "--ic-order still recovers the plaintext" \
-  "$(printf '%s' "$br_ct2" | ENIGMA_SEED=0 "$ENIGMA" -c -J -f -l wehrmacht \
-       -S f10 -u B -w 231 -r AAA -g QMW -R 8 --ic-order 2>/dev/null)" \
+check "-K still recovers the plaintext" \
+  "$(printf '%s' "$br_ct2" | ENIGMA_SEED=0 "$ENIGMA" -c -K -f -l wehrmacht \
+       -S f10 -u B -w 231 -r AAA -g QMW -R 8 2>/dev/null)" \
   "$br_pt2"
 
 echo "== Histogram-form low-order climb (-S i/m/k) =="

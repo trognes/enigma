@@ -134,21 +134,23 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "cheaper per climb -- so pair it with a larger -R.");
   fprintf(out, "  %-24s %s\n", "", "Wins the realistic ~10-plug case, may lose with");
   fprintf(out, "  %-24s %s\n", "", "few plugs (needs -c) [off]");
-  fprintf(out, "  %-24s %s\n", "--ic-order",
-          "Rank -J's move-ordering scan by the index of");
+  fprintf(out, "  %-24s %s\n", "-K, --ic-order",
+          "-J, but rank the move-ordering scan by the");
   fprintf(out, "  %-24s %s\n", "",
-          "coincidence, O(26) a move, instead of by the");
+          "index of coincidence, O(26) a move, instead of");
   fprintf(out, "  %-24s %s\n", "",
-          "target model, a full decode a move. Cheaper");
+          "by the target model, a full decode a move.");
   fprintf(out, "  %-24s %s\n", "",
-          "everywhere, never measured worse; the gain is");
+          "Cheaper than -J everywhere, never measured");
   fprintf(out, "  %-24s %s\n", "",
-          "in schedules whose pre-pass does not already");
+          "worse; the gain is in schedules whose pre-pass");
   fprintf(out, "  %-24s %s\n", "",
-          "supply IC -- much better and ~25% cheaper on");
+          "does not already supply IC -- much better and");
   fprintf(out, "  %-24s %s\n", "",
-          "a bare -S f10, nothing on -S k4f10/i4f10");
-  fprintf(out, "  %-24s %s\n", "", "(needs -c and -J) [off]");
+          "~25% cheaper on a bare -S f10, nothing on");
+  fprintf(out, "  %-24s %s\n", "",
+          "-S k4f10/i4f10. Use instead of -J, not with");
+  fprintf(out, "  %-24s %s\n", "", "it (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-M, --cap-target",
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");

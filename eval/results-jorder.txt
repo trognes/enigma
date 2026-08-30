@@ -4,14 +4,15 @@ ORDERING -J's MOVE SCAN BY IC INSTEAD OF BY THE TARGET MODEL
   python3 eval/jorder_ab.py --tsv --trials 300 --length L --restarts R \
           --schedule S --seed {4242,99}
 
-  -f -l wehrmacht -c -J, 10-pair board hidden, rotor key given, authentic
+  -f -l wehrmacht -c, 10-pair board hidden, rotor key given, authentic
   HG Nord decrypts.  24 cells, 300 paired trials each (200 at R=128 f10).
-  The arms differ ONLY by --ic-order.  JUDGED ON BREAK50 -- the count of
+  The arms differ ONLY by -J against -K.  JUDGED ON BREAK50 -- the count of
   trials recovering at least half the plaintext.
 
-  (Measured while the switch was $ENIGMA_JORDER=ic, before it was promoted to
-  a proper option.  Verified byte-identical across the promotion -- same
-  answer and same plugboards-scored count on 6 fixtures of schedule x -R.)
+  (Measured while the IC order was $ENIGMA_JORDER=ic on top of -J, before it
+  became the -K climb rule.  Verified byte-identical across the promotion --
+  same answer and same plugboards-scored count on 6 fixtures of schedule x
+  -R, and -K == -J --ic-order == the old env arm.)
 
 VERDICT: cheaper everywhere, and BETTER on the schedules whose pre-pass does
 not already supply IC.  Never measurably worse.
@@ -119,6 +120,6 @@ is unmeasured and the change is a search change, so it is left opt-in here
 pending that.
 
 The strongest practical reading is narrower and safe: IF YOU RUN A FUSED
-TARGET WITH NO LOW-ORDER PRE-PASS, USE --ic-order.  It is a quarter
+TARGET WITH NO LOW-ORDER PRE-PASS, USE -K IN PLACE OF -J.  It is a quarter
 cheaper and breaks materially more messages, and the advantage grows with
 message length.

@@ -301,11 +301,11 @@ English tables.
   ~2.8× cheaper per climb, so **pair with more `-R`**. A matched-compute win on
   the realistic ~10-plug case, may lose with few plugs (needs `-c`; off by
   default)
-- **`--ic-order`** — Rank `-J`'s move-ordering scan by the **index of
+- **`-K`** — `-J`, but rank the move-ordering scan by the **index of
   coincidence** (O(26) a move) instead of by the target model (a full decode a
-  move). Cheaper everywhere and never measured worse; much better *and* ~25%
-  cheaper on a bare `--score f10`, nothing on `k4f10`/`i4f10` (needs `-c` and
-  `-J`; off by default)
+  move). Use *instead of* `-J`, not with it. Cheaper than `-J` everywhere and
+  never measured worse; much better *and* ~25% cheaper on a bare `--score
+  f10`, nothing on `k4f10`/`i4f10` (needs `-c`; off by default)
 - **`-M`** — Make the plug cap a strict **descent target**: at/over the cap only
   merge/remove moves (no adds or reshuffles). A matched-compute win with a tight
   `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs
@@ -752,17 +752,18 @@ a find**, and a real break reads +15 to +17.
   at equal compute, it recovers noticeably more of a short message. Leave it off
   for a single climb (`-R 0`).
 
-- **`--ic-order` — rank that scan by the index of coincidence.** Building the
-  order costs 325 scores per restart, and with a fused or quad target every one
-  of them is a full decode: 21–23% of a climb's work, a share that *grows* with
-  message length. The index of coincidence can be had from a per-key
-  co-occurrence table in O(26) a move instead. It is not the same order, so it
-  is a search change rather than a speedup and was measured on recovery: it
-  never came out worse, and where the schedule does not already feed IC into
-  the climb it is both much cheaper and substantially better — on a bare
-  `--score f10` at 120 letters it recovered 64.6% of the plaintext against
-  52.3% while doing 25% less work. On `--score k4f10` or `i4f10`, whose
-  pre-pass already supplies IC, it is ~11% cheaper and otherwise a wash.
+- **`-K` — the same climb, with that scan ranked by the index of
+  coincidence.** Building the order costs 325 scores per restart, and with a
+  fused or quad target every one of them is a full decode: 21–23% of a climb's
+  work, a share that *grows* with message length. The index of coincidence can
+  be had from a per-key co-occurrence table in O(26) a move instead. It is not
+  the same order, so it is a search change rather than a speedup and was
+  measured on recovery: it never came out worse, and where the schedule does
+  not already feed IC into the climb it is both much cheaper and substantially
+  better — on a bare `--score f10` at 120 letters it recovered 64.6% of the
+  plaintext against 52.3% while doing 25% less work. On `--score k4f10` or
+  `i4f10`, whose pre-pass already supplies IC, it is ~11% cheaper and otherwise
+  a wash. `-K` is a replacement for `-J`, not an addition to it.
 
 The recipes below build the schedule and plug-cap mechanics up on the
 **recommended** fused target (`-f`, staged as `--score m4f10`). The percentages

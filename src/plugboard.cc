@@ -710,9 +710,9 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      climb from the (perturbed) starting board, so it differs per restart; deterministic
      (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
   const bool dyn_order = (opt_dynorder != 0);
-  /* --ic-order ranks that scan by the INDEX OF COINCIDENCE, computed from the
-     co-occurrence table in O(26) per move, instead of by the target model at
-     O(L) per move.
+  /* -K is that same climb with the scan ranked by the INDEX OF COINCIDENCE,
+     computed from the co-occurrence table in O(26) per move, instead of by the
+     target model at O(L) per move.
 
      ONLY WORTH ANYTHING WHEN hist_on IS FALSE.  With a low-order target
      probe_toggle already takes the histogram path, so the scan is O(26)
