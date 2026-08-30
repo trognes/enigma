@@ -303,10 +303,11 @@ English tables.
   default)
 - **`-K`** — `-J`, but rank the move-ordering scan by the **index of
   coincidence** (O(26) a move) instead of by the target model (a full decode a
-  move). Use *instead of* `-J`, not with it. Cheaper than `-J` everywhere and
-  never measured worse; much better *and* ~16% less wall time on a bare
-  `--score f10`, and on `k4f10` a wash on quality for ~8% less time (needs
-  `-c`; off by default)
+  move). **The recommended climb rule** — use *instead of* `-J`, not with it.
+  Faster than `-J` everywhere measured and never measurably worse on recovery,
+  in English and German prose as well as telegraphic German; the gain grows
+  with message length and is a wash at 40 letters (needs `-c`; off by
+  default)
 - **`-M`** — Make the plug cap a strict **descent target**: at/over the cap only
   merge/remove moves (no adds or reshuffles). A matched-compute win with a tight
   `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs
@@ -645,9 +646,9 @@ exploit the cost asymmetry — **run the seeder first, then fall back to
 restarts**:
 
 ```sh
-./enigma -c -f -l wehrmacht -J -S i4f10 --self-crib-seeds 10 -R 0 \
+./enigma -c -f -l wehrmacht -K -S i4f10 --self-crib-seeds 10 -R 0 \
          -T 4 < cipher.txt          # ~1 s per key-sweep; nothing lost if it misses
-./enigma -c -f -l wehrmacht -J -S i4f10 --polish -R 128 \
+./enigma -c -f -l wehrmacht -K -S i4f10 --polish -R 128 \
          -T 4 < cipher.txt          # the fallback
 ```
 
@@ -690,7 +691,7 @@ traffic rather than guessed: **all 75 recovered keys use reflector B**, and all
 A full recipe for a real, unknown-key message of operational length:
 
 ```sh
-./enigma -c -f -l wehrmacht -J -S i4f10 --polish \
+./enigma -c -f -l wehrmacht -K -S i4f10 --polish \
          -R 8 --ring-stride 3 -u B -r A.. -g ... \
          --confidence 256 --doubling-report 7 -T $(nproc) < cipher.txt
 ```
@@ -768,8 +769,11 @@ a find**, and a real break reads +15 to +17.
   counted; measured, it is 15.8% at that length). On `--score k4f10` or
   `i4f10`, whose pre-pass already supplies IC, quality is a wash and the
   saving is about half as large — 8.2% at 100 letters, 4.1% at 60, since the
-  work saved grows with message length. `-K` is a replacement for `-J`, not an
-  addition to it.
+  work saved grows with message length. `-K` is a replacement for `-J`, not
+  an addition to it, and it is **the recommended climb rule**: measured on
+  English and German prose as well as telegraphic German — 12 cells, 18 000
+  paired trials — it is never measurably worse and usually better, the gain
+  growing with message length and washing out at 40 letters.
 
 The recipes below build the schedule and plug-cap mechanics up on the
 **recommended** fused target (`-f`, staged as `--score m4f10`). The percentages
@@ -838,13 +842,14 @@ staged as `--score m4f10`. There are two strong plugboard solvers, and at
 **matched compute** they are **peers with a length-dependent crossover** — pick
 either, or run both:
 
-- **Greedy** — the tuned restart climb: dynamic move ordering (`-J`) over a
+- **Greedy** — the tuned restart climb: IC-ranked dynamic move ordering
+  (`-K`) over a
   capped staged schedule (`--random 10` kick → mono pre-pass → weighted capped
   at 10 plugs), plus the best-board finisher `--polish` (one fixed-cost pass
   after all restarts). Very cheap per restart, so it affords many.
 
   ```sh
-  ./enigma -c -J --score m4f10 --polish --random 10 -R 40 -f -l english \
+  ./enigma -c -K --score m4f10 --polish --random 10 -R 40 -f -l english \
            -u B -w 241 -r AAA -g QEW < cipher.txt
   ```
 

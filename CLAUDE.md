@@ -526,8 +526,10 @@ are read from a **data directory** (filenames built as
 > only one that does not depend on the writing style; see the `-f` entry below),
 > `-S m4f10` staging (mono pre-pass then fused; **`k4f10` on telegraphic
 > traffic, at every length** — measured, see `-S` and the `-S k` entry; it
-> displaced `i4f10` there), `-J` (dynamic move
-> order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the
+> displaced `i4f10` there), **`-K`** (first-improvement with the move order
+> ranked by IC — it **replaces `-J`**, which it is never measurably worse than
+> and is 4–16% faster than; `-J` remains correct and is the fallback where
+> `-K`'s evidence does not reach, see below), `-M` (with a tight cap), and the
 > best-board
 > finisher `--polish` (the recommended finisher: one fixed-cost pass after all
 > restarts, so it is negligible at a high `-R`). Several opt-in flags are **not
@@ -577,7 +579,7 @@ are read from a **data directory** (filenames built as
 > cross; ~5% at L40); past that only a **sharper scoring model** moves the
 > needle, not more search — which is exactly what the **`-a` weighted model**
 > delivers (the first measured short-message *scoring* gain, +~1–2pp mean
-> %-correct at L40–100 across all four languages; PR #106). Recipe: `-c -J
+> %-correct at L40–100 across all four languages; PR #106). Recipe: `-c -K
 > --polish --score m4f10 --random 10 -R <as high as -T affords> -f -l <lang> -T
 > <cores>` — swapping `m4f10` for **`k4f10` on telegraphic traffic, at every
 > length** (+5.0pp over `i4f10` at L=167, pooled over five seeds, and never
@@ -1015,7 +1017,8 @@ are read from a **data directory** (filenames built as
   count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected**
   (`archived/PERFORMANCE.md` §7.2).
-- `-K` **IC-ordered first-improvement climb** (needs `-c`; off by default).
+- `-K` **IC-ordered first-improvement climb** (**recommended** — it replaces
+  `-J`; needs `-c`; off by default, like `-J`).
   `-J` with its move-ordering scan ranked by the **index of coincidence**
   instead of by the target model — a climb rule in its own right, so it
   **replaces `-J`** rather than modifying it (`-K` sets the first-improvement
@@ -1096,12 +1099,39 @@ are read from a **data directory** (filenames built as
     looked like "IC ordering degrades at high restart budgets", which would
     have been a real concern given that pre-pass questions are known to be
     restart-budget dependent. It was a single cell of 24.
-  - **DEFAULT OFF pending prose**, which is unmeasured and which this file
-    records does not follow telegraphic results for scoring changes. Nothing
-    measured is worse, so default-on is defensible on this evidence; the safe
-    reading is the narrow one — **if you run a fused target with no low-order
-    pre-pass, use `-K` in place of `-J`.** `-q` and `-a` targets pay the same
-    full-decode scan and should behave like `f10`, but were not run.
+  - **PROSE WAS THE OPEN QUESTION AND IT REPRODUCES, RATHER THAN REVERSING.**
+    This file records that scoring results do not transfer between the two
+    writing styles, so the telegraphic grid could not settle a recommendation
+    for all languages. Measured on prose — 12 cells, 1500 paired trials each
+    (18 000 pairs), {english, german} × {`f10`, `m4f10`} × L = {40, 60, 100},
+    `-R 32`, judged on `break50` (`eval/results-jorder-prose.txt`): **pooled
+    Stouffer Z = −6.08**, +314 breaks of 18 000, and **not one of the twelve
+    cells is significantly against `-K`**. English alone reads −3.27, German
+    −5.34, `f10` −5.16, `m4f10` −3.44.
+  - **The split is by LENGTH, not by language or schedule** — pooled per
+    length, L=40 reads **+0.46 (nothing)**, L=60 **−4.55** and L=100
+    **−6.44**. That is the same monotone rise the telegraphic grid showed, so
+    the effect is a property of the move order rather than of the writing
+    style — as the mechanism predicts, the replaced scan being linear in `L`
+    where its replacement is flat. **At L=40 it is a wash, not a loss**: the
+    four cells read +0.93, +1.23, −1.24, 0.00.
+  - **So `-K` replaces `-J` as the recommended climb rule**, at every length
+    and in both writing styles: better or level on recovery everywhere
+    measured, and 4–16% faster. `-J` is not deprecated — it remains the
+    fallback where `-K`'s evidence does not reach: `-q` and `-a` targets (they
+    pay the same full-decode ordering scan and should behave like `f10`, but
+    were not run), lengths under 40, and the full unknown-key sweep, every
+    measurement here having given the rotor key and hidden only the board.
+    **Both stay off by default** — this is a recommendation, not a change of
+    default behaviour.
+  - **The German prose arm rests on a 476-character passage**, the fixture
+    `tests/crack_quality.py` uses for `CLANG=german` and the one every other
+    German-prose claim here was measured on. Excerpts therefore repeat ~4×
+    at L=100. Each trial still draws a fresh key and board and both arms see
+    the identical trial, so the pairing is sound; what is limited is
+    generalisation beyond that passage. The English arm has no such limit
+    (136 KB, no repetition) and agrees, which is the reason to believe the
+    German cells are not an artefact of their fixture.
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what
   the plug cap means during the climb: by default the cap is only a *growth
   ceiling* (at/over the cap, a brand-new **add** is blocked but count-preserving
@@ -1530,7 +1560,7 @@ are read from a **data directory** (filenames built as
   forces is the cost); log-linear wins because it is *conjunctive* — a candidate
   must look plausible at every order at once. See `archived/PERFORMANCE.md` /
   PR #106. Because `-a` is the sharpest single-family model, the recipe built on
-  it is `-c -S m4a10 -J --polish -a -l <lang>` -- but see `-f` below, which
+  it is `-c -S m4a10 -K --polish -a -l <lang>` -- but see `-f` below, which
   supersedes it.
 - `-f` **fused: weighted all-order + index of coincidence** (**recommended**
   when the language is known; needs `-l`; a schedule token too -- `-S m4f10`).
@@ -1553,7 +1583,7 @@ are read from a **data directory** (filenames built as
   better CLIMB, not better discrimination**: a decomposition
   (`archived/PERFORMANCE.md` 6.4) puts the whole gain in surface reshaping
   (+3.4pp) with selection contributing -0.0pp, so it does *not* move the
-  scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
+  scoring-failure floor. Recommended recipe: `-c -S m4f10 -K --polish -f -l
   <lang>` — but on **telegraphic traffic** use `k4f10` instead of `m4f10`, at
   every length (+5.0pp over `i4f10`, itself +2.8pp over `m4f10`; see the `-S k`
   entry).

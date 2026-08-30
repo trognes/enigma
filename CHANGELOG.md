@@ -173,9 +173,19 @@ existing command lines can behave differently or stop working.
     costs the same either way and only the fused target stage's scans are ever
     replaced. With every stage low-order `-K` is exactly `-J`, and the run says
     so rather than leaving the reader to infer it from an unchanged answer.
-  - **Default off pending prose**, which is unmeasured and which is known not
-    to follow telegraphic results for scoring changes. Nothing measured is
-    worse.
+  - **Prose was the open question, and it reproduces rather than reversing.**
+    12 cells, 1500 paired trials each (18 000 pairs), {english, german} ×
+    {`f10`, `m4f10`} × L = {40, 60, 100}, `-R 32`, judged on `break50`
+    (`eval/results-jorder-prose.txt`): pooled Stouffer Z = **−6.08**, +314
+    breaks, and not one of the twelve cells is significantly against `-K`.
+    The split is by **length**, not by language or schedule — pooled per
+    length, L=40 reads +0.46 (nothing), L=60 −4.55 and L=100 −6.44, the same
+    monotone rise the telegraphic grid showed.
+  - **`-K` therefore replaces `-J` as the recommended climb rule.** Both stay
+    **off by default** — this is a recommendation, not a change of default
+    behaviour — and `-J` remains the fallback where `-K`'s evidence does not
+    reach: `-q`/`-a` targets, lengths under 40, and the full unknown-key
+    sweep (every measurement gave the rotor key and hid only the board).
 
 - **`--biased-random T` — draw the restart kick from the single-plug index of
   coincidence instead of uniformly.** Each of the 325 possible single plugs is

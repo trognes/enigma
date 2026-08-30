@@ -114,7 +114,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "plugboard cannot game it, so it adds gradient");
   fprintf(out, "  %-24s %s\n", "", "where the n-gram surface is flat -- a better");
   fprintf(out, "  %-24s %s\n", "", "CLIMB, not better discrimination. Recommended:");
-  fprintf(out, "  %-24s %s\n", "", "-c -S m4f10 -J --polish");
+  fprintf(out, "  %-24s %s\n", "", "-c -S m4f10 -K --polish");
   fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
           "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
   fprintf(out, "  %-24s %s\n", "-T, --threads N",
@@ -141,9 +141,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "by the target model, a full decode a move.");
   fprintf(out, "  %-24s %s\n", "",
-          "Cheaper than -J everywhere, never measured");
+          "RECOMMENDED: faster than -J everywhere and never");
   fprintf(out, "  %-24s %s\n", "",
-          "worse; the gain is in schedules whose pre-pass");
+          "measurably worse, on prose as well as on");
+  fprintf(out, "  %-24s %s\n", "",
+          "telegraphic German. Largest where the pre-pass");
   fprintf(out, "  %-24s %s\n", "",
           "does not already supply IC -- much better and");
   fprintf(out, "  %-24s %s\n", "",
@@ -421,7 +423,8 @@ fprintf(out, "  %-24s %s\n", "--crib-rerank F",
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --polish --score m4f10 --random 10 -R 40 -f -l english\n");
+  fprintf(out, "  greedy: -c -K --polish --score m4f10 --random 10 -R 40 "
+               "-f -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score a10 -R 12 -a -l english\n");
   fprintf(out, "-f (weighted all-order + IC) is the recommended scoring model; -R is the main\n");
   fprintf(out, "quality dial (use -T to keep it cheap); the polisher is a small bump\n");

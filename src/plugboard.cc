@@ -770,9 +770,14 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      O(26) for a low-order pre-pass stage, so only the fused target's scans
      are ever replaced.
 
-     DEFAULT OFF pending prose, which is unmeasured and which CLAUDE.md
-     records does not follow telegraphic results for scoring changes.  Nothing
-     measured is worse. */
+     PROSE REPRODUCES IT rather than reversing it, which is what made this
+     the recommended climb rule: 12 cells of 1500 paired trials over english
+     and german prose (eval/results-jorder-prose.txt) pool to Stouffer
+     Z = -6.08, with no cell significantly against -K.  The split there is by
+     LENGTH -- +0.46 at L=40, -4.55 at 60, -6.44 at 100 -- the same monotone
+     rise the telegraphic grid showed, so the effect belongs to the move order
+     and not to the writing style.  Still OFF BY DEFAULT, as -J is: this is a
+     recommendation, not a change of default behaviour. */
   const bool ic_order = dyn_order && ! hist_on && (opt_ic_order != 0);
   int visit[nmoves];
   if (dyn_order)
