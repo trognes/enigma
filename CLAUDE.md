@@ -3230,6 +3230,33 @@ the failure-shape table above.
 > `-T` 1/4/8 — comparing the `--dump-all` multiset **and** the
 > plugboards-scored counter.
 >
+> **THAT IDENTITY IS A COMPILER PROMISE, NOT ONLY AN ARITHMETIC ONE, AND
+> `-ffp-contract=off` IS WHAT MAKES IT HOLD.** The integers are the easy half;
+> both paths then assemble the mono score as `isum/scale + textlength*bias`,
+> and a compiler may contract that multiply-add into an **FMA** at one site
+> and not the other. The results then differ in the last bit — which is not a
+> rounding difference here, because `hist_probe()` is compared against
+> `score_iter()` inside a loop that repeats while the score improves, so a
+> no-op move looks improving **forever**. On x86-64 without `-march` it never
+> arises (no FMA in the baseline ISA); on **arm64 it is baseline, g++
+> contracts by default, and `-S m4a10` and `-S m4f10` hang outright**. IC-only
+> stages are safe by construction — one division, nothing to contract — so the
+> exposure is exactly the mono and mono+IC models, **the recommended `k4f10`
+> among them**. The flag is free where it is not needed: the x86-64 binary is
+> **byte-identical** with and without it and contains zero FMA instructions.
+> **The general rule: any invariant of the form "these two code paths produce
+> the same double" is not established by reading the two expressions** — it
+> also needs the compiler forbidden from contracting one of them.
+>
+> **IT WAS INVISIBLE FOR AS LONG AS arm64 RAN NO CORRECTNESS JOB.** `Bench`
+> used the arm64 runners from the start, but bench measures **time, not
+> answers**, and not one of its five tiers uses a low-order climb stage —
+> `search`, `icscan` and `crib` run without `-c`, `hillclimb` is `-q` and
+> `fused` is `-f`. So the histogram path had never executed on arm64 at all.
+> The `build & test` arm64 job found it on its first green-ish run, presenting
+> as the documented timeout rather than a `FAIL` line. Reproduced without
+> arm64 hardware, with `aarch64-linux-gnu-g++` plus `qemu-aarch64`.
+>
 > **`ENIGMA_HIST=0` sends the same climb back through the decoders**, a
 > measurement-and-test switch in the shape of `ENIGMA_REFINE_WINDOW`. Without
 > it the identity would only ever have been checkable against a hand-built
