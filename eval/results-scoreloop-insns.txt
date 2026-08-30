@@ -707,3 +707,232 @@ clang.  It was shelved for the compiler split, not for lack of effect, and it
 targets the half of the loop that actually costs something.  A
 compiler-conditional form (as ic_score_decode's unroll already uses) is the
 best-supported next attempt on this function.
+
+
+THE FIFTH LEVER: NEON IN THE DECODE -- MEASURED DOWN, 30-39%
+==============================================================
+
+The section above ends by pointing at decode_at as the half of the loop that
+costs anything, and at the two steck[] lookups inside it (37% by ablation)
+against the rows[] gather (0.3%).  steck is 26 bytes and vqtbl2q_u8 looks 16
+indices up in a 32-byte table in ONE instruction, so the obvious prototype is
+to vectorise those two lookups and leave the gather scalar -- NEON has no
+gather, and it costs nothing anyway.
+
+  per 16 characters:  vld1q(ct) -> vqtbl2q -> vst1q(xb)
+                      16 scalar loads  yb[k] = rows[i+k][xb[k]]
+                      vld1q(yb) -> vqtbl2q -> vst1q(db)
+                      scalar accumulation over db
+
+MEASURED DOWN, HARD (fused tier, LONG=1, vs dev; x86_64 cells compile none of
+it and are controls):
+
+    cell            quick     long     control tiers
+    g++ arm64      +25.8%   +30.5%     search -1.6, icscan -1.8, crib -0.0
+    clang arm64    +26.6%   +39.1%     search +1.6, icscan +1.2, crib +0.1
+
+Both tripped FAIL_OVER=25.  Controls within +-1.8%, so this is not scatter.
+
+THE OBVIOUS EXPLANATION IS WIDTH-MISMATCHED STORE FORWARDING: a 16-byte
+vst1q_u8 followed by sixteen single-byte loads, and then sixteen single-byte
+stores followed by a 16-byte vld1q_u8.  Neither direction forwards on most
+cores; both wait on the store buffer.  Two such stalls per 16 characters.
+
+BUT THAT IS NOT PROVEN, and the obvious control does not support it as stated.
+A pure-SCALAR version of the same shape -- decode 16 characters into a
+buffer, then consume the buffer -- costs NOTHING on x86 (-2.5% against a -4.1%
+self-control).  So it is not "buffering" that is expensive; if the mechanism
+is store forwarding it is specifically the WIDTH MISMATCH, which that control
+cannot reproduce because its stores and loads are both single bytes.  Isolating
+it further needs arm64 hardware or another CI round; it was not chased.
+
+WHAT IT ACTUALLY CLOSES: the HYBRID, not SIMD.  Any design that vectorises
+part of the decode and leaves the gather scalar must cross the vector/scalar
+boundary TWICE per group, and this measures what that costs.  A design that
+never crosses it mid-decode is untouched by this result -- which is the
+shift-conjugate factorisation:
+
+    l2[g3][x]  = (Wfwd[(x + g3) mod 26] - g3) mod 26
+    rr2[g3][x] = (Wrev[(x + g3) mod 26] - g3) mod 26
+
+verified by reading rotor_l/rotor_r, whose bodies are literally
+diff26(rotor_fwd[w][add26(x, y)], y) with y = g3 - r3 and r3 = 0 in
+precompute.  Under that identity the per-position ROW becomes a per-lane
+SHIFT of one shared 26-byte table, every step of the decode is a shuffle or a
+modular add, and the whole thing stays in vector registers -- one transition
+per group instead of two, and the group can be widened to amortise it.
+
+That is a much larger change (precompute must publish `mid`, and the scorer
+needs the per-run (g1,g2,g3) bookkeeping), and this loop is now 0 for 4.  It
+is recorded as the only SIMD shape this result does not rule out, not as a
+recommendation.
+
+
+THE FOLLOW-UP PROBE: WIDENING THE GROUP 16 -> 64
+--------------------------------------------------
+
+The result above was attributed to the two vector/scalar transitions per
+group.  That predicted a ~4x smaller penalty at 64-wide, where each store is
+separated from its dependent load by ~48 further stores.  Per-element vector
+overhead predicted no change.  Measured (fused long, vs the same dev base):
+
+    cell            16-wide   64-wide   penalty removed
+    g++ arm64        +30.5%    +22.9%        25%
+    clang arm64      +39.1%    +20.3%        48%
+
+NEITHER PREDICTION.  Fitting penalty = a + b*(transitions) across the two
+widths puts the residual at zero transitions at ~20% (g++) and ~14% (clang).
+So the transitions cost something real and are a MINORITY of the cost.
+
+WHAT THE MAJORITY IS, and it is obvious in hindsight: THE PROTOTYPE NEVER
+REDUCED SCALAR MEMORY TRAFFIC.  Per 64 characters the scalar path does ~320
+loads (five per character: ct, steck, rows[i], the row byte, steck).  The
+NEON path does 4 vector loads + 4 shuffles + 4 vector stores, then 64 loads
+of xb[k], 128 for the gather itself, 64 stores of yb[k], then 4 more vector
+loads/shuffles/stores, then 64 loads of db[k] -- about the SAME ~320 scalar
+accesses, plus 24 vector ops.  The two steck[] table loads it removes are
+replaced by two buffer loads, because a scalar gather in the middle forces
+every value out to memory and back.
+
+So the hybrid cannot win at any width: the shuffles are free, and everything
+around them is not.
+
+THIS DOES NOT PRICE THE FACTORED FORM, which is the point of recording it.
+Under the shift-conjugate identity the gather disappears, so per 64
+characters the count is ~52 vector ops plus 64 scalar loads (db, for the
+histogram and quad gather, which have no vector form) against ~320 -- a
+different cost structure, not a smaller version of this one.  Whether that
+converts is unmeasured, and this loop is now 0 for 5.
+
+
+THE SIXTH LEVER: THE FACTORED FORM -- THE GATHER REMOVED, AND IT CHANGES
+NOTHING
+==========================================================================
+
+The two sections above end by naming the shift-conjugate factorisation as the
+one SIMD shape not ruled out, on the argument that the hybrid's cost is scalar
+memory traffic a gather in the middle of the decode forces.  Built and
+measured.  It does not convert, and it refutes that argument.
+
+    subst_array[d0][d1][d2][x] = rr2[d2][ mid[ l2[d2][x] ] ]
+    l2[g][x]  = diff26(w2_fwd[add26(x, g)], g)
+    rr2[g][x] = diff26(w2_rev[add26(x, g)], g)
+
+so the per-position ROW is a per-position SHIFT of two shared 26-byte tables,
+and the decode is five vqtbl2q_u8 around four modular adds with no per-position
+table and no gather anywhere.  setup_mapping records the per-position g3 and
+which mid applies and builds the mid tables once per KEY, amortised over every
+score_iter of that key's climb; a group straddling a stepping event falls back
+to a scalar decode of those 16 characters, which is ~40% of groups at these
+lengths.
+
+MEASURED DOWN (fused tier, LONG=1, vs the same dev base; x86_64 compiles none
+of it and all four x86 cells plus every non-fused tier are controls):
+
+    cell            quick     long     control tiers (q/l)
+    g++ arm64      +29.2%   +30.7%     search -0.0/-0.5, icscan -1.5/-1.5,
+                                       hillclimb +0.3/+0.4, crib -0.1/+0.1
+    clang arm64    +24.9%   +35.7%     search +3.7/+2.9, icscan +2.5/+2.9,
+                                       hillclimb +0.3/+0.3, crib +0.5/+0.8
+
+Both tripped FAIL_OVER=25.  Every control is within +-3%, and the two tiers
+that share this loop's bottleneck most closely (icscan, hillclimb) are within
++-1.5%, so this is not scatter.
+
+IT IS NO BETTER THAN THE HYBRID IT WAS DESIGNED TO FIX.  Same base, same
+cells, all three shapes:
+
+    shape                    g++ arm64   clang arm64   scalar loads / 64 ch
+    16-wide hybrid              +30.5%        +39.1%        ~320
+    64-wide hybrid              +22.9%        +20.3%        ~320
+    16-wide FACTORED            +30.7%        +35.7%         ~64
+
+Compared like for like -- both 16-wide -- removing the gather is worth 0.2
+points under g++ and 3.4 under clang, having cut scalar memory accesses by 5x.
+THAT KILLS THE SCALAR-TRAFFIC EXPLANATION the widening probe proposed.  The
+64-wide hybrid, which reduces no traffic at all and only amortises the
+transitions, remains the best of the three.
+
+WHAT THE COST ACTUALLY IS, from this repo's own decomposition.  The oracle
+ablation puts decode_at at 48.1% of the loop, and ~60% of groups take the
+vector path, so the measured total pins the vector decode's cost directly:
+
+    total = 0.519 + 0.481 * (0.40 * 1 + 0.60 * v)
+
+    g++    1.307  ->  v = 2.06        clang  1.357  ->  v = 2.24
+
+THE VECTOR DECODE COSTS ABOUT TWICE THE SCALAR ONE IT REPLACES.  That is an
+upper bound on the vector path proper, since the mid-table build and the
+per-group uniformity check are folded into it -- but the margin is not close.
+Five chained table lookups plus four modular reductions is a long dependent
+vector chain per group, against a scalar loop already running at IPC 3.32 with
+its misses hidden; sixteen lanes of parallelism do not pay for it.
+
+AND THAT CLOSES THE FOLLOW-UP WITHOUT RUNNING IT.  Blending two mid tables
+would remove the ~40% scalar fallback, which reads like the obvious next step
+and is the opposite of one: putting v = 2.06 / 2.24 on ALL groups gives
+
+    g++    +51%        clang    +60%
+
+i.e. the fallback is not diluting a win, it is diluting a loss.  Even a FREE
+vector path could only remove 0.6 * 48.1% = 29% of the loop, and the measured
+penalty is +31/+36% -- so no amount of coverage can reach zero from here.
+The dilution arithmetic bounds the whole design, not just this instance of it.
+
+VERIFICATION, which was never the problem.  $ENIGMA_FACTOR_CHECK=1 asserts at
+every position and every input letter that the recorded row is reproduced by
+the two shifts around mid: 94 configurations held, 0 broken, including
+two-notch VI-VIII, Norway and M4, with the check proven able to fail by
+injecting one wrong mid entry.  64/64 cells byte-identical under qemu-aarch64
+against the x86 scalar build.  Reverted.
+
+SO SIMD ON THIS LOOP IS CLOSED, and it is worth saying exactly what by.  The
+hybrid result closed designs that cross the vector/scalar boundary mid-decode;
+this one closes the design that does not, at the only granularity the histogram
+and the quad gather allow (they have no vector form, so the decoded letters
+must reach a scalar accumulator every group however the decode is spelled).
+The loop is 0 for 6, and three separate mechanisms have now been proposed for
+the SIMD failures -- transitions, scalar traffic, and per-group vector cost --
+of which the first is a minority, the second is refuted, and only the third
+survives.
+
+WHAT REMAINS IS FEWER CALLS, NOT CHEAPER ONES.  That is what -K did (325 fewer
+full decodes per restart) and what --seed-dedup did (whole climbs skipped),
+and hist_probe at 22.7% of instructions is a call-count story too.
+
+
+THE REVERT GAVE A FREE CONTROL, AND IT CUTS BOTH WAYS
+-------------------------------------------------------
+
+The revert commit leaves src/ byte-identical to the base it is benched
+against, so its Bench run is a base-vs-base control on the arm64 cells --
+the same accident PR #205 exploited, arriving for free again:
+
+    cell           search q/l    icscan q/l   hillclimb q/l   FUSED q/l
+    g++ arm64     +0.1 / -8.7   -0.2 / +0.1    +0.2 / -0.0   -0.4 / -0.3
+    clang arm64   -0.8 / -0.5   -0.0 / +0.0    -0.0 / -0.0   -0.1 / -0.2
+
+FIRST, IT STRENGTHENS THE RESULT ABOVE.  The tier that decided the factored
+probe reads -0.3% and -0.2% on the two cells that judged it, against the
++30.7% and +35.7% those same cells measured -- a floor two orders of
+magnitude below the effect.  icscan and hillclimb are equally tight.
+
+SECOND, ONE CELL LOOKED LOOSE AND WAS NOT -- AND THE BASE COLUMN CALLED IT IN
+ADVANCE.  g++ arm64 SEARCH LONG moved -8.7% on identical binaries, base 9.10 s
+against head 8.31 s.  Reading the base column rather than the percentage said
+which side was disturbed: clang arm64 ran the same tier at 6.64 s and this
+cell's own earlier runs sat near 8.3 s, so the BASE was the anomaly.  That was
+written down as a prediction before it could be checked.
+
+A SECOND docs-only commit tested it, and it holds.  Same cell, same tier:
+base 8.36 s, head 8.38 s, +0.2% -- the head value reproduces (8.31 then 8.38)
+and 9.10 s does not recur.  All ten of that run's cells sit within +-0.8%.
+
+SO THE GENERALISATION DRAWN FROM RUN 1 IS WITHDRAWN.  It said a noise floor is
+per TIER as well as per cell, and that "the arm64 floor" was really "the arm64
+fused floor".  n=2 says otherwise: the search tier on that cell is as tight as
+the rest when the run is quiet, and what happened was a single disturbed
+reading, not a property of the tier.  The durable part is the method, not the
+floor -- ONE anomalous cell against nine quiet ones is a disturbance until a
+second run says otherwise, and the base column identifies which side of the
+A/B carries it without any reasoning about percentages at all.

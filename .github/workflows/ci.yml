@@ -67,6 +67,36 @@ jobs:
       - name: Test
         run: make test CXX=${{ matrix.cxx }} EXTRA_CXXFLAGS=-Werror
 
+  # THE SAME GATE ON arm64, because until this existed nothing tested arm64
+  # correctness at all: every job in this file runs on ubuntu-latest, which is
+  # x86_64, and only bench.yml uses the arm64 runners -- and bench measures
+  # time, not answers. A build that produced wrong results on arm64 would have
+  # left this whole matrix green.
+  #
+  # That gap was harmless while every line of the program was portable C++. It
+  # stops being harmless the moment any code is written per-architecture, and
+  # the scorer already has one such split (ic_score_decode's unroll is gated on
+  # __aarch64__). An architecture-specific path with no architecture-specific
+  # test is a path that is not tested.
+  #
+  # Two compilers rather than three: g++-14 is in the x86_64 cell to catch
+  # warnings a newer gcc introduces, which is not an architecture question.
+  test-arm64:
+    name: build & test (${{ matrix.cxx }}, arm64)
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compiler version
+        run: ${{ matrix.cxx }} --version && uname -m
+      - name: Build (-Werror)
+        run: make CXX=${{ matrix.cxx }} EXTRA_CXXFLAGS=-Werror
+      - name: Test
+        run: make test CXX=${{ matrix.cxx }} EXTRA_CXXFLAGS=-Werror
+
   # AddressSanitizer + UndefinedBehaviorSanitizer over the suite. TEST_QUICK=1 shrinks
   # the end-to-end cracking checks (one language, a 26-key wildcard instead of the full
   # 26^3, so no 676-key x restart hill-climbs): ASan slows every key-scan ~10x, and the
