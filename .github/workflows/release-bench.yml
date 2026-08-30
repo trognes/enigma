@@ -53,6 +53,21 @@ name: Release Bench
 on:
   schedule:
     - cron: '0 4 * * 1'      # Mondays 04:00 UTC
+  # SELF-TEST, and the only trigger that works before this file reaches the
+  # default branch. `schedule` and `workflow_dispatch` are registered ONLY
+  # from there (note 1 above), so until then the workflow is invisible --
+  # `gh api .../workflows/release-bench.yml/dispatches` returns 404 because
+  # GitHub does not know it exists, not because it declined to run it.
+  # `pull_request` is branch-scoped and fires immediately, so a PR that edits
+  # this file runs the version it is proposing, against the same `dev` vs
+  # release-tag comparison the weekly run makes.
+  #
+  # The paths filter is what keeps that from costing anything: four cells of
+  # LONG=1 is ~25 minutes of runner time, and it is spent only on a PR that
+  # actually touches this workflow, never on ordinary PRs.
+  pull_request:
+    paths:
+      - '.github/workflows/release-bench.yml'
   workflow_dispatch:
     inputs:
       head:
