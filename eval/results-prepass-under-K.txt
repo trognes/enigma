@@ -1,0 +1,101 @@
+DOES -K's IC MOVE ORDER SUBSTITUTE FOR THE IC PRE-PASS?  HALF OF IT
+====================================================================
+
+  python3 eval/prepass_ab.py --length 100 --trials 10000 --restarts 8 \
+          --arms m4f10 k4f10 --climb-rule {J,K} --threads 1 --jobs 3 \
+          --seed {4242,99}
+
+  -c --polish -l wehrmacht -R 8, L=100, 10-pair board hidden, rotor key given,
+  authentic HG Nord decrypts.  40 000 paired trials in total: 10 000 per seed
+  per climb rule, and the SAME trials in both rules (the trial set is drawn
+  from the seed before anything runs), so the two gaps are directly
+  comparable.  JUDGED ON BREAK50.
+
+THE QUESTION.  -K ranks the climb's move-ordering scan by the index of
+coincidence; the k4 pre-pass fuses mono with IC.  Both inject IC information,
+so -K might make the cheaper mono pre-pass adequate -- in which case m4f10
+with -K would be the best combination and the k4f10 recommendation would need
+revising.
+
+ANSWER: the mechanism is real and it is worth half the gap, which is not
+enough.  k4f10 still wins under -K by 2.67pp (z = -5.6 per seed).
+
+
+THE FOUR CELLS
+--------------
+
+  seed  rule    m4f10    k4f10     gap        z      mean %-correct diff
+  4242   -J    34.13%   39.26%   +5.13pp   -10.34         -4.89
+  99     -J    32.43%   38.30%   +5.87pp   -11.93         -5.53
+  4242   -K    36.77%   39.41%   +2.64pp    -5.46         -2.72
+  99     -K    35.74%   38.44%   +2.70pp    -5.71         -2.58
+
+  mean gap under -J:  +5.50pp
+  mean gap under -K:  +2.67pp
+  -K NARROWS IT BY    2.83pp  (51%)
+
+Both seeds agree within each rule (5.13/5.87 and 2.64/2.70), and the
+difference of differences is 2.49pp and 3.17pp -- the same story twice.
+Taking each gap's SE from its own z (0.50pp and 0.48pp), the DD is ~2.8pp
+against ~0.69pp, i.e. z ~ 4.1; and that is conservative, since the two runs
+share their trials and a properly paired SE would be smaller.
+
+
+READ DOWN THE COLUMNS -- THAT IS WHERE THE MECHANISM IS
+---------------------------------------------------------
+
+               -J        -K       change
+  m4f10      34.13%    36.77%     +2.64
+             32.43%    35.74%     +3.31
+  k4f10      39.26%    39.41%     +0.15
+             38.30%    38.44%     +0.14
+
+-K LIFTS m4f10 BY ~3pp AND k4f10 BY NOTHING.  That is exactly the
+substitution hypothesis: an IC-ranked move order supplies something the k4
+pre-pass already supplies, so it helps only the schedule that lacks it.  It is
+also the same split the 24-cell -J/-K grid found (eval/results-jorder.txt: -K
+gains on f10 and m4f10, nothing on k4f10 and i4f10) -- but that grid could not
+say whether the lift was enough to REORDER the schedules, because it never
+compared schedules to each other.  This does, and it is not.
+
+So the two are PARTLY redundant, not additively independent and not
+interchangeable.  Half the k4 pre-pass's advantage is information -K can also
+supply; the other half is not.
+
+
+A FREE CROSS-CHECK OF BOTH INSTRUMENTS
+----------------------------------------
+
+The -J arm's mean %-correct gap is -4.89pp [-5.73, -4.04] and -5.53pp
+[-6.36, -4.69].  CLAUDE.md records +4.95pp [+3.06, +6.84] for these same two
+schedules at this same length, measured by a DIFFERENT harness
+(eval/results-monoic-endtoend.txt).  Agreement to 0.06pp on the first seed is
+good evidence that neither measurement is broken.
+
+That also settles a temptation recorded and resisted earlier in this work: the
+-K gap (2.65pp mean) was first compared against that documented 4.95pp, which
+would have been a cross-run comparison of the kind that has misled this
+project repeatedly.  Running the -J arm in the same harness gives the same
+conclusion for the right reason, and the cross-run agreement is now a check
+rather than the evidence.
+
+
+WHAT THIS DOES NOT CHANGE
+--------------------------
+
+  * k4f10 REMAINS THE RECOMMENDED PRE-PASS for telegraphic traffic, now
+    confirmed under the recommended climb rule rather than only under -J.
+  * -K remains recommended: it costs nothing on k4f10 and it is what lifts
+    m4f10, so a caller who has not tuned the schedule benefits most.
+
+WHAT IS NOT MEASURED
+---------------------
+
+  * ONE LENGTH.  L=100 only.  The documented k4f10-over-m4f10 margin GROWS
+    with length (+0.52pp at L=60, +4.95 at 100, +8.31 at 167), so at L=167
+    -K's ~2.8pp of narrowing would close proportionally less of it -- the
+    conclusion should get stronger, not weaker, but that is inference.
+  * ONE RESTART BUDGET.  -R 8.  CLAUDE.md records pre-pass questions as
+    restart-budget dependent.
+  * PROSE.  Telegraphic German throughout, as the k4f10 recommendation itself
+    is.
