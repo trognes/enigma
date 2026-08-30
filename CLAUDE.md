@@ -3388,10 +3388,21 @@ win and was removed too; the scalar fused loop is the current form.
 > are served by the histogram/`cooc_col` path rather than by decoding, so
 > their loop runs once per climb start and resync rather than per toggle.
 >
-> Instruction count is **not** the constraint on these loops and two earlier
-> attempts proved it: shaving 21% of the instructions bought 0%, and removing
-> one of six loads gained 7% under g++ while costing clang 3–5%.
-> `eval/results-scoreloop-insns.txt` has all four levers, including the two
+> Instruction count is **not** the constraint on these loops, and three
+> attempts now prove it. Shaving 21% of the instructions bought 0%; removing
+> one of six loads gained 7% under g++ while costing clang 3–5%; and widening
+> `ngram_ic_decode` to **8× measured down on all four CI cells** (+20.3% g++
+> x86_64, +4.4% g++ arm64, +1.7% clang arm64, +0.2% clang x86_64, `fused`
+> long), the first change to trip the hard `FAIL_OVER=25` gate rather than the
+> advisory one. **What the loop is bound on is L1 MISS LATENCY**: a
+> `callgrind --cache-sim` profile puts **50.6% of quad gathers missing L1**
+> (13 890 318 of 27 436 353 on a fused-only run) with last-level misses ~0 —
+> a 0.45 MB table that is LL-resident but cannot fit in L1. Memory-level
+> parallelism does not help either: 4× already saturates it, and the eight
+> histograms, doubled reduction and register spilling (374 → 601 instructions,
+> stack operands 17% → 22%) are pure loss on top. The remaining lever is
+> **fewer calls, not cheaper calls** — what `-K` and `--seed-dedup` deliver.
+> `eval/results-scoreloop-insns.txt` has all five levers, including the three
 > that measured down.
 
 The tables the scorers read are **uint8 fixed-point**
