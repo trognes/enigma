@@ -651,3 +651,59 @@ scoring.o from a git stash, so the comparison was g++-vs-clang codegen of the
 scorer rather than 4x-vs-8x of anything.  The clean CI build reads +0.2% for
 that cell.  Always `rm -f src/*.o` before switching CXX; a compiler A/B that
 skips that measures nothing.
+
+
+CORRECTION: THE TABLE IS NOT THE BOTTLENECK, AND THE MISS COUNT MISLED ME
+==========================================================================
+
+The section above concluded from the cache profile that this loop is "bound
+on L1 MISS LATENCY".  THAT IS WRONG, and the error is instructive: it infers
+a share of TIME from a share of a COUNTER, which is the exact trap this
+repository documents for score_iter -- committed one level down, on cache
+misses instead of scored plugboards.
+
+The miss numbers are real: 50.6% of quad gathers miss L1, and 91.9% of the
+whole run's L1 read misses are in ngram_ic_decode.  What was never measured
+is what they COST.
+
+ORACLE ABLATION.  Build variants that keep the loop shape, the instruction
+mix and the dependency structure but remove one component, and time them
+against the real binary (R=256, L=100, fused-only, min of 7, startup
+subtracted):
+
+    variant                        share of the loop
+    gather confined to one
+      always-L1-resident row              6.0%     <- ALL memory cost, plus
+                                                      the index arithmetic
+    decode_at replaced by ct[i]          48.1%
+    histogram increments removed         13.9%
+    self-control                          3.2%     <- noise floor
+
+So the quad table -- misses, index arithmetic and all -- is worth about 6% of
+this loop, barely twice the noise floor.  IPC measured 3.32, which is
+independent confirmation: 13.9 M misses at even 12 unhidden cycles would be
+167 M cycles against a 251 M-cycle run, impossible at that IPC.  The
+out-of-order engine is already hiding them, which is also why adding
+memory-level parallelism (8x) bought nothing but cost.
+
+WHAT THIS CLOSES.  Three ideas, all dead, all now measured rather than
+argued:
+  * SHRINK THE TABLE TO FIT L1 -- 6% ceiling, and it cannot shrink anyway
+    (0.45 MB against 32 KiB of L1; 8-bit is already the floor, 4-bit is not
+    viable, lower order is a different model).
+  * REDUCE THE ACCESSES -- the model fixes one gather per character, and the
+    incremental delta-scorer was prototyped and measured ~2x SLOWER
+    (archived/CODE_REVIEW_HISTORY.md).
+  * PREFETCH -- there is nothing to prefetch for.
+
+WHAT IT OPENS.  decode_at is 48% of the loop:
+
+    steck[ rows[i][ steck[ct[i]] ] ]
+
+That is where the time is, and there is already a measured lever aimed at it
+-- the second one in this file, walking rows (row += asize) instead of
+loading an 8-byte pointer per character, worth +7% under g++ and -3..5% under
+clang.  It was shelved for the compiler split, not for lack of effect, and it
+targets the half of the loop that actually costs something.  A
+compiler-conditional form (as ic_score_decode's unroll already uses) is the
+best-supported next attempt on this function.

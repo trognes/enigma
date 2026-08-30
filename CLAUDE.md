@@ -3394,16 +3394,27 @@ win and was removed too; the scalar fused loop is the current form.
 > `ngram_ic_decode` to **8× measured down on all four CI cells** (+20.3% g++
 > x86_64, +4.4% g++ arm64, +1.7% clang arm64, +0.2% clang x86_64, `fused`
 > long), the first change to trip the hard `FAIL_OVER=25` gate rather than the
-> advisory one. **What the loop is bound on is L1 MISS LATENCY**: a
-> `callgrind --cache-sim` profile puts **50.6% of quad gathers missing L1**
-> (13 890 318 of 27 436 353 on a fused-only run) with last-level misses ~0 —
-> a 0.45 MB table that is LL-resident but cannot fit in L1. Memory-level
-> parallelism does not help either: 4× already saturates it, and the eight
-> histograms, doubled reduction and register spilling (374 → 601 instructions,
-> stack operands 17% → 22%) are pure loss on top. The remaining lever is
-> **fewer calls, not cheaper calls** — what `-K` and `--seed-dedup` deliver.
-> `eval/results-scoreloop-insns.txt` has all five levers, including the three
-> that measured down.
+> advisory one.
+>
+> **AND THE TABLE IS NOT THE BOTTLENECK EITHER — MEASURE THE COST, NOT THE
+> MISS COUNT.** A `callgrind --cache-sim` profile shows **50.6% of quad
+> gathers missing L1** and **91.9% of the whole run's L1 read misses landing
+> in this one function**, which reads like a memory-bound loop and is not one.
+> An oracle build that confines the gather to one always-resident row —
+> removing every miss *and* the index arithmetic — is **6.0% faster against a
+> 3.2% self-control**. Ablating the other parts the same way decomposes the
+> loop as **`decode_at` 48.1%, histogram increments 13.9%, the quad gather
+> 6.0%**. IPC is 3.32, so the misses are already hidden by out-of-order
+> execution; that is why adding memory-level parallelism (the 8× unroll) only
+> added cost. Shrinking the table, prefetching and more MLP are all dead ends,
+> measured rather than argued.
+>
+> A share of a counter is not a share of time — the same trap this file
+> documents for `score_iter`, one level down. **The half of the loop that
+> costs anything is `decode_at`**, which is what the `rows`-pointer-walk lever
+> targets (+7% g++, −3…5% clang; shelved for the compiler split, not for
+> lack of effect). `eval/results-scoreloop-insns.txt` has all five levers,
+> including the three that measured down.
 
 The tables the scorers read are **uint8 fixed-point**
 (`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),
