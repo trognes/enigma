@@ -803,3 +803,99 @@ characters the count is ~52 vector ops plus 64 scalar loads (db, for the
 histogram and quad gather, which have no vector form) against ~320 -- a
 different cost structure, not a smaller version of this one.  Whether that
 converts is unmeasured, and this loop is now 0 for 5.
+
+
+THE SIXTH LEVER: THE FACTORED FORM -- THE GATHER REMOVED, AND IT CHANGES
+NOTHING
+==========================================================================
+
+The two sections above end by naming the shift-conjugate factorisation as the
+one SIMD shape not ruled out, on the argument that the hybrid's cost is scalar
+memory traffic a gather in the middle of the decode forces.  Built and
+measured.  It does not convert, and it refutes that argument.
+
+    subst_array[d0][d1][d2][x] = rr2[d2][ mid[ l2[d2][x] ] ]
+    l2[g][x]  = diff26(w2_fwd[add26(x, g)], g)
+    rr2[g][x] = diff26(w2_rev[add26(x, g)], g)
+
+so the per-position ROW is a per-position SHIFT of two shared 26-byte tables,
+and the decode is five vqtbl2q_u8 around four modular adds with no per-position
+table and no gather anywhere.  setup_mapping records the per-position g3 and
+which mid applies and builds the mid tables once per KEY, amortised over every
+score_iter of that key's climb; a group straddling a stepping event falls back
+to a scalar decode of those 16 characters, which is ~40% of groups at these
+lengths.
+
+MEASURED DOWN (fused tier, LONG=1, vs the same dev base; x86_64 compiles none
+of it and all four x86 cells plus every non-fused tier are controls):
+
+    cell            quick     long     control tiers (q/l)
+    g++ arm64      +29.2%   +30.7%     search -0.0/-0.5, icscan -1.5/-1.5,
+                                       hillclimb +0.3/+0.4, crib -0.1/+0.1
+    clang arm64    +24.9%   +35.7%     search +3.7/+2.9, icscan +2.5/+2.9,
+                                       hillclimb +0.3/+0.3, crib +0.5/+0.8
+
+Both tripped FAIL_OVER=25.  Every control is within +-3%, and the two tiers
+that share this loop's bottleneck most closely (icscan, hillclimb) are within
++-1.5%, so this is not scatter.
+
+IT IS NO BETTER THAN THE HYBRID IT WAS DESIGNED TO FIX.  Same base, same
+cells, all three shapes:
+
+    shape                    g++ arm64   clang arm64   scalar loads / 64 ch
+    16-wide hybrid              +30.5%        +39.1%        ~320
+    64-wide hybrid              +22.9%        +20.3%        ~320
+    16-wide FACTORED            +30.7%        +35.7%         ~64
+
+Compared like for like -- both 16-wide -- removing the gather is worth 0.2
+points under g++ and 3.4 under clang, having cut scalar memory accesses by 5x.
+THAT KILLS THE SCALAR-TRAFFIC EXPLANATION the widening probe proposed.  The
+64-wide hybrid, which reduces no traffic at all and only amortises the
+transitions, remains the best of the three.
+
+WHAT THE COST ACTUALLY IS, from this repo's own decomposition.  The oracle
+ablation puts decode_at at 48.1% of the loop, and ~60% of groups take the
+vector path, so the measured total pins the vector decode's cost directly:
+
+    total = 0.519 + 0.481 * (0.40 * 1 + 0.60 * v)
+
+    g++    1.307  ->  v = 2.06        clang  1.357  ->  v = 2.24
+
+THE VECTOR DECODE COSTS ABOUT TWICE THE SCALAR ONE IT REPLACES.  That is an
+upper bound on the vector path proper, since the mid-table build and the
+per-group uniformity check are folded into it -- but the margin is not close.
+Five chained table lookups plus four modular reductions is a long dependent
+vector chain per group, against a scalar loop already running at IPC 3.32 with
+its misses hidden; sixteen lanes of parallelism do not pay for it.
+
+AND THAT CLOSES THE FOLLOW-UP WITHOUT RUNNING IT.  Blending two mid tables
+would remove the ~40% scalar fallback, which reads like the obvious next step
+and is the opposite of one: putting v = 2.06 / 2.24 on ALL groups gives
+
+    g++    +51%        clang    +60%
+
+i.e. the fallback is not diluting a win, it is diluting a loss.  Even a FREE
+vector path could only remove 0.6 * 48.1% = 29% of the loop, and the measured
+penalty is +31/+36% -- so no amount of coverage can reach zero from here.
+The dilution arithmetic bounds the whole design, not just this instance of it.
+
+VERIFICATION, which was never the problem.  $ENIGMA_FACTOR_CHECK=1 asserts at
+every position and every input letter that the recorded row is reproduced by
+the two shifts around mid: 94 configurations held, 0 broken, including
+two-notch VI-VIII, Norway and M4, with the check proven able to fail by
+injecting one wrong mid entry.  64/64 cells byte-identical under qemu-aarch64
+against the x86 scalar build.  Reverted.
+
+SO SIMD ON THIS LOOP IS CLOSED, and it is worth saying exactly what by.  The
+hybrid result closed designs that cross the vector/scalar boundary mid-decode;
+this one closes the design that does not, at the only granularity the histogram
+and the quad gather allow (they have no vector form, so the decoded letters
+must reach a scalar accumulator every group however the decode is spelled).
+The loop is 0 for 6, and three separate mechanisms have now been proposed for
+the SIMD failures -- transitions, scalar traffic, and per-group vector cost --
+of which the first is a minority, the second is refuted, and only the third
+survives.
+
+WHAT REMAINS IS FEWER CALLS, NOT CHEAPER ONES.  That is what -K did (325 fewer
+full decodes per restart) and what --seed-dedup did (whole climbs skipped),
+and hist_probe at 22.7% of instructions is a call-count story too.

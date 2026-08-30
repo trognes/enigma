@@ -15,11 +15,6 @@
 
 static const int maxlen = 1024;   /* maximum ciphertext length (letters) */
 static const int asize = 26;
-/* Distinct middle-part tables a single message can need: one per stepping
-   event, which is once per 26 characters for a single-notch right wheel and
-   once per 13 for a two-notch VI-VIII, plus double steps and the initial one.
-   1024/13 + slack. */
-static const int max_mid = 160;
 static const int wheels = 3;
 
 /* A score lower than any achievable plaintext score. IC scores in [0, ~0.08];

@@ -3424,13 +3424,33 @@ win and was removed too; the scalar fused loop is the current form.
 > scalar crosses the vector/scalar boundary twice per group. Widening that
 > group 16 → 64 removes only 25% (g++) / 48% (clang) of the penalty, where
 > pricing it as per-transition predicted ~4× — so the transitions are a
-> minority of the cost. The majority is that **the hybrid never reduces
-> scalar memory traffic**: a scalar gather in the middle forces every value
-> out to memory and back, so the two `steck[]` table loads it removes are
-> replaced by two buffer loads, with vector work added on top (~320 scalar
-> accesses either way, per 64 characters).
-> `eval/results-scoreloop-insns.txt` has all six levers, including the four
-> that measured down, and the one SIMD shape the result does not rule out.
+> minority of the cost. The traffic explanation offered for the majority
+> (a scalar gather in the middle forces every value out to memory and back,
+> so ~320 scalar accesses either way per 64 characters) has since been
+> **refuted** — see the next paragraph.
+>
+> **SIMD ON THIS LOOP IS NOW CLOSED, by the shape that removed the gather
+> outright.** The shift-conjugate factorisation makes the per-position *row* a
+> per-position *shift* of two shared 26-byte tables — `l2[g][x] =
+> diff26(w2_fwd[add26(x,g)], g)`, likewise `rr2` — so the decode is five
+> `vqtbl2q_u8` around four modular adds with no gather at all, cutting scalar
+> accesses per 64 characters from ~320 to ~64. It measures **+30.7% g++ arm64
+> and +35.7% clang arm64**, i.e. **level with the 16-wide hybrid it was meant
+> to fix** and worse than the 64-wide one, against controls inside ±3%. So
+> traffic was not the cost. Putting the ablation's `decode_at` share (48.1%)
+> and the ~60% of groups taking the vector path against the measured total
+> prices the vector decode at **~2× the scalar decode it replaces** — a long
+> dependent chain of table lookups against a scalar loop already at IPC 3.32.
+> That also settles the obvious follow-up without running it: blending two
+> `mid` tables to remove the ~40% scalar fallback would take it to **+51% /
+> +60%**, since the fallback dilutes a loss rather than a win, and a *free*
+> vector path could only remove 0.6 × 48.1% = 29% of a loop that is 31–36%
+> over. The histogram and the quad gather have no vector form, so the decoded
+> letters must reach a scalar accumulator every group however the decode is
+> spelled — which is the granularity all of this is stuck at.
+> `eval/results-scoreloop-insns.txt` has all six levers and the three
+> mechanisms proposed for the SIMD failures, of which one is a minority, one
+> is refuted and one survives.
 
 The tables the scorers read are **uint8 fixed-point**
 (`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),

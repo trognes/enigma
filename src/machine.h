@@ -81,35 +81,6 @@ struct machine
      ARM in particular handles poorly). */
   unsigned char (* subst_array)[asize][asize][asize];
 
-  /* --- the factored decode's tables ---------------------------------------
-
-     Filled by setup_mapping, and only when copy_rows (the hill-climb path).
-
-     subst_array[d0][d1][d2][x] = rr2[d2][ mid[d0][d1][ l2[d2][x] ] ], and
-     rotor_l/rotor_r make l2/rr2 shift-conjugates of ONE 26-byte table each:
-
-         l2[g][x]  = diff26(w2_fwd[add26(x, g)], g)
-         rr2[g][x] = diff26(w2_rev[add26(x, g)], g)
-
-     So the per-position ROW is a per-position SHIFT of two shared tables, and
-     a decode needs no gather -- which is what makes it vectorisable. `mid`
-     depends on (d0, d1), which change only at stepping events, so there are
-     only ~L/26 distinct ones per key; they are built here rather than stored
-     by precompute, from mid[y] = w2_fwd[ sa[d0][d1][0][ w2_rev[y] ] ] (w2_fwd
-     and w2_rev are mutual inverses).
-
-     Built once per KEY and read by every score_iter of that key's climb, so
-     the cost is amortised over thousands of scorings. Filled only on the
-     hill-climb path: the plain scan is 53.8% setup_mapping and must not pay
-     for tables it will not use. */
-  const unsigned char * w2_fwd;         /* right wheel, forward  (26 bytes) */
-  const unsigned char * w2_rev;         /* right wheel, reverse  (26 bytes) */
-  unsigned char pos_g3[maxlen];         /* right wheel's offset, per position */
-  unsigned char pos_mid[maxlen];        /* which mid_tab row applies there */
-  unsigned char mid_tab[max_mid][asize];
-  int n_mid;                            /* rows of mid_tab in use */
-  bool pos_tables;                      /* are the three above filled? */
-
   /* Diagnostic counter: number of plugboards scored (score_iter calls) by this
      worker. Bumped once per whole-message score -- not per character -- so it is
      out of the hot per-character loop, and placed last so it never pushes the hot
