@@ -397,12 +397,29 @@ ciphertext length it runs many random trials (random excerpt + rotor key +
 plugboard hill-climbed (the cheap "plugboard-recovery" tier), and reports per
 length the mean %-of-letters-correct (a graded signal) and the exact-recovery
 rate, plus headline `L50`/`L90` (the shortest length reaching that recovery rate
-— lower is better). **When comparing search/scoring changes, judge on the mean
-%-correct, not the exact-recovery rate.** The mean is the graded, lower-variance
-signal: it moves smoothly with small quality changes and separates configs at
-short lengths where the exact rate is near-zero and dominated by trial noise.
-The exact rate (and `L50`/`L90`) is a coarse headline — use it as a secondary
-check, not the metric a tuning decision turns on. A fixed `SEED` makes the trial
+— lower is better).
+
+> **JUDGE A SEARCH OR SCORING CHANGE ON `BREAK50`: the NUMBER OF TRIALS
+> RECOVERING AT LEAST HALF THE PLAINTEXT.** Half the letters is the point
+> past which a reader has the message, so it is the outcome that means
+> something operationally, and counting those trials is what the restart
+> ladder below already does ("judged at ≥50% of the plaintext recovered").
+> Report mean %-correct and exact recovery alongside it, as secondary.
+>
+> **The other two each fail at one end.** Exact recovery is near-zero at the
+> short end and so is dominated by trial noise — at L=40 it sits at ~1% and
+> cannot separate anything. The mean is dragged around by catastrophic
+> failures, where a board that returned 5% of the letters and one that
+> returned 45% are both simply *not broken* and the difference between them
+> is noise being averaged in as if it were signal; that is also what makes a
+> mean move while the break count does not, which has happened here (a −0.45pp
+> mean swing at L=100 sitting on 216 breaks against 217).
+>
+> Being a COUNT, `break50` also takes a paired McNemar test directly, where a
+> mean needs a variance estimate — so the discordant pairs (only-A, only-B)
+> are the natural report and the one that says whether a difference is real.
+
+A fixed `SEED` makes the trial
 set deterministic (Python's `random.Random(seed)`, reproducible across
 machines), so `make crackquality BASE=<git-ref>` is a same-machine A/B that
 solves identical problems with both binaries. (It was rewritten from shell+awk

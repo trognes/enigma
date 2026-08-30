@@ -33,6 +33,14 @@ MATCHED COMPUTE IS THE POINT.  The IC arm is cheaper per restart, so at equal
 harness therefore reports plugboards scored for both arms alongside recovery,
 so a win can be read against what it cost.  If the IC arm is level on recovery
 at ~26% less work, that is the win; if it is level at equal work, it is not.
+
+THE JUDGE IS BREAK50: the number of trials recovering at least half the
+plaintext.  Exact recovery is near-zero at the short end and so is dominated
+by trial noise; the mean is dragged around by catastrophic failures, where a
+board that got 5% and one that got 45% are both simply "not broken".  Half the
+letters is the point past which a reader has the message, and the count of
+those is what CLAUDE.md's restart ladder already judges on.  Mean and exact
+are still reported, as secondary.
 """
 
 import argparse
@@ -92,6 +100,8 @@ def main():
     ap.add_argument("--schedule", default="k4f10")
     ap.add_argument("--plugs", type=int, default=10)
     ap.add_argument("--seed", type=int, default=4242)
+    ap.add_argument("--tsv", action="store_true",
+                    help="one tab-separated row, for grid sweeps")
     args = ap.parse_args()
 
     if not os.path.exists(ENIGMA):
@@ -103,9 +113,10 @@ def main():
     L = args.length
     rng = random.Random(args.seed)
 
-    # arm label -> (mean %correct sum, exact count, plugboards scored)
-    tot = {"target": [0.0, 0, 0], "ic": [0.0, 0, 0]}
-    only = {"target": 0, "ic": 0}
+    # arm -> [mean %correct sum, exact count, break50 count, plugboards]
+    tot = {"target": [0.0, 0, 0, 0], "ic": [0.0, 0, 0, 0]}
+    only = {"target": 0, "ic": 0}          # discordant on break50
+    only_ex = {"target": 0, "ic": 0}       # discordant on exact
     n = 0
 
     for _ in range(args.trials):
@@ -127,39 +138,56 @@ def main():
         base = key + ["-c", "-J", "-S", args.schedule, "-f",
                       "-l", "wehrmacht", "-R", args.restarts, "-T", 1]
         got = {}
+        b50 = {}
         for arm, env in (("target", None), ("ic", {"ENIGMA_JORDER": "ic"})):
             out, err = run(base, ct, env)
             got[arm] = out
-            tot[arm][0] += pct_correct(out, pt)
+            pc = pct_correct(out, pt)
+            b50[arm] = pc >= 50.0
+            tot[arm][0] += pc
             tot[arm][1] += 1 if out == pt else 0
-            tot[arm][2] += scored(err)
+            tot[arm][2] += 1 if b50[arm] else 0
+            tot[arm][3] += scored(err)
         n += 1
+        if b50["target"] and not b50["ic"]:
+            only["target"] += 1
+        elif b50["ic"] and not b50["target"]:
+            only["ic"] += 1
         ea, eb = got["target"] == pt, got["ic"] == pt
         if ea and not eb:
-            only["target"] += 1
+            only_ex["target"] += 1
         elif eb and not ea:
-            only["ic"] += 1
+            only_ex["ic"] += 1
 
     if n == 0:
         sys.exit("no usable trials")
 
+    bt, bi = tot["target"][2], tot["ic"][2]
+    st, si = tot["target"][3], tot["ic"][3]
+    z = mcnemar_z(only["target"], only["ic"])
+    dc = 100.0 * (si - st) / st if st else 0.0
+    if args.tsv:
+        # L sched R n break50_t break50_i dz mean_t mean_i ex_t ex_i compute%
+        print(f"{L}\t{args.schedule}\t{args.restarts}\t{n}\t{bt}\t{bi}\t"
+              f"{z:+.2f}\t{tot['target'][0] / n:.2f}\t{tot['ic'][0] / n:.2f}\t"
+              f"{tot['target'][1]}\t{tot['ic'][1]}\t{dc:+.1f}")
+        return
     print(f"# L={L}, {n} paired trials, -f -l wehrmacht -c -J "
           f"-S {args.schedule} -R {args.restarts}, {args.plugs}-pair board "
           f"hidden, rotor key given, seed {args.seed}")
-    print(f"{'arm':8s} {'mean %correct':>14s} {'exact':>10s} "
-          f"{'plugboards scored':>19s}")
+    print(f"{'arm':8s} {'BREAK50':>9s} {'mean %correct':>14s} {'exact':>10s} "
+          f"{'plugboards':>13s}")
     for arm in ("target", "ic"):
-        s, ex, sc = tot[arm]
-        print(f"{arm:8s} {s / n:14.2f} {ex:6d}/{n:<4d} {sc:19,d}")
-    dm = tot["ic"][0] / n - tot["target"][0] / n
-    st, si = tot["target"][2], tot["ic"][2]
-    print(f"\nic - target: {dm:+.2f}pp mean")
-    z = mcnemar_z(only["target"], only["ic"])
-    print(f"discordant exact: only target {only['target']}, only ic "
-          f"{only['ic']}  (McNemar z = {z:+.2f})")
+        mn, ex, b5, sc = tot[arm]
+        print(f"{arm:8s} {b5:5d}/{n:<3d} {mn / n:14.2f} {ex:6d}/{n:<4d} "
+              f"{sc:13,d}")
+    print(f"\nBREAK50 ic - target: {bi - bt:+d} of {n}  "
+          f"(discordant: only target {only['target']}, only ic {only['ic']}, "
+          f"McNemar z = {z:+.2f})")
+    print(f"mean  ic - target: {tot['ic'][0] / n - tot['target'][0] / n:+.2f}pp"
+          f"   exact discordant: {only_ex['target']} / {only_ex['ic']}")
     if st:
-        print(f"compute: ic is {100.0 * (si - st) / st:+.1f}% of the target "
-              f"arm's plugboards scored")
+        print(f"compute: ic is {dc:+.1f}% of the target arm's plugboards")
 
 
 if __name__ == "__main__":
