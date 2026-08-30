@@ -22,11 +22,18 @@ to be weighed against each other rather than one assumed.  Hence this harness:
 paired trials, same excerpts, same keys, same boards, arms differing only in
 -J against -K.
 
-WHY WEHRMACHT.  The recommended recipe for real traffic is `-f -l wehrmacht
--S k4f10 -J`, and CLAUDE.md records that scoring results do not transfer
-between prose and telegraphic German (the mono-vs-IC pre-pass ordering
-reverses).  Measuring this on English prose would answer a question nobody
-has.
+WHY WEHRMACHT BY DEFAULT.  The recommended recipe for real traffic is
+`-f -l wehrmacht -S k4f10`, and CLAUDE.md records that scoring results do not
+transfer between prose and telegraphic German (the mono-vs-IC pre-pass
+ordering reverses).  So telegraphic is the case that matters operationally --
+but it is exactly the transfer question that makes PROSE worth checking before
+a recommendation is written for all languages, which is what --corpus and
+--language are for:
+
+    --corpus eval/corpus-tune-phase-ab.txt --language english
+
+  That file is plain A-Z English prose; the default corpus is instead the
+  authentic HG Nord decrypts, parsed out of the message databases.
 
 MATCHED COMPUTE IS THE POINT.  The IC arm is cheaper per restart, so at equal
 -R it is also getting less compute -- which would flatter the target arm.  The
@@ -153,6 +160,10 @@ def main():
     ap.add_argument("--schedule", default="k4f10")
     ap.add_argument("--plugs", type=int, default=10)
     ap.add_argument("--seed", type=int, default=4242)
+    ap.add_argument("--language", default="wehrmacht")
+    ap.add_argument("--corpus", default=None,
+                    help="plain A-Z text file to draw excerpts from "
+                         "(default: the authentic HG Nord decrypts)")
     ap.add_argument("--ic-restarts", type=int, default=0,
                     help="-R for the -K arm (0 = same as --restarts)")
     ap.add_argument("--match-compute", action="store_true",
@@ -168,12 +179,19 @@ def main():
     if not os.path.exists(ENIGMA):
         sys.exit("build the binary first (make)")
 
-    corpus = "".join(decrypts(os.path.join(HERE, "enigma-messages.txt"))
-                     + decrypts(os.path.join(HERE,
-                                             "enigma-army-messages-1941.txt")))
+    if args.corpus:
+        # '#' lines are dropped BEFORE the A-Z strip: uppercasing a comment
+        # would otherwise splice its letters into the corpus itself.
+        text = "".join(ln for ln in open(args.corpus, encoding="utf-8")
+                       if not ln.lstrip().startswith("#"))
+        corpus = re.sub(r"[^A-Z]", "", text.upper())
+    else:
+        corpus = "".join(
+            decrypts(os.path.join(HERE, "enigma-messages.txt"))
+            + decrypts(os.path.join(HERE, "enigma-army-messages-1941.txt")))
     L = args.length
     rng = random.Random(args.seed)
-    tail = ["-S", args.schedule, "-f", "-l", "wehrmacht", "-T", 1]
+    tail = ["-S", args.schedule, "-f", "-l", args.language, "-T", 1]
 
     # Every trial is drawn from the seed BEFORE anything runs, so the trial set
     # is identical whatever --jobs is.
@@ -263,12 +281,13 @@ def main():
     if args.tsv:
         # L sched R_J R_K n break50_t break50_i dz mean_t mean_i ex_t ex_i
         # compute% mean_diff ci_lo ci_hi
-        print(f"{L}\t{args.schedule}\t{args.restarts}\t{rk}\t{n}\t{bt}\t"
+        print(f"{L}\t{args.language}\t{args.schedule}\t{args.restarts}\t"
+              f"{rk}\t{n}\t{bt}\t"
               f"{bi}\t{z:+.2f}\t{tot['target'][0] / n:.2f}\t"
               f"{tot['ic'][0] / n:.2f}\t{tot['target'][1]}\t{tot['ic'][1]}\t"
               f"{dc:+.1f}\t{md:+.2f}\t{md - half:+.2f}\t{md + half:+.2f}")
         return
-    print(f"# L={L}, {n} paired trials, -f -l wehrmacht -c -J/-K "
+    print(f"# L={L}, {n} paired trials, -f -l {args.language} -c -J/-K "
           f"-S {args.schedule} -R {args.restarts}/{rk}, {args.plugs}-pair "
           f"board hidden, rotor key given, seed {args.seed}")
     print(f"{'arm':8s} {'BREAK50':>9s} {'mean %correct':>14s} {'exact':>10s} "
