@@ -754,6 +754,79 @@ void ic_blend_init()
    same number of decodes as the shipped scorer. A two-pass version would inflate wall
    time per score_iter and quietly unfair any matched-score_iter A/B. Returns the
    log-prob SUM (caller normalises); writes the IC through *ic_out. */
+/* --- NEON factored decode: 16 positions, no gather ---------------------------
+
+   The hybrid that vectorised only the two steck[] lookups measured +30.5% /
+   +39.1% on arm64, and widening its groups 16 -> 64 recovered only a quarter
+   to a half of that.  The reason, from the widening probe: it never reduced
+   SCALAR MEMORY TRAFFIC.  A scalar gather in the middle forces every value out
+   to memory and back, so the two table loads the shuffles removed came straight
+   back as buffer loads.
+
+   This removes the gather instead.  setup_mapping records, per position, the
+   right wheel's offset g3 and which mid table applies (machine.h), and
+
+       rows[i][x] = rr2[g3][ mid[ l2[g3][x] ] ]
+       l2[g][x]   = diff26(w2_fwd[add26(x, g)], g)
+       rr2[g][x]  = diff26(w2_rev[add26(x, g)], g)
+
+   so every step is a lookup in a SHARED 26-byte table plus a per-lane shift.
+   Four vqtbl2q_u8 and a handful of modular adds decode 16 characters with no
+   per-position table anywhere -- the identity is asserted position by position
+   by $ENIGMA_FACTOR_CHECK=1 in setup_mapping.
+
+   One transition per group instead of two: the decoded letters still have to
+   reach the scalar accumulator, because a 26-bin histogram and a quad gather
+   have no vector form.
+
+   mid changes only at stepping events (~once per 26 characters, or 13 for a
+   two-notch right wheel), so a group can straddle one.  Rather than blend two
+   tables, a non-uniform group falls back to the scalar decode -- correct, and
+   it keeps this prototype to the question it is asking. */
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#define ENIGMA_HAVE_NEON 1
+#else
+#define ENIGMA_HAVE_NEON 0
+#endif
+
+#if ENIGMA_HAVE_NEON
+static bool neon_enabled()
+{
+  static const bool v = []()
+  {
+    const char * e = getenv("ENIGMA_NEON");
+    if ((e == nullptr) || (*e == 0))
+      {
+        return true;
+      }
+    return parse_opt_int(e, "$ENIGMA_NEON") != 0;
+  }();
+  return v;
+}
+
+/* A 26-entry permutation as a 32-byte vqtbl2q_u8 table. The six pad bytes are
+   never selected (every index is 0..25); they exist so the upper load does not
+   read past the 26-byte source. */
+static inline uint8x16x2_t neon_tbl(const unsigned char * t)
+{
+  unsigned char pad[32];
+  memcpy(pad, t, asize);
+  memset(pad + asize, 0, sizeof pad - asize);
+  uint8x16x2_t r;
+  r.val[0] = vld1q_u8(pad);
+  r.val[1] = vld1q_u8(pad + 16);
+  return r;
+}
+
+/* x < 52 -> x mod 26 */
+static inline uint8x16_t neon_mod26(uint8x16_t x)
+{
+  const uint8x16_t k = vdupq_n_u8(asize);
+  return vsubq_u8(x, vandq_u8(vcgeq_u8(x, k), k));
+}
+#endif
+
 static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize][asize],
                               int model, double * ic_out)
 {
@@ -798,6 +871,74 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   f0[a]++; f1[b]++; f2[c]++;
   long isum = 0;
   int i = 3;
+#if ENIGMA_HAVE_NEON
+  if (m.pos_tables && neon_enabled())
+    {
+      const uint8x16x2_t stbl = neon_tbl(steck);
+      const uint8x16x2_t wf = neon_tbl(m.w2_fwd);
+      const uint8x16x2_t wr = neon_tbl(m.w2_rev);
+      const uint8x16_t k26 = vdupq_n_u8(asize);
+      int cur = -1;
+      uint8x16x2_t md = stbl;                 /* replaced before first use */
+      unsigned char db[16];
+      for (; i + 15 < textlength; i += 16)
+        {
+          /* A stepping event inside the group changes mid mid-way. Decode
+             those 16 scalar and carry on rather than abandoning the loop --
+             events fall every ~26 characters (13 for a two-notch right
+             wheel), so bailing out entirely would leave most of a message to
+             the scalar path and understate what the vector path is worth. */
+          const int slot = m.pos_mid[i];
+          const uint8x16_t mv = vld1q_u8(m.pos_mid + i);
+          const uint8x16_t sv = vdupq_n_u8(static_cast<unsigned char>(slot));
+          if (vminvq_u8(vceqq_u8(mv, sv)) != 0xFF)
+            {
+              for (int k = 0; k < 16; k++)
+                {
+                  db[k] = static_cast<unsigned char>
+                            (decode_at(steck, rows, ct, i + k));
+                }
+            }
+          else
+            {
+              if (slot != cur)
+                {
+                  md = neon_tbl(m.mid_tab[slot]);
+                  cur = slot;
+                }
+              const uint8x16_t g3 = vld1q_u8(m.pos_g3 + i);
+              const uint8x16_t back = vsubq_u8(k26, g3);  /* (u - g3) mod 26 */
+
+              /* steck[ct] */
+              uint8x16_t v = vqtbl2q_u8(stbl, vld1q_u8(ct + i));
+              v = vqtbl2q_u8(wf, neon_mod26(vaddq_u8(v, g3)));     /* w2_fwd  */
+              v = vqtbl2q_u8(md, neon_mod26(vaddq_u8(v, back)));   /* mid     */
+              v = vqtbl2q_u8(wr, neon_mod26(vaddq_u8(v, g3)));     /* w2_rev  */
+              v = vqtbl2q_u8(stbl, neon_mod26(vaddq_u8(v, back))); /* steck[] */
+              vst1q_u8(db, v);
+            }
+
+          for (int k = 0; k < 16; k += 4)
+            {
+              const int d0 = db[k];
+              const int d1 = db[k + 1];
+              const int d2 = db[k + 2];
+              const int d3 = db[k + 3];
+              f0[d0]++;
+              f1[d1]++;
+              f2[d2]++;
+              f3[d3]++;
+              isum += table[a][b][c][d0];
+              isum += table[b][c][d0][d1];
+              isum += table[c][d0][d1][d2];
+              isum += table[d0][d1][d2][d3];
+              a = d1;
+              b = d2;
+              c = d3;
+            }
+        }
+    }
+#endif
   for (; i + 3 < textlength; i += 4)
     {
       const int d0 = decode_at(steck, rows, ct, i);

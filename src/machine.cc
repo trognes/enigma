@@ -1,5 +1,7 @@
 #include "machine.h"
 
+#include <stdlib.h>
+
 #include "common.h"
 #include "options.h"
 #include "text.h"
@@ -276,6 +278,31 @@ void setup_mapping(machine & m, bool copy_rows)
   const unsigned char (* blk)[asize] = sa[d0][d1];
   const unsigned char * row = blk[d2];
 
+  /* The factored decode's per-position tables. Filled only for the hill-climb
+     (copy_rows), whose scorer re-reads them thousands of times per key; the
+     plain scan would pay the stores and never read them. `mid` is rebuilt
+     whenever blk changes, i.e. at a stepping event -- see machine.h. */
+  m.pos_tables = copy_rows;
+  m.n_mid = 0;
+  m.w2_fwd = rotor_fwd[w2];
+  m.w2_rev = rotor_rev[w2];
+  int midslot = 0;
+  auto push_mid = [&](const unsigned char (* b)[asize])
+  {
+    if (m.n_mid >= max_mid)
+      {
+        return;                      /* cannot happen; see max_mid's comment */
+      }
+    unsigned char * t = m.mid_tab[m.n_mid];
+    for (int y = 0; y < asize; y++)
+      {
+        t[y] = m.w2_fwd[b[0][m.w2_rev[y]]];
+      }
+    midslot = m.n_mid++;
+  };
+  if (copy_rows)
+    push_mid(blk);
+
   int i = 0;
   while (i < textlength)
     {
@@ -297,6 +324,9 @@ void setup_mapping(machine & m, bool copy_rows)
             {
               memcpy(m.mapping[i], row, asize);
               rows[i] = m.mapping[i];
+              push_mid(blk);
+              m.pos_g3[i] = static_cast<unsigned char>(d2);
+              m.pos_mid[i] = static_cast<unsigned char>(midslot);
             }
           else
             rows[i] = row;
@@ -324,6 +354,8 @@ void setup_mapping(machine & m, bool copy_rows)
                 {
                   memcpy(m.mapping[i + k], row, asize);
                   rows[i + k] = m.mapping[i + k];
+                  m.pos_g3[i + k] = static_cast<unsigned char>(d2 + k + 1);
+                  m.pos_mid[i + k] = static_cast<unsigned char>(midslot);
                 }
               else
                 rows[i + k] = row;
@@ -339,6 +371,8 @@ void setup_mapping(machine & m, bool copy_rows)
                 {
                   memcpy(m.mapping[i], row, asize);
                   rows[i] = m.mapping[i];
+                  m.pos_g3[i] = 0;
+                  m.pos_mid[i] = static_cast<unsigned char>(midslot);
                 }
               else
                 rows[i] = row;
@@ -346,6 +380,33 @@ void setup_mapping(machine & m, bool copy_rows)
               n--;
             }
         }
+    }
+
+  /* $ENIGMA_FACTOR_CHECK=1 asserts the identity the factored decode rests on,
+     at every position and every input letter: that the row setup_mapping just
+     recorded is reproduced by two shifts of w2_fwd/w2_rev around mid. Costs
+     nothing when unset, and it is the only thing standing between "the algebra
+     reads right" and "the algebra is right". */
+  if (copy_rows)
+    {
+      static const bool chk = []()
+      {
+        const char * e = getenv("ENIGMA_FACTOR_CHECK");
+        return (e != nullptr) && (*e != 0) && (*e != '0');
+      }();
+      if (chk)
+        for (int p = 0; p < textlength; p++)
+          {
+            const int g = m.pos_g3[p];
+            const unsigned char * md = m.mid_tab[m.pos_mid[p]];
+            for (int x = 0; x < asize; x++)
+              {
+                const int b = diff26(m.w2_fwd[add26(x, g)], g);
+                const int e2 = diff26(m.w2_rev[add26(md[b], g)], g);
+                if (e2 != rows[p][x])
+                  fatal("factored decode identity broken");
+              }
+          }
     }
 
   m.grundstellung[0] = static_cast<unsigned char>(g0);
