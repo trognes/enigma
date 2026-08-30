@@ -145,12 +145,19 @@ existing command lines can behave differently or stop working.
     that gain are exactly those whose pre-pass does not already feed IC into
     the climb:
 
-    | schedule | pre-pass | break50 target/ic | Stouffer Z | plugboards |
+    | schedule | pre-pass | trials | break50 `-J` → `-K` | Stouffer Z |
     |---|---|---:|---:|---:|
-    | `f10` | none | 629 / **766** | **−5.81** | **−25.1%** |
-    | `m4f10` | mono | 481 / **510** | −2.32 | −11.5% |
-    | `k4f10` | mono+IC | 498 / 496 | +0.41 | −11.0% |
-    | `i4f10` | IC | 431 / 431 | +0.10 | −11.1% |
+    | `f10` | none | 2400 | 26.2% → **31.9%** | **−5.81** |
+    | `m4f10` | mono | 1200 | 40.1% → **42.5%** | −2.32 |
+    | `k4f10` | mono+IC | 1200 | 41.5% → 41.3% | +0.41 |
+    | `i4f10` | IC | 1200 | 35.9% → 35.9% | +0.10 |
+
+    Percentages, because `f10` ran on two seeds and so has twice the trials —
+    as raw counts those rows read 629/766 against 498/496 and `f10` looks like
+    the best schedule, which is backwards. Read down the column: `f10` is the
+    **worst** schedule at 26.2%, so `-K` there partly recovers ground a bare
+    fused target never had, and `-K` on `f10` still loses to plain `-J` on
+    `k4f10`.
 
     That last column is **plugboards scored, not compute**: the IC ranking's
     O(26) work per move is outside the counted score loop, so it prices the

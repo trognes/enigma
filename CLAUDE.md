@@ -1039,15 +1039,24 @@ are read from a **data directory** (filenames built as
     the schedules that gain are exactly those whose pre-pass does not already
     feed IC into the climb:
 
-    | schedule | pre-pass | break50 target/ic | Stouffer Z | plugboards |
+    | schedule | pre-pass | trials | break50 `-J` → `-K` | Stouffer Z |
     |---|---|---:|---:|---:|
-    | `f10` | none | 629 / **766** | **−5.81** | **−25.1%** |
-    | `m4f10` | mono | 481 / **510** | −2.32 | −11.5% |
-    | `k4f10` | mono+IC | 498 / 496 | +0.41 | −11.0% |
-    | `i4f10` | IC | 431 / 431 | +0.10 | −11.1% |
+    | `f10` | none | 2400 | 26.2% → **31.9%** | **−5.81** |
+    | `m4f10` | mono | 1200 | 40.1% → **42.5%** | −2.32 |
+    | `k4f10` | mono+IC | 1200 | 41.5% → 41.3% | +0.41 |
+    | `i4f10` | IC | 1200 | 35.9% → 35.9% | +0.10 |
 
-    (`f10` is eight cells over two seeds, the others four over one; negative Z
-    means IC ordering ahead.)
+    (Negative Z means IC ordering ahead. `f10` has twice the trials because it
+    was run on two seeds — **quote the percentages, not the counts**: as raw
+    counts the rows read 629/766 against 498/496 and `f10` looks like the best
+    schedule, which is backwards.)
+  - **READ DOWN THE COLUMN TOO: `f10` is the WORST schedule here, by a wide
+    margin.** At 26.2% it breaks far fewer messages than `k4f10` at 41.5% on
+    the identical trial design — so what `-K` does on `f10` is not find
+    something special, it **partly recovers ground a bare fused target never
+    had**, and `-K` on `f10` (31.9%) still loses to plain `-J` on `k4f10`
+    (41.5%). The schedule choice dominates the climb-rule choice; `-K` is a
+    small free gain on top of the right schedule, not a substitute for it.
   - **THAT LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE, and it overstates
     the saving.** The IC ranking's O(26) work per move happens **outside** the
     counted score loop, so `score_iter` prices the scans `-K` removes and not

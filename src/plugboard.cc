@@ -734,11 +734,17 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      eval/results-jorder-cells.tsv).  Judged on BREAK50.  IT SPLITS BY
      SCHEDULE, and the split is the obvious one:
 
-       schedule  break50 target/ic  Stouffer Z  plugboards
-       f10          629 / 766         -5.81      -25.1%   (8 cells, 2 seeds)
-       m4f10        481 / 510         -2.32      -11.5%
-       k4f10        498 / 496         +0.41      -11.0%
-       i4f10        431 / 431         +0.10      -11.1%
+       schedule  trials  break50 -J -> -K   Stouffer Z
+       f10         2400   26.2% -> 31.9%       -5.81
+       m4f10       1200   40.1% -> 42.5%       -2.32
+       k4f10       1200   41.5% -> 41.3%       +0.41
+       i4f10       1200   35.9% -> 35.9%       +0.10
+
+     PERCENTAGES, NOT COUNTS: f10 ran on two seeds and so has twice the
+     trials, and as raw counts those rows read 629/766 against 498/496, which
+     makes f10 look like the best schedule when it is the worst.  Reading down
+     the column, -K on f10 (31.9%) still loses to plain -J on k4f10 (41.5%) --
+     the schedule choice dominates the climb-rule choice.
 
      THE LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE.  The O(26) ranking
      below runs OUTSIDE the counted score loop, so score_iter prices the scans

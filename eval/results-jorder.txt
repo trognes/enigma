@@ -21,11 +21,21 @@ not already supply IC.  Never measurably worse.
 THE HEADLINE, BY SCHEDULE (lengths 60/80/100/120 at R=32)
 ----------------------------------------------------------
 
-  schedule  cells  break50 target/ic   Stouffer Z   plugboards
-  f10          8      629 / 766         -5.81       -25.1%
-  m4f10        4      481 / 510         -2.32       -11.5%
-  k4f10        4      498 / 496         +0.41       -11.0%
-  i4f10        4      431 / 431         +0.10       -11.1%
+  schedule  cells  trials  break50 -J -> -K   Stouffer Z   plugboards
+  f10          8     2400   26.2% -> 31.9%       -5.81       -25.1%
+  m4f10        4     1200   40.1% -> 42.5%       -2.32       -11.5%
+  k4f10        4     1200   41.5% -> 41.3%       +0.41       -11.0%
+  i4f10        4     1200   35.9% -> 35.9%       +0.10       -11.1%
+
+  PERCENTAGES, BECAUSE THE ROWS HAVE DIFFERENT DENOMINATORS.  f10 was run on
+  two seeds and so has twice the trials; as raw counts the rows read 629/766
+  against 498/496, and f10 reads as the best schedule when it is the worst.
+
+  READ DOWN THE COLUMN TOO.  f10 breaks 26.2% where k4f10 breaks 41.5% on the
+  identical trial design, so -K on f10 is not finding something special -- it
+  partly recovers ground a bare fused target never had, and -K on f10 (31.9%)
+  still loses to plain -J on k4f10 (41.5%).  The schedule choice dominates the
+  climb-rule choice.
 
 (negative Z = IC ordering ahead; f10 is eight cells because it was run on two
 seeds, the others on one.)
