@@ -10,7 +10,7 @@ FULL DECODE, and the scan is 20-23% of the climb's scored plugboards (measured
 at -R 64: 20 800 of 91 451 at L=100, of 98 081 at L=167).  Its share grows with
 message length, because it is linear in L where the histogram form is flat.
 
-$ENIGMA_JORDER=ic ranks that scan by the index of coincidence instead,
+`--ic-order` ranks that scan by the index of coincidence instead,
 computed from the co-occurrence table in O(26) per move.  Measured on one
 167-letter fixture that takes the run from 7 535 643 plugboards scored to
 5 546 450 -- a 26% cut in scoring work.
@@ -20,7 +20,7 @@ order, so the climb visits moves differently and can converge somewhere else.
 Cheaper per restart is worthless if it recovers less, and the two effects have
 to be weighed against each other rather than one assumed.  Hence this harness:
 paired trials, same excerpts, same keys, same boards, arms differing only in
-the environment variable.
+that one flag.
 
 WHY WEHRMACHT.  The recommended recipe for real traffic is `-f -l wehrmacht
 -S k4f10 -J`, and CLAUDE.md records that scoring results do not transfer
@@ -65,12 +65,10 @@ def decrypts(path):
     return out
 
 
-def run(args, text, env_extra=None):
+def run(args, text):
     env = dict(os.environ)
     env["ENIGMA_SEED"] = "0"
     env["ENIGMA_DATA"] = os.path.join(HERE, os.pardir, "ngrams")
-    if env_extra:
-        env.update(env_extra)
     p = subprocess.run([ENIGMA] + [str(a) for a in args], input=text,
                        capture_output=True, text=True, check=False, env=env)
     return p.stdout.strip(), p.stderr
@@ -139,8 +137,8 @@ def main():
                       "-l", "wehrmacht", "-R", args.restarts, "-T", 1]
         got = {}
         b50 = {}
-        for arm, env in (("target", None), ("ic", {"ENIGMA_JORDER": "ic"})):
-            out, err = run(base, ct, env)
+        for arm, extra in (("target", []), ("ic", ["--ic-order"])):
+            out, err = run(base + extra, ct)
             got[arm] = out
             pc = pct_correct(out, pt)
             b50[arm] = pc >= 50.0

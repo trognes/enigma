@@ -134,6 +134,21 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "cheaper per climb -- so pair it with a larger -R.");
   fprintf(out, "  %-24s %s\n", "", "Wins the realistic ~10-plug case, may lose with");
   fprintf(out, "  %-24s %s\n", "", "few plugs (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--ic-order",
+          "Rank -J's move-ordering scan by the index of");
+  fprintf(out, "  %-24s %s\n", "",
+          "coincidence, O(26) a move, instead of by the");
+  fprintf(out, "  %-24s %s\n", "",
+          "target model, a full decode a move. Cheaper");
+  fprintf(out, "  %-24s %s\n", "",
+          "everywhere, never measured worse; the gain is");
+  fprintf(out, "  %-24s %s\n", "",
+          "in schedules whose pre-pass does not already");
+  fprintf(out, "  %-24s %s\n", "",
+          "supply IC -- much better and ~25% cheaper on");
+  fprintf(out, "  %-24s %s\n", "",
+          "a bare -S f10, nothing on -S k4f10/i4f10");
+  fprintf(out, "  %-24s %s\n", "", "(needs -c and -J) [off]");
   fprintf(out, "  %-24s %s\n", "-M, --cap-target",
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
@@ -469,9 +484,15 @@ void show_settings()
   if (opt_hillclimb && opt_polish)
     fprintf(stderr, "            quadgram-gain 2-ply+3-ply cascade once on the best board "
             "(--polish)\n");
+  /* Which model ranks the move order is part of what the climb IS, and the two
+     rankings converge differently -- so a log that does not say which one ran
+     cannot be compared against another. */
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
-            opt_dynorder ? " (dynamic move order)" : "");
+            opt_dynorder
+            ? (opt_ic_order ? " (dynamic move order, ranked by IC)"
+                            : " (dynamic move order)")
+            : "");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts >= 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));

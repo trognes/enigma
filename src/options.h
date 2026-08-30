@@ -52,6 +52,7 @@ extern const char * opt_staged;
 extern int opt_hillclimb;
 extern int opt_firstimprove;
 extern int opt_dynorder;
+extern int opt_ic_order;
 extern int opt_capmerge;
 extern int opt_no_repair;
 extern int opt_restarts;

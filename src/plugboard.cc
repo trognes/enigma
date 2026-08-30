@@ -614,27 +614,6 @@ static pairtab make_pairtab()
   return t;
 }
 
-/* $ENIGMA_JORDER=ic: rank -J's move-ordering scan by the index of
-   coincidence (O(26) per move, from the co-occurrence table) instead of by
-   the target model (O(L) per move, a full decode).  Read once; empty means
-   unset, as for every other ENIGMA_* override.
-
-   A MEASUREMENT SWITCH FIRST.  Unlike ENIGMA_HIST, whose two paths are
-   byte-identical by construction, these two produce DIFFERENT visit orders
-   and so can converge differently -- which is exactly why it is a switch:
-   the question "is an IC order as good as a target-model order" is an
-   empirical one about recovery, not about speed, and it cannot be asked
-   without both paths in one binary. */
-static bool jorder_ic()
-{
-  static const bool v = []()
-  {
-    const char * e = getenv("ENIGMA_JORDER");
-    return (e != nullptr) && (*e != 0) && (strcmp(e, "ic") == 0);
-  }();
-  return v;
-}
-
 /* --- Circular first-improvement climb (-J) ------------------------------------
 
    Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
@@ -731,9 +710,9 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      climb from the (perturbed) starting board, so it differs per restart; deterministic
      (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
   const bool dyn_order = (opt_dynorder != 0);
-  /* $ENIGMA_JORDER=ic ranks that scan by the INDEX OF COINCIDENCE, computed
-     from the co-occurrence table in O(26) per move, instead of by the target
-     model at O(L) per move.
+  /* --ic-order ranks that scan by the INDEX OF COINCIDENCE, computed from the
+     co-occurrence table in O(26) per move, instead of by the target model at
+     O(L) per move.
 
      ONLY WORTH ANYTHING WHEN hist_on IS FALSE.  With a low-order target
      probe_toggle already takes the histogram path, so the scan is O(26)
@@ -747,7 +726,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
 
      IT IS A SEARCH CHANGE, NOT A SPEEDUP: ordering by IC is not ordering by
      the target, so the climb visits moves in a different order and can
-     converge somewhere else.  Hence a switch, defaulting to the existing
+     converge somewhere else.  Hence an option, defaulting to the existing
      behaviour, so the two can be A/B'd on recovery rather than assumed.
 
      MEASURED over 24 cells, 300 paired trials each, on authentic telegraphic
@@ -775,7 +754,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      DEFAULT OFF pending prose, which is unmeasured and which CLAUDE.md
      records does not follow telegraphic results for scoring changes.  Nothing
      measured is worse. */
-  const bool ic_order = dyn_order && ! hist_on && jorder_ic();
+  const bool ic_order = dyn_order && ! hist_on && (opt_ic_order != 0);
   int visit[nmoves];
   if (dyn_order)
     {

@@ -6,8 +6,12 @@ ORDERING -J's MOVE SCAN BY IC INSTEAD OF BY THE TARGET MODEL
 
   -f -l wehrmacht -c -J, 10-pair board hidden, rotor key given, authentic
   HG Nord decrypts.  24 cells, 300 paired trials each (200 at R=128 f10).
-  The arms differ ONLY by $ENIGMA_JORDER=ic.  JUDGED ON BREAK50 -- the count
-  of trials recovering at least half the plaintext.
+  The arms differ ONLY by --ic-order.  JUDGED ON BREAK50 -- the count of
+  trials recovering at least half the plaintext.
+
+  (Measured while the switch was $ENIGMA_JORDER=ic, before it was promoted to
+  a proper option.  Verified byte-identical across the promotion -- same
+  answer and same plugboards-scored count on 6 fixtures of schedule x -R.)
 
 VERDICT: cheaper everywhere, and BETTER on the schedules whose pre-pass does
 not already supply IC.  Never measurably worse.
@@ -115,6 +119,6 @@ is unmeasured and the change is a search change, so it is left opt-in here
 pending that.
 
 The strongest practical reading is narrower and safe: IF YOU RUN A FUSED
-TARGET WITH NO LOW-ORDER PRE-PASS, USE $ENIGMA_JORDER=ic.  It is a quarter
+TARGET WITH NO LOW-ORDER PRE-PASS, USE --ic-order.  It is a quarter
 cheaper and breaks materially more messages, and the advantage grows with
 message length.

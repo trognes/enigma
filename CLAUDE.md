@@ -1015,6 +1015,54 @@ are read from a **data directory** (filenames built as
   count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected**
   (`archived/PERFORMANCE.md` §7.2).
+- `--ic-order` **rank `-J`'s move-ordering scan by the index of coincidence**
+  (needs `-c` and `-J`; off by default). That scan scores all 325 toggles once
+  per restart, and with a fused or quad target every one of them is a **full
+  decode** — measured 21–23% of a climb's scored plugboards at `-R 64`, a share
+  that grows with message length because the scan is linear in `L`. This ranks
+  them from the co-occurrence table instead, in **O(26) per move**.
+  - **It is a SEARCH change, not a speedup.** An IC order is not a target-model
+    order, so the climb visits moves differently and can converge somewhere
+    else. Cheaper per restart is worthless if it recovers less, so it was
+    measured on recovery: 24 cells, 300 paired trials each, authentic
+    telegraphic German at L = 60…120, judged on **`break50`**
+    (`eval/jorder_ab.py`, `eval/results-jorder.txt`, per-cell data in
+    `eval/results-jorder-cells.tsv`).
+  - **It splits by SCHEDULE, and the split has the obvious mechanism** —
+    the schedules that gain are exactly those whose pre-pass does not already
+    feed IC into the climb:
+
+    | schedule | pre-pass | break50 target/ic | Stouffer Z | compute |
+    |---|---|---:|---:|---:|
+    | `f10` | none | 629 / **766** | **−5.81** | **−25.1%** |
+    | `m4f10` | mono | 481 / **510** | −2.32 | −11.5% |
+    | `k4f10` | mono+IC | 498 / 496 | +0.41 | −11.0% |
+    | `i4f10` | IC | 431 / 431 | +0.10 | −11.1% |
+
+    (`f10` is eight cells over two seeds, the others four over one; negative Z
+    means IC ordering ahead.)
+  - **On a bare fused target it is both cheaper AND better**, which is the
+    unusual part — not a trade in either direction. Eight of eight cells favour
+    it, the effect grows monotonically with length in both seeds, and at L=120
+    the mean goes 52.3 → **64.6** while the IC arm does 25% less work.
+  - **The compute split has the same cause as the quality one.**
+    `probe_toggle` already takes the O(26) histogram path for a low-order
+    stage, so a `k4`/`i4`/`m4` pre-pass costs the same either way and only the
+    fused **target** stage's scans are ever replaced. With no pre-pass at all
+    every scan in the run is replaced and the saving doubles. It is inert when
+    *every* stage is low-order, and says so rather than leaving the reader to
+    infer it from an unchanged answer.
+  - **The one adverse cell did not replicate**: `k4f10` L=100 `-R 128` read
+    z = +2.26 on the first seed and −0.45 on the second (pooled +1.28). It
+    looked like "IC ordering degrades at high restart budgets", which would
+    have been a real concern given that pre-pass questions are known to be
+    restart-budget dependent. It was a single cell of 24.
+  - **DEFAULT OFF pending prose**, which is unmeasured and which this file
+    records does not follow telegraphic results for scoring changes. Nothing
+    measured is worse, so default-on is defensible on this evidence; the safe
+    reading is the narrow one — **if you run a fused target with no low-order
+    pre-pass, use it.** `-q` and `-a` targets pay the same full-decode scan and
+    should behave like `f10`, but were not run.
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what
   the plug cap means during the climb: by default the cap is only a *growth
   ceiling* (at/over the cap, a brand-new **add** is blocked but count-preserving

@@ -58,6 +58,7 @@ void parse_args(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_firstimprove = 0;
   opt_dynorder = 0;
+  opt_ic_order = 0;
   opt_capmerge = 0;
   opt_no_repair = 0;
   opt_cascade = 0;
@@ -113,7 +114,7 @@ void parse_args(int argc, char * * argv)
          OPT_BIASEDRANDOM,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
          OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_SCTANDEM,
-         OPT_SEEDDEDUP, OPT_SEEDDEDUPBITS, OPT_SEEDDEDUPMAX };
+         OPT_SEEDDEDUP, OPT_SEEDDEDUPBITS, OPT_SEEDDEDUPMAX, OPT_ICORDER };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -137,6 +138,7 @@ void parse_args(int argc, char * * argv)
       { "anneal",         required_argument, nullptr, 'A' },
       { "ngrams",         required_argument, nullptr, 'd' },
       { "dynamic-order",  no_argument,       nullptr, 'J' },
+      { "ic-order",       no_argument,       nullptr, OPT_ICORDER },
       { "cap-target",     no_argument,       nullptr, 'M' },
       { "ic",             no_argument,       nullptr, 'i' },
       { "mono",           no_argument,       nullptr, 'm' },
@@ -244,6 +246,9 @@ void parse_args(int argc, char * * argv)
         case 'J':
           opt_firstimprove = 1;   /* -J is the first-improvement climb, best-first order */
           opt_dynorder = 1;
+          break;
+        case OPT_ICORDER:
+          opt_ic_order = 1;
           break;
         case OPT_NO_REPAIR:
           opt_no_repair = 1;
@@ -968,6 +973,35 @@ void parse_args(int argc, char * * argv)
   /* -J selects the first-improvement climb with dynamic move order, so it needs -c. */
   if (opt_firstimprove && (! opt_hillclimb))
     fatal("Dynamic move order (-J) needs the plugboard hill-climb (-c)");
+
+  /* --ic-order replaces the ranking used by -J's move-ordering scan, so it is
+     meaningless without both the climb and that scan. */
+  if (opt_ic_order)
+    {
+      if (! opt_hillclimb)
+        fatal("IC move ordering (--ic-order) needs the plugboard hill-climb "
+              "(-c)");
+      if (! opt_dynorder)
+        fatal("IC move ordering (--ic-order) needs the dynamic move order "
+              "(-J), which is the scan it re-ranks");
+      /* A stage whose model has a histogram form already scores each of the
+         325 moves in O(26), and exactly -- so there the flag is not merely
+         cheap, it is inert. With EVERY stage low-order it does nothing at all,
+         which a run that asked for it should be told rather than left to infer
+         from an unchanged answer. Non-fatal: the request is coherent, it just
+         has no work to do. */
+      bool any_full_scan = false;
+      for (int i = 0; i < opt_nstages; i++)
+        {
+          const int md = opt_stages[i].model;
+          if ((md != SCORE_IC) && (md != SCORE_MONO) && (md != SCORE_MONOIC))
+            any_full_scan = true;
+        }
+      if (! any_full_scan)
+        fprintf(stderr, "WARNING: --ic-order has no effect with a low-order "
+                "schedule -- every stage already ranks its moves in O(26) "
+                "exactly\n");
+    }
 
   /* -M changes the plug-cap rule in the climb, so it needs -c. */
   if (opt_capmerge && (! opt_hillclimb))

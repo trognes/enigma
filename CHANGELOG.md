@@ -127,6 +127,42 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--ic-order` — rank `-J`'s move-ordering scan by the index of coincidence
+  instead of by the target model.** `-J` builds its visit order by scoring all
+  325 toggles once per restart, and with a fused or quad target each of those
+  probes is a full decode — measured 21–23% of a climb's scored plugboards at
+  `-R 64`, a share that grows with message length because the scan is linear in
+  `L` where the histogram form is flat. This ranks them from the per-key
+  co-occurrence table in O(26) a move. Off by default; needs `-c` and `-J`.
+  - **A search change, not a speedup.** An IC order is not a target-model
+    order, so the climb visits moves differently and can converge somewhere
+    else — cheaper per restart is worthless if it recovers less. Measured on
+    recovery over 24 cells of 300 paired trials, authentic telegraphic German
+    at L = 60…120, judged on `break50` (`eval/results-jorder.txt`).
+  - **It splits by schedule, and the split is the obvious one** — the schedules
+    that gain are exactly those whose pre-pass does not already feed IC into
+    the climb:
+
+    | schedule | pre-pass | break50 target/ic | Stouffer Z | compute |
+    |---|---|---:|---:|---:|
+    | `f10` | none | 629 / **766** | **−5.81** | **−25.1%** |
+    | `m4f10` | mono | 481 / **510** | −2.32 | −11.5% |
+    | `k4f10` | mono+IC | 498 / 496 | +0.41 | −11.0% |
+    | `i4f10` | IC | 431 / 431 | +0.10 | −11.1% |
+
+  - **On a bare fused target it is both cheaper and better**, not a trade in
+    either direction: eight of eight cells favour it, the effect grows
+    monotonically with length in both seeds, and at L=120 the mean goes 52.3 →
+    64.6 while the IC arm does 25% less work.
+  - **The compute split has the same cause as the quality one.** A low-order
+    stage's probe is already O(26) and exact, so a `k4`/`i4`/`m4` pre-pass
+    costs the same either way and only the fused target stage's scans are ever
+    replaced. With every stage low-order the option is inert, and the run says
+    so rather than leaving the reader to infer it from an unchanged answer.
+  - **Default off pending prose**, which is unmeasured and which is known not
+    to follow telegraphic results for scoring changes. Nothing measured is
+    worse.
+
 - **`--biased-random T` — draw the restart kick from the single-plug index of
   coincidence instead of uniformly.** Each of the 325 possible single plugs is
   scored on its own IC, z-scored per key, and the kick's pairs are drawn with
