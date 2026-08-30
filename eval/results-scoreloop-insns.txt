@@ -766,3 +766,40 @@ That is a much larger change (precompute must publish `mid`, and the scorer
 needs the per-run (g1,g2,g3) bookkeeping), and this loop is now 0 for 4.  It
 is recorded as the only SIMD shape this result does not rule out, not as a
 recommendation.
+
+
+THE FOLLOW-UP PROBE: WIDENING THE GROUP 16 -> 64
+--------------------------------------------------
+
+The result above was attributed to the two vector/scalar transitions per
+group.  That predicted a ~4x smaller penalty at 64-wide, where each store is
+separated from its dependent load by ~48 further stores.  Per-element vector
+overhead predicted no change.  Measured (fused long, vs the same dev base):
+
+    cell            16-wide   64-wide   penalty removed
+    g++ arm64        +30.5%    +22.9%        25%
+    clang arm64      +39.1%    +20.3%        48%
+
+NEITHER PREDICTION.  Fitting penalty = a + b*(transitions) across the two
+widths puts the residual at zero transitions at ~20% (g++) and ~14% (clang).
+So the transitions cost something real and are a MINORITY of the cost.
+
+WHAT THE MAJORITY IS, and it is obvious in hindsight: THE PROTOTYPE NEVER
+REDUCED SCALAR MEMORY TRAFFIC.  Per 64 characters the scalar path does ~320
+loads (five per character: ct, steck, rows[i], the row byte, steck).  The
+NEON path does 4 vector loads + 4 shuffles + 4 vector stores, then 64 loads
+of xb[k], 128 for the gather itself, 64 stores of yb[k], then 4 more vector
+loads/shuffles/stores, then 64 loads of db[k] -- about the SAME ~320 scalar
+accesses, plus 24 vector ops.  The two steck[] table loads it removes are
+replaced by two buffer loads, because a scalar gather in the middle forces
+every value out to memory and back.
+
+So the hybrid cannot win at any width: the shuffles are free, and everything
+around them is not.
+
+THIS DOES NOT PRICE THE FACTORED FORM, which is the point of recording it.
+Under the shift-conjugate identity the gather disappears, so per 64
+characters the count is ~52 vector ops plus 64 scalar loads (db, for the
+histogram and quad gather, which have no vector form) against ~320 -- a
+different cost structure, not a smaller version of this one.  Whether that
+converts is unmeasured, and this loop is now 0 for 5.

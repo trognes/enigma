@@ -3421,9 +3421,14 @@ win and was removed too; the scalar fused loop is the current form.
 > gather scalar costs **+30.5% g++ arm64 and +39.1% clang arm64** on `fused`
 > long, against controls inside ±1.8%. What that closes is the **hybrid**, not
 > SIMD: any design that vectorises part of the decode and leaves the gather
-> scalar crosses the vector/scalar boundary twice per group. A pure-scalar
-> version of the same buffering shape costs nothing, so it is the width
-> mismatch rather than the buffering — plausible, not proven.
+> scalar crosses the vector/scalar boundary twice per group. Widening that
+> group 16 → 64 removes only 25% (g++) / 48% (clang) of the penalty, where
+> pricing it as per-transition predicted ~4× — so the transitions are a
+> minority of the cost. The majority is that **the hybrid never reduces
+> scalar memory traffic**: a scalar gather in the middle forces every value
+> out to memory and back, so the two `steck[]` table loads it removes are
+> replaced by two buffer loads, with vector work added on top (~320 scalar
+> accesses either way, per 64 characters).
 > `eval/results-scoreloop-insns.txt` has all six levers, including the four
 > that measured down, and the one SIMD shape the result does not rule out.
 
