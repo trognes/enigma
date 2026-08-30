@@ -56,6 +56,7 @@ DESIGN NOTES.
 """
 import argparse
 import os
+import multiprocessing
 import random
 import re
 import statistics
@@ -88,6 +89,23 @@ def run(args, text):
     return p.stdout.strip(), int(it.group(1)) if it else 0
 
 
+# One trial: encipher under a random key and board, hand the ciphertext to
+# both schedule arms.  Returns (pct_correct, exact, score_iter) per arm.
+def trial(spec):
+    pt, w, r, g, pb, opts, restarts, threads = spec
+    key = ["-u", "B", "-w", w, "-r", r, "-g", g]
+    ct, _ = run(key + ["-s", pb], pt)
+    L = len(pt)
+    out = {}
+    for arm in ARMS:
+        o, it = run(key + ["-c"] + opts + ["-l", "wehrmacht", "-S", arm,
+                                          "-R", restarts, "-T", threads,
+                                          "-e", "7"], ct)
+        pc = 100.0 * sum(a == b for a, b in zip(o, pt)) / L
+        out[arm] = (pc, pc > 99.99, it)
+    return out
+
+
 def main():
     global ARMS
     ap = argparse.ArgumentParser()
@@ -96,6 +114,14 @@ def main():
     ap.add_argument("--restarts", default="8")
     ap.add_argument("--seed", type=int, default=4242)
     ap.add_argument("--threads", default="4")
+    ap.add_argument("--climb-rule", choices=("J", "K"), default="J",
+                    help="-J (target-model move order) or -K (IC-ranked). "
+                         "Default J, which is what every result recorded in "
+                         "this file was measured with.")
+    ap.add_argument("--kick", type=int, default=None,
+                    help="--random K; omitted means the binary default (10)")
+    ap.add_argument("--jobs", type=int, default=1,
+                    help="run trials across N processes")
     ap.add_argument("--arms", nargs=2, default=list(ARMS),
                     metavar=("A", "B"),
                     help="two --score schedules to compare, e.g. i4f10 i4a10. "
@@ -119,9 +145,13 @@ def main():
 
     rng = random.Random(args.seed)
     L = args.length
-    res = {a: [] for a in ARMS}
-    iters = {a: 0 for a in ARMS}
+    opts = ["-" + args.climb_rule, "--polish"]
+    if args.kick is not None:
+        opts += ["--random", str(args.kick)]
 
+    # Draw every trial from the seed BEFORE anything runs, so the trial set is
+    # identical whatever --jobs is.
+    specs = []
     for _ in range(args.trials):
         pt = corpus[rng.randrange(0, len(corpus) - L):][:L]
         w = "".join(str(x) for x in rng.sample([1, 2, 3, 4, 5], 3))
@@ -130,22 +160,43 @@ def main():
         ls = list(LET)
         rng.shuffle(ls)
         pb = " ".join(ls[2 * i] + ls[2 * i + 1] for i in range(10))
-        ct, _ = run(["-u", "B", "-w", w, "-r", r, "-g", g, "-s", pb], pt)
-        for arm in ARMS:
-            out, it = run(["-u", "B", "-w", w, "-r", r, "-g", g, "-c", "-J",
-                           "--polish", "-l", "wehrmacht", "-S", arm,
-                           "-R", args.restarts, "-T", args.threads, "-e", "7"],
-                          ct)
-            res[arm].append(100.0 * sum(a == b for a, b in zip(out, pt)) / L)
-            iters[arm] += it
+        specs.append((pt, w, r, g, pb, opts, args.restarts, args.threads))
+
+    if args.jobs > 1:
+        with multiprocessing.Pool(args.jobs) as pool:
+            out = pool.map(trial, specs, chunksize=1)
+    else:
+        out = [trial(sp) for sp in specs]
+
+    res = {a: [o[a][0] for o in out] for a in ARMS}
+    iters = {a: sum(o[a][2] for o in out) for a in ARMS}
 
     n = args.trials
+    print(f"# {' '.join(['-c'] + opts)} -l wehrmacht -R {args.restarts}")
     print(f"L={L}  n={n}  -R {args.restarts}  seed={args.seed}")
     for arm in ARMS:
         v = res[arm]
         print(f"  {arm}: mean %correct {statistics.mean(v):6.2f}   "
               f"exact {sum(1 for x in v if x > 99.99)}/{n}   "
               f"score_iter {iters[arm]:,}")
+    # BREAK50 IS THE JUDGE (CLAUDE.md): the count of trials recovering at
+    # least half the plaintext.  Exact is near-zero at the short end and so is
+    # dominated by trial noise; a mean averages catastrophic failures in as
+    # though 5% and 45% of the letters differed meaningfully, when both are
+    # simply not broken.  The mean and exact lines below are secondary.
+    b50 = {a: [x >= 50.0 for x in res[a]] for a in ARMS}
+    bb = sum(1 for x, y in zip(b50[ARMS[0]], b50[ARMS[1]]) if x and not y)
+    cc = sum(1 for x, y in zip(b50[ARMS[0]], b50[ARMS[1]]) if y and not x)
+    nd50 = bb + cc
+    z50 = (bb - cc) / nd50 ** 0.5 if nd50 else 0.0
+    print(f"  BREAK50: {ARMS[0]} {sum(b50[ARMS[0]])}/{n} "
+          f"({100.0 * sum(b50[ARMS[0]]) / n:.1f}%)   "
+          f"{ARMS[1]} {sum(b50[ARMS[1]])}/{n} "
+          f"({100.0 * sum(b50[ARMS[1]]) / n:.1f}%)")
+    print(f"  McNemar on break50: {ARMS[0]}-only {bb}, {ARMS[1]}-only {cc}, "
+          f"discordant {nd50}, z={z50:+.2f}  "
+          f"(negative = {ARMS[1]} ahead)")
+
     ex = {a: [x > 99.99 for x in res[a]] for a in ARMS}
     b = sum(1 for x, y in zip(ex[ARMS[0]], ex[ARMS[1]]) if x and not y)
     c = sum(1 for x, y in zip(ex[ARMS[0]], ex[ARMS[1]]) if y and not x)

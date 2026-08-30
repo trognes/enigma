@@ -1124,6 +1124,19 @@ are read from a **data directory** (filenames built as
     style — as the mechanism predicts, the replaced scan being linear in `L`
     where its replacement is flat. **At L=40 it is a wash, not a loss**: the
     four cells read +0.93, +1.23, −1.24, 0.00.
+  - **It is PARTLY redundant with an IC pre-pass, and that is measured.**
+    `-K` and the `k4` pre-pass both inject IC information, so `-K` might make
+    the cheaper mono pre-pass adequate — which would reorder the schedule
+    recommendation. Measured directly (`eval/results-prepass-under-K.txt`,
+    40 000 paired trials, L=100, `-R 8`, two seeds, the same trials under both
+    rules): the `k4f10 − m4f10` gap is **+5.50pp under `-J` and +2.67pp under
+    `-K`**, so **`-K` closes 51% of it** — but not the rest. Reading down the
+    columns gives the mechanism: `-K` lifts `m4f10` by ~3pp and `k4f10` by
+    **0.15pp**, i.e. it helps only the schedule that lacks IC. So **`k4f10`
+    remains the recommended pre-pass under `-K`**, and a caller who has not
+    tuned the schedule is who gains most from `-K`. (The `-J` arm reproduces
+    `eval/results-monoic-endtoend.txt`'s +4.95pp from a different harness to
+    0.06pp, which is a check on both.)
   - **So `-K` replaces `-J` as the recommended climb rule**, at every length
     and in both writing styles: better or level on recovery everywhere
     measured, and 4–16% faster. `-J` is not deprecated — it remains the
