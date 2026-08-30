@@ -3579,8 +3579,11 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   them, and the one time a release-tag comparison was run by hand it was what
   established that the `src/` split had cost nothing. It runs the same four-cell
   matrix against the highest `v*` tag (or a ref given to `workflow_dispatch`),
-  **weekly rather than per-PR** — the answer barely moves between adjacent
-  commits, and doubling the bench matrix on every PR would buy nothing.
+  **on demand rather than per-PR or on a timer** — the answer barely moves
+  between adjacent commits, so doubling the bench matrix on every PR would buy
+  nothing, and a weekly cron was removed because `schedule` fires only from
+  the default branch: it would have been dead until the next release merge and
+  then benched `master`, which *is* the release.
   **Read it the opposite way round to the per-PR job**: large negative numbers
   are expected (`search` was −62% against v2.1.0), a cell near 0% means a tier
   gained nothing in a whole release cycle, and a POSITIVE cell is the alarm.
@@ -3589,15 +3592,20 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   **Two GitHub facts shape that file, and both fail SILENTLY — a job that runs
   and measures nothing looks exactly like a job that found nothing.**
   `schedule` and `workflow_dispatch` register only from the **default branch**
-  (`master` here), so while the workflow exists only on `dev` the weekly
-  trigger never fires and an API dispatch returns 404; it goes live at the next
-  release merge. And a scheduled run checks out the default branch, so benching
-  `master` against the highest `v*` tag is near a no-op — `master` only moves
-  at release merges and so *is* the tag, and the job would report ~0% every
-  Monday forever. The workflow therefore checks out **`dev`** explicitly
+  (`master` here), so while the workflow exists only on `dev` an API dispatch
+  returns 404 — GitHub does not know the file exists, rather than declining to
+  run it — and a cron would never fire. And a run triggered from the default
+  branch checks out the default branch, so benching `master` against the
+  highest `v*` tag is near a no-op: `master` only moves at release merges and
+  so *is* the tag. The workflow therefore checks out **`dev`** explicitly
   (overridable with the `head` dispatch input) rather than the ref it fired
   from, and prints which head it measured against which base, because a report
-  that omits that reads as though it were about the default branch.
+  that omits that reads as though it were about the default branch. It also
+  carries a **`pull_request` trigger filtered to its own path**, which is
+  branch-scoped and therefore the only way to exercise it before it reaches
+  `master` — a workflow that cannot run until it is merged to the release
+  branch cannot be reviewed before it is merged there, which is how both of
+  those traps survived its first two revisions.
   Measure the floor wherever you are judging, and do
   not import a number measured somewhere else.
 - **Every check in `tests/run_tests.sh` must be QUICK — size the keyspace to the
