@@ -114,7 +114,7 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "plugboard cannot game it, so it adds gradient");
   fprintf(out, "  %-24s %s\n", "", "where the n-gram surface is flat -- a better");
   fprintf(out, "  %-24s %s\n", "", "CLIMB, not better discrimination. Recommended:");
-  fprintf(out, "  %-24s %s\n", "", "-c -S m4f10 -J --polish");
+  fprintf(out, "  %-24s %s\n", "", "-c -S m4f10 -K --polish");
   fprintf(out, "  %-24s %s\n", "-d, --ngrams directory",
           "Dir with n-gram files (or $ENIGMA_DATA) [ngrams]");
   fprintf(out, "  %-24s %s\n", "-T, --threads N",
@@ -134,6 +134,27 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "cheaper per climb -- so pair it with a larger -R.");
   fprintf(out, "  %-24s %s\n", "", "Wins the realistic ~10-plug case, may lose with");
   fprintf(out, "  %-24s %s\n", "", "few plugs (needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "-K, --ic-order",
+          "-J, but rank the move-ordering scan by the");
+  fprintf(out, "  %-24s %s\n", "",
+          "index of coincidence, O(26) a move, instead of");
+  fprintf(out, "  %-24s %s\n", "",
+          "by the target model, a full decode a move.");
+  fprintf(out, "  %-24s %s\n", "",
+          "RECOMMENDED: faster than -J everywhere and never");
+  fprintf(out, "  %-24s %s\n", "",
+          "measurably worse, on prose as well as on");
+  fprintf(out, "  %-24s %s\n", "",
+          "telegraphic German. Largest where the pre-pass");
+  fprintf(out, "  %-24s %s\n", "",
+          "does not already supply IC -- much better and");
+  fprintf(out, "  %-24s %s\n", "",
+          "~16% faster on a bare -S f10; on k4f10/i4f10 a");
+  fprintf(out, "  %-24s %s\n", "",
+          "quality wash for ~8% less time (L=100; the");
+  fprintf(out, "  %-24s %s\n", "",
+          "saving grows with length). Use instead of -J,");
+  fprintf(out, "  %-24s %s\n", "", "not with it (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-M, --cap-target",
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");
@@ -402,7 +423,8 @@ fprintf(out, "  %-24s %s\n", "--crib-rerank F",
   fprintf(out, "Recommended for short messages with a standard ~10-plug board (raise -R for\n");
   fprintf(out, "harder ones; the two are matched-compute peers -- SA tends to win the very\n");
   fprintf(out, "shortest/hardest lengths, the greedy climb the slightly longer ones):\n");
-  fprintf(out, "  greedy: -c -J --polish --score m4f10 --random 10 -R 40 -f -l english\n");
+  fprintf(out, "  greedy: -c -K --polish --score m4f10 --random 10 -R 40 "
+               "-f -l english\n");
   fprintf(out, "  SA:     -c -A 12000 --score a10 -R 12 -a -l english\n");
   fprintf(out, "-f (weighted all-order + IC) is the recommended scoring model; -R is the main\n");
   fprintf(out, "quality dial (use -T to keep it cheap); the polisher is a small bump\n");
@@ -469,9 +491,15 @@ void show_settings()
   if (opt_hillclimb && opt_polish)
     fprintf(stderr, "            quadgram-gain 2-ply+3-ply cascade once on the best board "
             "(--polish)\n");
+  /* Which model ranks the move order is part of what the climb IS, and the two
+     rankings converge differently -- so a log that does not say which one ran
+     cannot be compared against another. */
   if (opt_hillclimb && opt_firstimprove)
     fprintf(stderr, "            first-improvement climb%s\n",
-            opt_dynorder ? " (dynamic move order)" : "");
+            opt_dynorder
+            ? (opt_ic_order ? " (dynamic move order, ranked by IC)"
+                            : " (dynamic move order)")
+            : "");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts >= 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));

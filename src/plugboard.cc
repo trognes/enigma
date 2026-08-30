@@ -710,19 +710,138 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      climb from the (perturbed) starting board, so it differs per restart; deterministic
      (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
   const bool dyn_order = (opt_dynorder != 0);
+  /* -K is that same climb with the scan ranked by the INDEX OF COINCIDENCE,
+     computed from the co-occurrence table in O(26) per move, instead of by the
+     target model at O(L) per move.
+
+     ONLY WORTH ANYTHING WHEN hist_on IS FALSE.  With a low-order target
+     probe_toggle already takes the histogram path, so the scan is O(26)
+     AND exact; approximating it there would cost accuracy for nothing.  The
+     case this addresses is the RECOMMENDED recipe -- a fused or quad target,
+     where every one of the 325 probes is a full decode.  Measured at
+     `-f -c -S f10 -R 64` with a 10-pair board, the scan is 20 800 of 91 451
+     plugboards scored at L=100 (22.7%) and of 98 081 at L=167 (21.2%), and
+     its share GROWS with length because it is linear in L where the
+     histogram form is flat.
+
+     IT IS A SEARCH CHANGE, NOT A SPEEDUP: ordering by IC is not ordering by
+     the target, so the climb visits moves in a different order and can
+     converge somewhere else.  Hence an option, defaulting to the existing
+     behaviour, so the two can be A/B'd on recovery rather than assumed.
+
+     MEASURED over 24 cells, 300 paired trials each, on authentic telegraphic
+     German at L = 60..120 (eval/results-jorder.txt, per-cell data in
+     eval/results-jorder-cells.tsv).  Judged on BREAK50.  IT SPLITS BY
+     SCHEDULE, and the split is the obvious one:
+
+       schedule  trials  break50 -J -> -K   Stouffer Z
+       f10         2400   26.2% -> 31.9%       -5.81
+       m4f10       1200   40.1% -> 42.5%       -2.32
+       k4f10       1200   41.5% -> 41.3%       +0.41
+       i4f10       1200   35.9% -> 35.9%       +0.10
+
+     PERCENTAGES, NOT COUNTS: f10 ran on two seeds and so has twice the
+     trials, and as raw counts those rows read 629/766 against 498/496, which
+     makes f10 look like the best schedule when it is the worst.  Reading down
+     the column, -K on f10 (31.9%) still loses to plain -J on k4f10 (41.5%) --
+     the schedule choice dominates the climb-rule choice.
+
+     THE LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE.  The O(26) ranking
+     below runs OUTSIDE the counted score loop, so score_iter prices the scans
+     this removes and not the work it adds.  Measured on WALL TIME instead
+     (eval/results-jorder-speed.txt, 24 paired fixtures per cell against a
+     self-control arm), -K is faster everywhere measured:
+
+       schedule  L=60     L=100    counter
+       f10       -12.9%   -15.8%   -25.1%
+       m4f10       --      -8.9%   -11.5%
+       i4f10       --      -8.6%   -11.1%
+       k4f10      -4.1%    -8.2%   -11.0%
+
+     The saving GROWS WITH LENGTH and the counter's overstatement shrinks with
+     it (2.7x at L=60 to 1.3x at L=100 on k4f10), because the work removed is
+     linear in L -- 325 full decodes a restart -- while the work added is
+     nearly flat.  So the counter is not a fixed multiple of the truth.
+
+     The schedules that gain are exactly those whose pre-pass does not already
+     feed IC into the climb.  Where it does (k4, i4) an IC order adds nothing;
+     where it does not (none, mono) it carries information the climb lacks.
+
+     ON A BARE FUSED TARGET IT IS BOTH CHEAPER AND BETTER, not a trade: eight
+     of eight cells favour it, the effect grows monotonically with length in
+     both seeds, and at L=120 the strongest cell breaks 182 of 300 against 140
+     (z = -4.70; mean 52.3 -> 64.6 and exact 128 -> 165, as secondary) while
+     scoring 25% fewer plugboards (~15% less wall time).  The saving splits the
+     same way as the quality and for the same cause: probe_toggle is already
+     O(26) for a low-order pre-pass stage, so only the fused target's scans
+     are ever replaced.
+
+     PROSE REPRODUCES IT rather than reversing it, which is what made this
+     the recommended climb rule: 12 cells of 1500 paired trials over english
+     and german prose (eval/results-jorder-prose.txt) pool to Stouffer
+     Z = -6.08, with no cell significantly against -K.  The split there is by
+     LENGTH -- +0.46 at L=40, -4.55 at 60, -6.44 at 100 -- the same monotone
+     rise the telegraphic grid showed, so the effect belongs to the move order
+     and not to the writing style.  Still OFF BY DEFAULT, as -J is: this is a
+     recommendation, not a change of default behaviour. */
+  const bool ic_order = dyn_order && ! hist_on && (opt_ic_order != 0);
   int visit[nmoves];
   if (dyn_order)
     {
       double sc[nmoves];
-      for (int mv = 0; mv < nmoves; mv++)
+      if (ic_order)
         {
-          int a = P.a[mv], b = P.b[mv];
-          double s = -1e300;   /* invalid moves sort last */
-          if (! (pf[a] || pf[b]) && ! cap_blocks(a, b))
-            s = probe_toggle(a, b);
-          sc[mv] = s;
-          visit[mv] = mv;
+          /* T depends on (rows, ciphertext) and not on the board, so one
+             build serves all 325 probes. Not built for this model otherwise
+             -- hillclimb() only calls cooc_build when hist_on. */
+          cooc_build(m);
+          int n[asize];
+          for (int y = 0; y < asize; y++)
+            n[y] = 0;
+          for (int c = 0; c < asize; c++)
+            {
+              const uint16_t * const col = cooc_col(c, steck[c]);
+              for (int y = 0; y < asize; y++)
+                n[y] += col[y];
+            }
+          for (int mv = 0; mv < nmoves; mv++)
+            {
+              const int a = P.a[mv], b = P.b[mv];
+              visit[mv] = mv;
+              if ((pf[a] || pf[b]) || cap_blocks(a, b))
+                { sc[mv] = -1e300; continue; }
+              int pos[4], val[4];
+              const int cnt = toggle_plan(steck, a, b, pos, val);
+              int nn[asize];
+              for (int y = 0; y < asize; y++)
+                nn[y] = n[y];
+              for (int k = 0; k < cnt; k++)
+                {
+                  const int p0 = pos[k];
+                  const uint16_t * __restrict rm = cooc_col(p0, steck[p0]);
+                  const uint16_t * __restrict ad = cooc_col(p0, val[k]);
+                  for (int y = 0; y < asize; y++)
+                    nn[y] += ad[y] - rm[y];
+                }
+              long coin = 0;
+              for (int y = 0; y < asize; y++)
+                coin += static_cast<long>(nn[y]) * (nn[y] - 1);
+              /* The IC divisor is a positive constant here, so ranking on the
+                 raw coincidence count orders identically and avoids a divide
+                 per move. Higher is better, as for the target-model score. */
+              sc[mv] = static_cast<double>(coin);
+            }
         }
+      else
+        for (int mv = 0; mv < nmoves; mv++)
+          {
+            int a = P.a[mv], b = P.b[mv];
+            double s = -1e300;   /* invalid moves sort last */
+            if (! (pf[a] || pf[b]) && ! cap_blocks(a, b))
+              s = probe_toggle(a, b);
+            sc[mv] = s;
+            visit[mv] = mv;
+          }
       std::sort(visit, visit + nmoves, [&](int i, int j)
       {
         if (sc[i] != sc[j]) return sc[i] > sc[j];   /* best score first */

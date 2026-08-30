@@ -397,12 +397,29 @@ ciphertext length it runs many random trials (random excerpt + rotor key +
 plugboard hill-climbed (the cheap "plugboard-recovery" tier), and reports per
 length the mean %-of-letters-correct (a graded signal) and the exact-recovery
 rate, plus headline `L50`/`L90` (the shortest length reaching that recovery rate
-— lower is better). **When comparing search/scoring changes, judge on the mean
-%-correct, not the exact-recovery rate.** The mean is the graded, lower-variance
-signal: it moves smoothly with small quality changes and separates configs at
-short lengths where the exact rate is near-zero and dominated by trial noise.
-The exact rate (and `L50`/`L90`) is a coarse headline — use it as a secondary
-check, not the metric a tuning decision turns on. A fixed `SEED` makes the trial
+— lower is better).
+
+> **JUDGE A SEARCH OR SCORING CHANGE ON `BREAK50`: the NUMBER OF TRIALS
+> RECOVERING AT LEAST HALF THE PLAINTEXT.** Half the letters is the point
+> past which a reader has the message, so it is the outcome that means
+> something operationally, and counting those trials is what the restart
+> ladder below already does ("judged at ≥50% of the plaintext recovered").
+> Report mean %-correct and exact recovery alongside it, as secondary.
+>
+> **The other two each fail at one end.** Exact recovery is near-zero at the
+> short end and so is dominated by trial noise — at L=40 it sits at ~1% and
+> cannot separate anything. The mean is dragged around by catastrophic
+> failures, where a board that returned 5% of the letters and one that
+> returned 45% are both simply *not broken* and the difference between them
+> is noise being averaged in as if it were signal; that is also what makes a
+> mean move while the break count does not, which has happened here (a −0.45pp
+> mean swing at L=100 sitting on 216 breaks against 217).
+>
+> Being a COUNT, `break50` also takes a paired McNemar test directly, where a
+> mean needs a variance estimate — so the discordant pairs (only-A, only-B)
+> are the natural report and the one that says whether a difference is real.
+
+A fixed `SEED` makes the trial
 set deterministic (Python's `random.Random(seed)`, reproducible across
 machines), so `make crackquality BASE=<git-ref>` is a same-machine A/B that
 solves identical problems with both binaries. (It was rewritten from shell+awk
@@ -509,8 +526,10 @@ are read from a **data directory** (filenames built as
 > only one that does not depend on the writing style; see the `-f` entry below),
 > `-S m4f10` staging (mono pre-pass then fused; **`k4f10` on telegraphic
 > traffic, at every length** — measured, see `-S` and the `-S k` entry; it
-> displaced `i4f10` there), `-J` (dynamic move
-> order, wins the realistic ~10-plug regime), `-M` (with a tight cap), and the
+> displaced `i4f10` there), **`-K`** (first-improvement with the move order
+> ranked by IC — it **replaces `-J`**, which it is never measurably worse than
+> and is 4–16% faster than; `-J` remains correct and is the fallback where
+> `-K`'s evidence does not reach, see below), `-M` (with a tight cap), and the
 > best-board
 > finisher `--polish` (the recommended finisher: one fixed-cost pass after all
 > restarts, so it is negligible at a high `-R`). Several opt-in flags are **not
@@ -560,7 +579,7 @@ are read from a **data directory** (filenames built as
 > cross; ~5% at L40); past that only a **sharper scoring model** moves the
 > needle, not more search — which is exactly what the **`-a` weighted model**
 > delivers (the first measured short-message *scoring* gain, +~1–2pp mean
-> %-correct at L40–100 across all four languages; PR #106). Recipe: `-c -J
+> %-correct at L40–100 across all four languages; PR #106). Recipe: `-c -K
 > --polish --score m4f10 --random 10 -R <as high as -T affords> -f -l <lang> -T
 > <cores>` — swapping `m4f10` for **`k4f10` on telegraphic traffic, at every
 > length** (+5.0pp over `i4f10` at L=167, pooled over five seeds, and never
@@ -998,6 +1017,130 @@ are read from a **data directory** (filenames built as
   count-dependent (`~10 plugs → -J` uncapped; `known-few → -J --score iKqK`).
   Static frequency-ordering was measured and **rejected**
   (`archived/PERFORMANCE.md` §7.2).
+- `-K` **IC-ordered first-improvement climb** (**recommended** — it replaces
+  `-J`; needs `-c`; off by default, like `-J`).
+  `-J` with its move-ordering scan ranked by the **index of coincidence**
+  instead of by the target model — a climb rule in its own right, so it
+  **replaces `-J`** rather than modifying it (`-K` sets the first-improvement
+  climb and the dynamic order itself; `-J -K` is agreement and is accepted
+  silently). Long form `--ic-order`. That scan scores all 325 toggles once per
+  restart, and with a fused or quad target every one of them is a **full
+  decode** — measured 21–23% of a climb's scored plugboards at `-R 64`, a share
+  that grows with message length because the scan is linear in `L`. `-K` ranks
+  them from the co-occurrence table instead, in **O(26) per move**.
+  - **It is a SEARCH change, not a speedup.** An IC order is not a target-model
+    order, so the climb visits moves differently and can converge somewhere
+    else. Cheaper per restart is worthless if it recovers less, so it was
+    measured on recovery: 24 cells, 300 paired trials each, authentic
+    telegraphic German at L = 60…120, judged on **`break50`**
+    (`eval/jorder_ab.py`, `eval/results-jorder.txt`, per-cell data in
+    `eval/results-jorder-cells.tsv`).
+  - **It splits by SCHEDULE, and the split has the obvious mechanism** —
+    the schedules that gain are exactly those whose pre-pass does not already
+    feed IC into the climb:
+
+    | schedule | pre-pass | trials | break50 `-J` → `-K` | Stouffer Z |
+    |---|---|---:|---:|---:|
+    | `f10` | none | 2400 | 26.2% → **31.9%** | **−5.81** |
+    | `m4f10` | mono | 1200 | 40.1% → **42.5%** | −2.32 |
+    | `k4f10` | mono+IC | 1200 | 41.5% → 41.3% | +0.41 |
+    | `i4f10` | IC | 1200 | 35.9% → 35.9% | +0.10 |
+
+    (Negative Z means IC ordering ahead. `f10` has twice the trials because it
+    was run on two seeds — **quote the percentages, not the counts**: as raw
+    counts the rows read 629/766 against 498/496 and `f10` looks like the best
+    schedule, which is backwards.)
+  - **READ DOWN THE COLUMN TOO: `f10` is the WORST schedule here, by a wide
+    margin.** At 26.2% it breaks far fewer messages than `k4f10` at 41.5% on
+    the identical trial design — so what `-K` does on `f10` is not find
+    something special, it **partly recovers ground a bare fused target never
+    had**, and `-K` on `f10` (31.9%) still loses to plain `-J` on `k4f10`
+    (41.5%). The schedule choice dominates the climb-rule choice; `-K` is a
+    small free gain on top of the right schedule, not a substitute for it.
+  - **THAT LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE, and it overstates
+    the saving.** The IC ranking's O(26) work per move happens **outside** the
+    counted score loop, so `score_iter` prices the scans `-K` removes and not
+    the work it adds — the same trap this file documents for the `--polish`
+    gain scan, with the sign reversed. Measured properly on **wall time**
+    (`eval/jorder_speed.py`, 24 fixtures × 3 reps per cell, paired, startup
+    subtracted, against a third arm re-timing `-J` against itself):
+
+    | schedule | L | `-K`/`-J` | 95% CI | control | counter said |
+    |---|---:|---:|---|---:|---:|
+    | `f10` | 60 | **−12.9%** | [−13.7, −12.1] | −0.1% | −25.1% |
+    | `f10` | 100 | **−15.8%** | [−16.8, −14.8] | −0.2% | −25.1% |
+    | `m4f10` | 100 | −8.9% | [−9.7, −8.0] | +0.1% | −11.5% |
+    | `i4f10` | 100 | −8.6% | [−10.0, −7.1] | −0.3% | −11.1% |
+    | `k4f10` | 100 | **−8.2%** | [−9.6, −6.8] | −0.1% | −11.0% |
+    | `k4f10` | 60 | −4.1% | [−5.0, −3.2] | +0.8% | −11.0% |
+
+    Every cell clears its own control by an order of magnitude, so `-K` **is**
+    faster, everywhere measured. **The saving grows with length and the
+    overstatement shrinks with it** — 2.7× at L=60 falling to 1.3× at L=100 on
+    `k4f10` — because the work removed is linear in `L` (325 full decodes a
+    restart) while the work added is nearly flat (325 O(26) column deltas). So
+    the counter is **not a fixed multiple of the truth** and cannot be
+    corrected by a constant; time it.
+  - **The per-fixture ratio is a real distribution, which is why this needed
+    24 fixtures and not two.** The arms converge in different numbers of
+    moves, and how many depends on the message and key — measured sd 0.020 to
+    0.036 against control sds of 0.013 to 0.022, so four of six cells carry
+    genuine trajectory spread on top of the noise. It is small enough that
+    every CI here is under ±1.5pp. An earlier two-fixture probe read `k4f10`
+    L=100 at −3.3% and −19.7% and that was written up here as the ratio being
+    unquotable; it was a **broken fixture**, enciphering under one start
+    position and climbing under another, i.e. timing a wrong-key climb.
+  - **On a bare fused target it is both cheaper AND better**, which is the
+    unusual part — not a trade in either direction. Eight of eight cells favour
+    it, the effect grows monotonically with length in both seeds, and at L=120
+    the strongest cell breaks **182 of 300 against 140** (60.7% against 46.7%,
+    z = −4.70) while doing less work. Mean %-correct 52.3 → 64.6 and exact
+    128 → 165 in the same cell, as secondary.
+  - **The SAVING splits the same way as the quality, and for the same cause.**
+    `probe_toggle` already takes the O(26) histogram path for a low-order
+    stage, so a `k4`/`i4`/`m4` pre-pass costs the same either way and only the
+    fused **target** stage's scans are ever replaced. With no pre-pass at all
+    every scan in the run is replaced and the saving doubles. With *every*
+    stage low-order `-K` is exactly `-J`, and the run says so rather than
+    leaving the reader to infer it from an unchanged answer.
+  - **The one adverse cell did not replicate**: `k4f10` L=100 `-R 128` read
+    z = +2.26 on the first seed and −0.45 on the second (pooled +1.28). It
+    looked like "IC ordering degrades at high restart budgets", which would
+    have been a real concern given that pre-pass questions are known to be
+    restart-budget dependent. It was a single cell of 24.
+  - **PROSE WAS THE OPEN QUESTION AND IT REPRODUCES, RATHER THAN REVERSING.**
+    This file records that scoring results do not transfer between the two
+    writing styles, so the telegraphic grid could not settle a recommendation
+    for all languages. Measured on prose — 12 cells, 1500 paired trials each
+    (18 000 pairs), {english, german} × {`f10`, `m4f10`} × L = {40, 60, 100},
+    `-R 32`, judged on `break50` (`eval/results-jorder-prose.txt`): **pooled
+    Stouffer Z = −6.08**, +314 breaks of 18 000, and **not one of the twelve
+    cells is significantly against `-K`**. English alone reads −3.27, German
+    −5.34, `f10` −5.16, `m4f10` −3.44.
+  - **The split is by LENGTH, not by language or schedule** — pooled per
+    length, L=40 reads **+0.46 (nothing)**, L=60 **−4.55** and L=100
+    **−6.44**. That is the same monotone rise the telegraphic grid showed, so
+    the effect is a property of the move order rather than of the writing
+    style — as the mechanism predicts, the replaced scan being linear in `L`
+    where its replacement is flat. **At L=40 it is a wash, not a loss**: the
+    four cells read +0.93, +1.23, −1.24, 0.00.
+  - **So `-K` replaces `-J` as the recommended climb rule**, at every length
+    and in both writing styles: better or level on recovery everywhere
+    measured, and 4–16% faster. `-J` is not deprecated — it remains the
+    fallback where `-K`'s evidence does not reach: `-q` and `-a` targets (they
+    pay the same full-decode ordering scan and should behave like `f10`, but
+    were not run), lengths under 40, and the full unknown-key sweep, every
+    measurement here having given the rotor key and hidden only the board.
+    **Both stay off by default** — this is a recommendation, not a change of
+    default behaviour.
+  - **The German prose arm rests on a 476-character passage**, the fixture
+    `tests/crack_quality.py` uses for `CLANG=german` and the one every other
+    German-prose claim here was measured on. Excerpts therefore repeat ~4×
+    at L=100. Each trial still draws a fresh key and board and both arms see
+    the identical trial, so the pairing is sound; what is limited is
+    generalisation beyond that passage. The English arm has no such limit
+    (136 KB, no repetition) and agrees, which is the reason to believe the
+    German cells are not an artefact of their fixture.
 - `-M` **cap-as-target** climb rule (needs `-c`; off by default). Changes what
   the plug cap means during the climb: by default the cap is only a *growth
   ceiling* (at/over the cap, a brand-new **add** is blocked but count-preserving
@@ -1426,7 +1569,7 @@ are read from a **data directory** (filenames built as
   forces is the cost); log-linear wins because it is *conjunctive* — a candidate
   must look plausible at every order at once. See `archived/PERFORMANCE.md` /
   PR #106. Because `-a` is the sharpest single-family model, the recipe built on
-  it is `-c -S m4a10 -J --polish -a -l <lang>` -- but see `-f` below, which
+  it is `-c -S m4a10 -K --polish -a -l <lang>` -- but see `-f` below, which
   supersedes it.
 - `-f` **fused: weighted all-order + index of coincidence** (**recommended**
   when the language is known; needs `-l`; a schedule token too -- `-S m4f10`).
@@ -1449,7 +1592,7 @@ are read from a **data directory** (filenames built as
   better CLIMB, not better discrimination**: a decomposition
   (`archived/PERFORMANCE.md` 6.4) puts the whole gain in surface reshaping
   (+3.4pp) with selection contributing -0.0pp, so it does *not* move the
-  scoring-failure floor. Recommended recipe: `-c -S m4f10 -J --polish -f -l
+  scoring-failure floor. Recommended recipe: `-c -S m4f10 -K --polish -f -l
   <lang>` — but on **telegraphic traffic** use `k4f10` instead of `m4f10`, at
   every length (+5.0pp over `i4f10`, itself +2.8pp over `m4f10`; see the `-S k`
   entry).

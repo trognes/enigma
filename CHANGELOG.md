@@ -127,6 +127,73 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`-K` / `--ic-order` — `-J` with its move-ordering scan ranked by the index
+  of coincidence instead of by the target model.** `-J` builds its visit order
+  by scoring all 325 toggles once per restart, and with a fused or quad target
+  each of those probes is a full decode — measured 21–23% of a climb's scored
+  plugboards at `-R 64`, a share that grows with message length because the
+  scan is linear in `L` where the histogram form is flat. `-K` ranks them from
+  the per-key co-occurrence table in O(26) a move. It is a climb rule in its
+  own right, so it **replaces `-J`** rather than modifying it, and needs only
+  `-c`; `-J -K` is agreement and is accepted silently. Off by default.
+  - **A search change, not a speedup.** An IC order is not a target-model
+    order, so the climb visits moves differently and can converge somewhere
+    else — cheaper per restart is worthless if it recovers less. Measured on
+    recovery over 24 cells of 300 paired trials, authentic telegraphic German
+    at L = 60…120, judged on `break50` (`eval/results-jorder.txt`).
+  - **It splits by schedule, and the split is the obvious one** — the schedules
+    that gain are exactly those whose pre-pass does not already feed IC into
+    the climb:
+
+    | schedule | pre-pass | trials | break50 `-J` → `-K` | Stouffer Z |
+    |---|---|---:|---:|---:|
+    | `f10` | none | 2400 | 26.2% → **31.9%** | **−5.81** |
+    | `m4f10` | mono | 1200 | 40.1% → **42.5%** | −2.32 |
+    | `k4f10` | mono+IC | 1200 | 41.5% → 41.3% | +0.41 |
+    | `i4f10` | IC | 1200 | 35.9% → 35.9% | +0.10 |
+
+    Percentages, because `f10` ran on two seeds and so has twice the trials —
+    as raw counts those rows read 629/766 against 498/496 and `f10` looks like
+    the best schedule, which is backwards. Read down the column: `f10` is the
+    **worst** schedule at 26.2%, so `-K` there partly recovers ground a bare
+    fused target never had, and `-K` on `f10` still loses to plain `-J` on
+    `k4f10`.
+
+    That last column is **plugboards scored, not compute**: the IC ranking's
+    O(26) work per move is outside the counted score loop, so it prices the
+    scans `-K` removes and not the work it adds. Measured on wall time
+    (`eval/jorder_speed.py`, 24 paired fixtures a cell against a self-control
+    arm), `-K` is faster everywhere measured — `f10` −12.9% at L=60 and −15.8%
+    at L=100, the three schedules with a low-order pre-pass −8.2…−8.9% at
+    L=100 and `k4f10` −4.1% at L=60. The saving **grows with length** and the
+    counter's overstatement shrinks with it, 2.7× at L=60 to 1.3× at L=100 on
+    `k4f10`, because the work removed is linear in `L` and the work added is
+    nearly flat.
+
+  - **On a bare fused target it is both cheaper and better**, not a trade in
+    either direction: eight of eight cells favour it, the effect grows
+    monotonically with length in both seeds, and at L=120 the strongest cell
+    breaks 182 of 300 against 140 (z = −4.70) while doing less work — mean
+    %-correct 52.3 → 64.6 and exact 128 → 165 in that cell, as secondary.
+  - **The compute split has the same cause as the quality one.** A low-order
+    stage's probe is already O(26) and exact, so a `k4`/`i4`/`m4` pre-pass
+    costs the same either way and only the fused target stage's scans are ever
+    replaced. With every stage low-order `-K` is exactly `-J`, and the run says
+    so rather than leaving the reader to infer it from an unchanged answer.
+  - **Prose was the open question, and it reproduces rather than reversing.**
+    12 cells, 1500 paired trials each (18 000 pairs), {english, german} ×
+    {`f10`, `m4f10`} × L = {40, 60, 100}, `-R 32`, judged on `break50`
+    (`eval/results-jorder-prose.txt`): pooled Stouffer Z = **−6.08**, +314
+    breaks, and not one of the twelve cells is significantly against `-K`.
+    The split is by **length**, not by language or schedule — pooled per
+    length, L=40 reads +0.46 (nothing), L=60 −4.55 and L=100 −6.44, the same
+    monotone rise the telegraphic grid showed.
+  - **`-K` therefore replaces `-J` as the recommended climb rule.** Both stay
+    **off by default** — this is a recommendation, not a change of default
+    behaviour — and `-J` remains the fallback where `-K`'s evidence does not
+    reach: `-q`/`-a` targets, lengths under 40, and the full unknown-key
+    sweep (every measurement gave the rotor key and hid only the board).
+
 - **`--biased-random T` — draw the restart kick from the single-plug index of
   coincidence instead of uniformly.** Each of the 325 possible single plugs is
   scored on its own IC, z-scored per key, and the kick's pairs are drawn with

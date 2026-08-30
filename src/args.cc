@@ -58,6 +58,7 @@ void parse_args(int argc, char * * argv)
   opt_hillclimb = 0;
   opt_firstimprove = 0;
   opt_dynorder = 0;
+  opt_ic_order = 0;
   opt_capmerge = 0;
   opt_no_repair = 0;
   opt_cascade = 0;
@@ -137,6 +138,7 @@ void parse_args(int argc, char * * argv)
       { "anneal",         required_argument, nullptr, 'A' },
       { "ngrams",         required_argument, nullptr, 'd' },
       { "dynamic-order",  no_argument,       nullptr, 'J' },
+      { "ic-order",       no_argument,       nullptr, 'K' },
       { "cap-target",     no_argument,       nullptr, 'M' },
       { "ic",             no_argument,       nullptr, 'i' },
       { "mono",           no_argument,       nullptr, 'm' },
@@ -188,7 +190,7 @@ void parse_args(int argc, char * * argv)
 
   int c;
   while ((c = getopt_long(argc, argv,
-                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:JMimbtqafcvhn4",
+                          "u:w:r:g:s:p:l:x:T:R:S:F:e:A:d:JKMimbtqafcvhn4",
                           long_options, nullptr)) != -1)
     {
       switch (c)
@@ -244,6 +246,15 @@ void parse_args(int argc, char * * argv)
         case 'J':
           opt_firstimprove = 1;   /* -J is the first-improvement climb, best-first order */
           opt_dynorder = 1;
+          break;
+        case 'K':
+          /* -K is -J with the move-ordering scan ranked by IC, so it IMPLIES
+             -J rather than modifying it: the two are one climb rule each, not
+             a rule and a switch. `-J -K` is agreement, not a conflict, and is
+             accepted silently. */
+          opt_firstimprove = 1;
+          opt_dynorder = 1;
+          opt_ic_order = 1;
           break;
         case OPT_NO_REPAIR:
           opt_no_repair = 1;
@@ -964,6 +975,31 @@ void parse_args(int argc, char * * argv)
     fatal("Illegal anneal move budget (-A must be >= 1)");
   if ((opt_anneal > 0) && (! opt_hillclimb))
     fatal("Simulated annealing (-A) needs the plugboard hill-climb (-c)");
+
+  /* -K is a climb rule, so it needs a climb. It sets opt_dynorder itself, so
+     there is no "needs -J" case to reject. */
+  if (opt_ic_order)
+    {
+      if (! opt_hillclimb)
+        fatal("IC-ordered first-improvement climb (-K) needs the plugboard "
+              "hill-climb (-c)");
+      /* A stage whose model has a histogram form already scores each of the
+         325 moves in O(26), and exactly -- so there the IC ranking is not
+         merely cheap, it is inert. With EVERY stage low-order, -K is exactly
+         -J, which a run that asked for -K should be told rather than left to
+         infer from an unchanged answer. Non-fatal: the request is coherent,
+         it just has no work to do. */
+      bool any_full_scan = false;
+      for (int i = 0; i < opt_nstages; i++)
+        {
+          const int md = opt_stages[i].model;
+          if ((md != SCORE_IC) && (md != SCORE_MONO) && (md != SCORE_MONOIC))
+            any_full_scan = true;
+        }
+      if (! any_full_scan)
+        fprintf(stderr, "WARNING: -K is exactly -J with a low-order schedule "
+                "-- every stage already ranks its moves in O(26) exactly\n");
+    }
 
   /* -J selects the first-improvement climb with dynamic move order, so it needs -c. */
   if (opt_firstimprove && (! opt_hillclimb))

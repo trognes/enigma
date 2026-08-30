@@ -204,6 +204,25 @@ int opt_firstimprove;
    truly set. Off by default; needs -c. */
 int opt_dynorder;
 
+/* -K: -J with its move-ordering scan ranked by the INDEX OF COINCIDENCE, in
+   O(26) per move from the co-occurrence table, instead of by the target model
+   at O(L) per move (a full decode each). A climb rule in its own right rather
+   than a modifier -- it sets opt_firstimprove and opt_dynorder itself, so it
+   REPLACES -J and needs only -c. Off by default.
+
+   It only ever applies to a stage whose model has no histogram form -- with a
+   low-order target the ordering scan is already O(26) and exact, so there is
+   nothing to approximate. The case it addresses is the recommended recipe, a
+   fused or quad target, where the scan is 21-23% of a climb's scored
+   plugboards and its share grows with message length.
+
+   A SEARCH CHANGE, NOT A SPEEDUP: an IC order is not a target-model order, so
+   the climb visits moves differently and can converge somewhere else. Measured
+   over 24 cells of 300 paired trials on telegraphic German at L = 60..120,
+   judged on break50 (eval/results-jorder.txt); it splits by schedule and never
+   measured worse. See the comment at the ordering scan in plugboard.cc. */
+int opt_ic_order;
+
 /* -M: make the plug cap a strict descent TARGET, not just a growth ceiling. Default (0):
    at/over the cap only a brand-new add (both ends free) is blocked, so an over-cap board
    (a big --random kick handed to a small stage cap) can converge still over the cap, merely
