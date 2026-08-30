@@ -753,8 +753,9 @@ static void firstimprove_sweep(machine & m, int max_pairs)
 
      ON A BARE FUSED TARGET IT IS BOTH CHEAPER AND BETTER, not a trade: eight
      of eight cells favour it, the effect grows monotonically with length in
-     both seeds, and at L=120 the mean goes 52.3 -> 64.6 while the IC arm
-     scores 25% fewer plugboards (~15% less wall time).  The saving splits the
+     both seeds, and at L=120 the strongest cell breaks 182 of 300 against 140
+     (z = -4.70; mean 52.3 -> 64.6 and exact 128 -> 165, as secondary) while
+     scoring 25% fewer plugboards (~15% less wall time).  The saving splits the
      same way as the quality and for the same cause: probe_toggle is already
      O(26) for a low-order pre-pass stage, so only the fused target's scans
      are ever replaced.

@@ -53,8 +53,10 @@ THE f10 RESULT IS THE LARGE ONE AND IT REPLICATED
 
 Eight of eight cells favour IC ordering, the effect grows monotonically with
 length in both seeds, and the second seed is STRONGER than the first.  Pooled
-Stouffer Z = -5.81.  At L=120 seed 99 the mean goes 52.3 -> 64.6 (+12.2pp)
-while the IC arm does 25% LESS work.
+Stouffer Z = -5.81.  The strongest cell is L=120 seed 99: 182 breaks of 300
+against 140, i.e. 60.7% against 46.7% (+14.0pp), while the IC arm scores 25%
+fewer plugboards.  Mean %-correct 52.3 -> 64.6 and exact 128 -> 165 in that
+same cell, as secondary -- the judge here is BREAK50 throughout.
 
 That is the unusual part: on f10 this is not a speed-for-quality trade in
 either direction.  It is cheaper AND better, and the gap widens with message

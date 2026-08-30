@@ -1061,8 +1061,10 @@ are read from a **data directory** (filenames built as
   - **On a bare fused target it is both cheaper AND better**, which is the
     unusual part — not a trade in either direction. Eight of eight cells favour
     it, the effect grows monotonically with length in both seeds, and at L=120
-    the mean goes 52.3 → **64.6** while the IC arm does 25% less work.
-  - **The compute split has the same cause as the quality one.**
+    the strongest cell breaks **182 of 300 against 140** (60.7% against 46.7%,
+    z = −4.70) while doing less work. Mean %-correct 52.3 → 64.6 and exact
+    128 → 165 in the same cell, as secondary.
+  - **The SAVING splits the same way as the quality, and for the same cause.**
     `probe_toggle` already takes the O(26) histogram path for a low-order
     stage, so a `k4`/`i4`/`m4` pre-pass costs the same either way and only the
     fused **target** stage's scans are ever replaced. With no pre-pass at all

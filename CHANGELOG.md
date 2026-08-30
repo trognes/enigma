@@ -160,8 +160,9 @@ existing command lines can behave differently or stop working.
 
   - **On a bare fused target it is both cheaper and better**, not a trade in
     either direction: eight of eight cells favour it, the effect grows
-    monotonically with length in both seeds, and at L=120 the mean goes 52.3 →
-    64.6 while the IC arm does 25% less work.
+    monotonically with length in both seeds, and at L=120 the strongest cell
+    breaks 182 of 300 against 140 (z = −4.70) while doing less work — mean
+    %-correct 52.3 → 64.6 and exact 128 → 165 in that cell, as secondary.
   - **The compute split has the same cause as the quality one.** A low-order
     stage's probe is already O(26) and exact, so a `k4`/`i4`/`m4` pre-pass
     costs the same either way and only the fused target stage's scans are ever

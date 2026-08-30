@@ -761,12 +761,13 @@ a find**, and a real break reads +15 to +17.
   the same order, so it is a search change rather than a speedup and was
   measured on recovery: it never came out worse, and where the schedule does
   not already feed IC into the climb it is both much cheaper and substantially
-  better — on a bare `--score f10` at 120 letters it recovered 64.6% of the
-  plaintext against 52.3% while scoring 25% fewer plugboards — around 15% less
-  wall time, the counter overstating it because the IC ranking's own work is
-  not counted. On `--score k4f10` or `i4f10`, whose pre-pass already supplies
-  IC, quality is a wash and the saving is smaller and message-dependent. `-K`
-  is a replacement for `-J`, not an addition to it.
+  better — on a bare `--score f10` at 120 letters it broke **182 of 300
+  messages against 140**, counting a break as at least half the plaintext
+  recovered, while scoring 25% fewer plugboards (around 15% less wall time,
+  the counter overstating it because the IC ranking's own work is not
+  counted). On `--score k4f10` or `i4f10`, whose pre-pass already supplies IC,
+  quality is a wash and the saving is smaller and message-dependent. `-K` is a
+  replacement for `-J`, not an addition to it.
 
 The recipes below build the schedule and plug-cap mechanics up on the
 **recommended** fused target (`-f`, staged as `--score m4f10`). The percentages
