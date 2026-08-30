@@ -3586,6 +3586,18 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   gained nothing in a whole release cycle, and a POSITIVE cell is the alarm.
   Tiers whose options postdate the tag report `n/a` and are counted, so partial
   coverage is never silent — against v2.1.0 that is `crib`.
+  **Two GitHub facts shape that file, and both fail SILENTLY — a job that runs
+  and measures nothing looks exactly like a job that found nothing.**
+  `schedule` and `workflow_dispatch` register only from the **default branch**
+  (`master` here), so while the workflow exists only on `dev` the weekly
+  trigger never fires and an API dispatch returns 404; it goes live at the next
+  release merge. And a scheduled run checks out the default branch, so benching
+  `master` against the highest `v*` tag is near a no-op — `master` only moves
+  at release merges and so *is* the tag, and the job would report ~0% every
+  Monday forever. The workflow therefore checks out **`dev`** explicitly
+  (overridable with the `head` dispatch input) rather than the ref it fired
+  from, and prints which head it measured against which base, because a report
+  that omits that reads as though it were about the default branch.
   Measure the floor wherever you are judging, and do
   not import a number measured somewhere else.
 - **Every check in `tests/run_tests.sh` must be QUICK — size the keyspace to the

@@ -32,12 +32,35 @@ name: Release Bench
 # options` rather than a fake regression (min_time returns empty on a non-zero
 # exit). Against v2.1.0 that is the crib tier, and it is counted and reported
 # at the end so partial coverage is never silent.
+#
+# TWO GITHUB FACTS THIS FILE IS SHAPED AROUND, both of which silently produce a
+# job that runs and measures nothing:
+#
+#   1. `schedule` and `workflow_dispatch` are registered ONLY from the DEFAULT
+#      branch. While this file exists only on `dev` it is not registered at all
+#      -- the weekly trigger never fires and an API dispatch returns 404, with
+#      no error surfaced anywhere. It becomes live when `dev` is merged to
+#      `master`, i.e. at the next release.
+#
+#   2. A scheduled run checks out the DEFAULT branch by default. Benching
+#      `master` against the highest v* tag is close to a no-op, because master
+#      only moves at release merges and so IS the tag: the job would run every
+#      Monday and report ~0% forever. The interesting question is how far `dev`
+#      has drifted since the last release, so the scheduled run explicitly
+#      checks out MEASURE_REF (default `dev`), not the branch it was
+#      triggered from.
 
 on:
   schedule:
     - cron: '0 4 * * 1'      # Mondays 04:00 UTC
   workflow_dispatch:
     inputs:
+      head:
+        description: >-
+          Branch or ref to MEASURE. Default: dev (see note 2 above -- the
+          default branch is the wrong thing to bench against a release tag).
+        required: false
+        type: string
       base:
         description: >-
           Ref to compare against. Default: the highest v* tag by version sort.
@@ -63,6 +86,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # NOT the triggering ref: a scheduled run fires on the default
+          # branch, and benching `master` against the highest v* tag is a
+          # no-op (see note 2 in the header). `dev` is what has drifted.
+          ref: ${{ inputs.head || 'dev' }}
           fetch-depth: 0   # the A/B builds BASE from a git worktree, and the
                            # tag lookup below needs the tags
 
@@ -73,6 +100,7 @@ jobs:
         # a ref named `x"; rm -rf /; #` would otherwise be pasted in verbatim.
         env:
           BASE_INPUT: ${{ inputs.base }}
+          MEASURE_REF: ${{ inputs.head || 'dev' }}
         run: |
           ref="$BASE_INPUT"
           if [ -z "$ref" ]; then
@@ -90,7 +118,18 @@ jobs:
           fi
           sha=$(git rev-parse --short "$ref^{commit}")
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
-          echo "Comparing against $ref ($sha)"
+          # Say what was measured against what. A scheduled run does not
+          # bench the branch it fired from, so a report that omits this is
+          # easy to read as being about the default branch.
+          head_sha=$(git rev-parse --short HEAD)
+          echo "Measuring $MEASURE_REF ($head_sha) against $ref ($sha)"
+          {
+            echo "### Release Bench"
+            echo ""
+            echo "Measuring \`$MEASURE_REF\` (\`$head_sha\`)"
+            echo "against \`$ref\` (\`$sha\`)."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compiler and machine
         run: |
