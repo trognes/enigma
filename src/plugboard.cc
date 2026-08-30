@@ -734,11 +734,18 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      eval/results-jorder-cells.tsv).  Judged on BREAK50.  IT SPLITS BY
      SCHEDULE, and the split is the obvious one:
 
-       schedule  break50 target/ic  Stouffer Z  compute
+       schedule  break50 target/ic  Stouffer Z  plugboards
        f10          629 / 766         -5.81      -25.1%   (8 cells, 2 seeds)
        m4f10        481 / 510         -2.32      -11.5%
        k4f10        498 / 496         +0.41      -11.0%
        i4f10        431 / 431         +0.10      -11.1%
+
+     THE LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE.  The O(26) ranking
+     below runs OUTSIDE the counted score loop, so score_iter prices the scans
+     this removes and not the work it adds.  On wall time f10 is -13..-17%,
+     and the ratio is trajectory-dependent -- k4f10 at L=100 read -3.3% on one
+     fixture and -19.7% on another, the arms converging in different numbers
+     of moves.
 
      The schedules that gain are exactly those whose pre-pass does not already
      feed IC into the climb.  Where it does (k4, i4) an IC order adds nothing;
@@ -746,10 +753,11 @@ static void firstimprove_sweep(machine & m, int max_pairs)
 
      ON A BARE FUSED TARGET IT IS BOTH CHEAPER AND BETTER, not a trade: eight
      of eight cells favour it, the effect grows monotonically with length in
-     both seeds, and at L=120 the mean goes 52.3 -> 64.6 while the IC arm does
-     25% less work.  The compute split has the same cause as the quality one:
-     probe_toggle is already O(26) for a low-order pre-pass stage, so only the
-     fused target's scans are ever replaced.
+     both seeds, and at L=120 the mean goes 52.3 -> 64.6 while the IC arm
+     scores 25% fewer plugboards (~15% less wall time).  The saving splits the
+     same way as the quality and for the same cause: probe_toggle is already
+     O(26) for a low-order pre-pass stage, so only the fused target's scans
+     are ever replaced.
 
      DEFAULT OFF pending prose, which is unmeasured and which CLAUDE.md
      records does not follow telegraphic results for scoring changes.  Nothing

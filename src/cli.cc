@@ -147,9 +147,9 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "does not already supply IC -- much better and");
   fprintf(out, "  %-24s %s\n", "",
-          "~25% cheaper on a bare -S f10, nothing on");
+          "~15% faster on a bare -S f10, a quality wash");
   fprintf(out, "  %-24s %s\n", "",
-          "-S k4f10/i4f10. Use instead of -J, not with");
+          "on -S k4f10/i4f10. Use instead of -J, not with");
   fprintf(out, "  %-24s %s\n", "", "it (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-M, --cap-target",
           "Make the plug cap a strict descent target: only");

@@ -1036,7 +1036,7 @@ are read from a **data directory** (filenames built as
     the schedules that gain are exactly those whose pre-pass does not already
     feed IC into the climb:
 
-    | schedule | pre-pass | break50 target/ic | Stouffer Z | compute |
+    | schedule | pre-pass | break50 target/ic | Stouffer Z | plugboards |
     |---|---|---:|---:|---:|
     | `f10` | none | 629 / **766** | **−5.81** | **−25.1%** |
     | `m4f10` | mono | 481 / **510** | −2.32 | −11.5% |
@@ -1045,6 +1045,19 @@ are read from a **data directory** (filenames built as
 
     (`f10` is eight cells over two seeds, the others four over one; negative Z
     means IC ordering ahead.)
+  - **THAT LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE, and it overstates
+    the saving.** The IC ranking's O(26) work per move happens **outside** the
+    counted score loop, so `score_iter` prices the scans `-K` removes and not
+    the work it adds — the same trap this file documents for the
+    `--polish` gain scan, with the sign reversed. Measured on wall time with
+    startup subtracted (min of 5, against a self-control that read 0.99–1.04),
+    `f10` is **−13…−17%** across four readings where the counter says −25%.
+    **The ratio is also TRAJECTORY-DEPENDENT**, which is why no number is
+    quoted for the other three: `k4f10` at L=100 read −3.3% on one fixture and
+    −19.7% on another, because the two arms converge in different numbers of
+    moves and how many depends on the message. Two fixtures cannot pin that.
+    If you need the compute side of this, measure wall time on your own
+    traffic; `--match-compute` in `eval/jorder_ab.py` calibrates it per cell.
   - **On a bare fused target it is both cheaper AND better**, which is the
     unusual part — not a trade in either direction. Eight of eight cells favour
     it, the effect grows monotonically with length in both seeds, and at L=120

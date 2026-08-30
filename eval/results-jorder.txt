@@ -21,7 +21,7 @@ not already supply IC.  Never measurably worse.
 THE HEADLINE, BY SCHEDULE (lengths 60/80/100/120 at R=32)
 ----------------------------------------------------------
 
-  schedule  cells  break50 target/ic   Stouffer Z   compute
+  schedule  cells  break50 target/ic   Stouffer Z   plugboards
   f10          8      629 / 766         -5.81       -25.1%
   m4f10        4      481 / 510         -2.32       -11.5%
   k4f10        4      498 / 496         +0.41       -11.0%
@@ -62,8 +62,35 @@ length -- which is what the cost model predicts, the replaced scan being
 linear in L where the histogram form is flat.
 
 
-THE COMPUTE SAVING SPLITS THE SAME WAY, FOR THE SAME REASON
-------------------------------------------------------------
+THAT LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE
+---------------------------------------------------
+
+  The IC ranking's O(26) work per move happens OUTSIDE the counted score loop,
+  so score_iter prices the scans -K removes and not the work it adds.  It is
+  the --polish gain-scan trap with the sign reversed, and it overstates by
+  2x or so.  On WALL TIME, startup subtracted, min of 5, against self-controls
+  reading 0.99-1.04:
+
+    f10    L=60   -9.7%, -12.9%      (two fixtures)
+    f10    L=100  -15.1% x3, -16.5%  (two fixtures, three R values on one)
+    k4f10  L=60   -5.8%, -3.3%
+    k4f10  L=100  -3.3%, -19.7%      <-- see below
+
+  So f10 is -13..-17%, stable across four readings.  NO NUMBER IS QUOTED FOR
+  THE OTHERS: the ratio is TRAJECTORY-DEPENDENT, not a per-move cost ratio.
+  The two arms converge in different numbers of moves and how many depends on
+  the message, so k4f10 at L=100 spans -3% to -20% across two fixtures.  Two
+  fixtures cannot pin that, and it was not chased further.
+
+  eval/jorder_ab.py --match-compute calibrates the ratio per cell from wall
+  time with startup subtracted, for anyone who wants to spend the saving on
+  restarts rather than bank it.  That A/B has NOT been run: at high -R the
+  reallocation is worth only ~0.3-0.9pp by the documented restart curve, and
+  a 30-trial probe at -R 1024 read the arms dead level at L=60 (14/14) and
+  L=100 (24/24).
+
+THE PLUGBOARD SAVING SPLITS THE SAME WAY AS THE QUALITY, FOR THE SAME REASON
+-----------------------------------------------------------------------------
 
   -25% on f10, -11% on the other three.
 

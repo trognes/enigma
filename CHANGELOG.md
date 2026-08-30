@@ -145,12 +145,18 @@ existing command lines can behave differently or stop working.
     that gain are exactly those whose pre-pass does not already feed IC into
     the climb:
 
-    | schedule | pre-pass | break50 target/ic | Stouffer Z | compute |
+    | schedule | pre-pass | break50 target/ic | Stouffer Z | plugboards |
     |---|---|---:|---:|---:|
     | `f10` | none | 629 / **766** | **−5.81** | **−25.1%** |
     | `m4f10` | mono | 481 / **510** | −2.32 | −11.5% |
     | `k4f10` | mono+IC | 498 / 496 | +0.41 | −11.0% |
     | `i4f10` | IC | 431 / 431 | +0.10 | −11.1% |
+
+    That last column is **plugboards scored, not compute**: the IC ranking's
+    O(26) work per move is outside the counted score loop, so it prices the
+    scans `-K` removes and not the work it adds. On wall time `f10` is
+    −13…−17%, and the ratio is trajectory-dependent — `k4f10` at L=100 read
+    −3.3% on one fixture and −19.7% on another.
 
   - **On a bare fused target it is both cheaper and better**, not a trade in
     either direction: eight of eight cells favour it, the effect grows

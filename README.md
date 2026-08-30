@@ -304,8 +304,9 @@ English tables.
 - **`-K`** — `-J`, but rank the move-ordering scan by the **index of
   coincidence** (O(26) a move) instead of by the target model (a full decode a
   move). Use *instead of* `-J`, not with it. Cheaper than `-J` everywhere and
-  never measured worse; much better *and* ~25% cheaper on a bare `--score
-  f10`, nothing on `k4f10`/`i4f10` (needs `-c`; off by default)
+  never measured worse; much better *and* ~15% less wall time on a bare
+  `--score f10`, a wash on quality with `k4f10`/`i4f10` (needs `-c`; off by
+  default)
 - **`-M`** — Make the plug cap a strict **descent target**: at/over the cap only
   merge/remove moves (no adds or reshuffles). A matched-compute win with a tight
   `-S` cap, biggest on **known-few-plug** boards; also cheaper per climb (needs
@@ -761,9 +762,11 @@ a find**, and a real break reads +15 to +17.
   measured on recovery: it never came out worse, and where the schedule does
   not already feed IC into the climb it is both much cheaper and substantially
   better — on a bare `--score f10` at 120 letters it recovered 64.6% of the
-  plaintext against 52.3% while doing 25% less work. On `--score k4f10` or
-  `i4f10`, whose pre-pass already supplies IC, it is ~11% cheaper and otherwise
-  a wash. `-K` is a replacement for `-J`, not an addition to it.
+  plaintext against 52.3% while scoring 25% fewer plugboards — around 15% less
+  wall time, the counter overstating it because the IC ranking's own work is
+  not counted. On `--score k4f10` or `i4f10`, whose pre-pass already supplies
+  IC, quality is a wash and the saving is smaller and message-dependent. `-K`
+  is a replacement for `-J`, not an addition to it.
 
 The recipes below build the schedule and plug-cap mechanics up on the
 **recommended** fused target (`-f`, staged as `--score m4f10`). The percentages
