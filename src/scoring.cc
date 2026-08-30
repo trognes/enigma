@@ -785,12 +785,8 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
      Byte-identical: the counts are the same integers whichever array they land
      in, and the n-gram terms are added in the same order. */
   int f0[asize], f1[asize], f2[asize], f3[asize];
-  int f4[asize], f5[asize], f6[asize], f7[asize];
   for (int j = 0; j < asize; j++)
-    {
-      f0[j] = 0; f1[j] = 0; f2[j] = 0; f3[j] = 0;
-      f4[j] = 0; f5[j] = 0; f6[j] = 0; f7[j] = 0;
-    }
+    { f0[j] = 0; f1[j] = 0; f2[j] = 0; f3[j] = 0; }
 
   *ic_out = 0.0;
   if (textlength < 4)
@@ -802,58 +798,6 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   f0[a]++; f1[b]++; f2[c]++;
   long isum = 0;
   int i = 3;
-  /* EIGHT-WIDE FIRST, because this loop is bound on L1 MISS LATENCY, not on
-     instructions.  Measured with callgrind --cache-sim on a fused-only run:
-     13 890 318 of 27 436 353 quad gathers -- 50.6% -- miss L1, while
-     last-level misses are ~0, so every one of them is a trip to L2 against a
-     0.45 MB table that cannot fit in L1.  The two levers already tried on
-     this loop (fewer instructions, fewer loads) were the wrong axis and are
-     recorded as measured down in eval/results-scoreloop-insns.txt; what is
-     left is MEMORY-LEVEL PARALLELISM -- keeping more independent misses in
-     flight.  Four-wide keeps four; a core sustains many more.
-
-     THIS IS ONLY POSSIBLE BECAUSE decode_at IS POSITION-INDEPENDENT.
-     steck[rows[i][steck[ct[i]]]] depends on i alone, never on a previously
-     decoded letter, so the eight addresses are all computable at the top of
-     the body with no dependency chain between them.  A scorer whose index
-     depended on the previous output could not be widened this way.
-
-     Byte-identical: isum is a long, so integer addition is associative, and
-     the counts sum to the same histogram whichever array they land in. */
-  for (; i + 7 < textlength; i += 8)
-    {
-      const int d0 = decode_at(steck, rows, ct, i);
-      const int d1 = decode_at(steck, rows, ct, i + 1);
-      const int d2 = decode_at(steck, rows, ct, i + 2);
-      const int d3 = decode_at(steck, rows, ct, i + 3);
-      const int d4 = decode_at(steck, rows, ct, i + 4);
-      const int d5 = decode_at(steck, rows, ct, i + 5);
-      const int d6 = decode_at(steck, rows, ct, i + 6);
-      const int d7 = decode_at(steck, rows, ct, i + 7);
-      f0[d0]++;
-      f1[d1]++;
-      f2[d2]++;
-      f3[d3]++;
-      f4[d4]++;
-      f5[d5]++;
-      f6[d6]++;
-      f7[d7]++;
-      isum += table[a][b][c][d0];
-      isum += table[b][c][d0][d1];
-      isum += table[c][d0][d1][d2];
-      isum += table[d0][d1][d2][d3];
-      isum += table[d1][d2][d3][d4];
-      isum += table[d2][d3][d4][d5];
-      isum += table[d3][d4][d5][d6];
-      isum += table[d4][d5][d6][d7];
-      a = d5;
-      b = d6;
-      c = d7;
-    }
-  /* Then four-wide, then scalar.  Without the four-wide step a short message
-     leaves up to seven characters to the scalar tail (13.5% of the scored
-     positions at L=40, against 3% before this change), which is the length
-     range crackquality measures. */
   for (; i + 3 < textlength; i += 4)
     {
       const int d0 = decode_at(steck, rows, ct, i);
@@ -885,8 +829,7 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   int coin = 0;                      /* see ic_score_decode: int, not double */
   for (int j = 0; j < asize; j++)
     {
-      const int n = f0[j] + f1[j] + f2[j] + f3[j]
-                  + f4[j] + f5[j] + f6[j] + f7[j];
+      const int n = f0[j] + f1[j] + f2[j] + f3[j];
       coin += n * (n - 1);
     }
   *ic_out = (textlength > 1)
