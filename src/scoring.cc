@@ -754,6 +754,48 @@ void ic_blend_init()
    same number of decodes as the shipped scorer. A two-pass version would inflate wall
    time per score_iter and quietly unfair any matched-score_iter A/B. Returns the
    log-prob SUM (caller normalises); writes the IC through *ic_out. */
+/* --- NEON decode of 16 positions at a time ---------------------------------
+
+   decode_at is steck[ rows[i][ steck[ct[i]] ] ] -- three dependent lookups,
+   and oracle ablation puts the two steck[] ones plus their dependency chain at
+   ~37% of this loop while the rows[] gather costs 0.3% (mapping is 2.6 KB at
+   L=100, so it is L1-resident and its latency is hidden).  So the part worth
+   vectorising is exactly the part that CAN be: steck is 26 bytes, and
+   vqtbl2q_u8 looks 16 indices up in a 32-byte table in ONE instruction.
+
+   The rows[] gather stays scalar -- NEON has no gather, and it costs nothing
+   anyway.  That is the whole design: two vector shuffles replace 32 scalar
+   table lookups, with a 16-byte buffer round trip between them for the gather.
+
+   BYTE-IDENTICAL by construction: same table, same indices, same order of
+   integer accumulation.  $ENIGMA_NEON=0 forces the scalar path so the two can
+   be compared in one binary, the way $ENIGMA_HIST=0 does for the histogram
+   form.  Verified under qemu-aarch64 and by the arm64 CI job.
+
+   The 32-byte padded copy is not decoration: steck is 26 bytes, so loading
+   the table's upper half would read 6 bytes past it.  Indices are 0..25, so
+   the pad is never selected -- it exists only to make the load legal. */
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#define ENIGMA_HAVE_NEON 1
+#else
+#define ENIGMA_HAVE_NEON 0
+#endif
+
+#if ENIGMA_HAVE_NEON
+static bool neon_enabled()
+{
+  static const bool v = []()
+  {
+    const char * e = getenv("ENIGMA_NEON");
+    if ((e == nullptr) || (*e == 0))
+      return true;
+    return parse_opt_int(e, "$ENIGMA_NEON") != 0;
+  }();
+  return v;
+}
+#endif
+
 static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize][asize],
                               int model, double * ic_out)
 {
@@ -798,6 +840,92 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   f0[a]++; f1[b]++; f2[c]++;
   long isum = 0;
   int i = 3;
+#if ENIGMA_HAVE_NEON
+  if (neon_enabled())
+    {
+      unsigned char pad[32];
+      memcpy(pad, steck, asize);
+      memset(pad + asize, 0, sizeof pad - asize);
+      uint8x16x2_t stbl;
+      stbl.val[0] = vld1q_u8(pad);
+      stbl.val[1] = vld1q_u8(pad + 16);
+      /* SIXTY-FOUR AT A TIME FIRST, then sixteen.  The 16-wide form of this
+         measured +30.5% (g++) and +39.1% (clang) on arm64, and the suspected
+         cause is the two vector/scalar transitions per group: a 16-byte
+         vst1q_u8 immediately followed by single-byte loads, and single-byte
+         stores immediately followed by a 16-byte vld1q_u8, neither of which
+         forwards.  If that is the cost then it is PER TRANSITION, and widening
+         the group separates each store from its dependent load by ~48 further
+         stores -- time for the store buffer to drain -- while quadrupling the
+         work each pair of transitions serves.  If instead the cost is
+         per-element vector overhead, widening changes nothing.  The two
+         predictions differ by a factor of four, which one bench run
+         distinguishes.
+
+         The 16-wide loop is kept after it so that both forms cover the same
+         characters and the ONLY difference between this and the measured-down
+         revision is the group width. */
+      unsigned char xb[64], yb[64], db[64];
+      for (; i + 63 < textlength; i += 64)
+        {
+          for (int v = 0; v < 64; v += 16)
+            vst1q_u8(xb + v, vqtbl2q_u8(stbl, vld1q_u8(ct + i + v)));
+          for (int k = 0; k < 64; k++)
+            yb[k] = rows[i + k][xb[k]];
+          for (int v = 0; v < 64; v += 16)
+            vst1q_u8(db + v, vqtbl2q_u8(stbl, vld1q_u8(yb + v)));
+          for (int k = 0; k < 64; k += 4)
+            {
+              const int d0 = db[k];
+              const int d1 = db[k + 1];
+              const int d2 = db[k + 2];
+              const int d3 = db[k + 3];
+              f0[d0]++;
+              f1[d1]++;
+              f2[d2]++;
+              f3[d3]++;
+              isum += table[a][b][c][d0];
+              isum += table[b][c][d0][d1];
+              isum += table[c][d0][d1][d2];
+              isum += table[d0][d1][d2][d3];
+              a = d1;
+              b = d2;
+              c = d3;
+            }
+        }
+      for (; i + 15 < textlength; i += 16)
+        {
+          /* steck[ct[i..i+15]] in one instruction */
+          vst1q_u8(xb, vqtbl2q_u8(stbl, vld1q_u8(ct + i)));
+          /* the gather: 16 rows, 16 indices -- no NEON form, and none needed */
+          for (int k = 0; k < 16; k++)
+            yb[k] = rows[i + k][xb[k]];
+          /* and the exit board, again in one instruction */
+          vst1q_u8(db, vqtbl2q_u8(stbl, vld1q_u8(yb)));
+          /* the accumulation is the scalar body below, verbatim, reading the
+             decoded letters from db instead of calling decode_at -- so the
+             four private histograms and the term order are unchanged. */
+          for (int k = 0; k < 16; k += 4)
+            {
+              const int d0 = db[k];
+              const int d1 = db[k + 1];
+              const int d2 = db[k + 2];
+              const int d3 = db[k + 3];
+              f0[d0]++;
+              f1[d1]++;
+              f2[d2]++;
+              f3[d3]++;
+              isum += table[a][b][c][d0];
+              isum += table[b][c][d0][d1];
+              isum += table[c][d0][d1][d2];
+              isum += table[d0][d1][d2][d3];
+              a = d1;
+              b = d2;
+              c = d3;
+            }
+        }
+    }
+#endif
   for (; i + 3 < textlength; i += 4)
     {
       const int d0 = decode_at(steck, rows, ct, i);
