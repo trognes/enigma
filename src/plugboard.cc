@@ -614,6 +614,27 @@ static pairtab make_pairtab()
   return t;
 }
 
+/* $ENIGMA_JORDER=ic: rank -J's move-ordering scan by the index of
+   coincidence (O(26) per move, from the co-occurrence table) instead of by
+   the target model (O(L) per move, a full decode).  Read once; empty means
+   unset, as for every other ENIGMA_* override.
+
+   A MEASUREMENT SWITCH FIRST.  Unlike ENIGMA_HIST, whose two paths are
+   byte-identical by construction, these two produce DIFFERENT visit orders
+   and so can converge differently -- which is exactly why it is a switch:
+   the question "is an IC order as good as a target-model order" is an
+   empirical one about recovery, not about speed, and it cannot be asked
+   without both paths in one binary. */
+static bool jorder_ic()
+{
+  static const bool v = []()
+  {
+    const char * e = getenv("ENIGMA_JORDER");
+    return (e != nullptr) && (*e != 0) && (strcmp(e, "ic") == 0);
+  }();
+  return v;
+}
+
 /* --- Circular first-improvement climb (-J) ------------------------------------
 
    Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
@@ -710,19 +731,96 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      climb from the (perturbed) starting board, so it differs per restart; deterministic
      (fixed board + tie-break) -> -T-independent. Costs one extra full scan per climb. */
   const bool dyn_order = (opt_dynorder != 0);
+  /* $ENIGMA_JORDER=ic ranks that scan by the INDEX OF COINCIDENCE, computed
+     from the co-occurrence table in O(26) per move, instead of by the target
+     model at O(L) per move.
+
+     ONLY WORTH ANYTHING WHEN hist_on IS FALSE.  With a low-order target
+     probe_toggle already takes the histogram path, so the scan is O(26)
+     AND exact; approximating it there would cost accuracy for nothing.  The
+     case this addresses is the RECOMMENDED recipe -- a fused or quad target,
+     where every one of the 325 probes is a full decode.  Measured at
+     `-f -c -S f10 -R 64` with a 10-pair board, the scan is 20 800 of 91 451
+     plugboards scored at L=100 (22.7%) and of 98 081 at L=167 (21.2%), and
+     its share GROWS with length because it is linear in L where the
+     histogram form is flat.
+
+     IT IS A SEARCH CHANGE, NOT A SPEEDUP: ordering by IC is not ordering by
+     the target, so the climb visits moves in a different order and can
+     converge somewhere else.  Hence a switch, defaulting to the existing
+     behaviour, so the two can be A/B'd on recovery rather than assumed.
+
+     MEASURED (eval/results-jorder.txt): recovery INDISTINGUISHABLE, compute
+     ~11% lower.  1600 paired trials on authentic telegraphic German, two
+     seeds, `-f -l wehrmacht -S k4f10 -R 8`, board hidden and rotor key
+     given: -0.03pp at L=100 (216 exact against 217 of 800) and +1.18pp at
+     L=167 (617 against 605, McNemar z=1.29, not established -- the first
+     seed read +1.68pp and the second +0.68pp).
+
+     The saving is 11% and not the 22% the scan's share suggests because
+     `k4f10`'s pre-pass is a low-order stage already on the histogram path;
+     only the f10 target's scans are replaced.  On a bare `-S f10` fixture it
+     is -26%.  DEFAULT OFF: same recovery 11% cheaper, on one recipe at one
+     budget on one writing style, is a thin basis for changing what everybody
+     gets. */
+  const bool ic_order = dyn_order && ! hist_on && jorder_ic();
   int visit[nmoves];
   if (dyn_order)
     {
       double sc[nmoves];
-      for (int mv = 0; mv < nmoves; mv++)
+      if (ic_order)
         {
-          int a = P.a[mv], b = P.b[mv];
-          double s = -1e300;   /* invalid moves sort last */
-          if (! (pf[a] || pf[b]) && ! cap_blocks(a, b))
-            s = probe_toggle(a, b);
-          sc[mv] = s;
-          visit[mv] = mv;
+          /* T depends on (rows, ciphertext) and not on the board, so one
+             build serves all 325 probes. Not built for this model otherwise
+             -- hillclimb() only calls cooc_build when hist_on. */
+          cooc_build(m);
+          int n[asize];
+          for (int y = 0; y < asize; y++)
+            n[y] = 0;
+          for (int c = 0; c < asize; c++)
+            {
+              const uint16_t * const col = cooc_col(c, steck[c]);
+              for (int y = 0; y < asize; y++)
+                n[y] += col[y];
+            }
+          for (int mv = 0; mv < nmoves; mv++)
+            {
+              const int a = P.a[mv], b = P.b[mv];
+              visit[mv] = mv;
+              if ((pf[a] || pf[b]) || cap_blocks(a, b))
+                { sc[mv] = -1e300; continue; }
+              int pos[4], val[4];
+              const int cnt = toggle_plan(steck, a, b, pos, val);
+              int nn[asize];
+              for (int y = 0; y < asize; y++)
+                nn[y] = n[y];
+              for (int k = 0; k < cnt; k++)
+                {
+                  const int p0 = pos[k];
+                  const uint16_t * __restrict rm = cooc_col(p0, steck[p0]);
+                  const uint16_t * __restrict ad = cooc_col(p0, val[k]);
+                  for (int y = 0; y < asize; y++)
+                    nn[y] += ad[y] - rm[y];
+                }
+              long coin = 0;
+              for (int y = 0; y < asize; y++)
+                coin += static_cast<long>(nn[y]) * (nn[y] - 1);
+              /* The IC divisor is a positive constant here, so ranking on the
+                 raw coincidence count orders identically and avoids a divide
+                 per move. Higher is better, as for the target-model score. */
+              sc[mv] = static_cast<double>(coin);
+            }
         }
+      else
+        for (int mv = 0; mv < nmoves; mv++)
+          {
+            int a = P.a[mv], b = P.b[mv];
+            double s = -1e300;   /* invalid moves sort last */
+            if (! (pf[a] || pf[b]) && ! cap_blocks(a, b))
+              s = probe_toggle(a, b);
+            sc[mv] = s;
+            visit[mv] = mv;
+          }
       std::sort(visit, visit + nmoves, [&](int i, int j)
       {
         if (sc[i] != sc[j]) return sc[i] > sc[j];   /* best score first */
