@@ -11,10 +11,18 @@ name: Release Bench
 # ~30 newly-extern symbols had cost nothing measurable, which no per-PR run
 # could have shown.
 #
-# NOT run on pull requests. The per-PR guard already covers "did this change
-# regress anything", the answer here barely moves between two adjacent commits,
-# and doubling the bench matrix on every PR would buy nothing for the wall time.
-# Weekly, plus manual dispatch when a release is being prepared.
+# ON DEMAND, not on a timer. There was a weekly cron here and it was removed:
+# `schedule` fires only from the DEFAULT branch (note 1 below), so it would
+# have been dead until the next release merge and then run against `master`,
+# which is the release -- a job that appears to work, costs 25 minutes of
+# runner time a week, and answers nothing. A comparison this coarse does not
+# need a calendar; it needs running when someone is about to cut a release, or
+# is wondering whether a run of merges has cost anything.
+#
+# NOT on ordinary pull requests either. The per-PR guard already covers "did
+# this change regress anything", the answer here barely moves between two
+# adjacent commits, and doubling the bench matrix on every PR would buy
+# nothing for the wall time.
 #
 # EXPECT LARGE NEGATIVE NUMBERS. Against v2.1.0 the search tier ran -62% before
 # this file existed; a cell near 0% is not "no regression", it means a tier has
@@ -32,12 +40,47 @@ name: Release Bench
 # options` rather than a fake regression (min_time returns empty on a non-zero
 # exit). Against v2.1.0 that is the crib tier, and it is counted and reported
 # at the end so partial coverage is never silent.
+#
+# TWO GITHUB FACTS THIS FILE IS SHAPED AROUND, both of which silently produce a
+# job that runs and measures nothing:
+#
+#   1. `workflow_dispatch` (and `schedule`, which is why the cron went) is
+#      registered ONLY from the DEFAULT branch. While this file exists only on
+#      `dev` it is not registered at all: the dispatch API returns 404 because
+#      GitHub does not know it exists, not because it declined to run it, and
+#      nothing surfaces that anywhere. `pull_request` below is branch-scoped
+#      and is what makes the workflow testable before it lands on `master`.
+#
+#   2. A run triggered from the default branch checks out the default branch.
+#      Benching `master` against the highest v* tag is close to a no-op,
+#      because master only moves at release merges and so IS the tag -- it
+#      would report ~0% forever. The interesting question is how far `dev` has
+#      drifted since the last release, so the checkout takes MEASURE_REF
+#      (default `dev`) rather than the ref it was triggered from.
 
 on:
-  schedule:
-    - cron: '0 4 * * 1'      # Mondays 04:00 UTC
+  # SELF-TEST, and the only trigger that works before this file reaches the
+  # default branch (note 1 above). `pull_request` is branch-scoped and fires
+  # immediately, so a PR that edits this file runs the version it is
+  # proposing, making the same `dev` vs release-tag comparison a dispatch
+  # makes. A workflow that cannot run until it is merged to the release branch
+  # cannot be reviewed before it is merged there, which is how two silent
+  # failure modes survived its first two revisions.
+  #
+  # The paths filter is what keeps that from costing anything: four cells of
+  # LONG=1 is ~25 minutes of runner time, and it is spent only on a PR that
+  # actually touches this workflow, never on ordinary PRs.
+  pull_request:
+    paths:
+      - '.github/workflows/release-bench.yml'
   workflow_dispatch:
     inputs:
+      head:
+        description: >-
+          Branch or ref to MEASURE. Default: dev (see note 2 above -- the
+          default branch is the wrong thing to bench against a release tag).
+        required: false
+        type: string
       base:
         description: >-
           Ref to compare against. Default: the highest v* tag by version sort.
@@ -63,6 +106,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # NOT the triggering ref: a scheduled run fires on the default
+          # branch, and benching `master` against the highest v* tag is a
+          # no-op (see note 2 in the header). `dev` is what has drifted.
+          ref: ${{ inputs.head || 'dev' }}
           fetch-depth: 0   # the A/B builds BASE from a git worktree, and the
                            # tag lookup below needs the tags
 
@@ -73,6 +120,7 @@ jobs:
         # a ref named `x"; rm -rf /; #` would otherwise be pasted in verbatim.
         env:
           BASE_INPUT: ${{ inputs.base }}
+          MEASURE_REF: ${{ inputs.head || 'dev' }}
         run: |
           ref="$BASE_INPUT"
           if [ -z "$ref" ]; then
@@ -90,7 +138,18 @@ jobs:
           fi
           sha=$(git rev-parse --short "$ref^{commit}")
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
-          echo "Comparing against $ref ($sha)"
+          # Say what was measured against what. A scheduled run does not
+          # bench the branch it fired from, so a report that omits this is
+          # easy to read as being about the default branch.
+          head_sha=$(git rev-parse --short HEAD)
+          echo "Measuring $MEASURE_REF ($head_sha) against $ref ($sha)"
+          {
+            echo "### Release Bench"
+            echo ""
+            echo "Measuring \`$MEASURE_REF\` (\`$head_sha\`)"
+            echo "against \`$ref\` (\`$sha\`)."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compiler and machine
         run: |
