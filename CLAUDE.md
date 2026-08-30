@@ -3413,8 +3413,19 @@ win and was removed too; the scalar fused loop is the current form.
 > documents for `score_iter`, one level down. **The half of the loop that
 > costs anything is `decode_at`**, which is what the `rows`-pointer-walk lever
 > targets (+7% g++, −3…5% clang; shelved for the compiler split, not for
-> lack of effect). `eval/results-scoreloop-insns.txt` has all five levers,
-> including the three that measured down.
+> lack of effect).
+>
+> **A NEON prototype of the decode measured down 30–39% and is the fourth
+> failure here.** Vectorising the two `steck[]` lookups (`vqtbl2q_u8`, 16
+> indices in a 32-byte table in one instruction) while leaving the `rows[]`
+> gather scalar costs **+30.5% g++ arm64 and +39.1% clang arm64** on `fused`
+> long, against controls inside ±1.8%. What that closes is the **hybrid**, not
+> SIMD: any design that vectorises part of the decode and leaves the gather
+> scalar crosses the vector/scalar boundary twice per group. A pure-scalar
+> version of the same buffering shape costs nothing, so it is the width
+> mismatch rather than the buffering — plausible, not proven.
+> `eval/results-scoreloop-insns.txt` has all six levers, including the four
+> that measured down, and the one SIMD shape the result does not rule out.
 
 The tables the scorers read are **uint8 fixed-point**
 (`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),
