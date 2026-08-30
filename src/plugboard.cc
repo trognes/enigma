@@ -750,19 +750,31 @@ static void firstimprove_sweep(machine & m, int max_pairs)
      converge somewhere else.  Hence a switch, defaulting to the existing
      behaviour, so the two can be A/B'd on recovery rather than assumed.
 
-     MEASURED (eval/results-jorder.txt): recovery INDISTINGUISHABLE, compute
-     ~11% lower.  1600 paired trials on authentic telegraphic German, two
-     seeds, `-f -l wehrmacht -S k4f10 -R 8`, board hidden and rotor key
-     given: -0.03pp at L=100 (216 exact against 217 of 800) and +1.18pp at
-     L=167 (617 against 605, McNemar z=1.29, not established -- the first
-     seed read +1.68pp and the second +0.68pp).
+     MEASURED over 24 cells, 300 paired trials each, on authentic telegraphic
+     German at L = 60..120 (eval/results-jorder.txt, per-cell data in
+     eval/results-jorder-cells.tsv).  Judged on BREAK50.  IT SPLITS BY
+     SCHEDULE, and the split is the obvious one:
 
-     The saving is 11% and not the 22% the scan's share suggests because
-     `k4f10`'s pre-pass is a low-order stage already on the histogram path;
-     only the f10 target's scans are replaced.  On a bare `-S f10` fixture it
-     is -26%.  DEFAULT OFF: same recovery 11% cheaper, on one recipe at one
-     budget on one writing style, is a thin basis for changing what everybody
-     gets. */
+       schedule  break50 target/ic  Stouffer Z  compute
+       f10          629 / 766         -5.81      -25.1%   (8 cells, 2 seeds)
+       m4f10        481 / 510         -2.32      -11.5%
+       k4f10        498 / 496         +0.41      -11.0%
+       i4f10        431 / 431         +0.10      -11.1%
+
+     The schedules that gain are exactly those whose pre-pass does not already
+     feed IC into the climb.  Where it does (k4, i4) an IC order adds nothing;
+     where it does not (none, mono) it carries information the climb lacks.
+
+     ON A BARE FUSED TARGET IT IS BOTH CHEAPER AND BETTER, not a trade: eight
+     of eight cells favour it, the effect grows monotonically with length in
+     both seeds, and at L=120 the mean goes 52.3 -> 64.6 while the IC arm does
+     25% less work.  The compute split has the same cause as the quality one:
+     probe_toggle is already O(26) for a low-order pre-pass stage, so only the
+     fused target's scans are ever replaced.
+
+     DEFAULT OFF pending prose, which is unmeasured and which CLAUDE.md
+     records does not follow telegraphic results for scoring changes.  Nothing
+     measured is worse. */
   const bool ic_order = dyn_order && ! hist_on && jorder_ic();
   int visit[nmoves];
   if (dyn_order)

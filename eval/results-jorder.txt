@@ -1,103 +1,120 @@
 ORDERING -J's MOVE SCAN BY IC INSTEAD OF BY THE TARGET MODEL
 ============================================================
 
-  python3 eval/jorder_ab.py --trials 400 --length {100,167} --seed {4242,99}
+  python3 eval/jorder_ab.py --tsv --trials 300 --length L --restarts R \
+          --schedule S --seed {4242,99}
 
-  -f -l wehrmacht -c -J -S k4f10 -R 8, 10-pair board hidden, rotor key
-  given, authentic HG Nord decrypts, 1600 paired trials over two seeds.
-  The arms differ ONLY by $ENIGMA_JORDER=ic.
+  -f -l wehrmacht -c -J, 10-pair board hidden, rotor key given, authentic
+  HG Nord decrypts.  24 cells, 300 paired trials each (200 at R=128 f10).
+  The arms differ ONLY by $ENIGMA_JORDER=ic.  JUDGED ON BREAK50 -- the count
+  of trials recovering at least half the plaintext.
 
-  L      mean ic-target   exact (ic/target of 800)   McNemar z   compute
-  100        -0.03pp            216 / 217              +0.10      -10.9%
-  167        +1.18pp            617 / 605              -1.29      -10.8%
-
-VERDICT: recovery is INDISTINGUISHABLE, compute is ~11% lower.
-
-
-WHAT THE CHANGE IS
-------------------
-
--J visits the 325 plugboard toggles best-first, rebuilding that order once
-per restart by scoring every move from the perturbed starting board.  With a
-FUSED OR QUAD TARGET each of those 325 probes is a full decode -- probe_toggle
-only takes the O(26) histogram path when hist_model() is true, and that is
-IC, mono and monoic only.  So the recommended recipe pays the scan in full.
-
-Measured at -f -c -S f10 -R 64 with a 10-pair board, the scan is
-
-    20 800 of 91 451 plugboards scored at L=100   (22.7%)
-    20 800 of 98 081                at L=167      (21.2%)
-
-and its share GROWS with length, being linear in L where the histogram form
-is flat.
-
-$ENIGMA_JORDER=ic ranks the scan by the index of coincidence instead,
-computed from the co-occurrence table in O(26) per move: build T once (it
-depends on rows and ciphertext, not the board), take n for the current board
-in 26 columns, then apply each toggle's 2-4 column delta.
+VERDICT: cheaper everywhere, and BETTER on the schedules whose pre-pass does
+not already supply IC.  Never measurably worse.
 
 
-WHY THE SAVING IS 11% AND NOT 22%
----------------------------------
+THE HEADLINE, BY SCHEDULE (lengths 60/80/100/120 at R=32)
+----------------------------------------------------------
 
-The 22% figure is for `-S f10`, a bare fused target.  The RECOMMENDED
-schedule is `k4f10`, whose k4 pre-pass is a low-order stage and therefore
-already on the histogram path -- probe_toggle is O(26) there and there is
-nothing to replace.  Only the f10 target stage's scans are affected, and they
-are about half the run.  On a single -S f10 fixture at L=167 the same switch
-takes 7 535 643 plugboards scored to 5 546 450, i.e. -26%.
+  schedule  cells  break50 target/ic   Stouffer Z   compute
+  f10          8      629 / 766         -5.81       -25.1%
+  m4f10        4      481 / 510         -2.32       -11.5%
+  k4f10        4      498 / 496         +0.41       -11.0%
+  i4f10        4      431 / 431         +0.10       -11.1%
 
-So the honest number depends on the schedule, and 11% is the one for the
-recipe people are told to use.
+(negative Z = IC ordering ahead; f10 is eight cells because it was run on two
+seeds, the others on one.)
 
+THE SPLIT HAS A MECHANISM, AND IT IS THE OBVIOUS ONE.  The schedules that gain
+are exactly those whose pre-pass does NOT feed IC into the climb:
 
-THE FIRST SEED OVERSTATED IT, WHICH IS WHY THERE ARE TWO
---------------------------------------------------------
+  f10     no pre-pass at all          -> large gain
+  m4f10   monogram pre-pass           -> gain
+  k4f10   mono+IC pre-pass            -> nothing
+  i4f10   IC pre-pass                 -> nothing
 
-Seed 4242 at L=167 read +1.68pp with 305 exact against 294, McNemar z=1.68 --
-suggestive, and the sort of result it is tempting to report.  Seed 99 reads
-+0.68pp with 312 against 311.  Pooled: +1.18pp, z=1.29, p about 0.20.
-
-Not established.  The lean is consistently positive across both seeds and
-both lengths (-0.45, +0.39, +1.68, +0.68), so there may be a small real gain,
-but 1600 trials cannot resolve it and the claim here is level recovery.
+Where the schedule already supplies IC information, ordering by IC adds none.
+Where it does not, the order carries information the climb otherwise lacks.
 
 
-WHY THIS IS NOT OBVIOUSLY A GOOD TRADE, AND WHY IT STILL IS
------------------------------------------------------------
+THE f10 RESULT IS THE LARGE ONE AND IT REPLICATED
+--------------------------------------------------
 
-Ordering by IC is not ordering by the target: the climb visits moves in a
-different sequence and can converge elsewhere.  CLAUDE.md records that a
-STATIC informed order was measured DOWN, because it destroyed the restart
-diversity -J depends on.  This order is still rebuilt per restart from the
-perturbed board, so it keeps that property -- which is the likely reason it
-costs nothing.
+  L      seed 4242            seed 99
+  60     27 / 33   (-1.00)    26 / 28   (-0.37)
+  80     54 / 64   (-1.31)    55 / 73   (-2.50)
+  100    96 / 114  (-2.01)   101 / 119  (-2.12)
+  120   130 / 153  (-2.41)   140 / 182  (-4.70)
 
-That the order can be approximated at all is consistent with --biased-random's
-finding that a single plug's IC carries real signal (12.1% of true plugs in
-the top 10 of 325 against 3.1% by chance at L=100).  The order only has to be
-approximately right: it is a visit sequence for first-improvement, not a
-decision.
+Eight of eight cells favour IC ordering, the effect grows monotonically with
+length in both seeds, and the second seed is STRONGER than the first.  Pooled
+Stouffer Z = -5.81.  At L=120 seed 99 the mean goes 52.3 -> 64.6 (+12.2pp)
+while the IC arm does 25% LESS work.
+
+That is the unusual part: on f10 this is not a speed-for-quality trade in
+either direction.  It is cheaper AND better, and the gap widens with message
+length -- which is what the cost model predicts, the replaced scan being
+linear in L where the histogram form is flat.
 
 
-WHAT IS NOT MEASURED
---------------------
+THE COMPUTE SAVING SPLITS THE SAME WAY, FOR THE SAME REASON
+------------------------------------------------------------
 
-  * PROSE.  Telegraphic German only.  CLAUDE.md records that scoring results
-    do not transfer between the two writing styles.
-  * OTHER TARGETS.  -q and -a pay the same full-decode scan and should behave
-    the same way, but were not run.
-  * OTHER BUDGETS.  -R 8 only.  The pre-pass ordering question was
-    restart-budget dependent (SS6.10), so this should not be assumed to hold at
-    high -R.
-  * WHETHER THE SAVING CONVERTS.  The obvious next question is whether 11%
-    more restarts at matched wall time buys breaks.  On the documented restart
-    curve 11% more -R is worth well under a point, so the honest expectation
-    is "a little, but not much".
-  * THE FULL SWEEP.  Rotor key given throughout, so this measures the
-    plugboard tier only -- which is where the move order lives, but not what
-    an operator runs.
+  -25% on f10, -11% on the other three.
 
-DEFAULT REMAINS OFF.  The evidence supports "same recovery, 11% cheaper on
-one recipe at one budget on one writing style".  That is a good reason to
-keep the switch and a thin reason to change what everybody gets.
+probe_toggle already takes the O(26) histogram path when hist_model() is true
+-- IC, mono, monoic.  So a k4/i4/m4 pre-pass stage costs nothing to order
+either way, and only the f10 TARGET stage's scans are replaced.  With no
+pre-pass at all, every scan in the run is replaced, and the saving doubles.
+
+
+THE ONE ADVERSE CELL DID NOT REPLICATE
+---------------------------------------
+
+  k4f10 L=100 R=128:  seed 4242  208 / 195  (z=+2.26, target ahead)
+                      seed 99    208 / 210  (z=-0.45)
+
+Pooled Z=+1.28, nothing.  The first reading looked like "IC ordering degrades
+at high restart budgets", which would have been a real concern -- CLAUDE.md
+records that pre-pass questions are restart-budget dependent.  It was a single
+cell.  Across all 24 cells, four exceed |z|=2 in both directions, which is
+about what 24 cells produce when some effects are real and the rest is
+scatter.
+
+The restart ladder on k4f10 (L=100) is flat throughout: R=8 z=+0.51, R=32
+z=0.00, R=128 z=+2.26/-0.45.
+
+f10's win DOES attenuate with budget -- L=120 reads z=-4.70 at R=32 and
+z=-1.23 at R=128 (200 trials) -- which is expected: more restarts wash out a
+difference in visit order.  It stays positive, and the compute saving is
+unchanged at -24.9%.
+
+
+WHAT IS STILL NOT MEASURED
+---------------------------
+
+  * PROSE.  Telegraphic German throughout.  CLAUDE.md records that scoring
+    results do not transfer between the two writing styles, and this is a
+    scoring-adjacent change.
+  * -q AND -a TARGETS.  Both pay the same full-decode scan and should behave
+    like f10, but were not run.
+  * THE FULL SWEEP.  Rotor key given throughout, so this is the plugboard
+    tier only -- which is where the move order lives, but not what an
+    operator runs.
+  * m4f10 ON A SECOND SEED.  Its Z=-2.32 rests on four cells from one seed.
+    f10 was confirmed; this was not.
+
+
+RECOMMENDATION
+--------------
+
+Default ON is defensible on this evidence: never measurably worse, ~11%
+cheaper on the recommended telegraphic recipes, and both much cheaper and
+substantially better on a bare fused target.  The case against is that prose
+is unmeasured and the change is a search change, so it is left opt-in here
+pending that.
+
+The strongest practical reading is narrower and safe: IF YOU RUN A FUSED
+TARGET WITH NO LOW-ORDER PRE-PASS, USE $ENIGMA_JORDER=ic.  It is a quarter
+cheaper and breaks materially more messages, and the advantage grows with
+message length.
