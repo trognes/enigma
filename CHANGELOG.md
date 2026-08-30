@@ -154,9 +154,14 @@ existing command lines can behave differently or stop working.
 
     That last column is **plugboards scored, not compute**: the IC ranking's
     O(26) work per move is outside the counted score loop, so it prices the
-    scans `-K` removes and not the work it adds. On wall time `f10` is
-    −13…−17%, and the ratio is trajectory-dependent — `k4f10` at L=100 read
-    −3.3% on one fixture and −19.7% on another.
+    scans `-K` removes and not the work it adds. Measured on wall time
+    (`eval/jorder_speed.py`, 24 paired fixtures a cell against a self-control
+    arm), `-K` is faster everywhere measured — `f10` −12.9% at L=60 and −15.8%
+    at L=100, the three schedules with a low-order pre-pass −8.2…−8.9% at
+    L=100 and `k4f10` −4.1% at L=60. The saving **grows with length** and the
+    counter's overstatement shrinks with it, 2.7× at L=60 to 1.3× at L=100 on
+    `k4f10`, because the work removed is linear in `L` and the work added is
+    nearly flat.
 
   - **On a bare fused target it is both cheaper and better**, not a trade in
     either direction: eight of eight cells favour it, the effect grows

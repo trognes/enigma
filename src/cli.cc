@@ -147,10 +147,12 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "",
           "does not already supply IC -- much better and");
   fprintf(out, "  %-24s %s\n", "",
-          "~15% faster on a bare -S f10, a quality wash");
+          "~16% faster on a bare -S f10; on k4f10/i4f10 a");
   fprintf(out, "  %-24s %s\n", "",
-          "on -S k4f10/i4f10. Use instead of -J, not with");
-  fprintf(out, "  %-24s %s\n", "", "it (needs -c) [off]");
+          "quality wash for ~8% less time (L=100; the");
+  fprintf(out, "  %-24s %s\n", "",
+          "saving grows with length). Use instead of -J,");
+  fprintf(out, "  %-24s %s\n", "", "not with it (needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "-M, --cap-target",
           "Make the plug cap a strict descent target: only");
   fprintf(out, "  %-24s %s\n", "", "merge/remove at/over the cap; pair with a tight");

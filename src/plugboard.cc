@@ -742,10 +742,20 @@ static void firstimprove_sweep(machine & m, int max_pairs)
 
      THE LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE.  The O(26) ranking
      below runs OUTSIDE the counted score loop, so score_iter prices the scans
-     this removes and not the work it adds.  On wall time f10 is -13..-17%,
-     and the ratio is trajectory-dependent -- k4f10 at L=100 read -3.3% on one
-     fixture and -19.7% on another, the arms converging in different numbers
-     of moves.
+     this removes and not the work it adds.  Measured on WALL TIME instead
+     (eval/results-jorder-speed.txt, 24 paired fixtures per cell against a
+     self-control arm), -K is faster everywhere measured:
+
+       schedule  L=60     L=100    counter
+       f10       -12.9%   -15.8%   -25.1%
+       m4f10       --      -8.9%   -11.5%
+       i4f10       --      -8.6%   -11.1%
+       k4f10      -4.1%    -8.2%   -11.0%
+
+     The saving GROWS WITH LENGTH and the counter's overstatement shrinks with
+     it (2.7x at L=60 to 1.3x at L=100 on k4f10), because the work removed is
+     linear in L -- 325 full decodes a restart -- while the work added is
+     nearly flat.  So the counter is not a fixed multiple of the truth.
 
      The schedules that gain are exactly those whose pre-pass does not already
      feed IC into the climb.  Where it does (k4, i4) an IC order adds nothing;

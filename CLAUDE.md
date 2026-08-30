@@ -1048,16 +1048,36 @@ are read from a **data directory** (filenames built as
   - **THAT LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE, and it overstates
     the saving.** The IC ranking's O(26) work per move happens **outside** the
     counted score loop, so `score_iter` prices the scans `-K` removes and not
-    the work it adds — the same trap this file documents for the
-    `--polish` gain scan, with the sign reversed. Measured on wall time with
-    startup subtracted (min of 5, against a self-control that read 0.99–1.04),
-    `f10` is **−13…−17%** across four readings where the counter says −25%.
-    **The ratio is also TRAJECTORY-DEPENDENT**, which is why no number is
-    quoted for the other three: `k4f10` at L=100 read −3.3% on one fixture and
-    −19.7% on another, because the two arms converge in different numbers of
-    moves and how many depends on the message. Two fixtures cannot pin that.
-    If you need the compute side of this, measure wall time on your own
-    traffic; `--match-compute` in `eval/jorder_ab.py` calibrates it per cell.
+    the work it adds — the same trap this file documents for the `--polish`
+    gain scan, with the sign reversed. Measured properly on **wall time**
+    (`eval/jorder_speed.py`, 24 fixtures × 3 reps per cell, paired, startup
+    subtracted, against a third arm re-timing `-J` against itself):
+
+    | schedule | L | `-K`/`-J` | 95% CI | control | counter said |
+    |---|---:|---:|---|---:|---:|
+    | `f10` | 60 | **−12.9%** | [−13.7, −12.1] | −0.1% | −25.1% |
+    | `f10` | 100 | **−15.8%** | [−16.8, −14.8] | −0.2% | −25.1% |
+    | `m4f10` | 100 | −8.9% | [−9.7, −8.0] | +0.1% | −11.5% |
+    | `i4f10` | 100 | −8.6% | [−10.0, −7.1] | −0.3% | −11.1% |
+    | `k4f10` | 100 | **−8.2%** | [−9.6, −6.8] | −0.1% | −11.0% |
+    | `k4f10` | 60 | −4.1% | [−5.0, −3.2] | +0.8% | −11.0% |
+
+    Every cell clears its own control by an order of magnitude, so `-K` **is**
+    faster, everywhere measured. **The saving grows with length and the
+    overstatement shrinks with it** — 2.7× at L=60 falling to 1.3× at L=100 on
+    `k4f10` — because the work removed is linear in `L` (325 full decodes a
+    restart) while the work added is nearly flat (325 O(26) column deltas). So
+    the counter is **not a fixed multiple of the truth** and cannot be
+    corrected by a constant; time it.
+  - **The per-fixture ratio is a real distribution, which is why this needed
+    24 fixtures and not two.** The arms converge in different numbers of
+    moves, and how many depends on the message and key — measured sd 0.020 to
+    0.036 against control sds of 0.013 to 0.022, so four of six cells carry
+    genuine trajectory spread on top of the noise. It is small enough that
+    every CI here is under ±1.5pp. An earlier two-fixture probe read `k4f10`
+    L=100 at −3.3% and −19.7% and that was written up here as the ratio being
+    unquotable; it was a **broken fixture**, enciphering under one start
+    position and climbing under another, i.e. timing a wrong-key climb.
   - **On a bare fused target it is both cheaper AND better**, which is the
     unusual part — not a trade in either direction. Eight of eight cells favour
     it, the effect grows monotonically with length in both seeds, and at L=120

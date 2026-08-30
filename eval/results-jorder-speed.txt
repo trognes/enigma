@@ -1,0 +1,97 @@
+IS -K ACTUALLY FASTER THAN -J?  WALL TIME, PAIRED OVER FIXTURES
+================================================================
+
+  python3 eval/jorder_speed.py --schedule S --length L --fixtures 24 --reps 3
+
+  -f -l wehrmacht -c, -R 1024, 10-pair board, rotor key given, authentic HG
+  Nord decrypts.  Single-threaded on an idle box.  Each fixture draws its own
+  message, key and board; the arms are -J, -K, and -J AGAIN as a control.
+  Startup subtracted per fixture and per arm via an -R 0 run.
+
+VERDICT: yes, everywhere measured, and the saving GROWS WITH LENGTH.  All six
+cells clear their own control by an order of magnitude.
+
+
+THE NUMBERS
+-----------
+
+  schedule  L     -K / -J      95% CI            control   plugboards said
+  f10       60    -12.9%   [-13.7, -12.1]        -0.1%     -25.1%
+  f10      100    -15.8%   [-16.8, -14.8]        -0.2%     -25.1%
+  m4f10    100     -8.9%   [ -9.7,  -8.0]        +0.1%     -11.5%
+  i4f10    100     -8.6%   [-10.0,  -7.1]        -0.3%     -11.1%
+  k4f10    100     -8.2%   [ -9.6,  -6.8]        -0.1%     -11.0%
+  k4f10     60     -4.1%   [ -5.0,  -3.2]        +0.8%     -11.0%
+
+The three schedules with a low-order pre-pass are indistinguishable from each
+other at L=100 (-8.2, -8.6, -8.9, CIs all overlapping), which is the expected
+shape: they replace the same f10 TARGET stage's scans and differ only in a
+pre-pass that was already O(26).  f10 replaces every scan in the run and comes
+out at roughly double.
+
+
+THE COUNTER OVERSTATES, AND BY MORE AT SHORT LENGTHS
+-----------------------------------------------------
+
+  schedule  L     wall     plugboards   overstatement
+  f10       60    -12.9%     -25.1%        1.9x
+  f10      100    -15.8%     -25.1%        1.6x
+  k4f10     60     -4.1%     -11.0%        2.7x
+  k4f10    100     -8.2%     -11.0%        1.3x
+
+score_iter counts calls through the fused score loop.  What -K REMOVES is
+counted (325 full decodes per restart, O(L) each); what it ADDS is not (325
+O(26) column deltas, plus one cooc_build).  The removed work is linear in L
+and the added work is nearly flat, so the net saving grows with L and the
+overstatement shrinks -- 2.7x at L=60 falling to 1.3x at L=100 on k4f10.
+
+That length dependence is the useful part: it says the counter is not a fixed
+multiple of the truth, so it cannot be corrected by a constant.  Time it.
+
+
+THE SPREAD IS REAL, BUT SMALL
+------------------------------
+
+  cell            -K/-J sd    control sd
+  f10      L=60     0.0203      0.0125
+  f10      L=100    0.0252      0.0198
+  m4f10    L=100    0.0213      0.0218
+  i4f10    L=100    0.0358      0.0158
+  k4f10    L=100    0.0343      0.0203
+  k4f10    L=60     0.0227      0.0191
+
+The two arms visit moves in different orders, so they converge in different
+numbers of moves, and how many depends on the message and key -- the
+per-fixture ratio is a genuine distribution, not a constant measured with
+error.  The control arm is what separates that from measurement noise, and the
+excess is there in four of six cells (largest on i4f10 and k4f10 at L=100,
+0.036 and 0.034 against controls of 0.016 and 0.020).
+
+But it is nowhere near large enough to stop a mean being quoted.  At 24
+fixtures every CI is under +/-1.5pp.
+
+
+WHAT THIS REPLACES, AND WHY THE OLD ANSWER WAS WRONG
+------------------------------------------------------
+
+An earlier two-fixture probe reported k4f10 at L=100 as -3.3% on one fixture
+and -19.7% on the other, and that spread was written up as the ratio being
+trajectory-dependent to the point of being unquotable.
+
+IT WAS A BROKEN FIXTURE, NOT TRAJECTORY.  The probe's second fixture
+enciphered with -g DKR and then climbed with -g QMW: it timed a WRONG-KEY
+climb, which converges quite differently.  All four of its readings are void.
+
+The first fixture's readings survive and agree with this run where they were
+repeated -- f10 L=100 read -15.1% three times against -15.8% here -- and
+scatter where they were read once (k4f10 L=100 -3.3% against -8.2%), which is
+what a single fixture drawn from an sd-0.034 distribution does.
+
+Two lessons, one specific and one general.  The specific one: a timing probe
+that varies the ciphertext must vary the key it hands the climb along with it,
+or it measures a different problem.  The general one is the same rule this
+repo already applies to bench cells -- a spread across two readings is not
+evidence about the underlying distribution until something rules out the
+measurement being broken, and here the CONTROL ARM is what would have caught
+it immediately: a wrong-key climb re-timed against itself is still self-
+consistent, but its ratio to the right-key arm is meaningless.

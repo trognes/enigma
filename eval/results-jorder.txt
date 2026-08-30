@@ -69,27 +69,30 @@ THAT LAST COLUMN IS PLUGBOARDS SCORED, NOT COMPUTE
 
   The IC ranking's O(26) work per move happens OUTSIDE the counted score loop,
   so score_iter prices the scans -K removes and not the work it adds.  It is
-  the --polish gain-scan trap with the sign reversed, and it overstates by
-  2x or so.  On WALL TIME, startup subtracted, min of 5, against self-controls
-  reading 0.99-1.04:
+  the --polish gain-scan trap with the sign reversed.
 
-    f10    L=60   -9.7%, -12.9%      (two fixtures)
-    f10    L=100  -15.1% x3, -16.5%  (two fixtures, three R values on one)
-    k4f10  L=60   -5.8%, -3.3%
-    k4f10  L=100  -3.3%, -19.7%      <-- see below
+  MEASURED SEPARATELY, on wall time -- eval/results-jorder-speed.txt, 24
+  paired fixtures per cell against a self-control arm:
 
-  So f10 is -13..-17%, stable across four readings.  NO NUMBER IS QUOTED FOR
-  THE OTHERS: the ratio is TRAJECTORY-DEPENDENT, not a per-move cost ratio.
-  The two arms converge in different numbers of moves and how many depends on
-  the message, so k4f10 at L=100 spans -3% to -20% across two fixtures.  Two
-  fixtures cannot pin that, and it was not chased further.
+    schedule  L      -K / -J    95% CI          control   counter
+    f10       60     -12.9%   [-13.7, -12.1]     -0.1%    -25.1%
+    f10      100     -15.8%   [-16.8, -14.8]     -0.2%    -25.1%
+    m4f10    100      -8.9%   [ -9.7,  -8.0]     +0.1%    -11.5%
+    i4f10    100      -8.6%   [-10.0,  -7.1]     -0.3%    -11.1%
+    k4f10    100      -8.2%   [ -9.6,  -6.8]     -0.1%    -11.0%
+    k4f10     60      -4.1%   [ -5.0,  -3.2]     +0.8%    -11.0%
 
-  eval/jorder_ab.py --match-compute calibrates the ratio per cell from wall
-  time with startup subtracted, for anyone who wants to spend the saving on
-  restarts rather than bank it.  That A/B has NOT been run: at high -R the
-  reallocation is worth only ~0.3-0.9pp by the documented restart curve, and
-  a 30-trial probe at -R 1024 read the arms dead level at L=60 (14/14) and
-  L=100 (24/24).
+  -K IS FASTER EVERYWHERE MEASURED, and the saving GROWS WITH LENGTH: the work
+  removed is linear in L (325 full decodes a restart) where the work added is
+  nearly flat (325 O(26) deltas).  The counter's overstatement shrinks with
+  length accordingly, 2.7x at L=60 down to 1.3x at L=100 on k4f10, so it is
+  not a fixed multiple of the truth and cannot be corrected by a constant.
+
+  eval/jorder_ab.py --match-compute calibrates that ratio per cell for anyone
+  who wants to SPEND the saving on restarts rather than bank it.  That A/B has
+  NOT been run: at high -R the reallocation is worth only ~0.3-0.9pp by the
+  documented restart curve, and a 30-trial probe at -R 1024 read the arms dead
+  level on break50 at L=60 (14/14 of 30) and L=100 (24/24 of 30).
 
 THE PLUGBOARD SAVING SPLITS THE SAME WAY AS THE QUALITY, FOR THE SAME REASON
 -----------------------------------------------------------------------------
