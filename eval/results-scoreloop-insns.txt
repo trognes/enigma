@@ -917,16 +917,22 @@ probe reads -0.3% and -0.2% on the two cells that judged it, against the
 +30.7% and +35.7% those same cells measured -- a floor two orders of
 magnitude below the effect.  icscan and hillclimb are equally tight.
 
-SECOND, IT QUALIFIES "THE arm64 CELLS REPRODUCE TO THE HUNDREDTH OF A SECOND".
-That claim was earned on the FUSED tier and it still holds there.  It does not
-transfer: g++ arm64 SEARCH LONG moved -8.7% on identical binaries, base 9.10 s
-against head 8.31 s.  Watching the base column identifies which side was
-disturbed -- clang arm64 ran the same tier at 6.64 s, and this cell's own
-earlier runs sat near 8.3 s, so it is the BASE reading that is anomalous, not
-the head.
+SECOND, ONE CELL LOOKED LOOSE AND WAS NOT -- AND THE BASE COLUMN CALLED IT IN
+ADVANCE.  g++ arm64 SEARCH LONG moved -8.7% on identical binaries, base 9.10 s
+against head 8.31 s.  Reading the base column rather than the percentage said
+which side was disturbed: clang arm64 ran the same tier at 6.64 s and this
+cell's own earlier runs sat near 8.3 s, so the BASE was the anomaly.  That was
+written down as a prediction before it could be checked.
 
-So a noise floor is per TIER as well as per cell, per workload and per run,
-and the one number this file has repeatedly been tempted to quote as "the
-arm64 floor" is really "the arm64 fused floor".  Which is the same lesson as
-the crib tier's flatness earlier in this file: a control bounds the noise of
-the tier it was measured on, and nothing else.
+A SECOND docs-only commit tested it, and it holds.  Same cell, same tier:
+base 8.36 s, head 8.38 s, +0.2% -- the head value reproduces (8.31 then 8.38)
+and 9.10 s does not recur.  All ten of that run's cells sit within +-0.8%.
+
+SO THE GENERALISATION DRAWN FROM RUN 1 IS WITHDRAWN.  It said a noise floor is
+per TIER as well as per cell, and that "the arm64 floor" was really "the arm64
+fused floor".  n=2 says otherwise: the search tier on that cell is as tight as
+the rest when the run is quiet, and what happened was a single disturbed
+reading, not a property of the tier.  The durable part is the method, not the
+floor -- ONE anomalous cell against nine quiet ones is a disturbance until a
+second run says otherwise, and the base column identifies which side of the
+A/B carries it without any reasoning about percentages at all.
