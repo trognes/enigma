@@ -63,7 +63,6 @@ int main(int argc, char * * argv)
 
   ic_blend_init();
   hist_init();
-  kappa_init();
   readciphertext();
 
   /* Before show_settings(), which reports the hypothesis count -- it read 0 for a while

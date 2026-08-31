@@ -1,0 +1,67 @@
+THE LAGGED-KAPPA TERM, MEASURED END TO END -- SAME VERDICT AS X-STRUCTURE
+=========================================================================
+
+  python3 eval/kappa_ab.py --trials 300 --lengths 40 60 100 --mu 0.3 1.0
+
+  300 paired trials per length, 10-pair board hidden, rotor key given,
+  -c -K --polish -S k4f10 -f -l wehrmacht -R 8.  JUDGED ON BREAK50, McNemar
+  exact on the paired discordants.  No fitted table and nothing held out: the
+  per-lag null is the candidate's own expected match rate.
+
+RESULT: neutral where the term is weak, catastrophic where it is strong, and
+no window between.
+
+  L    mu=0     mu=0.3          mu=1.0
+  40    0/300    1/300 p=1.00    1/300 p=1.00
+  60   23/300   21/300 p=0.824    6/300 p=0.000
+ 100   90/300   93/300 p=0.766   14/300 p=0.000
+
+At L=100 mu=1 the discordants are 79 only-base against 3 only-mu.  At mu=0.3
+there is real churn (21/24 discordant at L=100) and zero net -- the term
+changes WHICH trials break, not how many.
+
+
+THE EXIT-BOARD-INVARIANCE ARGUMENT DID NOT SAVE IT, WHICH IS THE FINDING
+-------------------------------------------------------------------------
+
+X-structure was gameable through the exit plugboard (move a plug, relocate
+every X), and one could hope kappa's equality-only construction -- invariant
+to the exit application by algebra -- closed that channel.  It closed HALF of
+it.  The entry application still shapes which pre-core letters collide, and
+at mu=1 the climb exploits that channel alone hard enough to take L=100 from
+90 breaks to 14.  A term the search can influence AT ALL is a term the search
+will optimise INSTEAD of the language, whenever it is weighted strongly
+enough to matter.
+
+And the screen was again no protection: kappa passed it MORE cleanly than
+X-structure did (every length improving under all three generator sets at
+mu=0.3, the statistic alone out-ranking the full fused model 56-70% against
+40-47%).  Offline, the term faces decoys never selected against it; end to
+end, each arm climbs under its own mu.  Two terms have now passed that screen
+and both inverted or nulled end to end.
+
+
+WHERE THIS LEAVES THE SCORING QUESTION
+---------------------------------------
+
+Four levers measured down in one investigation: the mixture weights (~1pp,
+below resolution), lambda (unjudgeable offline; documented as a climb effect,
+not discrimination), X-structure (inverts), and lagged kappa (nulls or
+inverts).  The two structural failures bracket the design space -- one term
+gameable via the exit board, one invariant to it and still gamed via the
+entry board.  The scoring-failure floor on short telegraphic messages is
+behaving like a genuine information limit for single-message statistics
+added to the target score, which is what CLAUDE.md's "-a is near-optimal on
+both scoring axes" already implied for prose.
+
+WHAT REMAINS UNTRIED is not another term but another ARCHITECTURE:
+  * REPORTING signals (the --doubling-report shape), which enter no ranking
+    and so cannot be gamed -- kappa's top-3 peaks would slot into that
+    pattern as a "this converged decrypt self-repeats like language" flag;
+  * JOINT scoring across messages sharing a day key, where the board must
+    make ALL traffic language-like at once -- an information multiplier no
+    single-message term can match.
+
+The implementation is reverted; src/ is byte-identical to dev.  The screen,
+the implementation discipline (KP=false proven 374/374 instruction-identical,
+40/40 numerical cross-check) and both harnesses are retained.

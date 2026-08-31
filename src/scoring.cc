@@ -864,50 +864,9 @@ void ic_blend_init()
    same number of decodes as the shipped scorer. A two-pass version would inflate wall
    time per score_iter and quietly unfair any matched-score_iter A/B. Returns the
    log-prob SUM (caller normalises); writes the IC through *ic_out. */
-/* --- lagged-coincidence profile (EXPERIMENTAL, off by default) -----------
-
-   kappa(k) is the coincidence rate of the decrypt with itself at lag k; IC is
-   (a weighted average of) kappa over ALL lags, so the tool's most trusted
-   statistic is the mean of a curve it never looks at. The curve's signal is
-   SPARSE -- each repeated token spikes exactly one lag -- so the term is the
-   SUM OF THE TOP 3 per-lag z-scores, the combiner that beat mean, max and
-   fixed thresholds at every length screened (eval/kappa_probe.py).
-
-   The per-lag null is the TEXT'S OWN expected match rate q = sum of squared
-   letter frequencies, so the term carries lag structure, not IC over again,
-   and needs no table. Equality-only, hence invariant to the exit plugboard;
-   the entry application still shapes it, so a climb can in principle game it
-   -- which is why this is env-gated and off by default. The offline screen
-   passed under both generator sets, but so did X-structure's, and that term
-   INVERTED end to end (eval/results-xstruct-ab.txt). This exists to run the
-   same end-to-end test. */
-static const int kappa_kmax = 30;    /* lags 1..30 */
-static const int kappa_topm = 3;
-static double g_kappa_mu = 0.0;      /* 0 = off; default path byte-identical */
-
-double kappa_mu()
+static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize][asize],
+                              int model, double * ic_out)
 {
-  return g_kappa_mu;
-}
-
-void kappa_init()
-{
-  const char * mu = getenv("ENIGMA_KAPPA");
-  if ((mu != nullptr) && (*mu != 0))
-    g_kappa_mu = parse_opt_double(mu, "$ENIGMA_KAPPA");
-}
-
-/* KP selects the kappa tail. TEMPLATED, not branched, so the KP=false
-   instantiation is byte-identical to the code before this term existed --
-   the discipline the plug_fixed climb chain and the X-structure prototype
-   both used, verified by objdump each time. */
-template<bool KP>
-static double ngram_ic_decode_t(machine & m, const uint8_t (* table)[asize][asize][asize],
-                                int model, double * ic_out, double * kp_out)
-{
-  unsigned char kbuf[maxlen];   /* decoded letters, used only when KP */
-  if (KP)
-    *kp_out = 0.0;
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
@@ -947,12 +906,6 @@ static double ngram_ic_decode_t(machine & m, const uint8_t (* table)[asize][asiz
   int b = decode_at(steck, rows, ct, 1);
   int c = decode_at(steck, rows, ct, 2);
   f0[a]++; f1[b]++; f2[c]++;
-  if (KP)
-    {
-      kbuf[0] = static_cast<unsigned char>(a);
-      kbuf[1] = static_cast<unsigned char>(b);
-      kbuf[2] = static_cast<unsigned char>(c);
-    }
   long isum = 0;
   int i = 3;
   for (; i + 3 < textlength; i += 4)
@@ -965,13 +918,6 @@ static double ngram_ic_decode_t(machine & m, const uint8_t (* table)[asize][asiz
       f1[d1]++;
       f2[d2]++;
       f3[d3]++;
-      if (KP)
-        {
-          kbuf[i] = static_cast<unsigned char>(d0);
-          kbuf[i + 1] = static_cast<unsigned char>(d1);
-          kbuf[i + 2] = static_cast<unsigned char>(d2);
-          kbuf[i + 3] = static_cast<unsigned char>(d3);
-        }
       isum += table[a][b][c][d0];
       isum += table[b][c][d0][d1];
       isum += table[c][d0][d1][d2];
@@ -984,8 +930,6 @@ static double ngram_ic_decode_t(machine & m, const uint8_t (* table)[asize][asiz
     {
       const int d = decode_at(steck, rows, ct, i);
       f0[d]++;
-      if (KP)
-        kbuf[i] = static_cast<unsigned char>(d);
       isum += table[a][b][c][d];
       a = b;
       b = c;
@@ -1001,48 +945,6 @@ static double ngram_ic_decode_t(machine & m, const uint8_t (* table)[asize][asiz
   *ic_out = (textlength > 1)
     ? static_cast<double>(coin)
         / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
-
-  if (KP)
-    {
-      const int n = textlength;
-      /* q from the histogram already in hand: sum of squared frequencies. */
-      long sq = 0;
-      for (int j = 0; j < asize; j++)
-        {
-          const long nc = f0[j] + f1[j] + f2[j] + f3[j];
-          sq += nc * nc;
-        }
-      const double q = static_cast<double>(sq)
-                       / (static_cast<double>(n) * n);
-      if ((n >= 12) && (q > 0.0) && (q < 1.0))
-        {
-          double top[kappa_topm];
-          for (int j = 0; j < kappa_topm; j++)
-            top[j] = -1e300;
-          const int klim = kappa_kmax < (n - 10) ? kappa_kmax : (n - 10);
-          for (int k = 1; k <= klim; k++)
-            {
-              const int nn = n - k;
-              int mt = 0;
-              for (int j = 0; j < nn; j++)
-                mt += (kbuf[j] == kbuf[j + k]);
-              const double sd = sqrt(nn * q * (1.0 - q));
-              const double z = (sd > 0.0) ? (mt - nn * q) / sd : 0.0;
-              /* keep the kappa_topm largest */
-              int lo = 0;
-              for (int j = 1; j < kappa_topm; j++)
-                if (top[j] < top[lo])
-                  lo = j;
-              if (z > top[lo])
-                top[lo] = z;
-            }
-          double t3 = 0.0;
-          for (int j = 0; j < kappa_topm; j++)
-            if (top[j] > -1e300)
-              t3 += top[j];
-          *kp_out = t3;
-        }
-    }
 
   return static_cast<double>(isum) / ngram_scale[model]
          + (textlength - 3) * ngram_bias[model];
@@ -1063,15 +965,12 @@ double score_iter(machine & m)
      quadratic in the whole-message letter histogram. */
   if (m.scoring == SCORE_FUSED)
     {
-      double ic = 0.0, kp = 0.0;
-      if (g_kappa_mu != 0.0)
-        score = ngram_ic_decode_t<true>(m, all8, SCORE_ALL, &ic, &kp);
-      else
-        score = ngram_ic_decode_t<false>(m, all8, SCORE_ALL, &ic, nullptr);
+      double ic = 0.0;
+      score = ngram_ic_decode(m, all8, SCORE_ALL, &ic);
       nterms = textlength - 3;
       if (nterms > 0)
         score /= nterms;
-      return score + g_fused_lambda * ic + g_kappa_mu * kp;
+      return score + g_fused_lambda * ic;
     }
 
   switch(m.scoring)
