@@ -6,6 +6,7 @@
 #include "options.h"
 #include "text.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -864,9 +865,113 @@ void ic_blend_init()
    same number of decodes as the shipped scorer. A two-pass version would inflate wall
    time per score_iter and quietly unfair any matched-score_iter A/B. Returns the
    log-prob SUM (caller normalises); writes the IC through *ic_out. */
-static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize][asize],
-                              int model, double * ic_out)
+/* --- X-delimiter structure (EXPERIMENTAL, off by default) ---------------
+
+   Telegraphic German uses X as a word separator, so a correct decrypt carries
+   structure the n-gram models see only through a 4-character window: the GAPS
+   between consecutive X are word lengths. Over the 75 authentic messages X is
+   6.2-6.7% of letters, the gap median is 7.5-9, and P(gap = 0) is 0.5%
+   against the 6.7% that random placement at the same X rate would give.
+
+   IT IS A LIKELIHOOD RATIO AGAINST RANDOM X PLACEMENT AT THE CANDIDATE'S OWN
+   X RATE, not a log-probability, and that is not a refinement -- it is what
+   makes the term well defined. A decrypt with fewer than two X has no gap to
+   score, and any constant standing in for it is then compared against real
+   texts' genuine negative scores; measured in the prototype, a neutral of 0.0
+   against a truth scoring -1.59 made the term PENALISE the truth in 100% of
+   trials. With a ratio, no X gives 0 because there is no evidence either way,
+   and being X-rich earns nothing here -- the monogram model already prices
+   that, and this must add STRUCTURE or nothing.
+
+   OFF BY DEFAULT and env-gated rather than a CLI option: the offline probe
+   (eval/results-xstruct.txt) says "worth trying", not "works". Its decoys were
+   produced by n-gram and IC models, none of which optimises X structure, so
+   the term faced a pool never selected against it and those numbers are an
+   UPPER BOUND. This exists so that bound can be tested end to end. */
+static const int xletter = 23;       /* 'X', the telegraphic separator */
+static const int xgap_max = 40;      /* gaps at or past this share a bin */
+static double g_xstruct_mu = 0.0;    /* 0 = off; default path byte-identical */
+static double g_xgap_lg[xgap_max + 1];
+
+double xstruct_mu()
 {
+  return g_xstruct_mu;
+}
+
+void xstruct_init()
+{
+  const char * mu = getenv("ENIGMA_XSTRUCT");
+  if ((mu == nullptr) || (*mu == 0))
+    return;
+  g_xstruct_mu = parse_opt_double(mu, "$ENIGMA_XSTRUCT");
+  if (g_xstruct_mu == 0.0)
+    return;
+  const char * path = getenv("ENIGMA_XGAPS");
+  if ((path == nullptr) || (*path == 0))
+    fatal("$ENIGMA_XSTRUCT needs $ENIGMA_XGAPS naming a gap-count file");
+  FILE * f = fopen(path, "r");
+  if (f == nullptr)
+    fatal("cannot open $ENIGMA_XGAPS file");
+  double cnt[xgap_max + 1];
+  for (int i = 0; i <= xgap_max; i++)
+    cnt[i] = 0.0;
+  int g = 0;
+  long c = 0;
+  double tot = 0.0;
+  while (fscanf(f, "%d %ld", &g, &c) == 2)
+    {
+      if ((g >= 0) && (g <= xgap_max) && (c > 0))
+        { cnt[g] += static_cast<double>(c); tot += static_cast<double>(c); }
+    }
+  fclose(f);
+  if (tot <= 0.0)
+    fatal("$ENIGMA_XGAPS file holds no usable gap counts");
+  /* add-one over the bins: no gap value is impossible, and an unseen one must
+     not be an infinite penalty. */
+  const double denom = tot + (xgap_max + 1);
+  for (int i = 0; i <= xgap_max; i++)
+    g_xgap_lg[i] = log10((cnt[i] + 1.0) / denom);
+}
+
+/* One X seen at position `at`: close the previous gap and open a new one.
+   ONE definition, because the first version of this had three copies -- the
+   pre-roll, the unrolled body and the tail -- and the pre-roll copy silently
+   omitted the gap between two X in the first three characters. A numerical
+   cross-check against the Python prototype caught it; three copies of ten
+   lines is how it got in. */
+struct xgaps
+{
+  int prev = -1;    /* position of the last X seen */
+  int n = 0;        /* gaps closed so far */
+  int sum = 0;      /* sum of gaps, each CAPPED at xgap_max */
+  int tail = 0;     /* how many of them hit the cap */
+  double lg = 0.0;  /* sum of log10 P(gap) under the fitted model */
+};
+
+static inline void xgap_see(int at, xgaps & x)
+{
+  if (x.prev >= 0)
+    {
+      const int gap = at - x.prev - 1;
+      const int b = gap < xgap_max ? gap : xgap_max;
+      x.lg += g_xgap_lg[b];
+      x.sum += b;
+      if (b == xgap_max)
+        x.tail++;
+      x.n++;
+    }
+  x.prev = at;
+}
+
+/* XS selects the X-structure tail. TEMPLATED, not branched, so the XS=false
+   instantiation is byte-identical to the code before this term existed --
+   verified by objdump, the same discipline the plug_fixed climb chain uses. */
+template<bool XS>
+static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize][asize],
+                              int model, double * ic_out, double * xs_out)
+{
+  if (XS)
+    *xs_out = 0.0;
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
   const unsigned char * const * __restrict rows = m.rows;
@@ -906,6 +1011,16 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   int b = decode_at(steck, rows, ct, 1);
   int c = decode_at(steck, rows, ct, 2);
   f0[a]++; f1[b]++; f2[c]++;
+  /* X-gap accumulators. Sum(gap) = last - first - ngaps, so four scalars
+     replace a histogram and the per-character cost is one compare. */
+  xgaps xg;
+  if (XS)
+    {
+      const int pre[3] = { a, b, c };
+      for (int j = 0; j < 3; j++)
+        if (pre[j] == xletter)
+          xgap_see(j, xg);
+    }
   long isum = 0;
   int i = 3;
   for (; i + 3 < textlength; i += 4)
@@ -918,6 +1033,13 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
       f1[d1]++;
       f2[d2]++;
       f3[d3]++;
+      if (XS)
+        {
+          const int dd[4] = { d0, d1, d2, d3 };
+          for (int j = 0; j < 4; j++)
+            if (dd[j] == xletter)
+              xgap_see(i + j, xg);
+        }
       isum += table[a][b][c][d0];
       isum += table[b][c][d0][d1];
       isum += table[c][d0][d1][d2];
@@ -930,6 +1052,8 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
     {
       const int d = decode_at(steck, rows, ct, i);
       f0[d]++;
+      if (XS && (d == xletter))
+        xgap_see(i, xg);
       isum += table[a][b][c][d];
       a = b;
       b = c;
@@ -945,6 +1069,24 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
   *ic_out = (textlength > 1)
     ? static_cast<double>(coin)
         / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
+
+  if (XS)
+    {
+      /* Ratio against random X placement at THIS candidate's own X rate:
+         no gaps means no evidence, hence 0, and X-richness earns nothing. */
+      if (xg.n > 0)
+        {
+          /* Null: X placed at random with this candidate's own rate, so gaps
+             are geometric. The top bin means "gap >= xgap_max", whose null
+             mass is (1-p)^xgap_max -- hence the tail gaps contribute no
+             log10(p) term. Getting that wrong is worth ~1.5 log units per
+             tail gap and was caught by the cross-check, not by inspection. */
+          const double p = static_cast<double>(xg.n + 1) / textlength;
+          const double lgeom = (xg.n - xg.tail) * log10(p)
+                               + xg.sum * log10(1.0 - p);
+          *xs_out = (xg.lg - lgeom) / textlength;
+        }
+    }
 
   return static_cast<double>(isum) / ngram_scale[model]
          + (textlength - 3) * ngram_bias[model];
@@ -965,12 +1107,15 @@ double score_iter(machine & m)
      quadratic in the whole-message letter histogram. */
   if (m.scoring == SCORE_FUSED)
     {
-      double ic = 0.0;
-      score = ngram_ic_decode(m, all8, SCORE_ALL, &ic);
+      double ic = 0.0, xs = 0.0;
+      if (g_xstruct_mu != 0.0)
+        score = ngram_ic_decode<true>(m, all8, SCORE_ALL, &ic, &xs);
+      else
+        score = ngram_ic_decode<false>(m, all8, SCORE_ALL, &ic, nullptr);
       nterms = textlength - 3;
       if (nterms > 0)
         score /= nterms;
-      return score + g_fused_lambda * ic;
+      return score + g_fused_lambda * ic + g_xstruct_mu * xs;
     }
 
   switch(m.scoring)
