@@ -1,0 +1,79 @@
+THE X-STRUCTURE TERM, MEASURED END TO END -- IT DOES NOT SURVIVE THE SEARCH
+===========================================================================
+
+  python3 eval/xstruct_ab.py --trials 300 --lengths 40 60 100 \
+          --mu 30 100 300 --restarts 8 --seed 21
+
+  300 paired trials per length, authentic HG Nord decrypts, 10-pair board
+  hidden, rotor key given, -c -K --polish -S k4f10 -f -l wehrmacht -R 8.
+  Gap table fitted on a HELD-OUT half of the corpus (37 messages, 231 gaps);
+  plaintexts drawn from the other 38.  JUDGED ON BREAK50.
+
+RESULT: the term is neutral where it is weak and HARMFUL where it is strong.
+There is no mu that helps.
+
+  L    mu=0    mu=30         mu=100              mu=300
+  40   6/300   5/300 p=1.00  3/300  p=0.453      0/300  p=0.031
+  60  19/300  20/300 p=1.00  10/300 p=0.035      2/300  p=0.000
+ 100  91/300  94/300 p=0.75  60/300 p=0.000      9/300  p=0.000
+
+(McNemar, exact, on the paired discordants.  At L=100 mu=300 the discordant
+pairs are 85 only-base against 3 only-mu.)
+
+
+THE OFFLINE PROBE HAD THE WRONG SIGN, NOT MERELY A LOOSE BOUND
+---------------------------------------------------------------
+
+eval/results-xstruct.txt reported, at mu=300, truth-wins rising from 3.8% to
+27.5% at L=40 and from 40.0% to 47.5% pooled -- and it held under BOTH
+generator sets, which is the check that killed the lambda result.  End to end
+the same setting takes break50 at L=40 from 6 to ZERO.
+
+The probe's stated caveat was that its decoys came from n-gram and IC models,
+none of which optimises X structure, so the term faced a pool never selected
+against it and the numbers were an UPPER BOUND.  That was right about the
+direction of the bias and wrong about its size: it is not a bound that
+shrinks, it is a bound that CHANGES SIGN once the search can optimise the
+term.  A climb under the augmented score finds boards whose X land at
+plausible word lengths, and at mu = 100-300 the term is strong enough that
+optimising it beats optimising the language.
+
+CLAUDE.md already records this failure mode for the kick-ranking probe --
+"treat an offline seeding probe as justifying a recovery run, never as
+evidence of its sign".  This is the same lesson in a second place, and this
+time the offline evidence was much stronger: two generator sets, monotone in
+length, and a mechanism.  NONE OF THAT SUBSTITUTES FOR LETTING THE SEARCH
+ATTACK THE TERM.
+
+WHY BOTH ENDS FAIL, WHICH IS WHAT MAKES THIS COMPLETE.  At mu = 30 the term
+contributes ~0.3 to a per-symbol score of ~-8 and changes nothing (p >= 0.75
+at every length; the probe agreed, reading 39.6% against 40.0%).  At mu = 300
+it contributes ~3 and dominates.  There is no window in between: mu = 100 is
+already significantly negative at two of three lengths.  The term is either
+too weak to matter or strong enough to be gamed.
+
+AND THE HARM GROWS WITH LENGTH, which is the opposite of what the idea
+predicted.  The rationale was that short messages give n-grams too little to
+work with, so structure should help most there.  At mu = 100 the loss is
+3/300 at L=40 but 31/300 at L=100 -- because a longer message has more X, so
+more gap evidence for the climb to exploit in the wrong direction.
+
+
+WHAT IS AND IS NOT RULED OUT
+-----------------------------
+
+RULED OUT: adding X-gap likelihood to the target score as a weighted term.
+Both ends of the mu range are covered and the middle is negative.
+
+NOT RULED OUT, and untested: using the statistic as a REPORTING signal rather
+than a score term -- the shape --doubling-report already has, where a
+confirmation cannot promote a wrong key because it enters no ranking.  That is
+also how the doubled-word evidence was measured DOWN as a score bonus and kept
+as a report (ENHANCEMENTS.md item 5(e)), so the precedent for this exact
+pattern is already in the tool.  Nothing here bears on it either way.
+
+The implementation is reverted; src/ is byte-identical to dev.  What it cost
+to learn is recorded above the revert in the commit, including the two bugs
+the numerical cross-check caught before the run -- a triplicated gap loop
+whose pre-roll copy dropped a gap, and a tail-bin null worth ~1.5 log units
+per tail gap.  Both would have biased this measurement had they survived.

@@ -60,12 +60,6 @@ extern double ngram_bias[SCORE_MONOIC + 1];
    The switch exists so the two paths can be COMPARED in the test suite; the
    default is on and the paths are byte-identical. */
 void hist_init();
-
-/* X-delimiter structure term (EXPERIMENTAL, off by default; see the block
-   above xstruct_init in scoring.cc). Read from $ENIGMA_XSTRUCT /
-   $ENIGMA_XGAPS at startup; mu = 0 leaves the scorer byte-identical. */
-void xstruct_init();
-double xstruct_mu();
 bool hist_model(int scoring);
 void cooc_build(machine & m);
 const uint16_t * cooc_col(int c, int d);
