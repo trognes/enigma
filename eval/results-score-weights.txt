@@ -1,0 +1,126 @@
+RETUNING THE FUSED MODEL'S WEIGHTS -- NO HEADROOM, AND THE FIRST ANSWER WAS
+AN ARTEFACT
+============================================================================
+
+  python3 eval/score_weight_probe.py --trials 80 --lengths 40 60 100 \
+          --restarts 64 --seed 7 [--generators <letters>]
+
+  240 trials (80 per length), authentic HG Nord decrypts, 10-pair board,
+  rotor key given.  -f's weights are (a,b,c,d) = (1, 0.6, 0.3, 0.15) with
+  lambda = 30 on the IC term, all BAKED IN -- ENIGMA_LOGLIN does NOT reach
+  them (load_table passes the baked vector as force_ll and that branch ignores
+  the environment), so the sweep is done offline in Python instead.
+
+THE QUESTION.  On telegraphic German the scoring-failure share is the dominant
+residual at short lengths -- CLAUDE.md records 56% at L=40 under -q and 90%
+under the recommended recipe -- so a sharper WEIGHTING is one of the few
+things that could move it.  The weights were tuned once, on prose, before -f
+took its present form.  Is there anything left in them?
+
+ANSWER: NO.  The mixture weights are worth about 1pp and lambda cannot be
+judged by this instrument at all.
+
+
+THE INSTRUMENT, AND WHY IT IS OFFLINE
+-------------------------------------
+
+Scoring failure is "the true plugboard does not score highest", which is a
+property of two DECRYPTS rather than of a search.  So the binary produces the
+decrypts once and Python sweeps 300 weight vectors over them for free.
+
+VALIDATED AGAINST THE BINARY BEFORE ANY SWEEP: on nine trials at L = 40/60/100
+the Python model agreed with the binary in every case -- where the search
+failed to recover, the winner it chose outscored the truth under the Python
+re-implementation too.  That is the check that the reimplementation ranks the
+same way the C++ does; without it the whole sweep would measure Python.
+
+
+THE FIRST ANSWER, WHICH LOOKED LIKE A LARGE WIN
+------------------------------------------------
+
+Decoys pooled from strong climbs (-K --polish -R 64) under five targets
+i/t/q/a/f.  Truth-wins %, named vectors:
+
+  vector                        all    L=40    L=60   L=100
+  shipped (1,.6,.3,.15) l=30   48.8%   10.0%   47.5%   88.8%
+  no bigram (c=0)              49.6%   11.2%   47.5%   90.0%
+  shipped, no IC (l=0)         62.1%   36.2%   56.2%   93.8%
+  pure quad, no IC             62.1%   35.0%   57.5%   93.8%
+  quad + IC                    44.6%    3.8%   42.5%   87.5%
+
+Read alone this says lambda is catastrophic: -13.3pp overall and -26pp at
+L=40, with the mixture weights worth ~1pp.  Every one of the grid's top twelve
+vectors had lambda = 0.
+
+
+THE CONTROL THAT KILLS IT
+--------------------------
+
+A weighting is disadvantaged against decoys produced by a model resembling it:
+those boards are that model's own argmax.  -f and -i are IC-bearing, so an
+IC-bearing weighting faces its own optimum while a lambda = 0 weighting does
+not.  Re-run with the generator set split:
+
+  named vector           generators q t      generators i f
+                         (no IC anywhere)    (IC-heavy)
+  shipped (l=30)              62.1%              49.6%
+  shipped, no IC              63.3%              75.0%
+  --------------------------------------------------------
+  gain from dropping IC       +1.2pp            +25.4pp
+
+THE SAME COMPARISON MOVES BY 24 POINTS DEPENDING ON WHO MADE THE DECOYS.  The
+pooled -13.3pp was an average of these two regimes, weighted by the accident
+that 2 of the 5 generators contained IC.  So this probe CANNOT judge lambda,
+and the headline above is an artefact of its own design.
+
+That is not a reason to distrust the tool -- it is the reason to run two
+generator sets.  A single-generator-set result here is worth nothing, in
+exactly the way a single-fixture timing is (see results-histprobe-ab.txt).
+
+
+WHAT SURVIVES
+--------------
+
+  * THE BIGRAM TERM is worth removing, and only just: +0.8pp pooled, +1.2pp
+    under generators q t, +0.8pp under i f.  Consistent in sign across all
+    three, and tiny.  Independent corroboration: the tool's lineage
+    (Ostwald & Weierud, MODERN_BREAKING_NOTES.md section 1) rejected bigrams
+    OUTRIGHT because accidental EN/ER/RE reward wrong plugs.  The probe
+    rediscovers that finding from scratch.
+  * NOTHING ELSE.  Trigram and monogram weights move the result by less than
+    the spread between adjacent grid points.
+
+  ~1pp is below what an end-to-end paired recovery run could resolve on this
+  corpus, and CLAUDE.md already records an 8x sweep of the order weights
+  moving search-fail% by <1pp on prose.  So there is no case for a code change
+  to make force_ll env-overridable.
+
+CONSISTENT WITH THE DOCUMENTED DECOMPOSITION rather than against it.
+CLAUDE.md says -f is "a better CLIMB, not better discrimination", with
+selection contributing -0.0pp.  The unbiased control here reads -1.2pp for
+lambda on selection.  Those agree.  And this probe is blind to the climb
+surface by construction -- it scores fixed decrypts -- so it could not see
+the +3.4pp of surface reshaping that is the whole reason lambda is there.
+NOTHING HERE ARGUES FOR REMOVING IC.
+
+
+WHERE THE HEADROOM IS NOT, AND WHERE IT MIGHT BE
+-------------------------------------------------
+
+Not in the weights.  The remaining untested idea from the same discussion is
+an X-STRUCTURE term: X delimits tokens in a way n-grams see only through a
+4-character window, it is garble-robust, and it needs no table.  NOW TESTED
+TWICE: it passes the offline screen under both generator sets
+(results-xstruct.txt) and then FAILS end to end (results-xstruct-ab.txt),
+because a climb under the augmented score games the gap structure.  So this
+investigation found no scoring headroom at all -- in the weights, in lambda,
+or in X structure.
+
+5-GRAMS were considered and dropped without a sweep, for two reasons that do
+not need one: the lineage chose trigrams over hexagrams BECAUSE real traffic
+carries 5-30% garbles and higher orders are fragile to them (one authentic
+message in MODERN_BREAKING_NOTES.md loses the truth by 0.24-0.33 at 12.9%
+corruption under high-order models against 0.05 under trigram); and the
+telegraphic tables come from published Appendix-C statistics, not a corpus --
+the entire authentic corpus is 7 400 letters against 11.9M quintgram cells,
+so a corpus-built table would be almost all hapax floor.
