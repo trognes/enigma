@@ -1,0 +1,91 @@
+AN X-DELIMITER STRUCTURE TERM -- PASSES THE SCREEN, NEEDS AN END-TO-END TEST
+============================================================================
+
+  python3 eval/xstruct_probe.py --trials 80 --lengths 40 60 100 \
+          --restarts 64 --mu 0 1 3 10 30 100 300 [--generators <letters>]
+
+  240 trials, authentic HG Nord decrypts, 10-pair board, rotor key given.
+  Score = the shipped fused model + mu * (X-gap log-likelihood ratio).
+
+THE IDEA.  Telegraphic German uses X as a word separator, so a correct decrypt
+carries structure an n-gram model sees only through a 4-character window: the
+GAPS between consecutive X's are word lengths.  Measured over the 75 authentic
+messages, X is 6.2-6.7% of letters, gap median 7.5-9, and P(gap = 0) = 0.5%
+against the 6.7% that random placement at the same rate would give.  It needs
+no table beyond a gap histogram and is garble-robust -- one corrupted letter
+moves one gap, where a high-order n-gram loses a whole window.
+
+RESULT: the direction is stable, the short-message gain is large, and there is
+a real cost at long lengths.  Truth-wins %, pooled generators i/t/q/a/f:
+
+    mu     all    L=40    L=60   L=100
+  0 (shipped)  40.0%    3.8%   33.8%   82.5%
+    100        45.4%   15.0%   45.0%   76.2%
+    300        47.5%   27.5%   46.2%   68.8%
+
+AND IT HOLDS UNDER BOTH GENERATOR SETS, which is what the lambda result in
+results-score-weights.txt failed:
+
+  generators      mu=0            mu=100          mu=300
+  q t (no IC)   47.1% / 18.8%   51.1% / 27.5%   49.8% / 36.2%
+  i f (IC)      42.1% /  3.8%   50.0% / 16.2%   54.2% / 27.5%
+                (all / L=40)
+
+Both sets improve, at both mu.  The lambda comparison moved 24 points between
+these same two sets; this one moves in the same direction in both.
+
+THE STATISTIC ALONE IS COMPARABLE TO THE WHOLE N-GRAM MODEL.  Ranking purely
+on X-gap structure puts the truth above every decoy in 43.8% / 49.8% / 50.4%
+of trials (pooled / q t / i f), against the full fused model's 40.0% / 47.1% /
+42.1%.  A table-free gap histogram discriminates about as well as four orders
+of n-grams plus IC -- on this decoy pool, which is the whole caveat below.
+
+
+THE BIAS THIS PROBE CANNOT REMOVE
+----------------------------------
+
+Every decoy is the argmax of some n-gram or IC model.  NONE of them optimises
+X structure, so the new term faces a pool that was never selected against it.
+That is the same mechanism that made lambda look catastrophic in the weight
+probe, with the sign reversed: there it penalised an existing term, here it
+flatters a new one.
+
+It cannot be controlled away offline, because generating an X-aware decoy
+requires a climb under the X-augmented score, i.e. the implementation.  So
+these numbers are an UPPER BOUND, and the honest verdict is that the term
+earns an implementation and a paired recovery A/B -- not that it works.
+
+WHAT WOULD CHANGE THE VERDICT: if, once implemented, a climb under the
+augmented score finds boards that game the gap structure (a wrong board whose
+X's happen to land at plausible word lengths), the gain collapses.  Nothing
+here rules that out.
+
+
+TWO IMPLEMENTATION NOTES THE PROTOTYPE ALREADY PAID FOR
+--------------------------------------------------------
+
+A RAW LOG-PROBABILITY CANNOT BE THE STATISTIC.  A decrypt with fewer than two
+X's has no gap to score, and whatever constant stands in for it is then
+compared against real texts' genuine negative scores.  Measured: a neutral of
+0.0 against a truth scoring -1.59 made the term PENALISE the truth in 100% of
+trials, and the probe reported the term as catastrophic.  The fix is a
+LIKELIHOOD RATIO against random X placement at the candidate's OWN X rate --
+no X's then gives 0 because there is no evidence either way, and being X-rich
+earns nothing (the monogram model already prices that).
+
+THE CORPUS MUST BE HELD OUT AND MUST NOT BE CONCATENATED.  The plaintext is
+drawn from the same 75 messages the gap distribution is fitted on, so the fit
+excludes the source message (leave-one-message-out).  And excerpts come from
+ONE message: concatenating the corpus fabricates a gap across every message
+boundary, which is harmless for n-grams and fatal for a statistic that IS the
+gap distribution.
+
+ON THE SCALE OF mu.  The gap ratio is ~0.01 per symbol, so mu = 100
+contributes ~1 to a per-symbol score of ~-8 -- the same order as the existing
+IC term (lambda = 30 on an IC of ~0.05 contributes ~1.5).  mu = 100 is
+therefore not an extreme setting in context, though it is far above the
+weight a strict likelihood combination would give (mu = 1, which does
+nothing).  The term carries ~0.6 log10 units of evidence per message against
+the n-gram model's 6-30, so it is being deliberately over-weighted relative to
+its likelihood content -- which is exactly what the non-adversarial pool
+permits and an end-to-end test would challenge.
