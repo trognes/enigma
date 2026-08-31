@@ -1,0 +1,23 @@
+# ENIGMA_HIST=1 vs 0, dev vs the fused hist_probe, same session
+# eval/histspeed.py --lengths 100 167 --restarts 400 --reps 5 --control
+# three seeds, control mean 2.1-2.6% (max 5.9%)
+
+   L schedule     dev   fused   change
+ 100    i4f10   1.22x   1.33x    +9.3%
+ 100    k4f10   1.24x   1.33x    +6.7%
+ 100    m4f10   1.09x   1.16x    +6.7%
+ 167    i4f10   1.33x   1.42x    +6.5%
+ 167    k4f10   1.40x   1.45x    +3.3%
+ 167    m4f10   1.22x   1.28x    +4.9%
+
+# cap stage alone (-S m4), us per restart, mean of 3 seeds
+   L   HIST=0   dev on  fused on   change
+  60      113      121        96   -20.4%
+ 400      480      122        98   -19.8%
+
+# NOTE: the dev column reproduces the table in CLAUDE.md to within its
+# control, which is the check that the instrument is unchanged. The
+# cap-stage us are NOT comparable with the 214/124 and 530/119 recorded
+# there -- different box, and a single-stage -S m4 isolation where the
+# stage is also the target. On this setup dev reads HIST=0 FASTER than
+# HIST=1 at L=60 (113 vs 121), which those figures do not show.
