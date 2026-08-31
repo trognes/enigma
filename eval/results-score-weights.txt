@@ -109,9 +109,12 @@ WHERE THE HEADROOM IS NOT, AND WHERE IT MIGHT BE
 
 Not in the weights.  The remaining untested idea from the same discussion is
 an X-STRUCTURE term: X delimits tokens in a way n-grams see only through a
-4-character window, it is garble-robust, and it needs no table.  NOW TESTED,
-and it passes the screen -- see results-xstruct.txt.  It is the only candidate
-from this investigation that improved under BOTH generator sets.
+4-character window, it is garble-robust, and it needs no table.  NOW TESTED
+TWICE: it passes the offline screen under both generator sets
+(results-xstruct.txt) and then FAILS end to end (results-xstruct-ab.txt),
+because a climb under the augmented score games the gap structure.  So this
+investigation found no scoring headroom at all -- in the weights, in lambda,
+or in X structure.
 
 5-GRAMS were considered and dropped without a sweep, for two reasons that do
 not need one: the lineage chose trigrams over hexagrams BECAUSE real traffic

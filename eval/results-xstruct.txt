@@ -1,3 +1,12 @@
+SUPERSEDED -- THIS SCREEN'S VERDICT DID NOT HOLD END TO END.  The term was
+implemented and measured with 300 paired trials per length, and it is neutral
+where it is weak and HARMFUL where it is strong: break50 at L=40 goes 6/300 to
+0/300 at mu=300, the setting this file reports as taking truth-wins from 3.8%
+to 27.5%.  The upper-bound caveat below named the right bias and understated
+it -- the bound does not shrink, it CHANGES SIGN once a climb can optimise the
+term.  See results-xstruct-ab.txt.  Everything below is kept as written,
+because the screen was run correctly and its failure is the finding.
+
 AN X-DELIMITER STRUCTURE TERM -- PASSES THE SCREEN, NEEDS AN END-TO-END TEST
 ============================================================================
 
