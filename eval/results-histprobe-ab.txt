@@ -1,0 +1,57 @@
+# hist_probe fusion + cached mono coefficients: paired binary A/B
+#
+#   python3 eval/binary_ab_speed.py --base <pre-fusion> --head <dev> \
+#           --schedule <S> --length 100 --restarts 1024 \
+#           --fixtures 24 --reps 3
+#
+# base = b29f751^1 (the commit before PR #258), head = dev after it.
+# Both built from git refs in the same session. Arm order alternates
+# per rep; the control arm re-runs the base binary under the same
+# alternation, so its spread is the floor.
+
+
+# -S k4f10, L=100, -R 1024, -K, 10-pair board, seed 4242
+# 24 fixtures x 3 reps, arm order alternating per rep
+# base climb time: mean 0.443s (min 0.348, max 0.491)
+head/base  0.9355  95% CI [0.9237, 0.9472]   = -6.5%  [-7.6, -5.3]
+base/base  0.9985  95% CI [0.9872, 1.0098]   = -0.1%  [-1.3, +1.0]   <- floor
+head minus control: -0.0631  95% CI [-0.0748, -0.0514]  -> ESTABLISHED
+
+# -S m4f10, L=100, -R 1024, -K, 10-pair board, seed 4242
+# 24 fixtures x 3 reps, arm order alternating per rep
+# base climb time: mean 0.446s (min 0.406, max 0.483)
+head/base  0.9140  95% CI [0.9059, 0.9222]   = -8.6%  [-9.4, -7.8]
+base/base  1.0104  95% CI [0.9978, 1.0231]   = +1.0%  [-0.2, +2.3]   <- floor
+head minus control: -0.0964  95% CI [-0.1088, -0.0840]  -> ESTABLISHED
+
+# -S i4f10, L=100, -R 1024, -K, 10-pair board, seed 4242
+# 24 fixtures x 3 reps, arm order alternating per rep
+# base climb time: mean 0.443s (min 0.410, max 0.496)
+head/base  0.9269  95% CI [0.9135, 0.9403]   = -7.3%  [-8.6, -6.0]
+base/base  0.9963  95% CI [0.9852, 1.0075]   = -0.4%  [-1.5, +0.7]   <- floor
+head minus control: -0.0694  95% CI [-0.0820, -0.0568]  -> ESTABLISHED
+
+SUMMARY
+  schedule   head/base   95% CI          floor
+  k4f10        -6.5%     [-7.6, -5.3]    -0.1%
+  m4f10        -8.6%     [-9.4, -7.8]    +1.0%
+  i4f10        -7.3%     [-8.6, -6.0]    -0.4%
+
+WHAT THIS REPLACES, AND WHY THE OLD NUMBER WAS WRONG
+
+PR #258 reported -3%/-5%/-9% for k4f10/m4f10/i4f10. Wrong in BOTH
+directions: k4f10 understated 2x, i4f10 overstated, and the ordering
+reversed between the first two. The true spread is 6.5..8.6%, so the
+apparent 3x difference between schedules was mostly noise.
+
+THE CAUSE WAS ONE FIXTURE PER CELL, not the drift it was blamed on.
+A single ciphertext and key is one draw from a distribution whose
+per-fixture spread is several points. Repetitions do not help: they
+sharpen that one fixture's estimate. Fixtures buy the interval.
+
+AND THE ATTEMPTED CORRECTION MADE IT WORSE. The raw reading was -3.9%
+with a -1.5% control; the control was read as warm-up drift shared
+linearly across the three arms, so the estimate was adjusted DOWN to
+~-3% -- away from the true -6.5%, and further from it than the
+uncorrected number had been. Correcting a one-draw estimate against a
+control of the same size is fitting noise.

@@ -3311,11 +3311,35 @@ the failure-shape table above.
 > that hid the arm64 hang above: no tier uses a low-order climb stage. Its four
 > cells duly read ±0.4% on g++ arm64 across the change — useful as a control
 > (the restructuring cost nothing on the paths it does not help), and useless
-> as evidence. The direct measurement is `−3%`/`−5%`/`−9%` of whole-climb wall
-> time on `k4f10`/`m4f10`/`i4f10`, all six cells favouring it against controls
-> of −3.4%…+0.9%; **direction certain, magnitude approximate**, since the arms
-> were timed in a fixed order within each repetition and the middle arm takes
-> half the warm-up drift.
+> as evidence. Measured instead by a paired A/B over 24 fixtures × 3 reps at
+> `-R 1024`, arm order alternating per rep, with a control arm
+> (`eval/binary_ab_speed.py`, `eval/results-histprobe-ab.txt`):
+>
+> | schedule | head/base | 95% CI | floor |
+> |---|---:|---|---:|
+> | `k4f10` | **−6.5%** | [−7.6, −5.3] | −0.1% |
+> | `m4f10` | **−8.6%** | [−9.4, −7.8] | +1.0% |
+> | `i4f10` | **−7.3%** | [−8.6, −6.0] | −0.4% |
+>
+> All three clear their floor by 5× or more.
+>
+> ⚠️ **AN EARLIER VERSION OF THIS ENTRY SAID −3%/−5%/−9%, AND IT WAS WRONG IN
+> BOTH DIRECTIONS.** Read together with the table above it understated `k4f10`
+> by 2× and overstated `i4f10`, and it got the ORDERING wrong — the spread is
+> 6.5…8.6%, not 3…9%, so what looked like a 3× difference between schedules is
+> mostly not there. **The failure was ONE FIXTURE PER CELL**, not the drift it
+> was blamed on: a single ciphertext and key is one draw from a distribution
+> whose per-fixture spread is several points, and no number of repetitions
+> fixes that — reps sharpen one fixture's own estimate, fixtures buy the
+> interval.
+>
+> **The attempted correction made it worse, which is the part worth keeping.**
+> The raw reading was −3.9% with a −1.5% control, and the control was assumed
+> to be warm-up drift shared linearly across the three arms, so the estimate
+> was adjusted *down* to ~−3% — away from the true −6.5%, and further from it
+> than the uncorrected number. Correcting a one-draw estimate against a
+> same-size control is fitting noise; the fix is more fixtures, not a better
+> model of the bias.
 >
 > A doubling ablation — run the body twice, discard the second result, so the
 > trajectory and the call count are unchanged and only the work differs — put

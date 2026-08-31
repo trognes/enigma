@@ -146,10 +146,11 @@ def main():
         sys.exit("too few usable fixtures")
     mr, mc = statistics.mean(ratios), statistics.mean(controls)
     hr, hc = ci95(ratios), ci95(controls)
+    # Wrapped at two lines: this header is pasted into eval/results-*.txt, and
+    # those wrap at 80 columns like everything else written by hand here.
     print(f"\n# -S {args.schedule}, L={L}, -R {args.restarts}, "
-          f"{args.climb_rule}"
-          f", {args.plugs}-pair board, {n} fixtures x {args.reps} reps"
-          f" (alternating order), seed {args.seed}")
+          f"{args.climb_rule}, {args.plugs}-pair board, seed {args.seed}")
+    print(f"# {n} fixtures x {args.reps} reps, arm order alternating per rep")
     print(f"# base climb time: mean {statistics.mean(base_t):.3f}s "
           f"(min {min(base_t):.3f}, max {max(base_t):.3f})")
     print(f"head/base  {mr:.4f}  95% CI [{mr - hr:.4f}, {mr + hr:.4f}]"
