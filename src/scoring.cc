@@ -418,6 +418,12 @@ struct histscratch
 {
   uint16_t t[asize * asize * asize];
   int n[asize];   /* histogram of the board the climb is sitting on */
+  /* mono8 permuted by that same board: mp[y] == mono8[S[y]]. The mono score
+     needs this gather for all 26 bins on EVERY probe, but S changes only when
+     a move is accepted -- once per 63 probes under -J -- so it is maintained
+     alongside n rather than recomputed. Same two maintenance sites as n, so it
+     inherits n's correctness argument, and ENIGMA_HIST=2 checks both. */
+  uint8_t mp[asize];
 };
 static thread_local histscratch hist_scratch;
 
@@ -500,6 +506,8 @@ void hist_resync(machine & m)
       for (int y = 0; y < asize; y++)
         n[y] += col[y];
     }
+  for (int y = 0; y < asize; y++)
+    hist_scratch.mp[y] = mono8[m.steckerbrett[y]];
 }
 
 /* Commit an accepted toggle to n: the same 2-4 column delta the probe already
@@ -523,6 +531,7 @@ void hist_apply(machine & m, const int * pos, const int * val, int cnt)
       const uint16_t * __restrict ad = cooc_col(pos[k], val[k]);
       for (int y = 0; y < asize; y++)
         n[y] += ad[y] - rm[y];
+      hist_scratch.mp[pos[k]] = mono8[val[k]];
     }
 }
 
@@ -544,6 +553,10 @@ void hist_verify(machine & m)
   for (int y = 0; y < asize; y++)
     if (want[y] != hist_scratch.n[y])
       fatal("ENIGMA_HIST=2: the incremental histogram has drifted from the "
+            "board");
+  for (int y = 0; y < asize; y++)
+    if (hist_scratch.mp[y] != mono8[m.steckerbrett[y]])
+      fatal("ENIGMA_HIST=2: the permuted mono table has drifted from the "
             "board");
 }
 
@@ -662,10 +675,109 @@ void cooc_plug_scores(machine & m, int model, double * out)
    Drop-in for score_iter() on the same hypothetical board, m.plugboards_scored
    included -- so the diagnostic stays comparable across this change and the
    harnesses that read it keep working. */
-double hist_probe(machine & m, const int * pos, const int * val, int cnt)
+/* Assemble the score from the two integer accumulators. ONE site, so the
+   three instantiations cannot drift apart -- and so `isum/scale +
+   textlength*bias` is written once. That multiply-add is what the Makefile's
+   -ffp-contract=off exists to stop a compiler contracting here and not in
+   score_iter(): the two must agree bit for bit or the climb never
+   terminates. */
+static inline double hist_assemble(int scoring, long isum, int coin)
 {
-  m.plugboards_scored++;
+  const double mono = static_cast<double>(isum) / ngram_scale[SCORE_MONO]
+                      + textlength * ngram_bias[SCORE_MONO];
+  if (scoring == SCORE_MONO)
+    {
+      /* score_iter normalises SCORE_MONO by nterms = textlength (SCORE_MONOIC
+         is already per-symbol and is left alone), so the /L belongs here. */
+      return (textlength > 0) ? mono / textlength : mono;
+    }
+  const double ic = (textlength > 1)
+    ? static_cast<double>(coin)
+        / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
+  return mono / (textlength > 0 ? textlength : 1)
+         + g_monoic_lambda * textlength * ic;
+}
 
+/* The probe with CNT known at compile time, so the whole thing is ONE pass
+   over the 26 bins instead of CNT+2 -- a copy, CNT delta passes and a
+   reduction. `cnt` is a runtime value at the call site, which is exactly why
+   the compiler cannot fuse those passes itself; dispatching on it is what
+   unlocks the fusion. The bins never reach memory: the 2*CNT column reads are
+   the real data and stay, the array traffic around them goes.
+
+   BYTE-IDENTICAL, which is the precondition for touching this at all. The same
+   integers land in isum and coin, and integer addition is associative and
+   commutative -- so neither the fusion nor the folded coefficient patch below
+   can change a bit. A climb that scored differently would make different
+   decisions, and every tuning number in CLAUDE.md would have to be
+   re-measured. */
+template<int CNT>
+static inline double hist_probe_fused(machine & m, const int * pos,
+                                      const int * val)
+{
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const int * __restrict n0 = hist_scratch.n;
+
+  const uint16_t * rm[CNT];
+  const uint16_t * ad[CNT];
+  for (int k = 0; k < CNT; k++)
+    {
+      rm[k] = cooc_col(pos[k], steck[pos[k]]);
+      ad[k] = cooc_col(pos[k], val[k]);
+    }
+
+  if (m.scoring == SCORE_IC)
+    {
+      int coin = 0;
+      for (int y = 0; y < asize; y++)
+        {
+          int nn = n0[y];
+          for (int k = 0; k < CNT; k++)
+            nn += ad[k][y] - rm[k][y];
+          coin += nn * (nn - 1);
+        }
+      return (textlength > 1)
+        ? static_cast<double>(coin)
+            / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
+    }
+
+  /* mono relabels its coefficients by the board, and the hypothetical board
+     differs from the real one at exactly the CNT named letters -- so PATCH
+     those CNT cached coefficients, run one loop, and put them back. That
+     removes the separate correction pass, and with it the need to know the
+     final counts at those positions, which a loop keeping no n[] array would
+     otherwise have to recompute. */
+  uint8_t * const mp = hist_scratch.mp;
+  uint8_t saved[CNT];
+  for (int k = 0; k < CNT; k++)
+    {
+      saved[k] = mp[pos[k]];
+      mp[pos[k]] = mono8[val[k]];
+    }
+
+  long isum = 0;
+  int coin = 0;
+  for (int y = 0; y < asize; y++)
+    {
+      int nn = n0[y];
+      for (int k = 0; k < CNT; k++)
+        nn += ad[k][y] - rm[k][y];
+      isum += static_cast<long>(nn) * mp[y];
+      coin += nn * (nn - 1);
+    }
+
+  for (int k = 0; k < CNT; k++)
+    mp[pos[k]] = saved[k];
+
+  return hist_assemble(m.scoring, isum, coin);
+}
+
+/* Runtime-CNT fallback. The toggle operator and try_repair only ever produce
+   2, 3 or 4, so nothing reaches this today; it exists so that a future move
+   set of a different arity is merely slow rather than wrong. */
+static double hist_probe_any(machine & m, const int * pos, const int * val,
+                             int cnt)
+{
   const unsigned char * __restrict steck = m.steckerbrett;
   const int * __restrict n0 = hist_scratch.n;
 
@@ -690,8 +802,6 @@ double hist_probe(machine & m, const int * pos, const int * val, int cnt)
             / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
     }
 
-  /* mono relabels its coefficients by the board, so the cnt changed positions
-     need their terms corrected -- everything else reads S unchanged. */
   long isum = 0;
   int coin = 0;
   for (int y = 0; y < asize; y++)
@@ -703,20 +813,20 @@ double hist_probe(machine & m, const int * pos, const int * val, int cnt)
     isum += static_cast<long>(n[pos[k]])
             * (mono8[val[k]] - mono8[steck[pos[k]]]);
 
-  const double mono = static_cast<double>(isum) / ngram_scale[SCORE_MONO]
-                      + textlength * ngram_bias[SCORE_MONO];
-  if (m.scoring == SCORE_MONO)
-    {
-      /* score_iter normalises SCORE_MONO by nterms = textlength (SCORE_MONOIC
-         is already per-symbol and is left alone), so the /L belongs here. */
-      return (textlength > 0) ? mono / textlength : mono;
-    }
+  return hist_assemble(m.scoring, isum, coin);
+}
 
-  const double ic = (textlength > 1)
-    ? static_cast<double>(coin)
-        / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
-  return mono / (textlength > 0 ? textlength : 1)
-         + g_monoic_lambda * textlength * ic;
+double hist_probe(machine & m, const int * pos, const int * val, int cnt)
+{
+  m.plugboards_scored++;
+
+  switch (cnt)
+    {
+    case 2:  return hist_probe_fused<2>(m, pos, val);
+    case 3:  return hist_probe_fused<3>(m, pos, val);
+    case 4:  return hist_probe_fused<4>(m, pos, val);
+    default: return hist_probe_any(m, pos, val, cnt);
+    }
 }
 
 

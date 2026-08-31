@@ -3279,6 +3279,66 @@ the failure-shape table above.
 > byte-identical it buys **no quality per restart**; the payoff is restarts at
 > fixed wall time, which the search playbook makes the primary lever.
 >
+> **THOSE RATIOS HAVE SINCE RISEN, because `hist_probe` was rewritten as ONE
+> pass over the 26 bins.** It made `cnt + 2` passes — copy `n0` into a local
+> array, `cnt` delta passes over it, then a reduction — and `cnt` is a runtime
+> value at the call site, so the compiler could not fuse them; dispatching on
+> it (2, 3 and 4 cover every move the toggle operator and `try_repair`
+> produce) is what unlocks a single pass with the bins in registers.
+> `mono8[steck[y]]`, a 26-way gather on every probe although the board changes
+> only on an accepted move, is now **cached beside `n`** and maintained at the
+> same two sites. Re-measured on both binaries in one session, three seeds and
+> a control (whose own mean is 2.1–2.6%):
+>
+> | | `m4f10` | `i4f10` | `k4f10` |
+> |---|---:|---:|---:|
+> | L=100 | 1.09 → **1.16×** | 1.22 → **1.33×** | 1.24 → **1.33×** |
+> | L=167 | 1.22 → **1.28×** | 1.33 → **1.42×** | 1.40 → **1.45×** |
+>
+> The `dev` column reproduces the table above to within its control, which is
+> the check that the instrument still measures the same thing.
+>
+> **The two halves only pay TOGETHER, which is why they landed together.**
+> Dropping the `n[]` array forces the `cnt` mono corrections to recompute the
+> final counts at those positions (≈36 loads), and that roughly cancels the
+> fusion — the fusion alone measured −3.9%…+2.4% against controls of the same
+> size, i.e. nothing. Caching the coefficients removes the correction pass
+> outright (patch the `cnt` changed ones, run one loop, put them back), and
+> only then is it a consistent win. Shipping the fusion on its own would have
+> read as "no effect".
+>
+> **`make bench` CANNOT SEE ANY OF THIS**, and that is the same coverage gap
+> that hid the arm64 hang above: no tier uses a low-order climb stage. Its four
+> cells duly read ±0.4% on g++ arm64 across the change — useful as a control
+> (the restructuring cost nothing on the paths it does not help), and useless
+> as evidence. The direct measurement is `−3%`/`−5%`/`−9%` of whole-climb wall
+> time on `k4f10`/`m4f10`/`i4f10`, all six cells favouring it against controls
+> of −3.4%…+0.9%; **direction certain, magnitude approximate**, since the arms
+> were timed in a fixed order within each repetition and the middle arm takes
+> half the warm-up drift.
+>
+> A doubling ablation — run the body twice, discard the second result, so the
+> trajectory and the call count are unchanged and only the work differs — put
+> `hist_probe` at **15–21% of climb time** before the rewrite, falling with
+> length because it is flat in `L` where the decode it competes with is linear.
+> That is the number that justified touching it, and it was measured rather
+> than taken from an instruction share.
+>
+> **The cached table is new state with a maintenance contract**, so it is
+> checked: `hist_verify()` under `ENIGMA_HIST=2` now asserts the permuted table
+> against the board as well as the histogram, and that assertion was **proven
+> able to fail** by injecting one wrong entry. The cap stage stays *flat in
+> `L`* — measured 96 µs at L=60 and 98 at L=400 on a bare `-S m4`.
+>
+> ⚠️ **Those two µs figures are NOT comparable with the 124/119 recorded
+> above.** They come from a different box and, more importantly, a different
+> isolation (a single-stage `-S m4`, where the stage is also the target), and
+> on that setup the `dev` binary reads 113 µs at L=60 for `ENIGMA_HIST=0`
+> against 121 for `=1` — i.e. the histogram path is a slight *loss* there,
+> where the recorded figures show a 1.7× win. Unexplained, and most likely a
+> setup difference rather than a contradiction; recorded because it is the kind
+> of gap that should be resolved before either number is quoted again.
+>
 > **An earlier version of this entry said 25–32%, and that was wrong — do not
 > reinstate it from the cap-stage numbers.** It was derived as *pre-pass share
 > × saving within it*, from a harness with a ±10% per-cell floor, and
