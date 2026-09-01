@@ -1,0 +1,66 @@
+OPERATIONAL-LENGTH SCORING FAILURES (107-167 letters) -- THE PROXY SET FOR
+THE DECADES-RESISTANT MESSAGES
+==========================================================================
+
+Built by oracle comparison: true-board score vs 48 wrong-key nulls, board
+hidden on both arms, -R 32 (eval/results-word-segment.txt). A message is a
+SCORING FAILURE when its true-key quad z is below the 6.15 bar a 160M-key
+sweep sets -- the true board does not stand above the keyspace, so a
+maximum-score search returns a wrong key no matter how well it searches.
+
+Filtered to 107 <= L <= 167 (the "long enough to expect a break" band the
+unbroken real messages sit in). THREE of the 18 messages in that band:
+
+  msg     L   quad z   doubling present        why it scores low
+  HBNVE  107   0.33    LUDSEN X LUDSEN         garbles + place name
+  EGERF  122   1.28    KOKOREWO X KCKOREWO     garble in copy 2 + place name
+  ALWOK  124   0.56    TSCHEDINOVA X TSCHED..  place name (Russian)
+
+  (context, just below the band: FTNBK 101 z=0.90 doubled, broken by
+   Enigma@Home 2017; CHAFU 101 z=0.65.)
+
+TRUE-KEY DECRYPTS -- all READABLE telegraphic German, not garbage:
+
+  HBNVE  MUNXEMPFANGOBSOFORTIMMUNXLALERXLUDSENXLUDSENXKLAMXORTSAUSGANG
+         KLYMXBITTEXZQSQUBTUEHRERBENAQRIQTIGENXHEINRICH
+  EGERF  INTENDANTENBESPREQUNGNGQTVPRCHOWSONDERNNAEHZXKOKOREWOXKCKORE
+         WOXSIEBENKMNORDOSTWXPORCHOWEINSVIERXSIWTENXEINSNULLNULLNULLU
+  ALWOK  ANXZWOXSANXKOMPXMITTAGESANBRUQMITEINSXZUGNAQXTSCHEDINOVAXTSC
+         HEDINOVAXNAQZIEHENXARBEITXBEREITSEINXNULLSEQSDREINULLXHOCKXH
+
+WHAT THE SET SHOWS
+------------------
+
+1. Operational-length scoring failures EXIST but are RARE: 3 of 18 messages
+   in the 107-167 band. At this length most misses are search failures, which
+   -R fixes; these three are the residue that no search count reaches.
+
+2. They are READABLE German at the true key -- the "wordless" label in
+   results-word-segment.txt is a word-LIST gap (Russian place names absent
+   from a German dictionary), not a garbled decrypt.
+
+3. They score below the bar for two compounding reasons, both visible in the
+   plaintext: TRANSMISSION GARBLES (KCKOREWO, BESPREQUNGNGQ) and
+   OFF-DISTRIBUTION VOCABULARY (Tschedinowa, Kokorewo, Ludsen, Portschow) that
+   the German quad tables score as near-random.
+
+4. EVERY ONE CARRIES A DOUBLING, and this is structural, not coincidence: the
+   rare place name that makes the message score badly is exactly what the
+   operator doubled for error-correction. So at operational length,
+   "scoring failure" and "has a doubling" coincide.
+
+CONSEQUENCE FOR A NEURAL-NET / WORD-LIST RE-RANKER
+--------------------------------------------------
+
+These messages are ALREADY identifiable by --doubling-report (rank-free,
+shipped): it fires on LUDSEN X LUDSEN, KOKOREWO X KCKOREWO (one garble, within
+the default 1-mismatch tolerance) and TSCHEDINOVA X TSCHEDINOVA. An LM
+re-ranker's only MARGINAL population over that report is the
+readable-German-WITHOUT-a-doubling scoring failure -- which is EMPTY in this
+band of the corpus. So an LM would duplicate a shipped mechanism for a
+population that barely exists at operational length.
+
+The genuinely stuck messages are the OTHER kind: too short or too garbled to
+recover readable plaintext at the true key at all. Those sit below the
+information floor, where no plaintext-side method -- word list, doubling
+report or LM -- has anything to read.
