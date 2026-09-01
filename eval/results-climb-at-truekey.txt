@@ -78,3 +78,53 @@ model: no neural net reads a plaintext the climb never produced. The messages
 still above the line, at operational length, carry doublings (the rare place
 name that scores badly is what the operator doubled), so the shipped
 --doubling-report already reaches them.
+
+
+FOLLOW-UP: L=107 AND 167 AT 0-10% GARBLE -- A REGIME CHANGE, NOT A SMOOTH
+PENALTY
+=========================================================================
+
+  python3 eval/climb_at_truekey.py --trials 100 --lengths 107 167 \
+          --garble 0.02 0.04 0.06 0.08 0.10 --seed 13
+
+Same measurement (climb at the true rotor key, board hidden, R64), now at
+operational length across the 0-10% garble band real traffic lives in. 100
+trials/cell. (At L=167 fragments are drawn from the concatenated corpus, so a
+few span a message boundary -- harmless for a RECOVERY measurement, but these
+fragments are not valid for a gap-structure statistic.)
+
+  L     0%    2%    4%    6%    8%   10%
+  107  SUCCESS      58    59    50    40    44    32
+       score-fail    6     8    14    22    28    34
+       search-fail  36    33    36    38    28    34
+  167  SUCCESS      92    90    90    91    83    77
+       score-fail    1     4     3     2     2     4
+       search-fail   7     6     7     7    15    19
+
+THE TWO LENGTHS FAIL DIFFERENTLY, AND THAT IS THE RESULT.
+
+L=167 IS GARBLE-RESILIENT. SUCCESS holds ~90% through 6% garble and dips only
+to 77% at 10%. The failures it incurs under garbles are SEARCH failures
+(7% -> 19%), NOT scoring failures (flat at 1-4%). At 167 letters there is
+enough signal that corruption does not flip the true board out of the top; it
+only makes the climb harder to converge -- which MORE RESTARTS would fix.
+
+L=107 IS GARBLE-FRAGILE. SUCCESS falls 58% -> 32%, and the loss goes straight
+into SCORING failure (6% -> 34%). At 107 letters the margin is thin enough
+that garbles flip the true board below a wrong one -- UNRECOVERABLE by any
+search budget.
+
+SO "GARBLE = A LENGTH PENALTY" (the L=40-60 reading) WAS TOO SMOOTH. What
+actually happens is a THRESHOLD between 107 and 167: above it, corruption
+costs recoverable search failures; below it, the same corruption costs
+unrecoverable scoring failures. EGERF (122, heavily garbled, 7% recovery at
+its own true key) sits in the fragile zone -- consistent.
+
+FOR THE DECADES-RESISTANT MESSAGES: a CLEAN ~167-letter message almost always
+recovers at the true key (92%), so a doubling report or LM can reach it if it
+is a keyspace-tier scoring failure (FTNBK-style). A ~107-letter message, or a
+heavily garbled longer one, falls into board-tier scoring failure where no
+plaintext-side method has anything to read. The truly stuck messages are the
+second kind, and the lever there is neither a better scorer nor a neural net
+-- it is less corruption or more ciphertext, neither of which the tool can
+manufacture.
