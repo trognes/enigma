@@ -1,0 +1,100 @@
+Detecting garbles by a single-letter quad-score spike
+=====================================================
+
+Question (verbatim): "Is it possible to detect putative garbles in a text,
+for instance where changing a single letter would increase the quad score
+substantially?"  Tested by injecting random garbles into TRUE Wehrmacht
+decrypts and asking whether the garbled positions light up.
+
+Harness: eval/garble_detect.py (pure Python, no enigma binary -- a
+single-letter change is a local quad effect and IC barely moves, so it scores
+the wehrmacht quadgram table directly in full float precision).  For every
+position of a CORRECT decrypt it scores all 25 single-letter substitutions
+over the <=4 width-4 windows covering that position:
+
+    gain_i = max_letter sum(windows with that letter) - sum(windows as-is)
+
+Corpus: the 75 authentic 1941 HG-Nord decrypts (7400 letters), random
+excerpts of length 107 and 167, 250 excerpts per length, garbles injected at
+2..10%.  A garble is one random letter substitution (Enigma has no diffusion,
+so one ciphertext error damages exactly one plaintext letter).
+
+    python3 eval/garble_detect.py --trials 250 --lengths 107 167 \
+            --garble 0.02 0.04 0.06 0.08 0.10
+
+   L  grbl   cln-g  grb-g   AUCg  AUCm   rec@1  prc@1   rec@5  prc@5  rec@10 prc@10
+ 107  0.02    3.13   9.41  0.850 0.740    9.6%  15.8%   32.6%  10.9%   47.9%   8.1%
+ 107  0.04    3.13   9.31  0.845 0.728    8.8%  24.5%   33.9%  19.8%   48.2%  14.9%
+ 107  0.06    3.13   9.32  0.841 0.713    9.6%  38.7%   33.6%  29.2%   48.4%  22.5%
+ 107  0.08    3.13   9.02  0.833 0.712    8.5%  41.6%   29.2%  31.1%   45.3%  25.6%
+ 107  0.10    3.13   9.02  0.835 0.711    8.4%  49.3%   29.8%  36.9%   46.5%  30.9%
+
+ 167  0.02    3.23   8.96  0.821 0.707    7.0%  12.4%   29.1%  10.1%   45.4%   8.0%
+ 167  0.04    3.23   9.00  0.827 0.705    7.0%  21.0%   29.1%  17.4%   46.5%  14.4%
+ 167  0.06    3.23   8.89  0.824 0.698    6.3%  29.7%   26.9%  24.1%   43.9%  20.2%
+ 167  0.08    3.23   8.91  0.825 0.704    6.1%  38.6%   27.9%  30.9%   44.7%  26.2%
+ 167  0.10    3.23   9.03  0.832 0.707    6.3%  43.5%   28.0%  36.2%   46.2%  31.0%
+
+cln-g/grb-g = mean gain at a clean / garbled position.  AUCg = P(a garbled
+position's gain outscores a random clean position's), threshold-free.  AUCm =
+same for the best-minus-second-best MARGIN.  rec@B / prc@B = recall and
+precision at a threshold set so clean text yields B flags per 100 letters.
+
+Findings
+--------
+
+1. THE SIGNAL IS REAL BUT NOT SHARP -- AUCg ~0.82..0.85, flat across length
+   and garble rate.  A garbled position gains ~9 log10 units on average
+   against ~3.1 for a clean one, so the distributions are clearly separated in
+   the mean -- but the CLEAN tail is heavy (the 98th percentile of clean gain
+   is ~14, above the garbled mean), and that tail is exactly where garbles
+   sit.  So a garble is detectable in aggregate and ambiguous case by case.
+
+2. THE TAIL IS OFF-DISTRIBUTION GERMAN, as predicted.  Wehrmacht telegraphic
+   text is full of place/person names (LUDSEN, KOKOREWO, TSCHEDINOVA),
+   spelled-out numbers, abbreviations and X separators -- every one of which
+   has a "more probable" single-letter neighbour under prose-derived
+   quadgrams.  Those positions produce the same spike a garble does, so they
+   are the precision floor.
+
+3. RECALL CEILS AROUND ~48% even at a generous 10-flags-per-100 budget.  Half
+   the garbles never clear the clean tail, for two reasons: a garble landing
+   in an already-improbable region (a name) produces unremarkable marginal
+   gain, and a random substitution sometimes happens to be locally plausible.
+   No threshold recovers the other half -- it is not there to recover.
+
+4. PRECISION IS BASE-RATE-BOUND.  It rises almost mechanically with the garble
+   rate (8% -> 31% at the 10-flag budget as garble goes 2% -> 10%) because
+   this is rare-event detection: at a realistic 2..6% corruption the flag pool
+   is mostly clean text however good the ranking.
+
+5. THE DISTINCTIVENESS-MARGIN REFINEMENT IS MEASURED DOWN.  The intuition that
+   a real garble has one standout restoration (the true letter) while a name
+   improves diffusely does not hold: AUCm ~0.71 < AUCg ~0.83 in every cell.  A
+   random garble often has several locally-plausible restorations, so its
+   margin is not peaked, and the margin discards the gain magnitude that
+   carries most of the separation.  Plain gain is the better feature.
+
+6. THE PRECONDITION IS THE SAME WALL as every plaintext-side method.  This
+   reads a CORRECT decrypt -- the state after a climb that succeeded on the
+   right rotors.  On a failed climb the whole message is a wrong-board garble
+   (~95% scrambled), gain is high everywhere, and the detector is meaningless.
+   So it is a POST-RECOVERY PROOFREADER, not a cracking lever: it cannot
+   rescue an EGERF-class message whose climb never lands the true board.
+
+7. IT DOES NOT REPLACE DOUBLING COMPARISON.  A garble inside a doubled word
+   (ENGELMANN X ENGELMANN) is caught far more reliably by comparing the two
+   copies -- which --doubling-mismatches 1 already tolerates.  This detector
+   is for garbles OUTSIDE doublings, and like every plaintext-side signal it
+   must stay rank-free (a report, never a score term), or the search games it
+   the way the X-structure and lagged-kappa terms did.
+
+Operational reading
+-------------------
+
+On a recovered 167-letter message at ~4% corruption (~7 garbles), a
+10-flags-per-100 threshold yields ~17 flagged positions containing ~3 real
+garbles (precision ~14%) and catches ~3 of the 7 (recall ~46%).  That is a
+modest proofreading aid -- a shortlist a human narrows -- not a clean
+detector.  The verdict matches the text analysis: real signal, bounded by
+off-distribution German, useful only where the climb already won.
