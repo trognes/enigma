@@ -92,9 +92,9 @@ def main():
                                              "enigma-army-messages-1941.txt")))
     rng = random.Random(args.seed)
 
-    # cells: (length, garble); clean at each length, garble sweep at one
-    cells = [(L, 0.0) for L in args.lengths]
-    cells += [(args.length_garble, g) for g in args.garble if g > 0]
+    # full length x garble grid: every length at every garble rate (0 always)
+    grates = [0.0] + [g for g in args.garble if g > 0]
+    cells = [(L, g) for L in args.lengths for g in grates]
 
     def score_true_board(key, ct, pb):
         # true-board score at the true key: dumpall of an -R 0 climb pinned to
@@ -113,7 +113,6 @@ def main():
     print(f"{'L':>4} {'garble':>7} {'n':>4}  {'SUCCESS':>8} "
           f"{'SCORE-fail':>11} {'SEARCH-fail':>11}")
     for L, g in cells:
-        pool_ok = 0
         succ = scorefail = searchfail = 0
         n = 0
         for _ in range(args.trials):
