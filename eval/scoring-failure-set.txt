@@ -52,13 +52,17 @@ WHAT THE SET SHOWS
 CONSEQUENCE FOR A NEURAL-NET / WORD-LIST RE-RANKER
 --------------------------------------------------
 
-These messages are ALREADY identifiable by --doubling-report (rank-free,
-shipped): it fires on LUDSEN X LUDSEN, KOKOREWO X KCKOREWO (one garble, within
-the default 1-mismatch tolerance) and TSCHEDINOVA X TSCHEDINOVA. An LM
-re-ranker's only MARGINAL population over that report is the
-readable-German-WITHOUT-a-doubling scoring failure -- which is EMPTY in this
-band of the corpus. So an LM would duplicate a shipped mechanism for a
-population that barely exists at operational length.
+BUT THE REPORT NEEDS THE CLIMB TO SUCCEED ON THE RIGHT ROTORS FIRST, and that
+splits these three from EGERF -- see results-climb-at-truekey.txt. At their
+own true rotor key, board hidden, FTNBK/HBNVE/ALWOK recover 100% (plaintext
+appears, --doubling-report fires on LUDSEN X LUDSEN, KOKOREWO X KCKOREWO,
+TSCHEDINOVA X TSCHEDINOVA), while EGERF recovers only 7% -- the most garbled
+of the four, its board does not recover even given the right rotors, so no
+plaintext ever surfaces and NO plaintext-side method (report or LM) can reach
+it. So of these four, three are caught by the shipped report and one is below
+the recovery line entirely. An LM re-ranker's only marginal population over
+the report is the readable-German-WITHOUT-a-doubling scoring failure that ALSO
+recovers at the true key -- empty in this band of the corpus.
 
 The genuinely stuck messages are the OTHER kind: too short or too garbled to
 recover readable plaintext at the true key at all. Those sit below the

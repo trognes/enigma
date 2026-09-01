@@ -1,0 +1,80 @@
+DOES THE CLIMB SUCCEED ON THE RIGHT ROTORS? -- THE PRECONDITION FOR EVERY
+PLAINTEXT-SIDE RESCUE
+=========================================================================
+
+  python3 eval/climb_at_truekey.py --trials 120 --lengths 40 50 60 \
+          --garble 0.05 0.10 0.15 --length-garble 60 --seed 13
+
+A doubling report, a word/name report and an LM re-ranker can only act on
+plaintext the search actually produced. So the ceiling on all of them is the
+fraction of messages whose board the climb recovers WHEN HANDED THE TRUE ROTOR
+KEY. Measured at the true key, board hidden, -c -K --polish -S k4f10 -f -R 64:
+
+  L    garble   SUCCESS(>=90%)   scoring-fail   search-fail
+  40    0%          0.8%            92.5%           6.7%
+  50    0%          1.7%            86.7%          11.7%
+  60    0%          6.7%            62.5%          30.8%
+  60    5%          5.8%            67.5%          26.7%
+  60   10%          1.7%            82.5%          15.8%
+  60   15%          1.7%            91.7%           6.7%
+
+  SUCCESS      recovered >= 90% -- board found, plaintext available
+  scoring-fail wrong board outscores the truth even here -- no plaintext
+  search-fail  truth outscores but the climb stuck -- more -R would help
+
+(120 trials/cell, authentic telegraphic German. The >=90% bar is strict, so
+SUCCESS mildly understates "readable enough for a doubling to show"; the
+scoring/search split leans on a true-board score measured with -s pinned, so
+read it as directional. SUCCESS itself is just recovery and is robust.)
+
+
+THREE FINDINGS
+--------------
+
+1. THE PRECONDITION IS THE BINDING CONSTRAINT, AND STEEPLY LENGTH-DEPENDENT.
+   The climb recovers on the right rotors ~1% at L=40, ~7% at L=60, rising to
+   the ~54%/91% the length-cost table (CLAUDE.md) records at L=107/167 clean.
+   Below that line there is no plaintext for any report or LM to read.
+
+2. GARBLES ARE WORTH ABOUT A 20-LETTER LENGTH PENALTY. At L=60, 15% garble
+   takes SUCCESS 6.7% -> 1.7% -- a garbled 60-letter message recovers like a
+   CLEAN 40-letter one. Real traffic carries 5-30% garbles, so this is the
+   operational regime, not a stress test.
+
+3. BELOW THE LINE IT IS SCORING FAILURE, NOT SEARCH FAILURE -- 62-92%,
+   dominant and RISING with garbles (search-fail falls 30.8% -> 6.7% as
+   scoring-fail climbs 62.5% -> 91.7%). So it is not a search-budget problem
+   more restarts could fix; garbles CONVERT the fixable search failures into
+   unfixable scoring ones.
+
+
+TIE TO THE FOUR REAL OPERATIONAL-LENGTH SCORING FAILURES
+--------------------------------------------------------
+
+At their own true rotor key, board hidden, R100:
+
+  FTNBK 101   recovers 100%   -> above the line, doubling report catches it
+  HBNVE 107   recovers 100%   -> above the line, doubling report catches it
+  ALWOK 124   recovers 100%   -> above the line, doubling report catches it
+  EGERF 122   recovers   7%   -> BELOW the line; the most garbled of the four,
+                                 no plaintext ever surfaces at its true key
+
+EGERF is finding 2 in a single message: 122 letters is ample, but garbled
+enough that it recovers like a much shorter clean message and falls below the
+line. This CORRECTS eval/scoring-failure-set.txt, which lumped EGERF with the
+other two as "caught by --doubling-report" -- it is not, because the report
+needs plaintext the climb never produces there.
+
+
+CONSEQUENCE FOR A REPORT OR AN LM
+---------------------------------
+
+The rescuable population is exactly the SUCCESS set -- climb recovers on the
+right rotors. It is adequate at long CLEAN length and COLLAPSES under garbles.
+The decades-resistant messages are the ones where length is fine (107-167) but
+garbles plus off-distribution vocabulary push them below the recovery line.
+For those, the limiting factor is TRANSMISSION CORRUPTION, not the scoring
+model: no neural net reads a plaintext the climb never produced. The messages
+still above the line, at operational length, carry doublings (the rare place
+name that scores badly is what the operator doubled), so the shipped
+--doubling-report already reaches them.
