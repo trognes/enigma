@@ -127,6 +127,33 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`--int` — the plugboard climb compares its scores as exact 64-bit
+  integers.** Every scorer already accumulates two integers, the table sum
+  `isum` and the same-letter pair count `coin`, before one float division;
+  under `--int` the climb decides on `I = A·isum + B·coin` (two integer
+  weights per model, computed once at start-up) instead of the double, and
+  only the per-restart reports — progress lines, `--dump-all`, the merge,
+  `--confidence` — are reconstructed as doubles from the converged board.
+  It exists as the reference arithmetic a GPU port can reproduce exactly
+  (`metal/DESIGN.md` §3a, milestone 1b), and on the CPU it is meant to
+  change nothing:
+  - **Identity:** 30 fixtures per length at `-R 64`, L = 60/107/167, every
+    restart's converged `(score, board)` compared through `--dump-all` —
+    **0 differing restarts of 5 760**, 0 differing decrypts, 0 differing
+    plugboards-scored counts.
+  - **Recovery:** paired `break50`, 2 000 trials per length at `-R 8` —
+    166, 825 and 1 715 breaks of 2 000 at L = 60/107/167 in both arms,
+    **zero discordant trials at every length** (`eval/intscore_ab.py`,
+    `eval/results-intscore.txt`).
+  - **Bench:** `make bench LONG=1 BASE=origin/dev` [[BENCH]].
+  - The four pure n-gram decoders became `always_inline` and `score_key()`
+    `noinline`: `score_key()` was a second caller and g++ outlined the
+    decoders, dropping `score_iter` from 837 to 326 instructions with a
+    call inside the hottest loop — caught by a per-symbol instruction
+    count, not by any test. The shipped `score_iter` is 850 instructions
+    against `dev`'s 837, the default body plus one branch.
+  - Needs `-c`; refused with `-A`, `--cascade` and `--crib-rerank`, whose
+    gates are in score units. Echoed in the settings. `-T`-deterministic.
 - **`-K` / `--ic-order` — `-J` with its move-ordering scan ranked by the index
   of coincidence instead of by the target model.** `-J` builds its visit order
   by scoring all 325 toggles once per restart, and with a fused or quad target

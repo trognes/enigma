@@ -1136,8 +1136,11 @@ __attribute__((always_inline)) static inline double score_double(machine & m)
    is exact: the double carries ~1e-13 of absolute error against a quantum of
    1. The three histogram models take one plain decode pass instead, because
    -S k's assembly cannot be inverted for two unknowns. Nothing here touches
-   a decoder's body, so the default path's code is unchanged. */
-static double score_key(machine & m)
+   a decoder's body, so the default path's code is unchanged. noinline, so
+   that score_iter() stays the default body plus one branch (839
+   instructions against dev's 837) rather than both bodies fused into one
+   1580-instruction function; the call costs --int one jump per score. */
+__attribute__((noinline)) static double score_key(machine & m)
 {
   const int L = textlength;
   long isum = 0;

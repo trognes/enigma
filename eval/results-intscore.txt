@@ -1,0 +1,12 @@
+# --int vs default, one binary, ['-c', '-K', '--polish', '-S', 'k4f10', '-f', '-l', 'wehrmacht'], 10 plugs, rotor key given
+
+identity: 30 fixtures per length, -R 64, every restart's converged (score, board) compared via --dump-all
+  L= 60: 30 fixtures, 1920 restarts compared: 0 differing restarts, 0 differing decrypts, 0 differing plugboards-scored counts
+  L=107: 30 fixtures, 1920 restarts compared: 0 differing restarts, 0 differing decrypts, 0 differing plugboards-scored counts
+  L=167: 30 fixtures, 1920 restarts compared: 0 differing restarts, 0 differing decrypts, 0 differing plugboards-scored counts
+
+recovery: paired break50, 2000 trials per length, -R 8
+     L  default    --int  only-def  only-int  verdict
+    60  166/2000  166/2000         0         0  no discordant pairs
+   107  825/2000  825/2000         0         0  no discordant pairs
+   167 1715/2000 1715/2000         0         0  no discordant pairs

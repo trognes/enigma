@@ -1185,6 +1185,51 @@ are read from a **data directory** (filenames built as
   convergence scan is a larger fraction of a fast climb). Default off keeps the
   climb byte-identical; the flag only skips the `try_repair` call at each
   convergence.
+- `--int` **compare the climb's scores as exact 64-bit integers** (needs `-c`;
+  off by default). The reference arithmetic the GPU targets reproduce
+  exactly — `metal/DESIGN.md` §3a — and, on the CPU, a flag that changes
+  nothing measurable. Every scorer already accumulates two integers before
+  its one float division: `isum`, the table sum, and `coin`, the
+  same-letter pair count that IC is a ratio of. Under `--int` the climb
+  compares the linear form `I = A·isum + B·coin` instead of the double
+  `isum/(scale·nterms) + bias + λ·coin/(L(L−1))`: pure n-gram models are
+  `A = 1, B = 0`, IC is `A = 0, B = 1`, and the two blends (`-f` and the
+  `-S k` pre-pass) take `A = L(L−1)·M`, `B = round(λ·scale·nterms·M)` with
+  `M` the largest power of two that keeps `I` below 2⁵², so the key is an
+  exact double and rides in the existing `double` score slots — nothing
+  outside the scorer changes shape. `B` is the only rounding anywhere, ~1e-12
+  relative, five orders finer than the double ordering it replaces.
+  - **What the user reads is unchanged.** Progress lines, `--dump-all`, the
+    merge, `--confidence`'s null and `--doubling-report`'s gate all take the
+    double from `score_report()`, reconstructed from the converged board by
+    the default formula; only the per-probe decisions inside a climb are on
+    `I`. So a run under `--int` prints the same numbers as one without it.
+  - **Measured, since it is a behaviour change however small.** Identity:
+    30 fixtures per length at `-R 64`, L = 60/107/167, every restart's
+    converged `(score, board)` compared through `--dump-all` — **0 differing
+    restarts of 5 760**, 0 differing decrypts, 0 differing plugboards-scored
+    counts. Recovery: paired `break50`, 2 000 trials per length at `-R 8` —
+    **166, 825 and 1 715 breaks of 2 000 at L = 60/107/167, in both arms,
+    with zero discordant trials at every length**. `eval/intscore_ab.py`
+    runs both from one binary; `eval/results-intscore.txt` is the output.
+    `make bench LONG=1 BASE=origin/dev`: [[BENCH]].
+  - **The four pure n-gram decoders are `always_inline` and `score_key()`
+    is `noinline`, and both are load-bearing.** `score_key()` is a second
+    caller of the decoders beside the double path, and g++ answered the
+    second call by outlining all four — `score_iter` fell from 837
+    instructions to 326 with a call in the middle of the hottest loop in
+    the program, invisible to `make test` and to every identity check.
+    Forcing them inline and then letting `score_key` inline too fused both
+    bodies into one 1 580-instruction function; keeping it out of line
+    leaves `score_iter` at **850 against dev's 837** — the default body
+    plus one branch and a call `--int` alone takes. Anything that adds a
+    caller to a `*_score_decode` should be followed by a per-symbol
+    instruction count (`objdump -d`), not a bench.
+  - Refused with `-A` (the temperature is calibrated in score units),
+    `--cascade` (its near-solution gate is in score units) and
+    `--crib-rerank` (its weight blends score units); `--polish` has no gate
+    and is fine. Echoed by the settings as `integer score comparison`.
+    `-T`-deterministic.
 - `--cascade[=GATE]` **quadgram-gain directed-repair cascade** (**not
   recommended** — prefer `--polish` on the plain sweep; kept as the
   `-F`/`--exhaust`-compatible variant; needs `-c`; quad-only; off by default).
