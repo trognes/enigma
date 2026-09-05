@@ -171,10 +171,23 @@ So each **lane runs one complete climb**, exactly as a CPU thread does:
 - **Control flow is uniform** across lanes by construction: every lane runs
   the same 325-toggle scan per pass. Only the number of passes to
   convergence differs, so divergence is confined to lanes idling while the
-  slowest lane in their simdgroup finishes. `-K` first-improvement accepts
-  at a lane-dependent move index and is inherently divergent; it stays a
-  CPU option. The GPU form is the default steepest ascent, which is also
-  what the tie rule and byte-identity are defined against.
+  slowest lane in their simdgroup finishes. The GPU form is therefore the
+  default **steepest ascent** first -- also the rule the tie rule,
+  `--dump-all` and byte-identity are defined against, so identity can be
+  tested against today's default output with nothing else changed.
+- **`-J`/`-K` first-improvement is reproducible but divergent, and is
+  measured second, not excluded.** SIMT executes divergent lanes
+  correctly by masking them, so a lane running `-K` produces exactly the
+  CPU's `-K` result; what divergence costs is utilisation. On the CPU,
+  first-improvement wins at matched compute because it is ~2.8x cheaper
+  per climb and buys more restarts. On a 32-lane group a step ends when
+  every lane has found an improvement, so its cost is the slowest lane's
+  scan, which late in a climb tends back toward the 325 evaluations
+  steepest pays anyway. Whether `-K` keeps enough of its 2.8x to beat
+  steepest at matched wall time is a milestone-6 A/B; its ordering scan
+  needs the co-occurrence table on chip (17.6 KB), the same optimisation
+  the `k` stage wants. `-A` is uniform by construction but measured worse
+  than greedy on telegraphic traffic and is not planned.
 - The **kick is generated on the CPU** and uploaded as the lane's start
   board. It costs ~20 RNG draws per restart, needs 64-bit integer modulo,
   and is the one place where a GPU re-implementation could silently drift;
@@ -279,8 +292,9 @@ other measured-down lever.
 5. Keys x restarts on the GPU, CPU merge, `--dump-all` and the doubling
    report fed from the downloaded boards; `plug_fixed` mask passed through.
 6. Optional: `--confidence` samples on the GPU (they are the same unit);
-   the on-chip co-occurrence table for the `k` stage; `--seed-dedup`
-   (needs the stage-0 board returned too).
+   the on-chip co-occurrence table for the `k` stage; a matched-wall-time
+   A/B of `-K` first-improvement against steepest ascent on the GPU
+   (section 4); `--seed-dedup` (needs the stage-0 board returned too).
 
 Steps 2 onward alternate: written here, built and measured on the Mac.
 
