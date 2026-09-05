@@ -1,0 +1,111 @@
+Common-letter first-plug exhaust vs matched -R restarts
+=======================================================
+
+Question: does EXHAUSTIVELY seeding the plugboard on the high-frequency
+letters -- the Sullivan/Weierud instinct -- beat spending the same compute on
+plain -R restarts?  Measured, not argued.
+
+Why it is plausible.  Plug pairs came off the key sheet uncorrelated with
+letter frequency (E is plugged as often as Q), but a wrong stecker on E
+scrambles ~17% of the decrypt where a wrong stecker on X barely moves the
+score.  So the score gradient, and the climb's local optima, concentrate on
+the common letters, and seeding the search there is well motivated.  The
+repo already banks this as a SOFT bias (--biased-random, +9.3% breaks at
+low -R).  What was untested is the HARD form: exhausting the first plug over
+the common letters specifically, cheaper than the general --exhaust 1 the
+archive measured as dominated.
+
+Harness: eval/common_exhaust_ab.py.  All arms paired on identical trials --
+rotor key given, 10-pair board hidden, -c -K -S k4f10 -f -l wehrmacht, NO
+--polish so the finisher cannot confound a question about the seed.
+
+  E-common  first plug exhausted over every pair touching the top-6 letters
+            of the WEHRMACHT monogram table -- ENXRSI, 135 pairs -- one
+            pinned -R 0 climb per pair via -s, best score wins.  The letters
+            come from the plaintext model the search scores against, not
+            prose German: the sensitivity argument is about what is frequent
+            in the text being scored, which is why the X separator is in.
+  E-all     native --exhaust 1, all 325 pairs: the sanity arm.
+  C-common  plain -R matched to E-common on plugboards scored (two-pass
+  C-all     rescale; within 1% in every cell).
+
+Judged on break50 (>=50% recovered), McNemar on the discordant pairs.  Wall
+time is deliberately NOT the axis: a pinned single climb is ~90% process
+startup, so the E arms look grossly expensive in seconds for a reason that
+has nothing to do with the algorithm.  60 paired trials per length,
+authentic HG-Nord decrypts.
+
+    python3 eval/common_exhaust_ab.py --trials 60 --lengths 107 167 --topk 6
+
+L=107  n=60  (a true plug among the common pairs in 60/60 trials)
+        arm  break50  exact  mean%  plugboards/trial
+   E-common    43/60      36   72.8           158,800
+   C-common    40/60      35   71.5           158,974
+      E-all    45/60      40   76.6           382,169
+      C-all    46/60      41   78.7           381,329
+  E-common vs C-common: only-E 6, only-C 3  McNemar p = 0.508
+  E-all vs C-all: only-E 3, only-C 4  McNemar p = 1.000
+
+L=167  n=60  (a true plug among the common pairs in 60/60 trials)
+        arm  break50  exact  mean%  plugboards/trial
+   E-common    52/60      52   88.5           155,682
+   C-common    57/60      57   95.4           156,003
+      E-all    57/60      54   93.5           374,504
+      C-all    59/60      58   97.7           375,010
+  E-common vs C-common: only-E 0, only-C 5  McNemar p = 0.062
+  E-all vs C-all: only-E 0, only-C 2  McNemar p = 0.500
+
+Findings
+--------
+
+1. IT DOES NOT PAY.  At L=107 the common-letter exhaust is a wash (+3
+   breaks, 6 vs 3 discordant, p = 0.51 -- nothing).  At L=167 it LOSES:
+   52/60 against 57/60, with ZERO discordant pairs in its favour against
+   five for the control (p = 0.062), and mean %-correct down 6.9pp (88.5 vs
+   95.4).  Pooled over both lengths the discordants are 6 vs 8 -- net
+   nothing -- but the split by length is the finding.
+
+2. THE SPLIT IS THE MECHANISM.  A pinned first plug helps only on the ~4 of
+   135 hypotheses that are a true plug; every other climb starts handicapped
+   by a WRONG forced plug that the pin keeps in place to convergence.  Where
+   the climb is still failing (L=107, plenty of headroom) the ~4 correctly
+   seeded climbs roughly buy back what the ~131 handicapped ones cost, and
+   it washes.  Where a kicked restart already lands the truth reliably
+   (L=167, C-common at 95%) handicapping 131 of 135 climbs is pure waste,
+   and it loses.  The exhaust is worth least exactly where a message is
+   most breakable.
+
+3. THE COVERAGE WAS NOT THE PROBLEM.  A true plug sat among the 135 common
+   pairs in 60/60 trials at both lengths, so the exhaust always HAD a
+   correct hypothesis to climb from.  Having it is not enough; the best-of-
+   135 has to pick it, and 131 handicapped competitors plus the decoy
+   attraction the archive documents (the joint optimum of the strongest
+   plugs sits above the truth) are what it is picked against.
+
+4. THE SANITY ARM REPRODUCES "NO ADVANTAGE", NOT "DOMINATED".  Native
+   --exhaust 1 ties or leans down against matched -R at both lengths (45 vs
+   46 at 107, 57 vs 59 at 167; p = 1.0 / 0.5).  That is consistent with the
+   archive's verdict that exhaust has no edge, but weaker than its 10-40pp
+   figure (archived/PERFORMANCE.md 3.6).  The likely reason is regime: 3.6
+   was short English prose under an older recipe; here a single first-plug
+   exhaust under k4f10 / -K on telegraphic German at operational length is
+   325 seeded climbs against 325 kicked ones, and they come out about level.
+   Recorded rather than papered over.
+
+5. MORE COMPUTE STILL BUYS MORE BREAKS, AND THAT IS ALL THE "ALL" PAIR
+   SHOWS.  The 2.4x-compute pair breaks more than the common pair at both
+   lengths (45-46 vs 40-43; 57-59 vs 52-57).  That is restarts converting
+   into breaks -- the repo's standing result -- not an exhaust effect.
+
+Verdict
+-------
+
+Sound insight, wrong verb.  The common letters DO carry the score
+sensitivity, and exploiting that as a soft bias on the restart kick
+(--biased-random) is measured to win.  Committing to it as an EXHAUSTION is
+null where a message is hard and a measured loss where it is breakable, at
+matched compute, because a pinned wrong plug handicaps a climb that a plain
+restart would have run unencumbered.  The Sullivan/Weierud approach was the
+right pragmatic move for its compute budget; with cheap parallel restarts
+the same insight belongs in the kick, not in an exhaustive seed.  Nothing
+here changes the search playbook: spend the compute on -R.
