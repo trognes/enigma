@@ -154,7 +154,17 @@ not measured, and no floating-point number is touched inside the climb.
   trials each -- the expectation is ZERO discordant trials, and that is
   the measurement, not the claim -- and `make bench`, expected neutral or
   slightly faster. If it holds, section 8.2's identity rate becomes a hard
-  100% requirement on Metal as on CUDA.
+  100% requirement on Metal as on CUDA. Decision 1's "substantially"
+  applied to `--int` itself: **any measurable recovery loss rejects it**,
+  and `make bench` must read inside its own floor.
+- **Scan order is part of the contract.** Under `--int` ties are exact.
+  On an exact tie between two SWITCH moves the CPU keeps the first found,
+  because its comparison is strict (`score > move_score`) and the scan
+  runs `a < b` ascending over the 325 pairs; only the switch-over-removal
+  rule breaks a tie the other way. A kernel that scans in any other order
+  reproduces every score and still diverges on ties, so the order is
+  specified, not left to the implementer: `a` outer, `b` inner, both
+  ascending, exactly as `hillclimb()` has them.
 
 ### 3b. Fallbacks
 
@@ -262,6 +272,32 @@ tables; dispatch; download boards and components; hand each (key, restart)
 result to the CPU's existing merge with its work index, so the
 lowest-work-index tie-break and `-T`-independence are preserved verbatim.
 
+Three consequences of that arrangement are worth stating rather than
+leaving to be rediscovered:
+
+- **The `--confidence` null stays valid unchanged.** The repo requires the
+  null to be calibrated by the SAME unit the sweep runs (`climb_unit()`
+  routes both through one helper for exactly this reason). Under `--int`
+  the GPU climb IS the CPU climb bit for bit, so CPU-climbed null samples
+  calibrate a GPU sweep with nothing to re-derive. Under the fallbacks
+  (3b) that argument weakens to "the same distribution up to near-ties",
+  which is one more reason to prefer `--int`.
+- **Ordering changes, and so does what the progress line means.** The CPU
+  sweep is restart-major so that the answer is front-loaded and a watcher
+  can kill a long sweep early. The GPU runs ALL of a key's restarts at
+  once, so its natural order is key-major: the front-loading property
+  survives in a different form -- every finished key is complete at its
+  full `-R` -- and the live line's "pass" field stops meaning anything and
+  is replaced by keys done of keys total. The final answer, the merge and
+  `--dump-all` are unaffected; only the order in which candidates appear
+  in the log differs.
+- **Batching and pipelining are unspecified for the prototype** and needed
+  for milestone 5: keys per dispatch (enough to keep several thousand lanes
+  resident, section 5), and overlapping the next batch's upload of rows
+  and start boards with the current batch's compute. Uploads are
+  kilobytes per key and the table goes up once, so this is scheduling,
+  not bandwidth.
+
 ## 8. Verification plan
 
 Run on real fixtures (authentic HG Nord decrypts, random keys and
@@ -274,7 +310,10 @@ Run on real fixtures (authentic HG Nord decrypts, random keys and
    components match `--dump-all` under `--int`. **100% required** on
    both targets once section 3a is in; any divergent item is a bug and is
    listed with both boards and both scores. Under the fallbacks (section
-   3b) it is reported as a rate.
+   3b) it is reported as a rate. **Mechanism**: the host prints its results
+   in `--dump-all`'s own row format, so the test is a `diff` against the
+   CPU's `--dump-all --int` output on the same fixtures -- no bespoke
+   comparer to get subtly wrong.
 3. **Recovery equivalence**: paired `break50` GPU vs CPU, 300 trials per
    length, McNemar on the discordants. Must be indistinguishable; this is
    the test decision 1 actually cares about.
@@ -295,16 +334,23 @@ other measured-down lever.
 
 ## 10. Milestones
 
+Rough effort, to set expectations rather than commit to them:
+
 1. This document.
 1b. **`--int` on the CPU** (section 3a), its own PR: the `(isum, coin)`
    components with one `compare()` choke point, the per-run weights, the
    flag and its echo, `make test`, the paired `break50` A/B in one binary,
    `make bench`. Establishes the reference the GPU must match exactly.
+   ~2 days plus the measurement.
 2. Kernel and host for the plugboard tier; component exactness (8.1).
+   First thing on the Mac: confirm 64-bit integer multiply in the kernel
+   (section 11). ~1 week.
 3. Identity rate (8.2), recovery equivalence (8.3), throughput (9).
+   Days, dominated by the measurement runs.
 4. Go/no-go on the numbers.
 5. Keys x restarts on the GPU, CPU merge, `--dump-all` and the doubling
-   report fed from the downloaded boards; `plug_fixed` mask passed through.
+   report fed from the downloaded boards; `plug_fixed` mask passed through;
+   batching and pipelining (section 7). ~1-2 weeks.
 6. Optional: `--confidence` samples on the GPU (they are the same unit);
    the on-chip co-occurrence table for the `k` stage; a matched-wall-time
    A/B of `-K` first-improvement against steepest ascent on the GPU
@@ -318,9 +364,19 @@ Steps 2 onward alternate: written here, built and measured on the Mac.
   climb's decisions in `int64` (section 3a), with the double reconstructed
   from the same integers for reporting only; the float and double-float
   fallbacks (3b) remain if `--int` is declined.
-- **Fast-math**: the Metal compiler enables it by default. It must be off
-  (`-fno-fast-math`) or the score assembly is exactly the arm64 FMA
-  contraction that hung the CPU climb before `-ffp-contract=off`.
+- **64-bit integers on Metal**: the 1e-12 precision claim in section 3a
+  rests on `int64` multiply-add in the kernel. Apple GPUs support 64-bit
+  integer types, but multiply is emulated and its availability and cost
+  are to be CONFIRMED on the M2 Pro before anything else is built --
+  milestone 2's first check. If it were unavailable, 32-bit weights would
+  drop the precision to float level and `--int` would lose its edge over
+  the 3b fallbacks, though not its exactness across targets.
+- **Fast-math**: the Metal compiler enables it by default. Under `--int`
+  the climb contains no floating-point operation at all, so this is now
+  defence in depth for the fallbacks and for any FP left in reporting; it
+  is still set off (`-fno-fast-math`), because the cost is nothing and the
+  failure it guards against is the arm64 FMA contraction that hung the CPU
+  climb before `-ffp-contract=off`.
 - **Divergence at convergence tails**: lanes idle while the slowest in the
   simdgroup finishes. Measure it (9); if it is large, sort restarts by the
   previous stage's plug count before the next stage, nothing more exotic.
