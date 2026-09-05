@@ -66,11 +66,11 @@ static inline double int_key(int model, long isum, int coin)
                              + g_int_b[model] * static_cast<int64_t>(coin));
 }
 
-/* Nearest integer of a non-negative double (every quantity rounded here is a
-   count or a positive weight, so no <cmath> is needed). */
+/* Nearest integer of a non-negative double: a count recovered from a
+   decoder's return, or a positive weight. */
 static inline int64_t round_nonneg(double x)
 {
-  return static_cast<int64_t>(x + 0.5);
+  return std::llround(x);
 }
 static uint8_t mono8[asize];
 static uint8_t bi8[asize][asize];
@@ -115,7 +115,13 @@ uint8_t all8[asize][asize][asize][asize];
 #define SCORE_UNROLL
 #endif
 
-static double quadgram_score_decode(machine & m)
+/* always_inline, because score_key() is a SECOND caller: with two callers
+   the compiler outlined all four pure n-gram decoders and score_iter
+   shrank from 837 to 326 instructions, i.e. the default path paid a call
+   per score. Forcing the inline restores the single-body score_iter the
+   hot-path notes above describe, and gives score_key its own copy. */
+__attribute__((always_inline))
+static inline double quadgram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
@@ -146,7 +152,8 @@ static double quadgram_score_decode(machine & m)
 /* The weighted "all-order" scorer: identical shape to the quad scorer, but reads all8 (the
    log-linear mixture table) and its own bias/scale. A separate function (not a parameterised
    quad scorer) so each stays a distinct global with no aliasing -- the hot-path rule. */
-static double allgram_score_decode(machine & m)
+__attribute__((always_inline))
+static inline double allgram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
@@ -173,7 +180,8 @@ static double allgram_score_decode(machine & m)
   return score;
 }
 
-static double trigram_score_decode(machine & m)
+__attribute__((always_inline))
+static inline double trigram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
@@ -198,7 +206,8 @@ static double trigram_score_decode(machine & m)
   return score;
 }
 
-static double bigram_score_decode(machine & m)
+__attribute__((always_inline))
+static inline double bigram_score_decode(machine & m)
 {
   const unsigned char * __restrict ct = num_ciphertext;
   const unsigned char * __restrict steck = m.steckerbrett;
