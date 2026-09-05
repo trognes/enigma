@@ -99,57 +99,72 @@ Consequences, and the plan for decision 1:
   does and reach strict byte-identity. The kernel body is written so the
   score type is a compile-time choice.
 
-### 3a. The preferred route: a `--float` option on the CPU
+### 3a. The preferred route: integer scores on the CPU (`--int`)
 
 Rather than make the GPU approximate the CPU's double, let the CPU offer
-the GPU's arithmetic as an **option**, so both sides perform the same
-operations and identity becomes provable instead of measured.
+an arithmetic both sides can perform **exactly**: keep the climb's
+decisions entirely in 64-bit integers. Then identity is by construction,
+not measured, and no floating-point number is touched inside the climb.
 
-- **What changes.** Only the final assembly. Every score is already an
-  exact integer pair (`isum`, `coin`); `double` enters at
-  `isum/scale + n*bias`, the division by `nterms`, and `lambda *
-  coin/(L(L-1))`. Under `--float` that assembly is computed in `float` and
-  the result widened to `double` for everything downstream -- the merge,
-  `--confidence`, printing. The hot loops are untouched.
-- **One choke point.** Today that expression is written out in each
-  `*_score_decode` and again in `hist_probe`. The option is implemented
-  as a single `assemble()` helper they all call, with the float/double
-  switch inside it. That is a small cleanup on its own, and it is what
-  keeps `hist_probe` and `score_iter` agreeing under both settings -- the
-  invariant the climb's termination already rests on.
-- **Why identity is then provable.** `isum` (<= ~255k) and `coin` (<= L^2)
-  are exact in a 24-bit mantissa, `L(L-1)` is exact, and the assembly is a
-  handful of IEEE-754 float operations in a fixed order. With contraction
-  off on the CPU (`-ffp-contract=off`, already load-bearing) and fast-math
-  off in Metal and CUDA, division and multiplication are correctly rounded
-  on every side, so the values compared inside the climb are bit-identical.
-  The one thing to verify rather than assume, as a milestone-2 unit test,
-  is that Metal's precise division is correctly rounded on the M-series.
-- **What float costs.** Nothing measurable in resolution: the smallest
-  real score step is one table byte, `1/(scale*nterms)`, about 3e-4 at
-  operational length, against a float ulp of about 1e-6 at these
-  magnitudes -- ~300 times finer. Where float differs from double is in
-  near-ties, under ~1e-6 apart, which may tie or flip and are then settled
-  by the tie rule. Those are rare, and the alternatives are optima of
-  equal standing.
+- **The arithmetic.** Within a run `L`, `nterms`, `scale`, `bias` and
+  `lambda` are constants. The fused score is
+  `S = isum/(scale*nterms) + bias + lambda*coin/(L(L-1))`. `bias` is the
+  same for every board and never affects a comparison; multiplying the
+  rest by the positive constant `scale*nterms*L(L-1)*M` preserves the
+  ordering exactly, leaving one linear form
+
+      I = A*isum + B*coin,   A = L(L-1)*M,   B = round(lambda*scale*nterms*M)
+
+  with `M` a power of two chosen once. The `k` pre-pass has the same
+  shape, `A = (L-1)*M`, `B = round(lambda_k*scale*L*M)`. Two integer
+  weights per model per run, computed on the CPU at start-up; the climb
+  compares `I` in `int64`.
+- **Precision.** With `M = 2^20`, `A*isum <~ 3e17` and `B*coin <~ 1e17`,
+  inside `int64` with headroom. The only rounding anywhere is `B`'s, about
+  5e-12 relative -- four orders finer than double's own rounding of the
+  same expression and five finer than float. Decisions can differ from
+  today's double ordering only for near-ties inside that band, which a
+  real pair of boards essentially never produces; genuine score steps are
+  ~1e-4. Exact ties (`I` equal) then mean identical components in
+  practice, and the tie rule settles them exactly as now.
+- **Why it beats float.** `int64` add and multiply are identical on the
+  CPU, Metal and CUDA: no correctly-rounded-division question, no
+  fast-math, no contraction. The whole FMA / `-ffp-contract` hazard class
+  leaves the climb; `hist_probe` and `score_iter` agree because they
+  produce the same integers and the same `I`. It is also cheaper -- two
+  64-bit multiply-adds per score against ~400 loads, no FP division
+  (Metal emulates 64-bit multiply; two per score is nothing).
+- **One choke point.** The double expression is written out today in
+  each `*_score_decode` and again in `hist_probe`. Under `--int` they all
+  produce `(isum, coin)` and one `compare()` on `I` decides; the double is
+  reconstructed from the same pair by today's formula only for reporting.
+  So `--dump-all`, `--confidence`, the merge and every progress line read
+  exactly as now -- they are per restart, not per probe, and they are what
+  a user reads.
 - **Why an option, not a replacement.** The default stays the double
-  assembly, byte-identical to today's binary and to every measurement in
-  the repo. `--float` is the reference the GPU targets reproduce exactly,
+  ordering, byte-identical to today's binary and to every measurement in
+  the repo. `--int` is the reference the GPU targets reproduce exactly,
   the GPU host turns it on (or refuses without it), and the two are
   compared in the repo's preferred form: one binary, two flags. It is
   echoed by `show_settings()` like any other flag that changes results.
 - **It is still a behaviour change and is measured as one**, in its own
-  CPU-only PR before any kernel: `make test` (an exact-output fixture may
-  need updating where a near-tie flips), a paired `break50` A/B of
-  `--float` against the default at L = 60/107/167, ~2000 trials each --
-  expected null, not asserted -- and `make bench`, expected neutral since
-  the assembly is nowhere in the profile. If it holds, section 8.2's
-  identity rate becomes a hard 100% requirement on Metal as on CUDA.
+  CPU-only PR before any kernel: `make test` (an exact-output fixture
+  would need updating only if a 1e-12 near-tie happened to flip), a paired
+  `break50` A/B of `--int` against the default at L = 60/107/167, ~2000
+  trials each -- the expectation is ZERO discordant trials, and that is
+  the measurement, not the claim -- and `make bench`, expected neutral or
+  slightly faster. If it holds, section 8.2's identity rate becomes a hard
+  100% requirement on Metal as on CUDA.
 
-The double-float assembly on the GPU (two floats, ~48-bit mantissa) is
-retained only as a **fallback** if `--float` is declined or measures down;
-changing the CPU to a scaled-integer comparison is recorded as a further
-option and not recommended.
+### 3b. Fallbacks
+
+If `--int` is declined or measures down: a `--float` assembly (the same
+choke point computing the final expression in float and widening to
+double; provably identical across targets too, but only with
+correctly-rounded division verified on each, and with near-ties at ~1e-6
+rather than ~1e-12), or a double-float assembly on the GPU alone (two
+floats, ~48-bit mantissa), which leaves the CPU untouched but makes
+identity a measured rate.
 
 ## 4. Decomposition: threadgroup = rotor key, lane = restart
 
@@ -256,11 +271,10 @@ Run on real fixtures (authentic HG Nord decrypts, random keys and
    equal the CPU's. Pure integers; **100% required**.
 2. **Converged-board identity**: over N >= 1000 restarts x 20 fixtures per
    length, the fraction of (key, restart) items whose final board and
-   components match `--dump-all` under `--float`. **100% required** on
+   components match `--dump-all` under `--int`. **100% required** on
    both targets once section 3a is in; any divergent item is a bug and is
-   listed with both boards and both scores. Without `--float` (the
-   fallback) it is reported as a rate, with and without the double-float
-   assembly.
+   listed with both boards and both scores. Under the fallbacks (section
+   3b) it is reported as a rate.
 3. **Recovery equivalence**: paired `break50` GPU vs CPU, 300 trials per
    length, McNemar on the discordants. Must be indistinguishable; this is
    the test decision 1 actually cares about.
@@ -282,10 +296,10 @@ other measured-down lever.
 ## 10. Milestones
 
 1. This document.
-1b. **`--float` on the CPU** (section 3a), its own PR: the `assemble()`
-   choke point, the flag and its echo, `make test`, the paired `break50`
-   A/B in one binary, `make bench`. Establishes the reference the GPU
-   must match exactly.
+1b. **`--int` on the CPU** (section 3a), its own PR: the `(isum, coin)`
+   components with one `compare()` choke point, the per-run weights, the
+   flag and its echo, `make test`, the paired `break50` A/B in one binary,
+   `make bench`. Establishes the reference the GPU must match exactly.
 2. Kernel and host for the plugboard tier; component exactness (8.1).
 3. Identity rate (8.2), recovery equivalence (8.3), throughput (9).
 4. Go/no-go on the numbers.
@@ -300,9 +314,10 @@ Steps 2 onward alternate: written here, built and measured on the Mac.
 
 ## 11. Risks
 
-- **No double** (section 3): mitigated by integer components, CPU-side
-  assembly for all reporting, double-float for the in-climb argmax, and a
-  measured identity rate rather than an assumed one.
+- **No double** (section 3): removed rather than mitigated by keeping the
+  climb's decisions in `int64` (section 3a), with the double reconstructed
+  from the same integers for reporting only; the float and double-float
+  fallbacks (3b) remain if `--int` is declined.
 - **Fast-math**: the Metal compiler enables it by default. It must be off
   (`-fno-fast-math`) or the score assembly is exactly the arm64 FMA
   contraction that hung the CPU climb before `-ffp-contract=off`.
@@ -382,11 +397,11 @@ The design maps one-to-one; nothing in it is Apple-specific.
 Three things CUDA does better:
 
 1. **`double` exists**, so CUDA can match either CPU setting exactly: the
-   default double assembly, or `--float` through the same float path the
+   default double ordering, or `--int` through the same integer path the
    Metal target uses (section 3a). FP64 runs at 1/32-1/64 rate on consumer
    cards, but the assembly is three operations per score against ~400
    loads, so it is invisible either way. On CUDA, decision 1 is met in
-   full with or without `--float`.
+   full with or without `--int`.
 2. **More shared memory**: the `k` stage's 17.6 KB co-occurrence table fits
    beside `rows[]` with room to spare, and 256+ restarts per block fit at
    any message length.
