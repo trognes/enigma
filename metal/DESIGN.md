@@ -101,6 +101,11 @@ Consequences, and the plan for decision 1:
   domain, which would make CPU and GPU provably identical to each other but
   NOT to today's CPU, and would re-open every tuning measurement. (a) is in
   the plan; (b) is recorded as an option and not recommended.
+- **This constraint is Metal's, not the design's.** NVIDIA GPUs have
+  `double`, so the CUDA target (section 15) can compare exactly as the CPU
+  does and reach strict byte-identity. The kernel body is written so the
+  score type is a compile-time choice: `double` on CUDA, float or
+  double-float on Metal.
 
 ## 4. Decomposition: threadgroup = rotor key, lane = restart
 
@@ -259,11 +264,16 @@ Relative to the same chip's own CPU running today's tool on all cores:
 | M2 Pro | 16-19 | ~3-5x |
 | M-series Max | ~32-40 | ~5-10x |
 | M-series Ultra | ~64-80 | ~5-10x, on a CPU already 2x the Max |
+| RTX 4090-class (CUDA) | 128 SMs | ~20-40x a base M1 GPU (section 15) |
 
 These scale my base-M1 reasoning (2-4x over its 8-core CPU) by core count
 and ~20-30% per generation per core. The Neural Accelerators, ray tracing
 and TFLOPS figures are irrelevant to an integer-gather workload; memory
 bandwidth is not the limiter because the table is cache-resident.
+
+In absolute terms, with a base M1 GPU at an estimated 30-60k key-climbs/s,
+a full exact `-r A..` sweep (230M keys) at 128 restarts per key is 6-11
+days there and roughly 6-16 hours on an RTX 4090-class card.
 
 Compute converts into **climb success**, not discrimination: on a message
 whose true-key z sits at the best-of-K bar (RXPSB at 107 letters), no
@@ -273,19 +283,77 @@ hours instead of days.
 
 ## 13. Build and layout
 
-`metal/` holds `DESIGN.md` (this), and later `climb.metal`, `host.mm` and a
-`Makefile` that is only ever invoked on macOS: `xcrun metal -fno-fast-math`
-to compile the kernel to a `.metallib`, and `clang++ -ObjC++` linking
-`src/*.o` (built by the top-level `make` first) with the Metal and
-Foundation frameworks. Nothing under `metal/` is reached by the top-level
-`make`, `make test` or CI; the Python and shell gates do not see `.mm` or
-`.metal` files.
+`metal/` holds `DESIGN.md` (this) and, later, **one kernel body and two
+thin wrappers**: the climb itself is plain integer C in a header shared by
+both targets, and each wrapper supplies only the address-space keywords,
+the thread index, the barrier and the score type. `climb.metal` + `host.mm`
+build on macOS only: `xcrun metal -fno-fast-math` to a `.metallib`, and
+`clang++ -ObjC++` linking `src/*.o` (built by the top-level `make` first)
+with the Metal and Foundation frameworks. `climb.cu` + `host_cuda.cc` build
+with `nvcc -fmad=false` on a machine with an NVIDIA GPU (section 15).
+Nothing under `metal/` is reached by the top-level `make`, `make test` or
+CI; the Python and shell gates do not see `.mm`, `.metal` or `.cu` files.
 
-## 14. Open questions
+## 14. Metal-first, then CUDA
+
+Metal is built and measured first because it runs on the hardware to hand;
+the CUDA wrapper is a near-free second target of the same kernel body and
+the friendlier one for exactness and raw parallelism. Milestones 2-4 are
+run on Metal; the CUDA wrapper is added at milestone 5 or as soon as an
+NVIDIA machine (a rented cloud GPU is enough) is available to measure it.
+
+## 15. The CUDA target
+
+The design maps one-to-one; nothing in it is Apple-specific.
+
+| design element | Metal | CUDA |
+|---|---|---|
+| one rotor key | threadgroup | block |
+| one restart running a full climb | lane | thread |
+| SIMD width | simdgroup, 32 | warp, 32 |
+| `rows[]` for the key | threadgroup memory, 32 KB | shared memory, 48-228 KB |
+| `all8` | device memory | global memory, L2-resident |
+| kicks | CPU-generated, uploaded | same |
+| host | Objective-C++ linking `src/*.o` | C++ under nvcc linking `src/*.o` |
+
+Three things CUDA does better:
+
+1. **`double` exists**, so the in-climb argmax compares exactly as
+   `hillclimb()` does and strict byte-identity is reachable rather than a
+   measured rate. FP64 runs at 1/32-1/64 rate on consumer cards, but the
+   assembly is three operations per score against ~400 loads, so it is
+   invisible. On CUDA, decision 1 can be met in full.
+2. **More shared memory**: the `k` stage's 17.6 KB co-occurrence table fits
+   beside `rows[]` with room to spare, and 256+ restarts per block fit at
+   any message length.
+3. **Far more lanes in flight**: a base M1 holds ~8k resident lanes, an
+   RTX 4090 ~260k (128 SMs x 2048). The design's whole bet is hiding gather
+   latency with independent lanes, so this scales almost directly.
+
+One trap carried over from the repo's own history: **`-fmad=false` is
+load-bearing.** nvcc contracts multiply-adds into FMAs by default even
+with fast-math off, and the CPU is built with `-ffp-contract=off`; without
+it the double assembly can differ from the CPU's in the last bit, which is
+the arm64 hang in another coat and would silently forfeit the
+byte-identity CUDA otherwise makes possible. Verification on CUDA is
+therefore the simplest of all: `--dump-all` must match **exactly**, and
+section 8.2's identity rate must read 100%.
+
+Discrete cards copy over PCIe rather than sharing memory; the per-batch
+traffic (rows, boards, a 457 KB table once) is kilobytes to megabytes and
+does not matter. Where enigma-cuda's per-letter design would still be the
+better one -- very long messages with few restarts per key -- is not the
+operational regime here, and this design is independent of L.
+
+## 16. Open questions
 
 - Lanes per threadgroup (128 vs 256) and threadgroups per key when
   `-R` exceeds it: measure, do not guess.
+- Restarts per key below 32 waste lanes in a simdgroup/warp; whether to
+  pack several keys' `rows[]` tables into one threadgroup for broad sweeps
+  at small `-R`, or simply require `-R >= 32` on the GPU path.
 - Whether the `k` stage's histogram form is worth bringing on chip before
-  or after the go/no-go.
+  or after the go/no-go (on CUDA the memory is there from the start).
 - Whether to return the stage-0 board so `--seed-dedup` can keep working
   unchanged on the CPU side.
+- When an NVIDIA machine becomes available for the CUDA measurement.
