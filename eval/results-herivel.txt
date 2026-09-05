@@ -1,0 +1,126 @@
+The Herivel tip is alive in the 1941 corpus
+==========================================
+
+Question.  A survey of every readable open Enigma-breaking implementation
+(enigma-suite / Enigma@Home, enigma-cuda, Lasry's CrypTool 2 analyzer, bomm,
+and four smaller GitHub projects) found nothing ciphertext-only that this
+tool lacks: all are IC -> bigram -> trigram swap climbs with swap-order or
+kick diversification, partial (E-)stecker exhaustion, and ring collapses the
+repo has in exact form.  The one lever none of them uses is not a ciphertext
+statistic at all.  It is an OPERATOR HABIT, Herivel's 1940 tip: an operator
+sets the day's rings, closes the lid, and the Grundstellung of his first
+message sits at or near the ring, because the rings are what he last saw in
+the windows.  Bletchley read the day's ring off the cluster of early
+Grundstellungen.  Is it alive in this corpus?
+
+Method.  eval/herivel_probe.py.  The corpus carries both halves -- the
+indicator (Grundstellung, sent in clear) for 54 messages and the published
+day-key ring for their dates -- so the tip is testable directly.  Cyclic
+distance |Grundstellung - ring| per wheel; uniform gives mean 6.5,
+P(d <= 2) = 19.2%, all three wheels within +-1 = (3/26)^3 = 0.15%.  Ring 0 is
+a class representative on three recovered days, so wheel 0 is scored on
+published rings only.  Send times come from the message-header page.
+
+    python3 eval/herivel_probe.py
+
+view 1: 54 messages with indicator + day ring
+
+  wheel 0: n=52  mean d =  6.6 (uniform 6.5)   d<=2: 12/52 = 23.1% (uniform 19.2%)
+  wheel 1: n=54  mean d =  6.4 (uniform 6.5)   d<=2: 12/54 = 22.2% (uniform 19.2%)
+  wheel 2: n=54  mean d =  5.2 (uniform 6.5)   d<=2: 17/54 = 31.5% (uniform 19.2%)
+
+  all three wheels within +-1: 4 messages, 0.11 expected by chance
+    08.07.1941 Nr   23 KHLPT  Grund OKF  ring PKF  [1, 0, 0]
+    16.09.1941 Nr   59 ADAFU  Grund LTB  ring LSB  [0, 1, 0]
+    27.09.1941 Nr  114 DAFPX  Grund ZIP  ring YHO  [1, 1, 1]
+    10.07.1941 Nr  161 ANIJQ  Grund IPG  ring JQH  [1, 1, 1]
+  wheels 1,2 within +-1: 6/54 = 11%  (chance (3/26)^2 = 1.3%)
+
+view 2: 20 messages with a header send time; 8 days
+
+  first message of each day by send time (HIT = wheels 1,2 both within +-1):
+    02.10.1941   1440 Nr    8 ALGXZ FXP DVM [2, 2, 3]
+    03.10.1941   1245 Nr    4 NKMOW DTI TIP [10, 11, 7]
+    08.07.1941   2305 Nr   23 KHLPT OKF PKF [1, 0, 0]  HIT
+    13.08.1941   1435 Nr    7 KEJNQ AMQ THE [7, 5, 12]
+    16.09.1941   0740 Nr   59 ADAFU LTB LSB [0, 1, 0]  HIT
+    19.08.1941   1905 Nr   19 ALWOK ALY YPC [2, 4, 4]
+    27.06.1941   1315 Nr   51 PLDRV ZKT RGP [8, 4, 4]
+    27.09.1941   1450 Nr  114 DAFPX ZIP YHO [1, 1, 1]  HIT
+
+  first-of-day: 3/8 hits   (chance 1.3%)
+  rank 1 within its day: 0/3 hits
+  rank 2 within its day: 0/2 hits
+
+Findings
+--------
+
+1. IT IS ALIVE.  Four messages sit within +-1 of the day's ring on ALL
+   THREE wheels against 0.11 expected -- p ~ 1e-5 -- and every one is on a
+   PUBLISHED ring (PKF, LSB, YHO, JQH), so this is not an artefact of a
+   class-representative ring.  On the two wheels a sweep would pin, 6 of 54
+   messages (11%) are within +-1 against 1.3% chance, p ~ 1e-4.
+
+2. THE RIGHT WHEEL CARRIES MOST OF IT.  Wheels 0 and 1 are near uniform in
+   the aggregate (23%, 22% within 2) while wheel 2 reads 31.5%, mean 5.2
+   against 6.5.  The rightmost ring is the last one set and the nearest to
+   the operator; where the tip holds partially it is the right ring that
+   stays.
+
+3. BY SEND TIME IT LOOKS LIKE HERIVEL DESCRIBED IT.  Of the 8 days with a
+   timed first message, 3 are hits; of the 5 later messages on those days,
+   none.  Small numbers -- this is suggestive, not established -- but the
+   pattern is the historical one, and it says the Grundstellung of a day's
+   EARLIEST message is the one to read.  Time of day is not decisive: the
+   hits were sent at 0740, 1450 and 2305.
+
+4. A CONSTRAINED SWEEP FOLLOWS, and it is cheap.  For an unbroken message
+   whose Grundstellung is G, pin ring1 and ring2 to G +-1 (9 combinations;
+   ring0 is unidentifiable and stays the offset axis) and sweep everything
+   else exactly.  For RXPSB (Grundstellung ZDN, reflector B, wheels I-V):
+
+     9 x 60 wheel orders x 17 576 starts = 9 491 040 keys, exact rings
+
+   against the 57.7M keys of a stride-3 full sweep.  Measured on this box:
+   one ring-pinned wheel order (17 576 keys) climbs in 2.1 s on 4 threads at
+   -R 0, i.e. ~8 250 key-climbs/s.  So -R 16 is ~5 h here; -R 500 is ~6.6
+   DAYS here -- and, relative to the 57.7M x -R 500 run already made on the
+   message, the same compute buys -R 3000 on the Herivel rings, six times
+   the restarts where the L=107 climb curve is still rising steeply.
+
+5. A SECOND, SEPARATE BENEFIT: THE BAR DROPS.  The best-of-K bar is
+   sqrt(2 ln K): 6.21 at 230M keys, 6.00 at 57.7M, 5.67 at 9.49M.  RXPSB's
+   true-key z sits at the bar (real traffic reads ~6 at 107 letters), so a
+   third of a sigma is worth having on discrimination, independent of the
+   compute.
+
+6. THE PRIOR IS THE WHOLE COST.  Around 11% of messages satisfy the +-1
+   condition, more among first-of-day messages and less for one sent at
+   1020 like RXPSB.  Call it 10-15%.  That is a lottery ticket -- but a
+   better one than a reflector-C sweep (a few-percent prior at ~30% power),
+   and the ticket costs a sixth of a full sweep.  +-2 on both rings (25
+   combinations, 2.8x) is the fallback.
+
+7. FOR BYQMZ IT BUYS NOTHING NEW.  Its Grundstellung MGS was sent at 0014,
+   fourteen minutes after the key change -- the strongest Herivel position
+   in the set -- but the full reflector-B sweep at -R 100 already covered
+   every ring exactly.  The tip would only make the non-standard-kit
+   contingencies (reflector C, wheels VI-VIII) overnight runs instead of
+   multi-day ones, and their priors are too small to justify even that.
+
+What is running
+---------------
+
+A first-pass RXPSB sweep on the nine Herivel ring combinations, centre (D,N)
+first, -R 16, reflector B, wheels I-V, all starts, --confidence 256
+--doubling-report 7 --seed-dedup, ~5 h on this 4-thread box.  The high-R
+version belongs on a faster box; per combination, for rr in
+DN CN EN DM DO CM CO EM EO:
+
+    ./enigma -u B -w ... -r Arr -g ... -c -K --polish -S k4f10 -f \
+        -l wehrmacht -R 2000 -T 7 --confidence 256 --doubling-report 7 \
+        --seed-dedup < rxpsb.txt
+
+with the ciphertext carrying its two garble dashes as placeholder letters
+and the Kenngruppe stripped.  Validate any candidate with
+eval/day_key_from_indicator.py --msg START:ZDN:QMF.
