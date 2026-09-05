@@ -26,8 +26,21 @@
 #include <stdint.h>
 
 /* Score the current board's decrypt under m.scoring. Bumps m.plugboards_scored
-   once per whole-message score -- the counter the final diagnostic reports. */
+   once per whole-message score -- the counter the final diagnostic reports.
+   Under --int this returns the integer comparison KEY (as an exactly
+   representable double), not the score: it orders boards, and nothing that a
+   user reads may be built from it. */
 double score_iter(machine & m);
+
+/* The double score of the current board, whatever --int says: what the
+   progress line, --dump-all, the doubling gate, the merge and --confidence
+   read. Identical to score_iter() when --int is off. Not counted. */
+double score_report(machine & m);
+
+/* --int: derive the per-run integer weights from the message length, the
+   table scales and the IC blend weights. Called once from main(), after the
+   ciphertext is read; a no-op when the option is off. */
+void intscore_init();
 
 /* Index of coincidence alone, no n-gram table and no language. */
 double ic_score_decode(machine & m);

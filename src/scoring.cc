@@ -34,6 +34,44 @@
    not a nonlinear curve. Raw counts live in a transient scratch buffer inside ngrams_read(). */
 double ngram_scale[SCORE_MONOIC + 1];   /* per-model: 255/(vmax-vmin), full 0..255 range */
 double ngram_bias[SCORE_MONOIC + 1];    /* per-model vmin; indexed by SCORE_* */
+
+/* --int: the integer comparison key.
+
+   Every model scores as an affine function of two exact integers -- the
+   table sum `isum` and the coincidence count `coin`:
+
+       S = isum / (scale * nterms) + bias + lambda * coin / (L (L - 1))
+
+   Within a run L, nterms, scale, bias and lambda are constants, and bias is
+   the same for every board, so it never decides a comparison. Multiplying
+   the rest by the positive constant scale * nterms * L(L-1) * M preserves
+   the ordering exactly and leaves one linear form
+
+       I = A * isum + B * coin,   A = L(L-1) * M,   B = round(lambda * scale
+                                                              * nterms * M)
+
+   with M a power of two chosen so that I fits in 52 bits and can be carried
+   as an exactly representable double through the same code paths the double
+   score takes. B's rounding is the only rounding anywhere -- about 5e-12
+   relative at operational length, four orders finer than the double
+   assembly's own -- so the ordering can differ from the default's only for
+   near-ties inside that band. Pure n-gram models have lambda = 0 and order
+   by isum alone; IC alone orders by coin. metal/DESIGN.md 3a. */
+static int64_t g_int_a[SCORE_MONOIC + 1];
+static int64_t g_int_b[SCORE_MONOIC + 1];
+
+static inline double int_key(int model, long isum, int coin)
+{
+  return static_cast<double>(g_int_a[model] * static_cast<int64_t>(isum)
+                             + g_int_b[model] * static_cast<int64_t>(coin));
+}
+
+/* Nearest integer of a non-negative double (every quantity rounded here is a
+   count or a positive weight, so no <cmath> is needed). */
+static inline int64_t round_nonneg(double x)
+{
+  return static_cast<int64_t>(x + 0.5);
+}
 static uint8_t mono8[asize];
 static uint8_t bi8[asize][asize];
 static uint8_t tri8[asize][asize][asize];
@@ -683,6 +721,8 @@ void cooc_plug_scores(machine & m, int model, double * out)
    terminates. */
 static inline double hist_assemble(int scoring, long isum, int coin)
 {
+  if (opt_intscore)
+    return int_key(scoring, isum, coin);
   const double mono = static_cast<double>(isum) / ngram_scale[SCORE_MONO]
                       + textlength * ngram_bias[SCORE_MONO];
   if (scoring == SCORE_MONO)
@@ -736,6 +776,8 @@ static inline double hist_probe_fused(machine & m, const int * pos,
             nn += ad[k][y] - rm[k][y];
           coin += nn * (nn - 1);
         }
+      if (opt_intscore)
+        return int_key(SCORE_IC, 0, coin);
       return (textlength > 1)
         ? static_cast<double>(coin)
             / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
@@ -797,6 +839,8 @@ static double hist_probe_any(machine & m, const int * pos, const int * val,
       int coin = 0;
       for (int y = 0; y < asize; y++)
         coin += n[y] * (n[y] - 1);
+      if (opt_intscore)
+        return int_key(SCORE_IC, 0, coin);
       return (textlength > 1)
         ? static_cast<double>(coin)
             / (static_cast<double>(textlength) * (textlength - 1)) : 0.0;
@@ -857,6 +901,60 @@ void ic_blend_init()
   const char * k = getenv("ENIGMA_MONOIC_BLEND");
   if ((k != nullptr) && (*k != 0))
     g_monoic_lambda = parse_opt_double(k, "$ENIGMA_MONOIC_BLEND");
+}
+
+void intscore_init()
+{
+  for (int md = 0; md <= SCORE_MONOIC; md++)
+    {
+      g_int_a[md] = 0;
+      g_int_b[md] = 0;
+    }
+  if (! opt_intscore)
+    return;
+
+  const int L = textlength;
+  const double LL = static_cast<double>(L) * (L - 1);
+
+  /* lambda = 0: the ordering is isum's. IC alone: coin's. */
+  g_int_a[SCORE_MONO] = 1;
+  g_int_a[SCORE_BI] = 1;
+  g_int_a[SCORE_TRI] = 1;
+  g_int_a[SCORE_QUAD] = 1;
+  g_int_a[SCORE_ALL] = 1;
+  g_int_b[SCORE_IC] = 1;
+
+  /* The two blended models. -f adds lambda*IC to the per-symbol all-order
+     score (nterms = L-3); -S k adds (lambda_k*L)*IC to the per-symbol
+     monogram score (nterms = L), so its effective lambda is lambda_k*L. */
+  struct blend { int model; int nterms; double lambda; double scale; };
+  const blend mix[2] = {
+    { SCORE_FUSED, L - 3, g_fused_lambda, ngram_scale[SCORE_ALL] },
+    { SCORE_MONOIC, L, g_monoic_lambda * L, ngram_scale[SCORE_MONO] },
+  };
+  for (const blend & b : mix)
+    {
+      if ((b.nterms <= 0) || (L < 2) || (b.scale <= 0.0))
+        continue;   /* degenerate length, or a table this run never loaded */
+      /* The largest power of two M that keeps the whole key under 2^52 at
+         its maximum -- every byte 255 and every letter the same -- so it is
+         an exact double. */
+      const double isum_max = 255.0 * b.nterms;
+      const double w = b.lambda * b.scale * b.nterms;
+      int k = 0;
+      while (k < 40)
+        {
+          const double M2 = static_cast<double>(1LL << (k + 1));
+          const double top = LL * M2 * isum_max + w * M2 * LL;
+          if (top >= 4503599627370496.0)   /* 2^52 */
+            break;
+          k++;
+        }
+      const double M = static_cast<double>(1LL << k);
+      /* A is exact (LL and M are integers); B is the one rounding. */
+      g_int_a[b.model] = round_nonneg(LL * M);
+      g_int_b[b.model] = round_nonneg(w * M);
+    }
 }
 
 
@@ -951,10 +1049,11 @@ static double ngram_ic_decode(machine & m, const uint8_t (* table)[asize][asize]
 }
 
 
-double score_iter(machine & m)
+/* The double score. Inlined into both callers on purpose: score_iter is the
+   hottest function in the program, and the default path must stay one body
+   with one extra predictable branch in front of it, not a call. */
+__attribute__((always_inline)) static inline double score_double(machine & m)
 {
-  m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
-
   double score = 0;
   int nterms = 0;   /* number of n-gram terms; 0 = no per-symbol normalisation (IC) */
 
@@ -1020,6 +1119,101 @@ double score_iter(machine & m)
     score /= nterms;
 
   return score;
+}
+
+/* --int: the current board's integer key under m.scoring. The components
+   come from the SAME decoders the double takes -- where a decoder returns
+   the assembled `isum/scale + n*bias`, isum is recovered by rounding, which
+   is exact: the double carries ~1e-13 of absolute error against a quantum of
+   1. The three histogram models take one plain decode pass instead, because
+   -S k's assembly cannot be inverted for two unknowns. Nothing here touches
+   a decoder's body, so the default path's code is unchanged. */
+static double score_key(machine & m)
+{
+  const int L = textlength;
+  long isum = 0;
+  int coin = 0;
+
+  switch (m.scoring)
+    {
+    case SCORE_IC:
+    case SCORE_MONO:
+    case SCORE_MONOIC:
+      {
+        int freq[asize];
+        for (int j = 0; j < asize; j++)
+          freq[j] = 0;
+        const unsigned char * __restrict ct = num_ciphertext;
+        const unsigned char * __restrict steck = m.steckerbrett;
+        const unsigned char * const * __restrict rows = m.rows;
+        for (int i = 0; i < L; i++)
+          freq[decode_at(steck, rows, ct, i)]++;
+        for (int j = 0; j < asize; j++)
+          {
+            isum += static_cast<long>(freq[j]) * mono8[j];
+            coin += freq[j] * (freq[j] - 1);
+          }
+      }
+      break;
+
+    case SCORE_BI:
+      if (L >= 2)
+        isum = round_nonneg((bigram_score_decode(m)
+                             - (L - 1) * ngram_bias[SCORE_BI])
+                            * ngram_scale[SCORE_BI]);
+      break;
+
+    case SCORE_TRI:
+      if (L >= 3)
+        isum = round_nonneg((trigram_score_decode(m)
+                             - (L - 2) * ngram_bias[SCORE_TRI])
+                            * ngram_scale[SCORE_TRI]);
+      break;
+
+    case SCORE_QUAD:
+      if (L >= 4)
+        isum = round_nonneg((quadgram_score_decode(m)
+                             - (L - 3) * ngram_bias[SCORE_QUAD])
+                            * ngram_scale[SCORE_QUAD]);
+      break;
+
+    case SCORE_ALL:
+      if (L >= 4)
+        isum = round_nonneg((allgram_score_decode(m)
+                             - (L - 3) * ngram_bias[SCORE_ALL])
+                            * ngram_scale[SCORE_ALL]);
+      break;
+
+    case SCORE_FUSED:
+      if (L >= 4)
+        {
+          double ic = 0.0;
+          const double r = ngram_ic_decode(m, all8, SCORE_ALL, & ic);
+          isum = round_nonneg((r - (L - 3) * ngram_bias[SCORE_ALL])
+                              * ngram_scale[SCORE_ALL]);
+          coin = static_cast<int>(round_nonneg(ic * static_cast<double>(L)
+                                               * (L - 1)));
+        }
+      break;
+
+    default:
+      fatal("Illegal scoring type");
+    }
+
+  return int_key(m.scoring, isum, coin);
+}
+
+double score_iter(machine & m)
+{
+  m.plugboards_scored++;   /* diagnostic count (once per whole-message score) */
+  if (opt_intscore)
+    return score_key(m);
+  return score_double(m);
+}
+
+double score_report(machine & m)
+{
+  return score_double(m);
 }
 
 /* Load the n-gram table backing a scoring model (IC needs none). */

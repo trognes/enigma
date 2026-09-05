@@ -389,6 +389,10 @@ fprintf(out, "  %-24s %s\n", "--crib-rerank F",
   fprintf(out, "  %-24s %s\n", "--no-repair",
           "Disable the 2-plug re-pair barrier cross");
   fprintf(out, "  %-24s %s\n", "", "(ablation/measurement flag; needs -c) [off]");
+  fprintf(out, "  %-24s %s\n", "--int",
+          "Compare climb scores as exact integers");
+  fprintf(out, "  %-24s %s\n", "", "(the GPU reference; reported scores are");
+  fprintf(out, "  %-24s %s\n", "", "unchanged; needs -c) [off]");
   fprintf(out, "  %-24s %s\n", "--cascade[=GATE]",
           "Quadgram-gain 2-ply directed-repair cascade at");
   fprintf(out, "  %-24s %s\n", "", "convergence; GATE = near-solution per-symbol");
@@ -500,6 +504,10 @@ void show_settings()
             ? (opt_ic_order ? " (dynamic move order, ranked by IC)"
                             : " (dynamic move order)")
             : "");
+  /* The flag changes which board a climb converges to only at near-ties,
+     but a log that does not say so cannot be compared against another. */
+  if (opt_hillclimb && opt_intscore)
+    fprintf(stderr, "            integer score comparison (--int)\n");
   if (opt_hillclimb && ((opt_anneal > 0) || (opt_restarts >= 1)))
     fprintf(stderr, "            seed: %llu\n",
             static_cast<unsigned long long>(opt_seed));

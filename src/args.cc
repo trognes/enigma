@@ -61,6 +61,7 @@ void parse_args(int argc, char * * argv)
   opt_ic_order = 0;
   opt_capmerge = 0;
   opt_no_repair = 0;
+  opt_intscore = 0;
   opt_cascade = 0;
   opt_cascade_gate = -4.9;   /* English-quad-calibrated near-solution gate (tunable) */
   opt_cascade3 = 0;
@@ -106,7 +107,8 @@ void parse_args(int argc, char * * argv)
   /* Long-only option identifiers (no short form): values above the byte range so they
      never collide with a short flag char. --random and --exhaust are the seed-pipeline
      options introduced in REDESIGN Part B. */
-  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_CASCADE,
+  enum { OPT_RANDOM = 256, OPT_EXHAUST, OPT_TRUEKEY, OPT_NO_REPAIR, OPT_INT,
+         OPT_CASCADE,
          OPT_POLISH, OPT_CRIBRERANK, OPT_CRIBWEIGHT, OPT_DUMPALL, OPT_RINGSTRIDE,
          OPT_NOPLUG, OPT_SOFTPLUG, OPT_SCSEEDS, OPT_SCLEN, OPT_SCSIG,
          OPT_FULLTEXT, OPT_CRIBTEXT, OPT_CRIBAT, OPT_CRIBDUMP,
@@ -158,6 +160,7 @@ void parse_args(int argc, char * * argv)
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-all",       no_argument,       nullptr, OPT_DUMPALL },
       { "no-repair",      no_argument,       nullptr, OPT_NO_REPAIR },
+      { "int",            no_argument,       nullptr, OPT_INT },
       { "cascade",        optional_argument, nullptr, OPT_CASCADE },
       { "polish",         no_argument,       nullptr, OPT_POLISH },
       { "crib-rerank",    required_argument, nullptr, OPT_CRIBRERANK },
@@ -258,6 +261,9 @@ void parse_args(int argc, char * * argv)
           break;
         case OPT_NO_REPAIR:
           opt_no_repair = 1;
+          break;
+        case OPT_INT:
+          opt_intscore = 1;
           break;
         case OPT_CASCADE:
           opt_cascade = 1;
@@ -1012,6 +1018,25 @@ void parse_args(int argc, char * * argv)
   /* --no-repair disables a climb move, so it only means anything with -c. */
   if (opt_no_repair && (! opt_hillclimb))
     fatal("Disabling the 2-plug re-pair (--no-repair) needs the plugboard hill-climb (-c)");
+
+  /* --int changes how the CLIMB compares scores, so it means nothing without
+     -c. Three options use a score NUMERICALLY rather than comparatively --
+     an annealing temperature, a cascade gate and a re-rank weight, all in
+     double-score units -- and would silently mean something else against an
+     integer key, so they are refused rather than reinterpreted. (--polish
+     runs the cascade with its gate disabled and is fine.) */
+  if (opt_intscore && (! opt_hillclimb))
+    fatal("Integer score comparison (--int) needs the plugboard "
+          "hill-climb (-c)");
+  if (opt_intscore && (opt_anneal > 0))
+    fatal("--int cannot be combined with simulated annealing (-A): "
+          "the temperature is calibrated in score units");
+  if (opt_intscore && opt_cascade)
+    fatal("--int cannot be combined with --cascade: its near-solution gate "
+          "is in score units (--polish is fine)");
+  if (opt_intscore && opt_crib_rerank)
+    fatal("--int cannot be combined with --crib-rerank: its weight blends "
+          "score units");
 
   /* --cascade is a climb barrier-cross move, so it needs -c. */
   if (opt_cascade && (! opt_hillclimb))

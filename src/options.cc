@@ -240,6 +240,17 @@ int opt_capmerge;
    ablation/measurement. Off by default (baseline byte-identical); needs -c. */
 int opt_no_repair;
 
+/* --int: the climb compares scores as exact 64-bit integers instead of
+   doubles. Every model already accumulates integer components (the table sum
+   and the coincidence count); within a run the score is an affine function
+   of those two, so its ordering is preserved exactly by one integer linear
+   form with per-run weights (scoring.cc, intscore_init). The double is still
+   reconstructed from the same integers for everything a user reads. The
+   point is a reference a GPU port can reproduce bit for bit -- Metal has no
+   double (metal/DESIGN.md 3a). Off by default (baseline byte-identical);
+   needs -c. */
+int opt_intscore;
+
 /* --cascade: quadgram-gain directed-repair barrier cross, tried at quad convergence.
    A 2-ply "cascade" that uses per-position gain to propose plug corrections (both
    plugboard contacts, self-encryption pruned), ranks them by the full re-decode

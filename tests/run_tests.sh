@@ -918,6 +918,30 @@ check "crack: start position, wehrmacht -a" \
   "$(run "$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g QXP)" -a -u B -w 123 -r AAA -g "$crack_scan_g" -l wehrmacht)" \
   "$pt_wehrmacht"
 
+# --int: the climb compares exact integer keys instead of doubles (the GPU
+# reference, metal/DESIGN.md 3a). Same board, same reported double, echoed
+# in the settings, -T independent, and refused without -c or with -A.
+int_run() {
+  printf '%s' "$w_ct" | "$ENIGMA" -u B -w 123 -r AAA -l wehrmacht "$@"
+}
+check "crack: hill-climb plugboard, wehrmacht -a, --int" \
+  "$(int_run -a -c --score a2 -g AAA --int 2>/dev/null)" "$pt_wehrmacht"
+int_dbl=$(int_run -a -c --score a2 -g AAA -T 1 2>&1 >/dev/null \
+          | progress_lines | tail -1)
+int_key=$(int_run -a -c --score a2 -g AAA -T 1 --int 2>&1 >/dev/null \
+          | progress_lines | tail -1)
+check "--int: same double score and board as the default" "$int_key" "$int_dbl"
+check "--int echoes itself in the settings" \
+  "$(int_run -a -c --score a2 -g AAA --int 2>&1 >/dev/null \
+     | grep -c 'integer score comparison')" "1"
+int_t1=$(int_run -f -c -S i2f2 -g "$rgd" --int -T 1 2>/dev/null)
+int_t4=$(int_run -f -c -S i2f2 -g "$rgd" --int -T 4 2>/dev/null)
+check "--int is -T independent" "$int_t4" "$int_t1"
+int_run -a --score a2 -g AAA --int >/dev/null 2>&1
+check "--int without -c rejected" "$?" "1"
+int_run -a -c -A 100 -g AAA --int >/dev/null 2>&1
+check "--int with -A rejected" "$?" "1"
+
 # Non-English-corpus languages added after the original english/german/danish/french set
 # (swedish, finnish, icelandic, polish, spanish -- see fold_codepoint() in src/ngrams.cc for
 # the accented-letter folding this exercises, e.g. Polish ogonek/stroke/acute letters and
