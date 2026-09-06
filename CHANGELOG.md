@@ -173,6 +173,12 @@ existing command lines can behave differently or stop working.
     export being an always_inline helper's second caller.
   - Nothing under `metal/` is reached by the top-level `make`, `make test`
     or CI.
+  - **`metal/Makefile` derives its link list from `src/*.cc`, not from the
+    objects on disk.** The first Mac build died on 23 duplicate symbols:
+    a wildcard over `src/*.o` had linked a stale `src/enigma.o`, the
+    single translation unit from before the module split, which no source
+    produces any more but which a long-lived checkout still carried. The
+    top-level Makefile builds from the sources and never saw it.
 - **`--int` — the plugboard climb compares its scores as exact 64-bit
   integers.** Every scorer already accumulates two integers, the table sum
   `isum` and the same-letter pair count `coin`, before one float division;
