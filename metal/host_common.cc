@@ -238,10 +238,11 @@ int main(int argc, char * * argv)
   double device_secs = 0.0;
   size_t cur_wo = static_cast<size_t>(-1);
   int rg6[6];
-  size_t scan_pos = 0;              /* where the enumeration has reached */
-  size_t batch_line_width = 0;      /* widest progress line drawn so far */
-  const bool show_batches = (isatty(fileno(stderr)) != 0)
-                              && ! opt_dump_all;
+  /* --dump-all is excluded for the tool's own reason: its rows are the
+     machine-readable form and print under their own mutex, so a \r line
+     could interleave into them. */
+  if ((isatty(fileno(stderr)) != 0) && ! opt_dump_all)
+    sweep_progress_arm(total_keys, 1);
 
   auto run_batch = [&]()
     {
@@ -342,28 +343,23 @@ int main(int argc, char * * argv)
       rows.clear();
       boards_in.clear();
 
-      /* Liveness. A sweep is many dispatches with nothing between them, and
-         the one failure this path has actually produced -- the GPU reset
-         above -- looks exactly like a slow run until the desktop freezes.
-         TTY only, so redirected logs and verify_identity.py stay clean, and
-         erased at the end like the tool's own sweep line. */
-      if (show_batches)
-        {
-          char line[80];
-          const int n = snprintf(line, sizeof line,
-                                 "GPU: %zu keys, %zu climbs, %.0f%%",
-                                 keys_done, items_done,
-                                 100.0 * static_cast<double>(scan_pos + 1)
-                                 / static_cast<double>(total_keys));
-          if (n > 0)
-            {
-              if (static_cast<size_t>(n) > batch_line_width)
-                batch_line_width = static_cast<size_t>(n);
-              fprintf(stderr, "\r%-*s", static_cast<int>(batch_line_width),
-                      line);
-              fflush(stderr);
-            }
-        }
+      /* Liveness, through the tool's OWN sweep line rather than one of this
+         host's: a batch is many climbs with nothing printed between them,
+         and the failure above -- the GPU reset -- looks exactly like a slow
+         run until the desktop freezes.
+
+         Reusing it is not merely tidier. progress_line() opens with
+         sweep_progress_clear(), so a score line erases the \r line before
+         printing over it; a second, private line has no such contract, and
+         a bespoke one drew `GPU: 4096 keys, 4096 climbs, 23% -6.6455 B123
+         AAK ...` with the next batch's score line smeared onto its row. The
+         clock, the width-exact erase and the TTY gate come with it.
+
+         Armed in KEYS, with restarts = 1, because the tool's pass field
+         describes a restart-MAJOR sweep and this host is key-major: a key's
+         restarts are adjacent (item i is key i/restarts), so there are no
+         passes to report and keys are the honest unit. */
+      sweep_progress_tick(nk, g_best);
     };
 
   /* Enumerate the key space exactly as search_worker() does -- the
@@ -399,14 +395,12 @@ int main(int argc, char * * argv)
         }
       batch_keys.push_back(keyidx);
 
-      scan_pos = keyidx;
       if (batch_keys.size() >= keys_per_batch)
         run_batch();
     }
-  scan_pos = (total_keys > 0) ? total_keys - 1 : 0;
   run_batch();
-  if (show_batches && (batch_line_width > 0))
-    fprintf(stderr, "\r%-*s\r", static_cast<int>(batch_line_width), "");
+  sweep_progress_clear();
+  sweep_progress_disarm();
 
   if (! g_best.found)
     fatal("No machine configuration produced a score");
