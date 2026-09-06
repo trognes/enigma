@@ -952,6 +952,37 @@ paid for.
      cap: it is a stepped function of register count, the natural kernel
      sits just above a step, and `try_repair`'s inlined body is among
      what holds it there.
+   - **Before building it, three things, in cost order.** (i) **DONE:
+     the per-probe cost against length** (`ablate.py --scaling`,
+     `eval/results-gpu-ablation-m1.txt` run 4). The redesign spreads a
+     probe's per-character work across 32 lanes and leaves its per-probe
+     work where it is, so the intercept of `t(L) = a + b*L` is the share
+     it cannot touch. Measured **1.4 + 0.405*L ns per probe**, residuals
+     0.2 ns, intercept **3.0% at L=107**: not intercept-limited, which
+     was the go/no-go. **A "17.4 bound" column from the same run is
+     withdrawn** -- it was per-probe latency, not throughput. The
+     redesign also puts 32x fewer climbs in flight, so with resident
+     lanes unchanged its payoff is the per-character **step-latency
+     ratio** (shuffle and threadgroup memory against thread memory) times
+     freed-register occupancy times 1.46 for divergence, and if the step
+     latency did not fall it would be a ~2x *loss* at L=107. Also from
+     the fit: at L=107 a lane holds 3.3 characters, so the ~10 cross-lane
+     reductions per probe are amortised over very little -- the design
+     favours long messages and the operational cell is short. (ii) **The
+     probe microkernel**: one toggle probe in the 17.4 shape -- board one
+     entry per lane, `rows` in threadgroup memory, L/32 characters per
+     lane, `simd_sum` for `isum`, the packed-histogram reduction for
+     `coin` -- repeated thousands of times with a rotating toggle and
+     timed against the same repeated probe in today's shape, behind an
+     environment switch on the existing host so no new plumbing. It
+     measures the step ratio and the new shape's register cap directly,
+     and must match the CPU's `isum`/`coin` bit for bit. An afternoon.
+     (iii) **The kill number, written down first.** Parity needs 4-6x,
+     worth using needs ~10x; a per-probe ratio under 4x from (ii) stops
+     the redesign, so a marginal result cannot be argued into a week.
+     And write (ii) against three macros in the `climb_body.h` style
+     (shuffle, sum, shuffle-up), which is what keeps the CUDA target
+     real at no cost.
 4. Only then `--sustained`, and the `k` stage's co-occurrence table on
    chip (`uint8`, 17.6 KB, fits; section 5).
 
