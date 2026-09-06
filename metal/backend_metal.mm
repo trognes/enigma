@@ -165,9 +165,10 @@ void backend_run(const mc_batch & b)
 
 static id<MTLComputePipelineState> g_probe_pso[MC_PROBE_ARMS];
 static const char * const g_probe_fn[MC_PROBE_ARMS] =
-  { "enigma_probe_lane", "enigma_probe_g32s", "enigma_probe_g32",
-    "enigma_probe_g16", "enigma_probe_g8" };
-static const int g_probe_k[MC_PROBE_ARMS] = { 1, 32, 32, 16, 8 };
+  { "enigma_probe_lane", "enigma_probe_g1", "enigma_probe_pass",
+    "enigma_probe_g32s", "enigma_probe_g32", "enigma_probe_g16",
+    "enigma_probe_g8" };
+static const int g_probe_k[MC_PROBE_ARMS] = MC_PROBE_K_LIST;
 
 static void probe_init()
 {

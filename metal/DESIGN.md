@@ -1026,7 +1026,43 @@ paid for.
      arms, of unknown size, entangled with how much the climb's scan
      machinery itself costs. Fixed: unit u starts from board u % 64, the
      64 kicks for (key 0, restart 0..63), so a simdgroup holds 32 boards
-     as a climb does; the oracle is 64 checksums. **Run 2 pending.**
+     as a climb does; the oracle is 64 checksums.
+     **RUN 2, 64 BOARDS: THE BROADCAST WAS WORTH 6%, AND 17.4'S
+     DECOMPOSITION IS DEAD.** The lane arm fell 71.0M -> 66.7M probes/s
+     and the group arms did not move: 0.49x at K=32 (both boards),
+     0.74x at 16, 0.93x at 8. Refitting the K trend puts the group
+     shape's per-character step at **0.94 of the lane's** in lane-time.
+     In lane-cycles per character the lane arm's step is ~750 and the
+     K=8 packed arm's ~1 300: both shapes are stalled for nearly all of
+     a 15-50-instruction step, and **the one with NO thread memory is
+     the slower**. Whatever the ~750 cycles are, they are not the
+     thread-memory board and histogram 17.2 ranked first -- which table
+     B had priced at 32% and 8%, the same fact from the other side.
+     **THE FINDING IS THE OTHER NUMBER.** The lane arm -- `mc_components`
+     on a toggled board, exactly what the climb does 326 times a pass --
+     runs **66.7M probes/s where the fixed-pass climb runs 22.3M**: the
+     same scoring, **3.0x slower inside the climb kernel than beside
+     it**, confound excluded. The cap covers 512/384 = 1.33x of that at
+     most; the remaining ~2.2x is the kernel around the scorer -- the
+     scan's kind logic and cap check, the mutate and restore writes to a
+     thread-memory board (up to eight a probe against the probe arm's
+     two to four), the best-move compare, and whatever the compiler
+     makes of `mc_components` inlined inside a function large enough to
+     be register-starved. 17.2 ranked four suspects and none was this,
+     because every ablation removed part of the *scorer*; the scan
+     machinery sat in table B's "everything else" (32.6%) and in the
+     per-probe intercept table D put at 3% -- which it cannot be if the
+     probe arm is right, and the probe arm is the one checked against
+     the tool's scorer. **Two arms added to settle it**, both cheap:
+     `lane packed regs` (the group template at K = 1: today's
+     decomposition with the board and histogram in registers, no
+     shuffles, no reductions -- whether thread memory matters at all
+     once the scan is gone) and `climb pass (scan)` (16 passes of the
+     real scan loop, `mc_pass()`, split out of `mc_hillclimb()` for the
+     purpose and verified byte-identical -- the scan machinery priced in
+     the same harness as the scorer; its probes/s should reproduce the
+     ablation table's 22.3M, a check on both instruments). **Run 3
+     pending.**
      (iii) **No kill number -- the owner's call, and consistent with
      decision 6.** A pre-registered bar (under 4x per probe stops the
      redesign) was proposed and declined: the number from (ii) is judged
