@@ -179,11 +179,46 @@ Run 4 -- one mc_key per toggle
   group K=8 packed        164392     62260653     0.94x   832  ok
 
 THE PASS ARM WENT 17.7M -> 33.0M, 1.87x, from the branch-free toggle
-alone, and every other row is where it was.  The double scoring was
-real and a little larger than the ~1.6x the pairing arithmetic
-predicted.  mc_pass() is the climb's own loop, so the climb kernel now
-carries it; the settings echo and verify_identity.py are unchanged,
-and the unit's checksum is the same integer as before.
+alone, and every other row is where it was.  The unit's checksum is
+the same integer as before and verify_identity.py is unchanged.
+
+THE CLIMB DID NOT MOVE, AND THAT CORRECTS THE READING ABOVE.  The real
+climb at this cell, -R 256 over 26 keys, 64 lanes, read 2 401 climbs/s
+before the fix, 2 402 after it, and 2 432 after a clean rebuild from
+the merged tree -- the same fixture throughout.  Same code
+change, +87% in one kernel and +0% in the other: the double scoring
+was a property of how the probe's small pass kernel was COMPILED --
+mc_key inlined once into each branch and never merged -- and not of
+the scan loop.  In the climb kernel, large enough that mc_key was not
+inlined twice, the compiler had already merged the two identical calls
+into one.  So the 1.87x was the pass arm becoming honest, not the
+climb becoming faster; the claim that "the climb carries it" was true
+of the code and false of the speedup; and the 21% by which the old
+pass arm trailed the fixed-pass climb, explained above as the stage
+mix, was mostly this.  The branch-free form stays -- it is what makes
+the pass arm a fair instrument, it is byte-identical, and it cannot
+hurt -- but it is not a lever.
+
+The corrected ledger, in probes per second at this cell:
+
+  scorer alone, board in registers (lane packed regs)   101.5M   cap 896
+  scorer alone, board in thread memory (lane)            66.5M   cap 512
+  the scan loop around it (climb pass, honest)           33.0M   cap 384
+  the climb at fixed passes, fused-equivalent            ~25M    cap 384
+  the climb as it runs, divergence and try_repair in     12.2M
+
+The scan loop costs 2.0x over the scorer it wraps; the climb's stage
+loop, try_repair scans and cap-check divergence a further ~1.3x; and a
+natural climb's own divergence (1.46x) and try_repair (1.33x) the rest.
+Parity with the CPU (13.1k climbs/s, ~67M probes/s natural-equivalent)
+would need the natural climb to run at the scorer-alone-in-registers
+rate with every layer above it free, which is not on offer.  The one
+layer still unmeasured is the scan loop on the packed board: run 5.
+If it reaches the scorer's ~60M, a climb rebuilt on it projects to
+roughly 60M x 0.76 / 1.46 / 1.33 = ~23M natural, ~4 500 climbs/s --
+1.9x today's, a third of the CPU's.  That projection uses measured
+factors for every layer and it is the honest ceiling of the current
+design on this chip.
 
 What is left between the scan and the scorer alone is 2.0x: the cap,
 384 against 512, for 1.33x, and ~1.5x for the eight mutate-and-restore
