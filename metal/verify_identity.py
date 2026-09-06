@@ -17,6 +17,16 @@ check (8.1) is read back from its stderr.
 host's key enumeration (the collapses, the two-notch wheels, M4) has to
 agree with search_worker(): 17 576 starts on a single-notch order, the
 same on a two-notch right wheel, and an M4 order.
+
+The M4 case pins start1 (`-g .AA.`), which costs no coverage and 26x the
+time. Its properties are the Greek wheel's offset collapse and the
+two-notch right wheel -- both live with start1 pinned, and the count says
+so, 8 788 being exactly half of 26 x 26 x 26. The middle-wheel collapse
+is NOT among them and cannot be: it is gated on ring1 and start1 both
+being wildcarded, and every case here pins ring1 (`-r AA.` / `-r AAA.`),
+so wildcarding start1 only multiplies the same properties by 26. It used
+to run 228 488 keys, which at -R 1 is one thread per threadgroup and the
+longest dispatch the kernel produces -- see MC_ITEMS_PER_DISPATCH.
 """
 
 import argparse
@@ -154,8 +164,8 @@ def main():
                   ["-u", "B", "-w", "123", "-r", "AA.", "-g", "A.."], False),
                  ("-w 126 -r AA. -g A.. (two-notch right wheel)",
                   ["-u", "B", "-w", "126", "-r", "AA.", "-g", "A.."], False),
-                 ("-4 -u b -w B317 -r AAA. -g .A.. (M4, Greek wildcarded)",
-                  ["-4", "-u", "b", "-w", "B317", "-r", "AAA.", "-g", ".A.."],
+                 ("-4 -u b -w B317 -r AAA. -g .AA. (M4, Greek wildcarded)",
+                  ["-4", "-u", "b", "-w", "B317", "-r", "AAA.", "-g", ".AA."],
                   True)]
         for L in args.lengths:
             for name, sweep, m4 in cases:

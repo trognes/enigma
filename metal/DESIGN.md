@@ -394,6 +394,23 @@ Steps 2 onward alternate: written here, built and measured on the Mac.
   is still set off (`-fno-fast-math`), because the cost is nothing and the
   failure it guards against is the arm64 FMA contraction that hung the CPU
   climb before `-ffp-contract=off`.
+- **The GPU watchdog, and it is no longer hypothetical.** macOS resets the
+  GPU when one command buffer runs too long, and the reset takes the
+  desktop with it: on an M1 mini the first `--sweeps` run froze the
+  machine, and the second appeared to hang at the same case. A batch was
+  bounded only by BYTES (~64 MB of rows), which does not bound duration --
+  and the case that broke it, 228 488 keys at `-R 1`, is the kernel's
+  worst shape, since `lanes_per_tg = restarts` puts ONE thread in each
+  threadgroup. `MC_ITEMS_PER_DISPATCH` (4 096, `$ENIGMA_GPU_BATCH_ITEMS`)
+  now caps the climbs in a dispatch; the two sweeps that survived that
+  machine dispatched 8 788 and 17 576, so the default sits below the
+  smaller rather than beside the larger. Splitting is result-neutral by
+  construction and measured so -- 8 788 keys at 1, 138, 1 256 and 8 788
+  dispatches give byte-identical `--dump-all` rows. **Treat raising it as
+  a change whose failure mode is the user's desktop, not an error line**,
+  and note the milestone-3 lever underneath it: at `-R 1` the kernel wastes
+  31 of 32 SIMD lanes, so a key-per-lane mapping would be both faster and
+  shorter-running.
 - **Divergence at convergence tails**: lanes idle while the slowest in the
   simdgroup finishes. Measure it (9); if it is large, sort restarts by the
   previous stage's plug count before the next stage, nothing more exotic.
