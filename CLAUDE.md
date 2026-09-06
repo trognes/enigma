@@ -133,6 +133,25 @@ make crackquality         # build, then run tests/crack_quality.py (cracking qua
 ./enigma -h               # help / usage
 ```
 
+**It cross-compiles for Windows from Linux with MinGW-w64**, as a native
+64-bit executable with no emulation layer:
+
+```sh
+make clean && make CXX=x86_64-w64-mingw32-g++-posix   # -> enigma (a PE)
+```
+
+(`apt install g++-mingw-w64-x86-64` provides the toolchain; the `-posix`
+variant is the one whose winpthreads give `std::thread` and `-pthread` as
+on Linux.) The whole POSIX surface the tool uses is `getopt_long`, `isatty`
+and one `getrusage` for the peak-memory figure; MinGW-w64 has the first
+two, and the third is guarded in `main.cc` so Windows reports 0 there. Four
+modules carried a dead `<sys/resource.h>` include from the split, which was
+the only other thing that failed. Verified to compile warning-free under the
+full flag set and to link statically; **not verified to run** — Wine is not
+in the container and no Windows machine has run the suite. `make clean`
+first, because the top-level Makefile writes its objects into `src/` and a
+cross build would otherwise link Linux objects.
+
 `make bench` (`tests/bench.sh`) benchmarks the hot paths **separately** —
 `search` (brute-force scan, no plugboard), **`icscan`** (the same scan under
 `-i`, the default model), `hillclimb` (the `-c` plugboard loop

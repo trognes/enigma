@@ -9,7 +9,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+/* getrusage() is the one POSIX call the tool makes that MinGW-w64 does not
+   provide; it only feeds the peak-memory figure on the last line, which a
+   Windows build reports as 0. Everything else the program uses --
+   getopt_long, isatty, std::thread over winpthreads -- the cross toolchain
+   has, so this guard is what makes `make CXX=x86_64-w64-mingw32-g++-posix`
+   a native Windows build (see "Build & run" in CLAUDE.md). */
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 
 #include <stdint.h>
 
@@ -142,8 +150,9 @@ int main(int argc, char * * argv)
   /* final diagnostic: wall-clock time and memory use */
   double secs = std::chrono::duration<double>
     (std::chrono::steady_clock::now() - t_start).count();
-  struct rusage ru;
   double peak_mb = 0.0;
+#ifndef _WIN32
+  struct rusage ru;
   if (getrusage(RUSAGE_SELF, & ru) == 0)
     {
       /* ru_maxrss is kilobytes on Linux but bytes on macOS/BSD */
@@ -153,6 +162,7 @@ int main(int argc, char * * argv)
       peak_mb = ru.ru_maxrss / 1024.0;
 #endif
     }
+#endif
   fprintf(stderr,
           "Analysed %zu rotor combination%s, scored %llu plugboard%s\n",
           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",

@@ -29,7 +29,6 @@
 #include <utility>
 #include <vector>
 #include <unistd.h>
-#include <sys/resource.h>
 
 /* Number of distinct sets of `pairs` disjoint plug pairs drawable from `free` letters:
    free! / (2^p p! (free-2p)!). Returned as a double (the count explodes fast). Used for the

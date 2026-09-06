@@ -8,6 +8,15 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The tool cross-compiles for Windows** (`make clean && make
+  CXX=x86_64-w64-mingw32-g++-posix`). The only POSIX call MinGW-w64 lacks
+  is `getrusage`, used once for the peak-memory figure on the last line;
+  it is now guarded by `_WIN32` and Windows reports 0 there. Four modules
+  carried a dead `<sys/resource.h>` include from the module split, which
+  was the only other thing that failed. Compiles warning-free under the
+  full flag set and links statically into a native 64-bit executable;
+  not yet run on Windows or under Wine. Byte-identical on Linux.
+
 - **`ic_score_decode` is unrolled 4x with a private histogram per copy — on
   arm64 only.** The default model's scan loop, and the first change measured
   by the `icscan` bench tier. The split is measured, against `icscan`'s
