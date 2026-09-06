@@ -37,6 +37,15 @@ so the engine stays a 3-stepping-rotor machine (see "M4 mode" below).
   gaps. One branch per PR, cut fresh from `dev`; do not reuse a branch whose PR
   has merged. If the harness assigns a different branch name, this convention
   wins.
+- **ONE OPEN PULL REQUEST AT A TIME.** Do not open a second while one is still
+  open — wait for it to merge, or put the further work on the open PR's own
+  branch, which is a normal push to a PR under review. The exception is the
+  owner asking for another explicitly. Review is a queue with one person in
+  it, and a stack of open PRs makes that person hold several diffs in their
+  head at once and decide the merge order; it also invites the race that
+  actually happened here, where a PR was merged while a second commit was
+  being pushed to it and the commit silently missed the merge (PR #271, fixed
+  by #272). Finish one, then start the next.
 - **Remote branches are deleted by the repository owner, manually.** There is no
   auto-delete on merge, so a merged branch lingering on the remote means nothing
   and must not be pruned or reused on that basis. `git fetch --prune` is fine
