@@ -37,7 +37,10 @@ construction. B is the measurement; A says how far the confound reached.
 
 Table C is occupancy: lanes per threadgroup on the shipping kernel,
 answer-preserving and needing no kernel change. 64 is the peak, at
-1.27x. (It briefly carried a second arm pairing each lane count with the
+1.27x, and is now the host's default (MC_LANES_DEFAULT) -- so tables A
+and B, which do not set a width, run at 64 from here on, where every
+table recorded in eval/results-gpu-ablation-m1.txt ran at 256. Table C
+sets the width per row and is unaffected. (It briefly carried a second arm pairing each lane count with the
 32-bit accumulators; see lane_sweep() for why that arm answered "no" and
 was removed.)
 

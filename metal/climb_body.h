@@ -46,6 +46,15 @@ typedef int64_t mc_i64;
    its pipeline allows. */
 #define MC_LANES 256
 #define MC_LANES_STR "256"    /* for a message that must name the bound */
+/* The threadgroup width the host uses unless $ENIGMA_GPU_LANES says
+   otherwise.  MEASURED, not chosen (DESIGN.md 17.6, table C): 64 is the
+   peak of the sweep on the M1 at 1.27x over 256, the register cap of 384
+   admitting six 64-lane groups per core against one of 256, while below
+   64 a key spans so many groups that each re-loading its own rows[]
+   costs more than the occupancy buys.  MC_LANES above stays the MAXIMUM
+   -- it sizes threadgroup memory and bounds the override -- and is
+   untouched by this. */
+#define MC_LANES_DEFAULT 64
 /* Climbs in one dispatch. A cap on DURATION, not on memory: macOS resets
    the GPU when a command buffer runs too long and takes the desktop with
    it, so this is what keeps a large sweep from freezing the machine.

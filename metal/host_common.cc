@@ -107,18 +107,18 @@ static void gpu_validate()
    tie-break are the CPU's. */
 static best_result g_best;
 
-/* $ENIGMA_GPU_LANES: the threadgroup width. DESIGN.md 16 asks for this to
-   be measured rather than guessed, and 17.6 step 1 measures it: at 256
-   lanes ONE threadgroup fits a core, since two would need 512 threads
-   against the kernel's 384-thread register cap, while at 128 three fit --
-   +50% occupancy for a constant. Resolved once; the settings echo and the
+/* $ENIGMA_GPU_LANES: the threadgroup width. DESIGN.md 16 asked for this
+   to be measured rather than guessed, and 17.6 table C did: 64 is the peak
+   at 1.27x over 256 (one 256-lane group fits a core under the 384-thread
+   register cap; six 64-lane ones do), so MC_LANES_DEFAULT is 64 and the
+   override exists for the sweep. Resolved once; the settings echo and the
    dispatch must not disagree. */
 static int gpu_lanes_cap()
 {
   static int cached = -1;
   if (cached > 0)
     return cached;
-  cached = MC_LANES;
+  cached = MC_LANES_DEFAULT;
   const char * v = getenv("ENIGMA_GPU_LANES");
   if ((v != nullptr) && (*v != 0))
     {
@@ -134,7 +134,8 @@ static const char * gpu_lanes_echo()
 {
   static char buf[32];
   const int n = gpu_lanes_cap();
-  snprintf(buf, sizeof buf, (n == MC_LANES) ? "%d" : "%d (overridden)", n);
+  snprintf(buf, sizeof buf,
+           (n == MC_LANES_DEFAULT) ? "%d" : "%d (overridden)", n);
   return buf;
 }
 
@@ -170,7 +171,7 @@ int main(int argc, char * * argv)
             "the component check is off.\n");
   fprintf(stderr, "GPU: %s\n", backend_name());
   fprintf(stderr, "     steepest-ascent climb per lane, %s lanes per "
-          "threadgroup at most\n", gpu_lanes_echo());
+          "threadgroup\n", gpu_lanes_echo());
 
   if (textlength < 1)
     fatal("Ciphertext is empty (no A-Z letters on standard input)");
