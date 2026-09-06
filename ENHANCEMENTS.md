@@ -2712,17 +2712,40 @@ take the close-but-wrong boards and measure what fraction a finishing pass
 converts. `tests/crack_quality.py` and
 `eval/tune_phase_vs_restarts_report.py` are the two places to add it.
 
-**19. `try_repair` at short lengths — its cost has been measured once, and it
-is not zero.** `CLAUDE.md` calls the 2-plug re-pair "~zero cost" because it
-fires only at convergence, and notes its value at short lengths is unmeasured.
-The GPU probes put `try_repair` plus the outer loop at **16.9% of a natural
-climb** at L≈105 (`eval/results-gpu-ablation-m1.txt`, run 2). A GPU lane and a
-CPU core do not price a convergence scan alike, so the CPU share may be
-smaller — but it is a measured reason to run the A/B the `--no-repair` flag
-was built for: `break50` at matched wall time, L = 40…100, with and without.
-If the re-pair's lift at short lengths is under its cost in restarts, it is a
-length-gated default, not an always-on one. → `CLAUDE.md` `--no-repair`,
-`metal/DESIGN.md` §17.8.
+**19. `try_repair` at short lengths — MEASURED; it stays always-on, and the
+GPU's 16.9% does not transfer.** The GPU probes put `try_repair` plus the
+outer loop at 16.9% of a natural climb at L≈105
+(`eval/results-gpu-ablation-m1.txt` run 2), against the "~zero cost" reasoning
+in `CLAUDE.md`'s `--no-repair` entry, which was the reason to run the A/B the
+flag exists for. Run: 2000 paired trials per length at L = 40/60/80/100,
+rotor key given, ten plugs hidden, the recommended recipe, judged on
+`break50` (`eval/repair_ab.py`, `eval/results-repair-ab.txt`):
+
+| L | on | off | matched-R | matched-wall |
+|---:|---:|---:|---:|---:|
+| 40 | 26/2000 | 22/2000 | p = 0.424 | p = 0.424 |
+| 60 | 154/2000 | 150/2000 | p = 0.627 | p = 0.053 *(artefact)* |
+| 80 | 423/2000 | 381/2000 | **p = 0.000** | **p = 0.000** |
+| 100 | 738/2000 | 684/2000 | **p = 0.000** | p = 0.135 |
+
+**No change**: the re-pair earns its keep decisively from L=80 up (62 on-only
+discordants against 20, then 87 against 33) and loses at no length, so it is
+not length-gated. At L=40 nothing resolves — 1.3% of trials break at all,
+the documented floor effect rather than evidence of absence. **On the CPU it
+costs 3.3 / 4.6 / 7.2% of a climb** at L = 40/80/100, so a lane and a core
+price a convergence scan about 3× apart, exactly the cross-hardware caveat.
+
+**Two things the run also settled about itself.** The one significant
+matched-time cell was called as contaminated *before* the recovery table was
+read — L=60's cost ratio of 1.337 sat between neighbours at 1.033 and 1.046
+with an `on` cost exceeding L=80's and L=100's, backwards for a climb linear
+in `L`, while the `off` column was cleanly monotone; re-timing the identical
+fixtures gives 1.069 and 1.099. And **the value half is only half-tested,
+because restarts are integers**: at `-R 8` a 3–7% saving cannot buy one, so
+at L=40 and L=80 the matched-time arm ran the same command as the
+matched-restart arm. Testing it properly needs `-R 64`, where the measured
+ratios give R' = 66, 69, 67 — **the one piece of item 19 still open.**
+→ `CLAUDE.md` `--no-repair`, `metal/DESIGN.md` §17.8.
 
 **20. The GPU port on Apple silicon — MEASURED and CLOSED; the open question
 is CUDA.** Every layer of the lane-per-climb kernel is measured on a kernel

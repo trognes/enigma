@@ -1254,13 +1254,28 @@ are read from a **data directory** (filenames built as
   this turns it off so its value can be A/B'd (e.g. at short lengths where its
   convergence scan is a larger fraction of a fast climb). Default off keeps the
   climb byte-identical; the flag only skips the `try_repair` call at each
-  convergence. **Its cost has now been measured once, on the GPU, and it is
-  not zero there**: `try_repair` plus the outer loop was **16.9%** of a
-  natural climb at L≈105 (`eval/results-gpu-ablation-m1.txt`, run 2), against
-  the "~zero cost" reasoning above. A GPU lane and a CPU core do not price a
-  convergence scan alike, so the CPU share is still unmeasured — but it is a
-  measured reason to run the short-length A/B the flag was built for
-  (`ENHANCEMENTS.md`, Measurement gaps).
+  convergence. **The short-length A/B this flag exists for has now been run,
+  and the re-pair keeps its always-on default.** 2000 paired trials per
+  length at L = 40/60/80/100, rotor key given, ten plugs hidden, the
+  recommended recipe, judged on `break50` (`eval/repair_ab.py`,
+  `eval/results-repair-ab.txt`): at matched restarts it wins **423/2000
+  against 381 at L=80** (62 on-only discordants against 20, p = 0.000) and
+  **738 against 684 at L=100** (87 against 33, p = 0.000), and it loses at no
+  length. L=40 resolves nothing (26 against 22, p = 0.424) because 1.3% of
+  trials break at all there — the floor effect, not evidence of absence.
+  - **"~zero cost" overstates it, and the GPU overstates it the other way.**
+    The CPU pays **3.3 / 4.6 / 7.2%** of a climb at L = 40/80/100, where the
+    GPU probes measured `try_repair` plus the outer loop at **16.9%** at
+    L≈105 (`eval/results-gpu-ablation-m1.txt` run 2). A lane and a core price
+    a convergence scan about **3× apart**, which is why a GPU share cannot be
+    read across.
+  - **The VALUE half is still half-tested, because restarts are integers.**
+    At `-R 8` a 3–7% saving cannot buy one — `round(8 × 1.033)` is 8 — so at
+    L=40 and L=80 the matched-*time* arm ran the identical command to the
+    matched-*restart* arm and its column is a copy. Only L=100 got a real
+    bonus, where the default still leads 738 to 719 at p = 0.135. A proper
+    matched-time test wants `-R 64`, where the measured ratios give R' = 66,
+    69, 67 (`ENHANCEMENTS.md` item 19).
 - `--int` **compare the climb's scores as exact 64-bit integers** (needs `-c`;
   off by default). The reference arithmetic the GPU targets reproduce
   exactly — `metal/DESIGN.md` §3a — and, on the CPU, a flag that changes
