@@ -146,14 +146,14 @@ on Linux.) The whole POSIX surface the tool uses is `getopt_long`, `isatty`
 and one `getrusage` for the peak-memory figure; MinGW-w64 has the first
 two, and for the third `main.cc` reads `GetProcessMemoryInfo()`'s peak
 working set on Windows (bound to kernel32 via `PSAPI_VERSION 2`, so no
-extra library). Four
-modules carried a dead `<sys/resource.h>` include from the split, which was
-the only other thing that failed. Verified to compile warning-free under the
-full flag set and to link statically; **not verified to run** — Wine is not
-in the container and no Windows machine has run the suite. `make clean`
-first, because the top-level Makefile writes its objects into `src/` and a
-cross build would otherwise link Linux objects. CI now also builds and runs
-the suite **natively on a Windows runner** (the `windows` job in `ci.yml`:
+extra library). Four modules carried a dead `<sys/resource.h>` include from
+the split, which was the only other thing that failed. The cross build
+compiles warning-free under the full flag set and links statically; the
+suite **passes natively on Windows, 648 of 648**, on the CI runner below.
+`make clean` first, because the top-level Makefile writes its objects into
+`src/` and a cross build would otherwise link Linux objects. CI builds and
+runs the suite **natively on a Windows runner** (the `windows` job in
+`ci.yml`:
 MSYS2's MinGW-w64 g++, the same `make test`), advisory (`continue-on-error`)
 until it has been green for a while. Two things that job must keep:
 `core.autocrlf=false` set *before* the checkout, or the n-gram tables and
