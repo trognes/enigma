@@ -90,6 +90,114 @@ any of this: it could only ever report the baseline's trajectory, never
 the trajectory of the variant whose number needed normalising.
 
 
+Run 2 -- the corrected instrument
+--------------------------------
+
+4 fixtures x 3 reps, same cell.
+
+B. FIXED passes -- every variant does the same work; the measurement
+  # variant                    climbs/s  passes/s  vs base   cap  passes  div
+  0 baseline                       4301     68818    1.00x   384   16.00  1.00
+  1 no histogram (freq[26])        4687     74997    1.09x   384   16.00  1.00
+  2 no board lookups               6339    101425    1.47x   384   16.00  1.00
+  3 32-bit accumulators            4490     71835    1.04x   448   16.00  1.00
+  4 no all8 gather                 5570     89118    1.29x   384   16.00  1.00
+
+A. NATURAL climb -- pass count moves with the variant, hence passes/s
+  # variant                    climbs/s  passes/s  vs base   cap  passes  div
+  0 baseline                       2222     34673    1.00x   384   15.60  1.46
+  1 no histogram (freq[26])        2484     39968    1.15x   384   16.09  1.46
+  2 no board lookups              44373     88747    2.56x   384    2.00  1.00
+  3 32-bit accumulators            2266     35352    1.02x   384   15.60  1.46
+  4 no all8 gather                 1969     35834    1.03x   384   18.20  1.45
+
+C. Lanes per threadgroup (base kernel)
+    32  2113 | 64  2835 | 96  2800 | 128  2782 | 192  2075 | 256  2234
+
+THE CONFOUND'S REACH, MEASURED THREE WAYS. Variant 2 reads 20.36x as raw
+climbs/s (run 1), 2.56x as passes/s, and 1.47x at fixed work. So even
+passes/s over-credits it by 1.7x: per-climb fixed costs and try_repair
+are not proportional to the pass count, which is why table B and not
+table A is the measurement.
+
+
+The decomposition
+-----------------
+
+Table B in time shares of the scan loop (1 - base/variant):
+
+  board lookups (steck x2)   32.2%
+  all8 gather                22.8%
+  histogram (freq[26])        8.2%
+  accumulator width           4.2%
+  everything else            32.6%
+
+NOTHING DOMINATES. The largest item is a third, and removing all four
+entirely is 3x.
+
+The A-vs-B gap gives the rest. The baseline runs 4301 climbs/s fixed
+against 2222 natural at 16.00 passes against 15.60 -- the fixed build
+does MORE passes and is 1.94x faster. Divergence accounts for 1.46x of
+that; the residual 1.33x is try_repair and the outer loop, which the
+fixed build skips. Folding both in gives the real kernel:
+
+  divergence (masked-off lanes)   31.5%
+  try_repair + outer loop         16.9%
+  board lookups                   16.6%
+  all8 gather                     11.8%
+  other scan work                 16.8%
+  histogram                        4.2%
+  accumulator width                2.2%
+
+The two biggest items are divergence and try_repair, and placement
+touches neither. try_repair at ~17% is itself a surprise: the CPU notes
+call it "~zero cost" because it fires only at convergence, and on a lane
+it is not.
+
+
+WHAT THIS SETTLES: STEP 2 IS DEAD AS SPECIFIED
+----------------------------------------------
+
+17.6 step 2 expected the placement fix to be worth 5-10x. It addresses
+the board lookups and the histogram -- 20.8% of the run -- so its
+ceiling is 1.26x. MEASURED, not estimated. The gather cannot join it:
+457 KB does not fit in 32 KB of threadgroup memory. Against the 4-6x
+needed merely to reach CPU parity that is not a route, so the fork is
+17.4 or stop.
+
+And 17.4 addresses the largest item STRUCTURALLY rather than
+incrementally: with all 32 lanes on one climb they take the same
+branches, so the 31.5% divergence goes to zero by construction.
+
+
+The two free things, and the cell run 2 did not cover
+-----------------------------------------------------
+
+VARIANT 3 IS THE ONLY PROBE THAT MOVED THE REGISTER CAP, 384 -> 448, and
+it is answer-preserving. It measured just 1.04x at 256 lanes, which is
+what the mechanism predicts: at 256 lanes one threadgroup is resident
+under either cap, so there is nothing for the extra headroom to buy.
+
+64 LANES IS THE PEAK OF THE SWEEP at 1.27x, not the 128 run 1 suggested
+from a single point. The curve has a mechanism: a threadgroup is one
+rotor key, so once lanes fall below the 256 restarts a key spans several
+groups and each re-loads its own copy of rows[] -- which is why 32 falls
+back to 2113. 192 reading below 256 is the ragged case, 256 restarts not
+dividing by it.
+
+So the untested cell is the PAIRING, and floor(cap/lanes) predicts
+exactly where it can pay:
+
+  lanes    32   64   96  128  192  256
+  cap 384  12    6    4    3    2    1
+  cap 448  14    7    4    3    2    1
+
+A gain confined to 32 and 64 lanes confirms the occupancy reading; a gain
+spread evenly refutes it and means something else. Table C now runs both
+arms and prints both grp columns so the prediction is checkable rather
+than asserted.
+
+
 A note on the cost of running it
 --------------------------------
 

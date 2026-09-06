@@ -904,10 +904,47 @@ paid for.
    because it shaped the design: the instrument was kept small to fit an
    hour that was never at risk, and the fixed-pass family that would have
    prevented the confound was dropped from this step for that reason.
-2. **The placement fix** (17.3). 5-10x says placement was the wall and
-   17.4 is the ceiling above it; little says the chain itself is the
-   problem and 17.4 is the only route.
-3. **Prototype 17.4**, its payoff bounded by the two steps above.
+   **RUN 2, THE CORRECTED INSTRUMENT, ANSWERS STEP 2 WITHOUT RUNNING
+   IT.** Fixed work, so the shares are the measurement:
+   board lookups **32.2%** of the scan loop, `all8` gather **22.8%**,
+   histogram **8.2%**, accumulator width **4.2%**, everything else
+   **32.6%** -- *nothing dominates*, the largest item is a third, and
+   deleting all four entirely is 3x. The A-vs-B gap supplies the rest:
+   the fixed build does *more* passes (16.00 against 15.60) and is
+   **1.94x faster**, of which 1.46x is divergence and 1.33x is
+   `try_repair` and the outer loop. In shares of the real kernel that is
+   divergence **31.5%**, `try_repair` **16.9%**, board lookups **16.6%**,
+   gather **11.8%**, other scan work **16.8%**, histogram **4.2%**,
+   accumulator **2.2%**. The two largest items are the two placement
+   cannot touch, and `try_repair` at ~17% is its own surprise -- the CPU
+   notes call it "~zero cost" because it fires only at convergence, and
+   on a lane it is not.
+2. **The placement fix (17.3) IS DEAD AS SPECIFIED -- SKIP IT.** This
+   step expected 5-10x. It addresses the board lookups and the histogram,
+   20.8% of the run, so its **ceiling is 1.26x, measured rather than
+   estimated**, and the gather cannot join it: 457 KB does not fit in
+   32 KB of threadgroup memory. Against the 4-6x needed merely to reach
+   CPU parity that is not a route. The fork is **17.4 or stop**.
+3. **Prototype 17.4**, now the only route rather than the ambitious one.
+   What run 2 adds to its case is that it attacks the largest item
+   **structurally**: with all 32 lanes on one climb they take the same
+   branches, so the 31.5% divergence goes to zero by construction, not by
+   tuning. Its payoff is still bounded by nothing measured, so 17.7's
+   warning against trusting its estimate stands.
+   - **Two free things first, neither needing a kernel change and both
+     answer-preserving.** `lanes_per_tg = 64` is the peak of the sweep at
+     **1.27x** -- not the 128 run 1 suggested from a single point -- and
+     the curve has a mechanism: a threadgroup is one rotor key, so once
+     lanes fall below the 256 restarts a key spans several groups and
+     each re-loads its own `rows[]`, which is why 32 falls back. And the
+     **32-bit accumulators are the only probe that moved the register cap
+     (384 -> 448)** while measuring 1.04x at 256 lanes, exactly as the
+     mechanism predicts: at 256 lanes one threadgroup is resident under
+     either cap. `floor(cap/lanes)` says the pairing can only pay at 32
+     and 64 lanes (12->14 and 6->7; 4, 3, 2, 1 unchanged above), so
+     table C runs both arms and prints both `grp` columns -- a gain
+     confined to those two confirms the occupancy reading and a gain
+     spread evenly refutes it.
 4. Only then `--sustained`, and the `k` stage's co-occurrence table on
    chip (`uint8`, 17.6 KB, fits; section 5).
 
