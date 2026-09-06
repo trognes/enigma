@@ -457,32 +457,37 @@ inline int mc_pass(MC_THR unsigned char * steck,
             }
 
           const int new_kind = paired ? 1 : 0;
-          mc_i64 score;
 
-          if (paired)
-            {
-              steck[a] = (unsigned char) a;   /* REMOVE a-b */
-              steck[b] = (unsigned char) b;
-              score = mc_key(steck, rows, ct, L, model, tbl, A, B);
-              steck[a] = (unsigned char) b;   /* restore */
-              steck[b] = (unsigned char) a;
-            }
-          else
-            {
-              const int x = sa;
-              const int y = sb;
-              const int xx = steck[x];
-              const int yy = steck[y];
-              steck[x] = (unsigned char) x;   /* force a-b */
-              steck[y] = (unsigned char) y;
-              steck[a] = (unsigned char) b;
-              steck[b] = (unsigned char) a;
-              score = mc_key(steck, rows, ct, L, model, tbl, A, B);
-              steck[a] = (unsigned char) sa;  /* restore */
-              steck[b] = (unsigned char) sb;
-              steck[x] = (unsigned char) xx;
-              steck[y] = (unsigned char) yy;
-            }
+          /* ONE code path for all four kinds of toggle, so mc_key() is
+             called ONCE per toggle per simdgroup.  This used to be
+             `if (paired) { remove; score; restore } else { force a-b;
+             score; restore }` -- correct, and the CPU's own shape -- but
+             on a GPU the two branches are executed one after the other
+             with lanes masked whenever any lane of the simdgroup is in
+             each, and with 32 boards per simdgroup at ~10 pairs each
+             that is most toggles: the probe microkernel measured the
+             scan loop at 0.26x the rate of the scorer it wraps (probe
+             run 3), and the scorer run twice was the first suspect.
+             With x = steck[a], y = steck[b]: for a REMOVE (x == b,
+             y == a) the four writes below free a and b and then leave
+             them free; for the other three kinds they free x and y and
+             pair a-b.  The restore is the same four writes reversed in
+             every case.  Same scores, same order, same tie rule. */
+          const int x = sa;
+          const int y = sb;
+          const int xx = steck[x];
+          const int yy = steck[y];
+          const int na = paired ? a : b;
+          const int nb = paired ? b : a;
+          steck[x] = (unsigned char) x;
+          steck[y] = (unsigned char) y;
+          steck[a] = (unsigned char) na;
+          steck[b] = (unsigned char) nb;
+          const mc_i64 score = mc_key(steck, rows, ct, L, model, tbl, A, B);
+          steck[a] = (unsigned char) sa;  /* restore */
+          steck[b] = (unsigned char) sb;
+          steck[x] = (unsigned char) xx;
+          steck[y] = (unsigned char) yy;
 
           if ((score > move_score) ||
               ((score == move_score) && (score > best_score) &&
