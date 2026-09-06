@@ -30,7 +30,6 @@
 #include <utility>
 #include <vector>
 #include <unistd.h>
-#include <sys/resource.h>
 
 
 /* --- --confidence N: is the winner better than chance? ------------------------
