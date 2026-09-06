@@ -1080,7 +1080,18 @@ paid for.
      fit cannot see. **Fixed in `mc_pass()`**: one branch-free
      mutate/score/restore for all four kinds, same writes, same scores,
      same tie rule, `verify_identity.py` byte-identical, one `mc_key`
-     per toggle. The pass arm measures it: **run 4 pending.**
+     per toggle. **Run 4: the pass arm went 17.7M -> 33.0M probes/s,
+     1.87x**, every other row unchanged -- the double scoring was real
+     and a little larger than the pairing arithmetic predicted, and
+     since `mc_pass()` is the climb's own loop the climb carries it.
+     What remains between the scan and the scorer alone is 2.0x: the
+     cap (384 against 512) for 1.33x and ~1.5x for the eight
+     mutate-and-restore writes per toggle to a thread-memory board.
+     **Measured next as `climb pass packed`**: `mc_pass()` transcribed
+     onto the five-word board line for line (`mc_pass_pk`, with the K = 1
+     decode as its scorer), checked against the *array* pass's oracle so
+     the two representations are proven to agree before it becomes the
+     climb's body. **Run 5 pending.**
      **And `lane packed regs` reads 1.52x** (101.2M probes/s, cap 896):
      today's decomposition with the board and histogram in registers,
      no thread memory at all. 896/512 = 1.75x more lanes resident for

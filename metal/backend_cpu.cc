@@ -126,7 +126,8 @@ void backend_run(const mc_batch & b)
    arms need a simdgroup and are not here. */
 bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
 {
-  if ((b.arm != MC_PROBE_LANE) && (b.arm != MC_PROBE_PASS))
+  if ((b.arm != MC_PROBE_LANE) && (b.arm != MC_PROBE_PASS)
+      && (b.arm != MC_PROBE_PASSPK))
     return false;
   const mc_probe_params & p = *b.params;
   const int L = static_cast<int>(p.L);
@@ -144,9 +145,12 @@ bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
       if (b.arm == MC_PROBE_LANE)
         mc_probe_lane(steck, b.rows, b.ct, L, model, b.tbl, nprobes,
                       & cs, & cc);
-      else
+      else if (b.arm == MC_PROBE_PASS)
         mc_probe_pass(steck, b.rows, b.ct, L, model, b.tbl, p.A, p.B,
                       MC_PROBE_PASSES(nprobes), & cs, & cc);
+      else
+        mc_probe_pass_pk(steck, b.rows, b.ct, L, model, b.tbl, p.A, p.B,
+                         MC_PROBE_PASSES(nprobes), & cs, & cc);
       b.out[u * 2] = cs;
       b.out[u * 2 + 1] = cc;
     }
