@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <chrono>
 #include <string>
 
 static id<MTLDevice> g_dev = nil;
@@ -26,6 +27,7 @@ static id<MTLCommandQueue> g_queue = nil;
 static id<MTLComputePipelineState> g_pso = nil;
 static id<MTLBuffer> g_tables[5] = { nil, nil, nil, nil, nil };
 static std::string g_name;
+static std::string g_libdir;   /* where the metallibs sit, for the probe */
 
 const char * backend_name()
 {
@@ -51,6 +53,7 @@ void backend_init(const char * argv0)
           if ([dir length] == 0)
             dir = @".";
           path = [dir stringByAppendingPathComponent:@"climb.metallib"];
+          g_libdir = [dir UTF8String];
         }
 
       NSError * err = nil;
@@ -155,5 +158,129 @@ void backend_run(const mc_batch & b)
 
       memcpy(b.boards_out, [boards_out contents], b.nitems * MC_ASIZE);
       memcpy(b.comps, [comps contents], b.nitems * 2 * sizeof(int64_t));
+    }
+}
+
+/* --- the probe microkernel (probe.metal, DESIGN.md 17.6 (ii)) ---------- */
+
+static id<MTLComputePipelineState> g_probe_pso[MC_PROBE_ARMS];
+static const char * const g_probe_fn[MC_PROBE_ARMS] =
+  { "enigma_probe_lane", "enigma_probe_g32s", "enigma_probe_g32",
+    "enigma_probe_g16", "enigma_probe_g8" };
+static const int g_probe_k[MC_PROBE_ARMS] = { 1, 32, 32, 16, 8 };
+
+static void probe_init()
+{
+  if (g_probe_pso[0] != nil)
+    return;
+  NSString * path = nil;
+  const char * env = getenv("ENIGMA_PROBELIB");
+  if ((env != nullptr) && (*env != 0))
+    path = [NSString stringWithUTF8String:env];
+  else
+    {
+      NSString * dir = [NSString stringWithUTF8String:
+                          g_libdir.empty() ? "." : g_libdir.c_str()];
+      path = [dir stringByAppendingPathComponent:@"probe.metallib"];
+    }
+  NSError * err = nil;
+  id<MTLLibrary> lib =
+    [g_dev newLibraryWithURL:[NSURL fileURLWithPath:path] error:& err];
+  if (lib == nil)
+    {
+      fprintf(stderr, "cannot load %s: %s\n", [path UTF8String],
+              [[err localizedDescription] UTF8String]);
+      fatal("no probe library (build it with `make -C metal metal`, or "
+            "point $ENIGMA_PROBELIB at it)");
+    }
+  for (int a = 0; a < MC_PROBE_ARMS; a++)
+    {
+      id<MTLFunction> fn =
+        [lib newFunctionWithName:
+               [NSString stringWithUTF8String:g_probe_fn[a]]];
+      if (fn == nil)
+        {
+          fprintf(stderr, "%s is not in the probe library\n", g_probe_fn[a]);
+          fatal("probe library incomplete");
+        }
+      g_probe_pso[a] = [g_dev newComputePipelineStateWithFunction:fn
+                                                            error:& err];
+      if (g_probe_pso[a] == nil)
+        {
+          fprintf(stderr, "%s: %s\n", g_probe_fn[a],
+                  [[err localizedDescription] UTF8String]);
+          fatal("cannot build a probe pipeline");
+        }
+    }
+}
+
+bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
+{
+  @autoreleasepool
+    {
+      probe_init();
+      if ((b.arm < 0) || (b.arm >= MC_PROBE_ARMS))
+        return false;
+      id<MTLComputePipelineState> pso = g_probe_pso[b.arm];
+      const NSUInteger maxthreads = pso.maxTotalThreadsPerThreadgroup;
+      *cap = static_cast<int>(maxthreads);
+
+      mc_probe_params p = *b.params;
+      const int K = g_probe_k[b.arm];
+      size_t lanes = static_cast<size_t>(p.lanes_per_tg);
+      if (lanes > maxthreads)
+        lanes = maxthreads;
+      if (K > 1)
+        {
+          lanes -= lanes % 32;    /* whole simdgroups, for the shuffles */
+          if (lanes < 32)
+            lanes = 32;
+        }
+      p.lanes_per_tg = static_cast<int64_t>(lanes);
+      const size_t units = static_cast<size_t>(p.units);
+      const size_t per_tg = lanes / static_cast<size_t>(K);
+      const size_t tgs = (units + per_tg - 1) / per_tg;
+      const size_t L = static_cast<size_t>(p.L);
+
+      id<MTLBuffer> params = upload(& p, sizeof p);
+      id<MTLBuffer> rows = upload(b.rows, L * MC_ASIZE);
+      id<MTLBuffer> ct = upload(b.ct, L);
+      id<MTLBuffer> tbl = upload(b.tbl, MC_ASIZE * MC_ASIZE * MC_ASIZE
+                                        * MC_ASIZE);
+      id<MTLBuffer> board0 = upload(b.board0, MC_ASIZE);
+      id<MTLBuffer> out =
+        [g_dev newBufferWithLength:units * 2 * sizeof(int64_t)
+                           options:MTLResourceStorageModeShared];
+      if (out == nil)
+        fatal("Metal buffer allocation failed");
+
+      id<MTLCommandBuffer> cmd = [g_queue commandBuffer];
+      id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+      [enc setComputePipelineState:pso];
+      [enc setBuffer:params offset:0 atIndex:0];
+      [enc setBuffer:rows offset:0 atIndex:1];
+      [enc setBuffer:ct offset:0 atIndex:2];
+      [enc setBuffer:tbl offset:0 atIndex:3];
+      [enc setBuffer:board0 offset:0 atIndex:4];
+      [enc setBuffer:out offset:0 atIndex:5];
+      [enc dispatchThreadgroups:MTLSizeMake(tgs, 1, 1)
+          threadsPerThreadgroup:MTLSizeMake(lanes, 1, 1)];
+      [enc endEncoding];
+
+      /* Device time is commit to completion: the uploads above are a few
+         hundred KB and belong to neither arm. */
+      const auto t0 = std::chrono::steady_clock::now();
+      [cmd commit];
+      [cmd waitUntilCompleted];
+      *secs = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0).count();
+      if (cmd.error != nil)
+        {
+          fprintf(stderr, "%s\n",
+                  [[cmd.error localizedDescription] UTF8String]);
+          fatal("the probe dispatch failed");
+        }
+      memcpy(b.out, [out contents], units * 2 * sizeof(int64_t));
+      return true;
     }
 }

@@ -26,23 +26,38 @@ all : enigma-ref
 $(OBJS) :
 	$(MAKE) -C $(TOP)
 
-enigma-ref : host_common.o backend_cpu.o $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ host_common.o backend_cpu.o $(OBJS)
+HOST_HDRS := host_common.h climb_body.h probe_body.h
 
-metal : enigma-metal climb.metallib
+enigma-ref : host_common.o probe_host.o backend_cpu.o $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ host_common.o probe_host.o backend_cpu.o \
+	    $(OBJS)
 
-enigma-metal : host_common.o backend_metal.o $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ host_common.o backend_metal.o $(OBJS) \
-	    -framework Metal -framework Foundation
+metal : enigma-metal climb.metallib probe.metallib
 
-host_common.o : host_common.cc host_common.h climb_body.h
+enigma-metal : host_common.o probe_host.o backend_metal.o $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ host_common.o probe_host.o backend_metal.o \
+	    $(OBJS) -framework Metal -framework Foundation
+
+host_common.o : host_common.cc $(HOST_HDRS)
 	$(CXX) $(CXXFLAGS) -c -o $@ host_common.cc
 
-backend_cpu.o : backend_cpu.cc host_common.h climb_body.h
+# The probe microkernel's driver (DESIGN.md 17.6 (ii)); $ENIGMA_GPU_PROBE=1
+# on either binary runs it instead of the sweep.
+probe_host.o : probe_host.cc $(HOST_HDRS)
+	$(CXX) $(CXXFLAGS) -c -o $@ probe_host.cc
+
+backend_cpu.o : backend_cpu.cc $(HOST_HDRS)
 	$(CXX) $(CXXFLAGS) -c -o $@ backend_cpu.cc
 
-backend_metal.o : backend_metal.mm host_common.h climb_body.h
+backend_metal.o : backend_metal.mm $(HOST_HDRS)
 	$(CXX) $(CXXFLAGS) -ObjC++ -fobjc-arc -c -o $@ backend_metal.mm
+
+# The probe's five kernels are five pipelines in ONE library: the register
+# cap is per pipeline, so unlike the ablation variants they need no
+# separate metallibs.
+probe.metallib : probe.metal probe_body.h climb_body.h
+	xcrun -sdk macosx metal -fno-fast-math -c probe.metal -o probe.air
+	xcrun -sdk macosx metallib probe.air -o $@
 
 # -fno-fast-math: the body holds no floating point, so this is defence in
 # depth against any FP that reaches a wrapper later (DESIGN.md 11).

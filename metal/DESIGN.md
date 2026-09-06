@@ -973,15 +973,44 @@ paid for.
      latency did not fall it would be a ~2x *loss* at L=107. Also from
      the fit: at L=107 a lane holds 3.3 characters, so the ~10 cross-lane
      reductions per probe are amortised over very little -- the design
-     favours long messages and the operational cell is short. (ii) **The
-     probe microkernel**: one toggle probe in the 17.4 shape -- board one
-     entry per lane, `rows` in threadgroup memory, L/32 characters per
-     lane, `simd_sum` for `isum`, the packed-histogram reduction for
-     `coin` -- repeated thousands of times with a rotating toggle and
-     timed against the same repeated probe in today's shape, behind an
-     environment switch on the existing host so no new plumbing. It
-     measures the step ratio and the new shape's register cap directly,
-     and must match the CPU's `isum`/`coin` bit for bit. An afternoon.
+     favours long messages and the operational cell is short. (ii) **BUILT:
+     the probe microkernel** (`probe_body.h`, `probe.metal`,
+     `probe_host.cc`; `$ENIGMA_GPU_PROBE=1` on either host binary runs it
+     instead of the sweep). One toggle probe -- apply a toggle, score the
+     board -- repeated `$ENIGMA_GPU_PROBE_N` (default 64) times from the
+     same kicked board under the same deterministic toggle sequence, in
+     five arms that do identical work: **lane**, today's shape, which is
+     `mc_components()` verbatim; and **group**, the 17.4 shape, at K = 32
+     with the board spread one entry per lane and read by `simd_shuffle`,
+     and at K = 32, 16 and 8 with the board **replicated in every lane as
+     five packed words** (26 five-bit entries, six to a word, every access
+     a select chain -- pure ALU, K-independent, and the reason K can be a
+     knob at all). Each lane decodes L/K characters; `isum` and a
+     **nine-word packed histogram** (27 nine-bit fields, so a field holds
+     the 256 a bin can reach after the reduction) are reduced across the
+     K lanes by an xor butterfly; the three quads straddling a lane
+     boundary are scored from the previous lane's last three letters
+     fetched by `simd_shuffle_up`, which is why a lane must hold at least
+     three characters (L >= 3K; the host says n/a otherwise). **No per-lane
+     array anywhere**, so nothing a compiler could send to thread memory.
+     The three cross-lane operations are macros in the `climb_body.h`
+     style -- `MC_SHFL`, `MC_SHFL_UP`, `MC_SHFL_XOR` -- so the CUDA
+     target inherits the body behind `__shfl_sync`.
+     **Every unit's two int64 checksums are compared against the tool's
+     own `score_components()` replaying the same toggles**, on every run;
+     the lane arm is additionally run through `probe_body.h` on the CPU
+     before anything is dispatched, separating a body bug from a wrapper
+     bug. A shape that is fast and wrong prints FAIL, not a rate, and the
+     FAIL path was proven able to fire by linking a deliberately wrong
+     lane arm (`-DMC_ABLATE=4`): it reported the mismatch and exited 2.
+     The packed board, its toggle operator and the histogram were
+     unit-tested against the array forms on 3 000 random boards. Sizing
+     is by time (a pilot, then ~0.4 s per arm, min of three), rates are
+     in probes per second so K does not enter the comparison, and each
+     arm's own register cap is printed since the five kernels are five
+     pipelines in one library. **Not yet run on a GPU**: the CPU backend
+     carries the lane arm only, which verified the driver end to end
+     (checksum ok, sweep path unchanged).
      (iii) **No kill number -- the owner's call, and consistent with
      decision 6.** A pre-registered bar (under 4x per probe stops the
      redesign) was proposed and declined: the number from (ii) is judged
