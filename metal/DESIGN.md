@@ -838,12 +838,31 @@ paid for.
    threadgroups per core under both limits (384 lanes, 20.7 KB) against
    one today -- +50% occupancy for a constant; add it to step 1,
    expecting 20-40% and a confirmation rather than a fix.
-1. **Five variants at one cell** (L=107, `-R 256`, `--keys 26`,
-   3 fixtures): no histogram; arithmetic `steck`; 32-bit accumulators;
-   fixed pass count; `lanes_per_tg = 128`. Read the `GPU:` line for
-   each. That decomposes the ~900 cycles the way the CPU's
-   score loop was (48% / 14% / 6%) and settles whether 17.2(a) is the
-   majority. About an hour of Mac time.
+1. **BUILT: `metal/ablate.py`, seven rows at one cell** (L=107, `-R 256`,
+   `--keys 26`, 3 fixtures x 3 reps): baseline; no histogram (`freq[26]`,
+   17.2(a)/(b)); no board lookups in the decode (the two `steck[]`,
+   17.2(a)); 32-bit accumulators (17.2(b)); no `all8` gather (17.2(d));
+   pass counts rather than a time (17.2(c), the divergence factor); and
+   the baseline again at `lanes_per_tg = 128`. Each is its own metallib
+   (`make -C metal ablate`, one `-DMC_ABLATE=N` build apiece), because
+   the register cap is a property of the COMPILED pipeline and a runtime
+   branch would allocate for the union and report one number for all of
+   them. That decomposes the ~900 cycles the way the CPU's score loop was
+   (48% / 14% / 6%) and settles whether 17.2(a) is the majority. About an
+   hour of Mac time.
+
+   **Variants 1, 2 and 4 return a WRONG board** -- they delete work the
+   answer depends on, which is what a cost probe is -- so the host prints
+   a banner under `$ENIGMA_GPU_ABLATE`, skips the CPU/GPU component check
+   and exits 0 regardless. Nothing in that mode reports a usable
+   plaintext. **Variant 3 is the exception and is a candidate FIX rather
+   than a probe**: 32-bit accumulators were verified answer-preserving on
+   the CPU backend over 1 536 restarts at L=60/107/167 (`verify_identity
+   .py --host metal/enigma-ref`, 0 differing rows), so if it reads well
+   above 1.00x it can ship as it stands. `isum` and `coin` are bounded by
+   `L` times a byte and by `L(L-1)/2`; the 64 bits exist for the blended
+   `I = A*isum + B*coin`, which is formed once per climb, not per
+   character.
 2. **The placement fix** (17.3). 5-10x says placement was the wall and
    17.4 is the ceiling above it; little says the chain itself is the
    problem and 17.4 is the only route.

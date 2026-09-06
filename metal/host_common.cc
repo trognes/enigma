@@ -107,6 +107,37 @@ static void gpu_validate()
    tie-break are the CPU's. */
 static best_result g_best;
 
+/* $ENIGMA_GPU_LANES: the threadgroup width. DESIGN.md 16 asks for this to
+   be measured rather than guessed, and 17.6 step 1 measures it: at 256
+   lanes ONE threadgroup fits a core, since two would need 512 threads
+   against the kernel's 384-thread register cap, while at 128 three fit --
+   +50% occupancy for a constant. Resolved once; the settings echo and the
+   dispatch must not disagree. */
+static int gpu_lanes_cap()
+{
+  static int cached = -1;
+  if (cached > 0)
+    return cached;
+  cached = MC_LANES;
+  const char * v = getenv("ENIGMA_GPU_LANES");
+  if ((v != nullptr) && (*v != 0))
+    {
+      const uint64_t n = parse_opt_u64(v, "$ENIGMA_GPU_LANES");
+      if ((n < 1) || (n > MC_LANES))
+        fatal("$ENIGMA_GPU_LANES must be between 1 and " MC_LANES_STR);
+      cached = static_cast<int>(n);
+    }
+  return cached;
+}
+
+static const char * gpu_lanes_echo()
+{
+  static char buf[32];
+  const int n = gpu_lanes_cap();
+  snprintf(buf, sizeof buf, (n == MC_LANES) ? "%d" : "%d (overridden)", n);
+  return buf;
+}
+
 int main(int argc, char * * argv)
 {
   const auto t_start = std::chrono::steady_clock::now();
@@ -122,9 +153,24 @@ int main(int argc, char * * argv)
   backend_init(argv[0]);
 
   show_settings();
+  /* $ENIGMA_GPU_ABLATE: this binary's kernel is one of DESIGN.md 17.6
+     step 1's cost probes, so most variants return a WRONG board and the
+     component check would fire on every item. Say so on every run --
+     loudly, because a probe binary that looks like the tool is exactly
+     how a measurement ends up quoted as a result -- and skip the check.
+     The kernel is chosen by which metallib is loaded, never at run time
+     (see MC_ABLATE in climb_body.h), so the host cannot name the variant
+     and reports only that one is active. */
+  const char * aenv = getenv("ENIGMA_GPU_ABLATE");
+  const bool ablating = (aenv != nullptr) && (*aenv != 0) && (*aenv != '0');
+  if (ablating)
+    fprintf(stderr,
+            "*** ABLATION PROBE: this kernel is instrumented, the "
+            "plaintext is NOT a result\n*** (DESIGN.md 17.6 step 1); "
+            "the component check is off.\n");
   fprintf(stderr, "GPU: %s\n", backend_name());
-  fprintf(stderr, "     steepest-ascent climb per lane, %d lanes per "
-          "threadgroup at most\n", MC_LANES);
+  fprintf(stderr, "     steepest-ascent climb per lane, %s lanes per "
+          "threadgroup at most\n", gpu_lanes_echo());
 
   if (textlength < 1)
     fatal("Ciphertext is empty (no A-Z letters on standard input)");
@@ -165,7 +211,8 @@ int main(int argc, char * * argv)
   memset(& p, 0, sizeof p);
   p.L = L;
   p.restarts = restarts;
-  p.lanes_per_tg = (restarts < MC_LANES) ? restarts : MC_LANES;
+  const int lanes_cap = gpu_lanes_cap();
+  p.lanes_per_tg = (restarts < lanes_cap) ? restarts : lanes_cap;
   p.nstages = opt_nstages;
   for (int s = 0; s < opt_nstages; s++)
     {
@@ -235,6 +282,7 @@ int main(int argc, char * * argv)
   size_t keys_done = 0;
   size_t items_done = 0;
   size_t comps_bad = 0;
+  std::vector<int64_t> all_comps;   /* ablation only; empty otherwise */
   double device_secs = 0.0;
   size_t cur_wo = static_cast<size_t>(-1);
   int rg6[6];
@@ -292,8 +340,11 @@ int main(int argc, char * * argv)
               long isum = 0;
               int coin = 0;
               score_components(m, & isum, & coin);
-              if ((static_cast<int64_t>(isum) != comps[item * 2])
-                  || (static_cast<int64_t>(coin) != comps[item * 2 + 1]))
+              if (ablating)
+                all_comps.push_back(comps[item * 2]);
+              if ((! ablating)
+                  && ((static_cast<int64_t>(isum) != comps[item * 2])
+                      || (static_cast<int64_t>(coin) != comps[item * 2 + 1])))
                 {
                   comps_bad++;
                   if (comps_bad <= 10)
@@ -416,6 +467,39 @@ int main(int argc, char * * argv)
           "on the device\n",
           keys_done, (keys_done == 1) ? "" : "s",
           items_done, (items_done == 1) ? "" : "s");
+  if (ablating)
+    {
+      /* Statistics on the FIRST returned component, per aligned group of
+         32 items. A threadgroup's lanes are consecutive restarts and a
+         simdgroup is 32 lanes, so a group is a simdgroup. Under variant 5
+         that component is the lane's climb-pass count, and max/mean is
+         exactly the divergence factor of 17.2(c) -- the work a simdgroup
+         runs against the work it needed. Under the other variants it is
+         `isum` and means nothing; the host cannot tell which metallib was
+         loaded, so it reports the statistic and lets the reader say. */
+      double ratio_sum = 0.0;
+      size_t groups = 0;
+      for (size_t g = 0; g + 32 <= all_comps.size(); g += 32)
+        {
+          int64_t mx = all_comps[g];
+          double sum = 0.0;
+          for (size_t k = 0; k < 32; k++)
+            {
+              if (all_comps[g + k] > mx)
+                mx = all_comps[g + k];
+              sum += static_cast<double>(all_comps[g + k]);
+            }
+          if (sum > 0.0)
+            {
+              ratio_sum += static_cast<double>(mx) / (sum / 32.0);
+              groups++;
+            }
+        }
+      if (groups > 0)
+        fprintf(stderr, "Ablation: first component per 32-item group, "
+                "max/mean = %.3f over %zu groups\n",
+                ratio_sum / static_cast<double>(groups), groups);
+    }
   fprintf(stderr, "Components: %zu of %zu boards exact\n",
           items_done - comps_bad, items_done);
   fprintf(stderr, "Device time %.2f s (%.0f climbs/s); finished in %.2f s "
@@ -425,5 +509,7 @@ int main(int argc, char * * argv)
                               : 0.0,
           secs,
           (secs > 0.0) ? static_cast<double>(items_done) / secs : 0.0);
-  return (comps_bad == 0) ? 0 : 2;
+  /* A probe's components are wrong by construction, so it must not
+     look like a failed run to a harness that only reads exit codes. */
+  return (ablating || (comps_bad == 0)) ? 0 : 2;
 }

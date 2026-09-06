@@ -88,14 +88,15 @@ kernel void enigma_climb(device const mc_params & p [[buffer(0)]],
   device const unsigned char * tbl = mono8;
   mc_i64 A = 0;
   mc_i64 B = 0;
+  int passes = 0;
   for (int s = 0; s < nstages; s++)
     {
       model = int(p.stages[s].model);
       tbl = mc_stage_table(model, mono8, bi8, tri8, quad8, all8);
       A = p.stages[s].A;
       B = p.stages[s].B;
-      mc_hillclimb(steck, rows_tg, ct_tg, L, model, tbl, A, B, pf,
-                   int(p.stages[s].cap), capmerge, no_repair);
+      passes += mc_hillclimb(steck, rows_tg, ct_tg, L, model, tbl, A, B, pf,
+                             int(p.stages[s].cap), capmerge, no_repair);
     }
 
   /* The converged board and its integer components under the target
@@ -105,6 +106,14 @@ kernel void enigma_climb(device const mc_params & p [[buffer(0)]],
   mc_components(steck, rows_tg, ct_tg, L, model, tbl, & isum, & coin);
   for (int j = 0; j < MC_ASIZE; j++)
     boards_out[item * MC_ASIZE + j] = steck[j];
+#if MC_ABLATE == 5
+  /* The divergence probe (17.2(c)): this lane's pass count and its lane
+     index within the simdgroup, in place of the components, which the
+     host is told to ignore by $ENIGMA_GPU_ABLATE. */
+  comps_out[item * 2] = (mc_i64) passes;
+  comps_out[item * 2 + 1] = (mc_i64) (lane % 32u);
+#else
   comps_out[item * 2] = isum;
   comps_out[item * 2 + 1] = coin;
+#endif
 }
