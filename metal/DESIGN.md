@@ -839,7 +839,10 @@ paid for.
 
 Do not read this as an M1 problem: the pathology is per-lane and
 chip-independent, and a Max or an RTX 4090 would show the same ratio to
-its own CPU. Do not tune section 4's design past step 2; every hour in it
-is spent on a shape that cannot win. Do not port to CUDA as-is. And do
-not trust 17.4's estimate more than section 12 deserved: steps 0-2 are
-cheap and say whether 17.4 is worth a week.
+its own CPU. **Measured, not assumed**: the same cell reads 0.169x on the
+M1 mini and 0.166x on an M2 Pro MacBook Pro (19 GPU cores, 12 CPU
+cores), both arms having scaled by the same 1.85-1.88x, and the register
+cap reads 384 on both. Do not tune section 4's design past step 2; every
+hour in it is spent on a shape that cannot win. Do not port to CUDA
+as-is. And do not trust 17.4's estimate more than section 12 deserved:
+steps 0-2 are cheap and say whether 17.4 is worth a week.

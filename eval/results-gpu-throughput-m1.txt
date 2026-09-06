@@ -87,3 +87,22 @@ a 500x per-lane gap: the k4 pre-pass decodes on the GPU where the CPU
 takes the O(26) histogram path (worth 1.16-1.45x on the CPU), the host's
 reporting walk (now measured at ~1%, so negligible), and no kernel tuning
 of any kind against a CPU carrying years of it.
+
+CROSS-CHECK ON A SECOND MACHINE: MacBook Pro, M2 Pro (19 GPU cores, 8P+4E
+CPU), Xcode's own Metal toolchain, same cell, -T 12 on the CPU arm:
+
+    L      R    n   device      gpu      cpu   speedup    95% CI
+  107    256    3     4100     4102    24629     0.17x  +-0.00
+
+    same cell on the M1 mini:  2221 / 13118 = 0.169x
+    on the M2 Pro:             4100 / 24629 = 0.166x
+
+Both arms scaled by the same factor (GPU 1.85x, CPU 1.88x), so the ratio
+is the same to the second decimal on two chips of two generations.  The
+"chip-independent" reading in DESIGN.md 17.7 is therefore a measurement,
+not an inference: a bigger GPU delivers proportionally more of the same
+starvation.  The register cap reads 384 threads per threadgroup on the
+M2 Pro too, so it is a property of the kernel and the compiler, not the
+GPU generation.  Per GPU core the M2 Pro is slightly LOWER (216 climbs/s
+against the mini's 278), which is a laptop's clocks and thermals and the
+reason the mini remains the instrument for the ladder.
