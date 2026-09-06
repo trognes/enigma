@@ -47,7 +47,10 @@ backend_metal.o : backend_metal.mm host_common.h climb_body.h
 # -fno-fast-math: the body holds no floating point, so this is defence in
 # depth against any FP that reaches a wrapper later (DESIGN.md 11).
 #
-# Since Xcode 16 the Metal compiler is a separately downloaded component:
+# Since Xcode 16 the Metal compiler is a separately downloaded component
+# ("requires Xcode ... command line tools instance" usually means Xcode is
+# installed but not selected: sudo xcode-select -s /Applications/Xcode.app/
+# Contents/Developer; DESIGN.md 13 has the no-Xcode route too):
 # if xcrun reports a missing Metal Toolchain, run (once per machine)
 #     xcodebuild -downloadComponent MetalToolchain
 climb.metallib : climb.metal climb_body.h
@@ -55,6 +58,26 @@ climb.metallib : climb.metal climb_body.h
 	xcrun -sdk macosx metallib climb.air -o $@
 
 clean :
-	rm -f enigma-ref enigma-metal *.o climb.air climb.metallib
+	rm -f enigma-ref enigma-metal *.o *.air *.metallib
 
 .PHONY : all metal clean
+
+# --- DESIGN.md 17.6 step 1: the cost probes -------------------------------
+# One metallib per MC_ABLATE variant, because the register cap the host's
+# GPU: line reports is a property of the COMPILED pipeline: a runtime
+# branch would have the compiler allocate for the union of the paths and
+# every variant would report the same number.  The default build above is
+# untouched -- MC_ABLATE unset is variant 0.
+#
+#   make -C metal ablate        # climb-a1.metallib .. climb-a5.metallib
+#   python3 metal/ablate.py     # runs them and prints the table
+ABLATE_LIBS := $(foreach n,1 2 3 4 5,climb-a$(n).metallib)
+
+ablate : $(ABLATE_LIBS)
+
+climb-a%.metallib : climb.metal climb_body.h
+	xcrun -sdk macosx metal -fno-fast-math -DMC_ABLATE=$* -c climb.metal \
+	    -o climb-a$*.air
+	xcrun -sdk macosx metallib climb-a$*.air -o $@
+
+.PHONY : ablate

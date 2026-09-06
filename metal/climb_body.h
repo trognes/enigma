@@ -45,6 +45,7 @@ typedef int64_t mc_i64;
 /* Lanes per threadgroup the host asks for; a backend may lower it to what
    its pipeline allows. */
 #define MC_LANES 256
+#define MC_LANES_STR "256"    /* for a message that must name the bound */
 /* Climbs in one dispatch. A cap on DURATION, not on memory: macOS resets
    the GPU when a command buffer runs too long and takes the desktop with
    it, so this is what keeps a large sweep from freezing the machine.
@@ -88,13 +89,61 @@ typedef struct
   mc_stage stages[MC_MAX_STAGES];
 } mc_params;
 
+/* --- MC_ABLATE: DESIGN.md 17.6 step 1, cost probes -----------------------
+   Which of the four suspects in 17.2 costs the ~900 lane-cycles per
+   decoded character.  Each variant REMOVES one thing and is timed against
+   variant 0; the share removed is the answer.  Compiled as separate
+   metallibs (`make -C metal ablate`), never selected at run time, because
+   the register cap the GPU: line reports is a property of the COMPILED
+   pipeline and a runtime branch would have the compiler allocate for the
+   union of the paths -- the same 384 for every variant, which is the one
+   thing step 1 must not do.
+
+   0  the shipping kernel.  MC_ABLATE unset is this, and the default path
+      below is textually unchanged, so `make -C metal` is byte-identical.
+   1  the fused stage keeps no histogram: no freq[26], no per-character
+      increment, coin = 0.  17.2(a) and (b) for the larger of the two
+      per-lane arrays.  ANSWER-DESTROYING.
+   2  the decode makes no board lookups: rows[i*26 + ct[i]] rather than
+      steck[rows[i*26 + steck[ct[i]]]].  17.2(a) for the two dynamically
+      indexed reads that are the innermost thing the kernel does.  The
+      climb still reads and mutates steck OUTSIDE the per-character loop,
+      so this isolates the per-character cost.  ANSWER-DESTROYING.
+   3  isum and coin accumulate in 32 bits, widening once at the end.
+      **ANSWER-PRESERVING and a candidate fix rather than a probe**: over
+      L <= 256, isum <= 255*256 = 65 280 and coin <= L(L-1) <= 65 280, so
+      both fit with eleven bits to spare, and the key A*isum + B*coin is
+      still formed in 64.  If this alone moves the register cap off 384 it
+      ships.
+   4  the quad gather returns a constant instead of reading all8.  17.2(d),
+      the 457 KB table, which the CPU decomposition priced at 6% because
+      out-of-order execution hides it and a lane cannot.  ANSWER-DESTROYING.
+   5  no ablation: counts the climb's passes per lane and writes them where
+      the components go, so the host can report the DIVERGENCE factor
+      (17.2(c)) as the simdgroup maximum over the mean.  Answer-preserving
+      in the board, but the components are overwritten.
+
+   Every variant except 3 and 5 returns a wrong board, so a probe binary
+   must never be mistaken for the tool: $ENIGMA_GPU_ABLATE makes the host
+   say so on every run and skip its component check (host_common.cc). */
+#ifndef MC_ABLATE
+#define MC_ABLATE 0
+#endif
+
 /* plugboard -> per-position rotor-stack row -> plugboard: decode_at()
    with rows[] flattened to L rows of 26 bytes. */
 inline int mc_decode_at(MC_THR_CONST unsigned char * steck,
                         MC_TG_CONST unsigned char * rows,
                         MC_TG_CONST unsigned char * ct, int i)
 {
+#if MC_ABLATE == 2
+  /* No board lookups: the two dynamically indexed steck[] reads are what
+     this variant prices.  Wrong plaintext by construction. */
+  (void) steck;
+  return rows[i * MC_ASIZE + ct[i]];
+#else
   return steck[rows[i * MC_ASIZE + steck[ct[i]]]];
+#endif
 }
 
 /* The two integer accumulators of score_components(): isum over the
@@ -103,6 +152,14 @@ inline int mc_decode_at(MC_THR_CONST unsigned char * steck,
    the CPU decoders exactly (scoring.cc): the three histogram models count
    all L letters with tbl = mono8; the quad-shaped models need L >= 4 and
    -f counts all L letters into coin while -q/-a leave it 0. */
+/* Variant 3's accumulator type; mc_i64 otherwise.  See MC_ABLATE above
+   for why 32 bits is provably enough for both sums. */
+#if MC_ABLATE == 3
+typedef int mc_acc;
+#else
+typedef mc_i64 mc_acc;
+#endif
+
 inline void mc_components(MC_THR_CONST unsigned char * steck,
                           MC_TG_CONST unsigned char * rows,
                           MC_TG_CONST unsigned char * ct,
@@ -111,8 +168,8 @@ inline void mc_components(MC_THR_CONST unsigned char * steck,
                           MC_THR mc_i64 * isum_out,
                           MC_THR mc_i64 * coin_out)
 {
-  mc_i64 isum = 0;
-  mc_i64 coin = 0;
+  mc_acc isum = 0;
+  mc_acc coin = 0;
 
   if ((model == MC_IC) || (model == MC_MONO) || (model == MC_MONOIC))
     {
@@ -123,8 +180,8 @@ inline void mc_components(MC_THR_CONST unsigned char * steck,
         freq[mc_decode_at(steck, rows, ct, i)]++;
       for (int j = 0; j < MC_ASIZE; j++)
         {
-          isum += (mc_i64) freq[j] * (mc_i64) tbl[j];
-          coin += (mc_i64) freq[j] * (mc_i64) (freq[j] - 1);
+          isum += (mc_acc) freq[j] * (mc_acc) tbl[j];
+          coin += (mc_acc) freq[j] * (mc_acc) (freq[j] - 1);
         }
     }
   else if (model == MC_BI)
@@ -135,7 +192,7 @@ inline void mc_components(MC_THR_CONST unsigned char * steck,
           for (int i = 1; i < L; i++)
             {
               int b = mc_decode_at(steck, rows, ct, i);
-              isum += (mc_i64) tbl[a * MC_ASIZE + b];
+              isum += (mc_acc) tbl[a * MC_ASIZE + b];
               a = b;
             }
         }
@@ -149,7 +206,7 @@ inline void mc_components(MC_THR_CONST unsigned char * steck,
           for (int i = 2; i < L; i++)
             {
               int c = mc_decode_at(steck, rows, ct, i);
-              isum += (mc_i64) tbl[(a * MC_ASIZE + b) * MC_ASIZE + c];
+              isum += (mc_acc) tbl[(a * MC_ASIZE + b) * MC_ASIZE + c];
               a = b;
               b = c;
             }
@@ -159,35 +216,49 @@ inline void mc_components(MC_THR_CONST unsigned char * steck,
     {
       if (L >= 4)
         {
+#if MC_ABLATE != 1
           int freq[MC_ASIZE];
           for (int j = 0; j < MC_ASIZE; j++)
             freq[j] = 0;
+#endif
           int a = mc_decode_at(steck, rows, ct, 0);
           int b = mc_decode_at(steck, rows, ct, 1);
           int c = mc_decode_at(steck, rows, ct, 2);
+#if MC_ABLATE != 1
           freq[a]++;
           freq[b]++;
           freq[c]++;
+#endif
           for (int i = 3; i < L; i++)
             {
               int d = mc_decode_at(steck, rows, ct, i);
+#if MC_ABLATE != 1
               freq[d]++;
-              isum += (mc_i64) tbl[((a * MC_ASIZE + b) * MC_ASIZE + c)
+#endif
+#if MC_ABLATE == 4
+              /* The 457 KB gather, replaced by a value that still depends
+                 on the window so the decode is not dead-code eliminated. */
+              isum += (mc_acc) ((a + b + c + d) & 0xff);
+#else
+              isum += (mc_acc) tbl[((a * MC_ASIZE + b) * MC_ASIZE + c)
                                    * MC_ASIZE + d];
+#endif
               a = b;
               b = c;
               c = d;
             }
+#if MC_ABLATE != 1
           if (model == MC_FUSED)
             {
               for (int j = 0; j < MC_ASIZE; j++)
-                coin += (mc_i64) freq[j] * (mc_i64) (freq[j] - 1);
+                coin += (mc_acc) freq[j] * (mc_acc) (freq[j] - 1);
             }
+#endif
         }
     }
 
-  *isum_out = isum;
-  *coin_out = coin;
+  *isum_out = (mc_i64) isum;
+  *coin_out = (mc_i64) coin;
 }
 
 /* The --int key: what every comparison in the climb is made on. */
@@ -295,7 +366,10 @@ inline int mc_try_repair(MC_THR unsigned char * steck,
    ascending, is part of the contract: ties between two switch moves keep
    the FIRST found, so any other order reproduces every score and still
    diverges on ties (DESIGN.md 3a). */
-inline void mc_hillclimb(MC_THR unsigned char * steck,
+/* Returns the number of steepest-ascent PASSES it ran, which variant 5
+   reports so the divergence factor (17.2(c)) can be read as a simdgroup
+   maximum over the mean.  Every other build ignores the value. */
+inline int mc_hillclimb(MC_THR unsigned char * steck,
                          MC_TG_CONST unsigned char * rows,
                          MC_TG_CONST unsigned char * ct,
                          int L, int model,
@@ -305,6 +379,7 @@ inline void mc_hillclimb(MC_THR unsigned char * steck,
                          int capmerge, int no_repair)
 {
   int progress;
+  int passes = 0;
   do
     {
       progress = 0;
@@ -315,6 +390,7 @@ inline void mc_hillclimb(MC_THR unsigned char * steck,
         {
           best_score = mc_key(steck, rows, ct, L, model, tbl, A, B);
           last_best = best_score;
+          passes++;
 
           const int pairs = mc_plug_count(steck);
 
@@ -413,6 +489,7 @@ inline void mc_hillclimb(MC_THR unsigned char * steck,
         progress = 1;
     }
   while (progress);
+  return passes;
 }
 
 #endif

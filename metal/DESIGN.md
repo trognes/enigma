@@ -1,7 +1,8 @@
 # Metal port: design and plan
 
-Status: **milestone 2 is DONE and verified on a GPU; milestone 3 (§9's
-throughput) is next.** This
+Status: **milestone 2 done and verified on a GPU; milestone 3 measured,
+and the port is 4-6x SLOWER than the CPU on an M1 -- with a named,
+untested suspect (per-lane arrays spilling to thread memory).** This
 document records the decisions taken and the plan they lead to; every
 number marked as an estimate is one. What exists (section 13 has the
 build):
@@ -31,18 +32,22 @@ build):
   design errors: the Metal compiler is a separate download since Xcode 16
   (section 13), and a dispatch had to be capped by WORK rather than by
   bytes or the GPU watchdog resets the machine (section 11).
-- **Milestone 3, first run: the GPU LOSES every cell on an M1 mini**, by
-  1.5x to 12x on the trustworthy `device` column
-  (`eval/results-gpu-throughput-m1.txt`). The shape says why, and it is
-  not the kernel's arithmetic: time per fixture is nearly flat as the work
-  grows 16x, so lanes and threadgroups are both nearly free and what is
-  slow is ONE LANE -- 50-300x a CPU core, which is what a dependent chain
-  of gathers costs against an out-of-order core at IPC 3.32. The GPU
-  answers that with width, and this run gave it almost none: a fixture is
-  one key, so it dispatched 1 to 4 threadgroups on a machine that holds
-  ~32. **It measured an eighth to a half of the device.** Re-run with
-  `--keys 26` before drawing any conclusion; that is also the sweep tier
-  section 1 is aiming at.
+- **Milestone 3 is MEASURED, and the GPU is 4-6x SLOWER than the same
+  chip's CPU** at every length and restart count on an M1 mini
+  (`eval/results-gpu-throughput-m1.txt`). Two runs: the first starved both
+  arms (one key per fixture) and its cells are superseded; the second, at
+  26 keys, fills the device and saturates it. **Occupancy is excluded** --
+  16x the restarts now buys 1.3x, so ~1700-4700 climbs/s is the ceiling.
+  What remains is per-lane speed, and the gap is **~500-750x per ALU
+  against a CPU core** where clock and the absence of out-of-order
+  execution explain 10-30x. That 20-50x excess is the thing to chase, and
+  it has a named suspect: every per-lane array in the kernel (`steck`,
+  `freq`, the saved best board) is **dynamically indexed**, which on Metal
+  means thread memory rather than registers -- i.e. the decode's two
+  lookups are dependent memory round trips. **Section 17 is the analysis
+  and the plan**: the decomposition is the fault, not the tuning, and the
+  ladder of experiments there says how to establish that before the
+  simdgroup-per-climb design it proposes is built.
 
 Decisions recorded (owner's):
 
@@ -51,7 +56,13 @@ Decisions recorded (owner's):
 2. Host language: Objective-C++.
 3. Lives in `metal/` with its own macOS-only build; the Linux `make` and CI
    are untouched.
-4. Written here, built and measured on the owner's Mac (an M2 Pro first).
+4. **The target is the M1**, and in principle any Apple silicon GPU;
+   CUDA (section 15) and OpenCL (section 15b) later. This line used to
+   read "an M2 Pro first", which was a note about which machine was
+   expected to be to hand rather than a target, and it misled: the port
+   was built and measured on an **M1 mini**, and that machine stays the
+   instrument. An M2 Pro laptop has served once, as a cross-check on a
+   second chip (17.7).
 5. This PR is design and planning only.
 6. **No pre-set throughput bar** for milestone 3: produce section
    9's numbers, then decide. The earlier ">= 2x proceeds, < 1.5x
@@ -224,7 +235,10 @@ identity a measured rate.
 The opposite of enigma-cuda, which spends one thread per ciphertext letter
 and runs the climb loop serially per block behind a barrier reduction per
 score (`eval/results-*` survey, PR #265). That is why a GTX 1070 reaches
-only ~20k key-climbs/s and underfills on a 107-letter message. The repo's
+only ~20k key-climbs/s and underfills on a 107-letter message. **This
+paragraph is REVERSED by section 17.5, on measurement**: 20k on a 2016
+card is ten times what this design reached on an M1, and the CPU lesson
+the next sentence rests on does not transfer to a GPU. The repo's
 own CPU history points the same way: every attempt to vectorise *inside*
 the decode measured down (six SIMD levers, +30..40%), because the decoded
 letters must reach a scalar accumulator every group regardless.
@@ -427,8 +441,9 @@ Steps 2 onward alternate: written here, built and measured on the Mac.
 - **64-bit integers on Metal**: the 1e-12 precision claim in section 3a
   rests on `int64` multiply-add in the kernel. Apple GPUs support 64-bit
   integer types, but multiply is emulated and its availability and cost
-  are to be CONFIRMED on the M2 Pro before anything else is built --
-  milestone 2's first check. If it were unavailable, 32-bit weights would
+  are to be CONFIRMED before anything else is built -- milestone 2's
+  first check. **Confirmed on the M1**, the target: identity is exact
+  (the status header above). If it were unavailable, 32-bit weights would
   drop the precision to float level and `--int` would lose its edge over
   the 3b fallbacks, though not its exactness across targets.
 - **Fast-math**: the Metal compiler enables it by default. Under `--int`
@@ -470,17 +485,26 @@ Steps 2 onward alternate: written here, built and measured on the Mac.
 
 Relative to the same chip's own CPU running today's tool on all cores:
 
-| chip | GPU cores | expected |
-|---|---:|---:|
-| M2 Pro | 16-19 | ~3-5x |
-| M-series Max | ~32-40 | ~5-10x |
-| M-series Ultra | ~64-80 | ~5-10x, on a CPU already 2x the Max |
-| RTX 4090-class (CUDA) | 128 SMs | ~20-40x a base M1 GPU (section 15) |
+| chip | GPU cores | expected | MEASURED (section 9) |
+|---|---:|---:|---|
+| **M1 (the target)** | 8 | ~2-4x | **0.17x** |
+| M2 Pro | 16-19 | ~3-5x | **0.17x** (one cell, 17.7) |
+| M-series Max | ~32-40 | ~5-10x | - |
+| M-series Ultra | ~64-80 | ~5-10x, on a CPU already 2x the Max | - |
+| RTX 4090-class (CUDA) | 128 SMs | ~20-40x a base M1 GPU (section 15) | - |
 
-These scale my base-M1 reasoning (2-4x over its 8-core CPU) by core count
-and ~20-30% per generation per core. The Neural Accelerators, ray tracing
-and TFLOPS figures are irrelevant to an integer-gather workload; memory
-bandwidth is not the limiter because the table is cache-resident.
+**Every row is wrong by ~20x and the last column says so.** They scale a
+base-M1 reasoning (2-4x over its 8-core CPU) by core count and ~20-30%
+per generation per core -- and the scaling was the sound part: the two
+measured chips differ by 1.85x on the GPU and 1.88x on the CPU, so the
+RATIO is flat and the per-core scaling holds. What was wrong is the
+anchor, because section 4's decomposition cannot use a core (section
+17). Read this table as an estimate of what the hardware could give a
+kernel that suits it, not of what this one does.
+
+The Neural Accelerators, ray tracing and TFLOPS figures are irrelevant to
+an integer-gather workload; memory bandwidth is not the limiter because
+the table is cache-resident.
 
 In absolute terms, with a base M1 GPU at an estimated 30-60k key-climbs/s,
 a full exact `-r A..` sweep (230M keys) at 128 restarts per key is 6-11
@@ -524,6 +548,22 @@ fixes it, once per machine (the first Mac build stopped here):
 ```sh
 xcodebuild -downloadComponent MetalToolchain
 ```
+
+**If that refuses with "requires Xcode ... active developer directory
+... is a command line tools instance", check `xcode-select` before
+assuming Xcode is missing.** On the second machine Xcode was installed
+and only the pointer was wrong; one command fixed it:
+
+```sh
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+If Xcode genuinely is absent the CLT never ships a Metal compiler, and
+the way round it is to skip compiling there: a `.metallib` is AIR
+bytecode the driver finishes for the specific GPU at load time, so one
+built on another Apple silicon machine works. `make -C metal
+enigma-metal` builds the host alone with the CLT's clang and frameworks;
+copy `climb.metallib` beside it or point `$ENIGMA_METALLIB` at it.
 
 `enigma-ref`
 builds anywhere and is the same program with the body run on the CPU: it
@@ -644,3 +684,200 @@ cheap to keep.
 - Whether to return the stage-0 board so `--seed-dedup` can keep working
   unchanged on the CPU side.
 - When an NVIDIA machine becomes available for the CUDA measurement.
+
+## 17. Why milestone 3 disappointed, and what to do about it
+
+Written after the two M1 runs (`eval/results-gpu-throughput-m1.txt`),
+before any of it is built. The conclusion is that the port is slow
+because of its **decomposition**, not its tuning, and the section ends
+with the ladder of experiments that would establish that cheaply before
+the bigger change is paid for.
+
+### 17.1 The one number
+
+At saturation the M1's GPU spends **~900-1030 lane-cycles per decoded
+character** (1741 climbs/s x 833 497 characters per climb at L=167,
+against 8 cores x 128 ALUs x 1.28 GHz). A decode step is ~10-15
+instructions on either machine: two board lookups, a row lookup, a table
+gather, a histogram increment, window shifts. The CPU spends **3-5
+core-cycles** on the same step at IPC 3.3. So a GPU lane is **stalled
+about 98% of its cycles**. This is not an arithmetic deficit -- a GPU ALU
+and a CPU core retire simple integer ops at similar rates -- it is
+latency, unhidden.
+
+A CPU hides latency with out-of-order execution: within one probe the
+characters' load chains are independent and the core overlaps dozens. A
+GPU lane is in-order and hides nothing by itself; the hardware hides
+latency only by switching to OTHER simdgroups, i.e. by occupancy. Section
+4's design serialises a ~4 500-probe x L-character chain onto each lane
+(the CPU's shape) and loads each lane with enough private state that few
+simdgroups can be resident. That is the worst of both: CPU-shaped work on
+hardware without OoO, at an occupancy too low to compensate.
+
+### 17.2 Where the cycles go, ranked, each with its experiment
+
+- **(a) Per-lane arrays in thread memory -- the suspected majority.**
+  Metal keeps a `thread` array in registers only when the indexing is
+  provably static. `steck[26]` is read twice per character with dynamic
+  indices, `freq[26]` is read-modify-written once per character, and
+  `try_repair`'s `plo/phi/rp/rv` are the same shape. Dynamically indexed
+  thread arrays go to thread memory -- device memory behind a cache -- so
+  that is three dependent round trips per character at a few hundred
+  cycles each, which IS ~900. Experiment: ablation kernels that replace
+  `steck` with an arithmetic identity and drop `freq`, as cost probes.
+- **(b) Occupancy throttled by per-lane state.** 64-bit accumulators
+  everywhere (emulated on Apple GPUs), the arrays above, loop state. The
+  free datum is the `GPU:` line the host prints:
+  `maxTotalThreadsPerThreadgroup` below 1024 means the compiler's own
+  register count is capping residency. `isum <= 255*L` and `coin <= L^2`
+  fit 32 bits; accumulate in 32 and widen once per probe.
+- **(c) Divergence -- real, ~2x, not the 20-50x.** Lanes converge after
+  different pass counts, so a simdgroup runs to its slowest lane
+  (section 11 named this); ~1.7x at a mean of ~14 passes. The
+  `paired`/`else` branch adds ~1.2x. Experiment: a fixed pass count.
+- **(d) The `all8` gather**, 457 KB, random, per character: 6% on the CPU
+  because OoO hides it, fully exposed on a lane. Intrinsic; only
+  occupancy or memory-level parallelism hides it.
+- Minor: `rows_tg[i*26 + x]` read by 32 lanes at the same `i` and random
+  `x` spans ~7 banks -- several-way conflicts.
+
+### 17.3 Fixes inside section 4's design: worth doing, not enough
+
+`steck` to a 26-byte slice of threadgroup memory per lane (6.6 KB at 256
+lanes beside the 6.9 KB of rows); `freq` to `uint16` slices (13 KB; 26.5
+of 32 KB in all, or 128 lanes); 32-bit accumulators. Threadgroup memory
+is on-chip. Expect **several x, perhaps 5-10x** -- parity with the CPU,
+probably not section 12's 2-4x -- and (c) and (d) are untouched. Its
+real value is diagnostic: it separates PLACEMENT from DECOMPOSITION
+cheaply, before the bigger change.
+
+### 17.4 The answer: simdgroup = one climb, lane = a slice of characters
+
+enigma-cuda's thread-per-letter idea at simdgroup granularity, with
+cross-lane primitives in place of barriers:
+
+- **The board is distributed across the simdgroup**: lane `j` holds
+  `steck[j]`, and `steck[x]` is one `simd_shuffle`. No thread memory,
+  and no threadgroup memory for boards at all. A probe's <= 4 mutations
+  are conditional register writes (`lane == a ? b : mine`); restore is
+  the same.
+- **The decode is spread, not serial.** Each lane decodes its 2-8
+  characters, with the ciphertext preloaded into registers once per
+  climb (zero loads). The quad window crosses lane boundaries: three
+  `simd_shuffle_up`s fetch the left neighbour's last letters.
+- **`isum` is one `simd_sum`** -- an integer sum, exact and
+  order-independent, so byte-identity survives.
+- **The histogram**: each lane's partial counts packed as 26 bytes in 7
+  words (a lane holds <= 8 characters, so a byte never overflows; 32 x 8
+  = 256 per bin at L <= 255), reduced with seven `simd_sum`s, then
+  `sum n(n-1)`. ~100 ops per probe per lane against the ~150 000 stalled
+  cycles a probe costs a lane today.
+- **No divergence, by construction**: one climb per simdgroup in
+  lockstep, so the convergence tail is gone and the `paired` branch is
+  uniform. No barriers anywhere; simdgroup ops need none.
+- **`climb_body.h`'s control flow is untouched** -- probe order, the tie
+  rule, the cap gate, `try_repair`, the stages. Only `mc_components` and
+  the board representation change, so `verify_identity.py` remains the
+  oracle and must still read `RESULT: identical`.
+- **The one-key tier fills the machine too**: 64 restarts = 64
+  simdgroups = 2 048 lanes, twice an M1. Run 1's starvation cannot recur.
+
+Arithmetic, marked as such because section 12's arithmetic was 20x high
+for the wrong design: ~160 ops per probe per lane, ~5 independent gathers
+in flight per lane, ~4 500 probes per climb -> ~1 ms per climb per
+simdgroup; 8 cores x several resident simdgroups -> **20-60k climbs/s at
+L=167**, against 1 741 measured and 10 252 for the CPU. That is section
+12's range: the estimate may have been right for the design it should
+have been paired with.
+
+### 17.5 enigma-cuda, revisited
+
+Section 4 dismissed thread-per-letter with "that is why a GTX 1070
+reaches only ~20k key-climbs/s". Twenty thousand on a 2016 card is **ten
+times** what section 9 measured on the M1, and ~5x per ALU. The lesson
+section 4 borrowed to justify lane-per-climb -- every SIMD attempt inside
+the CPU decode measured down -- is about vector lanes in one core feeding
+a scalar accumulator across the vector/scalar boundary. It does not
+transfer: on a GPU the reduction is a native cross-lane operation and the
+letters run on separate ALUs. Section 4 read that evidence backwards.
+The modern form is 17.4, simdgroup-level with shuffles rather than
+block-level with barriers.
+
+CUDA as a TARGET is friendlier -- native 64-bit integers, 255 registers
+per thread, 48-100 KB of shared memory, `__shfl_sync`/
+`__reduce_add_sync`, and `nvcc -Xptxas -v` printing spills and register
+counts, the diagnostic Metal makes one infer -- but the same
+lane-per-climb kernel would die the same death there, since CUDA's local
+memory spill is the same phenomenon. Fix the decomposition on Metal,
+where the harness exists; CUDA inherits it behind three macros (shuffle,
+sum, shuffle-up).
+
+### 17.6 The experiment ladder
+
+In order; each is cheap and rules something in or out before the next is
+paid for.
+
+0. **Read the `GPU:` line** from one direct run: free, and it says
+   whether registers already cap occupancy. **DONE: `384 threads per
+   threadgroup`.** A lean kernel reads 1024, so each lane uses ~2.7x the
+   register budget and a core holds at most 12 simdgroups of it. The
+   dispatch shape then halves that: a 256-lane threadgroup fits once per
+   core (512 > 384), and a 64-lane one fits four times by threadgroup
+   memory -- **8 simdgroups per core in every cell**, i.e. two per
+   32-wide SIMD unit to interleave, which cannot hide one memory round
+   trip, let alone three per character. That is also why the device
+   rate was flat across `-R`. Cross-check: 8 x 32 x 8 cores = 2 048
+   climbs in flight at 1 741/s is 1.18 s per climb, against the 1.24 s
+   inferred independently from the `-R 64` cell. What 384 does NOT
+   settle is whether the arrays sit in thread memory (cost = latency) or
+   were promoted to registers with select chains (`freq[26]` alone would
+   be 26 registers; cost = ALU, and it explains 384 by itself). Step 1
+   tells them apart for free by reading this line per variant: if
+   dropping the histogram lifts 384 toward 1024, `freq` was in
+   registers. One free knob falls out: `lanes_per_tg = 128` fits three
+   threadgroups per core under both limits (384 lanes, 20.7 KB) against
+   one today -- +50% occupancy for a constant; add it to step 1,
+   expecting 20-40% and a confirmation rather than a fix.
+1. **BUILT: `metal/ablate.py`, seven rows at one cell** (L=107, `-R 256`,
+   `--keys 26`, 3 fixtures x 3 reps): baseline; no histogram (`freq[26]`,
+   17.2(a)/(b)); no board lookups in the decode (the two `steck[]`,
+   17.2(a)); 32-bit accumulators (17.2(b)); no `all8` gather (17.2(d));
+   pass counts rather than a time (17.2(c), the divergence factor); and
+   the baseline again at `lanes_per_tg = 128`. Each is its own metallib
+   (`make -C metal ablate`, one `-DMC_ABLATE=N` build apiece), because
+   the register cap is a property of the COMPILED pipeline and a runtime
+   branch would allocate for the union and report one number for all of
+   them. That decomposes the ~900 cycles the way the CPU's score loop was
+   (48% / 14% / 6%) and settles whether 17.2(a) is the majority. About an
+   hour of Mac time.
+
+   **Variants 1, 2 and 4 return a WRONG board** -- they delete work the
+   answer depends on, which is what a cost probe is -- so the host prints
+   a banner under `$ENIGMA_GPU_ABLATE`, skips the CPU/GPU component check
+   and exits 0 regardless. Nothing in that mode reports a usable
+   plaintext. **Variant 3 is the exception and is a candidate FIX rather
+   than a probe**: 32-bit accumulators were verified answer-preserving on
+   the CPU backend over 1 536 restarts at L=60/107/167 (`verify_identity
+   .py --host metal/enigma-ref`, 0 differing rows), so if it reads well
+   above 1.00x it can ship as it stands. `isum` and `coin` are bounded by
+   `L` times a byte and by `L(L-1)/2`; the 64 bits exist for the blended
+   `I = A*isum + B*coin`, which is formed once per climb, not per
+   character.
+2. **The placement fix** (17.3). 5-10x says placement was the wall and
+   17.4 is the ceiling above it; little says the chain itself is the
+   problem and 17.4 is the only route.
+3. **Prototype 17.4**, its payoff bounded by the two steps above.
+4. Only then `--sustained`, and the `k` stage's co-occurrence table on
+   chip (`uint8`, 17.6 KB, fits; section 5).
+
+### 17.7 What not to do
+
+Do not read this as an M1 problem: the pathology is per-lane and
+chip-independent, and a Max or an RTX 4090 would show the same ratio to
+its own CPU. **Measured, not assumed**: the same cell reads 0.169x on the
+M1 mini and 0.166x on an M2 Pro MacBook Pro (19 GPU cores, 12 CPU
+cores), both arms having scaled by the same 1.85-1.88x, and the register
+cap reads 384 on both. Do not tune section 4's design past step 2; every
+hour in it is spent on a shape that cannot win. Do not port to CUDA
+as-is. And do not trust 17.4's estimate more than section 12 deserved:
+steps 0-2 are cheap and say whether 17.4 is worth a week.
