@@ -1110,7 +1110,30 @@ paid for.
      onto the five-word board line for line (`mc_pass_pk`, with the K = 1
      decode as its scorer), checked against the *array* pass's oracle so
      the two representations are proven to agree before it becomes the
-     climb's body. **Run 5 pending.**
+     climb's body. **Run 5: 48.7M probes/s, 1.48x over the array scan,
+     bit-exact on the GPU, and the cap did not move (384).** The gain is
+     the per-lane step -- the eight thread-memory writes per toggle
+     gone -- not occupancy: the scan's own live state pins its
+     registers, not the board. The scan's overhead over its scorer is
+     unchanged in ratio, 2.08x against the register-resident scorer
+     where it was 2.00x against the thread-memory one. **The ledger is
+     complete.** Scorer in registers 101.2M; packed scan 48.7M (x2.08);
+     climb at fixed passes ~37M (x1.3, stages and the cap check); climb
+     as it runs ~19M (x1.46 divergence, x1.33 `try_repair`), i.e.
+     **~3 700 climbs/s: 1.5x today's and 0.28x the CPU's 13.1k** at the
+     operational cell. Every factor is measured on a kernel that exists
+     and checks against the tool. There is no unmeasured lever left in
+     the lane-per-climb design, 17.4's decomposition is dead at
+     0.49-0.94x, and the CPU side of every ratio is the steepest-ascent
+     tool rather than the recommended `-K`, so the real gap is wider.
+     **On Apple silicon this design cannot reach its own CPU.** The
+     absolute rate scales with resident lanes times clock, and a
+     discrete CUDA part carries ~30x the M1's lanes at ~2x the clock
+     against a CPU of perhaps 2x -- the same kernel projects to parity
+     or a small multiple there, as arithmetic, with section 12's record
+     as the warning and enigma-cuda's 20k key-climbs/s on a GTX 1070 as
+     the order-of-magnitude check. The Mac was the instrument, and the
+     instrument's job is done.
      **And `lane packed regs` reads 1.52x** (101.2M probes/s, cap 896):
      today's decomposition with the board and histogram in registers,
      no thread memory at all. 896/512 = 1.75x more lanes resident for
