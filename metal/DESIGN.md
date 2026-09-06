@@ -1081,12 +1081,31 @@ paid for.
      mutate/score/restore for all four kinds, same writes, same scores,
      same tie rule, `verify_identity.py` byte-identical, one `mc_key`
      per toggle. **Run 4: the pass arm went 17.7M -> 33.0M probes/s,
-     1.87x**, every other row unchanged -- the double scoring was real
-     and a little larger than the pairing arithmetic predicted, and
-     since `mc_pass()` is the climb's own loop the climb carries it.
-     What remains between the scan and the scorer alone is 2.0x: the
-     cap (384 against 512) for 1.33x and ~1.5x for the eight
-     mutate-and-restore writes per toggle to a thread-memory board.
+     1.87x**, every other row unchanged. **AND THE CLIMB DID NOT MOVE:
+     2 401 climbs/s before, 2 402 after, rebuilt by hand.** Same change,
+     +87% in one kernel and +0% in the other, so the double scoring was
+     a property of how the small probe kernel was *compiled* -- `mc_key`
+     inlined once per branch and never merged -- and not of the scan
+     loop; in the large climb kernel the compiler had already merged
+     the two identical calls. The 1.87x was the pass arm becoming
+     honest, not the climb becoming faster, and "the climb carries it"
+     above was true of the code and false of the speedup. **A
+     microkernel measures its own compilation; the transfer to the real
+     kernel is a separate measurement**, and it was the owner's plain
+     run that made it. The branch-free form stays (byte-identical, and
+     what makes the pass arm fair) but it is not a lever.
+     What remains between the honest scan and the scorer alone is 2.0x:
+     the cap (384 against 512) for 1.33x and ~1.5x for the eight
+     mutate-and-restore writes per toggle to a thread-memory board. The
+     corrected ledger at this cell, probes/s: scorer in registers
+     101.5M, scorer in thread memory 66.5M, the scan loop 33.0M, the
+     climb at fixed passes ~25M fused-equivalent, the climb as it runs
+     12.2M. **The honest ceiling of the current design on this chip**,
+     with measured factors for every layer: if the packed-board scan
+     reaches the scorer's ~60M, a climb rebuilt on it projects to ~23M
+     natural, ~4 500 climbs/s -- 1.9x today's and a third of the CPU's
+     13.1k. Parity would need the natural climb to run at the
+     scorer-in-registers rate with every layer above it free.
      **Measured next as `climb pass packed`**: `mc_pass()` transcribed
      onto the five-word board line for line (`mc_pass_pk`, with the K = 1
      decode as its scorer), checked against the *array* pass's oracle so
