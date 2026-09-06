@@ -126,10 +126,12 @@ void backend_run(const mc_batch & b)
    arms need a simdgroup and are not here. */
 bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
 {
-  if (b.arm != MC_PROBE_LANE)
+  if ((b.arm != MC_PROBE_LANE) && (b.arm != MC_PROBE_PASS))
     return false;
   const mc_probe_params & p = *b.params;
   const int L = static_cast<int>(p.L);
+  const int model = static_cast<int>(p.model);
+  const int nprobes = static_cast<int>(p.nprobes);
   const size_t units = static_cast<size_t>(p.units);
   const auto t0 = std::chrono::steady_clock::now();
   const size_t nboards = static_cast<size_t>(p.nboards);
@@ -139,8 +141,12 @@ bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
       memcpy(steck, b.board0 + (u % nboards) * MC_ASIZE, MC_ASIZE);
       mc_i64 cs = 0;
       mc_i64 cc = 0;
-      mc_probe_lane(steck, b.rows, b.ct, L, static_cast<int>(p.model),
-                    b.tbl, static_cast<int>(p.nprobes), & cs, & cc);
+      if (b.arm == MC_PROBE_LANE)
+        mc_probe_lane(steck, b.rows, b.ct, L, model, b.tbl, nprobes,
+                      & cs, & cc);
+      else
+        mc_probe_pass(steck, b.rows, b.ct, L, model, b.tbl, p.A, p.B,
+                      MC_PROBE_PASSES(nprobes), & cs, & cc);
       b.out[u * 2] = cs;
       b.out[u * 2 + 1] = cc;
     }

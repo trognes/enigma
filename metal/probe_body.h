@@ -40,21 +40,46 @@
 #include "climb_body.h"
 
 #define MC_PROBE_LANE 0     /* today's shape */
-#define MC_PROBE_G32S 1     /* group, K = 32, board by shuffle */
-#define MC_PROBE_G32 2      /* group, K = 32, board packed */
-#define MC_PROBE_G16 3      /* group, K = 16, board packed */
-#define MC_PROBE_G8 4       /* group, K = 8, board packed */
-#define MC_PROBE_ARMS 5
+#define MC_PROBE_G1 1       /* today's decomposition, board and histogram
+                               in registers: the group template at K = 1 */
+#define MC_PROBE_PASS 2     /* one steepest-ascent pass per unit: the
+                               climb's own scan loop, mc_pass() */
+#define MC_PROBE_G32S 3     /* group, K = 32, board by shuffle */
+#define MC_PROBE_G32 4      /* group, K = 32, board packed */
+#define MC_PROBE_G16 5      /* group, K = 16, board packed */
+#define MC_PROBE_G8 6       /* group, K = 8, board packed */
+#define MC_PROBE_ARMS 7
+/* Lanes per unit, per arm; every wrapper and the driver index this list
+   rather than carrying one of their own. */
+#define MC_PROBE_K_LIST { 1, 1, 1, 32, 32, 16, 8 }
+
+/* THE TWO LANE-SHAPED ARMS BESIDE TODAY'S exist because of run 2: the
+   scorer alone ran 66.7M probes/s where the fixed-pass climb, doing the
+   same scoring 326 times a pass, ran 22.3M -- 3x, with the start-board
+   confound excluded.  G1 asks whether the thread-memory board and
+   histogram matter at all once the scan is gone (it is the group shape
+   with no lanes to share, so no shuffles and no reductions).  PASS runs
+   the real scan loop from climb_body.h -- MC_PROBE_PASSES(n) passes of
+   MC_PROBE_PASS_PROBES scored boards each, n/4 so that the default 64
+   gives 16 passes, exactly one fixed-pass climb's work -- and so prices
+   the machinery around the scorer in the same harness as the scorer;
+   its probes/s should reproduce the ablation table's, which is a check
+   on both instruments.  Its checksum is body-against-body (mc_pass on
+   the CPU), which verify_identity.py ties to the tool's climb. */
+#define MC_PROBE_PASS_PROBES 326   /* the base score and 325 toggles */
+#define MC_PROBE_PASSES(n) ((((n) / 4) > 0) ? ((n) / 4) : 1)
 
 /* One dispatch's constants; every member 64-bit, as mc_params. */
 typedef struct
 {
   mc_i64 L;
   mc_i64 model;         /* the target stage's model */
-  mc_i64 nprobes;       /* toggles per unit */
+  mc_i64 nprobes;       /* toggles per unit; passes via MC_PROBE_PASSES */
   mc_i64 units;         /* lanes (arm LANE) or K-lane groups (arm GROUP) */
   mc_i64 lanes_per_tg;  /* a multiple of 32 for the group arms */
   mc_i64 nboards;       /* distinct start boards; unit u takes u % nboards */
+  mc_i64 A;             /* the --int weights of the target stage, for */
+  mc_i64 B;             /* the pass arm's mc_key */
 } mc_probe_params;
 
 /* WHY THERE ARE MANY START BOARDS.  The first run of this instrument gave
@@ -126,6 +151,30 @@ inline void mc_probe_lane(MC_THR unsigned char * steck,
       mc_components(steck, rows, ct, L, model, tbl, & isum, & coin);
       cs += isum;
       cc += coin;
+    }
+  *ck_isum = cs;
+  *ck_coin = cc;
+}
+
+/* --- arm PASS -------------------------------------------------------------
+   Uncapped, no pins, no -M: the shape of the target stage's climb. */
+inline void mc_probe_pass(MC_THR unsigned char * steck,
+                          MC_TG_CONST unsigned char * rows,
+                          MC_TG_CONST unsigned char * ct,
+                          int L, int model,
+                          MC_DEV_CONST unsigned char * tbl,
+                          mc_i64 A, mc_i64 B, int npasses,
+                          MC_THR mc_i64 * ck_isum, MC_THR mc_i64 * ck_coin)
+{
+  mc_i64 cs = 0;
+  mc_i64 cc = 0;
+  for (int t = 0; t < npasses; t++)
+    {
+      mc_i64 s = 0;
+      mc_pass(steck, rows, ct, L, model, tbl, A, B, 0u, MC_ASIZE / 2, 0,
+              & s);
+      cs += s;
+      cc += (mc_i64) mc_plug_count(steck);
     }
   *ck_isum = cs;
   *ck_coin = cc;

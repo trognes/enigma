@@ -404,11 +404,127 @@ inline int mc_try_repair(MC_THR unsigned char * steck,
   return found;
 }
 
+/* One steepest-ascent PASS: score the board, scan the 325 toggles, commit
+   the single best improving one.  Returns 1 if it improved, and leaves
+   the board's score in *score_out either way.  The scan order a outer, b
+   inner, both ascending, is part of the contract: ties between two switch
+   moves keep the FIRST found, so any other order reproduces every score
+   and still diverges on ties (DESIGN.md 3a).
+
+   Split out of mc_hillclimb() so the probe microkernel can run the real
+   scan loop as an arm of its own (probe_body.h, MC_PROBE_PASS): the
+   probe's lane arm measured the scorer alone at 3x the climb's per-probe
+   rate, and this is what prices the machinery around it in the same
+   harness.  The loop body is textually the one mc_hillclimb() had, and
+   verify_identity.py is what says the split changed nothing. */
+inline int mc_pass(MC_THR unsigned char * steck,
+                   MC_TG_CONST unsigned char * rows,
+                   MC_TG_CONST unsigned char * ct,
+                   int L, int model,
+                   MC_DEV_CONST unsigned char * tbl,
+                   mc_i64 A, mc_i64 B,
+                   unsigned int pf, int max_pairs, int capmerge,
+                   MC_THR mc_i64 * score_out)
+{
+  mc_i64 best_score = mc_key(steck, rows, ct, L, model, tbl, A, B);
+
+  const int pairs = mc_plug_count(steck);
+
+  mc_i64 move_score = best_score;
+  int move_kind = 0;   /* 0 = switch, 1 = remove */
+  int move_a = 0;
+  int move_b = 0;
+
+  for (int a = 0; a < MC_ASIZE; a++)
+    {
+      for (int b = a + 1; b < MC_ASIZE; b++)
+        {
+          if ((((pf >> a) & 1u) != 0u) || (((pf >> b) & 1u) != 0u))
+            continue;
+
+          const int sa = steck[a];
+          const int sb = steck[b];
+          const int a_free = (sa == a);
+          const int b_free = (sb == b);
+          const int paired = (sa == b);
+
+          if ((pairs >= max_pairs) && ! paired)
+            {
+              if (a_free && b_free)
+                continue;                    /* block ADD (+1) */
+              if (capmerge && (a_free || b_free))
+                continue;                    /* -M: block MOVE (0) */
+            }
+
+          const int new_kind = paired ? 1 : 0;
+          mc_i64 score;
+
+          if (paired)
+            {
+              steck[a] = (unsigned char) a;   /* REMOVE a-b */
+              steck[b] = (unsigned char) b;
+              score = mc_key(steck, rows, ct, L, model, tbl, A, B);
+              steck[a] = (unsigned char) b;   /* restore */
+              steck[b] = (unsigned char) a;
+            }
+          else
+            {
+              const int x = sa;
+              const int y = sb;
+              const int xx = steck[x];
+              const int yy = steck[y];
+              steck[x] = (unsigned char) x;   /* force a-b */
+              steck[y] = (unsigned char) y;
+              steck[a] = (unsigned char) b;
+              steck[b] = (unsigned char) a;
+              score = mc_key(steck, rows, ct, L, model, tbl, A, B);
+              steck[a] = (unsigned char) sa;  /* restore */
+              steck[b] = (unsigned char) sb;
+              steck[x] = (unsigned char) xx;
+              steck[y] = (unsigned char) yy;
+            }
+
+          if ((score > move_score) ||
+              ((score == move_score) && (score > best_score) &&
+               (new_kind == 0) && (move_kind == 1)))
+            {
+              move_score = score;
+              move_kind = new_kind;
+              move_a = a;
+              move_b = b;
+            }
+        }
+    }
+
+  if (move_score > best_score)
+    {
+      /* commit: the same mutation the winning probe made */
+      const int a = move_a;
+      const int b = move_b;
+      if (move_kind == 1)
+        {
+          steck[a] = (unsigned char) a;
+          steck[b] = (unsigned char) b;
+        }
+      else
+        {
+          const int x = steck[a];
+          const int y = steck[b];
+          steck[x] = (unsigned char) x;
+          steck[y] = (unsigned char) y;
+          steck[a] = (unsigned char) b;
+          steck[b] = (unsigned char) a;
+        }
+      *score_out = move_score;
+      return 1;
+    }
+  *score_out = best_score;
+  return 0;
+}
+
 /* One stage's climb to convergence: hillclimb<false>() under --int with the
-   default (steepest-ascent) rule. The scan order a outer, b inner, both
-   ascending, is part of the contract: ties between two switch moves keep
-   the FIRST found, so any other order reproduces every score and still
-   diverges on ties (DESIGN.md 3a). */
+   default (steepest-ascent) rule -- mc_pass() until it stops improving,
+   then try_repair() as a barrier cross, and round again if that landed. */
 /* Returns the number of steepest-ascent PASSES it ran, which MC_PASSES
    reports so the mean and the divergence factor (17.2(c), the simdgroup
    maximum over the mean) can be read per variant.  Every other build
@@ -428,114 +544,23 @@ inline int mc_hillclimb(MC_THR unsigned char * steck,
     {
       progress = 0;
 
-      mc_i64 best_score;
-      mc_i64 last_best;
+      mc_i64 best_score = 0;
+      int improved;
       do
         {
-          best_score = mc_key(steck, rows, ct, L, model, tbl, A, B);
-          last_best = best_score;
+          improved = mc_pass(steck, rows, ct, L, model, tbl, A, B, pf,
+                             max_pairs, capmerge, & best_score);
           passes++;
-
-          const int pairs = mc_plug_count(steck);
-
-          mc_i64 move_score = best_score;
-          int move_kind = 0;   /* 0 = switch, 1 = remove */
-          int move_a = 0;
-          int move_b = 0;
-
-          for (int a = 0; a < MC_ASIZE; a++)
-            {
-              for (int b = a + 1; b < MC_ASIZE; b++)
-                {
-                  if ((((pf >> a) & 1u) != 0u) || (((pf >> b) & 1u) != 0u))
-                    continue;
-
-                  const int sa = steck[a];
-                  const int sb = steck[b];
-                  const int a_free = (sa == a);
-                  const int b_free = (sb == b);
-                  const int paired = (sa == b);
-
-                  if ((pairs >= max_pairs) && ! paired)
-                    {
-                      if (a_free && b_free)
-                        continue;                    /* block ADD (+1) */
-                      if (capmerge && (a_free || b_free))
-                        continue;                    /* -M: block MOVE (0) */
-                    }
-
-                  const int new_kind = paired ? 1 : 0;
-                  mc_i64 score;
-
-                  if (paired)
-                    {
-                      steck[a] = (unsigned char) a;   /* REMOVE a-b */
-                      steck[b] = (unsigned char) b;
-                      score = mc_key(steck, rows, ct, L, model, tbl, A, B);
-                      steck[a] = (unsigned char) b;   /* restore */
-                      steck[b] = (unsigned char) a;
-                    }
-                  else
-                    {
-                      const int x = sa;
-                      const int y = sb;
-                      const int xx = steck[x];
-                      const int yy = steck[y];
-                      steck[x] = (unsigned char) x;   /* force a-b */
-                      steck[y] = (unsigned char) y;
-                      steck[a] = (unsigned char) b;
-                      steck[b] = (unsigned char) a;
-                      score = mc_key(steck, rows, ct, L, model, tbl, A, B);
-                      steck[a] = (unsigned char) sa;  /* restore */
-                      steck[b] = (unsigned char) sb;
-                      steck[x] = (unsigned char) xx;
-                      steck[y] = (unsigned char) yy;
-                    }
-
-                  if ((score > move_score) ||
-                      ((score == move_score) && (score > best_score) &&
-                       (new_kind == 0) && (move_kind == 1)))
-                    {
-                      move_score = score;
-                      move_kind = new_kind;
-                      move_a = a;
-                      move_b = b;
-                    }
-                }
-            }
-
-          if (move_score > best_score)
-            {
-              /* commit: the same mutation the winning probe made */
-              const int a = move_a;
-              const int b = move_b;
-              if (move_kind == 1)
-                {
-                  steck[a] = (unsigned char) a;
-                  steck[b] = (unsigned char) b;
-                }
-              else
-                {
-                  const int x = steck[a];
-                  const int y = steck[b];
-                  steck[x] = (unsigned char) x;
-                  steck[y] = (unsigned char) y;
-                  steck[a] = (unsigned char) b;
-                  steck[b] = (unsigned char) a;
-                }
-              best_score = move_score;
-            }
         }
 #if MC_FIXED_PASSES > 0
       /* Exactly N passes, whatever the score does: the outer loop runs
          once and try_repair is skipped, so every variant scans the same
          number of times.  See MC_FIXED_PASSES at the top. */
       while (passes < MC_FIXED_PASSES);
-      (void) last_best;
+      (void) improved;
       (void) no_repair;
-      (void) pf;
 #else
-      while (best_score > last_best);
+      while (improved);
 
       if ((! no_repair) &&
           mc_try_repair(steck, rows, ct, L, model, tbl, A, B, pf, best_score))

@@ -56,3 +56,60 @@ itself.  Both matter and this run cannot tell them apart.
 Fixed by giving unit u start board u % 64, the 64 boards being the
 kicks for (key 0, restart 0..63), so a simdgroup holds 32 boards as a
 climb does, with 64 oracles in place of one.  Run 2 is that.
+
+
+Run 2 -- 64 start boards, the measurement
+-----------------------------------------
+
+  arm                      units     probes/s   vs lane   cap  check
+  lane (today)            132864     66682646     1.00x   512  ok
+  group K=32 shuffle       54096     32802591     0.49x  1024  ok
+  group K=32 packed        57472     32610251     0.49x   832  ok
+  group K=16 packed       104804     49236337     0.74x   832  ok
+  group K=8 packed        149040     62233807     0.93x   832  ok
+
+THE BROADCAST WAS WORTH 6%.  The lane arm fell 71.0M -> 66.7M with 32
+different boards per simdgroup, and the group arms did not move, as
+predicted.  So the run-1 reading stands, sharpened: refitting the K
+trend puts the group shape's per-character step at 0.94 of the lane's
+in lane-time, with the reductions at ~0.009 per butterfly step per
+lane and no measurable fixed cost.
+
+17.4'S DECOMPOSITION IS DEAD.  Spreading the decode across a simdgroup
+-- the board in registers by shuffle or by packed words, the histogram
+in registers, no per-lane array anywhere -- does not shorten the
+per-character step.  Converting both arms to lane-cycles per character
+(rate x L over the resident lanes the cap allows, at ~1.28 GHz): the
+lane arm's step is ~750 cycles and the K=8 packed arm's ~1 300.  Both
+shapes are stalled for nearly all of a ~15-50-instruction step, and the
+one with NO thread memory is the slower.  Whatever the ~750 cycles are,
+they are not the thread-memory board and histogram that 17.2 ranked
+first; table B had already priced those at 32% and 8%, and this is the
+same fact from the other side.
+
+THE FINDING IS THE OTHER NUMBER.  The lane arm -- mc_components on a
+toggled board, which is exactly what the climb does 326 times a pass --
+runs 66.7M probes/s.  The fixed-pass climb runs 22.3M (results-gpu-
+ablation-m1.txt run 4, 44.8 ns per probe at L=107).  The same scoring,
+3.0x slower inside the climb kernel than beside it, with the broadcast
+now excluded.  The cap accounts for 512/384 = 1.33x of that at most;
+the remaining ~2.2x is the kernel around the scorer: the toggle scan's
+kind logic and cap check, the mutate and restore writes to a
+thread-memory board (up to eight a probe against the probe arm's
+two-to-four), the best-move compare, and whatever the compiler makes of
+mc_components inlined inside a function large enough to be
+register-starved.  17.2 ranked four suspects and none of them was this,
+because every ablation removed part of the SCORER and the scan
+machinery was in the "everything else" of table B (32.6%) and in the
+per-probe intercept table D put at 3% -- which it cannot be, if the
+probe arm is right.  One of those two instruments is misreading the
+scan, and the probe arm is the one checked against the tool's scorer.
+
+Two arms settle it, both cheap:
+  lane packed    K = 1 through the group template: the board and the
+                 histogram in registers in TODAY's decomposition, no
+                 shuffles, no reductions -- whether the thread-memory
+                 traffic matters at all once the scan is gone;
+  climb pass     one steepest-ascent pass per unit, the real scan loop
+                 from climb_body.h, 326 probes -- the scan machinery's
+                 cost in the same harness as the scorer alone.

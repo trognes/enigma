@@ -34,9 +34,10 @@
 #include <vector>
 
 static const char * const arm_name[MC_PROBE_ARMS] =
-  { "lane (today)", "group K=32 shuffle", "group K=32 packed",
-    "group K=16 packed", "group K=8 packed" };
-static const int arm_k[MC_PROBE_ARMS] = { 1, 32, 32, 16, 8 };
+  { "lane (today)", "lane packed regs", "climb pass (scan)",
+    "group K=32 shuffle", "group K=32 packed", "group K=16 packed",
+    "group K=8 packed" };
+static const int arm_k[MC_PROBE_ARMS] = MC_PROBE_K_LIST;
 
 static const char * model_name(int model)
 {
@@ -138,6 +139,12 @@ int probe_run(machine & m, int lanes_cap)
   unsigned char boards[MC_PROBE_BOARDS * asize];
   int64_t os[MC_PROBE_BOARDS];
   int64_t oc[MC_PROBE_BOARDS];
+  int64_t ps[MC_PROBE_BOARDS];   /* the pass arm's, body-against-body */
+  int64_t pc[MC_PROBE_BOARDS];
+  int64_t A = 0;
+  int64_t B = 0;
+  intscore_weights(model, & A, & B);
+  const int npasses = MC_PROBE_PASSES(nprobes);
   m.scoring = model;
   for (size_t bd = 0; bd < nboards; bd++)
     {
@@ -166,13 +173,20 @@ int probe_run(machine & m, int lanes_cap)
           fatal("probe_body.h disagrees with the tool's scorer on the "
                 "CPU");
         }
+
+      /* The pass arm's oracle: mc_pass() itself on the CPU.  Its tie to
+         the tool's climb is verify_identity.py, not this. */
+      memcpy(st, b0, asize);
+      mc_probe_pass(st, rows.data(), num_ciphertext, L, model, tbl, A, B,
+                    npasses, & ps[bd], & pc[bd]);
     }
 
   fprintf(stderr, "Probe: DESIGN.md 17.6 (ii), one toggle probe in two "
-          "shapes\n  L=%d, model %s, %d probes per unit, %zu start "
-          "boards, %d lanes per\n  threadgroup, checksums against "
-          "score_components over the same toggles\n", L,
-          model_name(model), nprobes, nboards, lanes);
+          "shapes\n  L=%d, model %s, %d probes per unit (%d passes of %d "
+          "for the pass arm),\n  %zu start boards, %d lanes per "
+          "threadgroup, checksums against\n  score_components over the "
+          "same toggles\n", L, model_name(model), nprobes, npasses,
+          MC_PROBE_PASS_PROBES, nboards, lanes);
   fprintf(stderr, "  %-20s %9s %12s %9s %5s  %s\n", "arm", "units",
           "probes/s", "vs lane", "cap", "check");
 
@@ -183,6 +197,8 @@ int probe_run(machine & m, int lanes_cap)
   p.nprobes = nprobes;
   p.lanes_per_tg = lanes;
   p.nboards = static_cast<int64_t>(nboards);
+  p.A = A;
+  p.B = B;
 
   std::vector<int64_t> out;
   double lane_rate = 0.0;
@@ -197,6 +213,10 @@ int probe_run(machine & m, int lanes_cap)
           continue;
         }
       const size_t per_tg = static_cast<size_t>(lanes / K);
+      const bool pass_arm = (arm == MC_PROBE_PASS);
+      const int ppu = pass_arm ? npasses * MC_PROBE_PASS_PROBES : nprobes;
+      const int64_t * ar_s = pass_arm ? ps : os;
+      const int64_t * ar_c = pass_arm ? pc : oc;
 
       /* Pilot: 64 threadgroups. */
       size_t units = 64 * per_tg;
@@ -218,14 +238,15 @@ int probe_run(machine & m, int lanes_cap)
                   arm_name[arm], "");
           continue;
         }
-      bool ok = check(out, units, os, oc, nboards, arm_name[arm], false);
+      bool ok = check(out, units, ar_s, ar_c, nboards, arm_name[arm],
+                      false);
       double rate = (secs > 0.0)
-        ? static_cast<double>(units) * nprobes / secs : 0.0;
+        ? static_cast<double>(units) * ppu / secs : 0.0;
 
       /* Size to ~0.4 s, in whole threadgroups, capped at 1M units. */
       if (rate > 0.0)
         {
-          size_t want = static_cast<size_t>(rate * 0.4 / nprobes);
+          size_t want = static_cast<size_t>(rate * 0.4 / ppu);
           want = ((want + per_tg - 1) / per_tg) * per_tg;
           if (want < per_tg)
             want = per_tg;
@@ -241,10 +262,10 @@ int probe_run(machine & m, int lanes_cap)
         {
           if (! backend_probe(b, & secs, & cap))
             fatal("internal: an arm that ran refuses to run again");
-          ok = check(out, units, os, oc, nboards, arm_name[arm], ! ok)
+          ok = check(out, units, ar_s, ar_c, nboards, arm_name[arm], ! ok)
             && ok;
           const double r = (secs > 0.0)
-            ? static_cast<double>(units) * nprobes / secs : 0.0;
+            ? static_cast<double>(units) * ppu / secs : 0.0;
           if (r > best)
             best = r;
         }
@@ -258,9 +279,10 @@ int probe_run(machine & m, int lanes_cap)
               ok ? "ok" : "FAIL");
     }
 
-  fprintf(stderr, "\n  vs lane is the step-latency ratio 17.4 rests on, "
-          "occupancy included;\n  cap is the pipeline's register-derived "
-          "thread limit, 1024 for a lean\n  kernel.  A FAIL row's rate "
-          "means nothing.\n");
+  fprintf(stderr, "\n  vs lane: the group rows are the step-latency "
+          "ratio 17.4 rests on, occupancy\n  included; the pass row is "
+          "the scan machinery's cost, the scorer alone being\n  1.00x; "
+          "cap is the pipeline's register-derived thread limit, 1024 for "
+          "a lean\n  kernel.  A FAIL row's rate means nothing.\n");
   return (failed == 0) ? 0 : 2;
 }
