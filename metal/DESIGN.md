@@ -533,6 +533,16 @@ fixes it, once per machine (the first Mac build stopped here):
 xcodebuild -downloadComponent MetalToolchain
 ```
 
+**A machine with only the Command Line Tools cannot do that** --
+`xcodebuild` refuses ("requires Xcode ... is a command line tools
+instance") and the CLT never ships a Metal compiler. Either install Xcode
+(App Store, ~12 GB; then `xcode-select -s` to it and the command above),
+or skip compiling there: a `.metallib` is AIR bytecode the driver
+finishes for the specific GPU at load time, so one built on another Apple
+silicon machine works. `make -C metal enigma-metal` builds the host alone
+with the CLT's clang and frameworks; copy `climb.metallib` beside it or
+point `$ENIGMA_METALLIB` at it.
+
 `enigma-ref`
 builds anywhere and is the same program with the body run on the CPU: it
 is how the body was verified on Linux, and how a GPU disagreement is

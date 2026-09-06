@@ -47,7 +47,9 @@ backend_metal.o : backend_metal.mm host_common.h climb_body.h
 # -fno-fast-math: the body holds no floating point, so this is defence in
 # depth against any FP that reaches a wrapper later (DESIGN.md 11).
 #
-# Since Xcode 16 the Metal compiler is a separately downloaded component:
+# Since Xcode 16 the Metal compiler is a separately downloaded component
+# (and the Command Line Tools alone never have one -- build enigma-metal
+# here and copy a climb.metallib built elsewhere, DESIGN.md 13):
 # if xcrun reports a missing Metal Toolchain, run (once per machine)
 #     xcodebuild -downloadComponent MetalToolchain
 climb.metallib : climb.metal climb_body.h
