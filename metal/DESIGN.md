@@ -454,7 +454,17 @@ top-level `make` first, so the tool's own option parsing, key space,
 kicks, tables and reporting are reused rather than re-implemented
 (section 7). `enigma-metal` needs `xcrun metal -fno-fast-math` for the
 `.metallib`, loaded from beside the executable or `$ENIGMA_METALLIB`, and
-`clang++ -ObjC++` with the Metal and Foundation frameworks. `enigma-ref`
+`clang++ -ObjC++` with the Metal and Foundation frameworks. **The Metal
+compiler is not part of Xcode's default install since Xcode 16** — it is a
+downloadable component, and until it is fetched `xcrun metal` fails with
+"cannot execute tool 'metal' due to missing Metal Toolchain". One command
+fixes it, once per machine (the first Mac build stopped here):
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+```
+
+`enigma-ref`
 builds anywhere and is the same program with the body run on the CPU: it
 is how the body was verified on Linux, and how a GPU disagreement is
 split into a wrapper bug or a body bug. Both take the tool's own command

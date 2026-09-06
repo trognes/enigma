@@ -179,6 +179,10 @@ existing command lines can behave differently or stop working.
     single translation unit from before the module split, which no source
     produces any more but which a long-lived checkout still carried. The
     top-level Makefile builds from the sources and never saw it.
+  - **The Metal compiler is a separate download since Xcode 16**, and the
+    first Mac build stopped on it: `xcrun metal` reports a missing Metal
+    Toolchain until `xcodebuild -downloadComponent MetalToolchain` has been
+    run once. Recorded in `metal/DESIGN.md` §13 and the Makefile.
 - **`--int` — the plugboard climb compares its scores as exact 64-bit
   integers.** Every scorer already accumulates two integers, the table sum
   `isum` and the same-letter pair count `coin`, before one float division;
