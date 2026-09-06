@@ -45,6 +45,11 @@ typedef int64_t mc_i64;
 /* Lanes per threadgroup the host asks for; a backend may lower it to what
    its pipeline allows. */
 #define MC_LANES 256
+/* Climbs in one dispatch. A cap on DURATION, not on memory: macOS resets
+   the GPU when a command buffer runs too long and takes the desktop with
+   it, so this is what keeps a large sweep from freezing the machine.
+   $ENIGMA_GPU_BATCH_ITEMS overrides it (host_common.cc). */
+#define MC_ITEMS_PER_DISPATCH 4096
 
 /* Scoring models, in the CPU's enum scoring order (src/common.h). The host
    asserts the correspondence at compile time. */
