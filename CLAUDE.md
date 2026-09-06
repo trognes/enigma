@@ -1212,7 +1212,11 @@ are read from a **data directory** (filenames built as
     **166, 825 and 1 715 breaks of 2 000 at L = 60/107/167, in both arms,
     with zero discordant trials at every length**. `eval/intscore_ab.py`
     runs both from one binary; `eval/results-intscore.txt` is the output.
-    `make bench LONG=1 BASE=origin/dev`: [[BENCH]].
+    `make bench LONG=1 BASE=origin/dev` on the idle box, long tier: `search`
+    −1.7%, `icscan` +0.0%, `hillclimb` +0.1%, `fused` −0.2%, `crib` +3.1%
+    (quick +0.9%, so the long reading does not reproduce across tiers and
+    is scatter) — every cell inside its documented floor, as a branch on a
+    global at the top of `score_iter` should be.
   - **The four pure n-gram decoders are `always_inline` and `score_key()`
     is `noinline`, and both are load-bearing.** `score_key()` is a second
     caller of the decoders beside the double path, and g++ answered the

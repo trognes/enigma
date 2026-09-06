@@ -145,7 +145,9 @@ existing command lines can behave differently or stop working.
     166, 825 and 1 715 breaks of 2 000 at L = 60/107/167 in both arms,
     **zero discordant trials at every length** (`eval/intscore_ab.py`,
     `eval/results-intscore.txt`).
-  - **Bench:** `make bench LONG=1 BASE=origin/dev` [[BENCH]].
+  - **Bench:** `make bench LONG=1 BASE=origin/dev`, long tier: `search`
+    −1.7%, `icscan` +0.0%, `hillclimb` +0.1%, `fused` −0.2%, `crib` +3.1%
+    (+0.9% quick, i.e. scatter) — every cell inside its floor.
   - The four pure n-gram decoders became `always_inline` and `score_key()`
     `noinline`: `score_key()` was a second caller and g++ outlined the
     decoders, dropping `score_iter` from 837 to 326 instructions with a

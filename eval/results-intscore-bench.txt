@@ -1,0 +1,16 @@
+sh tests/bench.sh
+A/B: BASE=origin/dev vs working tree (regression threshold 10%)
+LONG=1  SCALE=0  quick reps=3  long reps=2
+
+search     quick base     0.65s  head     0.64s     -0.8%
+icscan     quick base     0.60s  head     0.58s     -2.9%
+hillclimb  quick base     0.30s  head     0.30s     +1.4%
+fused      quick base     0.52s  head     0.52s     +0.7%
+crib       quick base     0.39s  head     0.39s     +0.9%
+search     long  base     8.79s  head     8.64s     -1.7%
+icscan     long  base     7.82s  head     7.82s     +0.0%
+hillclimb  long  base    13.58s  head    13.59s     +0.1%
+fused      long  base    19.48s  head    19.43s     -0.2%
+crib       long  base     9.50s  head     9.79s     +3.1%
+
+RESULT: no regression > 10%
