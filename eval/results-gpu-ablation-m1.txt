@@ -1,0 +1,102 @@
+GPU cost probes on the Mac mini M1 -- metal/DESIGN.md 17.6 step 1
+================================================================
+
+metal/ablate.py, L=107, -R 256, 26 keys, 3 fixtures x 3 reps.
+Device climbs/s from the host's own timer, so startup is outside it.
+
+
+Run 1 -- CONFOUNDED, kept because the confound is the finding
+------------------------------------------------------------
+
+  # variant                        climbs/s   vs base   cap  note
+  0 baseline                           2229     1.00x   384
+  1 no histogram (freq[26])            2505     1.12x   384  spread 1.07
+  2 no board lookups                  45382    20.36x   384  spread 1.00
+  3 32-bit accumulators                2261     1.01x   384  spread 1.08
+  4 no all8 gather                     1973     0.89x   384  spread 1.06
+  5 pass counts (divergence)           2219     1.00x   384  div    1.48
+  0 baseline, 128 lanes                2801     1.26x   384
+
+(The "spread" column was printed as "divergence" on every row, which was
+true only of row 5: on the others it is the per-simdgroup max/mean of
+`isum`, not of the pass count. Corrected in the tool.)
+
+WHY ROWS 1, 2 AND 4 CANNOT BE READ. Each changes the SCORE, so it changes
+the climb's trajectory, so it changes how many passes the climb runs
+before it converges -- and climbs/s does not normalise for that. Variant 2
+is the extreme: with the decode independent of the board, all 325 toggle
+probes return the same score, no move ever improves, and the climb exits
+after ONE pass per stage instead of the ~16 it normally takes. The
+fingerprint is in the table -- its per-simdgroup spread reads exactly
+1.00, i.e. every lane computed an identical score.
+
+Measured on the CPU backend at the same cell and recipe, the natural
+climb runs a mean of 15.83 passes against variant 2's 2 (one per stage,
+two stages), so ~7.9x of that 20.36x is work not done. What is left is
+~2.6x for the two steck[] lookups themselves -- and that is a LOWER bound
+on the per-pass speedup, since a 2-pass climb amortises the per-climb
+fixed costs (the rows[] load into threadgroup memory, the barrier) over
+one eighth as much work. Real, the largest single item so far, and
+nothing like the headline.
+
+Variant 3 is the only one of the four that could be read at all, because
+it is answer-preserving and therefore runs the identical trajectory by
+construction. It reads 1.01x: 32-bit accumulators are free and are not a
+speedup.
+
+
+What run 1 does establish
+-------------------------
+
+THE REGISTER CAP IS 384 IN EVERY VARIANT. That is a compile-time property
+of the pipeline, untouched by the trajectory confound, so it is solid --
+and it answers the question step 0 left open. Deleting freq[26] outright
+does not lift the cap, so freq was never in registers: the per-lane arrays
+are in thread memory and the cost is latency, not ALU (17.2 (a) over (b)).
+It also raises a new one: if none of the four ablations moves the cap,
+something none of them removes is setting it.
+
+DIVERGENCE IS 1.48x, not the ~2x guessed in 17.2(c). About a third of
+lane-cycles are masked off. Real, but not the story. The CPU backend
+reproduces it to three digits (1.480 at the same cell), which is expected
+-- it is a property of the climb's trajectory, not of the hardware -- and
+means the remaining divergence questions need no Mac time at all.
+
+128 LANES PER THREADGROUP BUYS 26% FOR NOTHING: no kernel change, no
+answer change, inside the 20-40% predicted in step 0 from the occupancy
+arithmetic. Swept properly in run 2 before it becomes the default.
+
+
+The instrument, corrected
+-------------------------
+
+MC_PASSES and MC_FIXED_PASSES are now switches orthogonal to MC_ABLATE
+rather than a fifth mutually exclusive variant:
+
+  climb-a<N>   natural climb, MC_PASSES=1, so every variant reports the
+               pass count it actually took and its rate can be read in
+               passes/s -- the invariant-work unit
+  climb-f<N>   MC_FIXED_PASSES=8, so every variant runs the same number
+               of scans by construction and climbs/s is directly
+               comparable; this is the measurement
+
+Verified on the CPU backend, which now mirrors climb.metal's pass-count
+output so the probe machinery is testable without a GPU: the natural
+build reports mean 15.825 passes and max/mean 1.480, the fixed build
+reports mean 16.000 (8 passes x 2 stages) and max/mean exactly 1.000.
+
+Being a fifth VARIANT is what stopped the old pass counter from catching
+any of this: it could only ever report the baseline's trajectory, never
+the trajectory of the variant whose number needed normalising.
+
+
+A note on the cost of running it
+--------------------------------
+
+DESIGN.md 17.6 estimated "about an hour of Mac time" for step 1. It took
+a few minutes. 63 invocations at ~3.3 s each is under four minutes, and
+the estimate was written without multiplying it out. Worth recording
+because the estimate shaped the design -- the instrument was kept small
+to fit an hour that was never at risk, and the fixed-pass family that
+would have avoided the confound was dropped from the ladder for exactly
+that reason.

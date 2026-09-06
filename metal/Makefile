@@ -63,21 +63,43 @@ clean :
 .PHONY : all metal clean
 
 # --- DESIGN.md 17.6 step 1: the cost probes -------------------------------
-# One metallib per MC_ABLATE variant, because the register cap the host's
-# GPU: line reports is a property of the COMPILED pipeline: a runtime
-# branch would have the compiler allocate for the union of the paths and
-# every variant would report the same number.  The default build above is
-# untouched -- MC_ABLATE unset is variant 0.
+# One metallib per variant, because the register cap the host's GPU: line
+# reports is a property of the COMPILED pipeline: a runtime branch would
+# have the compiler allocate for the union of the paths and every variant
+# would report the same number.  The default build above is untouched --
+# MC_ABLATE unset is variant 0.
 #
-#   make -C metal ablate        # climb-a1.metallib .. climb-a5.metallib
-#   python3 metal/ablate.py     # runs them and prints the table
-ABLATE_LIBS := $(foreach n,1 2 3 4 5,climb-a$(n).metallib)
+#   make -C metal ablate        # ten metallibs, seconds each
+#   python3 metal/ablate.py     # runs them and prints the tables
+#
+# TWO FAMILIES, because the first run of this was confounded (climb_body.h,
+# MC_FIXED_PASSES).  Variants that change the score change the climb's
+# trajectory, so they change how many passes it runs, and climbs/s does not
+# normalise for that:
+#
+#   climb-a<N>   natural climb, MC_PASSES=1 so each run also reports the
+#                pass count it took -- which is what turns its climbs/s
+#                into passes/s, and what gives the divergence factor
+#   climb-f<N>   MC_FIXED_PASSES, so every variant runs the same number of
+#                scans by construction and climbs/s is directly comparable
+#
+# MC_PASSES is on in both: it costs one store per climb, measured at 2 219
+# climbs/s against 2 229 for a build without it.
+ABLATE_N := 0 1 2 3 4
+ABLATE_FIXED ?= 8
+ABLATE_LIBS := $(foreach n,$(ABLATE_N),climb-a$(n).metallib) \
+               $(foreach n,$(ABLATE_N),climb-f$(n).metallib)
 
 ablate : $(ABLATE_LIBS)
 
 climb-a%.metallib : climb.metal climb_body.h
-	xcrun -sdk macosx metal -fno-fast-math -DMC_ABLATE=$* -c climb.metal \
-	    -o climb-a$*.air
+	xcrun -sdk macosx metal -fno-fast-math -DMC_ABLATE=$* -DMC_PASSES=1 \
+	    -c climb.metal -o climb-a$*.air
 	xcrun -sdk macosx metallib climb-a$*.air -o $@
+
+climb-f%.metallib : climb.metal climb_body.h
+	xcrun -sdk macosx metal -fno-fast-math -DMC_ABLATE=$* -DMC_PASSES=1 \
+	    -DMC_FIXED_PASSES=$(ABLATE_FIXED) -c climb.metal -o climb-f$*.air
+	xcrun -sdk macosx metallib climb-f$*.air -o $@
 
 .PHONY : ablate

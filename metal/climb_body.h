@@ -118,16 +118,50 @@ typedef struct
    4  the quad gather returns a constant instead of reading all8.  17.2(d),
       the 457 KB table, which the CPU decomposition priced at 6% because
       out-of-order execution hides it and a lane cannot.  ANSWER-DESTROYING.
-   5  no ablation: counts the climb's passes per lane and writes them where
-      the components go, so the host can report the DIVERGENCE factor
-      (17.2(c)) as the simdgroup maximum over the mean.  Answer-preserving
-      in the board, but the components are overwritten.
 
-   Every variant except 3 and 5 returns a wrong board, so a probe binary
-   must never be mistaken for the tool: $ENIGMA_GPU_ABLATE makes the host
-   say so on every run and skip its component check (host_common.cc). */
+   Every variant except 3 returns a wrong board, so a probe binary must
+   never be mistaken for the tool: $ENIGMA_GPU_ABLATE makes the host say
+   so on every run and skip its component check (host_common.cc).
+
+   THE FIRST RUN OF THIS INSTRUMENT WAS CONFOUNDED, AND MC_FIXED_PASSES
+   BELOW IS WHY IT NOW IS NOT.  Variants 1, 2 and 4 change the SCORE, so
+   they change the climb's trajectory, so they change how many passes a
+   climb runs before it converges -- and climbs/s does not normalise for
+   that.  Variant 2 is the extreme case: with the decode independent of
+   steck, every one of the 325 probes returns the same score, no move
+   ever improves, and the climb exits after ONE pass instead of ten or
+   twenty.  It duly measured 20.4x faster, and the fingerprint was in the
+   output -- its per-simdgroup spread of the first component read exactly
+   1.00, i.e. every lane computed an identical score.  Almost all of that
+   20.4x is work not done, not latency removed.  Variant 3 was the only
+   probe of the four that could be read, because it is answer-preserving
+   and therefore runs the identical trajectory by construction. */
 #ifndef MC_ABLATE
 #define MC_ABLATE 0
+#endif
+
+/* --- MC_FIXED_PASSES: make the work identical across variants ------------
+   N > 0 runs EXACTLY N steepest-ascent passes per stage and skips the
+   try_repair barrier cross, whatever the scores do.  Every variant then
+   performs the same number of scans over the same number of characters,
+   so climbs/s is directly comparable and the difference is the ablated
+   component alone -- which is what step 1 was supposed to measure.
+   Truncates or extends a real climb, so the board is not the tool's:
+   a probe build, under the same $ENIGMA_GPU_ABLATE banner. */
+#ifndef MC_FIXED_PASSES
+#define MC_FIXED_PASSES 0
+#endif
+
+/* --- MC_PASSES: report the pass count instead of the components ----------
+   Orthogonal to MC_ABLATE, which is the point: the natural pass count of
+   variant N is what normalises variant N's climbs/s into passes/s, so it
+   has to be measurable for every variant and not only for the baseline.
+   It was MC_ABLATE == 5 -- a fifth mutually exclusive variant, which
+   could only ever report the BASELINE's trajectory and so could not have
+   detected the confound above.  Writing the count costs one store per
+   climb, measured at 2 219 climbs/s against the baseline's 2 229. */
+#ifndef MC_PASSES
+#define MC_PASSES 0
 #endif
 
 /* plugboard -> per-position rotor-stack row -> plugboard: decode_at()
@@ -366,9 +400,10 @@ inline int mc_try_repair(MC_THR unsigned char * steck,
    ascending, is part of the contract: ties between two switch moves keep
    the FIRST found, so any other order reproduces every score and still
    diverges on ties (DESIGN.md 3a). */
-/* Returns the number of steepest-ascent PASSES it ran, which variant 5
-   reports so the divergence factor (17.2(c)) can be read as a simdgroup
-   maximum over the mean.  Every other build ignores the value. */
+/* Returns the number of steepest-ascent PASSES it ran, which MC_PASSES
+   reports so the mean and the divergence factor (17.2(c), the simdgroup
+   maximum over the mean) can be read per variant.  Every other build
+   ignores the value. */
 inline int mc_hillclimb(MC_THR unsigned char * steck,
                          MC_TG_CONST unsigned char * rows,
                          MC_TG_CONST unsigned char * ct,
@@ -482,11 +517,21 @@ inline int mc_hillclimb(MC_THR unsigned char * steck,
               best_score = move_score;
             }
         }
+#if MC_FIXED_PASSES > 0
+      /* Exactly N passes, whatever the score does: the outer loop runs
+         once and try_repair is skipped, so every variant scans the same
+         number of times.  See MC_FIXED_PASSES at the top. */
+      while (passes < MC_FIXED_PASSES);
+      (void) last_best;
+      (void) no_repair;
+      (void) pf;
+#else
       while (best_score > last_best);
 
       if ((! no_repair) &&
           mc_try_repair(steck, rows, ct, L, model, tbl, A, B, pf, best_score))
         progress = 1;
+#endif
     }
   while (progress);
   return passes;
