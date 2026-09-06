@@ -232,6 +232,76 @@ representations are proven to agree before anything is built into the
 climb.
 
 
+Run 5 -- the scan loop on the packed board
+------------------------------------------
+
+  arm                      units     probes/s   vs lane   cap  check
+  lane (today)            134528     66050663     1.00x   512  ok
+  lane packed regs        328256    101210471     1.53x   896  ok
+  climb pass (scan)         2368     32967390     0.50x   384  ok
+  climb pass packed         3904     48713510     0.74x   384  ok
+  group K=32 shuffle       63336     32694074     0.49x  1024  ok
+  group K=32 packed        62578     32604018     0.49x   832  ok
+  group K=16 packed        98372     49157053     0.74x   832  ok
+  group K=8 packed        146776     62165027     0.94x   832  ok
+
+THE PACKED BOARD IS WORTH 1.48x IN THE SCAN, AND THE CAP DID NOT MOVE.
+mc_pass_pk runs 48.7M probes/s against mc_pass's 33.0M, every unit
+reproducing the array pass's integers on the GPU as on the CPU.  The
+cap stays at 384 -- so unlike the scorer-alone case (512 -> 896) the
+gain here is not occupancy but the per-lane step: the eight
+thread-memory writes per toggle are gone.  What pins the scan kernel's
+registers is the scan's own live state -- best and move scores in 64
+bits, the move's kind and endpoints, the loop counters, sa/sb/x/y/
+xx/yy/na/nb -- not the board, which is why the board moving to
+registers did not free any.
+
+The scan's overhead over its scorer is therefore unchanged in ratio:
+48.7M against the register-resident scorer's 101.2M is 2.08x, where
+33.0M against 66.1M was 2.00x.  Moving the board made both faster by
+the same factor and the machinery around the scorer still costs as
+much as the scorer.
+
+THE LEDGER IS COMPLETE.  Every layer of the current design is now
+measured on a kernel that exists and checks against the tool:
+
+  scorer alone, board in registers      101.2M
+  scan loop on the packed board          48.7M   x 2.08 for the scan
+  climb at fixed passes, projected       ~37M    x 1.3 stages, cap check
+  climb as it runs, projected            ~19M    x 1.46 divergence,
+                                                 x 1.33 try_repair
+
+~19M natural probes/s at ~5 100 per climb is ~3 700 climbs/s: 1.5x
+today's 2 430, and 0.28x the CPU's 13.1k at this cell.  The 17.4
+decomposition is 0.49-0.94x of the lane and is dead.  There is no
+unmeasured lever left in the lane-per-climb design: the board is in
+registers, the scorer is one call per toggle, the double scoring was
+never the climb's, and the remaining 8x between the scorer in
+registers and the climb as it runs is the scan (2.1x), the stage
+structure (1.3x), and the divergence and try_repair that a climb per
+lane brings by construction (1.9x).
+
+AND THE CPU COMPARISON IS GENEROUS TO THE GPU.  Every GPU/CPU ratio in
+these files runs the CPU under steepest ascent, the rule the port
+fixed as its contract; the tool's recommended recipe is -K, which does
+~2.8x fewer scorings per climb.  The GPU could adopt the same rule and
+the ratio would likely hold, but against the tool as actually used the
+gap is wider than the tables say.
+
+WHAT THIS IS AND IS NOT A VERDICT ON.  On Apple silicon the GPU cannot
+reach its own CPU with this design: the M1 pairs 8 GPU cores of ~1 000
+lanes each with 8 CPU cores, and every layer above says why.  The
+pathology is per-lane and the M2 Pro cross-check said chip-independent
+-- but the ABSOLUTE rate scales with resident lanes times clock, and a
+discrete CUDA part carries ~30x the M1's lanes at ~2x the clock against
+a desktop CPU of perhaps 2x the M1's.  The same kernel, unchanged,
+projects to parity or a small multiple there -- arithmetic, with
+section 12's record as the warning -- and enigma-cuda's 20k
+key-climbs/s on a 2016 GTX 1070 says the order of magnitude is right.
+The port's value, if it has one, is on that hardware and not on the
+Mac; the Mac was the instrument, and the instrument's job is done.
+
+
 WHERE THIS LEAVES THE PORT.  The scorer with a register-resident board
 runs 101M probes/s; the climb ran 17.7M and now 33.0M.  That 5.7x is the scan
 machinery plus the occupancy it costs, and both are inside the current
