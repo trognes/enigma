@@ -108,19 +108,48 @@ Findings
    contingencies (reflector C, wheels VI-VIII) overnight runs instead of
    multi-day ones, and their priors are too small to justify even that.
 
-What is running
----------------
+What was run
+------------
 
-A first-pass RXPSB sweep on the nine Herivel ring combinations, centre (D,N)
-first, -R 16, reflector B, wheels I-V, all starts, --confidence 256
---doubling-report 7 --seed-dedup, ~5 h on this 4-thread box.  The high-R
-version belongs on a faster box; per combination, for rr in
-DN CN EN DM DO CM CO EM EO:
+The first-pass RXPSB sweep on the nine Herivel ring combinations: -R 16,
+reflector B, wheels I-V, all starts, ring0 the offset axis, --confidence
+256 --doubling-report 7 --seed-dedup, the recommended recipe
+(-c -K --polish -S k4f10 -f -l wehrmacht), 4 threads.  Each combination
+is 60 wheel orders x 17 576 starts = 1 054 560 keys, ~33.2 G plugboards
+scored and ~29.5 min, 4.4 h in all.  The ciphertext carried its two garble
+dashes as placeholder letters and the Kenngruppe stripped.
+
+    ring   margin  best   best key                      preview
+    ADN    +0.34   5.6sd  B213 ADN RJT (10 plugs)       MSIGSTIEREOPIKDNNAN
+    ACN    +0.73   6.0sd  B314 ACN DLQ                  TERCEEBERELMEXBELIE
+    AEN    +0.99   6.3sd  B213 AEN RKT                  MSIGSTIEREOPIKDNNAN
+    ADM    +0.62   5.9sd  B512 ADM RSS                  LATWETWERREINWELBGY
+    ADO    +0.61   5.9sd  B324 ADO TXV                  QHIETSQHMLLEISIEGEH
+    ACM    +0.53   5.8sd  B512 ACM QQS                  LATWETWERREINWELBGY
+    ACO    +0.77   6.0sd  B324 ACO TWV                  QHIETSQHMLLEISIEGEH
+    AEM    +0.88   6.1sd  B512 AEM RTS                  LATWETWERREINWELBGY
+    AEO    +1.08   6.3sd  B324 AEO TWV                  QHIETSQHMLLEISIEGEH
+
+NOTHING.  Every margin sits inside the +0.5..+1.1 band that pure noise
+reaches over a million keys (CLAUDE.md, --confidence: the 99th percentile
+of the margin on signal-free text is +0.8, rising with K), no
+--doubling-report line fired in any run, and the same three decoy boards
+recur across neighbouring rings -- the ring shift moves the notch timing
+and leaves the substitution, so a decoy at ADM is a decoy at ACM and AEM
+too.  The best "plaintext" is telegraphic-shaped noise (LATWETWERREINWEL,
+QHIETSQHMLLEISIEGEH).
+
+WHAT THE NULL IS WORTH.  The 5.67 bar is unchanged; what -R 16 buys is
+the climb, and at 107 letters with the rotor key GIVEN the plugboard tier
+recovers ~30% at -R 8 and ~54% at -R 64 (CLAUDE.md, "how much length
+costs"), so call this pass ~40% power at the true key -- times the
+10-15% prior that RXPSB's ring is a Herivel ring at all.  So the negative
+lowers that prior to roughly 6-10% and no more.  The -R 2000 version of
+the same command is what would settle it, and it belongs on a faster box:
 
     ./enigma -u B -w ... -r Arr -g ... -c -K --polish -S k4f10 -f \
         -l wehrmacht -R 2000 -T 7 --confidence 256 --doubling-report 7 \
         --seed-dedup < rxpsb.txt
 
-with the ciphertext carrying its two garble dashes as placeholder letters
-and the Kenngruppe stripped.  Validate any candidate with
+for rr in DN CN EN DM DO CM CO EM EO.  Validate any candidate with
 eval/day_key_from_indicator.py --msg START:ZDN:QMF.
