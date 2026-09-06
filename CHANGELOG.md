@@ -183,10 +183,14 @@ existing command lines can behave differently or stop working.
     first Mac build stopped on it: `xcrun metal` reports a missing Metal
     Toolchain until `xcodebuild -downloadComponent MetalToolchain` has been
     run once. Recorded in `metal/DESIGN.md` §13 and the Makefile.
-  - **RUNS ON A GPU, and identity holds there**: on an M1 mini, 0 differing
-    rows of 3 840 at L = 60/107/167 against the CPU's `--int` climb, every
-    board's components exact. The 64-bit integer arithmetic §3a rests on is
-    confirmed on Apple silicon, which was milestone 2's first open question.
+  - **MILESTONE 2 IS DONE, verified on an M1 mini**: `verify_identity.py
+    --host metal/enigma-metal --sweeps` reads **RESULT: identical** — 0
+    differing rows of 3 840 at L = 60/107/167 against the CPU's `--int`
+    climb, 0 differing decrypts, every board's components exact, and all
+    nine wildcarded sweeps agreeing key for key with `search_worker()`.
+    The 64-bit integer arithmetic §3a rests on is confirmed on Apple
+    silicon, which was §11's first risk and the thing to check before
+    anything else was built.
   - **A dispatch is now capped by WORK, which is what kept that run from
     finishing.** A batch was bounded only by bytes (~64 MB of rows), and a
     memory bound does not bound how long a command buffer RUNS: macOS
@@ -199,8 +203,15 @@ existing command lines can behave differently or stop working.
     `MC_ITEMS_PER_DISPATCH` (4 096, `$ENIGMA_GPU_BATCH_ITEMS`) caps it
     below the smaller of those. Result-neutral, and measured so: 8 788 keys
     as 1, 138, 1 256 and 8 788 dispatches give byte-identical `--dump-all`
-    rows. The host also draws a TTY-only per-batch progress line, since the
-    failure looked exactly like a slow run until the desktop stopped.
+    rows. The host also ticks **the tool's own** live progress line per
+    batch, since the failure looked exactly like a slow run until the
+    desktop stopped. Reusing it rather than drawing a private line is what
+    keeps it legible: `progress_line()` opens with `sweep_progress_clear()`,
+    so a score line erases the `\r` line instead of printing onto it — a
+    bespoke line drew `GPU: 4096 keys, 4096 climbs, 23% -6.6455 B123 AAK
+    …`, with the next batch's score line smeared across its row. Armed in
+    **keys** with `restarts = 1`, because the pass field describes a
+    restart-major sweep and this host is key-major.
   - `verify_identity.py`'s M4 sweep pins start1 (8 788 keys against
     228 488) — no coverage lost, the Greek offset collapse and the
     two-notch right wheel both being live with start1 pinned, while the

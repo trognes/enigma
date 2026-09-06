@@ -1,6 +1,7 @@
 # Metal port: design and plan
 
-Status: **milestones 1b and 2 built; nothing measured on a GPU yet.** This
+Status: **milestone 2 is DONE and verified on a GPU; milestone 3 (§9's
+throughput) is next.** This
 document records the decisions taken and the plan they lead to; every
 number marked as an estimate is one. What exists (section 13 has the
 build):
@@ -16,10 +17,23 @@ build):
   length), every board's components exact, and the wildcarded sweeps
   (17 576 starts, a two-notch right wheel, an M4 order) agreeing key for
   key with `search_worker()`.
-- **Not yet run on a Mac.** The first thing to confirm there is that
-  `climb.metal` compiles and that the components line reads exact (section
-  11's 64-bit-integer risk); then `verify_identity.py --host
-  metal/enigma-metal`, then section 9's throughput.
+- **RUN ON A GPU, an M1 mini, and identity holds there.**
+  `verify_identity.py --host metal/enigma-metal --sweeps` reads **RESULT:
+  identical**: 0 differing rows of 3 840 at L = 60/107/167, 0 differing
+  decrypts, every board's components exact, and all nine wildcarded sweeps
+  agreeing key for key. **That closes section 11's first risk** -- the
+  64-bit integer multiply-add section 3a rests on is available and exact on
+  Apple silicon, which was the thing to confirm before anything else was
+  built. Identity is therefore by construction *and* measured on the
+  target, so section 3's float-comparison worry never applies under
+  `--int`.
+- Two things had to be fixed to get there, both platform facts rather than
+  design errors: the Metal compiler is a separate download since Xcode 16
+  (section 13), and a dispatch had to be capped by WORK rather than by
+  bytes or the GPU watchdog resets the machine (section 11).
+- **Next: section 9's throughput**, milestone 3 -- and read the occupancy
+  note in section 11 first, because at `-R 1` the kernel uses one lane of
+  every 32 and that is the first number section 9 will report.
 
 Decisions recorded (owner's):
 
