@@ -1,0 +1,112 @@
+# try_repair A/B: -c -K --polish -S k4f10 -f -l wehrmacht
+# 10 plugs hidden, rotor key given, 2000 paired trials per length,
+# -R 64, seed 11, 4 workers
+
+cost: per-restart climb time in ms, the slope between -R 8 and
+      -R 128 over 24 fixtures, min of 5 reps
+     L       on      off   ratio  R' (off+)
+    40    0.272    0.208   1.309         84
+    60    0.302    0.255   1.186         76
+    80    0.338    0.283   1.196         77
+   100    0.392    0.311   1.262         81
+
+recovery: paired break50 (>=50% of letters), the same fixture in every arm
+     L        on       off      off+  on-only/off-only on-only/off+-only  mean%: on/off/off+
+    40   54/2000   51/2000   59/2000       9/6               8/13         11.3/10.9/11.2
+       restarts matched: p = 0.607;  wall matched (off+ at -R 84): p = 0.383
+    60  334/2000  313/2000  333/2000      52/31             52/51         23.7/23.0/23.8
+       restarts matched: p = 0.028;  wall matched (off+ at -R 76): p = 1.000
+    80  803/2000  745/2000  775/2000      83/25             78/50         45.3/42.7/44.0
+       restarts matched: p = 0.000;  wall matched (off+ at -R 77): p = 0.017
+   100 1223/2000 1161/2000 1215/2000      92/30             76/68         64.0/61.3/63.6
+       restarts matched: p = 0.000;  wall matched (off+ at -R 81): p = 0.560
+
+Read: `off` against `on` is what the re-pair is worth in breaks at
+equal restarts; `off+` against `on` is whether those breaks cost
+more restarts than they buy.  off+ ahead means the default is
+length-gated.
+
+
+THE READING
+===========
+
+THE VALUE QUESTION IS ANSWERED: THE RE-PAIR IS WORTH MORE THAN THE
+RESTARTS IT COSTS.  At -R 8 a 3-7% saving could not buy an integer
+restart, so the matched-time arm ran the identical command to the
+matched-restart arm at two of four lengths and the question could not be
+put.  At -R 64 it can: `off+` gets 76 to 84 restarts against `on`'s 64,
+a real 19-31% bonus.  It never wins.  `on` takes L=80 outright
+(78 on-only discordants against 50, p = 0.017) and ties at L=60
+(52/51, p = 1.000) and L=100 (76/68, p = 0.560); at L=40 `off+` leads
+59 to 54 and does not resolve (p = 0.383) in a cell where 2.7% of
+trials break at all.
+
+AND THE CONCLUSION IS ROBUST TO THE COST RATIO BEING WRONG, WHICH
+MATTERS BECAUSE IT PROBABLY IS.  See below: two pilots on the identical
+fixtures disagree, 1.03-1.07 against 1.19-1.31.  The arm was built on
+the HIGHER pair, so `off+` was handed more restarts than a 1.05 ratio
+would justify -- roughly 67 rather than 76-84.  Fewer restarts can only
+make `off+` weaker, so every cell above is conservative for `on` and the
+verdict cannot flip in the direction the uncertainty runs.
+
+THE RE-PAIR'S VALUE GROWS WITH RESTARTS RATHER THAN FADING.  That is
+the opposite of what --polish does, and it is the interesting part.
+CLAUDE.md records the finisher's edge halving from R80 to R160 and
+sometimes vanishing by 160, because restarts subsume the near-solution
+boards it targets.  The re-pair does not behave that way -- matched
+restarts, on minus off:
+
+    L      -R 8        -R 64
+    40     4 (ns)      3 (ns)
+    60     4 (ns)     21 (p = 0.028)
+    80    42          58
+   100    54          62
+
+L=60 goes from nothing to significant as the budget rises eightfold.
+The mechanism is structural: --polish fires ONCE on the best board after
+every restart, so more restarts dilute its share, while try_repair fires
+at EVERY convergence inside EVERY restart, so its contribution scales
+with the restarts rather than against them.  A finisher and a
+barrier-cross are not the same kind of thing and do not answer to the
+same budget argument.
+
+WHAT THE MATCHED-TIME MARGIN SAYS ABOUT SIZE.  At matched restarts the
+re-pair is decisive (92/30 discordants at L=100); at matched time it is
+level (76/68).  So its benefit is worth approximately what its cost
+would buy in extra restarts, and slightly more at L=80.  It is not a
+large lever in either direction -- it is a cheap one that pays for
+itself, which is exactly the case for leaving a default alone.
+
+
+THE COST RATIO IS UNRESOLVED, AND BOTH PILOTS CANNOT BE RIGHT
+=============================================================
+
+Same 24 fixtures, same seed, same slope between -R 8 and -R 128:
+
+    L      run 1 (min of 2)   run 2 (min of 5)
+    40     1.033              1.309
+    60     1.337 (rejected)   1.186
+    80     1.046              1.196
+   100     1.072              1.262
+
+Run 2 is the better-FORMED of the two by the criterion that condemned
+run 1's L=60 cell: both its columns rise monotonically with L (on
+0.272/0.302/0.338/0.392, off 0.208/0.255/0.283/0.311), where run 1's
+`on` column did not.  But every absolute time in run 2 is 20-50% higher,
+and min-of-5 cannot exceed min-of-2 on the same work -- so the box was
+slower, not the statistic noisier.  The container had restarted between
+the runs (uptime read 6 minutes at 21:26 and 5 minutes at 22:13), so the
+two were measured on different machine states.
+
+NEITHER NUMBER SHOULD BE QUOTED until one is reproduced on a quiet box.
+What is safe to say is the range, 1.03-1.31, and that the re-pair is
+cheap at every point in it.  The recovery arms are untouched by this:
+they are paired, deterministic under a fixed seed, and machine speed
+cannot change which trials break.  Only R' depends on the ratio, and the
+direction of that dependence is what makes the verdict above safe.
+
+The pilot measures `on` first in both arms' loop.  Any warm-up or
+decaying disturbance therefore inflates `on` and biases the ratio UP,
+which is one more reason the true value likely sits nearer run 1's end
+of the range than run 2's.  Alternating the arm order per rep would
+remove it and is the obvious fix if this is ever re-measured.

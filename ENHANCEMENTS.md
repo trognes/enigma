@@ -2735,17 +2735,55 @@ the documented floor effect rather than evidence of absence. **On the CPU it
 costs 3.3 / 4.6 / 7.2% of a climb** at L = 40/80/100, so a lane and a core
 price a convergence scan about 3× apart, exactly the cross-hardware caveat.
 
-**Two things the run also settled about itself.** The one significant
+**One thing the run also settled about itself.** The one significant
 matched-time cell was called as contaminated *before* the recovery table was
 read — L=60's cost ratio of 1.337 sat between neighbours at 1.033 and 1.046
 with an `on` cost exceeding L=80's and L=100's, backwards for a climb linear
 in `L`, while the `off` column was cleanly monotone; re-timing the identical
-fixtures gives 1.069 and 1.099. And **the value half is only half-tested,
-because restarts are integers**: at `-R 8` a 3–7% saving cannot buy one, so
-at L=40 and L=80 the matched-time arm ran the same command as the
-matched-restart arm. Testing it properly needs `-R 64`, where the measured
-ratios give R' = 66, 69, 67 — **the one piece of item 19 still open.**
-→ `CLAUDE.md` `--no-repair`, `metal/DESIGN.md` §17.8.
+fixtures gives 1.069 and 1.099.
+
+**The VALUE half — blocked at `-R 8` because restarts are integers — is now
+measured at `-R 64`, and the answer is the same.** A 3–7% saving cannot buy
+an integer restart out of 8, so at L=40 and L=80 the matched-time arm ran the
+identical command to the matched-restart arm; at 64 it can, and `off+` was
+given 76–84 restarts against `on`'s 64 (`eval/results-repair-ab-r64.txt`):
+
+| L | on | off | off+ | matched-R | matched-wall |
+|---:|---:|---:|---:|---:|---:|
+| 40 | 54/2000 | 51/2000 | 59/2000 | p = 0.607 | p = 0.383 |
+| 60 | 334/2000 | 313/2000 | 333/2000 | **p = 0.028** | p = 1.000 |
+| 80 | 803/2000 | 745/2000 | 775/2000 | **p = 0.000** | **p = 0.017** |
+| 100 | 1223/2000 | 1161/2000 | 1215/2000 | **p = 0.000** | p = 0.560 |
+
+**`off+` never wins.** `on` takes L=80 outright at matched wall time and ties
+at L=60 and L=100; L=40 leans `off+` and does not resolve, in a cell where
+2.7% of trials break at all. And **the verdict is robust to the cost ratio
+being wrong**, which matters because it probably is (below): the arm was built
+on the *higher* of two disagreeing pilots, so `off+` holds more restarts than a
+1.05 ratio would justify — ~67 rather than 76–84 — and fewer restarts can only
+weaken it. The uncertainty runs in the safe direction.
+
+**Its value GROWS with restarts, where `--polish`'s fades — and that is
+structural, not luck.** Matched restarts, `on` minus `off`: L=60 goes 4 (ns)
+→ 21 (p = 0.028), L=80 42 → 58, L=100 54 → 62 across the eightfold budget
+step. The finisher fires **once** on the best board after all restarts, so more
+restarts dilute its share and subsume the near-solution boards it targets;
+`try_repair` fires at **every convergence inside every restart**, so its
+contribution scales with the budget rather than against it. A finisher and a
+barrier-cross do not answer to the same budget argument.
+
+**What is left open is the COST RATIO, not the decision.** Two pilots on the
+identical fixtures disagree — 1.03–1.07 against 1.19–1.31 — and both cannot be
+right: run 2 is the better-*formed* (both columns monotone in `L`, where run
+1's `on` column was not), yet every absolute time in it is 20–50% higher and a
+min-of-5 cannot exceed a min-of-2 on the same work, so the box was slower
+rather than the statistic noisier (the container had restarted between them).
+Quote the range, 1.03–1.31, until one is reproduced on a quiet box. The
+recovery arms are untouched: they are paired and deterministic, so machine
+speed cannot change which trials break. The pilot also times `on` first in
+both arms, which biases the ratio **up** — alternating the arm order per rep is
+the fix if it is re-measured. → `CLAUDE.md` `--no-repair`,
+`metal/DESIGN.md` §17.8.
 
 **20. The GPU port on Apple silicon — MEASURED and CLOSED; the open question
 is CUDA.** Every layer of the lane-per-climb kernel is measured on a kernel

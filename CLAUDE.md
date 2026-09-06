@@ -1269,13 +1269,30 @@ are read from a **data directory** (filenames built as
     L≈105 (`eval/results-gpu-ablation-m1.txt` run 2). A lane and a core price
     a convergence scan about **3× apart**, which is why a GPU share cannot be
     read across.
-  - **The VALUE half is still half-tested, because restarts are integers.**
-    At `-R 8` a 3–7% saving cannot buy one — `round(8 × 1.033)` is 8 — so at
-    L=40 and L=80 the matched-*time* arm ran the identical command to the
-    matched-*restart* arm and its column is a copy. Only L=100 got a real
-    bonus, where the default still leads 738 to 719 at p = 0.135. A proper
-    matched-time test wants `-R 64`, where the measured ratios give R' = 66,
-    69, 67 (`ENHANCEMENTS.md` item 19).
+  - **The VALUE half needed `-R 64`, because restarts are integers — and it
+    is now measured there.** At `-R 8` a 3–7% saving cannot buy one —
+    `round(8 × 1.033)` is 8 — so at L=40 and L=80 the matched-*time* arm ran
+    the identical command to the matched-*restart* arm and its column was a
+    copy. At `-R 64` the bonus is real (`off+` at 76–84 restarts against 64)
+    and **`off+` never wins**: `on` takes L=80 outright (78 on-only
+    discordants against 50, p = 0.017) and ties at L=60 (p = 1.000) and L=100
+    (p = 0.560), while L=40 leans `off+` without resolving (p = 0.383) in a
+    cell where 2.7% of trials break. The verdict is robust to the cost ratio
+    being wrong, since the arm was built on the *higher* of two disagreeing
+    pilots and fewer restarts can only weaken `off+`.
+    `eval/results-repair-ab-r64.txt`.
+  - **Its value GROWS with restarts, where `--polish`'s fades.** Matched
+    restarts, `on` minus `off`, at `-R 8` → `-R 64`: L=60 goes 4 (ns) → 21
+    (p = 0.028), L=80 42 → 58, L=100 54 → 62. The finisher fires **once**
+    after all restarts, so more restarts dilute its share and subsume the
+    boards it targets; `try_repair` fires at **every convergence inside every
+    restart**, so its contribution scales with the budget. A finisher and a
+    barrier-cross do not answer to the same budget argument.
+  - **The cost ratio itself is unresolved**: two pilots on identical fixtures
+    read 1.03–1.07 and 1.19–1.31, and a min-of-5 cannot exceed a min-of-2 on
+    the same work, so the second box was slower rather than the statistic
+    noisier. Quote the range until one is reproduced on a quiet box; the
+    recovery arms are paired and deterministic and are untouched by it.
 - `--int` **compare the climb's scores as exact 64-bit integers** (needs `-c`;
   off by default). The reference arithmetic the GPU targets reproduce
   exactly — `metal/DESIGN.md` §3a — and, on the CPU, a flag that changes
