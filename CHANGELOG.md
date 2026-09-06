@@ -183,6 +183,28 @@ existing command lines can behave differently or stop working.
     first Mac build stopped on it: `xcrun metal` reports a missing Metal
     Toolchain until `xcodebuild -downloadComponent MetalToolchain` has been
     run once. Recorded in `metal/DESIGN.md` §13 and the Makefile.
+  - **RUNS ON A GPU, and identity holds there**: on an M1 mini, 0 differing
+    rows of 3 840 at L = 60/107/167 against the CPU's `--int` climb, every
+    board's components exact. The 64-bit integer arithmetic §3a rests on is
+    confirmed on Apple silicon, which was milestone 2's first open question.
+  - **A dispatch is now capped by WORK, which is what kept that run from
+    finishing.** A batch was bounded only by bytes (~64 MB of rows), and a
+    memory bound does not bound how long a command buffer RUNS: macOS
+    resets the GPU when one runs too long and takes the desktop with it,
+    observed as the machine freezing and then a sweep that appeared to
+    hang. At `-R 1` the shape is the worst the kernel produces —
+    `lanes_per_tg = restarts` puts one thread in each threadgroup, so a
+    64 MB batch at L=60 is 41 226 single-thread climbs in one dispatch,
+    against the 17 576 and 8 788 of the two sweeps that had completed.
+    `MC_ITEMS_PER_DISPATCH` (4 096, `$ENIGMA_GPU_BATCH_ITEMS`) caps it
+    below the smaller of those. Result-neutral, and measured so: 8 788 keys
+    as 1, 138, 1 256 and 8 788 dispatches give byte-identical `--dump-all`
+    rows. The host also draws a TTY-only per-batch progress line, since the
+    failure looked exactly like a slow run until the desktop stopped.
+  - `verify_identity.py`'s M4 sweep pins start1 (8 788 keys against
+    228 488) — no coverage lost, the Greek offset collapse and the
+    two-notch right wheel both being live with start1 pinned, while the
+    middle-wheel collapse needs ring1 wildcarded and every case pins it.
 - **`--int` — the plugboard climb compares its scores as exact 64-bit
   integers.** Every scorer already accumulates two integers, the table sum
   `isum` and the same-letter pair count `coin`, before one float division;

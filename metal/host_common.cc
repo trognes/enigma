@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>   /* isatty, for the batch progress line */
 
 #include <chrono>
 #include <mutex>
@@ -194,6 +195,31 @@ int main(int argc, char * * argv)
   if (keys_per_batch > 65536)
     keys_per_batch = 65536;
 
+  /* AND bound it by WORK, which is the constraint that actually bites.
+     macOS resets the GPU when one command buffer runs too long, and the
+     reset takes the window server with it -- observed on an M1 as the
+     machine freezing, then a run that appeared to hang. A memory bound
+     does not cap duration: at -R 1 a batch is 41 226 climbs of ONE thread
+     each (lanes_per_tg = restarts), which is both the slowest shape the
+     kernel has and the longest single dispatch. The two sweeps that
+     completed on that machine dispatched 17 576 and 8 788 items, so the
+     default here sits below the smaller of the two rather than beside the
+     largest that survived. Raising it is a throughput knob for milestone
+     9's numbers, not something to reach for casually: the failure mode is
+     the user's desktop, not an error message. */
+  size_t items_per_batch = MC_ITEMS_PER_DISPATCH;
+  const char * ienv = getenv("ENIGMA_GPU_BATCH_ITEMS");
+  if ((ienv != nullptr) && (*ienv != 0))
+    {
+      const uint64_t v = parse_opt_u64(ienv, "$ENIGMA_GPU_BATCH_ITEMS");
+      if (v < 1)
+        fatal("$ENIGMA_GPU_BATCH_ITEMS must be at least 1");
+      items_per_batch = static_cast<size_t>(v);
+    }
+  const size_t by_items = items_per_batch / static_cast<size_t>(restarts);
+  if (keys_per_batch > by_items)
+    keys_per_batch = (by_items < 1) ? 1 : by_items;
+
   std::vector<uint8_t> rows;
   std::vector<uint8_t> boards_in;
   std::vector<uint8_t> boards_out;
@@ -212,6 +238,10 @@ int main(int argc, char * * argv)
   double device_secs = 0.0;
   size_t cur_wo = static_cast<size_t>(-1);
   int rg6[6];
+  size_t scan_pos = 0;              /* where the enumeration has reached */
+  size_t batch_line_width = 0;      /* widest progress line drawn so far */
+  const bool show_batches = (isatty(fileno(stderr)) != 0)
+                              && ! opt_dump_all;
 
   auto run_batch = [&]()
     {
@@ -311,6 +341,29 @@ int main(int argc, char * * argv)
       batch_keys.clear();
       rows.clear();
       boards_in.clear();
+
+      /* Liveness. A sweep is many dispatches with nothing between them, and
+         the one failure this path has actually produced -- the GPU reset
+         above -- looks exactly like a slow run until the desktop freezes.
+         TTY only, so redirected logs and verify_identity.py stay clean, and
+         erased at the end like the tool's own sweep line. */
+      if (show_batches)
+        {
+          char line[80];
+          const int n = snprintf(line, sizeof line,
+                                 "GPU: %zu keys, %zu climbs, %.0f%%",
+                                 keys_done, items_done,
+                                 100.0 * static_cast<double>(scan_pos + 1)
+                                 / static_cast<double>(total_keys));
+          if (n > 0)
+            {
+              if (static_cast<size_t>(n) > batch_line_width)
+                batch_line_width = static_cast<size_t>(n);
+              fprintf(stderr, "\r%-*s", static_cast<int>(batch_line_width),
+                      line);
+              fflush(stderr);
+            }
+        }
     };
 
   /* Enumerate the key space exactly as search_worker() does -- the
@@ -346,10 +399,14 @@ int main(int argc, char * * argv)
         }
       batch_keys.push_back(keyidx);
 
+      scan_pos = keyidx;
       if (batch_keys.size() >= keys_per_batch)
         run_batch();
     }
+  scan_pos = (total_keys > 0) ? total_keys - 1 : 0;
   run_batch();
+  if (show_batches && (batch_line_width > 0))
+    fprintf(stderr, "\r%-*s\r", static_cast<int>(batch_line_width), "");
 
   if (! g_best.found)
     fatal("No machine configuration produced a score");
