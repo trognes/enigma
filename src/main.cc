@@ -10,12 +10,19 @@
 #include <fcntl.h>
 
 /* getrusage() is the one POSIX call the tool makes that MinGW-w64 does not
-   provide; it only feeds the peak-memory figure on the last line, which a
-   Windows build reports as 0. Everything else the program uses --
-   getopt_long, isatty, std::thread over winpthreads -- the cross toolchain
-   has, so this guard is what makes `make CXX=x86_64-w64-mingw32-g++-posix`
-   a native Windows build (see "Build & run" in CLAUDE.md). */
-#ifndef _WIN32
+   provide; it only feeds the peak-memory figure on the last line, which
+   Windows reads from GetProcessMemoryInfo() instead. PSAPI_VERSION 2 binds
+   that to its kernel32 entry point, so no extra library is linked.
+   Everything else the program uses -- getopt_long, isatty, std::thread
+   over winpthreads -- the cross toolchain has, so this is what makes
+   `make CXX=x86_64-w64-mingw32-g++-posix` a native Windows build (see
+   "Build & run" in CLAUDE.md). */
+#ifdef _WIN32
+#define PSAPI_VERSION 2
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <psapi.h>
+#else
 #include <sys/resource.h>
 #endif
 
@@ -151,7 +158,15 @@ int main(int argc, char * * argv)
   double secs = std::chrono::duration<double>
     (std::chrono::steady_clock::now() - t_start).count();
   double peak_mb = 0.0;
-#ifndef _WIN32
+#ifdef _WIN32
+  PROCESS_MEMORY_COUNTERS pmc;
+  if (GetProcessMemoryInfo(GetCurrentProcess(), & pmc, sizeof pmc) != 0)
+    {
+      /* PeakWorkingSetSize is in bytes: the resident peak, as ru_maxrss */
+      peak_mb = static_cast<double>(pmc.PeakWorkingSetSize)
+                / (1024.0 * 1024.0);
+    }
+#else
   struct rusage ru;
   if (getrusage(RUSAGE_SELF, & ru) == 0)
     {

@@ -144,7 +144,9 @@ make clean && make CXX=x86_64-w64-mingw32-g++-posix   # -> enigma (a PE)
 variant is the one whose winpthreads give `std::thread` and `-pthread` as
 on Linux.) The whole POSIX surface the tool uses is `getopt_long`, `isatty`
 and one `getrusage` for the peak-memory figure; MinGW-w64 has the first
-two, and the third is guarded in `main.cc` so Windows reports 0 there. Four
+two, and for the third `main.cc` reads `GetProcessMemoryInfo()`'s peak
+working set on Windows (bound to kernel32 via `PSAPI_VERSION 2`, so no
+extra library). Four
 modules carried a dead `<sys/resource.h>` include from the split, which was
 the only other thing that failed. Verified to compile warning-free under the
 full flag set and to link statically; **not verified to run** — Wine is not

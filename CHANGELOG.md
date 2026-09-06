@@ -11,7 +11,8 @@ existing command lines can behave differently or stop working.
 - **The tool cross-compiles for Windows** (`make clean && make
   CXX=x86_64-w64-mingw32-g++-posix`). The only POSIX call MinGW-w64 lacks
   is `getrusage`, used once for the peak-memory figure on the last line;
-  it is now guarded by `_WIN32` and Windows reports 0 there. Four modules
+  Windows reads `GetProcessMemoryInfo()`'s peak working set instead (bound
+  to kernel32 via `PSAPI_VERSION 2`, no extra library). Four modules
   carried a dead `<sys/resource.h>` include from the module split, which
   was the only other thing that failed. Compiles warning-free under the
   full flag set and links statically into a native 64-bit executable;
