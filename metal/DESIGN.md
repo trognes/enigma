@@ -1061,8 +1061,46 @@ paid for.
      real scan loop, `mc_pass()`, split out of `mc_hillclimb()` for the
      purpose and verified byte-identical -- the scan machinery priced in
      the same harness as the scorer; its probes/s should reproduce the
-     ablation table's 22.3M, a check on both instruments). **Run 3
-     pending.**
+     ablation table's 22.3M, a check on both instruments).
+     **RUN 3: THE SCAN MACHINERY IS 74% OF THE CLIMB, AND THE CAUSE IS
+     THE SCORER RUN TWICE.** `climb pass (scan)` -- the real loop, one
+     fixed-pass climb's work per unit -- runs the scorer at **0.26x** the
+     rate the scorer alone runs it (17.7M against 66.7M probes/s, cap
+     384 against 512); against the ablation table's 22.3M it is 21%
+     slower, which is the stage mix (half of table B's passes were the
+     cheap `k4` stage) and not a disagreement. Occupancy covers 1.33x of
+     the 3.8x. The rest is the toggle's kind branch: `if (paired)
+     {remove; score; restore} else {force; score; restore}` is one
+     `mc_key` on the CPU and **two on a GPU** whenever any lane of the
+     simdgroup is in each branch -- and with 32 boards of ~10 pairs,
+     that is most of the 325 toggles. That also reconciles table D:
+     its 3% intercept says the scan adds no *fixed* cost per probe,
+     which is true, because the scan's cost is per-*character* -- the
+     scorer executed twice -- a multiplier on the slope that a linear
+     fit cannot see. **Fixed in `mc_pass()`**: one branch-free
+     mutate/score/restore for all four kinds, same writes, same scores,
+     same tie rule, `verify_identity.py` byte-identical, one `mc_key`
+     per toggle. The pass arm measures it: **run 4 pending.**
+     **And `lane packed regs` reads 1.52x** (101.2M probes/s, cap 896):
+     today's decomposition with the board and histogram in registers,
+     no thread memory at all. 896/512 = 1.75x more lanes resident for
+     1.52x the throughput, so the per-lane step is ~15% *slower* (the
+     select chains cost more ALU than thread memory costs latency --
+     the group arms' finding again) and the win is entirely occupancy.
+     It is the best per-probe rate of any shape here and beats the best
+     group arm (K=8 packed, 62.2M) by 1.63x: **17.4 is dead against the
+     fair comparison too.**
+     **WHERE THIS LEAVES THE PORT.** The scorer with a register-resident
+     board runs 101M probes/s and the climb runs 17.7M. That 5.7x is
+     the scan machinery plus the occupancy it costs, both inside the
+     current lane-per-climb design, and parity needs ~4.6x. For the
+     first time the ceiling is not an estimate but the measured rate of
+     a kernel that exists, scoring the same boards to the same integers.
+     The levers, in order: one `mc_key` per toggle (done, measured
+     next); the packed board in the climb itself, so mutate and restore
+     are ALU and the kernel's footprint drops toward the 896 the lane
+     arm reads; then whatever the pass arm still shows above the scorer
+     alone. Step 3 as written -- prototype 17.4 -- is withdrawn.
      (iii) **No kill number -- the owner's call, and consistent with
      decision 6.** A pre-registered bar (under 4x per probe stops the
      redesign) was proposed and declined: the number from (ii) is judged
