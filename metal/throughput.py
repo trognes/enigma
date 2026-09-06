@@ -60,6 +60,12 @@ ENIGMA = os.path.join(TOP, "enigma")
 NGRAMS = os.path.join(TOP, "ngrams")
 LET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 RECIPE = ["-c", "-S", "k4f10", "-f", "-l", "wehrmacht", "--int"]
+# --sustained compares the mean rate over the first WINDOW seconds against
+# the last. The two must not overlap or the "drift" is one window against
+# itself, which reads a reassuring 0.0% whatever the hardware does -- so a
+# run shorter than MIN_SUSTAINED is refused rather than answered.
+WINDOW = 60.0
+MIN_SUSTAINED = 3 * WINDOW
 
 
 def decrypts(path):
@@ -169,7 +175,11 @@ def cell(host, corpus, rng, L, R, fixtures, threads):
 def sustained(host, corpus, rng, L, R, threads, seconds):
     """DESIGN.md 9's thermal check: the same cell over and over, reported
     as the first minute against the last. A GPU that throttles shows up
-    here and nowhere else."""
+    here and nowhere else -- every cell above is seconds long and so
+    measures the BURST rate, while the runs this port exists for are
+    hours. One fixture throughout, deliberately: the work is held constant
+    so the only variable is time on the clock. The device rate is the one
+    read, since the question is about the GPU rather than the host walk."""
     key, ct = fixture(rng, corpus, L)
     args = key + RECIPE + ["-R", R, "-T", threads]
     t0 = time.perf_counter()
@@ -182,8 +192,10 @@ def sustained(host, corpus, rng, L, R, threads, seconds):
         marks.append((time.perf_counter() - t0, R / d))
     if len(marks) < 4:
         return None
-    first = [r for t, r in marks if t <= 60.0] or [marks[0][1]]
-    last = [r for t, r in marks if t >= marks[-1][0] - 60.0]
+    first = [r for t, r in marks if t <= WINDOW]
+    last = [r for t, r in marks if t >= marks[-1][0] - WINDOW]
+    if (not first) or (not last):
+        return None
     return {"runs": len(marks), "first": sum(first) / len(first),
             "last": sum(last) / len(last)}
 
@@ -228,16 +240,25 @@ def main():
                 continue
             print(f" {c['L']:>4} {c['R']:>6} {c['n']:>4} "
                   f"{c['device']:>8.0f} {c['gpu']:>8.0f} {c['cpu']:>8.0f} "
-                  f"{c['speedup']:>8.2f}x  +-{c['ci']:.2f}")
+                  f"{c['speedup']:>8.2f}x  "
+                  + ("     n/a" if c['ci'] != c['ci']
+                     else f"+-{c['ci']:.2f}"))
 
     if args.sustained > 0:
         L = args.lengths[-1]
         R = args.restarts[-1]
         print(f"\nsustained: L={L}, -R {R}, {args.sustained} s on the device")
-        s = sustained(args.host, corpus, rng, L, R, args.threads,
-                      args.sustained)
+        if args.sustained < MIN_SUSTAINED:
+            print(f"  refused: needs at least {MIN_SUSTAINED:.0f} s, or the "
+                  f"first and last {WINDOW:.0f} s windows overlap and the\n"
+                  f"  drift is one window against itself -- 0.0% whatever "
+                  f"the hardware does")
+            s = None
+        else:
+            s = sustained(args.host, corpus, rng, L, R, args.threads,
+                          args.sustained)
         if s is None:
-            print("  (too few runs to compare; raise --sustained)")
+            pass
         else:
             drop = 100.0 * (1.0 - s["last"] / s["first"]) if s["first"] else 0
             print(f"  {s['runs']} runs: first minute {s['first']:.0f} "
