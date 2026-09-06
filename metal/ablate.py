@@ -41,11 +41,20 @@ answer-preserving and needing no kernel change. 64 is the peak, at
 32-bit accumulators; see lane_sweep() for why that arm answered "no" and
 was removed.)
 
+Table D (--scaling, on its own) is the per-probe cost against message
+length on the baseline kernel: fixed passes for the cost, natural for
+context, at five lengths from 60 to 256. It fits t(L) = a + b*L and
+prints, per length, an upper bound on the 17.4 redesign -- which spreads
+the per-character slope across 32 lanes and leaves the per-probe
+intercept where it is. See scaling().
+
 COST, this time multiplied out: an invocation is ~3.3 s at this cell, so
 tables A and B are 2 x 5 x fixtures x reps invocations and table C is
 6 x fixtures x sweep-reps. The defaults (4 fixtures, 3 reps, 1 sweep
 rep) come to ~150 invocations, about eight minutes. --skip-probes runs
-only table C, --skip-lanes only A and B.
+only table C, --skip-lanes only A and B. --scaling is 5 x 2 x fixtures
+x reps, ~120 invocations, the longer lengths slower each -- ten minutes
+or so.
 
 One cell, the one the M1/M2 Pro tables report: L=107, -R 256, 26 keys.
 Repetitions are the min of a few, as everywhere in this repo, and the
@@ -219,6 +228,75 @@ def lane_sweep(args, fx):
     print("   its own rows[]; that is the fall-off at the small end.)")
 
 
+SCALING_L = [60, 107, 167, 214, 256]
+PROBES_PER_PASS = 326   # mc_key for best_score, then the 325 toggles
+
+
+def scaling(args, corpus, rng):
+    """Per-probe cost against message length: what 17.4 can and cannot
+    shorten.
+
+    The baseline kernel at fixed passes, so a climb is exactly
+    16 x 326 scored boards and the device time divides into ns per probe.
+    Fitting t(L) = a + b*L splits that into the per-CHARACTER part, b*L,
+    which 17.4 spreads across 32 lanes, and the per-PROBE part, a --
+    loop control, mc_plug_count, the move bookkeeping, mc_key's entry --
+    which it does not touch. So t(L) / (a + b*L/32) is an upper bound on
+    the redesign from a measured number, before a line of it exists. The
+    natural climb runs beside it for the pass count and divergence at
+    each length, which are context rather than input to the fit.
+    """
+    flib = os.path.join(HERE, "climb-f0.metallib")
+    alib = os.path.join(HERE, "climb-a0.metallib")
+    if not (os.path.exists(flib) and os.path.exists(alib)):
+        sys.exit("run `make -C metal ablate` first")
+    print(f"# {os.path.relpath(args.host, TOP)}, -R {args.restarts}, "
+          f"26 keys, {args.fixtures} fixtures x {args.reps} reps per length")
+    print("# DESIGN.md 17.6: per-probe cost vs L, baseline kernel.\n")
+    print("D. Length scaling -- fixed passes for the cost, natural for "
+          "context")
+    print("     L   climbs/s   ns/probe   natural passes   div")
+    pts = []
+    for L in SCALING_L:
+        fx = []
+        while len(fx) < args.fixtures:
+            key, ct = fixture(rng, corpus, L)
+            if len(ct) == L:
+                fx.append((key, ct))
+        f = cell(args, fx, flib, None)
+        a = cell(args, fx, alib, None)
+        if (f is None) or (a is None):
+            print(f"  {L:4d}  (failed)")
+            continue
+        probes = (f["mean"] or 16.0) * PROBES_PER_PASS
+        ns = 1e9 / (f["rate"] * probes)
+        pts.append((L, ns))
+        print(f"  {L:4d} {f['rate']:10.0f} {ns:10.1f} {a['mean'] or 0:15.2f}"
+              f" {a['div'] or 0:6.2f}")
+    if len(pts) < 2:
+        return
+    n = len(pts)
+    sx = sum(p[0] for p in pts)
+    sy = sum(p[1] for p in pts)
+    sxx = sum(p[0] * p[0] for p in pts)
+    sxy = sum(p[0] * p[1] for p in pts)
+    b = (n * sxy - sx * sy) / (n * sxx - sx * sx)
+    a = (sy - b * sx) / n
+    print(f"\n  fit: ns/probe = {a:.1f} + {b:.3f} * L")
+    print("  (intercept = the per-probe part, slope = per character)")
+    print("     L   measured   fitted   resid   intercept share   17.4 bound")
+    for L, ns in pts:
+        fit = a + b * L
+        bound = ns / (a + b * L / 32.0) if (a + b * L / 32.0) > 0 else 0.0
+        print(f"  {L:4d} {ns:10.1f} {fit:8.1f} {ns - fit:7.1f} "
+              f"{100.0 * a / fit:15.1f}%  {bound:9.1f}x")
+    print("\n  Read: the bound keeps the intercept and divides only the")
+    print("  slope by 32 -- what 17.4's decomposition can reach at best,")
+    print("  before reduction overhead and before occupancy. A bound near")
+    print("  the 4-6x parity needs is a stop; the redesign must clear it")
+    print("  with room for the costs this fit cannot see.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.path.join(HERE, "enigma-metal"))
@@ -233,6 +311,9 @@ def main():
                     help="only the lane sweep (table C)")
     ap.add_argument("--sweep-reps", type=int, default=1,
                     help="reps for table C; its rows repeat within 1%%")
+    ap.add_argument("--scaling", action="store_true",
+                    help="table D only: per-probe cost vs L and the 17.4 "
+                         "bound")
     args = ap.parse_args()
     if not os.path.exists(args.host):
         sys.exit(f"build {args.host} first (make -C metal metal)")
@@ -241,6 +322,9 @@ def main():
                      + decrypts(os.path.join(TOP, "eval",
                                              "enigma-army-messages-1941.txt")))
     rng = random.Random(args.seed)
+    if args.scaling:
+        scaling(args, corpus, rng)
+        return
     fx = []
     while len(fx) < args.fixtures:
         key, ct = fixture(rng, corpus, args.length)
