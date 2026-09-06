@@ -519,6 +519,19 @@ measure; on the v1.1.0 baseline every miss is a *search* failure.)
 > deterministic proxy* it is — good for `-T`-independent A/Bs of moves that live
 > **inside** the score loop (restarts, climb order, caps), misleading for
 > anything that adds work outside it.
+>
+> **The converse trap: wall time per CLIMB is confounded whenever the change
+> alters the SCORE.** A scoring change that is not byte-identical changes the
+> climb's trajectory, hence how many passes it runs before it converges, and
+> climbs per second then measures work not done rather than cost. The GPU
+> probes hit this at its extreme — an ablation that made the decode
+> board-independent read 20× faster because every climb converged after one
+> pass (`eval/results-gpu-ablation-m1.txt`, run 1) — but the `hillclimb` and
+> `fused` bench tiers time whole climbs and are exposed the same way. The
+> comparable unit is wall time **per fixed unit of work**: pin the pass count
+> (as the probes' `MC_FIXED_PASSES` does) or normalise by boards scored, and
+> never read either axis alone — `score_iter` undercounts work outside the
+> loop, and climbs/s hides work the trajectory no longer does.
 
 `crack_quality.py` also carries three opt-in test modes from
 `archived/CRACKQUALITY_TESTS.md` (all off by default, the normal flow
@@ -1241,7 +1254,13 @@ are read from a **data directory** (filenames built as
   this turns it off so its value can be A/B'd (e.g. at short lengths where its
   convergence scan is a larger fraction of a fast climb). Default off keeps the
   climb byte-identical; the flag only skips the `try_repair` call at each
-  convergence.
+  convergence. **Its cost has now been measured once, on the GPU, and it is
+  not zero there**: `try_repair` plus the outer loop was **16.9%** of a
+  natural climb at L≈105 (`eval/results-gpu-ablation-m1.txt`, run 2), against
+  the "~zero cost" reasoning above. A GPU lane and a CPU core do not price a
+  convergence scan alike, so the CPU share is still unmeasured — but it is a
+  measured reason to run the short-length A/B the flag was built for
+  (`ENHANCEMENTS.md`, Measurement gaps).
 - `--int` **compare the climb's scores as exact 64-bit integers** (needs `-c`;
   off by default). The reference arithmetic the GPU targets reproduce
   exactly — `metal/DESIGN.md` §3a — and, on the CPU, a flag that changes

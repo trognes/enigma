@@ -2712,6 +2712,31 @@ take the close-but-wrong boards and measure what fraction a finishing pass
 converts. `tests/crack_quality.py` and
 `eval/tune_phase_vs_restarts_report.py` are the two places to add it.
 
+**19. `try_repair` at short lengths — its cost has been measured once, and it
+is not zero.** `CLAUDE.md` calls the 2-plug re-pair "~zero cost" because it
+fires only at convergence, and notes its value at short lengths is unmeasured.
+The GPU probes put `try_repair` plus the outer loop at **16.9% of a natural
+climb** at L≈105 (`eval/results-gpu-ablation-m1.txt`, run 2). A GPU lane and a
+CPU core do not price a convergence scan alike, so the CPU share may be
+smaller — but it is a measured reason to run the A/B the `--no-repair` flag
+was built for: `break50` at matched wall time, L = 40…100, with and without.
+If the re-pair's lift at short lengths is under its cost in restarts, it is a
+length-gated default, not an always-on one. → `CLAUDE.md` `--no-repair`,
+`metal/DESIGN.md` §17.8.
+
+**20. The GPU port on Apple silicon — MEASURED and CLOSED; the open question
+is CUDA.** Every layer of the lane-per-climb kernel is measured on a kernel
+that exists and checks bit-exact against the tool (`metal/DESIGN.md` §17.6 (ii),
+`eval/results-gpu-probe-m1.txt`): scorer in registers 101M probes/s, the scan
+loop 49M, the climb as it runs ~19M — a ceiling of 1.5× today's and 0.28× the
+M1's CPU. The §17.4 redesign measured 0.49–0.94× of the shape it was to
+replace. There is no unmeasured lever left on this hardware. The absolute rate
+scales with resident lanes × clock, so the same kernel projects to parity or a
+small multiple on a discrete CUDA card against a desktop CPU — arithmetic, with
+§12's record as the warning. **The first step there is the probe, not the
+port**: the body is behind three macros so the same microkernel can run on a
+CUDA card and give the number before any port work is spent.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.

@@ -1168,14 +1168,54 @@ paid for.
 4. Only then `--sustained`, and the `k` stage's co-occurrence table on
    chip (`uint8`, 17.6 KB, fits; section 5).
 
-### 17.7 What not to do
+### 17.7 What not to do -- revised after the probes
 
-Do not read this as an M1 problem: the pathology is per-lane and
-chip-independent, and a Max or an RTX 4090 would show the same ratio to
-its own CPU. **Measured, not assumed**: the same cell reads 0.169x on the
-M1 mini and 0.166x on an M2 Pro MacBook Pro (19 GPU cores, 12 CPU
-cores), both arms having scaled by the same 1.85-1.88x, and the register
-cap reads 384 on both. Do not tune section 4's design past step 2; every
-hour in it is spent on a shape that cannot win. Do not port to CUDA
-as-is. And do not trust 17.4's estimate more than section 12 deserved:
-steps 0-2 are cheap and say whether 17.4 is worth a week.
+**Two sentences in the first version of this section were wrong, and
+the ladder measured them wrong.** It said a Max or an RTX 4090 "would
+show the same ratio to its own CPU", and "do not port to CUDA as-is".
+The per-lane pathology *is* chip-independent -- 0.169x on the M1 mini,
+0.166x on an M2 Pro, cap 384 on both, and the probes put the same
+~750-cycle step on every shape tried -- but the ratio to the CPU is
+not, because the absolute rate scales with resident lanes times clock
+and the M2 Pro merely scales both sides alike. A discrete CUDA part
+carries ~30x the M1's lanes at ~2x the clock against a CPU of perhaps
+2x: the same kernel projects to parity or a small multiple there. So
+the revised list is:
+
+- Do not tune section 4's design further on Apple silicon: every layer
+  is measured (17.6 (ii)), the ceiling is 1.5x today's and a third of
+  the CPU's, and 17.4 is dead at 0.49-0.94x.
+- Do not build 17.4. It was the ambitious route and it measured slower
+  than the shape it was meant to replace, on both the unfair comparison
+  and the fair one.
+- Do not trust the projection for CUDA more than section 12 deserved --
+  the probe should run on a CUDA card *before* any port work, and the
+  body is already behind three macros so that it can.
+- Do not read a microkernel's gain as the kernel's. The one lever that
+  read 1.87x in the probe read 0% in the climb, because the probe's
+  small kernel had been compiled differently.
+
+### 17.8 What transfers to the CPU code
+
+Very little of the code, and one of the GPU's wins would be a loss: the
+packed-register board measured **8x slower** on the CPU backend, where a
+26-byte array in L1 costs a cycle and a select chain a dozen. Three
+things do transfer.
+
+1. **The CPU scorer is at its floor, and the GPU says why.** The same
+   dependent chain -- plugboard, rotor row, plugboard, table -- costs
+   ~750 cycles on a GPU lane and 3-5 on a CPU core, and the entire
+   difference is out-of-order execution overlapping consecutive letters.
+   That is the fact `CLAUDE.md` records from the other side (half the
+   loop's gathers miss L1 and it does not matter, IPC 3.3, every SIMD
+   attempt lost). There is no scorer trick left to find; the chain is
+   the chain, and the CPU hides it.
+2. **A trajectory-confounded benchmark**, now in `CLAUDE.md` beside the
+   `score_iter` warning: a scoring change that is not byte-identical
+   changes the pass count, and time per climb then measures work not
+   done. The bench's climb tiers are exposed to it exactly as the
+   ablations were.
+3. **`try_repair`'s cost is not zero**, measured once: 16.9% of a
+   natural climb on the GPU at L≈105. The CPU share is unmeasured and
+   may differ, but it is a reason to run the short-length A/B the
+   `--no-repair` flag exists for -- `ENHANCEMENTS.md`, Measurement gaps.
