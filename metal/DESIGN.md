@@ -786,10 +786,30 @@ In order; each is cheap and rules something in or out before the next is
 paid for.
 
 0. **Read the `GPU:` line** from one direct run: free, and it says
-   whether registers already cap occupancy.
-1. **Four ablation kernels at one cell** (L=107, `-R 256`, `--keys 26`,
+   whether registers already cap occupancy. **DONE: `384 threads per
+   threadgroup`.** A lean kernel reads 1024, so each lane uses ~2.7x the
+   register budget and a core holds at most 12 simdgroups of it. The
+   dispatch shape then halves that: a 256-lane threadgroup fits once per
+   core (512 > 384), and a 64-lane one fits four times by threadgroup
+   memory -- **8 simdgroups per core in every cell**, i.e. two per
+   32-wide SIMD unit to interleave, which cannot hide one memory round
+   trip, let alone three per character. That is also why the device
+   rate was flat across `-R`. Cross-check: 8 x 32 x 8 cores = 2 048
+   climbs in flight at 1 741/s is 1.18 s per climb, against the 1.24 s
+   inferred independently from the `-R 64` cell. What 384 does NOT
+   settle is whether the arrays sit in thread memory (cost = latency) or
+   were promoted to registers with select chains (`freq[26]` alone would
+   be 26 registers; cost = ALU, and it explains 384 by itself). Step 1
+   tells them apart for free by reading this line per variant: if
+   dropping the histogram lifts 384 toward 1024, `freq` was in
+   registers. One free knob falls out: `lanes_per_tg = 128` fits three
+   threadgroups per core under both limits (384 lanes, 20.7 KB) against
+   one today -- +50% occupancy for a constant; add it to step 1,
+   expecting 20-40% and a confirmation rather than a fix.
+1. **Five variants at one cell** (L=107, `-R 256`, `--keys 26`,
    3 fixtures): no histogram; arithmetic `steck`; 32-bit accumulators;
-   fixed pass count. That decomposes the ~900 cycles the way the CPU's
+   fixed pass count; `lanes_per_tg = 128`. Read the `GPU:` line for
+   each. That decomposes the ~900 cycles the way the CPU's
    score loop was (48% / 14% / 6%) and settles whether 17.2(a) is the
    majority. About an hour of Mac time.
 2. **The placement fix** (17.3). 5-10x says placement was the wall and
