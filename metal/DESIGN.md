@@ -1008,9 +1008,25 @@ paid for.
      is by time (a pilot, then ~0.4 s per arm, min of three), rates are
      in probes per second so K does not enter the comparison, and each
      arm's own register cap is printed since the five kernels are five
-     pipelines in one library. **Not yet run on a GPU**: the CPU backend
-     carries the lane arm only, which verified the driver end to end
-     (checksum ok, sweep path unchanged).
+     pipelines in one library.
+     **RUN ONCE ON THE M1 -- valid, and confounded** (`eval/results-gpu-
+     probe-m1.txt`). All five arms compiled at the first attempt and
+     every unit checked bit-exact. Every group arm was SLOWER than the
+     lane: 0.46x at K=32 (shuffle and packed alike), 0.70x at 16, 0.90x
+     at 8; fitting the K trend puts the per-character step at 0.89 of
+     the lane's in lane-time, i.e. the shuffles and packed-ALU lookups
+     replaced the thread-memory reads and the step barely moved, and the
+     reductions are what scale with K. Caps: shuffle 1 024, packed 896,
+     lane 512 -- against the climb kernel's 384. **But every unit ran the
+     same board**, so the lane arm's 32 lanes read the same `rows` entry
+     and gathered the same cell at every character, a broadcast the
+     group arms get nothing from; and the lane arm's 71M probes/s
+     against the fixed-pass climb's 22M for the same scoring is more
+     than the cap explains. So the bias is one-way against the group
+     arms, of unknown size, entangled with how much the climb's scan
+     machinery itself costs. Fixed: unit u starts from board u % 64, the
+     64 kicks for (key 0, restart 0..63), so a simdgroup holds 32 boards
+     as a climb does; the oracle is 64 checksums. **Run 2 pending.**
      (iii) **No kill number -- the owner's call, and consistent with
      decision 6.** A pre-registered bar (under 4x per probe stops the
      redesign) was proposed and declined: the number from (ii) is judged

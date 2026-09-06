@@ -54,7 +54,21 @@ typedef struct
   mc_i64 nprobes;       /* toggles per unit */
   mc_i64 units;         /* lanes (arm LANE) or K-lane groups (arm GROUP) */
   mc_i64 lanes_per_tg;  /* a multiple of 32 for the group arms */
+  mc_i64 nboards;       /* distinct start boards; unit u takes u % nboards */
 } mc_probe_params;
+
+/* WHY THERE ARE MANY START BOARDS.  The first run of this instrument gave
+   every unit the SAME board, and under the same toggle sequence every
+   lane of a simdgroup then read the same rows[] entry and gathered the
+   same table cell at every character -- a broadcast and one cache line,
+   where a climb's 32 lanes hold 32 boards and touch 32 lines.  The lane
+   arm read 71M probes/s against 22M for the fixed-pass climb doing the
+   same scoring: flattered, by an amount the run could not separate from
+   the climb's own scan overhead.  The group arms gain nothing from it,
+   their lanes reading different positions by design, so the ratio was
+   biased against them.  With unit u on board u % nboards and nboards a
+   multiple of 32, a simdgroup holds 32 boards as a climb does. */
+#define MC_PROBE_BOARDS 64
 
 /* --- the toggle sequence -------------------------------------------------
    Deterministic in t, so the driver can replay it.  The two indices

@@ -57,7 +57,7 @@ struct mc_probe_batch
   const uint8_t * rows;      /* L * 26 bytes, one key */
   const uint8_t * ct;
   const uint8_t * tbl;
-  const uint8_t * board0;    /* 26 bytes */
+  const uint8_t * board0;    /* params->nboards boards of 26 bytes */
   int64_t * out;             /* 2 * units */
   int arm;
 };

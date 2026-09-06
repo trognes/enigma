@@ -247,7 +247,8 @@ bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
       id<MTLBuffer> ct = upload(b.ct, L);
       id<MTLBuffer> tbl = upload(b.tbl, MC_ASIZE * MC_ASIZE * MC_ASIZE
                                         * MC_ASIZE);
-      id<MTLBuffer> board0 = upload(b.board0, MC_ASIZE);
+      id<MTLBuffer> board0 =
+        upload(b.board0, static_cast<size_t>(p.nboards) * MC_ASIZE);
       id<MTLBuffer> out =
         [g_dev newBufferWithLength:units * 2 * sizeof(int64_t)
                            options:MTLResourceStorageModeShared];
