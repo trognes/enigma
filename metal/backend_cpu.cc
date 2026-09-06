@@ -63,22 +63,33 @@ static void run_keys(const mc_batch & b, size_t k0, size_t k1)
 
           int model = MC_IC;
           const uint8_t * tbl = b.mono8;
+          int passes = 0;
           for (int s = 0; s < nstages; s++)
             {
               model = static_cast<int>(p.stages[s].model);
               tbl = stage_table(b, model);
-              mc_hillclimb(steck, rows, b.ct, L, model, tbl,
-                           p.stages[s].A, p.stages[s].B, pf,
-                           static_cast<int>(p.stages[s].cap),
-                           static_cast<int>(p.capmerge),
-                           static_cast<int>(p.no_repair));
+              passes += mc_hillclimb(steck, rows, b.ct, L, model, tbl,
+                                     p.stages[s].A, p.stages[s].B, pf,
+                                     static_cast<int>(p.stages[s].cap),
+                                     static_cast<int>(p.capmerge),
+                                     static_cast<int>(p.no_repair));
             }
           mc_i64 isum = 0;
           mc_i64 coin = 0;
           mc_components(steck, rows, b.ct, L, model, tbl, & isum, & coin);
           memcpy(b.boards_out + item * MC_ASIZE, steck, MC_ASIZE);
+#if MC_PASSES
+          /* The same substitution climb.metal makes, so the probe
+             machinery -- MC_PASSES and MC_FIXED_PASSES both -- can be
+             verified on a machine with no GPU. The default build does not
+             reach this: MC_PASSES is 0 unless a probe asked for it. */
+          b.comps[item * 2] = static_cast<mc_i64>(passes);
+          b.comps[item * 2 + 1] = static_cast<mc_i64>(r % 32);
+#else
+          (void) passes;
           b.comps[item * 2] = isum;
           b.comps[item * 2 + 1] = coin;
+#endif
         }
     }
 }

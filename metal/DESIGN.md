@@ -838,31 +838,72 @@ paid for.
    threadgroups per core under both limits (384 lanes, 20.7 KB) against
    one today -- +50% occupancy for a constant; add it to step 1,
    expecting 20-40% and a confirmation rather than a fix.
-1. **BUILT: `metal/ablate.py`, seven rows at one cell** (L=107, `-R 256`,
-   `--keys 26`, 3 fixtures x 3 reps): baseline; no histogram (`freq[26]`,
-   17.2(a)/(b)); no board lookups in the decode (the two `steck[]`,
-   17.2(a)); 32-bit accumulators (17.2(b)); no `all8` gather (17.2(d));
-   pass counts rather than a time (17.2(c), the divergence factor); and
-   the baseline again at `lanes_per_tg = 128`. Each is its own metallib
-   (`make -C metal ablate`, one `-DMC_ABLATE=N` build apiece), because
-   the register cap is a property of the COMPILED pipeline and a runtime
-   branch would allocate for the union and report one number for all of
-   them. That decomposes the ~900 cycles the way the CPU's score loop was
-   (48% / 14% / 6%) and settles whether 17.2(a) is the majority. About an
-   hour of Mac time.
+1. **RUN ONCE, CONFOUNDED, INSTRUMENT REBUILT.**
+   `metal/ablate.py` at one cell (L=107, `-R 256`, `--keys 26`): four
+   ablations -- no histogram (`freq[26]`, 17.2(a)/(b)); no board lookups
+   in the decode (the two `steck[]`, 17.2(a)); 32-bit accumulators
+   (17.2(b)); no `all8` gather (17.2(d)) -- plus the baseline at
+   `lanes_per_tg = 128`. Each is its own metallib (`make -C metal
+   ablate`), because the register cap is a property of the COMPILED
+   pipeline and a runtime branch would allocate for the union and report
+   one number for all of them. Results and the full reading:
+   `eval/results-gpu-ablation-m1.txt`.
 
    **Variants 1, 2 and 4 return a WRONG board** -- they delete work the
    answer depends on, which is what a cost probe is -- so the host prints
    a banner under `$ENIGMA_GPU_ABLATE`, skips the CPU/GPU component check
-   and exits 0 regardless. Nothing in that mode reports a usable
-   plaintext. **Variant 3 is the exception and is a candidate FIX rather
-   than a probe**: 32-bit accumulators were verified answer-preserving on
-   the CPU backend over 1 536 restarts at L=60/107/167 (`verify_identity
-   .py --host metal/enigma-ref`, 0 differing rows), so if it reads well
-   above 1.00x it can ship as it stands. `isum` and `coin` are bounded by
-   `L` times a byte and by `L(L-1)/2`; the 64 bits exist for the blended
-   `I = A*isum + B*coin`, which is formed once per climb, not per
-   character.
+   and exits 0 regardless. **Variant 3 is the exception and is a
+   candidate FIX rather than a probe**: 32-bit accumulators are
+   answer-preserving, verified on the CPU backend over 1 536 restarts at
+   L=60/107/167 (0 differing rows), `isum` and `coin` being bounded by
+   `L` times a byte and by `L(L-1)/2` while the blend `A*isum + B*coin`
+   is still formed in 64 once per climb. **Measured 1.01x: free, and not
+   a speedup.**
+
+   **THE CONFOUND, WHICH IS THE MAIN THING STEP 1 TAUGHT.** An ablation
+   that changes the SCORE changes the climb's trajectory, hence the
+   number of passes before convergence, and **climbs/s does not normalise
+   for that**. Variant 2 makes the decode independent of the board, so no
+   move ever improves and the climb exits after ONE pass per stage rather
+   than the ~16 it takes naturally; it duly read **20.36x** and was
+   nearly all work not done. Its fingerprint was in the output all along
+   -- a per-simdgroup spread of exactly 1.00, i.e. every lane computing
+   an identical score. Normalised against the measured mean of 15.83
+   passes, what is left for the two `steck[]` lookups is **~2.6x**, and
+   that is a lower bound, since a 2-pass climb amortises the per-climb
+   fixed costs over an eighth as much work. Rows 1 and 4 have the same
+   defect; row 3 was the only readable one, precisely because it is
+   answer-preserving.
+
+   **The instrument now separates the two axes.** `MC_PASSES` (report the
+   pass count) and `MC_FIXED_PASSES` (run exactly N passes, whatever the
+   score does) are switches ORTHOGONAL to `MC_ABLATE`, so every variant
+   can be read in passes/s and, better, pinned to identical work. Being a
+   fifth mutually exclusive *variant* is exactly what stopped the old
+   pass counter from catching this: it could only ever report the
+   baseline's trajectory, never that of the variant whose number needed
+   normalising. `backend_cpu.cc` mirrors the pass-count output, so the
+   machinery is verifiable with no GPU -- natural reads mean 15.825 and
+   max/mean 1.480, fixed reads 16.000 and 1.000 exactly.
+
+   **What run 1 does establish**, none of it touched by the confound:
+   the **register cap is 384 in every variant**, a compile-time property,
+   and deleting `freq[26]` outright does not lift it -- so the per-lane
+   arrays are in **thread memory and the cost is latency, not ALU**,
+   which is what step 0 could not settle. It leaves a new question: if
+   none of the four ablations moves the cap, something none of them
+   removes is setting it. **Divergence is 1.48x**, not the ~2x guessed in
+   17.2(c) -- about a third of lane-cycles masked off, real but not the
+   story, and the CPU backend reproduces it to three digits, so the
+   remaining divergence questions need no Mac time. And **128 lanes buys
+   26% for nothing**, inside step 0's predicted 20-40%.
+
+   **Cost: a few minutes, not the "about an hour" this step used to
+   claim.** 63 invocations at ~3.3 s each is under four minutes and the
+   estimate was written without multiplying it out. It is recorded
+   because it shaped the design: the instrument was kept small to fit an
+   hour that was never at risk, and the fixed-pass family that would have
+   prevented the confound was dropped from this step for that reason.
 2. **The placement fix** (17.3). 5-10x says placement was the wall and
    17.4 is the ceiling above it; little says the chain itself is the
    problem and 17.4 is the only route.

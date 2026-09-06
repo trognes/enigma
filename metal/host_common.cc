@@ -471,13 +471,19 @@ int main(int argc, char * * argv)
     {
       /* Statistics on the FIRST returned component, per aligned group of
          32 items. A threadgroup's lanes are consecutive restarts and a
-         simdgroup is 32 lanes, so a group is a simdgroup. Under variant 5
-         that component is the lane's climb-pass count, and max/mean is
-         exactly the divergence factor of 17.2(c) -- the work a simdgroup
-         runs against the work it needed. Under the other variants it is
-         `isum` and means nothing; the host cannot tell which metallib was
-         loaded, so it reports the statistic and lets the reader say. */
+         simdgroup is 32 lanes, so a group is a simdgroup. Under an
+         MC_PASSES build that component is the lane's climb-pass count:
+         the MEAN is what normalises climbs/s into passes/s, the unit in
+         which variants doing different amounts of work are comparable,
+         and max/mean is the divergence factor of 17.2(c) -- the work a
+         simdgroup runs against the work it needed. Under an ordinary
+         build it is `isum` and neither figure means anything. The host
+         cannot tell which metallib was loaded, so it reports both and
+         names the component rather than the interpretation: the first
+         table printed here labelled max/mean "divergence" on every row,
+         which was true of one of them. */
       double ratio_sum = 0.0;
+      double mean_sum = 0.0;
       size_t groups = 0;
       for (size_t g = 0; g + 32 <= all_comps.size(); g += 32)
         {
@@ -492,12 +498,14 @@ int main(int argc, char * * argv)
           if (sum > 0.0)
             {
               ratio_sum += static_cast<double>(mx) / (sum / 32.0);
+              mean_sum += sum / 32.0;
               groups++;
             }
         }
       if (groups > 0)
         fprintf(stderr, "Ablation: first component per 32-item group, "
-                "max/mean = %.3f over %zu groups\n",
+                "mean = %.3f, max/mean = %.3f over %zu groups\n",
+                mean_sum / static_cast<double>(groups),
                 ratio_sum / static_cast<double>(groups), groups);
     }
   fprintf(stderr, "Components: %zu of %zu boards exact\n",

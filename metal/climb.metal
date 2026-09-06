@@ -106,10 +106,13 @@ kernel void enigma_climb(device const mc_params & p [[buffer(0)]],
   mc_components(steck, rows_tg, ct_tg, L, model, tbl, & isum, & coin);
   for (int j = 0; j < MC_ASIZE; j++)
     boards_out[item * MC_ASIZE + j] = steck[j];
-#if MC_ABLATE == 5
-  /* The divergence probe (17.2(c)): this lane's pass count and its lane
-     index within the simdgroup, in place of the components, which the
-     host is told to ignore by $ENIGMA_GPU_ABLATE. */
+#if MC_PASSES
+  /* This lane's pass count and its lane index within the simdgroup, in
+     place of the components, which the host is told to ignore by
+     $ENIGMA_GPU_ABLATE.  The mean normalises climbs/s into passes/s and
+     the simdgroup maximum over the mean is the divergence factor
+     (17.2(c)); both are needed PER VARIANT, hence a switch orthogonal to
+     MC_ABLATE rather than a variant of its own. */
   comps_out[item * 2] = (mc_i64) passes;
   comps_out[item * 2 + 1] = (mc_i64) (lane % 32u);
 #else
