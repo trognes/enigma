@@ -44,6 +44,9 @@ Decisions recorded (owner's):
    are untouched.
 4. Written here, built and measured on the owner's Mac (an M2 Pro first).
 5. This PR is design and planning only.
+6. **No pre-set throughput bar** for milestone 3: produce section
+   9's numbers, then decide. The earlier ">= 2x proceeds, < 1.5x
+   stops" is withdrawn.
 
 ## 1. Goal and scope
 
@@ -359,9 +362,26 @@ fixtures per cell (fixtures buy the interval; repetitions sharpen one
 fixture's own estimate), upload and download included, against `-T 12` on
 the same fixtures, plus a 10-minute sustained run for thermal throttling.
 
-Go/no-go after milestone 3: **>= 2x** the CPU-only figure proceeds to the
-sweep integration; **< 1.5x** stops, and the result is recorded like every
-other measured-down lever.
+**There is NO pre-set bar** (owner's decision 6). This used to read ">= 2x
+proceeds, < 1.5x stops"; the numbers are to be produced first and judged
+then. Two reasons that is the better order here. The measurement is not of
+one thing: the cells span L and `-R` by an order of magnitude each, and a
+port that wins at `-R 1024` and loses at `-R 64` fails a single threshold
+while being exactly what the search playbook wants, since restarts are the
+lever compute is meant to buy. And the first numbers will understate the
+hardware by a known, fixable factor -- at small `-R` the kernel uses one
+lane of every 32 (section 16's second open question), so a bar applied
+before that is answered would be judging the mapping rather than the
+design.
+
+Recording a number and then deciding is also what this repo does
+everywhere else: `--seed-dedup`, `-K` and the `k4f10` pre-pass were each
+measured, written down, and weighed against their cost afterwards -- and
+the one place a bar WAS pre-registered, the `-S k` entry in CLAUDE.md, it
+failed on a tie at L = 60 and the token was adopted anyway on judgment.
+The value of pre-registration is that it stops a claim drifting to fit its
+evidence; that is served by publishing the cells, which section 9 requires
+regardless.
 
 ## 10. Milestones
 
@@ -378,7 +398,7 @@ Rough effort, to set expectations rather than commit to them:
    (section 11). ~1 week.
 3. Identity rate (8.2), recovery equivalence (8.3), throughput (9).
    Days, dominated by the measurement runs.
-4. Go/no-go on the numbers.
+4. Judge it on the numbers (decision 6: no pre-set bar).
 5. Keys x restarts on the GPU, CPU merge, `--dump-all` and the doubling
    report fed from the downloaded boards; `plug_fixed` mask passed through;
    batching and pipelining (section 7). ~1-2 weeks.
@@ -598,8 +618,9 @@ cheap to keep.
 - **Expected gain, an estimate in section 12's sense only**: 54 compute
   units against the M2 Pro's 19 GPU cores puts the card between the
   Max-class Apple rows and the RTX 4090 row, if the gather latency hides
-  as the design bets. The measurement is section 9 on that machine, with
-  the same 2x bar.
+  as the design bets. The measurement is section 9 on that machine,
+  judged the same way -- which is now on the numbers rather than
+  against a pre-set bar (decision 6).
 
 ## 16. Open questions
 
