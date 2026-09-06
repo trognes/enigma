@@ -31,10 +31,18 @@ build):
   design errors: the Metal compiler is a separate download since Xcode 16
   (section 13), and a dispatch had to be capped by WORK rather than by
   bytes or the GPU watchdog resets the machine (section 11).
-- **Next: section 9's throughput**, milestone 3. The harness is written
-  (`throughput.py`); the numbers want the Mac. Read the occupancy note in
-  section 11 first, because at small `-R` the kernel wastes lanes and that
-  is a property of the mapping rather than of the port.
+- **Milestone 3, first run: the GPU LOSES every cell on an M1 mini**, by
+  1.5x to 12x on the trustworthy `device` column
+  (`eval/results-gpu-throughput-m1.txt`). The shape says why, and it is
+  not the kernel's arithmetic: time per fixture is nearly flat as the work
+  grows 16x, so lanes and threadgroups are both nearly free and what is
+  slow is ONE LANE -- 50-300x a CPU core, which is what a dependent chain
+  of gathers costs against an out-of-order core at IPC 3.32. The GPU
+  answers that with width, and this run gave it almost none: a fixture is
+  one key, so it dispatched 1 to 4 threadgroups on a machine that holds
+  ~32. **It measured an eighth to a half of the device.** Re-run with
+  `--keys 26` before drawing any conclusion; that is also the sweep tier
+  section 1 is aiming at.
 
 Decisions recorded (owner's):
 

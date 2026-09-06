@@ -37,12 +37,20 @@ smallest cell and less everywhere else.
 No pre-set bar (DESIGN.md decision 6): this prints the cells and the
 interval, and the judgment comes after.
 
-DO NOT READ A --host metal/enigma-ref RUN AS A RESULT. The reference
-backend caps its threads at the KEY count (backend_cpu.cc), and this tier
-gives one key per fixture, so it runs single-threaded against a CPU arm
-using every core -- its speedup column is roughly 1/threads by
-construction and says nothing about the port. It is here to check the
-harness itself, and the script says so in its header when pointed at it.
+DO NOT READ A --host metal/enigma-ref --keys 1 RUN AS A RESULT. The
+reference backend caps its threads at the KEY count (backend_cpu.cc), so
+at one key per fixture it runs single-threaded against a CPU arm using
+every core -- its speedup column is roughly 1/threads by construction and
+says nothing about the port. The script says so when pointed at itself.
+At --keys 26 and above that backend threads normally and the warning is
+not printed.
+
+--keys IS THE LEVER THE FIRST M1 RUN ASKED FOR. One key per fixture gives
+ceil(R / lanes) = 1 to 4 threadgroups; the M1's 8 cores hold roughly 32
+between them, so that run measured an eighth to a half of the machine and
+its cells are a floor rather than the port's speed. The sweep tier is
+also what the port is FOR (DESIGN.md 1). Cost scales with the key count,
+so --keys 26 with fewer fixtures is the sensible next measurement.
 """
 
 import argparse
@@ -93,7 +101,15 @@ def device_secs(stderr):
     return float(m.group(1)) if m else None
 
 
-def fixture(rng, corpus, L):
+# -g patterns by key count. ONE key -- the plugboard-recovery tier every
+# tuning number in the repo uses -- gives the GPU no key parallelism at
+# all: threadgroups = ceil(R / lanes), so 1 to 4 of them, on a machine
+# that holds ~32. The sweep tier is what the port is for (DESIGN.md 1),
+# and it is the only shape that can fill the device.
+KEY_SHAPES = {1: "{g}", 26: "{g0}{g1}.", 676: "{g0}..", 17576: "..."}
+
+
+def fixture(rng, corpus, L, keys=1):
     pt = corpus[rng.randrange(0, len(corpus) - L):][:L]
     w = "".join(str(x) for x in rng.sample([1, 2, 3, 4, 5], 3))
     r = "".join(rng.choice(LET) for _ in range(3))
@@ -102,23 +118,39 @@ def fixture(rng, corpus, L):
     ls = list(LET)
     rng.shuffle(ls)
     pb = " ".join(ls[2 * i] + ls[2 * i + 1] for i in range(10))
-    _, _, _ = run(ENIGMA, key + ["-s", pb], pt)
     p = subprocess.run([ENIGMA] + key + ["-s", pb], input=pt,
                        capture_output=True, text=True,
                        env=dict(os.environ, ENIGMA_SEED="0",
                                 ENIGMA_DATA=NGRAMS))
-    return key, p.stdout.strip()
+    # The SEARCH key wildcards start positions to the requested count; the
+    # ciphertext was made with the true one, so the truth is in the space.
+    shape = KEY_SHAPES[keys].format(g=g, g0=g[0], g1=g[1])
+    search = ["-u", "B", "-w", w, "-r", r, "-g", shape]
+    return search, p.stdout.strip()
 
 
 def startup(binary, key, ct, threads):
-    """One -R 1 run: essentially the n-gram load, which both arms pay."""
+    """What a run costs before any climbing: the n-gram load, which both
+    arms pay and which is ~0.1 s against cells of a few hundred ms.
+
+    A bare -R 1 elapsed time is NOT that, and assuming it was made the
+    first M1 run's end-to-end column faster than its own device column --
+    arithmetically impossible, and the tell that the baseline was wrong.
+    On the GPU a single climb is a whole dispatch, measured at 0.3-1.3 s
+    on an M1, so -R 1 is startup PLUS a full dispatch and subtracting it
+    removes real work. The host reports its own device time, so the
+    dispatch is subtracted back out; on the CPU one climb is a millisecond
+    and the correction is nil."""
     best = None
     for _ in range(3):
-        el, rc, _ = run(binary, key + RECIPE + ["-R", 1, "-T", threads], ct)
+        el, rc, err = run(binary, key + RECIPE + ["-R", 1, "-T", threads],
+                          ct)
         if rc != 0:
             return None
+        d = device_secs(err)
+        el -= (d if d is not None else 0.0)
         best = el if (best is None) else min(best, el)
-    return best
+    return max(best, 0.0)
 
 
 def mean_ci(xs):
@@ -130,12 +162,12 @@ def mean_ci(xs):
     return mu, 1.96 * sd / math.sqrt(n)
 
 
-def cell(host, corpus, rng, L, R, fixtures, threads):
+def cell(host, corpus, rng, L, R, fixtures, threads, keys=1):
     """One L x R cell: returns the aggregate rates and the per-fixture
     speedups, which are what carry the interval."""
     fx = []
     for _ in range(fixtures):
-        key, ct = fixture(rng, corpus, L)
+        key, ct = fixture(rng, corpus, L, keys)
         if len(ct) == L:
             fx.append((key, ct))
     if not fx:
@@ -163,7 +195,7 @@ def cell(host, corpus, rng, L, R, fixtures, threads):
         dev += d
         gpu += g
         cpu += c
-        climbs += R
+        climbs += R * keys
         ratios.append(c / g)
     mu, ci = mean_ci(ratios)
     return {"L": L, "R": R, "n": len(fx), "climbs": climbs,
@@ -208,6 +240,11 @@ def main():
     ap.add_argument("--restarts", type=int, nargs="+",
                     default=[64, 256, 1024])
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 4)
+    ap.add_argument("--keys", type=int, default=1,
+                    choices=sorted(KEY_SHAPES), metavar="N",
+                    help="keys per fixture: 1 (the plugboard tier), or "
+                         "26/676/17576 with start positions wildcarded, "
+                         "which is what can fill a GPU")
     ap.add_argument("--sustained", type=int, default=0,
                     metavar="SECONDS")
     ap.add_argument("--seed", type=int, default=11)
@@ -222,9 +259,13 @@ def main():
     rng = random.Random(args.seed)
     print(f"# {os.path.relpath(args.host, TOP)} vs ./enigma -T "
           f"{args.threads}, {RECIPE}, rotor key given, 10 plugs hidden")
-    print(f"# {args.fixtures} fixtures per cell, wall time with startup "
-          f"subtracted, climbs per second")
-    if os.path.basename(args.host) == "enigma-ref":
+    print(f"# {args.fixtures} fixtures per cell, {args.keys} key(s) per "
+          f"fixture, wall time with startup subtracted, climbs per second")
+    if args.keys == 1:
+        print("# NOTE: one key per fixture gives ceil(R/lanes) = 1-4 "
+              "threadgroups, on a machine\n#       that holds ~32. This "
+              "cannot fill a GPU; --keys 26 or more can.")
+    if (os.path.basename(args.host) == "enigma-ref") and (args.keys == 1):
         print("# WARNING: the reference backend threads over KEYS and this "
               "tier has one\n#          key per fixture, so it is "
               "single-threaded here. Harness check only,\n#          not a "
@@ -234,7 +275,7 @@ def main():
     for L in args.lengths:
         for R in args.restarts:
             c = cell(args.host, corpus, rng, L, R, args.fixtures,
-                     args.threads)
+                     args.threads, args.keys)
             if c is None:
                 print(f" {L:>4} {R:>6}    -  (cell failed)")
                 continue
