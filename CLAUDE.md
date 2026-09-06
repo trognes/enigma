@@ -519,6 +519,19 @@ measure; on the v1.1.0 baseline every miss is a *search* failure.)
 > deterministic proxy* it is — good for `-T`-independent A/Bs of moves that live
 > **inside** the score loop (restarts, climb order, caps), misleading for
 > anything that adds work outside it.
+>
+> **The converse trap: wall time per CLIMB is confounded whenever the change
+> alters the SCORE.** A scoring change that is not byte-identical changes the
+> climb's trajectory, hence how many passes it runs before it converges, and
+> climbs per second then measures work not done rather than cost. The GPU
+> probes hit this at its extreme — an ablation that made the decode
+> board-independent read 20× faster because every climb converged after one
+> pass (`eval/results-gpu-ablation-m1.txt`, run 1) — but the `hillclimb` and
+> `fused` bench tiers time whole climbs and are exposed the same way. The
+> comparable unit is wall time **per fixed unit of work**: pin the pass count
+> (as the probes' `MC_FIXED_PASSES` does) or normalise by boards scored, and
+> never read either axis alone — `score_iter` undercounts work outside the
+> loop, and climbs/s hides work the trajectory no longer does.
 
 `crack_quality.py` also carries three opt-in test modes from
 `archived/CRACKQUALITY_TESTS.md` (all off by default, the normal flow
@@ -1241,7 +1254,45 @@ are read from a **data directory** (filenames built as
   this turns it off so its value can be A/B'd (e.g. at short lengths where its
   convergence scan is a larger fraction of a fast climb). Default off keeps the
   climb byte-identical; the flag only skips the `try_repair` call at each
-  convergence.
+  convergence. **The short-length A/B this flag exists for has now been run,
+  and the re-pair keeps its always-on default.** 2000 paired trials per
+  length at L = 40/60/80/100, rotor key given, ten plugs hidden, the
+  recommended recipe, judged on `break50` (`eval/repair_ab.py`,
+  `eval/results-repair-ab.txt`): at matched restarts it wins **423/2000
+  against 381 at L=80** (62 on-only discordants against 20, p = 0.000) and
+  **738 against 684 at L=100** (87 against 33, p = 0.000), and it loses at no
+  length. L=40 resolves nothing (26 against 22, p = 0.424) because 1.3% of
+  trials break at all there — the floor effect, not evidence of absence.
+  - **"~zero cost" overstates it, and the GPU overstates it the other way.**
+    The CPU pays **3.3 / 4.6 / 7.2%** of a climb at L = 40/80/100, where the
+    GPU probes measured `try_repair` plus the outer loop at **16.9%** at
+    L≈105 (`eval/results-gpu-ablation-m1.txt` run 2). A lane and a core price
+    a convergence scan about **3× apart**, which is why a GPU share cannot be
+    read across.
+  - **The VALUE half needed `-R 64`, because restarts are integers — and it
+    is now measured there.** At `-R 8` a 3–7% saving cannot buy one —
+    `round(8 × 1.033)` is 8 — so at L=40 and L=80 the matched-*time* arm ran
+    the identical command to the matched-*restart* arm and its column was a
+    copy. At `-R 64` the bonus is real (`off+` at 76–84 restarts against 64)
+    and **`off+` never wins**: `on` takes L=80 outright (78 on-only
+    discordants against 50, p = 0.017) and ties at L=60 (p = 1.000) and L=100
+    (p = 0.560), while L=40 leans `off+` without resolving (p = 0.383) in a
+    cell where 2.7% of trials break. The verdict is robust to the cost ratio
+    being wrong, since the arm was built on the *higher* of two disagreeing
+    pilots and fewer restarts can only weaken `off+`.
+    `eval/results-repair-ab-r64.txt`.
+  - **Its value GROWS with restarts, where `--polish`'s fades.** Matched
+    restarts, `on` minus `off`, at `-R 8` → `-R 64`: L=60 goes 4 (ns) → 21
+    (p = 0.028), L=80 42 → 58, L=100 54 → 62. The finisher fires **once**
+    after all restarts, so more restarts dilute its share and subsume the
+    boards it targets; `try_repair` fires at **every convergence inside every
+    restart**, so its contribution scales with the budget. A finisher and a
+    barrier-cross do not answer to the same budget argument.
+  - **The cost ratio itself is unresolved**: two pilots on identical fixtures
+    read 1.03–1.07 and 1.19–1.31, and a min-of-5 cannot exceed a min-of-2 on
+    the same work, so the second box was slower rather than the statistic
+    noisier. Quote the range until one is reproduced on a quiet box; the
+    recovery arms are paired and deterministic and are untouched by it.
 - `--int` **compare the climb's scores as exact 64-bit integers** (needs `-c`;
   off by default). The reference arithmetic the GPU targets reproduce
   exactly — `metal/DESIGN.md` §3a — and, on the CPU, a flag that changes

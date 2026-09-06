@@ -1,0 +1,81 @@
+# try_repair A/B, ['-c', '-K', '--polish', '-S', 'k4f10', '-f', '-l', 'wehrmacht'], 10 plugs hidden, rotor key given,
+# 2000 paired trials per length, -R 8, seed 11, 4 workers
+
+cost: per-restart climb time, ms, the slope between -R 8 and -R 128 over 24 pilot fixtures, min of 2 reps
+     L       on      off   ratio  R' (off+)
+    40    0.178    0.172   1.033          8
+    60    0.247    0.185   1.337         11
+    80    0.223    0.213   1.046          8
+   100    0.237    0.221   1.072          9
+
+recovery: paired break50 (>=50% of letters), the same fixture in every arm
+     L        on       off      off+  on-only/off-only on-only/off+-only  mean%: on/off/off+
+    40   26/2000   22/2000   22/2000       9/5               9/5          10.0/9.6/9.6
+       restarts matched: p = 0.424;  wall matched (off+ at -R 8): p = 0.424
+    60  154/2000  150/2000  171/2000      21/17             26/43         16.2/15.8/16.7
+       restarts matched: p = 0.627;  wall matched (off+ at -R 11): p = 0.053
+    80  423/2000  381/2000  381/2000      62/20             62/20         28.2/26.4/26.4
+       restarts matched: p = 0.000;  wall matched (off+ at -R 8): p = 0.000
+   100  738/2000  684/2000  719/2000      87/33             82/63         42.3/39.9/41.6
+       restarts matched: p = 0.000;  wall matched (off+ at -R 9): p = 0.135
+
+Read: `off` against `on` is what the re-pair is worth in breaks at
+equal restarts; `off+` against `on` is whether those breaks cost
+more restarts than they buy.  off+ ahead means the default is
+length-gated.
+
+
+THE READING
+===========
+
+1. try_repair COSTS 3-7% OF A CLIMB ON THE CPU, NOT 16.9%.  The GPU
+   probes put try_repair plus the outer loop at 16.9% of a natural climb
+   at L~105 (results-gpu-ablation-m1.txt run 2); the CPU pays 3.3% at
+   L=40, 4.6% at 80 and 7.2% at 100.  So a GPU lane and a CPU core price
+   a convergence scan differently by about 3x, which is what the
+   cross-hardware caveat in CLAUDE.md's --no-repair entry anticipated.
+   It is cheap, but "~zero cost" overstates it at the top of the range.
+
+2. THE L=60 COST ROW IS CONTAMINATED, AS PREDICTED BEFORE THE RECOVERY
+   TABLE WAS READ.  Its 1.337 sits between neighbours reading 1.046 and
+   1.033, and its `on` cost (0.247) exceeds both L=80's (0.223) and
+   L=100's (0.237) -- backwards for a climb linear in L.  The `off`
+   column is cleanly monotone (0.172, 0.185, 0.213, 0.221), so the
+   well-behaved arm is the one saying the other is wrong.  Re-timing the
+   IDENTICAL fixtures twice reads 1.069 and 1.099.  The true R' at L=60
+   is 9, not 11, so the only apparently-significant matched-time cell
+   (p = 0.053) rests on a 37% restart bonus where ~9% was earned.  It is
+   an artefact and is not a finding.
+
+3. THE RE-PAIR EARNS ITS KEEP AT L>=80, DECISIVELY, AT MATCHED RESTARTS:
+   423 breaks against 381 at L=80 (62 on-only against 20, p = 0.000) and
+   738 against 684 at L=100 (87 against 33, p = 0.000).  At L=40 nothing
+   resolves -- 26 against 22 of 2000, p = 0.424 -- which is the documented
+   floor effect, not evidence of absence: at forty letters 1.3% of trials
+   break at all.
+
+4. NO LENGTH SHOWS THE RE-PAIR LOSING.  So ENHANCEMENTS.md item 19
+   closes with NO CHANGE: it stays always-on and is not length-gated.
+
+5. THE VALUE QUESTION IS ONLY HALF-TESTED, AND THE REASON IS INTEGER
+   RESTARTS.  At -R 8 a 3-7% saving cannot buy a restart: round(8 x
+   1.033) and round(8 x 1.046) are both 8, so at L=40 and L=80 the `off+`
+   arm ran the IDENTICAL command to `off` and its column is a copy --
+   which the identical discordant counts (9/5 and 62/20) confirm, and
+   which doubles as a check that the pairing and the determinism are
+   sound.  Only L=100 got a real bonus (R' = 9, +12.5%, itself slightly
+   over-credited), where `on` leads 738 to 719 at p = 0.135.  A proper
+   matched-time test needs a budget where the ratio is expressible: at
+   -R 64 the measured ratios give R' = 66, 69, 67 -- a genuine 3-7%.
+   Until that is run, "the re-pair is worth more than the restarts it
+   costs" is supported at L=80 (where it costs no restart at all) and
+   merely not contradicted at L=100.
+
+WHAT THE HARNESS LEARNED.  min-of-2 reps was too thin for a slope that is
+a difference of two sums: one bad timing in four rows produced one false
+positive at p = 0.053.  The pilot now takes min of 5, and the cost table
+marks the two readings a reader would otherwise take at face value -- a
+ratio below 1.0 (impossible, since the re-pair only ever adds work, so
+it is the timer winning) and a ratio that rounds to no extra restart, in
+which case `off+` is the same command as `off` and its column is a copy
+rather than an arm.  The rows above were produced before that change.

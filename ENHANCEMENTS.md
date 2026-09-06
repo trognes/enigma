@@ -2712,6 +2712,92 @@ take the close-but-wrong boards and measure what fraction a finishing pass
 converts. `tests/crack_quality.py` and
 `eval/tune_phase_vs_restarts_report.py` are the two places to add it.
 
+**19. `try_repair` at short lengths — MEASURED; it stays always-on, and the
+GPU's 16.9% does not transfer.** The GPU probes put `try_repair` plus the
+outer loop at 16.9% of a natural climb at L≈105
+(`eval/results-gpu-ablation-m1.txt` run 2), against the "~zero cost" reasoning
+in `CLAUDE.md`'s `--no-repair` entry, which was the reason to run the A/B the
+flag exists for. Run: 2000 paired trials per length at L = 40/60/80/100,
+rotor key given, ten plugs hidden, the recommended recipe, judged on
+`break50` (`eval/repair_ab.py`, `eval/results-repair-ab.txt`):
+
+| L | on | off | matched-R | matched-wall |
+|---:|---:|---:|---:|---:|
+| 40 | 26/2000 | 22/2000 | p = 0.424 | p = 0.424 |
+| 60 | 154/2000 | 150/2000 | p = 0.627 | p = 0.053 *(artefact)* |
+| 80 | 423/2000 | 381/2000 | **p = 0.000** | **p = 0.000** |
+| 100 | 738/2000 | 684/2000 | **p = 0.000** | p = 0.135 |
+
+**No change**: the re-pair earns its keep decisively from L=80 up (62 on-only
+discordants against 20, then 87 against 33) and loses at no length, so it is
+not length-gated. At L=40 nothing resolves — 1.3% of trials break at all,
+the documented floor effect rather than evidence of absence. **On the CPU it
+costs 3.3 / 4.6 / 7.2% of a climb** at L = 40/80/100, so a lane and a core
+price a convergence scan about 3× apart, exactly the cross-hardware caveat.
+
+**One thing the run also settled about itself.** The one significant
+matched-time cell was called as contaminated *before* the recovery table was
+read — L=60's cost ratio of 1.337 sat between neighbours at 1.033 and 1.046
+with an `on` cost exceeding L=80's and L=100's, backwards for a climb linear
+in `L`, while the `off` column was cleanly monotone; re-timing the identical
+fixtures gives 1.069 and 1.099.
+
+**The VALUE half — blocked at `-R 8` because restarts are integers — is now
+measured at `-R 64`, and the answer is the same.** A 3–7% saving cannot buy
+an integer restart out of 8, so at L=40 and L=80 the matched-time arm ran the
+identical command to the matched-restart arm; at 64 it can, and `off+` was
+given 76–84 restarts against `on`'s 64 (`eval/results-repair-ab-r64.txt`):
+
+| L | on | off | off+ | matched-R | matched-wall |
+|---:|---:|---:|---:|---:|---:|
+| 40 | 54/2000 | 51/2000 | 59/2000 | p = 0.607 | p = 0.383 |
+| 60 | 334/2000 | 313/2000 | 333/2000 | **p = 0.028** | p = 1.000 |
+| 80 | 803/2000 | 745/2000 | 775/2000 | **p = 0.000** | **p = 0.017** |
+| 100 | 1223/2000 | 1161/2000 | 1215/2000 | **p = 0.000** | p = 0.560 |
+
+**`off+` never wins.** `on` takes L=80 outright at matched wall time and ties
+at L=60 and L=100; L=40 leans `off+` and does not resolve, in a cell where
+2.7% of trials break at all. And **the verdict is robust to the cost ratio
+being wrong**, which matters because it probably is (below): the arm was built
+on the *higher* of two disagreeing pilots, so `off+` holds more restarts than a
+1.05 ratio would justify — ~67 rather than 76–84 — and fewer restarts can only
+weaken it. The uncertainty runs in the safe direction.
+
+**Its value GROWS with restarts, where `--polish`'s fades — and that is
+structural, not luck.** Matched restarts, `on` minus `off`: L=60 goes 4 (ns)
+→ 21 (p = 0.028), L=80 42 → 58, L=100 54 → 62 across the eightfold budget
+step. The finisher fires **once** on the best board after all restarts, so more
+restarts dilute its share and subsume the near-solution boards it targets;
+`try_repair` fires at **every convergence inside every restart**, so its
+contribution scales with the budget rather than against it. A finisher and a
+barrier-cross do not answer to the same budget argument.
+
+**What is left open is the COST RATIO, not the decision.** Two pilots on the
+identical fixtures disagree — 1.03–1.07 against 1.19–1.31 — and both cannot be
+right: run 2 is the better-*formed* (both columns monotone in `L`, where run
+1's `on` column was not), yet every absolute time in it is 20–50% higher and a
+min-of-5 cannot exceed a min-of-2 on the same work, so the box was slower
+rather than the statistic noisier (the container had restarted between them).
+Quote the range, 1.03–1.31, until one is reproduced on a quiet box. The
+recovery arms are untouched: they are paired and deterministic, so machine
+speed cannot change which trials break. The pilot also times `on` first in
+both arms, which biases the ratio **up** — alternating the arm order per rep is
+the fix if it is re-measured. → `CLAUDE.md` `--no-repair`,
+`metal/DESIGN.md` §17.8.
+
+**20. The GPU port on Apple silicon — MEASURED and CLOSED; the open question
+is CUDA.** Every layer of the lane-per-climb kernel is measured on a kernel
+that exists and checks bit-exact against the tool (`metal/DESIGN.md` §17.6 (ii),
+`eval/results-gpu-probe-m1.txt`): scorer in registers 101M probes/s, the scan
+loop 49M, the climb as it runs ~19M — a ceiling of 1.5× today's and 0.28× the
+M1's CPU. The §17.4 redesign measured 0.49–0.94× of the shape it was to
+replace. There is no unmeasured lever left on this hardware. The absolute rate
+scales with resident lanes × clock, so the same kernel projects to parity or a
+small multiple on a discrete CUDA card against a desktop CPU — arithmetic, with
+§12's record as the warning. **The first step there is the probe, not the
+port**: the body is behind three macros so the same microkernel can run on a
+CUDA card and give the number before any port work is spent.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
