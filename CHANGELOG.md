@@ -216,6 +216,17 @@ existing command lines can behave differently or stop working.
     228 488) — no coverage lost, the Greek offset collapse and the
     two-notch right wheel both being live with start1 pinned, while the
     middle-wheel collapse needs ring1 wildcarded and every case pins it.
+  - **`metal/throughput.py`, §9's measurement** (milestone 3): L × restarts
+    cells on wall time with **startup subtracted from both arms**, since an
+    invocation's n-gram load is ~0.1 s and a whole `-R 64` run is a few
+    hundred ms — the trap `CLAUDE.md`'s `-S k` entry records two attempts
+    falling into. Reports device rate (the kernel, transfers included),
+    end-to-end rate (what a user gets, the host's reporting walk included)
+    and the paired speedup with a CI over fixtures, plus a `--sustained`
+    mode for thermal drift. It refuses to be misread: pointed at
+    `enigma-ref` it prints a warning, because that backend threads over
+    **keys** and this tier has one key per fixture, so it runs
+    single-threaded and its speedup column is ~1/threads by construction.
 - **`--int` — the plugboard climb compares its scores as exact 64-bit
   integers.** Every scorer already accumulates two integers, the table sum
   `isum` and the same-letter pair count `coin`, before one float division;

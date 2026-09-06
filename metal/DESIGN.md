@@ -31,9 +31,10 @@ build):
   design errors: the Metal compiler is a separate download since Xcode 16
   (section 13), and a dispatch had to be capped by WORK rather than by
   bytes or the GPU watchdog resets the machine (section 11).
-- **Next: section 9's throughput**, milestone 3 -- and read the occupancy
-  note in section 11 first, because at `-R 1` the kernel uses one lane of
-  every 32 and that is the first number section 9 will report.
+- **Next: section 9's throughput**, milestone 3. The harness is written
+  (`throughput.py`); the numbers want the Mac. Read the occupancy note in
+  section 11 first, because at small `-R` the kernel wastes lanes and that
+  is a property of the mapping rather than of the port.
 
 Decisions recorded (owner's):
 
@@ -478,6 +479,7 @@ keywords, the thread index, the barrier and the integer type.
 | `backend_metal.mm` | uploads a batch and dispatches the kernel (macOS) |
 | `backend_cpu.cc` | runs the body per lane on the CPU (any platform) |
 | `verify_identity.py` | section 8.2 as a `diff` of `--dump-all` rows |
+| `throughput.py` | section 9's cells, wall time, startup subtracted |
 | `Makefile` | `make -C metal` (reference), `make -C metal metal` (Metal) |
 
 Both hosts link every object under `src/` except `main.o`, built by the
