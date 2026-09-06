@@ -37,16 +37,20 @@ construction. B is the measurement; A says how far the confound reached.
 
 Table C is occupancy: lanes per threadgroup on the shipping kernel,
 answer-preserving and needing no kernel change. 64 is the peak, at
-1.27x. (It briefly carried a second arm pairing each lane count with the
+1.27x, and is now the host's default (MC_LANES_DEFAULT) -- so tables A
+and B, which do not set a width, run at 64 from here on, where every
+table recorded in eval/results-gpu-ablation-m1.txt ran at 256. Table C
+sets the width per row and is unaffected. (It briefly carried a second arm pairing each lane count with the
 32-bit accumulators; see lane_sweep() for why that arm answered "no" and
 was removed.)
 
 Table D (--scaling, on its own) is the per-probe cost against message
 length on the baseline kernel: fixed passes for the cost, natural for
-context, at five lengths from 60 to 256. It fits t(L) = a + b*L and
-prints, per length, an upper bound on the 17.4 redesign -- which spreads
-the per-character slope across 32 lanes and leaves the per-probe
-intercept where it is. See scaling().
+context, at five lengths from 60 to 256. It fits t(L) = a + b*L; the
+intercept is the per-probe work the 17.4 redesign leaves where it is,
+so its share is the go/no-go (measured 3% at L=107 -- a go). It does
+NOT bound the redesign's throughput; see scaling() for why the column
+that once claimed to was withdrawn.
 
 COST, this time multiplied out: an invocation is ~3.3 s at this cell, so
 tables A and B are 2 x 5 x fixtures x reps invocations and table C is
@@ -284,17 +288,23 @@ def scaling(args, corpus, rng):
     a = (sy - b * sx) / n
     print(f"\n  fit: ns/probe = {a:.1f} + {b:.3f} * L")
     print("  (intercept = the per-probe part, slope = per character)")
-    print("     L   measured   fitted   resid   intercept share   17.4 bound")
+    print("     L   measured   fitted   resid   intercept share   chars/lane")
     for L, ns in pts:
         fit = a + b * L
-        bound = ns / (a + b * L / 32.0) if (a + b * L / 32.0) > 0 else 0.0
         print(f"  {L:4d} {ns:10.1f} {fit:8.1f} {ns - fit:7.1f} "
-              f"{100.0 * a / fit:15.1f}%  {bound:9.1f}x")
-    print("\n  Read: the bound keeps the intercept and divides only the")
-    print("  slope by 32 -- what 17.4's decomposition can reach at best,")
-    print("  before reduction overhead and before occupancy. A bound near")
-    print("  the 4-6x parity needs is a stop; the redesign must clear it")
-    print("  with room for the costs this fit cannot see.")
+              f"{100.0 * a / fit:15.1f}%  {L / 32.0:9.1f}")
+    print("\n  Read: the intercept share is the part of the cost 17.4 cannot")
+    print("  touch (its per-probe work stays per-probe). Small means the")
+    print("  redesign attacks nearly all of it; large is a stop. chars/lane")
+    print("  is L/32, what each lane holds under 17.4 -- the per-probe")
+    print("  reductions it adds are amortised over that many characters.")
+    print("  This table does NOT bound the redesign's throughput: 17.4 cuts")
+    print("  each lane's chain 32x and puts 32x fewer climbs in flight, so")
+    print("  its payoff is the per-character STEP latency ratio (shuffle")
+    print("  and threadgroup memory against thread memory) times occupancy")
+    print("  times divergence -- and the step ratio needs the microkernel.")
+    print("  An earlier version printed a '17.4 bound' column here; it was")
+    print("  per-probe latency, not throughput, and it is gone.")
 
 
 def main():

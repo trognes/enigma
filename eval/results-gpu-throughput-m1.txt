@@ -6,6 +6,13 @@ instrument for the whole experiment ladder.  Apple silicon generally is
 in scope in principle, CUDA and OpenCL later; the M2 Pro at the end of
 this file is a cross-check on a second chip, not the target.
 
+EVERY GPU FIGURE IN THIS FILE IS AT 256 LANES PER THREADGROUP, which was
+the default when they were taken.  The default is now 64
+(MC_LANES_DEFAULT, from the lane sweep in results-gpu-ablation-m1.txt:
+1.27x at L=107), so a re-run of throughput.py on the same chip should
+read about that much higher on the gpu column and nothing else.  The
+speedup column's reading -- 4-6x behind the CPU -- is not changed by it.
+
 RUN 2 IS THE MEASUREMENT.  --keys 26 --fixtures 6, -T 8 on the CPU arm:
 
     L      R    n   device      gpu      cpu   speedup    95% CI

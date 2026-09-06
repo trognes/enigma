@@ -932,11 +932,16 @@ paid for.
    tuning. Its payoff is still bounded by nothing measured, so 17.7's
    warning against trusting its estimate stands.
    - **One free thing first, needing no kernel change and
-     answer-preserving.** `lanes_per_tg = 64` is the peak of the sweep at
-     **1.27x** -- not the 128 run 1 suggested from a single point -- and
-     the curve has a mechanism: a threadgroup is one rotor key, so once
-     lanes fall below the 256 restarts a key spans several groups and
-     each re-loads its own `rows[]`, which is why 32 falls back.
+     answer-preserving -- SHIPPED as `MC_LANES_DEFAULT = 64`.**
+     `lanes_per_tg = 64` is the peak of the sweep at **1.27x** -- not the
+     128 run 1 suggested from a single point -- and the curve has a
+     mechanism: a threadgroup is one rotor key, so once lanes fall below
+     the 256 restarts a key spans several groups and each re-loads its
+     own `rows[]`, which is why 32 falls back. `MC_LANES` stays 256 as the
+     maximum (it sizes threadgroup memory and bounds `$ENIGMA_GPU_LANES`,
+     which now exists for the sweep); the settings line reports the width
+     in use and marks an override. The 1.27x is one chip and one cell,
+     so the sweep stays in `ablate.py` for the next chip.
    - **The 32-bit accumulators are NOT a second one, and a claim here
      that they were has been retracted.** Table B's row 3 read cap 448
      against 384, and that was written up as the accumulators moving the
@@ -952,6 +957,42 @@ paid for.
      cap: it is a stepped function of register count, the natural kernel
      sits just above a step, and `try_repair`'s inlined body is among
      what holds it there.
+   - **Before building it, three things, in cost order.** (i) **DONE:
+     the per-probe cost against length** (`ablate.py --scaling`,
+     `eval/results-gpu-ablation-m1.txt` run 4). The redesign spreads a
+     probe's per-character work across 32 lanes and leaves its per-probe
+     work where it is, so the intercept of `t(L) = a + b*L` is the share
+     it cannot touch. Measured **1.4 + 0.405*L ns per probe**, residuals
+     0.2 ns, intercept **3.0% at L=107**: not intercept-limited, which
+     was the go/no-go. **A "17.4 bound" column from the same run is
+     withdrawn** -- it was per-probe latency, not throughput. The
+     redesign also puts 32x fewer climbs in flight, so with resident
+     lanes unchanged its payoff is the per-character **step-latency
+     ratio** (shuffle and threadgroup memory against thread memory) times
+     freed-register occupancy times 1.46 for divergence, and if the step
+     latency did not fall it would be a ~2x *loss* at L=107. Also from
+     the fit: at L=107 a lane holds 3.3 characters, so the ~10 cross-lane
+     reductions per probe are amortised over very little -- the design
+     favours long messages and the operational cell is short. (ii) **The
+     probe microkernel**: one toggle probe in the 17.4 shape -- board one
+     entry per lane, `rows` in threadgroup memory, L/32 characters per
+     lane, `simd_sum` for `isum`, the packed-histogram reduction for
+     `coin` -- repeated thousands of times with a rotating toggle and
+     timed against the same repeated probe in today's shape, behind an
+     environment switch on the existing host so no new plumbing. It
+     measures the step ratio and the new shape's register cap directly,
+     and must match the CPU's `isum`/`coin` bit for bit. An afternoon.
+     (iii) **No kill number -- the owner's call, and consistent with
+     decision 6.** A pre-registered bar (under 4x per probe stops the
+     redesign) was proposed and declined: the number from (ii) is judged
+     with the rest of the information in hand, not against a threshold
+     fixed before it exists. For orientation only, not as a bar: the
+     CPU at L=107 is ~8.5-13k climbs/s against the GPU's 2 832 at 64
+     lanes, so parity is ~4.6x on the real kernel, of which divergence
+     removal supplies 1.46x by construction and `try_repair` supplies
+     nothing. And write (ii) against three macros in the `climb_body.h`
+     style (shuffle, sum, shuffle-up), which is what keeps the CUDA
+     target real at no cost.
 4. Only then `--sustained`, and the `k` stage's co-occurrence table on
    chip (`uint8`, 17.6 KB, fits; section 5).
 
