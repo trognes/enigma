@@ -44,14 +44,16 @@
                                in registers: the group template at K = 1 */
 #define MC_PROBE_PASS 2     /* one steepest-ascent pass per unit: the
                                climb's own scan loop, mc_pass() */
-#define MC_PROBE_G32S 3     /* group, K = 32, board by shuffle */
-#define MC_PROBE_G32 4      /* group, K = 32, board packed */
-#define MC_PROBE_G16 5      /* group, K = 16, board packed */
-#define MC_PROBE_G8 6       /* group, K = 8, board packed */
-#define MC_PROBE_ARMS 7
+#define MC_PROBE_PASSPK 3   /* the same scan loop on the PACKED board:
+                               mc_pass_pk(), the candidate climb */
+#define MC_PROBE_G32S 4     /* group, K = 32, board by shuffle */
+#define MC_PROBE_G32 5      /* group, K = 32, board packed */
+#define MC_PROBE_G16 6      /* group, K = 16, board packed */
+#define MC_PROBE_G8 7       /* group, K = 8, board packed */
+#define MC_PROBE_ARMS 8
 /* Lanes per unit, per arm; every wrapper and the driver index this list
    rather than carrying one of their own. */
-#define MC_PROBE_K_LIST { 1, 1, 1, 32, 32, 16, 8 }
+#define MC_PROBE_K_LIST { 1, 1, 1, 1, 32, 32, 16, 8 }
 
 /* THE TWO LANE-SHAPED ARMS BESIDE TODAY'S exist because of run 2: the
    scorer alone ran 66.7M probes/s where the fixed-pass climb, doing the
@@ -319,6 +321,238 @@ inline int mc_h9_coin(MC_THR_CONST mc_h9 * h)
     + mc_h9_word_coin(h->h4) + mc_h9_word_coin(h->h5)
     + mc_h9_word_coin(h->h6) + mc_h9_word_coin(h->h7)
     + mc_h9_word_coin(h->h8);
+}
+
+/* --- arm PASSPK: the climb's scan loop on the packed board ---------------
+   Probe run 4 left the scan at 0.50x the scorer alone with the double
+   scoring gone: 1.33x of it is the cap (384 against 512) and the rest the
+   mutate and restore writes to a thread-memory board, eight per toggle,
+   each ordered before the scorer's reads.  On the packed board those are
+   select chains, and the board is five registers.  This is mc_pass()
+   transcribed onto mc_pk, one line for one line, with the scorer being
+   the K = 1 group decode without the loop -- so if it wins here it is
+   the climb's next body, and its checksum against mc_pass() on the
+   array board is the proof the two representations agree. */
+
+inline int mc_pk_plug_count(MC_THR_CONST mc_pk * pk)
+{
+  int n = 0;
+  for (int x = 0; x < MC_ASIZE; x++)
+    n += (mc_pk_get(pk, x) != x) ? 1 : 0;
+  return n / 2;
+}
+
+/* mc_components() on the packed board.  The histogram models count into
+   mc_h9 and unpack; the quad-shaped ones run the window with the
+   histogram beside it for -f.  BI and TRI unpack to an array and take the
+   ordinary scorer: correct, slow, and not on the climb's recipe. */
+inline void mc_components_pk(MC_THR_CONST mc_pk * pk,
+                             MC_TG_CONST unsigned char * rows,
+                             MC_TG_CONST unsigned char * ct,
+                             int L, int model,
+                             MC_DEV_CONST unsigned char * tbl,
+                             MC_THR mc_i64 * isum_out,
+                             MC_THR mc_i64 * coin_out)
+{
+  mc_i64 isum = 0;
+  mc_i64 coin = 0;
+  if ((model == MC_IC) || (model == MC_MONO) || (model == MC_MONOIC))
+    {
+      mc_h9 h;
+      mc_h9_zero(& h);
+      for (int i = 0; i < L; i++)
+        {
+          const int s1 = mc_pk_get(pk, ct[i]);
+          const int d = mc_pk_get(pk, rows[i * MC_ASIZE + s1]);
+          mc_h9_inc(& h, d);
+        }
+      /* bin d = field d % 3 of word d / 3 */
+      const unsigned int w[9] = { h.h0, h.h1, h.h2, h.h3, h.h4, h.h5,
+                                  h.h6, h.h7, h.h8 };
+      for (int q = 0; q < 9; q++)
+        {
+          for (int r = 0; r < 3; r++)
+            {
+              const int d = 3 * q + r;
+              if (d < MC_ASIZE)
+                {
+                  const int n = (int) ((w[q] >> (9 * r)) & 511u);
+                  isum += (mc_i64) n * (mc_i64) tbl[d];
+                  coin += (mc_i64) n * (mc_i64) (n - 1);
+                }
+            }
+        }
+    }
+  else if ((model == MC_BI) || (model == MC_TRI))
+    {
+      unsigned char st[MC_ASIZE];
+      for (int x = 0; x < MC_ASIZE; x++)
+        st[x] = (unsigned char) mc_pk_get(pk, x);
+      mc_components(st, rows, ct, L, model, tbl, & isum, & coin);
+    }
+  else
+    {
+      if (L >= 4)
+        {
+          const bool fused = (model == MC_FUSED);
+          mc_h9 h;
+          mc_h9_zero(& h);
+          int wa = 0;
+          int wb = 0;
+          int wc = 0;
+          int is = 0;
+          for (int i = 0; i < L; i++)
+            {
+              const int s1 = mc_pk_get(pk, ct[i]);
+              const int d = mc_pk_get(pk, rows[i * MC_ASIZE + s1]);
+              if (fused)
+                mc_h9_inc(& h, d);
+              if (i >= 3)
+                is += (int) tbl[((wa * MC_ASIZE + wb) * MC_ASIZE + wc)
+                                * MC_ASIZE + d];
+              wa = wb;
+              wb = wc;
+              wc = d;
+            }
+          isum = (mc_i64) is;
+          if (fused)
+            coin = (mc_i64) mc_h9_coin(& h);
+        }
+    }
+  *isum_out = isum;
+  *coin_out = coin;
+}
+
+inline mc_i64 mc_key_pk(MC_THR_CONST mc_pk * pk,
+                        MC_TG_CONST unsigned char * rows,
+                        MC_TG_CONST unsigned char * ct,
+                        int L, int model,
+                        MC_DEV_CONST unsigned char * tbl,
+                        mc_i64 A, mc_i64 B)
+{
+  mc_i64 isum = 0;
+  mc_i64 coin = 0;
+  mc_components_pk(pk, rows, ct, L, model, tbl, & isum, & coin);
+  return A * isum + B * coin;
+}
+
+/* mc_pass() on the packed board, line for line. */
+inline int mc_pass_pk(MC_THR mc_pk * pk,
+                      MC_TG_CONST unsigned char * rows,
+                      MC_TG_CONST unsigned char * ct,
+                      int L, int model,
+                      MC_DEV_CONST unsigned char * tbl,
+                      mc_i64 A, mc_i64 B,
+                      unsigned int pf, int max_pairs, int capmerge,
+                      MC_THR mc_i64 * score_out)
+{
+  mc_i64 best_score = mc_key_pk(pk, rows, ct, L, model, tbl, A, B);
+
+  const int pairs = mc_pk_plug_count(pk);
+
+  mc_i64 move_score = best_score;
+  int move_kind = 0;
+  int move_a = 0;
+  int move_b = 0;
+
+  for (int a = 0; a < MC_ASIZE; a++)
+    {
+      for (int b = a + 1; b < MC_ASIZE; b++)
+        {
+          if ((((pf >> a) & 1u) != 0u) || (((pf >> b) & 1u) != 0u))
+            continue;
+
+          const int sa = mc_pk_get(pk, a);
+          const int sb = mc_pk_get(pk, b);
+          const int a_free = (sa == a);
+          const int b_free = (sb == b);
+          const int paired = (sa == b);
+
+          if ((pairs >= max_pairs) && ! paired)
+            {
+              if (a_free && b_free)
+                continue;
+              if (capmerge && (a_free || b_free))
+                continue;
+            }
+
+          const int new_kind = paired ? 1 : 0;
+          const int x = sa;
+          const int y = sb;
+          const int xx = mc_pk_get(pk, x);
+          const int yy = mc_pk_get(pk, y);
+          const int na = paired ? a : b;
+          const int nb = paired ? b : a;
+          mc_pk_set(pk, x, x);
+          mc_pk_set(pk, y, y);
+          mc_pk_set(pk, a, na);
+          mc_pk_set(pk, b, nb);
+          const mc_i64 score = mc_key_pk(pk, rows, ct, L, model, tbl, A, B);
+          mc_pk_set(pk, a, sa);
+          mc_pk_set(pk, b, sb);
+          mc_pk_set(pk, x, xx);
+          mc_pk_set(pk, y, yy);
+
+          if ((score > move_score) ||
+              ((score == move_score) && (score > best_score) &&
+               (new_kind == 0) && (move_kind == 1)))
+            {
+              move_score = score;
+              move_kind = new_kind;
+              move_a = a;
+              move_b = b;
+            }
+        }
+    }
+
+  if (move_score > best_score)
+    {
+      const int a = move_a;
+      const int b = move_b;
+      if (move_kind == 1)
+        {
+          mc_pk_set(pk, a, a);
+          mc_pk_set(pk, b, b);
+        }
+      else
+        {
+          const int x = mc_pk_get(pk, a);
+          const int y = mc_pk_get(pk, b);
+          mc_pk_set(pk, x, x);
+          mc_pk_set(pk, y, y);
+          mc_pk_set(pk, a, b);
+          mc_pk_set(pk, b, a);
+        }
+      *score_out = move_score;
+      return 1;
+    }
+  *score_out = best_score;
+  return 0;
+}
+
+inline void mc_probe_pass_pk(MC_DEV_CONST unsigned char * board0,
+                             MC_TG_CONST unsigned char * rows,
+                             MC_TG_CONST unsigned char * ct,
+                             int L, int model,
+                             MC_DEV_CONST unsigned char * tbl,
+                             mc_i64 A, mc_i64 B, int npasses,
+                             MC_THR mc_i64 * ck_isum,
+                             MC_THR mc_i64 * ck_coin)
+{
+  mc_pk pk;
+  mc_pk_pack(& pk, board0);
+  mc_i64 cs = 0;
+  mc_i64 cc = 0;
+  for (int t = 0; t < npasses; t++)
+    {
+      mc_i64 s = 0;
+      mc_pass_pk(& pk, rows, ct, L, model, tbl, A, B, 0u, MC_ASIZE / 2, 0,
+                 & s);
+      cs += s;
+      cc += (mc_i64) mc_pk_plug_count(& pk);
+    }
+  *ck_isum = cs;
+  *ck_coin = cc;
 }
 
 /* --- arm GROUP ---------------------------------------------------------- */

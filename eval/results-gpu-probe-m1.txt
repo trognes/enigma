@@ -166,8 +166,39 @@ here has reached, and it beats the best group arm (K=8 packed, 62.2M)
 by 1.63x: 17.4 is dead against the fair comparison as well as the
 unfair one.
 
+Run 4 -- one mc_key per toggle
+------------------------------
+
+  arm                      units     probes/s   vs lane   cap  check
+  lane (today)            132928     66478304     1.00x   512  ok
+  lane packed regs        329984    101539437     1.53x   896  ok
+  climb pass (scan)         2368     32967437     0.50x   384  ok
+  group K=32 shuffle       69850     32822290     0.49x  1024  ok
+  group K=32 packed        54636     32599058     0.49x   832  ok
+  group K=16 packed        95840     49140383     0.74x   832  ok
+  group K=8 packed        164392     62260653     0.94x   832  ok
+
+THE PASS ARM WENT 17.7M -> 33.0M, 1.87x, from the branch-free toggle
+alone, and every other row is where it was.  The double scoring was
+real and a little larger than the ~1.6x the pairing arithmetic
+predicted.  mc_pass() is the climb's own loop, so the climb kernel now
+carries it; the settings echo and verify_identity.py are unchanged,
+and the unit's checksum is the same integer as before.
+
+What is left between the scan and the scorer alone is 2.0x: the cap,
+384 against 512, for 1.33x, and ~1.5x for the eight mutate-and-restore
+writes per toggle to a thread-memory board, each ordered before the
+scorer's reads, plus the compare.  The packed board addresses both --
+the writes become select chains and the board five registers -- and
+the lane arms have already shown what that buys the scorer (1.53x, all
+occupancy).  Measured next as `climb pass packed`: mc_pass() on mc_pk
+line for line, its checksum against the ARRAY pass's oracle so the two
+representations are proven to agree before anything is built into the
+climb.
+
+
 WHERE THIS LEAVES THE PORT.  The scorer with a register-resident board
-runs 101M probes/s; the climb runs 17.7M.  That 5.7x is the scan
+runs 101M probes/s; the climb ran 17.7M and now 33.0M.  That 5.7x is the scan
 machinery plus the occupancy it costs, and both are inside the current
 lane-per-climb design.  Parity with the CPU at this cell needs ~4.6x
 (13.1k climbs/s against 2.83k).  The ceiling is not a redesign's

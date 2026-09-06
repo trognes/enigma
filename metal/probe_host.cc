@@ -35,8 +35,8 @@
 
 static const char * const arm_name[MC_PROBE_ARMS] =
   { "lane (today)", "lane packed regs", "climb pass (scan)",
-    "group K=32 shuffle", "group K=32 packed", "group K=16 packed",
-    "group K=8 packed" };
+    "climb pass packed", "group K=32 shuffle", "group K=32 packed",
+    "group K=16 packed", "group K=8 packed" };
 static const int arm_k[MC_PROBE_ARMS] = MC_PROBE_K_LIST;
 
 static const char * model_name(int model)
@@ -213,7 +213,10 @@ int probe_run(machine & m, int lanes_cap)
           continue;
         }
       const size_t per_tg = static_cast<size_t>(lanes / K);
-      const bool pass_arm = (arm == MC_PROBE_PASS);
+      /* The packed pass is checked against the ARRAY pass's oracle: the
+         two representations must agree to the integer. */
+      const bool pass_arm = (arm == MC_PROBE_PASS)
+                            || (arm == MC_PROBE_PASSPK);
       const int ppu = pass_arm ? npasses * MC_PROBE_PASS_PROBES : nprobes;
       const int64_t * ar_s = pass_arm ? ps : os;
       const int64_t * ar_c = pass_arm ? pc : oc;

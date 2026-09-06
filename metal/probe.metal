@@ -104,6 +104,22 @@ kernel void enigma_probe_pass(MC_PROBE_ARGS)
   out[unit * 2 + 1] = cc;
 }
 
+kernel void enigma_probe_passpk(MC_PROBE_ARGS)
+{
+  MC_PROBE_STAGE();
+  const uint unit = tg_id * tg_size + lane;
+  if (unit >= uint(p.units))
+    return;
+  device const unsigned char * b0 =
+    board0 + (unit % uint(p.nboards)) * MC_ASIZE;
+  mc_i64 cs = 0;
+  mc_i64 cc = 0;
+  mc_probe_pass_pk(b0, rows_tg, ct_tg, L, int(p.model), tbl, p.A, p.B,
+                   MC_PROBE_PASSES(int(p.nprobes)), & cs, & cc);
+  out[unit * 2] = cs;
+  out[unit * 2 + 1] = cc;
+}
+
 kernel void enigma_probe_g1(MC_PROBE_ARGS)
 {
   MC_PROBE_STAGE();
