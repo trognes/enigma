@@ -154,8 +154,9 @@ suite **passes natively on Windows, 648 of 648**, on the CI runner below.
 `src/` and a cross build would otherwise link Linux objects. CI builds and
 runs the suite **natively on a Windows runner** (the `windows` job in
 `ci.yml`:
-MSYS2's MinGW-w64 g++, the same `make test`), advisory (`continue-on-error`)
-until it has been green for a while. Two things that job must keep:
+MSYS2's MinGW-w64 g++, the same `make test`), a required job like the Linux
+ones — it was advisory for exactly one green run. Two things that job must
+keep:
 `core.autocrlf=false` set *before* the checkout, or the n-gram tables and
 the scripts arrive as CRLF and every check fails for a reason that is not
 in the code; and the MSYS2 shell for every step, so `sh tests/run_tests.sh`
@@ -3907,7 +3908,9 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   cancels a superseded PR run but never a `dev`/`master` one, where each push is
   a different landed commit rather than a revision of the same one. The jobs are
   the suite `-Werror`
-  under g++, **g++-14** and clang++, ASan+UBSan, ThreadSanitizer, valgrind,
+  under g++, **g++-14** and clang++ (and, required too, natively on Windows
+  under MSYS2's MinGW-w64 g++ — see "Build & run"), ASan+UBSan,
+  ThreadSanitizer, valgrind,
   cppcheck, clang-tidy (config in
   `.clang-tidy`), and shellcheck plus a `py_compile` of the Python harness; a
   separate CodeQL workflow runs on PRs and

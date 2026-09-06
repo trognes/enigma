@@ -18,8 +18,8 @@ existing command lines can behave differently or stop working.
   full flag set and links statically into a native 64-bit executable.
   Byte-identical on Linux. A `windows` CI job (MSYS2's MinGW-w64 g++ on
   `windows-latest`, the same `make test`) now runs the suite natively
-  there, advisory until it has been green for a while; `core.autocrlf`
-  must be off before the checkout or the tables arrive as CRLF. Its first
+  there, as a required job; `core.autocrlf` must be off before the
+  checkout or the tables arrive as CRLF. Its first
   run found the one Windows-specific fact about the program — the C
   runtime writes `\n` as `\r\n` on stdout and stderr — so `main.cc` puts
   both streams into binary mode there and the output is byte-identical to

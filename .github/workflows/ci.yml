@@ -322,10 +322,6 @@ jobs:
   #     CRLF on the way in; the table reader and the suite then see stray
   #     carriage returns and every check fails for a reason that is not in
   #     the code.
-  #   * continue-on-error, for now. This is the first time the suite runs on
-  #     Windows at all, and a runner-side surprise must not block a PR that
-  #     is green everywhere else. Promote it to a required job once it has
-  #     been green for a while.
   #   * python for the MINGW64 environment: five crib checks score a board
   #     through a python3 one-liner, and the environment does not ship one.
   #
@@ -342,7 +338,6 @@ jobs:
   windows:
     name: build & test (MinGW-w64 g++, Windows)
     runs-on: windows-latest
-    continue-on-error: true
     timeout-minutes: 45
     defaults:
       run:
