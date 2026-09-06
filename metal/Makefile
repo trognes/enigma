@@ -6,10 +6,18 @@
 #
 # Both link every src/*.o except main.o, so build the tool first (`make` at
 # the top level); those objects carry -ffp-contract=off, and so does this.
+#
+# The list is derived from the SOURCES, not from the objects on disk. A
+# wildcard over src/*.o once linked a stale src/enigma.o -- the single
+# translation unit from before the module split, which no source produces
+# any more but which a long-lived checkout still had lying around -- and
+# the link died on 23 duplicate symbols. The top-level Makefile builds from
+# src/*.cc and never sees such a file, so only this one could.
 
 CXX ?= c++
 TOP := ..
-OBJS := $(filter-out $(TOP)/src/main.o,$(wildcard $(TOP)/src/*.o))
+SRCS := $(filter-out $(TOP)/src/main.cc,$(wildcard $(TOP)/src/*.cc))
+OBJS := $(SRCS:.cc=.o)
 CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic -Wshadow -O3 -pthread \
             -ffp-contract=off -I$(TOP)/src
 
