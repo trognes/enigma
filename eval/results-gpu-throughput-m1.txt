@@ -1,6 +1,11 @@
 Milestone 3, GPU throughput -- Mac mini M1 (2020), 8 GPU cores, 8 CPU cores
 metal/DESIGN.md 9.  Two runs: --keys 1 (the plugboard tier) and --keys 26.
 
+THE M1 IS THE TARGET (DESIGN.md decision 4), and this machine is the
+instrument for the whole experiment ladder.  Apple silicon generally is
+in scope in principle, CUDA and OpenCL later; the M2 Pro at the end of
+this file is a cross-check on a second chip, not the target.
+
 RUN 2 IS THE MEASUREMENT.  --keys 26 --fixtures 6, -T 8 on the CPU arm:
 
     L      R    n   device      gpu      cpu   speedup    95% CI

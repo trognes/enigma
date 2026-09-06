@@ -56,7 +56,13 @@ Decisions recorded (owner's):
 2. Host language: Objective-C++.
 3. Lives in `metal/` with its own macOS-only build; the Linux `make` and CI
    are untouched.
-4. Written here, built and measured on the owner's Mac (an M2 Pro first).
+4. **The target is the M1**, and in principle any Apple silicon GPU;
+   CUDA (section 15) and OpenCL (section 15b) later. This line used to
+   read "an M2 Pro first", which was a note about which machine was
+   expected to be to hand rather than a target, and it misled: the port
+   was built and measured on an **M1 mini**, and that machine stays the
+   instrument. An M2 Pro laptop has served once, as a cross-check on a
+   second chip (17.7).
 5. This PR is design and planning only.
 6. **No pre-set throughput bar** for milestone 3: produce section
    9's numbers, then decide. The earlier ">= 2x proceeds, < 1.5x
@@ -435,8 +441,9 @@ Steps 2 onward alternate: written here, built and measured on the Mac.
 - **64-bit integers on Metal**: the 1e-12 precision claim in section 3a
   rests on `int64` multiply-add in the kernel. Apple GPUs support 64-bit
   integer types, but multiply is emulated and its availability and cost
-  are to be CONFIRMED on the M2 Pro before anything else is built --
-  milestone 2's first check. If it were unavailable, 32-bit weights would
+  are to be CONFIRMED before anything else is built -- milestone 2's
+  first check. **Confirmed on the M1**, the target: identity is exact
+  (the status header above). If it were unavailable, 32-bit weights would
   drop the precision to float level and `--int` would lose its edge over
   the 3b fallbacks, though not its exactness across targets.
 - **Fast-math**: the Metal compiler enables it by default. Under `--int`
@@ -478,17 +485,26 @@ Steps 2 onward alternate: written here, built and measured on the Mac.
 
 Relative to the same chip's own CPU running today's tool on all cores:
 
-| chip | GPU cores | expected |
-|---|---:|---:|
-| M2 Pro | 16-19 | ~3-5x |
-| M-series Max | ~32-40 | ~5-10x |
-| M-series Ultra | ~64-80 | ~5-10x, on a CPU already 2x the Max |
-| RTX 4090-class (CUDA) | 128 SMs | ~20-40x a base M1 GPU (section 15) |
+| chip | GPU cores | expected | MEASURED (section 9) |
+|---|---:|---:|---|
+| **M1 (the target)** | 8 | ~2-4x | **0.17x** |
+| M2 Pro | 16-19 | ~3-5x | **0.17x** (one cell, 17.7) |
+| M-series Max | ~32-40 | ~5-10x | - |
+| M-series Ultra | ~64-80 | ~5-10x, on a CPU already 2x the Max | - |
+| RTX 4090-class (CUDA) | 128 SMs | ~20-40x a base M1 GPU (section 15) | - |
 
-These scale my base-M1 reasoning (2-4x over its 8-core CPU) by core count
-and ~20-30% per generation per core. The Neural Accelerators, ray tracing
-and TFLOPS figures are irrelevant to an integer-gather workload; memory
-bandwidth is not the limiter because the table is cache-resident.
+**Every row is wrong by ~20x and the last column says so.** They scale a
+base-M1 reasoning (2-4x over its 8-core CPU) by core count and ~20-30%
+per generation per core -- and the scaling was the sound part: the two
+measured chips differ by 1.85x on the GPU and 1.88x on the CPU, so the
+RATIO is flat and the per-core scaling holds. What was wrong is the
+anchor, because section 4's decomposition cannot use a core (section
+17). Read this table as an estimate of what the hardware could give a
+kernel that suits it, not of what this one does.
+
+The Neural Accelerators, ray tracing and TFLOPS figures are irrelevant to
+an integer-gather workload; memory bandwidth is not the limiter because
+the table is cache-resident.
 
 In absolute terms, with a base M1 GPU at an estimated 30-60k key-climbs/s,
 a full exact `-r A..` sweep (230M keys) at 128 restarts per key is 6-11
