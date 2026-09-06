@@ -518,6 +518,48 @@ does not matter. Where enigma-cuda's per-letter design would still be the
 better one -- very long messages with few restarts per key -- is not the
 operational regime here, and this design is independent of L.
 
+## 15b. A third target: OpenCL, for an AMD card on Windows
+
+Not planned; recorded as an option because the question came up (an RX
+7700 XT, RDNA 3, `gfx1101`, in a Windows 11 machine) and the answer is
+cheap to keep.
+
+- **The route is OpenCL, not HIP.** OpenCL C is C99 with address-space
+  qualifiers -- `__global const` for the tables, `__local` for the key's
+  `rows[]`, `__private` for the board -- which is exactly what
+  `climb_body.h`'s macros were built to supply, so the wrapper is smaller
+  than `climb.metal`. 64-bit integers are core OpenCL, the kernel compiles
+  from source at run time (no offline toolchain), and the AMD Adrenalin
+  driver ships the runtime on Windows. HIP would be the CUDA twin, but
+  AMD's Windows HIP SDK lists the 7900 series and `gfx1101` support could
+  not be confirmed; WSL2 does not help either, since AMD's compute support
+  inside it is limited to listed cards. The same OpenCL wrapper would also
+  run on NVIDIA and Intel GPUs, and on a CPU through PoCL -- which is how
+  it could be verified on Linux before touching the card, exactly as the
+  reference backend verified the body.
+- **The hardware fits the design.** RDNA 3 runs 32-wide wavefronts, the
+  width section 4's uniform-control-flow argument assumes; 64 KB of local
+  memory per workgroup holds `rows[]` with room for the `k` stage's
+  co-occurrence table; 64-bit multiply is not native, but as on Metal it
+  is two operations per score against ~400 loads.
+- **The obstacle is the repository, not the GPU.** Nothing here has ever
+  been built on Windows: `src/` uses `getopt_long`, `unistd.h`,
+  `getrusage` (the peak-memory line), `isatty` (the progress line) and
+  pthreads, and the host links every object under `src/`. A plain MSVC
+  build is therefore out; MSYS2's GCC toolchain provides those headers,
+  and its OpenCL headers and loader packages link against the Windows
+  `OpenCL.dll` that the AMD driver answers. The first step on such a
+  machine is `make` and `make test` under MSYS2, before any GPU work.
+- **Files it would add**: `climb.cl` (the wrapper), `backend_opencl.cc`
+  (context, queue, run-time compile, upload, read-back -- the shape of
+  `backend_metal.mm`), an `opencl` target in `metal/Makefile`, and a note
+  of the MSYS2 packages. The body, the host and the harness are unchanged.
+- **Expected gain, an estimate in section 12's sense only**: 54 compute
+  units against the M2 Pro's 19 GPU cores puts the card between the
+  Max-class Apple rows and the RTX 4090 row, if the gather latency hides
+  as the design bets. The measurement is section 9 on that machine, with
+  the same 2x bar.
+
 ## 16. Open questions
 
 - Lanes per threadgroup (128 vs 256) and threadgroups per key when
