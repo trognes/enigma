@@ -35,14 +35,17 @@ so its rate can be read in passes/s; table B pins every variant to the
 same number of passes (MC_FIXED_PASSES), so climbs/s is comparable by
 construction. B is the measurement; A says how far the confound reached.
 
-Table C is occupancy: lanes per threadgroup crossed with the 32-bit
-accumulators, both arms answer-preserving and neither needing a kernel
-change. It exists because variant 3 was the only probe to move the
-register cap (384 -> 448) while measuring just 1.04x at 256 lanes, where
-one threadgroup is resident either way -- the cap can only convert at a
-threadgroup size small enough for the extra group to fit. The table
-prints floor(cap/lanes) so that reading is checkable rather than
-asserted.
+Table C is occupancy: lanes per threadgroup on the shipping kernel,
+answer-preserving and needing no kernel change. 64 is the peak, at
+1.27x. (It briefly carried a second arm pairing each lane count with the
+32-bit accumulators; see lane_sweep() for why that arm answered "no" and
+was removed.)
+
+COST, this time multiplied out: an invocation is ~3.3 s at this cell, so
+tables A and B are 2 x 5 x fixtures x reps invocations and table C is
+6 x fixtures x sweep-reps. The defaults (4 fixtures, 3 reps, 1 sweep
+rep) come to ~150 invocations, about eight minutes. --skip-probes runs
+only table C, --skip-lanes only A and B.
 
 One cell, the one the M1/M2 Pro tables report: L=107, -R 256, 26 keys.
 Repetitions are the min of a few, as everywhere in this repo, and the
@@ -127,12 +130,12 @@ def run(host, key, ct, R, threads, lib, lanes):
             "div": float(st.group(2)) if st else None}
 
 
-def cell(args, fx, lib, lanes):
+def cell(args, fx, lib, lanes, reps=None):
     """Min over reps of the pooled rate; the pass stats of the last rep."""
     best = None
     cap = 0
     mean = div = None
-    for _ in range(args.reps):
+    for _ in range(reps if reps else args.reps):
         tot_s = tot_i = 0.0
         for key, ct in fx:
             r = run(args.host, key, ct, args.restarts, args.threads,
@@ -180,51 +183,40 @@ def table(args, fx, prefix, title, note):
 
 
 def lane_sweep(args, fx):
-    """Occupancy, with and without the 32-bit accumulators.
-
-    Both arms are MC_PASSES builds so the pairing is like with like (the
-    counter costs ~0.5%), and both are answer-preserving, so this table
-    is about the shipping kernel rather than about a probe.
+    """Occupancy: lanes per threadgroup on the shipping kernel.
 
     The `grp` column is floor(cap / lanes): how many threadgroups of that
     size a core can hold, the cap being the compiler's register-derived
-    limit that the host reports. It is what makes this a MECHANISM and
-    not just two columns of numbers -- the 32-bit arm's cap was measured
-    at 448 against 384, which changes grp at 32 and 64 lanes and nowhere
-    else, so a gain confined to those two confirms the reading and a gain
-    spread evenly refutes it.
+    limit that the host reports.
+
+    This used to run a second arm with the 32-bit accumulators, on the
+    reading that they lifted the cap 384 -> 448 and so could only pay
+    where grp differed (32 and 64 lanes). It ran, and both arms read 384
+    at every row: the 448 belongs to the FIXED-PASS build of variant 3,
+    where try_repair is compiled out, and not to the accumulators -- the
+    natural build reads 384 with them too, in every run. So grp never
+    differed, the pairing measured 1.01-1.02x flat, and the arm is gone
+    along with the half of table C's cost it was.
     """
-    base_lib = os.path.join(HERE, "climb-a0.metallib")
-    acc_lib = os.path.join(HERE, "climb-a3.metallib")
-    if not (os.path.exists(base_lib) and os.path.exists(acc_lib)):
-        print("\nC. skipped -- run `make -C metal ablate`")
-        return
-    print("\nC. Lanes per threadgroup x accumulator width -- occupancy only,"
-          " both answer-preserving")
-    print("  lanes    base c/s  cap  grp     32-bit c/s  cap  grp   32/base"
-          "   vs 256")
-    ref = None
+    print("\nC. Lanes per threadgroup, shipping kernel, answer-preserving")
+    print("  lanes   climbs/s  cap  grp   vs 256")
     rows = []
+    ref = None
     for ln in LANES:
-        b = cell(args, fx, base_lib, ln)
-        a = cell(args, fx, acc_lib, ln)
-        if (b is None) or (a is None):
+        c = cell(args, fx, None, ln, args.sweep_reps)
+        if c is None:
             print(f"  {ln:5d}  (failed)")
             continue
         if ln == 256:
-            ref = b["rate"]
-        rows.append((ln, b, a))
-    for ln, b, a in rows:
-        bg = b["cap"] // ln if ln else 0
-        ag = a["cap"] // ln if ln else 0
-        vs = f"  {b['rate'] / ref:6.2f}x" if ref else ""
-        print(f"  {ln:5d} {b['rate']:11.0f} {b['cap']:4d} {bg:4d} "
-              f"{a['rate']:14.0f} {a['cap']:4d} {ag:4d} "
-              f"{a['rate'] / b['rate']:8.2f}x{vs}")
-    print("  (grp = floor(cap/lanes), threadgroups a core can hold; vs 256")
-    print("   is the base arm against its own 256-lane row. The 32-bit arm")
-    print("   should gain ONLY where grp differs; a gain where it does not")
-    print("   is something other than occupancy.)")
+            ref = c["rate"]
+        rows.append((ln, c))
+    for ln, c in rows:
+        vs = f"  {c['rate'] / ref:6.2f}x" if ref else ""
+        print(f"  {ln:5d} {c['rate']:10.0f} {c['cap']:4d} {c['cap'] // ln:4d}"
+              f"{vs}")
+    print("  (grp = floor(cap/lanes), threadgroups a core can hold. Below")
+    print("   the restart count a key spans several groups, each loading")
+    print("   its own rows[]; that is the fall-off at the small end.)")
 
 
 def main():
@@ -237,6 +229,10 @@ def main():
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 8)
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--skip-lanes", action="store_true")
+    ap.add_argument("--skip-probes", action="store_true",
+                    help="only the lane sweep (table C)")
+    ap.add_argument("--sweep-reps", type=int, default=1,
+                    help="reps for table C; its rows repeat within 1%%")
     args = ap.parse_args()
     if not os.path.exists(args.host):
         sys.exit(f"build {args.host} first (make -C metal metal)")
@@ -257,12 +253,14 @@ def main():
     print("# DESIGN.md 17.6 step 1. device climbs/s, the host's own timer.")
     print("# Variants 1, 2 and 4 return a WRONG board: cost probes.")
 
-    table(args, fx, "f", "B. FIXED passes -- every variant does the same "
-          "work; this is the measurement",
-          "read the vs-base column: that is what the suspect cost")
-    table(args, fx, "a", "A. NATURAL climb -- the pass count moves with the "
-          "variant, hence passes/s",
-          "climbs/s here is confounded by the trajectory; passes/s is not")
+    if not args.skip_probes:
+        table(args, fx, "f", "B. FIXED passes -- every variant does the "
+              "same work; this is the measurement",
+              "read the vs-base column: that is what the suspect cost")
+        table(args, fx, "a", "A. NATURAL climb -- the pass count moves with "
+              "the variant, hence passes/s",
+              "climbs/s here is confounded by the trajectory; passes/s is "
+              "not")
 
     if not args.skip_lanes:
         lane_sweep(args, fx)
