@@ -35,8 +35,14 @@ so its rate can be read in passes/s; table B pins every variant to the
 same number of passes (MC_FIXED_PASSES), so climbs/s is comparable by
 construction. B is the measurement; A says how far the confound reached.
 
-Table C sweeps lanes per threadgroup, which needs no kernel change at
-all: the first run read +26% at 128 and that is a free win if it holds.
+Table C is occupancy: lanes per threadgroup crossed with the 32-bit
+accumulators, both arms answer-preserving and neither needing a kernel
+change. It exists because variant 3 was the only probe to move the
+register cap (384 -> 448) while measuring just 1.04x at 256 lanes, where
+one threadgroup is resident either way -- the cap can only convert at a
+threadgroup size small enough for the extra group to fit. The table
+prints floor(cap/lanes) so that reading is checkable rather than
+asserted.
 
 One cell, the one the M1/M2 Pro tables report: L=107, -R 256, 26 keys.
 Repetitions are the min of a few, as everywhere in this repo, and the
@@ -173,6 +179,54 @@ def table(args, fx, prefix, title, note):
     print(f"  ({note})")
 
 
+def lane_sweep(args, fx):
+    """Occupancy, with and without the 32-bit accumulators.
+
+    Both arms are MC_PASSES builds so the pairing is like with like (the
+    counter costs ~0.5%), and both are answer-preserving, so this table
+    is about the shipping kernel rather than about a probe.
+
+    The `grp` column is floor(cap / lanes): how many threadgroups of that
+    size a core can hold, the cap being the compiler's register-derived
+    limit that the host reports. It is what makes this a MECHANISM and
+    not just two columns of numbers -- the 32-bit arm's cap was measured
+    at 448 against 384, which changes grp at 32 and 64 lanes and nowhere
+    else, so a gain confined to those two confirms the reading and a gain
+    spread evenly refutes it.
+    """
+    base_lib = os.path.join(HERE, "climb-a0.metallib")
+    acc_lib = os.path.join(HERE, "climb-a3.metallib")
+    if not (os.path.exists(base_lib) and os.path.exists(acc_lib)):
+        print("\nC. skipped -- run `make -C metal ablate`")
+        return
+    print("\nC. Lanes per threadgroup x accumulator width -- occupancy only,"
+          " both answer-preserving")
+    print("  lanes    base c/s  cap  grp     32-bit c/s  cap  grp   32/base"
+          "   vs 256")
+    ref = None
+    rows = []
+    for ln in LANES:
+        b = cell(args, fx, base_lib, ln)
+        a = cell(args, fx, acc_lib, ln)
+        if (b is None) or (a is None):
+            print(f"  {ln:5d}  (failed)")
+            continue
+        if ln == 256:
+            ref = b["rate"]
+        rows.append((ln, b, a))
+    for ln, b, a in rows:
+        bg = b["cap"] // ln if ln else 0
+        ag = a["cap"] // ln if ln else 0
+        vs = f"  {b['rate'] / ref:6.2f}x" if ref else ""
+        print(f"  {ln:5d} {b['rate']:11.0f} {b['cap']:4d} {bg:4d} "
+              f"{a['rate']:14.0f} {a['cap']:4d} {ag:4d} "
+              f"{a['rate'] / b['rate']:8.2f}x{vs}")
+    print("  (grp = floor(cap/lanes), threadgroups a core can hold; vs 256")
+    print("   is the base arm against its own 256-lane row. The 32-bit arm")
+    print("   should gain ONLY where grp differs; a gain where it does not")
+    print("   is something other than occupancy.)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default=os.path.join(HERE, "enigma-metal"))
@@ -211,19 +265,7 @@ def main():
           "climbs/s here is confounded by the trajectory; passes/s is not")
 
     if not args.skip_lanes:
-        print("\nC. Lanes per threadgroup, baseline kernel, no ablation")
-        print("  lanes  climbs/s   vs 256")
-        ref = None
-        for ln in LANES:
-            c = cell(args, fx, None, ln)
-            if c is None:
-                print(f"  {ln:5d}  (failed)")
-                continue
-            if ln == 256:
-                ref = c["rate"]
-            print(f"  {ln:5d} {c['rate']:9.0f}" +
-                  (f"   {c['rate'] / ref:6.2f}x" if ref else ""))
-        print("  (occupancy only -- no kernel change, and answer-preserving)")
+        lane_sweep(args, fx)
 
     print("\nRead: in table B a row far above 1.00x is what that suspect")
     print("cost. A cap above the baseline's says the array was in")
