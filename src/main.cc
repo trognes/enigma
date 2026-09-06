@@ -64,6 +64,7 @@ int main(int argc, char * * argv)
   ic_blend_init();
   hist_init();
   readciphertext();
+  intscore_init();   /* --int weights depend on the length just read */
 
   /* Before show_settings(), which reports the hypothesis count -- it read 0 for a while
      because the list is built from the ciphertext and the echo ran first. */

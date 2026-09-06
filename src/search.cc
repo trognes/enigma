@@ -232,10 +232,23 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
     score = optimize_once(m, & rng);
   if (opt_tune_phase > 0)
     score = tune_phase(m, & rng, score);
+  /* --int: everything above compared integer keys; everything below -- the
+     dump, the doubling gate, the merge, --confidence -- reads the double. A
+     skipped --seed-dedup item carries the no-score sentinel and no board. */
+  if (opt_intscore && (score > unit_no_score))
+    score = score_report(m);
   if (opt_dump_all)
     dump_all(m, score);
   report_doubling(m, score);
   return score;
+}
+/* --int for the seeded units: they compare integer keys across their
+   hypotheses and leave the winning board in m, so the double is
+   reconstructed here, at the boundary the merge reads. The no-score sentinel
+   of a unit with no surviving hypothesis passes through untouched. */
+static double unit_report(machine & m, double s)
+{
+  return (opt_intscore && (s > unit_no_score)) ? score_report(m) : s;
 }
 /* The per-key climb the search actually runs, in ONE place.
 
@@ -251,9 +264,9 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
 double climb_unit(machine & m, size_t key_index, int restart)
 {
   if (opt_crib_text)
-    return crib_unit(m, key_index, restart);
+    return unit_report(m, crib_unit(m, key_index, restart));
   if (opt_self_crib_seeds > 0)
-    return self_crib_unit(m, key_index, restart);
+    return unit_report(m, self_crib_unit(m, key_index, restart));
   return hillclimb_one(m, key_index, restart);
 }
 /* Run all the climbs for one key sequentially, keeping the best (used where the search
@@ -1360,6 +1373,10 @@ double bruteforce(char * result, bool allow_empty)
            avenue of the saturation exact-loss, archived/PERFORMANCE.md 4.10). */
         int fin_cap = opt_stages[opt_nstages - 1].cap;
         double s = hillclimb<false>(m, fin_cap);
+        /* --int: the finisher compared keys; everything below reads the
+           double. */
+        if (opt_intscore)
+          s = score_report(m);
         /* "after climb and polish": the per-restart call in hillclimb_one covers
            the climbs, this covers the one board the finisher touched. Reported
            on the finished board whether or not it beat the pre-polish best --

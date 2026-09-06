@@ -18,6 +18,14 @@
    from it. */
 void report_climb_progress(machine & m, double score);
 
+/* Under --int the climb compares integer keys, but the progress line shows
+   the double: reconstruct it from the board just committed. Accepted moves
+   only, so the extra decode is nowhere near the scoring scans. */
+static inline double echo_score(machine & m, double s)
+{
+  return opt_intscore ? score_report(m) : s;
+}
+
 /* Reset the plugboard to identity + the fixed -s pairs. Board-only (the fixed-letter set is
    the separate plug_fixed, below), so the init-dominated scan path pays no extra cost. */
 void init_steckerbrett(machine & m, const char * steckerbrett_string)
@@ -275,7 +283,7 @@ static bool try_repair(machine & m, double cur_score)
     {
       for (int k = 0; k < 4; k++)
         m.steckerbrett[rp_pos[k]] = static_cast<unsigned char>(rp_val[k]);
-      report_climb_progress(m, best);
+      report_climb_progress(m, echo_score(m, best));
     }
   return found;
 }
@@ -465,7 +473,7 @@ static bool gain_cascade(machine & m, double cur_score)
     {
       gainfix_apply(steck, ba1, bb1);
       gainfix_apply(steck, ba2, bb2);
-      report_climb_progress(m, best);
+      report_climb_progress(m, echo_score(m, best));
     }
   return found;
 }
@@ -597,7 +605,7 @@ static bool gain_cascade_3ply(machine & m, double cur_score, int max_pairs)
   if (found)
     {
       for (int i = 0; i < asize; i++) steck[i] = bestboard[i];
-      report_climb_progress(m, best);
+      report_climb_progress(m, echo_score(m, best));
     }
   return found;
 }
@@ -918,7 +926,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
       if (improved)
         {
           stale = 0;
-          report_climb_progress(m, cur);
+          report_climb_progress(m, echo_score(m, cur));
           pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
           for (int j = 0; j < asize; j++)
             if (steck[j] > j)
@@ -1109,7 +1117,7 @@ double hillclimb(machine & m, int max_pairs)
                   commit_toggle(m, pos, val, cnt, hist_on);
 
                   best_score = move_score;
-                  report_climb_progress(m, best_score);
+                  report_climb_progress(m, echo_score(m, best_score));
                 }
             }
           while (best_score > last_best);
@@ -1547,7 +1555,7 @@ static double anneal_once(machine & m, uint64_t * rng)
                 {
                   best = cur;
                   memcpy(best_board, m.steckerbrett, asize);
-                  report_climb_progress(m, best);
+                  report_climb_progress(m, echo_score(m, best));
                 }
             }
           else

@@ -153,7 +153,9 @@ double exhaust_unit(machine & m, size_t key_index, size_t fi)
     {
       memcpy(m.plaintext, c.best_pt, static_cast<size_t>(textlength) + 1);
       memcpy(m.steckerbrett, c.best_steck, asize);
-      return c.best;
+      /* --int: the leaves compared integer keys; the merge reads the double,
+         reconstructed from the winning board just restored into m. */
+      return opt_intscore ? score_report(m) : c.best;
     }
   return unit_no_score;   /* no valid combo under this first pair: never wins the merge */
 }

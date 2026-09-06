@@ -55,6 +55,7 @@ extern int opt_dynorder;
 extern int opt_ic_order;
 extern int opt_capmerge;
 extern int opt_no_repair;
+extern int opt_intscore;
 extern int opt_restarts;
 extern int opt_perturb;
 extern double opt_biased_random;
