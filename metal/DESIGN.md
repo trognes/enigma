@@ -1,7 +1,8 @@
 # Metal port: design and plan
 
-Status: **milestone 2 is DONE and verified on a GPU; milestone 3 (§9's
-throughput) is next.** This
+Status: **milestone 2 done and verified on a GPU; milestone 3 measured,
+and the port is 4-6x SLOWER than the CPU on an M1 -- with a named,
+untested suspect (per-lane arrays spilling to thread memory).** This
 document records the decisions taken and the plan they lead to; every
 number marked as an estimate is one. What exists (section 13 has the
 build):
@@ -31,18 +32,20 @@ build):
   design errors: the Metal compiler is a separate download since Xcode 16
   (section 13), and a dispatch had to be capped by WORK rather than by
   bytes or the GPU watchdog resets the machine (section 11).
-- **Milestone 3, first run: the GPU LOSES every cell on an M1 mini**, by
-  1.5x to 12x on the trustworthy `device` column
-  (`eval/results-gpu-throughput-m1.txt`). The shape says why, and it is
-  not the kernel's arithmetic: time per fixture is nearly flat as the work
-  grows 16x, so lanes and threadgroups are both nearly free and what is
-  slow is ONE LANE -- 50-300x a CPU core, which is what a dependent chain
-  of gathers costs against an out-of-order core at IPC 3.32. The GPU
-  answers that with width, and this run gave it almost none: a fixture is
-  one key, so it dispatched 1 to 4 threadgroups on a machine that holds
-  ~32. **It measured an eighth to a half of the device.** Re-run with
-  `--keys 26` before drawing any conclusion; that is also the sweep tier
-  section 1 is aiming at.
+- **Milestone 3 is MEASURED, and the GPU is 4-6x SLOWER than the same
+  chip's CPU** at every length and restart count on an M1 mini
+  (`eval/results-gpu-throughput-m1.txt`). Two runs: the first starved both
+  arms (one key per fixture) and its cells are superseded; the second, at
+  26 keys, fills the device and saturates it. **Occupancy is excluded** --
+  16x the restarts now buys 1.3x, so ~1700-4700 climbs/s is the ceiling.
+  What remains is per-lane speed, and the gap is **~500-750x per ALU
+  against a CPU core** where clock and the absence of out-of-order
+  execution explain 10-30x. That 20-50x excess is the thing to chase, and
+  it has a named suspect: every per-lane array in the kernel (`steck`,
+  `freq`, the saved best board) is **dynamically indexed**, which on Metal
+  means thread memory rather than registers -- i.e. the decode's two
+  lookups are dependent memory round trips. The first thing to try is
+  `steck` in threadgroup memory, which fits; see the results file.
 
 Decisions recorded (owner's):
 

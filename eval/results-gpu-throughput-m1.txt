@@ -1,65 +1,89 @@
-Milestone 3, first GPU throughput run -- Mac mini M1 (2020), 8 GPU cores
-metal/DESIGN.md 9.  python3 metal/throughput.py --host metal/enigma-metal
-24 fixtures per cell, ONE key per fixture, -T 8 on the CPU arm.
+Milestone 3, GPU throughput -- Mac mini M1 (2020), 8 GPU cores, 8 CPU cores
+metal/DESIGN.md 9.  Two runs: --keys 1 (the plugboard tier) and --keys 26.
+
+RUN 2 IS THE MEASUREMENT.  --keys 26 --fixtures 6, -T 8 on the CPU arm:
 
     L      R    n   device      gpu      cpu   speedup    95% CI
-   60     64   24      193      307     1223     0.25x  +-0.02
-   60    256   24      608      736     2804     0.26x  +-0.02
-   60   1024   24     2280     2838     3507     0.81x  +-0.02
-  107     64   24      108      173     1350     0.13x  +-0.02
-  107    256   24      337      449     2152     0.21x  +-0.01
-  107   1024   24     1277     1563     2618     0.60x  +-0.02
-  167     64   24       66       87      841     0.10x  +-0.01
-  167    256   24      214      293     1542     0.19x  +-0.01
-  167   1024   24      795     1136     1913     0.60x  +-0.02
+   60     64    6     3591     3608    14004     0.26x  +-0.07
+   60    256    6     3896     3875    18024     0.22x  +-0.01
+   60   1024    6     4697     4653    18942     0.25x  +-0.01
+  107     64    6     2084     2075    10614     0.20x  +-0.01
+  107    256    6     2221     2208    13118     0.17x  +-0.01
+  107   1024    6     2665     2652    13266     0.20x  +-0.01
+  167     64    6     1342     1346     8514     0.16x  +-0.00
+  167    256    6     1444     1441     9093     0.16x  +-0.01
+  167   1024    6     1741     1731    10252     0.17x  +-0.00
 
-THE HEADLINE: the GPU loses every cell, by 1.5x to 12x.
+THE HEADLINE: the GPU is 4-6x SLOWER than the same chip's CPU, at every
+length and every restart count.  device and end-to-end now agree to ~1%,
+so the host's reporting walk is not the issue and the startup fix holds.
 
-READ THE `device` COLUMN, NOT `speedup`.  The gpu/speedup columns of this
-run are wrong and flatter the GPU: the startup baseline was a -R 1 run,
-and on the GPU a single climb is a whole dispatch (0.3-1.3 s here), so
-the baseline subtracted startup PLUS a full dispatch.  The tell is that
-the end-to-end column is FASTER than the device column in all nine cells,
-which is arithmetically impossible -- end-to-end contains the device.
-Fixed by subtracting the -R 1 run's own reported device time.  `device`
-was always clean: the host's own timer, no startup, no host walk.
+RUN 1 (--keys 1) IS SUPERSEDED, NOT MERELY OLDER.  It starved BOTH arms:
+one key x R restarts is too little work for either device, and moving to
+26 keys lifted the GPU 2.1-20x AND the CPU 5.1-11.5x.  Its cells are not
+a valid baseline for anything.
 
-    device/cpu:  0.16 0.22 0.65 | 0.08 0.16 0.49 | 0.08 0.14 0.42
+    ratio then -> now:  0.16->0.26  0.22->0.22  0.65->0.25 (L=60)
+                        0.08->0.20  0.16->0.17  0.49->0.20 (L=107)
+                        0.08->0.16  0.14->0.16  0.42->0.17 (L=167)
 
-THE SHAPE SAYS THE PARALLELISM WORKS AND THE MACHINE WAS NEVER FILLED.
-Time per fixture is nearly FLAT as the work grows 16x:
+OCCUPANCY IS NOW EXCLUDED as the explanation, which is what run 2 was for.
+The prediction from run 1 was 2.5-6.9x once the machine was filled.  The
+GPU did gain what the prediction's mechanism said it would -- 18-20x at
+-R 64, where threadgroups went 1 -> 26 -- but the ratio did not move,
+because the CPU was being starved by the same fixture.  So the
+extrapolation was wrong: it scaled a number that was low for a reason
+that applied to both arms.
 
-    L=167:  R=64 0.970 s, R=256 1.196 s, R=1024 1.288 s
+AND THE GPU IS NOW SATURATED.  16x the restarts buys 1.28-1.31x:
 
-64 -> 256 lanes costs 1.23x for 4x the work (one threadgroup, more lanes);
-256 -> 1024 costs 1.08x for 4x (four threadgroups).  So lanes and
-threadgroups are both nearly free -- what is slow is ONE LANE.  A climb
-takes ~0.33 s (L=60) to ~1.3 s (L=167) on a lane against ~2-10 ms on a
-CPU core: a per-lane deficit of 50-300x, which is what a long dependent
-chain of gathers costs on a GPU lane against an out-of-order core at
-IPC 3.32.
+    L= 60:  3591 -> 4697 climbs/s     (run 1 gained 11.8x over the same step)
+    L=107:  2084 -> 2665
+    L=167:  1342 -> 1741
 
-The GPU compensates with width, and this run gave it almost none.  A
-fixture is ONE key, so threadgroups = ceil(R / lanes) = 1, 1, 4 -- and
-threadgroup memory is 6912 B of 32768, so ~4 threadgroups fit per core
-and the 8-core M1 holds ~32.  The run therefore used 1/32 to 4/32 of the
-device.  Scaling the device column by the unused headroom predicts
-2.5-6.9x over the CPU, which brackets section 12's 2-4x estimate for a
-base M1 -- an EXTRAPOLATION, and the reason --keys was added: it is a
-hypothesis to measure, not a result.
+Run 1 scaled nearly linearly with R because it was far below the
+machine's ceiling; run 2 is at it.  ~1700-4700 climbs/s is what an M1 GPU
+does with this kernel, and more work no longer helps.
 
-WHAT THIS RUN DOES NOT SHOW.  Three known handicaps, all documented as
-future work rather than found here:
-  - the k4 pre-pass DECODES on the GPU where the CPU takes the O(26)
-    histogram path (section 2), worth 1.16-1.45x on the CPU for exactly
-    this k4f10 recipe and flat in L where decoding is linear;
-  - the host's per-item reporting walk is single-threaded CPU work inside
-    the end-to-end column (that is the device-to-gpu gap);
-  - no kernel tuning of any kind has been done, against a CPU arm
-    carrying 4x-unrolled scorer loops, the histogram path, cache-resident
-    uint8 tables and struct layout tuned for Apple-silicon clang.
-Not measured: thermal drift (--sustained was not run), so every number
-here is a BURST rate.
+WHAT IS LEFT IS PER-LANE SPEED, AND THE GAP IS TOO BIG FOR THE HARDWARE.
+Per ALU against per core, both at saturation and both 8-wide at the top
+level (M1: 8 GPU cores x 128 ALUs = 1024; 8 CPU cores):
 
-NEXT: re-run with --keys 26 (or more), which is both the shape that can
-fill the device and the sweep tier the port is for (section 1).
+    L= 60: core 0.42 ms/climb, ALU ~218 ms  ->  ~516x
+    L=107: core 0.60 ms/climb, ALU ~384 ms  ->  ~637x
+    L=167: core 0.78 ms/climb, ALU ~588 ms  ->  ~754x
+
+A GPU ALU at ~1.3 GHz with no out-of-order execution, against a core at
+~3.2 GHz running this loop at IPC 3.32, should be 10-30x slower.  500-750x
+is 20-50x beyond that, so something in the kernel is wrong rather than
+merely narrow.
+
+THE SUSPECT IS THREAD-MEMORY SPILLING, and it is specific enough to test.
+Metal places a `thread` array in registers only if it can prove the
+indexing is static; every per-lane array here is indexed DYNAMICALLY and
+in the innermost loop:
+
+  - `thread unsigned char steck[26]` (climb.metal), read twice per
+    character as steck[rows[i*26 + steck[ct[i]]]];
+  - `int freq[26]` in mc_components, incremented per character;
+  - the climb's saved best board, same shape.
+
+Dynamically indexed thread arrays go to thread memory, which is device
+memory behind a cache -- so the decode's two lookups become dependent
+memory round trips per character per toggle, which is exactly the shape
+of a 20-50x excess over the clock-and-OoO expectation.
+
+THE FIX TO TRY FIRST, before judging the design: give each lane a 26-byte
+slice of THREADGROUP memory for `steck` instead of thread memory.
+Threadgroup memory is on-chip.  It fits: 256 lanes x 26 B = 6.6 KB beside
+the 6.9 KB of rows and ciphertext, 13.5 KB of the 32 KB budget.  `freq`
+as int is 104 B x 256 = 26 KB and does not fit at 256 lanes -- it would
+need `unsigned short` and/or 128 lanes, so try `steck` alone first and
+read the change against these cells.
+
+NOT MEASURED: thermal drift (--sustained was not run), so these are burst
+rates.  Three known handicaps still stand and none is the explanation for
+a 500x per-lane gap: the k4 pre-pass decodes on the GPU where the CPU
+takes the O(26) histogram path (worth 1.16-1.45x on the CPU), the host's
+reporting walk (now measured at ~1%, so negligible), and no kernel tuning
+of any kind against a CPU carrying years of it.
