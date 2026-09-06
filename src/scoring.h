@@ -42,6 +42,16 @@ double score_report(machine & m);
    ciphertext is read; a no-op when the option is off. */
 void intscore_init();
 
+/* --int, for the GPU host under metal/: the current board's integer
+   components under m.scoring -- the isum and coin the key is built from --
+   the per-model weights the key uses, and the flat table a model reads
+   (mono8 for the three histogram models, all8 for -a and -f). The host
+   uploads the tables and weights, and checks every board the kernel returns
+   against score_components(). Not on any hot path. */
+void score_components(machine & m, long * isum, int * coin);
+void intscore_weights(int model, int64_t * a, int64_t * b);
+const uint8_t * ngram_table(int model);
+
 /* Index of coincidence alone, no n-gram table and no language. */
 double ic_score_decode(machine & m);
 

@@ -1130,17 +1130,25 @@ __attribute__((always_inline)) static inline double score_double(machine & m)
   return score;
 }
 
-/* --int: the current board's integer key under m.scoring. The components
-   come from the SAME decoders the double takes -- where a decoder returns
-   the assembled `isum/scale + n*bias`, isum is recovered by rounding, which
-   is exact: the double carries ~1e-13 of absolute error against a quantum of
+/* --int: the current board's integer components (isum, coin) under
+   m.scoring, and below it the key built from them. The components come from
+   the SAME decoders the double takes -- where a decoder returns the
+   assembled `isum/scale + n*bias`, isum is recovered by rounding, which is
+   exact: the double carries ~1e-13 of absolute error against a quantum of
    1. The three histogram models take one plain decode pass instead, because
    -S k's assembly cannot be inverted for two unknowns. Nothing here touches
-   a decoder's body, so the default path's code is unchanged. noinline, so
-   that score_iter() stays the default body plus one branch (839
-   instructions against dev's 837) rather than both bodies fused into one
-   1580-instruction function; the call costs --int one jump per score. */
-__attribute__((noinline)) static double score_key(machine & m)
+   a decoder's body, so the default path's code is unchanged. score_key is
+   noinline, so that score_iter() stays the default body plus one branch
+   (850 instructions against dev's 837) rather than both bodies fused into
+   one 1580-instruction function; the call costs --int one jump per score.
+   The components are exported on their own because the GPU host
+   (metal/) checks every downloaded board's integers against them; the
+   body is an always_inline helper so that the export costs the --int path
+   no extra call -- score_key stays one body (780 instructions against the
+   772 before the export; the extra eight are the two stores). */
+__attribute__((always_inline))
+static inline void components_impl(machine & m, long * isum_out,
+                                   int * coin_out)
 {
   const int L = textlength;
   long isum = 0;
@@ -1212,7 +1220,46 @@ __attribute__((noinline)) static double score_key(machine & m)
       fatal("Illegal scoring type");
     }
 
+  *isum_out = isum;
+  *coin_out = coin;
+}
+
+void score_components(machine & m, long * isum_out, int * coin_out)
+{
+  components_impl(m, isum_out, coin_out);
+}
+
+__attribute__((noinline)) static double score_key(machine & m)
+{
+  long isum = 0;
+  int coin = 0;
+  components_impl(m, & isum, & coin);
   return int_key(m.scoring, isum, coin);
+}
+
+void intscore_weights(int model, int64_t * a, int64_t * b)
+{
+  *a = g_int_a[model];
+  *b = g_int_b[model];
+}
+
+const uint8_t * ngram_table(int model)
+{
+  switch (model)
+    {
+    case SCORE_IC:
+    case SCORE_MONO:
+    case SCORE_MONOIC:
+      return mono8;
+    case SCORE_BI:
+      return & bi8[0][0];
+    case SCORE_TRI:
+      return & tri8[0][0][0];
+    case SCORE_QUAD:
+      return & quad8[0][0][0][0];
+    default:
+      return & all8[0][0][0][0];   /* SCORE_ALL and SCORE_FUSED */
+    }
 }
 
 double score_iter(machine & m)

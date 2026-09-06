@@ -1,0 +1,19 @@
+# metal/enigma-ref vs ./enigma, ['-c', '-S', 'k4f10', '-f', '-l', 'wehrmacht', '--int', '--dump-all'], 10 plugs hidden, rotor key given
+
+identity: 20 fixtures per length, -R 64, every restart's (key, score, board) row compared
+  L= 60: 20 fixtures, 1280 restarts: 0 differing rows, 0 differing decrypts, 0 of 1280 boards with inexact components, 0 host failures
+  L=107: 20 fixtures, 1280 restarts: 0 differing rows, 0 differing decrypts, 0 of 1280 boards with inexact components, 0 host failures
+  L=167: 20 fixtures, 1280 restarts: 0 differing rows, 0 differing decrypts, 0 of 1280 boards with inexact components, 0 host failures
+
+sweeps: wildcarded keys, -R 1, the host's enumeration against search_worker()'s
+  L= 60 -w 123 -r AA. -g A.. (17 576 keys, single-notch): 17576 keys, 0 differing rows, decrypt same, components 17576/17576, host exit 0
+  L= 60 -w 126 -r AA. -g A.. (two-notch right wheel): 8788 keys, 0 differing rows, decrypt same, components 8788/8788, host exit 0
+  L= 60 -4 -u b -w B317 -r AAA. -g .A.. (M4, Greek wildcarded): 228488 keys, 0 differing rows, decrypt same, components 228488/228488, host exit 0
+  L=107 -w 123 -r AA. -g A.. (17 576 keys, single-notch): 17576 keys, 0 differing rows, decrypt same, components 17576/17576, host exit 0
+  L=107 -w 126 -r AA. -g A.. (two-notch right wheel): 8788 keys, 0 differing rows, decrypt same, components 8788/8788, host exit 0
+  L=107 -4 -u b -w B317 -r AAA. -g .A.. (M4, Greek wildcarded): 228488 keys, 0 differing rows, decrypt same, components 228488/228488, host exit 0
+  L=167 -w 123 -r AA. -g A.. (17 576 keys, single-notch): 17576 keys, 0 differing rows, decrypt same, components 17576/17576, host exit 0
+  L=167 -w 126 -r AA. -g A.. (two-notch right wheel): 8788 keys, 0 differing rows, decrypt same, components 8788/8788, host exit 0
+  L=167 -4 -u b -w B317 -r AAA. -g .A.. (M4, Greek wildcarded): 228488 keys, 0 differing rows, decrypt same, components 228488/228488, host exit 0
+
+RESULT: identical
