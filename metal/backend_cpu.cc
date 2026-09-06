@@ -132,10 +132,11 @@ bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
   const int L = static_cast<int>(p.L);
   const size_t units = static_cast<size_t>(p.units);
   const auto t0 = std::chrono::steady_clock::now();
+  const size_t nboards = static_cast<size_t>(p.nboards);
   for (size_t u = 0; u < units; u++)
     {
       unsigned char steck[MC_ASIZE];
-      memcpy(steck, b.board0, MC_ASIZE);
+      memcpy(steck, b.board0 + (u % nboards) * MC_ASIZE, MC_ASIZE);
       mc_i64 cs = 0;
       mc_i64 cc = 0;
       mc_probe_lane(steck, b.rows, b.ct, L, static_cast<int>(p.model),

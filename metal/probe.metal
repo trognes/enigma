@@ -46,9 +46,11 @@ kernel void enigma_probe_lane(MC_PROBE_ARGS)
   const uint unit = tg_id * tg_size + lane;
   if (unit >= uint(p.units))
     return;
+  device const unsigned char * b0 =
+    board0 + (unit % uint(p.nboards)) * MC_ASIZE;
   thread unsigned char steck[MC_ASIZE];
   for (int j = 0; j < MC_ASIZE; j++)
-    steck[j] = board0[j];
+    steck[j] = b0[j];
   mc_i64 cs = 0;
   mc_i64 cc = 0;
   mc_probe_lane(steck, rows_tg, ct_tg, L, int(p.model), tbl,
@@ -70,9 +72,11 @@ static inline void probe_group_kernel(device const mc_probe_params & p,
 {
   const uint groups_per_tg = tg_size / uint(K);
   const uint unit = tg_id * groups_per_tg + lane / uint(K);
+  device const unsigned char * b0 =
+    board0 + (unit % uint(p.nboards)) * MC_ASIZE;
   mc_i64 cs = 0;
   mc_i64 cc = 0;
-  mc_probe_group<K, SHUF>(lane % 32u, board0, rows, ct, int(p.L),
+  mc_probe_group<K, SHUF>(lane % 32u, b0, rows, ct, int(p.L),
                           int(p.model), tbl, int(p.nprobes), & cs, & cc);
   if ((lane % uint(K)) == 0u)
     {

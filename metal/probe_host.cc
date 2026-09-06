@@ -79,22 +79,24 @@ static void oracle(machine & m, const unsigned char * board0, int nprobes,
   *ck_coin = cc;
 }
 
-/* Every unit's checksums against the oracle; the first mismatch of an arm
-   is named, the rest only counted. */
+/* Every unit's checksums against its board's oracle; the first mismatch
+   of an arm is named, the rest only counted. */
 static bool check(const std::vector<int64_t> & out, size_t units,
-                  int64_t os, int64_t oc, const char * arm, bool quiet)
+                  const int64_t * os, const int64_t * oc, size_t nboards,
+                  const char * arm, bool quiet)
 {
   for (size_t u = 0; u < units; u++)
     {
-      if ((out[u * 2] != os) || (out[u * 2 + 1] != oc))
+      const size_t bd = u % nboards;
+      if ((out[u * 2] != os[bd]) || (out[u * 2 + 1] != oc[bd]))
         {
           if (! quiet)
-            fprintf(stderr, "  %s: unit %zu checksum %lld/%lld, oracle "
-                    "%lld/%lld\n", arm, u,
+            fprintf(stderr, "  %s: unit %zu (board %zu) checksum "
+                    "%lld/%lld, oracle %lld/%lld\n", arm, u, bd,
                     static_cast<long long>(out[u * 2]),
                     static_cast<long long>(out[u * 2 + 1]),
-                    static_cast<long long>(os),
-                    static_cast<long long>(oc));
+                    static_cast<long long>(os[bd]),
+                    static_cast<long long>(oc[bd]));
           return false;
         }
     }
@@ -125,48 +127,52 @@ int probe_run(machine & m, int lanes_cap)
     lanes = 32;
 
   /* One key's rows, the ciphertext, the table, and hillclimb_one()'s
-     kicked start board for (key 0, restart 0). */
+     kicked start boards for (key 0, restart b), b < MC_PROBE_BOARDS: see
+     probe_body.h for why one board was not enough. */
   std::vector<uint8_t> rows;
   rows.reserve(static_cast<size_t>(L) * asize);
   for (int i = 0; i < L; i++)
     rows.insert(rows.end(), m.rows[i], m.rows[i] + asize);
   const uint8_t * tbl = ngram_table(model);
-  unsigned char board0[asize];
-  init_steckerbrett(m, opt_steckerbrett);
-  {
-    uint64_t rng = restart_seed(0, 0);
-    perturb_steckerbrett(m, & rng, opt_perturb);
-  }
-  memcpy(board0, m.steckerbrett, asize);
+  const size_t nboards = MC_PROBE_BOARDS;
+  unsigned char boards[MC_PROBE_BOARDS * asize];
+  int64_t os[MC_PROBE_BOARDS];
+  int64_t oc[MC_PROBE_BOARDS];
   m.scoring = model;
+  for (size_t bd = 0; bd < nboards; bd++)
+    {
+      init_steckerbrett(m, opt_steckerbrett);
+      uint64_t rng = restart_seed(0, static_cast<int>(bd));
+      perturb_steckerbrett(m, & rng, opt_perturb);
+      unsigned char * b0 = boards + bd * asize;
+      memcpy(b0, m.steckerbrett, asize);
+      oracle(m, b0, nprobes, & os[bd], & oc[bd]);
 
-  int64_t os = 0;
-  int64_t oc = 0;
-  oracle(m, board0, nprobes, & os, & oc);
-
-  /* The body itself on the CPU first: a mismatch here is in probe_body.h,
-     not in any backend. */
-  {
-    unsigned char st[asize];
-    memcpy(st, board0, asize);
-    mc_i64 bs = 0;
-    mc_i64 bc = 0;
-    mc_probe_lane(st, rows.data(), num_ciphertext, L, model, tbl, nprobes,
-                  & bs, & bc);
-    if ((bs != os) || (bc != oc))
-      {
-        fprintf(stderr, "probe body %lld/%lld, score_components "
-                "%lld/%lld\n", static_cast<long long>(bs),
-                static_cast<long long>(bc), static_cast<long long>(os),
-                static_cast<long long>(oc));
-        fatal("probe_body.h disagrees with the tool's scorer on the CPU");
-      }
-  }
+      /* The body itself on the CPU first: a mismatch here is in
+         probe_body.h, not in any backend. */
+      unsigned char st[asize];
+      memcpy(st, b0, asize);
+      mc_i64 bs = 0;
+      mc_i64 bc = 0;
+      mc_probe_lane(st, rows.data(), num_ciphertext, L, model, tbl,
+                    nprobes, & bs, & bc);
+      if ((bs != os[bd]) || (bc != oc[bd]))
+        {
+          fprintf(stderr, "board %zu: probe body %lld/%lld, "
+                  "score_components %lld/%lld\n", bd,
+                  static_cast<long long>(bs), static_cast<long long>(bc),
+                  static_cast<long long>(os[bd]),
+                  static_cast<long long>(oc[bd]));
+          fatal("probe_body.h disagrees with the tool's scorer on the "
+                "CPU");
+        }
+    }
 
   fprintf(stderr, "Probe: DESIGN.md 17.6 (ii), one toggle probe in two "
-          "shapes\n  L=%d, model %s, %d probes per unit, %d lanes per "
-          "threadgroup, checksums\n  against score_components over the "
-          "same toggles\n", L, model_name(model), nprobes, lanes);
+          "shapes\n  L=%d, model %s, %d probes per unit, %zu start "
+          "boards, %d lanes per\n  threadgroup, checksums against "
+          "score_components over the same toggles\n", L,
+          model_name(model), nprobes, nboards, lanes);
   fprintf(stderr, "  %-20s %9s %12s %9s %5s  %s\n", "arm", "units",
           "probes/s", "vs lane", "cap", "check");
 
@@ -176,6 +182,7 @@ int probe_run(machine & m, int lanes_cap)
   p.model = model;
   p.nprobes = nprobes;
   p.lanes_per_tg = lanes;
+  p.nboards = static_cast<int64_t>(nboards);
 
   std::vector<int64_t> out;
   double lane_rate = 0.0;
@@ -200,7 +207,7 @@ int probe_run(machine & m, int lanes_cap)
       b.rows = rows.data();
       b.ct = num_ciphertext;
       b.tbl = tbl;
-      b.board0 = board0;
+      b.board0 = boards;
       b.out = out.data();
       b.arm = arm;
       double secs = 0.0;
@@ -211,7 +218,7 @@ int probe_run(machine & m, int lanes_cap)
                   arm_name[arm], "");
           continue;
         }
-      bool ok = check(out, units, os, oc, arm_name[arm], false);
+      bool ok = check(out, units, os, oc, nboards, arm_name[arm], false);
       double rate = (secs > 0.0)
         ? static_cast<double>(units) * nprobes / secs : 0.0;
 
@@ -234,7 +241,8 @@ int probe_run(machine & m, int lanes_cap)
         {
           if (! backend_probe(b, & secs, & cap))
             fatal("internal: an arm that ran refuses to run again");
-          ok = check(out, units, os, oc, arm_name[arm], ! ok) && ok;
+          ok = check(out, units, os, oc, nboards, arm_name[arm], ! ok)
+            && ok;
           const double r = (secs > 0.0)
             ? static_cast<double>(units) * nprobes / secs : 0.0;
           if (r > best)

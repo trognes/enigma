@@ -1,0 +1,58 @@
+The probe microkernel on the Mac mini M1 -- metal/DESIGN.md 17.6 (ii)
+=====================================================================
+
+metal/probe_host.cc via $ENIGMA_GPU_PROBE=1 on metal/enigma-metal.  One
+toggle probe -- apply a toggle, score the board -- repeated 64 times per
+unit under one deterministic toggle sequence, in five arms doing
+identical work; probes per second, the min of three ~0.4 s runs, every
+unit's checksums verified against the tool's own score_components.
+L=105 (the earlier fixture, 107 letters less two), -f, 64 lanes per
+threadgroup.
+
+
+Run 1 -- ONE start board, which is a confound; kept for what it says
+--------------------------------------------------------------------
+
+  arm                      units     probes/s   vs lane   cap  check
+  lane (today)            139456     70967882     1.00x   512  ok
+  group K=32 shuffle       56044     32852392     0.46x  1024  ok
+  group K=32 packed        58118     32686511     0.46x   896  ok
+  group K=16 packed       102368     49890343     0.70x   896  ok
+  group K=8 packed        149840     63523033     0.90x   896  ok
+
+THE INSTRUMENT IS VALID.  All five arms compiled at the first attempt
+and every unit of every arm reproduced score_components bit for bit --
+the packed board, the nine-word histogram, the boundary quads by
+shuffle-up and the xor butterfly all agree with the CPU across 64
+toggles from a ten-pair kicked board.  The register caps are per
+pipeline: the lean shuffle arm reads the full 1 024, the packed arms 896
+(five board words and nine histogram words held by name), and the lane
+arm 512 -- against the climb kernel's 384, which says the climb's scan
+machinery around the scorer is what costs the rest.
+
+EVERY GROUP ARM IS SLOWER THAN THE LANE, monotone in K.  Fit
+K*T(K) = c*L + K*(R*log2 K + F) to the three packed rows (per-character
+work plus per-probe reductions and fixed cost, both scaling with K in
+lane-time): per-character 0.89, R = 0.006, F = 0.009 in units of the
+lane arm's probe time.  So the per-character step in the group shape
+costs 0.89 of the lane's -- shuffles and packed-ALU lookups replaced the
+thread-memory reads and the step barely moved -- and the reductions are
+what separate K=8 from K=32.  Even with the reductions free the group
+shape would reach ~1.1x the lane.
+
+THE CONFOUND.  Every unit ran the SAME board under the same toggles, so
+in the lane arm all 32 lanes of a simdgroup read the same rows[] entry
+and gathered the same table cell at every character -- a broadcast and
+one cache line, where a climb's 32 lanes hold 32 boards and touch 32.
+The group arms gain nothing from it, their lanes reading different
+positions by design; so the bias is one-way, against them.  The tell is
+the lane arm's absolute rate: 71M probes/s against 22M for the
+fixed-pass climb doing nominally the same scoring (results-gpu-
+ablation-m1.txt run 4: 44.8 ns per probe at L=107), a 3.2x that the cap
+(512 against 384) does not cover.  Either the broadcast is worth ~2x to
+the lane arm, or the climb's scan machinery costs twice the scoring
+itself.  Both matter and this run cannot tell them apart.
+
+Fixed by giving unit u start board u % 64, the 64 boards being the
+kicks for (key 0, restart 0..63), so a simdgroup holds 32 boards as a
+climb does, with 64 oracles in place of one.  Run 2 is that.
