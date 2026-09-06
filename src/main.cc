@@ -22,6 +22,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <psapi.h>
+#include <io.h>
 #else
 #include <sys/resource.h>
 #endif
@@ -69,6 +70,18 @@
 int main(int argc, char * * argv)
 {
   auto t_start = std::chrono::steady_clock::now();
+
+#ifdef _WIN32
+  /* The Windows C runtime opens stdout and stderr in TEXT mode and writes
+     every \n as \r\n. The plaintext, the progress lines and the --dump-all
+     rows are parsed by scripts that compare them byte for byte against a
+     Linux run, and the suite asserts no carriage return reaches a
+     redirected stderr (the first Windows CI run counted 43). Binary mode on
+     both streams makes the output identical to every other platform's;
+     stdin is left alone, since the ciphertext reader keeps only A-Z. */
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
+#endif
 
   /* Reads only the environment, and parse_args needs the answer: ranking
      the kick by k means the monogram table has to be loaded. */

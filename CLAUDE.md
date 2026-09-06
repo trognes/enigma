@@ -159,7 +159,14 @@ until it has been green for a while. Two things that job must keep:
 `core.autocrlf=false` set *before* the checkout, or the n-gram tables and
 the scripts arrive as CRLF and every check fails for a reason that is not
 in the code; and the MSYS2 shell for every step, so `sh tests/run_tests.sh`
-finds the same `grep`/`awk`/`sed` the Linux jobs use.
+finds the same `grep`/`awk`/`sed` the Linux jobs use (plus a `python`
+package, which five crib checks need and the environment does not ship).
+**The first run found the one genuinely Windows-specific fact about the
+program**: the C runtime opens stdout and stderr in text mode and writes
+every `\n` as `\r\n`, so the "no carriage returns on a redirected stderr"
+check counted 43 and every script that parses the output would have seen
+them too. `main.cc` puts both streams into binary mode on Windows, which is
+what makes the output byte-identical to a Linux run.
 
 `make bench` (`tests/bench.sh`) benchmarks the hot paths **separately** —
 `search` (brute-force scan, no plugboard), **`icscan`** (the same scan under

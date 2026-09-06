@@ -326,6 +326,15 @@ jobs:
   #     Windows at all, and a runner-side surprise must not block a PR that
   #     is green everywhere else. Promote it to a required job once it has
   #     been green for a while.
+  #   * python for the MINGW64 environment: five crib checks score a board
+  #     through a python3 one-liner, and the environment does not ship one.
+  #
+  # The first run also found the one genuinely Windows-specific fact about
+  # the program: the C runtime opens stdout and stderr in TEXT mode there and
+  # writes every \n as \r\n, so the "no carriage returns on a redirected
+  # stderr" check counted 43 of them and every script that parses the output
+  # would have seen them too. main.cc now puts both streams into binary mode
+  # on Windows, which is what makes the output byte-identical to Linux.
   #
   # The suite makes ~290 process invocations, and process start-up is far
   # more expensive on Windows, so expect this job to be several times slower
@@ -350,6 +359,7 @@ jobs:
           install: >-
             make
             mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-python
       - name: Compiler version
         run: g++ --version && uname -a
       - name: Build (-Werror)
