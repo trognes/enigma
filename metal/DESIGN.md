@@ -931,20 +931,27 @@ paid for.
    branches, so the 31.5% divergence goes to zero by construction, not by
    tuning. Its payoff is still bounded by nothing measured, so 17.7's
    warning against trusting its estimate stands.
-   - **Two free things first, neither needing a kernel change and both
+   - **One free thing first, needing no kernel change and
      answer-preserving.** `lanes_per_tg = 64` is the peak of the sweep at
      **1.27x** -- not the 128 run 1 suggested from a single point -- and
      the curve has a mechanism: a threadgroup is one rotor key, so once
      lanes fall below the 256 restarts a key spans several groups and
-     each re-loads its own `rows[]`, which is why 32 falls back. And the
-     **32-bit accumulators are the only probe that moved the register cap
-     (384 -> 448)** while measuring 1.04x at 256 lanes, exactly as the
-     mechanism predicts: at 256 lanes one threadgroup is resident under
-     either cap. `floor(cap/lanes)` says the pairing can only pay at 32
-     and 64 lanes (12->14 and 6->7; 4, 3, 2, 1 unchanged above), so
-     table C runs both arms and prints both `grp` columns -- a gain
-     confined to those two confirms the occupancy reading and a gain
-     spread evenly refutes it.
+     each re-loads its own `rows[]`, which is why 32 falls back.
+   - **The 32-bit accumulators are NOT a second one, and a claim here
+     that they were has been retracted.** Table B's row 3 read cap 448
+     against 384, and that was written up as the accumulators moving the
+     cap, with the prediction that pairing them with 64 lanes could pay
+     (`floor(cap/lanes)` going 6 -> 7). Run 3 crossed the two and **both
+     arms read 384 at every lane count**: the 448 belongs to the
+     *fixed-pass* build of variant 3, where `try_repair` is compiled out,
+     and the natural build reads 384 with 32-bit sums in every run --
+     including table A's row 3 of the very run the claim came from. The
+     pairing measured 1.01-1.02x flat, which is the accumulators' own
+     ~1-2% and exactly the "gain where grp does not differ" the table was
+     written to catch. What survives is a partial answer to what sets the
+     cap: it is a stepped function of register count, the natural kernel
+     sits just above a step, and `try_repair`'s inlined body is among
+     what holds it there.
 4. Only then `--sustained`, and the `k` stage's co-occurrence table on
    chip (`uint8`, 17.6 KB, fits; section 5).
 

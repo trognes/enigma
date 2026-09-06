@@ -170,13 +170,8 @@ incrementally: with all 32 lanes on one climb they take the same
 branches, so the 31.5% divergence goes to zero by construction.
 
 
-The two free things, and the cell run 2 did not cover
------------------------------------------------------
-
-VARIANT 3 IS THE ONLY PROBE THAT MOVED THE REGISTER CAP, 384 -> 448, and
-it is answer-preserving. It measured just 1.04x at 256 lanes, which is
-what the mechanism predicts: at 256 lanes one threadgroup is resident
-under either cap, so there is nothing for the extra headroom to buy.
+The one free thing, and the pairing that was not one
+----------------------------------------------------
 
 64 LANES IS THE PEAK OF THE SWEEP at 1.27x, not the 128 run 1 suggested
 from a single point. The curve has a mechanism: a threadgroup is one
@@ -185,17 +180,40 @@ groups and each re-loads its own copy of rows[] -- which is why 32 falls
 back to 2113. 192 reading below 256 is the ragged case, 256 restarts not
 dividing by it.
 
-So the untested cell is the PAIRING, and floor(cap/lanes) predicts
-exactly where it can pay:
+Run 2's table B showed variant 3 (32-bit accumulators) at cap 448
+against 384 for every other row, and that was read as "the only probe
+that moved the cap" -- which, since floor(cap/lanes) changes only at 32
+and 64 lanes (12->14, 6->7), predicted the pairing of the two could pay
+there and nowhere else. Run 3 crossed the two, both arms MC_PASSES
+builds, both answer-preserving:
 
-  lanes    32   64   96  128  192  256
-  cap 384  12    6    4    3    2    1
-  cap 448  14    7    4    3    2    1
+  lanes    base c/s  cap  grp     32-bit c/s  cap  grp   32/base   vs 256
+     32        2108  384   12           2123  384   12     1.01x    0.95x
+     64        2832  384    6           2847  384    6     1.01x    1.27x
+     96        2776  384    4           2829  384    4     1.02x    1.25x
+    128        2773  384    3           2800  384    3     1.01x    1.25x
+    192        2069  384    2           2088  384    2     1.01x    1.01x
+    256        2224  384    1           2262  384    1     1.02x    1.00x
 
-A gain confined to 32 and 64 lanes confirms the occupancy reading; a gain
-spread evenly refutes it and means something else. Table C now runs both
-arms and prints both grp columns so the prediction is checkable rather
-than asserted.
+BOTH ARMS READ 384. The 448 was a property of the FIXED-PASS build of
+variant 3 -- try_repair compiled out AND 32-bit sums -- and not of the
+accumulators: the natural build reads 384 with them in run 1, run 2 and
+here. The evidence was already on the page in run 2, where table A's
+row 3 says 384 beside table B's 448, and it was read past. So grp never
+differs, the pairing measures 1.01-1.02x flat -- the accumulators' own
+~1-2%, spread evenly, exactly what "a gain where grp does not differ is
+something other than occupancy" was written to catch -- and the arm is
+removed from the tool, taking with it the half of table C's cost the
+owner noticed.
+
+What the 448 does say is worth keeping: the cap is a stepped function of
+register count and the natural kernel sits just above a step, with
+try_repair's inlined body among what holds it there. That is a partial
+answer to "something none of the ablations removes is setting it" --
+try_repair is one of those things.
+
+So the free win is 64 lanes alone, 1.27x, and the 32-bit accumulators
+are answer-preserving, harmless and worth ~1%.
 
 
 A note on the cost of running it
