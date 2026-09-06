@@ -9,7 +9,23 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+/* getrusage() is the one POSIX call the tool makes that MinGW-w64 does not
+   provide; it only feeds the peak-memory figure on the last line, which
+   Windows reads from GetProcessMemoryInfo() instead. PSAPI_VERSION 2 binds
+   that to its kernel32 entry point, so no extra library is linked.
+   Everything else the program uses -- getopt_long, isatty, std::thread
+   over winpthreads -- the cross toolchain has, so this is what makes
+   `make CXX=x86_64-w64-mingw32-g++-posix` a native Windows build (see
+   "Build & run" in CLAUDE.md). */
+#ifdef _WIN32
+#define PSAPI_VERSION 2
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <psapi.h>
+#include <io.h>
+#else
 #include <sys/resource.h>
+#endif
 
 #include <stdint.h>
 
@@ -54,6 +70,18 @@
 int main(int argc, char * * argv)
 {
   auto t_start = std::chrono::steady_clock::now();
+
+#ifdef _WIN32
+  /* The Windows C runtime opens stdout and stderr in TEXT mode and writes
+     every \n as \r\n. The plaintext, the progress lines and the --dump-all
+     rows are parsed by scripts that compare them byte for byte against a
+     Linux run, and the suite asserts no carriage return reaches a
+     redirected stderr (the first Windows CI run counted 43). Binary mode on
+     both streams makes the output identical to every other platform's;
+     stdin is left alone, since the ciphertext reader keeps only A-Z. */
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
+#endif
 
   /* Reads only the environment, and parse_args needs the answer: ranking
      the kick by k means the monogram table has to be loaded. */
@@ -142,8 +170,17 @@ int main(int argc, char * * argv)
   /* final diagnostic: wall-clock time and memory use */
   double secs = std::chrono::duration<double>
     (std::chrono::steady_clock::now() - t_start).count();
-  struct rusage ru;
   double peak_mb = 0.0;
+#ifdef _WIN32
+  PROCESS_MEMORY_COUNTERS pmc;
+  if (GetProcessMemoryInfo(GetCurrentProcess(), & pmc, sizeof pmc) != 0)
+    {
+      /* PeakWorkingSetSize is in bytes: the resident peak, as ru_maxrss */
+      peak_mb = static_cast<double>(pmc.PeakWorkingSetSize)
+                / (1024.0 * 1024.0);
+    }
+#else
+  struct rusage ru;
   if (getrusage(RUSAGE_SELF, & ru) == 0)
     {
       /* ru_maxrss is kilobytes on Linux but bytes on macOS/BSD */
@@ -153,6 +190,7 @@ int main(int argc, char * * argv)
       peak_mb = ru.ru_maxrss / 1024.0;
 #endif
     }
+#endif
   fprintf(stderr,
           "Analysed %zu rotor combination%s, scored %llu plugboard%s\n",
           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",

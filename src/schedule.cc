@@ -29,7 +29,6 @@
 #include <utility>
 #include <vector>
 #include <unistd.h>
-#include <sys/resource.h>
 
 /* Parse the --score/-S schedule string into opt_stages[]/opt_nstages, and set
    opt_scoring to the target (last model stage). Tokens are <letter><optional int>:

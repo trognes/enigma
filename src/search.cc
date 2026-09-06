@@ -35,7 +35,6 @@
 #include <utility>
 #include <vector>
 #include <unistd.h>
-#include <sys/resource.h>
 
 /* Alternation cap for tune_phase(); it converges well before this. */
 static const int tune_phase_rounds = 4;

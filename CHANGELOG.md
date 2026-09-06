@@ -8,6 +8,23 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The tool cross-compiles for Windows** (`make clean && make
+  CXX=x86_64-w64-mingw32-g++-posix`). The only POSIX call MinGW-w64 lacks
+  is `getrusage`, used once for the peak-memory figure on the last line;
+  Windows reads `GetProcessMemoryInfo()`'s peak working set instead (bound
+  to kernel32 via `PSAPI_VERSION 2`, no extra library). Four modules
+  carried a dead `<sys/resource.h>` include from the module split, which
+  was the only other thing that failed. Compiles warning-free under the
+  full flag set and links statically into a native 64-bit executable.
+  Byte-identical on Linux. A `windows` CI job (MSYS2's MinGW-w64 g++ on
+  `windows-latest`, the same `make test`) now runs the suite natively
+  there, as a required job; `core.autocrlf` must be off before the
+  checkout or the tables arrive as CRLF. Its first
+  run found the one Windows-specific fact about the program — the C
+  runtime writes `\n` as `\r\n` on stdout and stderr — so `main.cc` puts
+  both streams into binary mode there and the output is byte-identical to
+  Linux.
+
 - **`ic_score_decode` is unrolled 4x with a private histogram per copy — on
   arm64 only.** The default model's scan loop, and the first change measured
   by the `icscan` bench tier. The split is measured, against `icscan`'s

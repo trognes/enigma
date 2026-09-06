@@ -133,6 +133,42 @@ make crackquality         # build, then run tests/crack_quality.py (cracking qua
 ./enigma -h               # help / usage
 ```
 
+**It cross-compiles for Windows from Linux with MinGW-w64**, as a native
+64-bit executable with no emulation layer:
+
+```sh
+make clean && make CXX=x86_64-w64-mingw32-g++-posix   # -> enigma (a PE)
+```
+
+(`apt install g++-mingw-w64-x86-64` provides the toolchain; the `-posix`
+variant is the one whose winpthreads give `std::thread` and `-pthread` as
+on Linux.) The whole POSIX surface the tool uses is `getopt_long`, `isatty`
+and one `getrusage` for the peak-memory figure; MinGW-w64 has the first
+two, and for the third `main.cc` reads `GetProcessMemoryInfo()`'s peak
+working set on Windows (bound to kernel32 via `PSAPI_VERSION 2`, so no
+extra library). Four modules carried a dead `<sys/resource.h>` include from
+the split, which was the only other thing that failed. The cross build
+compiles warning-free under the full flag set and links statically; the
+suite **passes natively on Windows, 648 of 648**, on the CI runner below.
+`make clean` first, because the top-level Makefile writes its objects into
+`src/` and a cross build would otherwise link Linux objects. CI builds and
+runs the suite **natively on a Windows runner** (the `windows` job in
+`ci.yml`:
+MSYS2's MinGW-w64 g++, the same `make test`), a required job like the Linux
+ones — it was advisory for exactly one green run. Two things that job must
+keep:
+`core.autocrlf=false` set *before* the checkout, or the n-gram tables and
+the scripts arrive as CRLF and every check fails for a reason that is not
+in the code; and the MSYS2 shell for every step, so `sh tests/run_tests.sh`
+finds the same `grep`/`awk`/`sed` the Linux jobs use (plus a `python`
+package, which five crib checks need and the environment does not ship).
+**The first run found the one genuinely Windows-specific fact about the
+program**: the C runtime opens stdout and stderr in text mode and writes
+every `\n` as `\r\n`, so the "no carriage returns on a redirected stderr"
+check counted 43 and every script that parses the output would have seen
+them too. `main.cc` puts both streams into binary mode on Windows, which is
+what makes the output byte-identical to a Linux run.
+
 `make bench` (`tests/bench.sh`) benchmarks the hot paths **separately** —
 `search` (brute-force scan, no plugboard), **`icscan`** (the same scan under
 `-i`, the default model), `hillclimb` (the `-c` plugboard loop
@@ -3872,7 +3908,9 @@ throughput-bound), and the delta-scorer (`archived/SIMULATED_ANNEALING.md`
   cancels a superseded PR run but never a `dev`/`master` one, where each push is
   a different landed commit rather than a revision of the same one. The jobs are
   the suite `-Werror`
-  under g++, **g++-14** and clang++, ASan+UBSan, ThreadSanitizer, valgrind,
+  under g++, **g++-14** and clang++ (and, required too, natively on Windows
+  under MSYS2's MinGW-w64 g++ — see "Build & run"), ASan+UBSan,
+  ThreadSanitizer, valgrind,
   cppcheck, clang-tidy (config in
   `.clang-tidy`), and shellcheck plus a `py_compile` of the Python harness; a
   separate CodeQL workflow runs on PRs and
