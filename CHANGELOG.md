@@ -15,8 +15,11 @@ existing command lines can behave differently or stop working.
   to kernel32 via `PSAPI_VERSION 2`, no extra library). Four modules
   carried a dead `<sys/resource.h>` include from the module split, which
   was the only other thing that failed. Compiles warning-free under the
-  full flag set and links statically into a native 64-bit executable;
-  not yet run on Windows or under Wine. Byte-identical on Linux.
+  full flag set and links statically into a native 64-bit executable.
+  Byte-identical on Linux. A `windows` CI job (MSYS2's MinGW-w64 g++ on
+  `windows-latest`, the same `make test`) now runs the suite natively
+  there, advisory until it has been green for a while; `core.autocrlf`
+  must be off before the checkout or the tables arrive as CRLF.
 
 - **`ic_score_decode` is unrolled 4x with a private histogram per copy — on
   arm64 only.** The default model's scan loop, and the first change measured

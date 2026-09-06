@@ -306,3 +306,53 @@ jobs:
         run: shellcheck tests/run_tests.sh tests/bench.sh
       - name: Byte-compile the Python harness
         run: python3 -m py_compile tests/crack_quality.py
+
+  # THE SAME GATE ON WINDOWS, as a native MinGW-w64 build under MSYS2 (which
+  # the Windows runner images carry preinstalled). Until this existed the
+  # Windows build was only ever cross-COMPILED from Linux; nothing had run
+  # the suite against the resulting executable, and the one platform-specific
+  # line in the program -- the peak-memory figure from GetProcessMemoryInfo()
+  # -- had never executed. The same make and the same run_tests.sh, under the
+  # MSYS2 shell, so there is no Windows-specific script to drift.
+  #
+  # Two things that are not optional:
+  #
+  #   * core.autocrlf=false BEFORE the checkout. Git for Windows defaults it
+  #     to true, which rewrites the n-gram tables and the shell scripts to
+  #     CRLF on the way in; the table reader and the suite then see stray
+  #     carriage returns and every check fails for a reason that is not in
+  #     the code.
+  #   * continue-on-error, for now. This is the first time the suite runs on
+  #     Windows at all, and a runner-side surprise must not block a PR that
+  #     is green everywhere else. Promote it to a required job once it has
+  #     been green for a while.
+  #
+  # The suite makes ~290 process invocations, and process start-up is far
+  # more expensive on Windows, so expect this job to be several times slower
+  # than the Linux one -- a runtime question, not a correctness one.
+  windows:
+    name: build & test (MinGW-w64 g++, Windows)
+    runs-on: windows-latest
+    continue-on-error: true
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Keep LF line endings on checkout
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+      - name: Compiler version
+        run: g++ --version && uname -a
+      - name: Build (-Werror)
+        run: make CXX=g++ EXTRA_CXXFLAGS=-Werror
+      - name: Test
+        run: make test CXX=g++ EXTRA_CXXFLAGS=-Werror

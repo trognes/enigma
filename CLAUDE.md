@@ -152,7 +152,14 @@ the only other thing that failed. Verified to compile warning-free under the
 full flag set and to link statically; **not verified to run** — Wine is not
 in the container and no Windows machine has run the suite. `make clean`
 first, because the top-level Makefile writes its objects into `src/` and a
-cross build would otherwise link Linux objects.
+cross build would otherwise link Linux objects. CI now also builds and runs
+the suite **natively on a Windows runner** (the `windows` job in `ci.yml`:
+MSYS2's MinGW-w64 g++, the same `make test`), advisory (`continue-on-error`)
+until it has been green for a while. Two things that job must keep:
+`core.autocrlf=false` set *before* the checkout, or the n-gram tables and
+the scripts arrive as CRLF and every check fails for a reason that is not
+in the code; and the MSYS2 shell for every step, so `sh tests/run_tests.sh`
+finds the same `grep`/`awk`/`sed` the Linux jobs use.
 
 `make bench` (`tests/bench.sh`) benchmarks the hot paths **separately** —
 `search` (brute-force scan, no plugboard), **`icscan`** (the same scan under
