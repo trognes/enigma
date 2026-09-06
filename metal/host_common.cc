@@ -233,6 +233,25 @@ int main(int argc, char * * argv)
   p.capmerge = opt_capmerge ? 1 : 0;
   p.no_repair = opt_no_repair ? 1 : 0;
 
+  /* $ENIGMA_GPU_PROBE: the microkernel of DESIGN.md 17.6 (ii) instead of
+     the sweep -- one key, one board, one toggle probe timed in two
+     shapes (probe_host.cc). The key is the first the key space decodes,
+     with its rows built exactly as the sweep builds them. */
+  const char * penv = getenv("ENIGMA_GPU_PROBE");
+  if ((penv != nullptr) && (*penv != 0) && (*penv != '0'))
+    {
+      size_t wo = static_cast<size_t>(-1);
+      int r6[6];
+      size_t k = 0;
+      while ((k < total_keys)
+             && ! key_to_machine(m, k, ks.tasks, ks.range, ks.rc, ks.gc, all,
+                                 rg, ks.gsize, rc12, gc12, wo, r6))
+        k++;
+      if (k >= total_keys)
+        fatal("no key in the key space decodes; nothing to probe");
+      return probe_run(m, gpu_lanes_cap());
+    }
+
   /* Keys per batch: bound the upload at ~64 MB of rows and boards. */
   const size_t row_bytes = static_cast<size_t>(L) * asize;
   const size_t per_key = row_bytes

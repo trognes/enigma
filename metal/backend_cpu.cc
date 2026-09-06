@@ -12,6 +12,7 @@
 
 #include <string.h>
 
+#include <chrono>
 #include <thread>
 #include <vector>
 
@@ -118,4 +119,32 @@ void backend_run(const mc_batch & b)
     }
   for (std::thread & th : pool)
     th.join();
+}
+
+/* The probe's lane arm on the CPU: the driver is testable on a machine
+   with no GPU, and its checksum check has something to check.  The group
+   arms need a simdgroup and are not here. */
+bool backend_probe(const mc_probe_batch & b, double * secs, int * cap)
+{
+  if (b.arm != MC_PROBE_LANE)
+    return false;
+  const mc_probe_params & p = *b.params;
+  const int L = static_cast<int>(p.L);
+  const size_t units = static_cast<size_t>(p.units);
+  const auto t0 = std::chrono::steady_clock::now();
+  for (size_t u = 0; u < units; u++)
+    {
+      unsigned char steck[MC_ASIZE];
+      memcpy(steck, b.board0, MC_ASIZE);
+      mc_i64 cs = 0;
+      mc_i64 cc = 0;
+      mc_probe_lane(steck, b.rows, b.ct, L, static_cast<int>(p.model),
+                    b.tbl, static_cast<int>(p.nprobes), & cs, & cc);
+      b.out[u * 2] = cs;
+      b.out[u * 2 + 1] = cc;
+    }
+  *secs = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - t0).count();
+  *cap = 0;
+  return true;
 }
