@@ -1,8 +1,25 @@
 # Metal port: design and plan
 
-Status: **design only, no code.** This document records the decisions taken
-and the plan they lead to. Nothing here is built; every number marked as an
-estimate is one.
+Status: **milestones 1b and 2 built; nothing measured on a GPU yet.** This
+document records the decisions taken and the plan they lead to; every
+number marked as an estimate is one. What exists (section 13 has the
+build):
+
+- `--int` on the CPU (milestone 1b, PR #267): identity 0 of 5 760 restarts
+  differing, zero discordant recovery trials, bench inside every floor.
+- `climb_body.h`, the one kernel body; `climb.metal` and `backend_metal.mm`,
+  the Metal wrapper and host; `backend_cpu.cc`, a reference backend that
+  runs the same body per lane on the CPU; `host_common.cc`, the host that
+  both share; `verify_identity.py`, section 8's identity test as a `diff`
+  of `--dump-all` rows. On Linux, against the CPU's `--int` climb: **0
+  differing rows of 3 840** at L = 60/107/167 (20 fixtures x `-R 64` per
+  length), every board's components exact, and the wildcarded sweeps
+  (17 576 starts, a two-notch right wheel, an M4 order) agreeing key for
+  key with `search_worker()`.
+- **Not yet run on a Mac.** The first thing to confirm there is that
+  `climb.metal` compiles and that the components line reads exact (section
+  11's 64-bit-integer risk); then `verify_identity.py --host
+  metal/enigma-metal`, then section 9's throughput.
 
 Decisions recorded (owner's):
 
@@ -417,16 +434,37 @@ hours instead of days.
 
 ## 13. Build and layout
 
-`metal/` holds `DESIGN.md` (this) and, later, **one kernel body and two
-thin wrappers**: the climb itself is plain integer C in a header shared by
-both targets, and each wrapper supplies only the address-space keywords,
-the thread index, the barrier and the score type. `climb.metal` + `host.mm`
-build on macOS only: `xcrun metal -fno-fast-math` to a `.metallib`, and
-`clang++ -ObjC++` linking `src/*.o` (built by the top-level `make` first)
-with the Metal and Foundation frameworks. `climb.cu` + `host_cuda.cc` build
-with `nvcc -fmad=false` on a machine with an NVIDIA GPU (section 15).
-Nothing under `metal/` is reached by the top-level `make`, `make test` or
-CI; the Python and shell gates do not see `.mm`, `.metal` or `.cu` files.
+`metal/` holds `DESIGN.md` (this) and **one kernel body and thin
+wrappers**: the climb itself is plain integer C in `climb_body.h`, shared
+by every target, and each wrapper supplies only the address-space
+keywords, the thread index, the barrier and the integer type.
+
+| file | what |
+|---|---|
+| `climb_body.h` | the climb: components, key, toggle scan, `try_repair`, stages |
+| `climb.metal` | the Metal kernel `enigma_climb` around it |
+| `host_common.cc` / `.h` | `main()`: keys, rows, kicks, batches, reporting, merge |
+| `backend_metal.mm` | uploads a batch and dispatches the kernel (macOS) |
+| `backend_cpu.cc` | runs the body per lane on the CPU (any platform) |
+| `verify_identity.py` | section 8.2 as a `diff` of `--dump-all` rows |
+| `Makefile` | `make -C metal` (reference), `make -C metal metal` (Metal) |
+
+Both hosts link every object under `src/` except `main.o`, built by the
+top-level `make` first, so the tool's own option parsing, key space,
+kicks, tables and reporting are reused rather than re-implemented
+(section 7). `enigma-metal` needs `xcrun metal -fno-fast-math` for the
+`.metallib`, loaded from beside the executable or `$ENIGMA_METALLIB`, and
+`clang++ -ObjC++` with the Metal and Foundation frameworks. `enigma-ref`
+builds anywhere and is the same program with the body run on the CPU: it
+is how the body was verified on Linux, and how a GPU disagreement is
+split into a wrapper bug or a body bug. Both take the tool's own command
+line and print its own output (`--dump-all` rows included), plus a
+`Components:` line for section 8.1 and a device-time line for section 9;
+they refuse, by name, every option this milestone does not port. `climb.cu`
++ `host_cuda.cc` will build with `nvcc -fmad=false` on a machine with an
+NVIDIA GPU (section 15). Nothing under `metal/` is reached by the
+top-level `make`, `make test` or CI; the Python and shell gates do not
+see `.mm`, `.metal` or `.cu` files.
 
 ## 14. Metal-first, then CUDA
 

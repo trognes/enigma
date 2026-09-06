@@ -3,6 +3,11 @@ cipher*.txt
 /enigma
 src/*.o
 src/*.d
+metal/*.o
+metal/*.air
+metal/*.metallib
+metal/enigma-ref
+metal/enigma-metal
 /enigma_cap
 /enigma_chi2
 __pycache__/

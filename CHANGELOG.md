@@ -127,6 +127,35 @@ existing command lines can behave differently or stop working.
 
 ### Added
 
+- **`metal/`: the GPU port of the plugboard climb, milestone 2 of
+  `metal/DESIGN.md`.** One kernel body in plain integer C
+  (`climb_body.h`: the `--int` components and key, the 325-toggle steepest
+  ascent in `a<b` order with the CPU's tie rule and cap gating,
+  `try_repair`, the staged schedule), a Metal wrapper and Objective-C++
+  host (`climb.metal`, `backend_metal.mm`, macOS only), a reference
+  backend that runs the same body per lane on the CPU (`backend_cpu.cc`,
+  any platform), and the host both share (`host_common.cc`), which links
+  every object under `src/` except `main.o` and so reuses the tool's own
+  option parsing, key space and collapses, kicks, tables, `--dump-all`,
+  merge and progress line. `verify_identity.py` is DESIGN.md §8.2 as a
+  `diff` of `--dump-all` rows against `./enigma --int`.
+  - **Verified on Linux with the reference backend**: 0 differing rows of
+    3 840 at L = 60/107/167 (20 fixtures × `-R 64` per length), every
+    board's `(isum, coin)` exact against `score_components()`, identical
+    decrypts, and the wildcarded sweeps — 17 576 starts on a single-notch
+    order, the two-notch right-wheel collapse (8 788 keys), an M4 order
+    with the Greek wheel wildcarded (228 488 keys) — agreeing key for key
+    with `search_worker()`.
+  - **Not yet run on a GPU.** The Metal build and its 64-bit integer
+    arithmetic are the first thing to confirm on the Mac (DESIGN.md §11);
+    the identity harness then runs against `metal/enigma-metal`, and §9's
+    throughput after that.
+  - `src/scoring.cc` exports `score_components()`, `intscore_weights()`
+    and `ngram_table()` for the host; `score_iter` stays at 850
+    instructions and `score_key` goes 772 → 780 with no call added, the
+    export being an always_inline helper's second caller.
+  - Nothing under `metal/` is reached by the top-level `make`, `make test`
+    or CI.
 - **`--int` — the plugboard climb compares its scores as exact 64-bit
   integers.** Every scorer already accumulates two integers, the table sum
   `isum` and the same-letter pair count `coin`, before one float division;

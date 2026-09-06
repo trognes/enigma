@@ -84,9 +84,21 @@ SEED_DEDUP.md             Design record for `--seed-dedup` (now BUILT, in
                           pass barrier, bits-per-item sizing.  Carries the
                           designs that were tried and retracted, and what the
                           build itself taught.
+metal/                    The GPU port of the plugboard climb: DESIGN.md (the
+                          plan and its status), climb_body.h (the ONE kernel
+                          body, plain integer C shared by every target),
+                          climb.metal + backend_metal.mm (Metal, macOS only),
+                          backend_cpu.cc (the same body per lane on the CPU,
+                          any platform), host_common.cc (the host both share,
+                          linking src/*.o minus main.o) and
+                          verify_identity.py. Its own Makefile; nothing here
+                          is reached by the top-level make, make test or CI.
+                          Needs -c and --int, and refuses by name every
+                          option it does not port yet.
 LICENSE                   GNU GPL v3.
 .gitignore                Editor backups, cipher*.txt, the built binary, the
-                          `src/*.o` / `src/*.d` build products, and __pycache__.
+                          `src/*.o` / `src/*.d` and `metal/` build products,
+                          and __pycache__.
 ngrams/<lang>_monograms.txt   Single-letter frequencies.
 ngrams/<lang>_bigrams.txt     Two-letter frequencies.
 ngrams/<lang>_trigrams.txt    Three-letter frequencies.
