@@ -125,16 +125,26 @@ def one_trial(job):
     return on, off, offp
 
 
-def pilot(seed, L, n, r_lo, r_hi):
+def pilot(seed, L, n, r_lo, r_hi, reps=5):
     """Per-restart cost with and without the re-pair: the slope between two
-    restart counts on the same fixtures, min of two reps each."""
+    restart counts on the same fixtures, min of `reps` each.
+
+    MIN OF 2 WAS TOO THIN, and one bad timing cost a false positive.  The
+    slope is a DIFFERENCE of two sums, so a single disturbance in the
+    high-restart arm inflates it without bound -- and in the first full
+    run it did: L=60 read 1.337 between neighbours at 1.046 and 1.033,
+    its `on` cost exceeding both L=80's and L=100's, which is backwards
+    for a climb linear in L.  Re-timing the identical fixtures twice gave
+    1.069 and 1.099.  min of 5 costs ~60 s a length and buys the
+    difference between a measurement and a coin flip.
+    """
     fx = [trial_fixture(seed + 7777, L, i) for i in range(n)]
     cost = {}
     for flag in ([], ["--no-repair"]):
         secs = {}
         for R in (r_lo, r_hi):
             best = None
-            for _ in range(2):
+            for _ in range(reps):
                 t0 = time.perf_counter()
                 for _, key, ct in fx:
                     run(key + RECIPE + ["-T", 1, "-R", R] + flag, ct)
@@ -154,32 +164,43 @@ def main():
     ap.add_argument("--restarts", type=int, default=8)
     ap.add_argument("--pilot", type=int, default=24,
                     help="fixtures per length for the cost ratio")
+    ap.add_argument("--reps", type=int, default=5,
+                    help="timing reps per pilot cell; min is kept")
     ap.add_argument("--workers", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--seed", type=int, default=11)
     args = ap.parse_args()
     if not os.path.exists(ENIGMA):
         sys.exit("build the binary first (make)")
 
-    print(f"# try_repair A/B, {RECIPE}, 10 plugs hidden, rotor key given,"
-          f"\n# {args.trials} paired trials per length, -R {args.restarts}, "
-          f"seed {args.seed}, {args.workers} workers\n")
+    print(f"# try_repair A/B: {' '.join(RECIPE)}\n"
+          f"# 10 plugs hidden, rotor key given, {args.trials} paired "
+          f"trials per length,\n# -R {args.restarts}, seed {args.seed}, "
+          f"{args.workers} workers\n")
 
     # -R 8 against -R 128: a per-restart cost of ~0.2 ms needs thousands of
     # restarts per arm before the slope stands above the timer, and the
     # smoke test's 3 fixtures x 56 restarts (29 ms an arm) read the
     # re-pair as CHEAPER, which it cannot be -- it only ever adds work.
-    print("cost: per-restart climb time, ms, the slope between -R 8 and "
-          f"-R 128 over {args.pilot} pilot fixtures, min of 2 reps")
+    print("cost: per-restart climb time in ms, the slope between -R 8 and")
+    print(f"      -R 128 over {args.pilot} fixtures, min of {args.reps} reps")
     rlabel = "R' (off+)"
     print(f"  {'L':>4} {'on':>8} {'off':>8} {'ratio':>7} {rlabel:>10}")
     ratio = {}
     for L in args.lengths:
-        c = pilot(args.seed, L, args.pilot, 8, 128)
+        c = pilot(args.seed, L, args.pilot, 8, 128, args.reps)
         r = c["on"] / c["off"] if c["off"] > 0 else 1.0
         rp = max(1, round(args.restarts * r))
         ratio[L] = (r, rp)
+        flag = ""
+        if r < 1.0:
+            # The re-pair only ever ADDS work, so this is the timer
+            # winning, not a saving.  Say so rather than build the
+            # matched-time arm on it.
+            flag = "  <- BELOW 1.0: timing noise, not a cost"
+        elif rp == args.restarts:
+            flag = "  <- rounds to no extra restart; off+ == off"
         print(f"  {L:>4} {1000 * c['on']:8.3f} {1000 * c['off']:8.3f} "
-              f"{r:7.3f} {rp:>10}")
+              f"{r:7.3f} {rp:>10}{flag}")
     print()
 
     print("recovery: paired break50 (>=50% of letters), the same fixture in "
