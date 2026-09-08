@@ -1216,6 +1216,75 @@ things do transfer.
    done. The bench's climb tiers are exposed to it exactly as the
    ablations were.
 3. **`try_repair`'s cost is not zero**, measured once: 16.9% of a
-   natural climb on the GPU at L≈105. The CPU share is unmeasured and
-   may differ, but it is a reason to run the short-length A/B the
-   `--no-repair` flag exists for -- `ENHANCEMENTS.md`, Measurement gaps.
+   natural climb on the GPU at L≈105. That prompted the short-length
+   A/B the `--no-repair` flag exists for, which has since been run
+   (`ENHANCEMENTS.md` item 19): the CPU pays **3.3 / 4.6 / 7.2%** at
+   L = 40/80/100, so a lane and a core price a convergence scan about
+   **3x apart** and the GPU share does not read across. The re-pair
+   keeps its always-on default at both `-R 8` and `-R 64`.
+
+### 17.9 The lever never tried: independent work INSIDE a lane
+
+**Every arm of the ladder attacked the problem with more parallel
+units, and not one gave a single lane more independent work to
+overlap.** Lane-per-restart, simdgroup-per-climb at K = 8/16/32, the
+packed-register board raising occupancy from cap 512 to 896 -- all of
+them thread-level parallelism. Instruction-level parallelism within one
+lane was never measured on the GPU, which is worth recording because it
+is the CPU's *largest* scorer win: the five pure-gather loops carry a
+4x unroll pragma and `ngram_ic_decode` is unrolled by hand with four
+private histograms, together worth -18.7% on g++ arm64 and -13.7% on
+clang arm64 (`CLAUDE.md`, the scorer-loop note).
+
+**The GPU body is rolled.** `mc_key()` in `climb_body.h` runs one
+`mc_decode_at` per iteration with its 3-deep chain -- plugboard, rotor
+row, plugboard -- fully exposed, then the table gather. Characters are
+independent of one another, so that chain is overlappable and is not
+being overlapped.
+
+**It should help an in-order lane, and the reason is worth stating.**
+In-order *issue* does not mean in-order *completion*: with
+scoreboarding a lane may issue independent loads back to back and
+stalls only on reaching a consumer. Interleaving four characters'
+chains puts 12 loads in flight instead of 3 -- classic software
+pipelining, and precisely the overlap a CPU core gets for free from a
+~600-entry reorder buffer holding ~80 characters at once. It is also
+the only lever that attacks the measured ~123 lane-cycles per
+character step from inside the lane rather than by adding lanes.
+
+**Two reasons it may not pay, both measured elsewhere.**
+
+- **Registers.** More live values means fewer resident simdgroups, and
+  occupancy is the binding constraint -- the climb kernel caps at 384
+  of 1024, and the register-packing arm was a 1.52x win *entirely*
+  through residency while the per-lane step got ~15% slower. Unrolling
+  pushes that dial the wrong way.
+- **The accumulator trap, worse here than on the CPU.** The pragma
+  alone made `ngram_ic_decode` **+11.7% slower** on g++ `fused` long,
+  four unrolled copies incrementing one `freq[]` serialising the
+  stores; four private histograms fixed it. On a GPU lane four
+  26-entry histograms is 104 bytes of per-lane state and would spill
+  straight to thread memory. So unroll the **decode only** -- four
+  decoded letters into four registers, then the four histogram
+  increments and four partial `isum` sums after -- which is ~10-15
+  extra live registers rather than ~100.
+
+**Do NOT do it a whole message at a time.** Three passes over the full
+text (all letters through the entry board, then the rotor rows, then
+the exit board) makes every step independent, but needs two L-byte
+intermediates, and with lane = restart those are *per-lane*, i.e.
+thread memory, i.e. DRAM-backed: a chain of threadgroup-memory hits
+traded for four DRAM streams. The CPU already measured the cheaper
+version of this -- **one** intermediate, in L1 -- when the scorers were
+fused: materialising into `m.plaintext` and reading it back costs
++6.8% / +7.0% under g++ and **+28.4% / +45.6% under clang/ARM**. The
+register-granularity unroll is the same idea without the traffic.
+
+**Size, honestly: it cannot flip the verdict.** At 0.28x the M1's CPU,
+even a 2x would land at 0.56x, and 17.7's advice stands unchanged. It
+is recorded because it is the largest untried lever and among the
+cheapest to test -- a `#pragma unroll` and split accumulators in one
+kernel body, in a probe harness that already exists -- and because
+"TLP was tested exhaustively and ILP never was" should not have to be
+rediscovered by whoever runs the probe on a CUDA card, where a
+different register budget may well decide it differently.

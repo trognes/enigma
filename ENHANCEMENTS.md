@@ -2798,6 +2798,19 @@ small multiple on a discrete CUDA card against a desktop CPU — arithmetic, wit
 port**: the body is behind three macros so the same microkernel can run on a
 CUDA card and give the number before any port work is spent.
 
+**One named gap survives the close-out, and it is a gap in how the ladder
+searched rather than in what it found** (`metal/DESIGN.md` §17.9). Every arm
+attacked the problem with more parallel *units* — lane-per-restart,
+simdgroup-per-climb at K = 8/16/32, packed registers for occupancy — and not
+one gave a single lane more independent work to overlap. The GPU body is
+rolled, one character and its 3-deep chain per iteration, where the CPU
+scorers are unrolled 4× for a measured −18.7% / −13.7% on arm64. So **ILP
+inside a lane was never tested**, though it is the CPU's largest scorer win.
+It cannot flip the verdict — 2× on 0.28× is still 0.56× — and it is bounded
+against the register budget that occupancy already depends on, which is why
+it stays a gap rather than a task. It matters most for whoever runs the probe
+on a CUDA card, where that budget differs.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
