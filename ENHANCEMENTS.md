@@ -2877,19 +2877,32 @@ other language keeps a flat 30 and is byte-identical.
 unmeasured one.** At L=200 and the operating budget (`-R 8`, 6000 paired
 trials) lambda 45 and 65 beat the capped 30 by +32 and +37 breaks of 6000
 (z = 2.67, 2.97) — ~+0.6pp of break50. The L=167 grid's faint hint
-(lambda 40 at z = +1.2, ns) was real. It is **not shipped** because one length
-cannot fix a rule: the measured plateau midpoints (≈10 at L≈65, ≈20 at L=100,
-≈55 at L=200) imply an exponent near 1.5, steeper than both the shipped
-`0.17·L` (predicts 34) and the `1.1·√L` sd-ratio argument (predicts 33), and
-three midpoints are the same evidence shape that produced the withdrawn
-`0.18·L` above.
+(lambda 40 at z = +1.2, ns) was real. **Across the whole band the cap binds
+in** — L = 177/190/215/240, 8000 paired trials each — lambda 45 beats it by
+**+107 of 32 000** (z = +3.89) and 65 by +79 (z = +2.48); and a length-scaled
+replacement **won held out**, `0.25·L` beating the shipped rule by **+65 of
+32 000** (z = +2.35, all four lengths positive) on a seed that had no hand in
+choosing 0.25 — at **half** the size that seed implied, the winner's curse
+again. §13, §14.
 
-**What would close it:** two or three more lengths in **L = 177–250** at
-`-R 8`. Not more trials at L=200, and not `-R 0` — a single-trajectory climb
-overshoots the optimum by 1.5–2× (it peaks near lambda 90 at L=200, where the
-real budget reads 90 as nothing). `-R 8` saturates above L≈250 and >300 is out
-of scope, so that band is the whole remaining question.
-`eval/results-weight-sweep.txt` §12.
+**It is still not shipped, and the reason has changed: the SHAPE is
+undetermined, not the direction.** No run compares a length-scaled lambda
+against a raised **flat** one, and the held-out per-length deltas (+27, +7,
++14, +17) carry no length trend, so "`0.25·L`" and "any constant near 50" are
+not separated; §13's sign flip (lambda 65 − 45 reading −24, −24, +10, +10 in
+length order) is suggestive with each cell about one SE. The measured plateau
+midpoints (≈10 at L≈65, ≈20 at L=100, ≈55 at L=200) imply an exponent near
+1.5, steeper than both the shipped `0.17·L` (predicts 34) and the `1.1·√L`
+sd-ratio argument (predicts 33) — three midpoints being the same evidence
+shape that produced the withdrawn `0.18·L` above.
+
+**What would close it:** one arm — **flat lambda ≈ 50 paired against `0.25·L`
+across L = 177–240 on a fresh seed**. A shipped rule additionally needs a cap
+or a measurement above L=240, since `0.25·L` is unbounded (100 at L=400) and
+the error is asymmetric. Not `-R 0` — a single-trajectory climb overshoots the
+optimum by 1.5–2× (it peaks near lambda 90 at L=200, where the real budget
+reads 90 as nothing). `-R 8` saturates above L≈250 and >300 is out of scope.
+`eval/results-weight-sweep.txt` §12–§14.
 
 L=110 reads −4.9 per 1000 (z = −1.57, ns) with flat cells either side, most
 likely scatter. And every cell here measures the plugboard tier with the rotor

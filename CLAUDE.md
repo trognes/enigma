@@ -1857,22 +1857,44 @@ are read from a **data directory** (filenames built as
   > costs **−178 breaks per 1000** — 14× the size of the win being chased —
   > while lambda = 0 costs −22.
   >
-  > ⚠️ **The cap above L=176 is now TESTED, and 30 is TOO LOW there — the
-  > shipped rule is known-wrong in that band and has not been changed.** At
-  > L=200 and the operating budget (`-R 8`, 6000 paired trials), lambda 45 and
-  > 65 beat the capped 30 by **+32 and +37 breaks of 6000** (z = 2.67 and
-  > 2.97), i.e. ~+0.6pp of break50 on a 92.75% base. So the L=167 grid's
-  > "faint hint" (lambda 40 at z = +1.2, ns) was real.
+  > ⚠️ **The cap above L=176 is now TESTED THREE TIMES, and 30 is TOO LOW
+  > there — the shipped rule is known-wrong in that band and has not been
+  > changed.** At L=200 and the operating budget (`-R 8`, 6000 paired trials),
+  > lambda 45 and 65 beat the capped 30 by **+32 and +37 breaks of 6000**
+  > (z = 2.67 and 2.97), i.e. ~+0.6pp of break50 on a 92.75% base. So the
+  > L=167 grid's "faint hint" (lambda 40 at z = +1.2, ns) was real. Across the
+  > whole band the cap binds in — L = 177/190/215/240, 8000 paired trials each
+  > — lambda 45 beats it by **+107 of 32 000** (z = +3.89) and lambda 65 by +79
+  > (z = +2.48). §13.
   >
-  > **It is not shipped because ONE length cannot fix a rule.** Lining up the
-  > measured plateau midpoints — lambda ≈ 10 at L ≈ 65, ≈ 20 at L = 100, ≈ 55
-  > at L = 200 — implies an exponent near **1.5**, steeper than the shipped
-  > linear rule (`0.17·L` predicts 34 at L=200) *and* than the `sd`-ratio
-  > argument the `-S k` entry makes (`1.1·√L` predicts 33). Both candidate
-  > theories undershoot in the same direction, which is suggestive; three
-  > plateau midpoints, two of them soft, are not a rule — and the note above
-  > about a fitted line fitting a plateau is what happened the last time this
-  > evidence shape was trusted.
+  > **A length-scaled replacement then WON HELD OUT**, which is the strongest
+  > form of this result: `0.25·L` applied as a rule beats the shipped
+  > `min(0.17·L, 30)` by **+65 breaks of 32 000** (z = +2.35, all four lengths
+  > positive) on a seed that had no hand in choosing 0.25 — but at **half** the
+  > size the selecting seed implied (+107 → +65, and ~2× at each end
+  > separately), which is the winner's curse this file records eating two
+  > earlier optima. §14.
+  >
+  > **It is STILL not shipped, and the reason has changed: the SHAPE is
+  > undetermined, not the direction.** No run compares a length-scaled lambda
+  > against a raised **flat** one, and the held-out per-length deltas (+27, +7,
+  > +14, +17) carry **no length trend** — equally consistent with "any lambda
+  > near 50 beats 30 in this band". §13's sign-flip discriminator (lambda 65
+  > minus 45 reading −24, −24, +10, +10 in length order) is suggestive and each
+  > of its cells is about one SE. The arm that separates them is a flat
+  > lambda ≈ 50 paired against `0.25·L` across the band on a fresh seed.
+  > Separately, `0.25·L` is **unbounded** where the shipped rule caps (100 at
+  > L=400, with nothing measured at the operating budget above L=240), and the
+  > error asymmetry says an unbounded rule is the wrong thing to guess at.
+  >
+  > Lining up the measured plateau midpoints — lambda ≈ 10 at L ≈ 65, ≈ 20 at
+  > L = 100, ≈ 55 at L = 200 — implies an exponent near **1.5**, steeper than
+  > the shipped linear rule (`0.17·L` predicts 34 at L=200) *and* than the
+  > `sd`-ratio argument the `-S k` entry makes (`1.1·√L` predicts 33). Both
+  > candidate theories undershoot in the same direction, which is suggestive;
+  > three plateau midpoints, two of them soft, are not a rule — and the note
+  > above about a fitted line fitting a plateau is what happened the last time
+  > this evidence shape was trusted.
   >
   > **A single-trajectory climb OVERSHOOTS the optimum by 1.5–2×, so do not
   > tune lambda at `-R 0`.** At L=200 the `-R 0` ladder peaks near lambda 90
@@ -1884,11 +1906,11 @@ are read from a **data directory** (filenames built as
   > saturates above L≈250 (98.7% break at 250, 100% at 400) and cannot measure
   > there at all.
   >
-  > **The band worth closing is therefore L = 177–250**, and it needs two or
-  > three more lengths in it at `-R 8`, not more trials at L=200. Above ~300
-  > is out of scope anyway: operational procedure split long messages, so
-  > those lengths are off-distribution for real traffic *and* too easy to
-  > discriminate scoring variants.
+  > **That band — L = 177–250 — is now measured** (§13, §14); what remains is
+  > the flat-versus-scaled arm above. Above ~300 is out of scope anyway:
+  > operational procedure split long messages, so those lengths are
+  > off-distribution for real traffic *and* too easy to discriminate scoring
+  > variants.
   >
   > **Pure IC is survivable at L=300 and catastrophic at L=200**, which bears
   > on where scoring work is worth doing: lambda = 10 000 (IC alone in

@@ -376,6 +376,54 @@ once already and withdrawn.  The next step is to A/B a CANDIDATE RULE as a
 rule -- section 14.
 
 
+====== 14. THE CANDIDATE RULE, HELD OUT: 0.25*L vs SHIPPED (seed 917) ======
+# -R 8, 8000 paired trials at each of L = 177, 190, 215, 240 (32 000 pairs)
+# arm      = lambda 0.25*L, applied AS A RULE (a different lambda per length)
+# baseline = the shipped min(0.17*L, 30), i.e. 30 at every one of these
+# seed 917 is HELD OUT: 0.25 was read off seed 83 in section 13, so seed 83
+# would test the seed and not the rule
+
+  L     lambda   arm vs base        delta   only-c/only-b       z     p
+  177   44.2     6979 vs 6952        +27     166/139         +1.55  0.136
+  190   47.5     7208 vs 7201         +7     124/117         +0.45  0.699
+  215   53.8     7627 vs 7613        +14      82/68          +1.14  0.289
+  240   60       7838 vs 7821        +17      43/26          +2.05  0.053
+
+  pooled  29652 vs 29587  (+65 of 32 000)   415/350   z +2.35  p 0.019
+          92.66% vs 92.46% of messages broken, +0.20pp
+
+THE RULE WINS HELD OUT, AND ALL FOUR LENGTHS ARE POSITIVE.  That is the
+question this section was run to answer and it answers it: the cap of 30 is
+too low across the band on a seed that had no hand in choosing 0.25, and a
+length-scaled replacement recovers +65 breaks of 32 000 (z +2.35).
+
+IT IS HALF THE SIZE SECTION 13 IMPLIED, AND THE SHRINK IS UNIFORM.  Against
+section 13's nearest flat arms the per-length deltas go +60 -> +27 at L=177
+and +36 -> +17 at L=240 -- almost exactly 2x at both ends, and pooled +107
+-> +65.  A ~2x shrink on a value selected from the seed it is then quoted on
+is the winner's curse this file has already recorded eating two nominal
+optima (reading 4).  The effect survived it; its SIZE did not.
+
+WHAT THIS DOES NOT SETTLE: SLOPE VERSUS A RAISED FLAT CAP.  Section 13's
+discriminator was a sign flip in lam65 - lam45 across the band, which needs
+a flat arm to test, and this run has none -- it compares the rule against
+the SHIPPED cap, not against a raised one.  Worse, the held-out per-length
+deltas (+27, +7, +14, +17) carry no length trend at all, which is equally
+consistent with "any lambda near 50 beats 30 here" as with "lambda must
+rise with L".  So the slope hypothesis is UNCONFIRMED, not confirmed, and
+the one arm that would separate them is a flat lambda ~50 run paired
+against 0.25*L on a fresh seed.
+
+NOT SHIPPED ON THIS ALONE, FOR TWO REASONS.  The undetermined shape is the
+first.  The second is that 0.25*L is unbounded where the shipped rule caps:
+at L=400 it reads 100, and nothing at the operating budget has been measured
+above L=240 -- the -R 0 ladder in section 12 is the only evidence up there
+and it is the biased proxy.  Any shipped version needs either a new cap or a
+measurement above the band, and the error asymmetry (reading 3, and section
+12's -488 per 2000 at lambda 1000) says an unbounded rule is the wrong
+default to guess at.
+
+
 THE READING
 =============================================================================
 
@@ -459,8 +507,16 @@ THE READING
    schedule and is still not directly comparable; what is now established is
    that the BREAK gain under -S k4f10 is ~1.9pp at L=167 and not zero.
 
-STILL OPEN.  The cap above L=176 is untested and the L=167 grid put lambda 40
-at +2.8 per 1000 (z +1.2, ns), a faint hint lambda might keep rising past 30.
+STILL OPEN.  The cap of 30 is now KNOWN WRONG above L=176 -- measured at one
+length (section 12), across the band (section 13) and against a candidate
+rule on a held-out seed (section 14, +65 of 32 000, z +2.35) -- and it is
+still what ships.  What is not known is the SHAPE of the replacement: no run
+yet compares a length-scaled lambda against a raised FLAT one, and the
+held-out per-length deltas show no length trend, so "0.25*L" and "any
+constant near 50" are not separated.  The one arm that separates them is a
+flat lambda ~50 paired against 0.25*L across L = 177-240 on a fresh seed.  A
+shipped rule would also need a cap or a measurement above L=240, since
+0.25*L is unbounded and the error is asymmetric.
 L=110 reads -4.9 per 1000 (z -1.57, ns) with flat cells either side, most
 likely scatter but the cell to re-check if this misbehaves.  And every cell
 here measures the plugboard tier with the rotor key GIVEN, so none of it
