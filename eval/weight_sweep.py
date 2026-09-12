@@ -215,7 +215,9 @@ def geometric(r):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["decay", "refine", "lam", "confirm"])
+    ap.add_argument("stage",
+                    choices=["decay", "refine", "lam", "confirm",
+                             "rule"])
     ap.add_argument("--target", choices=["a", "f"], default="f")
     ap.add_argument("--lengths", type=int, nargs="+", default=[100, 167])
     ap.add_argument("--trials", type=int, default=300)
@@ -230,6 +232,8 @@ def main():
     ap.add_argument("--lams", type=float, nargs="+",
                     default=[0, 5, 10, 15, 20, 25, 30, 40, 50,
                              65, 80, 100, 140])
+    ap.add_argument("--lam-rule", type=float, default=0.18,
+                    help="rule stage: lambda = K * L, against the\nbaked constant 30")
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--step", type=float, default=0.025,
                     help="decay: resolution in r")
@@ -279,6 +283,29 @@ def main():
                             best, cur = t, cand
                     print(f"  == best so far {cur} ({best})", flush=True)
             print(f"\nRESULT {args.stage}: {cur} with {best} breaks")
+        elif args.stage == "rule":
+            # Test lambda = K*L AS A RULE, the way it would ship -- each
+            # length gets its own lambda, against the baked constant.  Run
+            # this on lengths the grid never saw: confirming a fitted rule at
+            # the points it was fitted to is not a held-out test of the rule,
+            # only of the seed.
+            gt = gb = 0
+            for L in args.lengths:
+                lam = round(args.lam_rule * L, 1)
+                b = baseline(pool, args.seed, L, args.trials, args.target,
+                             args.restarts)
+                c = arm(pool, args.seed, L, args.trials, args.target,
+                        args.restarts, tuple(start), lam)
+                oc = sum(1 for x, y in zip(c, b) if x and not y)
+                ob = sum(1 for x, y in zip(c, b) if y and not x)
+                gt += sum(c)
+                gb += sum(b)
+                print(f"  L={L:<5} lam {lam:<6g} vs 30   "
+                      f"{sum(c):>5} vs {sum(b):<5} ({sum(c) - sum(b):+5})  "
+                      f"{oc:>4}/{ob:<4} z{zscore(oc, ob):+5.2f} "
+                      f"p={mcnemar(oc, ob):.4f}", flush=True)
+            print(f"\n  pooled: {gt} vs {gb} ({gt - gb:+d}) over "
+                  f"{args.trials * len(args.lengths)} paired trials")
         else:
             for spec in args.arms:
                 if ":" in spec:
