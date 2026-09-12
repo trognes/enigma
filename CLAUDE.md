@@ -1774,18 +1774,34 @@ are read from a **data directory** (filenames built as
   >
   > **And the mixture itself is worth little there.** Switching it off
   > entirely — `(1,0,0,0)`, i.e. plain quad — costs 34 breaks of 6000 on a
-  > held-out seed (p = 0.105), and removing IC as well costs 36. So the whole
-  > `-a`+`-f` apparatus is ~**0.6pp of break50** on wehrmacht under the
-  > recommended recipe. That does **not** contradict the +1–2pp and
-  > +3.0…+4.4pp recorded here, which are **mean %-correct** — this file's own
-  > notes record the two moving independently — but it does mean the *break*
-  > gain under `-S k4f10` is small.
+  > held-out seed (p = 0.105). So the ORDER-MIXING half of `-a` is ~0.6pp of
+  > break50 on wehrmacht under the recommended recipe, which does not
+  > contradict the +1–2pp above (that is **mean %-correct**, which this file's
+  > own notes record as moving independently of break counts).
   >
-  > **The mechanism is the `k4` pre-pass, which is mono+IC.** IC is already in
-  > the schedule, so adding it again at the target has little left to give:
-  > `-f` against `-a` measures **+6 breaks of 6000, p = 0.824** on a held-out
-  > seed. The same redundancy the `-K` entry documents, in a second place.
-  > `eval/weight_sweep.py`, `ENHANCEMENTS.md` item 21.
+  > ⚠️ **The IC half is a different matter, and an earlier version of this
+  > entry had it backwards.** It said `-f` over `-a` was ~zero on wehrmacht
+  > (**+6 breaks of 6000, p = 0.824**) because the `k4` pre-pass is mono+IC
+  > and already supplies IC. Measured against the **shipped λ rule** on a
+  > fresh seed, `-a` instead loses **292 breaks of 32 000** (z = −6.68), and
+  > the deficit is **entirely at operational length**: −134 at L=100 and −152
+  > at L=167, against −2 and −4 at L=40 and 60 (z = −0.2 each). IC at the
+  > target is carrying ~**1.9pp of break50 at L=167**.
+  >
+  > **It failed in two ways that compound, both of them ones this file warns
+  > about elsewhere.** Its baseline was the flat λ=30 that the length rule
+  > then replaced, so it measured `-a` against a *mistuned* `-f` — and two of
+  > its three lengths are where that mistuning bites, which flatters `-a`. And
+  > it was **pooled** over lengths that disagree, the same failure recorded
+  > for the λ grid in the `-f` entry below.
+  >
+  > **The mechanism was independently TRUE, which is what made the wrong
+  > conclusion persuasive.** `k4` really is mono+IC, and that really does
+  > explain the null cells at L=40 and 60 — where the rule sets λ to 6.8 and
+  > 10.2, so the baseline is near `-a` anyway. It does not reach the long
+  > cells. **Beware a result that arrives with its own explanation attached**
+  > — the `--biased-random` entry records the same trap, on a z = −3.08 that
+  > did not replicate. `eval/weight_sweep.py` §11, `ENHANCEMENTS.md` item 21.
 
   The linear
   (Jelinek-Mercer) form was tried and **lost** (the conditional reframing it
@@ -1870,7 +1886,13 @@ are read from a **data directory** (filenames built as
   Measured **+3.0 to
   +4.4pp** mean %-correct over `-a` on english, german AND wehrmacht (n=1800
   each), the first scoring change in this codebase that is **not dependent on
-  the writing style** -- expected, since IC is language-independent. Wall-time
+  the writing style** -- expected, since IC is language-independent. On
+  wehrmacht it also holds on **break50** under the recommended `k4f10`
+  schedule and the shipped λ rule — `-a` loses **292 breaks of 32 000**
+  (z = −6.68) — but only at operational length: the deficit is −134 at L=100
+  and −152 at L=167 against nothing at L=40 and 60, where the rule's λ is
+  small enough that `-f` is near `-a` anyway. See the `-a` entry, which
+  carries the retraction of an earlier "~zero" reading of this. Wall-time
   neutral (the histogram is cheap beside the gather-bound decode). **It is a
   better CLIMB, not better discrimination**: a decomposition
   (`archived/PERFORMANCE.md` 6.4) puts the whole gain in surface reshaping

@@ -2858,12 +2858,20 @@ other language keeps a flat 30 and is byte-identical.
   optimum is flat from lambda 4 to 16, so the constant is a *choice* (err low —
   at L=100 lambda 140 costs −178 per 1000, 14× the win being chased) and not a
   measurement.
-- **`-f` over `-a` is now ~zero on wehrmacht**: +6 breaks of 6000, p = 0.824.
-  `CLAUDE.md`'s +3.0…+4.4pp predates `-S k4f10`, and **`k4` is mono+IC** — the
-  pre-pass already supplies IC, so adding it at the target has little left to
-  give. Not a contradiction (that figure is mean %-correct, a metric this repo
-  records as moving independently of break counts), but it does mean the break
-  gain from the fused target under the recommended schedule is small.
+- **`-f` over `-a` is REAL on wehrmacht, and this list said the opposite
+  first.** Against the shipped λ rule on a fresh seed, `-a` loses **292 breaks
+  of 32 000** (z = −6.68), concentrated entirely at operational length: −134
+  at L=100 and −152 at L=167, against −2 and −4 at L=40 and 60 (z = −0.2
+  each). The retracted claim was "+6 breaks of 6000, p = 0.824", and it
+  compounded two failures this repo already documents — a **mistuned
+  baseline** (the flat λ=30 the rule then replaced, so `-a` was measured
+  against a handicapped `-f` at two of its three lengths) and **pooling over
+  lengths that disagree**, the same failure the bullet above records for the λ
+  grid. Its mechanism — `k4` is mono+IC, so the pre-pass already supplies IC —
+  is independently true and still explains the short cells, where the rule
+  sets λ to 6.8 and 10.2 and the baseline is near `-a` anyway. That is what
+  made the wrong conclusion persuasive enough to write down twice: **beware a
+  result that arrives with its own explanation attached.**
 
 **Still open.** The cap above L=176 is untested, and the L=167 grid put
 lambda = 40 at +2.8 per 1000 (z = +1.2, ns) — a faint hint lambda might keep

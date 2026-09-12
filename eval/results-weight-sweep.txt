@@ -218,6 +218,42 @@
   arm      1,0.6,0.3,0.15       lam 10     6427 ( +321)  1636/1315 z+5.91 p=0.000  | +54(90/36,z+4.8)  +67(168/101,z+4.1)  +103(269/166,z+4.9)  +100(352/252,z+4.1)  +1(374/373,z+0.0)  -4(383/387,z-0.1)
 
 =============================================================================
+=============== 11. -a vs -f UNDER THE RULE (seed 47) ===============
+# 8000 paired trials per length [40, 60, 100, 167], -R 8, seed 47
+# baseline = the SHIPPED row, i.e. lambda = min(0.17*L, 30) and not a constant
+# candidate = lambda 0, which IS -a: verified byte-identical to `-S k4a10 -a`
+# over 18 configurations, and pinned by a suite check
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  arm      1,0.6,0.3,0.15       lam 0     10326 ( -292)   810/1102 z-6.68 p=0.000  | -2(53/55,z-0.2)  -4(194/198,z-0.2)  -134(378/512,z-4.5)  -152(185/337,z-6.7)
+
+THIS SUPERSEDES SECTION 4's lambda-0 ARM AND READING 6 BELOW.  Against the
+shipped rule, -f beats -a by 292 breaks of 32000 (z -6.68) -- NOT the "~zero"
+that section 4 measured at +6 of 6000 (p = 0.824).
+
+Two things were wrong with that earlier figure, and they compound:
+
+  * ITS BASELINE WAS THE FLAT 30, which sections 6-10 then showed is much too
+    high below ~75 letters.  So it compared -a against a MISTUNED -f, and two
+    of its three lengths (60, and 100 at lambda 17) are where the mistuning
+    bites.  Handicapping the baseline flatters the candidate.
+
+  * IT WAS POOLED.  The effect is entirely at L >= 100: -2 and -4 at L = 40
+    and 60 (z -0.2 each, nothing) against -134 and -152 at L = 100 and 167.
+    A single total over lengths that behave differently is the exact failure
+    reading 4 records for the lambda grid, repeated on a different question.
+
+The two runs cannot be decomposed against each other, because section 4
+printed only the candidate's per-length counts and not its per-length DELTAS,
+so what its +6 was hiding is not recoverable from this file.
+
+The shape makes sense: at L = 40 and 60 the rule sets lambda to 6.8 and 10.2,
+so the baseline is itself near -a and there is little to measure; at L = 167
+it sets 28.4, and IC is then carrying ~1.9pp of break50.  So -f's value on
+wehrmacht is REAL and is an OPERATIONAL-LENGTH effect, which is the opposite
+of the short-message story the pooled number told.
+
+
 THE READING
 =============================================================================
 
@@ -268,13 +304,38 @@ THE READING
    between 16 and 20, and its cap bites at L=176 rather than exactly at 167,
    leaving operational length off the kink.
 
-6. -f OVER -a IS NOW ~ZERO ON WEHRMACHT: +6 breaks of 6000, p = 0.824
-   (section 4, the lambda 0 arm).  CLAUDE.md's +3.0..+4.4pp predates
-   -S k4f10, and k4 IS mono+IC -- the pre-pass already supplies IC, so adding
-   it at the target has little left to give.  Not a contradiction: that figure
-   is mean %-correct, which this repo records as moving independently of break
-   counts.  But the break gain from the fused target under the recommended
-   schedule is small, and the whole -a+-f apparatus is ~0.6pp of break50 here.
+6. -f OVER -a IS REAL ON WEHRMACHT, AND IS AN OPERATIONAL-LENGTH EFFECT:
+   -292 breaks of 32000, z -6.68 (section 11), concentrated entirely at
+   L >= 100 (-134 and -152 at L = 100 and 167; -2 and -4 at L = 40 and 60,
+   z -0.2 each).
+
+   THIS REVERSES WHAT THIS FILE FIRST CONCLUDED, and the retraction is the
+   most useful thing in it.  Section 4 read +6 of 6000 (p = 0.824) and was
+   written up here as "-f over -a is now ~zero", with a mechanism attached:
+   k4 is mono+IC, so the pre-pass already supplies IC and adding it at the
+   target has little left to give.  The mechanism is still true and still
+   explains the SHORT-length cells; it does not explain the long ones, and
+   the conclusion drawn from it was wrong.
+
+   Both defects are ones this file already warns about elsewhere:
+
+     * A MISTUNED BASELINE.  Section 4's baseline was the flat lambda 30,
+       which sections 6-10 then showed is far too high below ~75 letters --
+       so it measured -a against a handicapped -f, which flatters -a.
+
+     * POOLING OVER LENGTHS THAT DISAGREE.  Exactly the failure reading 4
+       records for the lambda grid ("a pooled optimum smears a
+       length-dependent one away"), repeated on a different question a few
+       runs later.  Per-length reporting existed by then; this arm simply
+       predated its use.
+
+   So: beware a result that arrives with a mechanism that sounds right.  The
+   mechanism was independently correct, which is what made the wrong
+   conclusion persuasive enough to write down twice.
+
+   CLAUDE.md's +3.0..+4.4pp for -f over -a is mean %-correct on a different
+   schedule and is still not directly comparable; what is now established is
+   that the BREAK gain under -S k4f10 is ~1.9pp at L=167 and not zero.
 
 STILL OPEN.  The cap above L=176 is untested and the L=167 grid put lambda 40
 at +2.8 per 1000 (z +1.2, ns), a faint hint lambda might keep rising past 30.
