@@ -1375,7 +1375,7 @@ which is Batch C and may not even be the same network.
 
 **4. Known-word and X-segmentation bonuses — MEASURED DOWN; do not add them to
 the score.** The idea: after each rotor setting's climb, score the candidate
-plaintext for whole known words and for the X word-separator rate, and add that
+plaintext for whole known words and for the X segmentation rate, and add that
 as a bonus. It is what a human reader does with a decrypt the quadgram model has
 undervalued, and it looked strong — on FTNBK, the message that prompted it, the
 combination lifts the true key from **z = 0.90 to 11.21**, across the 6.15 bar a

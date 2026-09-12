@@ -563,7 +563,8 @@ thread count for a given seed.
 - **`-v` / `-h`** — Version / help
 
 For **authentic telegraphic German traffic** (real Wehrmacht messages: `X`
-separators, `Q` for *ch*, spelled-out numbers) the prose German tables mis-score
+fencing abbreviations, numerals and names rather than separating every word;
+`Q` for *ch*; spelled-out numbers) the prose German tables mis-score
 the plaintext. Use **`-l wehrmacht`**, a domain-matched scoring language built
 from the published statistics of ~20 000 letters of 1941 Enigma decrypts: it
 recovers **+20.9 pp** more (mean %-letters-correct) over a 69-message held-out
