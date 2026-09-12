@@ -89,9 +89,13 @@ int main(int argc, char * * argv)
 
   parse_args(argc, argv);
 
-  ic_blend_init();
   hist_init();
   readciphertext();
+  /* AFTER readciphertext, because wehrmacht's -f lambda is 0.25*L and so
+     needs the length.  Before intscore_init, which bakes that lambda
+     into the --int integer coefficients -- if the two disagreed, the integer
+     and double paths would score differently. */
+  ic_blend_init();
   intscore_init();   /* --int weights depend on the length just read */
 
   /* Before show_settings(), which reports the hypothesis count -- it read 0 for a while

@@ -8,6 +8,41 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The `-a`/`-f` scoring coefficients are per language, and `wehrmacht`'s
+  `-f` IC weight now scales with the message: `0.25 × length`, uncapped,
+  instead of a flat 30.** Every other language keeps the previous constants
+  and is byte-identical. The coefficients had been fitted across four
+  *prose* languages and never retuned for telegraphic German, so the prose
+  fit sat underneath the recommended recipe for real traffic as an
+  assumption rather than a result.
+
+  A deep sweep found the **order weights are a plateau** — every cell from
+  `r = 0.35` to `1.2` in a geometric family lands within ±10 breaks of 1000,
+  a 3.4× range, with the shipping row on the plateau rather than at a peak —
+  so they did not move. The IC weight did: a baked constant cannot suit
+  every length, because IC's spread falls as ~`1/L` while the per-symbol
+  n-gram score's falls as ~`1/√L`. A flat 30 is much too high below ~75
+  letters — held out on three seeds and 152 000 paired trials, scaling is
+  worth **+586 breaks of 64 000 at L ≤ 70** (z = +10.95) against +3 of
+  88 000 at L ≥ 80 (z = +0.04), i.e. 6.54% → 7.46% of short messages broken,
+  **+14% relative** — and too low above ~175.
+
+  The first version of this rule capped at 30 and that cap was then measured
+  wrong at three scales: at one length (L=200, weights 45 and 65 beating 30
+  by +32 and +37 of 6000, z = 2.67 and 2.97), across the whole band the cap
+  bound in (L = 177…240, **+107 of 32 000** for weight 45, z = +3.89), and
+  finally as a rule — `0.25 × length` beats `min(0.17 × length, 30)` by
+  **+65 breaks of 32 000** (z = +2.35, all four lengths positive) on a
+  held-out seed that had no hand in choosing 0.25. It ships uncapped because
+  the cap is precisely what was measured wrong; nothing is measured at the
+  operating budget above L=240, where operational procedure split messages
+  anyway. Whether a raised *flat* weight would do as well is not settled.
+
+  `show_settings()` prints the effective weight with the length it came
+  from, since a rule-derived weight varies per message and a log omitting it
+  cannot be compared against another run of the same command.
+  `$ENIGMA_IC_BLEND` still overrides the rule.
+
 - **The tool cross-compiles for Windows** (`make clean && make
   CXX=x86_64-w64-mingw32-g++-posix`). The only POSIX call MinGW-w64 lacks
   is `getrusage`, used once for the peak-memory figure on the last line;

@@ -2811,6 +2811,108 @@ against the register budget that occupancy already depends on, which is why
 it stays a gap rather than a task. It matters most for whoever runs the probe
 on a CUDA card, where that budget differs.
 
+**21. `-a`/`-f` coefficients tuned on `wehrmacht` — DONE. The order weights
+did not move; `-f`'s lambda is now `0.25·L`, uncapped.** The four log-linear
+weights were fitted across four *prose* languages in PR #106 and had never
+been retuned for telegraphic German, so the prose fit sat underneath the
+recommended recipe for real traffic as an assumption rather than a result.
+Swept end to end on authentic HG Nord decrypts, paired `break50`, plugboard
+tier, both arms from one binary via `$ENIGMA_AW` / `$ENIGMA_IC_BLEND`
+(`eval/weight_sweep.py`).
+
+**The order weights are a PLATEAU and were left alone.** At 0.025 resolution
+over `(1, r, r², r³)`, every cell from **r = 0.35 to 1.2 lands within ±10
+breaks of 1000** — a 3.4× range — with the shipping row on the plateau rather
+than at a peak. Turning the mixture off entirely costs 34 breaks of 6000
+(p = 0.105) on a held-out seed. **The pre-registered prediction that
+wehrmacht would want higher low-order weights FAILED** — recorded because the
+hypothesis behind it (that `-a` compensates for a defective quad table) is
+otherwise well supported, and this was its sharpest test.
+
+**`-f`'s lambda was the real find, and nobody had looked for it.** A baked
+constant cannot suit every length, since IC's spread falls as ~`1/L` while the
+per-symbol n-gram score's falls as ~`1/√L`. Held out on **three seeds and
+152 000 paired trials**:
+
+| band | effect | z |
+|---|---:|---:|
+| L ≤ 70 | **+586 breaks of 64 000** | **+10.95** |
+| L ≥ 80 | +3 of 88 000 | +0.04 |
+
+6.54% → 7.46% of short messages broken, **+14% relative**, for a different
+constant and nothing else. Shipped as `lang_coeffs` in `src/scoring.cc`; every
+other language keeps a flat 30 and is byte-identical.
+
+**Four things worth carrying forward.**
+
+- **The pooled column would have given the wrong answer**, reading a shallow
+  peak at lambda 15 (p = 0.059) because it averages +76 at L=60 against −100
+  at L=167. Per-length reporting is what found this; a pooled optimum smears a
+  length-dependent one away.
+- **The winner's curse ate two nominal optima**, exactly as pre-registered.
+  The stage-1 and stage-2 grid winners read +10 and +7 per 1000 and re-measured
+  at +2.5 and +1.8 on a fresh seed — a ~4× shrink from selecting a maximum
+  over 49 and 13 cells. Without the `confirm` stage both would have shipped.
+- **A fitted line was fitting a plateau.** An earlier `0.18·L` came from three
+  per-length peaks, two of them weak; the full ladder shows the short-band
+  optimum is flat from lambda 4 to 16, so the constant is a *choice* (err low —
+  at L=100 lambda 140 costs −178 per 1000, 14× the win being chased) and not a
+  measurement.
+- **`-f` over `-a` is REAL on wehrmacht, and this list said the opposite
+  first.** Against the shipped λ rule on a fresh seed, `-a` loses **292 breaks
+  of 32 000** (z = −6.68), concentrated entirely at operational length: −134
+  at L=100 and −152 at L=167, against −2 and −4 at L=40 and 60 (z = −0.2
+  each). The retracted claim was "+6 breaks of 6000, p = 0.824", and it
+  compounded two failures this repo already documents — a **mistuned
+  baseline** (the flat λ=30 the rule then replaced, so `-a` was measured
+  against a handicapped `-f` at two of its three lengths) and **pooling over
+  lengths that disagree**, the same failure the bullet above records for the λ
+  grid. Its mechanism — `k4` is mono+IC, so the pre-pass already supplies IC —
+  is independently true and still explains the short cells, where the rule
+  sets λ to 6.8 and 10.2 and the baseline is near `-a` anyway. That is what
+  made the wrong conclusion persuasive enough to write down twice: **beware a
+  result that arrives with its own explanation attached.**
+
+**The cap was measured wrong and has been REMOVED — the shipped rule is now
+`0.25·L`, uncapped.** At L=200 and the operating budget (`-R 8`, 6000 paired
+trials) lambda 45 and 65 beat the capped 30 by +32 and +37 breaks of 6000
+(z = 2.67, 2.97) — ~+0.6pp of break50. The L=167 grid's faint hint
+(lambda 40 at z = +1.2, ns) was real. **Across the whole band the cap bound
+in** — L = 177/190/215/240, 8000 paired trials each — lambda 45 beat it by
+**+107 of 32 000** (z = +3.89) and 65 by +79 (z = +2.48); and the
+length-scaled replacement **won held out**, `0.25·L` beating
+`min(0.17·L, 30)` by **+65 of 32 000** (z = +2.35, all four lengths positive)
+on a seed that had no hand in choosing 0.25 — at **half** the size that seed
+implied, the winner's curse again. §12, §13, §14.
+
+**Still open: the SHAPE — slope versus a raised flat cap.** No run compares a
+length-scaled lambda against a raised **flat** one, and the held-out
+per-length deltas (+27, +7, +14, +17) carry no length trend, so "`0.25·L`"
+and "any constant near 50" are not separated; §13's sign flip (lambda 65 − 45
+reading −24, −24, +10, +10 in length order) is suggestive with each cell about
+one SE. So this ships as the better of two *measured* options rather than as a
+fitted law. The measured plateau midpoints (≈10 at L≈65, ≈20 at L=100, ≈55 at
+L=200) imply an exponent near 1.5, steeper than the linear rule and than the
+`1.1·√L` sd-ratio argument (predicts 33 at L=200) — three midpoints being the
+same evidence shape that produced the withdrawn `0.18·L` above.
+
+**What would close it:** one arm — **flat lambda ≈ 50 paired against `0.25·L`
+across L = 177–240 on a fresh seed**. The other loose end is that the rule is
+unbounded with nothing measured at the operating budget above L=240 (it asks
+for 100 at L=400); it ships that way because the cap is exactly what was
+measured wrong, and re-imposing one at an unmeasured height would be a fresh
+guess. Not `-R 0` — a single-trajectory climb overshoots the optimum by 1.5–2×
+(it peaks near lambda 90 at L=200, where the real budget reads 90 as nothing).
+`-R 8` saturates above L≈250 and >300 is out of scope.
+`eval/results-weight-sweep.txt` §12–§14.
+
+L=110 reads −4.9 per 1000 (z = −1.57, ns) with flat cells either side, most
+likely scatter. And every cell here measures the plugboard tier with the rotor
+key given, so none of it establishes the coefficients are right for a full
+unknown-key sweep — where `-a`'s gain being climb-surface rather than
+discrimination means they could differ. → `CLAUDE.md`, the `-a` and `-f`
+entries.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.

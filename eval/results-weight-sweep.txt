@@ -1,0 +1,526 @@
+# -a / -f coefficient sweep on wehrmacht  (ENHANCEMENTS.md item 21)
+#
+# Paired break50, plugboard tier (rotor key given, 10-pair board hidden),
+# authentic HG Nord decrypts, -R 8, recommended recipe.  Both arms from ONE
+# binary via $ENIGMA_AW / $ENIGMA_IC_BLEND, so nothing differs but the
+# coefficients.  Fit on seed 11; confirm on seeds 23 / 37 / 43.
+#
+# VERDICT: the order weights sit on a plateau and did not move.  -f's lambda
+# is now min(0.17*L, 30) for wehrmacht; every other language keeps a flat 30.
+
+=============== 1. -a order weights: decay locator (seed 11) ===============
+# 500 paired trials per length [100, 167], -R 8, seed 11
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  r=0        1,0,0,0                            605 vs 622   ( -17)    34/51   p=0.082  [183, 422]
+  r=0.025    1,0.025,0.000625,1.5625e-05             610 vs 622   ( -12)    35/47   p=0.224  [185, 425]
+  r=0.05     1,0.05,0.0025,0.000125             609 vs 622   ( -13)    34/47   p=0.182  [185, 424]
+  r=0.075    1,0.075,0.005625,0.000421875             606 vs 622   ( -16)    33/49   p=0.097  [183, 423]
+  r=0.1      1,0.1,0.01,0.001                   602 vs 622   ( -20)    31/51   p=0.035  [182, 420]
+  r=0.125    1,0.125,0.015625,0.00195312             605 vs 622   ( -17)    34/51   p=0.082  [182, 423]
+  r=0.15     1,0.15,0.0225,0.003375             603 vs 622   ( -19)    25/44   p=0.029  [178, 425]
+  r=0.175    1,0.175,0.030625,0.00535937             606 vs 622   ( -16)    27/43   p=0.072  [185, 421]
+  r=0.2      1,0.2,0.04,0.008                   606 vs 622   ( -16)    25/41   p=0.064  [184, 422]
+  r=0.225    1,0.225,0.050625,0.0113906             611 vs 622   ( -11)    25/36   p=0.200  [187, 424]
+  r=0.25     1,0.25,0.0625,0.015625             615 vs 622   (  -7)    28/35   p=0.450  [190, 425]
+  r=0.275    1,0.275,0.075625,0.0207969             614 vs 622   (  -8)    24/32   p=0.350  [188, 426]
+  r=0.3      1,0.3,0.09,0.027                   612 vs 622   ( -10)    19/29   p=0.193  [186, 426]
+  r=0.325    1,0.325,0.105625,0.0343281             618 vs 622   (  -4)    20/24   p=0.652  [192, 426]
+  r=0.35     1,0.35,0.1225,0.042875             621 vs 622   (  -1)    23/24   p=1.000  [190, 431]
+  r=0.375    1,0.375,0.140625,0.0527344             622 vs 622   (  +0)    22/22   p=1.000  [193, 429]
+  r=0.4      1,0.4,0.16,0.064                   623 vs 622   (  +1)    21/20   p=1.000  [195, 428]
+  r=0.425    1,0.425,0.180625,0.0767656             622 vs 622   (  +0)    20/20   p=1.000  [193, 429]
+  r=0.45     1,0.45,0.2025,0.091125             621 vs 622   (  -1)    15/16   p=1.000  [197, 424]
+  r=0.475    1,0.475,0.225625,0.107172             617 vs 622   (  -5)    11/16   p=0.442  [195, 422]
+  r=0.5      1,0.5,0.25,0.125                   614 vs 622   (  -8)     8/16   p=0.152  [196, 418]
+  r=0.525    1,0.525,0.275625,0.144703             623 vs 622   (  +1)     8/7    p=1.000  [199, 424]
+  r=0.55     1,0.55,0.3025,0.166375             618 vs 622   (  -4)     4/8    p=0.388  [197, 421]
+  r=0.575    1,0.575,0.330625,0.190109             625 vs 622   (  +3)    12/9    p=0.664  [203, 422]
+  r=0.6      1,0.6,0.36,0.216                   625 vs 622   (  +3)    12/9    p=0.664  [201, 424]
+  r=0.625    1,0.625,0.390625,0.244141             628 vs 622   (  +6)    13/7    p=0.263  [204, 424]
+  r=0.65     1,0.65,0.4225,0.274625             632 vs 622   ( +10)    22/12   p=0.121  [204, 428]
+  r=0.675    1,0.675,0.455625,0.307547             623 vs 622   (  +1)    18/17   p=1.000  [198, 425]
+  r=0.7      1,0.7,0.49,0.343                   624 vs 622   (  +2)    19/17   p=0.868  [197, 427]
+  r=0.725    1,0.725,0.525625,0.381078             625 vs 622   (  +3)    22/19   p=0.755  [198, 427]
+  r=0.75     1,0.75,0.5625,0.421875             624 vs 622   (  +2)    23/21   p=0.880  [194, 430]
+  r=0.775    1,0.775,0.600625,0.465484             624 vs 622   (  +2)    26/24   p=0.888  [195, 429]
+  r=0.8      1,0.8,0.64,0.512                   619 vs 622   (  -3)    26/29   p=0.788  [195, 424]
+  r=0.825    1,0.825,0.680625,0.561516             623 vs 622   (  +1)    30/29   p=1.000  [200, 423]
+  r=0.85     1,0.85,0.7225,0.614125             619 vs 622   (  -3)    29/32   p=0.798  [197, 422]
+  r=0.875    1,0.875,0.765625,0.669922             621 vs 622   (  -1)    30/31   p=1.000  [200, 421]
+  r=0.9      1,0.9,0.81,0.729                   619 vs 622   (  -3)    30/33   p=0.801  [198, 421]
+  r=0.925    1,0.925,0.855625,0.791453             622 vs 622   (  +0)    33/33   p=1.000  [200, 422]
+  r=0.95     1,0.95,0.9025,0.857375             621 vs 622   (  -1)    29/30   p=1.000  [197, 424]
+  r=0.975    1,0.975,0.950625,0.926859             628 vs 622   (  +6)    38/32   p=0.550  [205, 423]
+  r=1        1,1,1,1                            624 vs 622   (  +2)    36/34   p=0.905  [202, 422]
+  r=1.025    1,1.025,1.05062,1.07689             626 vs 622   (  +4)    36/32   p=0.716  [201, 425]
+  r=1.05     1,1.05,1.1025,1.15763              624 vs 622   (  +2)    35/33   p=0.904  [201, 423]
+  r=1.075    1,1.075,1.15562,1.2423             626 vs 622   (  +4)    37/33   p=0.720  [202, 424]
+  r=1.1      1,1.1,1.21,1.331                   621 vs 622   (  -1)    38/39   p=1.000  [196, 425]
+  r=1.125    1,1.125,1.26562,1.42383             622 vs 622   (  +0)    38/38   p=1.000  [196, 426]
+  r=1.15     1,1.15,1.3225,1.52087              622 vs 622   (  +0)    40/40   p=1.000  [197, 425]
+  r=1.175    1,1.175,1.38063,1.62223             626 vs 622   (  +4)    41/37   p=0.734  [199, 427]
+  r=1.2      1,1.2,1.44,1.728                   623 vs 622   (  +1)    41/40   p=1.000  [198, 425]
+
+=============== 2. -f lambda, coarse (seed 11) ===============
+# 500 paired trials per length [100, 167], -R 8, seed 11
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  lam0       1,0.6,0.3,0.15         lam 0       611 vs 622   ( -11)    51/62   p=0.347  [188, 423]
+  lam5       1,0.6,0.3,0.15         lam 5       614 vs 622   (  -8)    54/62   p=0.516  [193, 421]
+  lam10      1,0.6,0.3,0.15         lam 10      624 vs 622   (  +2)    50/48   p=0.920  [200, 424]
+  lam15      1,0.6,0.3,0.15         lam 15      629 vs 622   (  +7)    42/35   p=0.494  [198, 431]
+  lam20      1,0.6,0.3,0.15         lam 20      627 vs 622   (  +5)    32/27   p=0.603  [199, 428]
+  lam25      1,0.6,0.3,0.15         lam 25      614 vs 622   (  -8)    15/23   p=0.256  [192, 422]
+  lam30      1,0.6,0.3,0.15         lam 30      622 vs 622   (  +0)     0/0    p=1.000  [199, 423]
+  lam40      1,0.6,0.3,0.15         lam 40      616 vs 622   (  -6)    27/33   p=0.519  [190, 426]
+  lam50      1,0.6,0.3,0.15         lam 50      599 vs 622   ( -23)    31/54   p=0.017  [177, 422]
+  lam65      1,0.6,0.3,0.15         lam 65      591 vs 622   ( -31)    35/66   p=0.003  [168, 423]
+  lam80      1,0.6,0.3,0.15         lam 80      570 vs 622   ( -52)    26/78   p=0.000  [151, 419]
+  lam100     1,0.6,0.3,0.15         lam 100     546 vs 622   ( -76)    25/101  p=0.000  [131, 415]
+  lam140     1,0.6,0.3,0.15         lam 140     518 vs 622   (-104)    23/127  p=0.000  [110, 408]
+
+=============== 3. -a decay, no IC (seed 11) ===============
+# 500 paired trials per length [100, 167], -R 8, seed 11
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15)
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  r=0        1,0,0,0                            587 vs 611   ( -24)    32/56   p=0.014  [174, 413]
+  r=0.025    1,0.025,0.000625,1.5625e-05             591 vs 611   ( -20)    32/52   p=0.038  [175, 416]
+  r=0.05     1,0.05,0.0025,0.000125             595 vs 611   ( -16)    32/48   p=0.093  [178, 417]
+  r=0.075    1,0.075,0.005625,0.000421875             591 vs 611   ( -20)    30/50   p=0.033  [174, 417]
+  r=0.1      1,0.1,0.01,0.001                   594 vs 611   ( -17)    31/48   p=0.071  [173, 421]
+  r=0.125    1,0.125,0.015625,0.00195312             599 vs 611   ( -12)    30/42   p=0.195  [180, 419]
+  r=0.15     1,0.15,0.0225,0.003375             593 vs 611   ( -18)    27/45   p=0.044  [176, 417]
+  r=0.175    1,0.175,0.030625,0.00535937             596 vs 611   ( -15)    30/45   p=0.105  [180, 416]
+  r=0.2      1,0.2,0.04,0.008                   596 vs 611   ( -15)    24/39   p=0.077  [174, 422]
+  r=0.225    1,0.225,0.050625,0.0113906             596 vs 611   ( -15)    27/42   p=0.091  [179, 417]
+  r=0.25     1,0.25,0.0625,0.015625             607 vs 611   (  -4)    31/35   p=0.712  [183, 424]
+  r=0.275    1,0.275,0.075625,0.0207969             605 vs 611   (  -6)    31/37   p=0.545  [183, 422]
+  r=0.3      1,0.3,0.09,0.027                   601 vs 611   ( -10)    24/34   p=0.237  [181, 420]
+  r=0.325    1,0.325,0.105625,0.0343281             601 vs 611   ( -10)    22/32   p=0.220  [179, 422]
+  r=0.35     1,0.35,0.1225,0.042875             600 vs 611   ( -11)    22/33   p=0.177  [178, 422]
+  r=0.375    1,0.375,0.140625,0.0527344             599 vs 611   ( -12)    21/33   p=0.134  [179, 420]
+  r=0.4      1,0.4,0.16,0.064                   604 vs 611   (  -7)    22/29   p=0.401  [181, 423]
+  r=0.425    1,0.425,0.180625,0.0767656             603 vs 611   (  -8)    19/27   p=0.302  [177, 426]
+  r=0.45     1,0.45,0.2025,0.091125             604 vs 611   (  -7)    16/23   p=0.337  [180, 424]
+  r=0.475    1,0.475,0.225625,0.107172             603 vs 611   (  -8)    13/21   p=0.229  [184, 419]
+  r=0.5      1,0.5,0.25,0.125                   603 vs 611   (  -8)     9/17   p=0.169  [181, 422]
+  r=0.525    1,0.525,0.275625,0.144703             604 vs 611   (  -7)     7/14   p=0.189  [181, 423]
+  r=0.55     1,0.55,0.3025,0.166375             610 vs 611   (  -1)     7/8    p=1.000  [184, 426]
+  r=0.575    1,0.575,0.330625,0.190109             606 vs 611   (  -5)     9/14   p=0.405  [182, 424]
+  r=0.6      1,0.6,0.36,0.216                   614 vs 611   (  +3)    15/12   p=0.701  [189, 425]
+  r=0.625    1,0.625,0.390625,0.244141             609 vs 611   (  -2)    15/17   p=0.860  [185, 424]
+  r=0.65     1,0.65,0.4225,0.274625             607 vs 611   (  -4)    17/21   p=0.627  [187, 420]
+  r=0.675    1,0.675,0.455625,0.307547             611 vs 611   (  +0)    21/21   p=1.000  [189, 422]
+  r=0.7      1,0.7,0.49,0.343                   612 vs 611   (  +1)    27/26   p=1.000  [189, 423]
+  r=0.725    1,0.725,0.525625,0.381078             607 vs 611   (  -4)    21/25   p=0.659  [184, 423]
+  r=0.75     1,0.75,0.5625,0.421875             611 vs 611   (  +0)    30/30   p=1.000  [186, 425]
+  r=0.775    1,0.775,0.600625,0.465484             609 vs 611   (  -2)    31/33   p=0.901  [187, 422]
+  r=0.8      1,0.8,0.64,0.512                   613 vs 611   (  +2)    32/30   p=0.899  [190, 423]
+  r=0.825    1,0.825,0.680625,0.561516             610 vs 611   (  -1)    30/31   p=1.000  [187, 423]
+  r=0.85     1,0.85,0.7225,0.614125             604 vs 611   (  -7)    31/38   p=0.470  [186, 418]
+  r=0.875    1,0.875,0.765625,0.669922             606 vs 611   (  -5)    31/36   p=0.625  [185, 421]
+  r=0.9      1,0.9,0.81,0.729                   602 vs 611   (  -9)    30/39   p=0.336  [185, 417]
+  r=0.925    1,0.925,0.855625,0.791453             603 vs 611   (  -8)    36/44   p=0.434  [187, 416]
+  r=0.95     1,0.95,0.9025,0.857375             602 vs 611   (  -9)    33/42   p=0.356  [190, 412]
+  r=0.975    1,0.975,0.950625,0.926859             603 vs 611   (  -8)    36/44   p=0.434  [187, 416]
+  r=1        1,1,1,1                            605 vs 611   (  -6)    37/43   p=0.576  [183, 422]
+  r=1.025    1,1.025,1.05062,1.07689             611 vs 611   (  +0)    41/41   p=1.000  [190, 421]
+  r=1.05     1,1.05,1.1025,1.15763              617 vs 611   (  +6)    45/39   p=0.586  [192, 425]
+  r=1.075    1,1.075,1.15562,1.2423             619 vs 611   (  +8)    45/37   p=0.440  [195, 424]
+  r=1.1      1,1.1,1.21,1.331                   614 vs 611   (  +3)    43/40   p=0.826  [190, 424]
+  r=1.125    1,1.125,1.26562,1.42383             607 vs 611   (  -4)    38/42   p=0.738  [186, 421]
+  r=1.15     1,1.15,1.3225,1.52087              608 vs 611   (  -3)    40/43   p=0.826  [187, 421]
+  r=1.175    1,1.175,1.38063,1.62223             611 vs 611   (  +0)    39/39   p=1.000  [190, 421]
+  r=1.2      1,1.2,1.44,1.728                   616 vs 611   (  +5)    44/39   p=0.661  [193, 423]
+
+=============== 4. winner's curse: confirm on seed 23 ===============
+# 2000 paired trials per length [60, 100, 167], -R 8, seed 23
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  arm        1,0.65,0.4225,0.274625 lam 30     2582 vs 2567  ( +15)    90/75   p=0.276  [167, 754, 1661]
+  arm        1,0.6,0.3,0.15         lam 15     2578 vs 2567  ( +11)   213/202  p=0.624  [182, 746, 1650]
+  arm        1,0,0,0                lam 30     2533 vs 2567  ( -34)   190/224  p=0.105  [140, 709, 1684]
+  arm        1,0.6,0.3,0.15         lam 0      2573 vs 2567  (  +6)   256/250  p=0.824  [175, 756, 1642]
+  arm        1,0,0,0                lam 0      2531 vs 2567  ( -36)   259/295  p=0.137  [165, 714, 1652]
+
+=============== 5. -f lambda, high power (seed 11) ===============
+# 8000 paired trials per length [60, 100, 167], -R 8, seed 11
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  lam5     1,0.6,0.3,0.15       lam 5     10259 (  -59)   905/964  z-1.36 p=0.180  | +76(237/161,z+3.8)  -35(456/491,z-1.1)  -100(212/312,z-4.4)
+  lam10    1,0.6,0.3,0.15       lam 10    10353 (  +35)   881/846  z+0.84 p=0.413  | +81(231/150,z+4.1)  +16(444/428,z+0.5)  -62(206/268,z-2.8)
+  lam15    1,0.6,0.3,0.15       lam 15    10393 (  +75)   806/731  z+1.91 p=0.059  | +72(207/135,z+3.9)  +31(409/378,z+1.1)  -28(190/218,z-1.4)
+  lam20    1,0.6,0.3,0.15       lam 20    10390 (  +72)   663/591  z+2.03 p=0.045  | +57(168/111,z+3.4)  +27(334/307,z+1.1)  -12(161/173,z-0.7)
+  lam25    1,0.6,0.3,0.15       lam 25    10382 (  +64)   427/363  z+2.28 p=0.025  | +33(104/71,z+2.5)  +34(216/182,z+1.7)  -3(107/110,z-0.2)
+  lam35    1,0.6,0.3,0.15       lam 35    10238 (  -80)   367/447  z-2.80 p=0.006  | -35(63/98,z-2.8)  -36(197/233,z-1.7)  -9(107/116,z-0.6)
+  lam40    1,0.6,0.3,0.15       lam 40    10238 (  -80)   565/645  z-2.30 p=0.023  | -44(100/144,z-2.8)  -58(296/354,z-2.3)  +22(169/147,z+1.2)
+
+=============== 6. lambda = 0.18*L as a RULE (seed 23) ===============
+# 8000 paired trials per length [40, 60, 80, 100, 140], -R 8, seed 23
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  L=40    lam 7.2    vs 30     165 vs 119   (  +46)    90/44   z+3.97 p=0.0001
+  L=60    lam 10.8   vs 30     702 vs 621   (  +81)   262/181  z+3.85 p=0.0001
+  L=80    lam 14.4   vs 30    1734 vs 1692  (  +42)   364/322  z+1.60 p=0.1174
+  L=100   lam 18     vs 30    2988 vs 3013  (  -25)   340/365  z-0.94 p=0.3661
+  L=140   lam 25.2   vs 30    5569 vs 5575  (   -6)   182/188  z-0.31 p=0.7950
+
+  pooled: 11158 vs 11020 (+138) over 40000 paired trials
+
+=============== 7. same rule, seed 37, new lengths ===============
+# 8000 paired trials per length [50, 70, 90, 110, 130], -R 8, seed 37
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  L=50    lam 9      vs 30     348 vs 281   (  +67)   175/108  z+3.98 p=0.0001
+  L=70    lam 12.6   vs 30    1141 vs 1073  (  +68)   318/250  z+2.85 p=0.0049
+  L=90    lam 16.2   vs 30    2361 vs 2361  (   +0)   352/352  z+0.00 p=1.0000
+  L=110   lam 19.8   vs 30    3760 vs 3799  (  -39)   290/329  z-1.57 p=0.1266
+  L=130   lam 23.4   vs 30    5007 vs 5010  (   -3)   222/225  z-0.14 p=0.9246
+
+  pooled: 12617 vs 12524 (+93) over 40000 paired trials
+
+=============== 8. L=100 at 32k trials, to settle it ===============
+# 32000 paired trials per length [100], -R 8, seed 37
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  L=100   lam 18     vs 30   12116 vs 12104 (  +12)  1432/1420 z+0.22 p=0.8368
+
+  pooled: 12116 vs 12104 (+12) over 32000 paired trials
+
+=============== 9. short-band lambda ladder (seed 11) ===============
+# 4000 paired trials per length [40, 50, 60, 70, 80, 90], -R 8, seed 11
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  lam4     1,0.6,0.3,0.15       lam 4      3177 ( +219)   893/674  z+5.53 p=0.000  | +27(55/28,z+3.0)  +57(95/38,z+4.9)  +42(118/76,z+3.0)  +71(197/126,z+4.0)  +9(200/191,z+0.5)  +13(228/215,z+0.6)
+  lam6     1,0.6,0.3,0.15       lam 6      3181 ( +223)   868/645  z+5.73 p=0.000  | +27(52/25,z+3.1)  +50(86/36,z+4.5)  +36(114/78,z+2.6)  +67(192/125,z+3.8)  +30(205/175,z+1.5)  +13(219/206,z+0.6)
+  lam8     1,0.6,0.3,0.15       lam 8      3196 ( +238)   855/617  z+6.20 p=0.000  | +22(47/25,z+2.6)  +63(99/36,z+5.4)  +45(118/73,z+3.3)  +66(181/115,z+3.8)  +33(204/171,z+1.7)  +9(206/197,z+0.4)
+  lam10    1,0.6,0.3,0.15       lam 10     3185 ( +227)   849/622  z+5.92 p=0.000  | +21(48/27,z+2.4)  +64(99/35,z+5.5)  +48(121/73,z+3.4)  +61(171/110,z+3.6)  +21(203/182,z+1.1)  +12(207/195,z+0.6)
+  lam13    1,0.6,0.3,0.15       lam 13     3165 ( +207)   792/585  z+5.58 p=0.000  | +20(49/29,z+2.3)  +49(84/35,z+4.5)  +52(117/65,z+3.9)  +60(160/100,z+3.7)  +13(191/178,z+0.7)  +13(191/178,z+0.7)
+  lam16    1,0.6,0.3,0.15       lam 16     3168 ( +210)   721/511  z+5.98 p=0.000  | +25(50/25,z+2.9)  +43(73/30,z+4.2)  +42(99/57,z+3.4)  +63(156/93,z+4.0)  +17(169/152,z+0.9)  +20(174/154,z+1.1)
+  lam20    1,0.6,0.3,0.15       lam 20     3081 ( +123)   570/447  z+3.86 p=0.000  | +13(36/23,z+1.7)  +36(57/21,z+4.1)  +36(87/51,z+3.1)  +33(119/86,z+2.3)  +21(128/107,z+1.4)  -16(143/159,z-0.9)
+  lam25    1,0.6,0.3,0.15       lam 25     3037 (  +79)   370/291  z+3.07 p=0.002  | +6(22/16,z+1.0)  +14(34/20,z+1.9)  +23(53/30,z+2.5)  +11(71/60,z+1.0)  +29(99/70,z+2.2)  -4(91/95,z-0.3)
+
+=============== 10. final: flat lambda 10 vs 30 (seed 43) ===============
+# 8000 paired trials per length [40, 50, 60, 70, 80, 90], -R 8, seed 43
+# baseline = the shipping row (1.0, 0.6, 0.3, 0.15) lam 30
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  arm      1,0.6,0.3,0.15       lam 10     6427 ( +321)  1636/1315 z+5.91 p=0.000  | +54(90/36,z+4.8)  +67(168/101,z+4.1)  +103(269/166,z+4.9)  +100(352/252,z+4.1)  +1(374/373,z+0.0)  -4(383/387,z-0.1)
+
+=============================================================================
+=============== 11. -a vs -f UNDER THE RULE (seed 47) ===============
+# 8000 paired trials per length [40, 60, 100, 167], -R 8, seed 47
+# baseline = the SHIPPED row, i.e. lambda = min(0.17*L, 30) and not a constant
+# candidate = lambda 0, which IS -a: verified byte-identical to `-S k4a10 -a`
+# over 18 configurations, and pinned by a suite check
+
+  cell       weights                          breaks vs base         only-c/only-b  per-length
+  arm      1,0.6,0.3,0.15       lam 0     10326 ( -292)   810/1102 z-6.68 p=0.000  | -2(53/55,z-0.2)  -4(194/198,z-0.2)  -134(378/512,z-4.5)  -152(185/337,z-6.7)
+
+THIS SUPERSEDES SECTION 4's lambda-0 ARM AND READING 6 BELOW.  Against the
+shipped rule, -f beats -a by 292 breaks of 32000 (z -6.68) -- NOT the "~zero"
+that section 4 measured at +6 of 6000 (p = 0.824).
+
+Two things were wrong with that earlier figure, and they compound:
+
+  * ITS BASELINE WAS THE FLAT 30, which sections 6-10 then showed is much too
+    high below ~75 letters.  So it compared -a against a MISTUNED -f, and two
+    of its three lengths (60, and 100 at lambda 17) are where the mistuning
+    bites.  Handicapping the baseline flatters the candidate.
+
+  * IT WAS POOLED.  The effect is entirely at L >= 100: -2 and -4 at L = 40
+    and 60 (z -0.2 each, nothing) against -134 and -152 at L = 100 and 167.
+    A single total over lengths that behave differently is the exact failure
+    reading 4 records for the lambda grid, repeated on a different question.
+
+The two runs cannot be decomposed against each other, because section 4
+printed only the candidate's per-length counts and not its per-length DELTAS,
+so what its +6 was hiding is not recoverable from this file.
+
+The shape makes sense: at L = 40 and 60 the rule sets lambda to 6.8 and 10.2,
+so the baseline is itself near -a and there is little to measure; at L = 167
+it sets 28.4, and IC is then carrying ~1.9pp of break50.  So -f's value on
+wehrmacht is REAL and is an OPERATIONAL-LENGTH effect, which is the opposite
+of the short-message story the pooled number told.
+
+
+=============== 12. ABOVE THE CAP: L = 200/300 (seeds 61, 67) ===============
+# A: -R 8, L=200, 6000 paired trials, seed 61   (the OPERATING budget)
+# B: -R 0, L=200 and 300, 2000 each, seed 67    (how far it rises)
+# baseline in both = the shipped rule, which is lambda 30 at every L >= 177
+
+  A, -R 8, L=200            breaks vs base    only-c/only-b
+  lam30                     5565 (   +0)       0/0     z+0.00   <- self-control
+  lam45                     5597 (  +32)      88/56    z+2.67
+  lam65                     5602 (  +37)      96/59    z+2.97
+  lam90                     5577 (  +12)     112/100   z+0.82
+
+  B, -R 0                  total      L=200            L=300
+  lam90                    +89     +53(z+3.9)       +36(z+4.1)
+  lam150                   +73     +29(z+2.0)       +44(z+4.9)
+  lam300                   -46     -79(z-4.5)       +33(z+3.4)
+  lam1000                 -531    -488(z-19.6)      -43(z-3.5)
+  lam10000               -1030    -812(z-27.3)     -218(z-12.6)
+
+THE CAP OF 30 IS TOO LOW AT L=200, AT THE OPERATING BUDGET.  lambda 45 and 65
+beat it by 32 and 37 breaks of 6000 (z 2.67 and 2.97) -- about +0.6pp of
+break50, on a base of 92.75%.  So the "faint hint" recorded at L=167
+(lambda 40 at z +1.2, ns) was real, and the cap is not merely unmeasured
+above L=176: it is wrong there.
+
+BUT -R 0 OVERSHOOTS THE OPTIMUM BY 1.5-2x, AND THAT IS THE METHODOLOGICAL
+FINDING.  At L=200 the cheap proxy peaks near lambda 90; the real budget peaks
+at 45-65 and reads lambda 90 as NOTHING (+12, z +0.82).  Normalised by
+headroom the two agree where they agree -- at lambda 45 and 65 the proxy fixes
+6.1% and 9.2% of its failures against the real budget's 7.4% and 8.5% -- and
+diverge hard at 90 (12.4% against 2.8%).  So a single-trajectory climb is a
+usable proxy for WHETHER IC helps and a biased one for HOW MUCH.
+
+A PRE-REGISTERED PREDICTION WAS RESOLVED AGAINST ITS OWN FIRST BRANCH.  Before
+run B the prediction recorded was: if -R 0 keeps rising through lambda 150 and
+300, its monotone climb is degenerate -- a lone trajectory simply buying the
+smoothest surface available -- and says nothing about lambda's optimum.  It
+does not keep rising.  L=200 peaks near 90 and is -79 by 300, so the proxy is
+biased rather than meaningless, which is the weaker and more useful of the two
+branches.
+
+THE PEAK MOVES WITH LENGTH, WHICH IS WHAT THE THEORY WANTS.  At -R 0, L=200
+peaks near 90 and collapses by 300; L=300 sits on a broad plateau from 90 to
+300 and is still positive at 300.  lambda scaling with L is the premise of the
+shipped rule, and this is the first direct evidence for it above the cap.
+
+PURE IC IS NOT A DISASTER AT L=300, AND THAT IS THE ODD ONE.  lambda 10000 is
+effectively IC alone; it costs -40.6pp at L=200 but only -10.9pp at L=300, and
+lambda 1000 costs -24.4pp against -2.2pp.  At three hundred letters the n-gram
+half of -f is contributing very little -- the climb very nearly succeeds on
+coincidence structure alone.  Not acted on; recorded because it bears on where
+scoring work is worth doing at all.
+
+THE ERROR STAYS WILDLY ASYMMETRIC, SO ERR LOW.  At L=200, overshooting to
+lambda 1000 costs -488 per 2000 while the whole win being chased is +37 per
+6000.  That asymmetry is the same one recorded for the short band and it is
+the reason the cap exists at all.
+
+NOT SHIPPED, AND THE REASON IS THE ONE THIS FILE KEEPS RE-LEARNING.  There is
+exactly ONE length measured at the operating budget above the cap.  Lining up
+the plateau midpoints gives lambda ~10 at L~65, ~20 at L=100 and ~55 at L=200,
+an implied exponent near 1.5 -- steeper than the shipped linear rule (0.17*L
+predicts 34 at L=200) AND than the sd-ratio argument (1.1*sqrt(L) predicts
+33).  Both candidate theories undershoot in the same direction, which is
+suggestive; three plateau midpoints, two of them soft, are not a rule.
+Reading 5 above records the last time a line was fitted to exactly this kind
+of evidence here, and it had to be withdrawn.
+
+SCOPE, AND IT IS NARROW.  Operational procedure split long messages, so
+lengths much above 300 are off-distribution for real traffic and are in any
+case too easy to discriminate scoring variants (at -R 8 the pilot reads 98.7%
+break at L=250 and 100% at L=400).  The cap binds from L=177.  So the band
+where this question both matters and can be measured at the operating budget
+is roughly L = 177-250, and closing it needs two or three more lengths in that
+band at -R 8 -- not more trials at L=200.
+
+
+========= 13. THE BAND THE CAP BINDS IN: L = 177-250 (seed 83) =========
+# -R 8, 8000 paired trials at each of L = 177, 190, 215, 240 (32 000 pairs)
+# baseline = the shipped rule, i.e. lambda 30 at every one of these lengths
+
+  arm       total vs base   only-c/only-b      per length: 177 / 190 / 215 / 240
+  lam30     29553 (   +0)     0/0   z+0.00   |   +0     +0     +0     +0
+  lam45     29660 ( +107)   431/324 z+3.89   |  +60    +20     +1    +26
+  lam65     29632 (  +79)   546/467 z+2.48   |  +36     -4    +11    +36
+
+  per-cell discordants and z, lam45:  192/132 z+3.3  132/112 z+1.3
+                                       62/61  z+0.1   45/19  z+3.2
+                              lam65:  227/191 z+1.8  164/168 z-0.2
+                                       88/77  z+0.9   67/31  z+3.6
+
+THE CAP IS TOO LOW ACROSS THE WHOLE BAND, NOT ONLY AT L=200.  Both raised
+values beat the shipped 30 over 32 000 paired trials -- lambda 45 by 107
+breaks (z +3.89) and lambda 65 by 79 (z +2.48) -- on a base of 92.35%.  So
+section 12's single length was not a one-length artefact, and the cap is
+wrong from L=177 (where it starts binding) to at least L=240.
+
+THE SLOPE IS TOO SHALLOW, NOT MERELY THE CAP -- AND THE EVIDENCE IS A SIGN
+PATTERN, NOT A SIGNIFICANT CELL.  The discriminator is lam65 minus lam45 at
+each length: -24, -24, +10, +10, in length order.  A raised FLAT cap would
+put the same winner at every length; a rule whose slope is too shallow puts
+45 ahead at the short end of the band and 65 ahead at the long end, crossing
+somewhere near L=200, which is what this reads.  0.25*L gives 44/48/54/60
+across the four lengths and tracks that crossover.
+
+BUT NONE OF THOSE FOUR DIFFERENCES RESOLVES ON ITS OWN.  Each cell's delta
+carries an SE near 18-20 breaks (sqrt of its discordant total), so -24 and
++10 are about one SE each; the two arms share their trials, so the paired SE
+of the difference is smaller than that, but the harness does not print the
+arm-vs-arm discordants and it cannot be computed from what is here.  What is
+suggestive is the ORDER -- both negatives at the two shortest lengths and
+both positives at the two longest -- not any one number.
+
+L=215 IS THE WEAK CELL and should not be leant on: 123 discordant pairs
+against 324 at L=177, and lam45 reads +1 there.  L=240 is the sharpest
+(45/19 and 67/31, both z > 3) and is where the two arms separate most.
+
+A RULE WAS NOT FITTED FROM THIS, DELIBERATELY.  Four points, each about one
+SE, is exactly the evidence shape reading 5 records being fitted to a line
+once already and withdrawn.  The next step is to A/B a CANDIDATE RULE as a
+rule -- section 14.
+
+
+====== 14. THE CANDIDATE RULE, HELD OUT: 0.25*L vs SHIPPED (seed 917) ======
+# -R 8, 8000 paired trials at each of L = 177, 190, 215, 240 (32 000 pairs)
+# arm      = lambda 0.25*L, applied AS A RULE (a different lambda per length)
+# baseline = the shipped min(0.17*L, 30), i.e. 30 at every one of these
+# seed 917 is HELD OUT: 0.25 was read off seed 83 in section 13, so seed 83
+# would test the seed and not the rule
+
+  L     lambda   arm vs base        delta   only-c/only-b       z     p
+  177   44.2     6979 vs 6952        +27     166/139         +1.55  0.136
+  190   47.5     7208 vs 7201         +7     124/117         +0.45  0.699
+  215   53.8     7627 vs 7613        +14      82/68          +1.14  0.289
+  240   60       7838 vs 7821        +17      43/26          +2.05  0.053
+
+  pooled  29652 vs 29587  (+65 of 32 000)   415/350   z +2.35  p 0.019
+          92.66% vs 92.46% of messages broken, +0.20pp
+
+THE RULE WINS HELD OUT, AND ALL FOUR LENGTHS ARE POSITIVE.  That is the
+question this section was run to answer and it answers it: the cap of 30 is
+too low across the band on a seed that had no hand in choosing 0.25, and a
+length-scaled replacement recovers +65 breaks of 32 000 (z +2.35).
+
+IT IS HALF THE SIZE SECTION 13 IMPLIED, AND THE SHRINK IS UNIFORM.  Against
+section 13's nearest flat arms the per-length deltas go +60 -> +27 at L=177
+and +36 -> +17 at L=240 -- almost exactly 2x at both ends, and pooled +107
+-> +65.  A ~2x shrink on a value selected from the seed it is then quoted on
+is the winner's curse this file has already recorded eating two nominal
+optima (reading 4).  The effect survived it; its SIZE did not.
+
+WHAT THIS DOES NOT SETTLE: SLOPE VERSUS A RAISED FLAT CAP.  Section 13's
+discriminator was a sign flip in lam65 - lam45 across the band, which needs
+a flat arm to test, and this run has none -- it compares the rule against
+the SHIPPED cap, not against a raised one.  Worse, the held-out per-length
+deltas (+27, +7, +14, +17) carry no length trend at all, which is equally
+consistent with "any lambda near 50 beats 30 here" as with "lambda must
+rise with L".  So the slope hypothesis is UNCONFIRMED, not confirmed, and
+the one arm that would separate them is a flat lambda ~50 run paired
+against 0.25*L on a fresh seed.
+
+NOT SHIPPED ON THIS ALONE, FOR TWO REASONS.  The undetermined shape is the
+first.  The second is that 0.25*L is unbounded where the shipped rule caps:
+at L=400 it reads 100, and nothing at the operating budget has been measured
+above L=240 -- the -R 0 ladder in section 12 is the only evidence up there
+and it is the biased proxy.  Any shipped version needs either a new cap or a
+measurement above the band, and the error asymmetry (reading 3, and section
+12's -488 per 2000 at lambda 1000) says an unbounded rule is the wrong
+default to guess at.
+
+
+THE READING
+=============================================================================
+
+1. THE ORDER WEIGHTS ARE A PLATEAU AND DID NOT MOVE.  Section 1: every cell
+   from r = 0.35 to 1.2 lands within +-10 breaks of 1000, a 3.4x range in the
+   low-order weights, with the shipping row on the plateau and not at a peak.
+   Section 9 shows the same in lambda: pooled over L = 40..90, lambda
+   4/6/8/10/13/16 score +219/+223/+238/+227/+207/+210 per 24 000.  Wide flat
+   optima, twice.
+
+   THE PRE-REGISTERED PREDICTION FAILED.  ENHANCEMENTS.md item 21 predicted
+   wehrmacht would want HIGHER low-order weights, because its quad table is
+   german's 80.1% support reweighted with 843 grams clipped at W_MAX holding
+   ~68% of the mass.  The nominal peak at r = 0.65 is above the default's
+   ~0.55-0.6, the right direction, but +10 per 1000 at p = 0.121 chosen as the
+   max of 49 cells is nothing.  Recorded as failed.
+
+2. LAMBDA WAS THE FIND, AND THE POOLED COLUMN HID IT.  Section 5's pooled
+   column reads a shallow peak at lambda 15, +75, p = 0.059 -- unremarkable.
+   Per length the same cells read +76 at L=60 and -100 at L=167: two large
+   opposing effects averaging to almost nothing.  Adding the per-length split
+   is what found this; without it the run would have concluded "no resolvable
+   optimum, 30 stands" and been wrong.
+
+3. HELD OUT ON THREE SEEDS, 152 000 PAIRED TRIALS (sections 6, 7, 8, 10):
+
+       L <= 70:  +586 breaks of 64 000   z +10.95
+       L >= 80:    +3 breaks of 88 000   z  +0.04
+
+   6.54% -> 7.46% of short messages broken, +14% relative, for a different
+   constant and nothing else.  L=100 at 32 000 trials (section 8) reads +12,
+   z +0.22 -- the flatness above the knee is measured, not assumed, which is
+   what makes the cap defensible.
+
+4. THE WINNER'S CURSE ATE TWO NOMINAL OPTIMA (section 4), exactly as
+   pre-registered.  The stage-1 and stage-2 grid winners read +10 and +7 per
+   1000 and re-measured at +2.5 and +1.8 on a fresh seed -- a ~4x shrink from
+   selecting a maximum over 49 and 13 cells.  Both would have shipped without
+   the confirm stage.
+
+5. A FITTED LINE WAS FITTING A PLATEAU.  0.18*L came from three per-length
+   peaks (sections 5), two of them at z 1.2-1.7.  The ladder in section 9
+   shows the short-band optimum is flat from lambda 4 to 16, so the per-length
+   argmaxes (4, 10, 13, 4, 8, 16 at L = 40..90, correlation with L of only
+   +0.50) were noise on a plateau.  0.17 is therefore a CHOICE: it errs low
+   because the error is asymmetric (at L=100, lambda 140 costs -178 per 1000
+   against lambda 0's -22), it keeps clear of the plateau's upper shoulder
+   between 16 and 20, and its cap bites at L=176 rather than exactly at 167,
+   leaving operational length off the kink.
+
+6. -f OVER -a IS REAL ON WEHRMACHT, AND IS AN OPERATIONAL-LENGTH EFFECT:
+   -292 breaks of 32000, z -6.68 (section 11), concentrated entirely at
+   L >= 100 (-134 and -152 at L = 100 and 167; -2 and -4 at L = 40 and 60,
+   z -0.2 each).
+
+   THIS REVERSES WHAT THIS FILE FIRST CONCLUDED, and the retraction is the
+   most useful thing in it.  Section 4 read +6 of 6000 (p = 0.824) and was
+   written up here as "-f over -a is now ~zero", with a mechanism attached:
+   k4 is mono+IC, so the pre-pass already supplies IC and adding it at the
+   target has little left to give.  The mechanism is still true and still
+   explains the SHORT-length cells; it does not explain the long ones, and
+   the conclusion drawn from it was wrong.
+
+   Both defects are ones this file already warns about elsewhere:
+
+     * A MISTUNED BASELINE.  Section 4's baseline was the flat lambda 30,
+       which sections 6-10 then showed is far too high below ~75 letters --
+       so it measured -a against a handicapped -f, which flatters -a.
+
+     * POOLING OVER LENGTHS THAT DISAGREE.  Exactly the failure reading 4
+       records for the lambda grid ("a pooled optimum smears a
+       length-dependent one away"), repeated on a different question a few
+       runs later.  Per-length reporting existed by then; this arm simply
+       predated its use.
+
+   So: beware a result that arrives with a mechanism that sounds right.  The
+   mechanism was independently correct, which is what made the wrong
+   conclusion persuasive enough to write down twice.
+
+   CLAUDE.md's +3.0..+4.4pp for -f over -a is mean %-correct on a different
+   schedule and is still not directly comparable; what is now established is
+   that the BREAK gain under -S k4f10 is ~1.9pp at L=167 and not zero.
+
+SHIPPED: 0.25*L, UNCAPPED, replacing min(0.17*L, 30).  The cap was measured
+wrong at one length (section 12), across the whole band it binds in (section
+13), and finally as a rule on a held-out seed (section 14, +65 of 32 000,
+z +2.35).  It ships without a cap because the cap is precisely what was
+measured wrong; re-imposing one at an unmeasured height would be a new guess.
+
+STILL OPEN.  The SHAPE of the replacement: no run compares a length-scaled
+lambda against a raised FLAT one, and the held-out per-length deltas show no
+length trend, so "0.25*L" and "any constant near 50" are not separated.  The
+one arm that separates them is a flat lambda ~50 paired against 0.25*L across
+L = 177-240 on a fresh seed -- so this ships as the better of two MEASURED
+options, not as a fitted law.  Nothing is measured at the operating budget
+above L=240, where the rule asks for 60 and keeps rising (100 at L=400).
+L=110 reads -4.9 per 1000 (z -1.57, ns) with flat cells either side, most
+likely scatter but the cell to re-check if this misbehaves.  And every cell
+here measures the plugboard tier with the rotor key GIVEN, so none of it
+establishes the coefficients are right for a full unknown-key sweep.

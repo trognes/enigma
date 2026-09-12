@@ -2070,9 +2070,17 @@ wo_c10=$(run "$wo_pt" -u B -w 123 -r AAN -g AAW -s "AB CD EF GH IJ KL MN OP QR S
 TMP_WO=/tmp/enigma_wo.$$
 # Runs the sweep over the 676 keys around the true one and leaves stderr in
 # $TMP_WO; echoes the recovered plaintext.
+# ENIGMA_IC_BLEND pins -f's IC weight.  These checks are about best.idx
+# RECONSTRUCTION, not about scoring: wehrmacht's lambda is min(0.17*L, 30) and
+# this fixture is 74 letters, so the shipping default would give 12.6 and the
+# climb converges somewhere --polish cannot improve on -- which makes the
+# assertion vacuous without testing anything it was built for.  Pinning keeps
+# the property under test independent of the scoring defaults, so a future
+# retune cannot quietly disarm it.
 wo_run() {
   _c=$1; shift
-  printf '%s' "$_c" | "$ENIGMA" -c -f -l wehrmacht -S i4f10 -J -u B -w 123 \
+  printf '%s' "$_c" | ENIGMA_IC_BLEND=30 "$ENIGMA" -c -f -l wehrmacht \
+    -S i4f10 -J -u B -w 123 \
     -r "AA." -g "AA." -R 2 -T 4 "$@" 2>"$TMP_WO"
 }
 wo_score() { grep -E '^ *-?[0-9.]+ [A-Za-z]' "$TMP_WO" | tail -1 | awk '{ print $1 }'; }
@@ -3018,9 +3026,15 @@ check "--crib-file is no longer accepted" \
 # Every long option must appear in --help. --crib-dump was absent for four
 # releases because nothing checked, so this compares the getopt table in the
 # source against the help text rather than trusting a human to notice.
+#
+# The match MUST require the argument keyword. Without it the pattern is just
+# `{ "lowercase-string",` and any brace-initialised table in src/*.cc trips
+# it -- scoring.cc's per-language coefficient rows did, reporting "wehrmacht"
+# as a long option missing from --help.
 help_missing=$("$ENIGMA" -h 2>&1 > /tmp/enigma_help.$$ ; \
-  grep -ohE '\{ "[a-z-]+",' "$(dirname "$0")"/../src/*.cc \
-  | sed 's/{ "//;s/",//' | sort -u \
+  grep -ohE '\{ "[a-z-]+", *(no|required|optional)_argument,' \
+     "$(dirname "$0")"/../src/*.cc \
+  | sed 's/{ "//;s/",.*//' | sort -u \
   | while read -r o; do grep -q -- "--$o" /tmp/enigma_help.$$ || echo "$o"; done)
 rm -f /tmp/enigma_help.$$
 check "help lists every long option" "$help_missing" ""
@@ -3122,6 +3136,80 @@ check "-S k needs a language, like every other n-gram model" \
 check "\$ENIGMA_LOGLIN rejects a partial weight vector" \
   "$(printf 'AAAA' | env ENIGMA_LOGLIN=1,0.6 "$ENIGMA" -q -l english \
      >/dev/null 2>&1; echo $?)" "1"
+
+# wehrmacht's -f lambda is 0.25*L, not the flat 30 every other language takes
+# -- measured +586 breaks of 64000 at L <= 70 for scaling at all, then +65 of
+# 32000 held out for this slope over the capped min(0.17*L, 30) it replaced
+# (eval/results-weight-sweep.txt sections 12-14).  A rule-derived weight VARIES
+# WITH THE MESSAGE, so all of this is about the echo as much as the value: two
+# runs of the same command on different ciphertexts score differently, and a
+# log that omits the weight cannot be compared against another.
+lam_echo()
+{
+  _len=$1
+  shift
+  # shellcheck disable=SC2183,SC2046  # deliberate: _len copies of a letter
+  printf 'A%.0s' $(seq "$_len") \
+    | "$ENIGMA" -u B -w 123 -r AAA -g AAA "$@" 2>&1 >/dev/null \
+    | sed -n 's/.*IC weight \([0-9.]*\) (from length \([0-9]*\)).*/\1 \2/p'
+}
+check "wehrmacht -f derives lambda from the length" \
+  "$(lam_echo 100 -f -l wehrmacht)" "25 100"
+# UNCAPPED, and this is the check that says so: the rule this replaced capped
+# at 30, which was measured too low across L = 177..240.  Any cap at or below
+# 100 fails here, which is the way a reinstated one would show up.
+check "wehrmacht -f lambda is uncapped past the old cap" \
+  "$(lam_echo 200 -f -l wehrmacht) / $(lam_echo 400 -f -l wehrmacht)" \
+  "50 200 / 100 400"
+# The short end is where scaling was worth most (+14% relative at L <= 70), so
+# it is pinned too: a steeper slope shipped without this could regress it.
+check "wehrmacht -f lambda stays low on a short message" \
+  "$(lam_echo 40 -f -l wehrmacht)" "10 40"
+# Every other language keeps the flat 30, so it prints no length clause at all.
+check "english -f takes a flat lambda, with no length clause" \
+  "$(lam_echo 100 -f -l english)" ""
+# -a has no IC term, so the rule must not fire for it even on wehrmacht.
+check "wehrmacht -a prints no IC weight" \
+  "$(lam_echo 100 -a -l wehrmacht)" ""
+# The override is what lets one binary reproduce the sweep, so it must BEAT the
+# rule -- and then the echo must not claim the value came from the length.
+check "\$ENIGMA_IC_BLEND overrides the wehrmacht rule" \
+  "$(ENIGMA_IC_BLEND=30 lam_echo 100 -f -l wehrmacht)" ""
+check "an overridden lambda is echoed as overridden" \
+  "$(printf 'A%.0s' $(seq 100) | env ENIGMA_IC_BLEND=7 "$ENIGMA" -f -l wehrmacht \
+     -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null \
+     | grep -c 'lambda 7 (overridden)')" "1"
+
+# At lambda 0 the fused target scores all8 alone, so -f IS -a on the same
+# table.  That equivalence is what makes the sweep's lambda-0 cell a
+# measurement of `k4a10` rather than of something adjacent to it
+# (eval/results-weight-sweep.txt section 11), so it is pinned here rather than
+# left as an inference about three lines of scoring.cc.
+#
+# It compares the SCORE LINES as well as the plaintext, and that is not
+# belt-and-braces: injecting `(g_fused_lambda + 1.0) * ic` leaves this fixture
+# in the same basin, so the decrypt is byte-identical and a stdout-only
+# assertion passes a genuinely broken blend.  The scores differ, and catch it.
+#
+# What it cannot catch, by construction, is a MULTIPLICATIVE bug on lambda:
+# `g_fused_lambda * 2.0 * ic` is still zero at lambda 0.  The rule checks above
+# are what cover the magnitude; this one covers only "lambda 0 means no IC".
+#
+# The rotor key is PINNED, because this asserts that two runs AGREE and breadth
+# is not the point -- the same reason $rgd exists.  Verified against the
+# lambda+1 injection at one key and at 26: both catch it, and one key is 12x
+# cheaper (0.13 s against 1.49 s, which under ASan is 1.5 s against 15 s).
+_lzt='QWERTZUIOPASDFGHJKLYXCVBNMQWERTZUIOPASDFGHJKLYXCVBNMQWERTZUIOPASDF'
+_lz=$(printf '%s' "$_lzt" \
+      | ENIGMA_SEED=0 "$ENIGMA" -c -K --polish -T 1 -R 4 -l wehrmacht \
+        -S k4a10 -a -u B -w 123 -r AAA -g AAA 2>&1 \
+      | grep -E '^ *-[0-9]|^[A-Z]+$')
+_lf=$(printf '%s' "$_lzt" \
+      | ENIGMA_SEED=0 ENIGMA_IC_BLEND=0 "$ENIGMA" -c -K --polish -T 1 -R 4 \
+        -l wehrmacht -S k4f10 -f -u B -w 123 -r AAA -g AAA 2>&1 \
+      | grep -E '^ *-[0-9]|^[A-Z]+$')
+check "-f at lambda 0 is -a on the same table" \
+  "$([ -n "$_lf" ] && [ "$_lz" = "$_lf" ] && echo same)" "same"
 
 echo "== Biased restart kick: --biased-random =="
 
