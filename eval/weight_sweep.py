@@ -247,8 +247,12 @@ def main():
     print(f"# -{args.target} coefficient sweep on wehrmacht, {args.stage}\n"
           f"# {args.trials} paired trials per length {args.lengths}, "
           f"-R {args.restarts}, seed {args.seed}\n"
+          # The baseline arm sets NO env, so its lambda is whatever the binary
+          # resolves -- since PR #294 that is wehrmacht's min(0.17*L, 30) rule,
+          # not the historical flat 30.  Label it as the binary's own, or a
+          # captured output claims a constant the run did not use.
           f"# baseline = the shipping row {DEFAULT_W}"
-          f"{'' if args.target == 'a' else f' lam {DEFAULT_LAM:g}'}\n")
+          f"{'' if args.target == 'a' else ' lam as the binary resolves it'}\n")
     print(f"  {'cell':<10} {'weights':<22}{'':<10} "
           f"{'breaks vs base':<22} {'only-c/only-b':<14} per-length")
 

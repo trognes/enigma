@@ -3137,6 +3137,75 @@ check "\$ENIGMA_LOGLIN rejects a partial weight vector" \
   "$(printf 'AAAA' | env ENIGMA_LOGLIN=1,0.6 "$ENIGMA" -q -l english \
      >/dev/null 2>&1; echo $?)" "1"
 
+# wehrmacht's -f lambda is min(0.17*L, 30), not the flat 30 every other
+# language takes -- measured +586 breaks of 64000 at L <= 70 and +3 of 88000
+# at L >= 80 (eval/results-weight-sweep.txt).  A rule-derived weight VARIES
+# WITH THE MESSAGE, so all of this is about the echo as much as the value: two
+# runs of the same command on different ciphertexts score differently, and a
+# log that omits the weight cannot be compared against another.
+lam_echo()
+{
+  _len=$1
+  shift
+  # shellcheck disable=SC2183,SC2046  # deliberate: _len copies of a letter
+  printf 'A%.0s' $(seq "$_len") \
+    | "$ENIGMA" -u B -w 123 -r AAA -g AAA "$@" 2>&1 >/dev/null \
+    | sed -n 's/.*IC weight \([0-9.]*\) (from length \([0-9]*\)).*/\1 \2/p'
+}
+check "wehrmacht -f derives lambda from the length" \
+  "$(lam_echo 100 -f -l wehrmacht)" "17 100"
+check "wehrmacht -f lambda is capped at 30" \
+  "$(lam_echo 200 -f -l wehrmacht)" "30 200"
+# 176 * 0.17 = 29.92, so the cap bites at 177 and not at operational length.
+check "wehrmacht -f lambda reaches the cap at L=177, not before" \
+  "$(lam_echo 176 -f -l wehrmacht) / $(lam_echo 177 -f -l wehrmacht)" \
+  "29.92 176 / 30 177"
+# Every other language keeps the flat 30, so it prints no length clause at all.
+check "english -f takes a flat lambda, with no length clause" \
+  "$(lam_echo 100 -f -l english)" ""
+# -a has no IC term, so the rule must not fire for it even on wehrmacht.
+check "wehrmacht -a prints no IC weight" \
+  "$(lam_echo 100 -a -l wehrmacht)" ""
+# The override is what lets one binary reproduce the sweep, so it must BEAT the
+# rule -- and then the echo must not claim the value came from the length.
+check "\$ENIGMA_IC_BLEND overrides the wehrmacht rule" \
+  "$(ENIGMA_IC_BLEND=30 lam_echo 100 -f -l wehrmacht)" ""
+check "an overridden lambda is echoed as overridden" \
+  "$(printf 'A%.0s' $(seq 100) | env ENIGMA_IC_BLEND=7 "$ENIGMA" -f -l wehrmacht \
+     -u B -w 123 -r AAA -g AAA 2>&1 >/dev/null \
+     | grep -c 'lambda 7 (overridden)')" "1"
+
+# At lambda 0 the fused target scores all8 alone, so -f IS -a on the same
+# table.  That equivalence is what makes the sweep's lambda-0 cell a
+# measurement of `k4a10` rather than of something adjacent to it
+# (eval/results-weight-sweep.txt section 11), so it is pinned here rather than
+# left as an inference about three lines of scoring.cc.
+#
+# It compares the SCORE LINES as well as the plaintext, and that is not
+# belt-and-braces: injecting `(g_fused_lambda + 1.0) * ic` leaves this fixture
+# in the same basin, so the decrypt is byte-identical and a stdout-only
+# assertion passes a genuinely broken blend.  The scores differ, and catch it.
+#
+# What it cannot catch, by construction, is a MULTIPLICATIVE bug on lambda:
+# `g_fused_lambda * 2.0 * ic` is still zero at lambda 0.  The rule checks above
+# are what cover the magnitude; this one covers only "lambda 0 means no IC".
+#
+# The rotor key is PINNED, because this asserts that two runs AGREE and breadth
+# is not the point -- the same reason $rgd exists.  Verified against the
+# lambda+1 injection at one key and at 26: both catch it, and one key is 12x
+# cheaper (0.13 s against 1.49 s, which under ASan is 1.5 s against 15 s).
+_lzt='QWERTZUIOPASDFGHJKLYXCVBNMQWERTZUIOPASDFGHJKLYXCVBNMQWERTZUIOPASDF'
+_lz=$(printf '%s' "$_lzt" \
+      | ENIGMA_SEED=0 "$ENIGMA" -c -K --polish -T 1 -R 4 -l wehrmacht \
+        -S k4a10 -a -u B -w 123 -r AAA -g AAA 2>&1 \
+      | grep -E '^ *-[0-9]|^[A-Z]+$')
+_lf=$(printf '%s' "$_lzt" \
+      | ENIGMA_SEED=0 ENIGMA_IC_BLEND=0 "$ENIGMA" -c -K --polish -T 1 -R 4 \
+        -l wehrmacht -S k4f10 -f -u B -w 123 -r AAA -g AAA 2>&1 \
+      | grep -E '^ *-[0-9]|^[A-Z]+$')
+check "-f at lambda 0 is -a on the same table" \
+  "$([ -n "$_lf" ] && [ "$_lz" = "$_lf" ] && echo same)" "same"
+
 echo "== Biased restart kick: --biased-random =="
 
 # Draw the kick's pairs from exp(z / T) over the 325 single-plug IC z-scores
