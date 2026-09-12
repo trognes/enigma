@@ -1746,7 +1746,10 @@ are read from a **data directory** (filenames built as
 - `-a` **weighted all-order scoring** (**recommended** when the language is
   known; needs `-l`; a schedule token too — `-S m4a10`). Scores each quadgram
   window as a **log-linear mixture** of all four orders — `a·log p(ABCD) + b·log
-  p(BCD) + c·log p(CD) + d·log p(D)` with baked weights `(1, 0.6, 0.3, 0.15)`
+  p(BCD) + c·log p(CD) + d·log p(D)` with weights `(1, 0.6, 0.3, 0.15)` **per
+  language** (`lang_coeffs` in `src/scoring.cc`; every language currently
+  takes that row, and a deep sweep on `wehrmacht` found nothing to move --
+  see the plateau note below)
   and the **symmetric folding** (every sub-gram a window contains, divided by
   its window-multiplicity 2/3/4, so leading edge grams are included). It is a
   **geometric (Product-of-Experts) mixture** that stays in joint log-prob space
@@ -1755,7 +1758,36 @@ are read from a **data directory** (filenames built as
   are unchanged** (they treat `all8` exactly like `quad8`). Measured the **first
   short-message scoring win** in the tuning history: +~1–2pp mean %-correct at
   L40–100 across all four languages (2000-trial German confirms +1.3pp avg, all
-  lengths positive), neutral by L≥190 where quad already saturates. The linear
+  lengths positive), neutral by L≥190 where quad already saturates.
+
+  > **THE WEIGHTS ARE ON A PLATEAU AND WERE NOT WORTH RETUNING — measured on
+  > `wehrmacht`, the language whose quad table is worst.** They were fitted
+  > across four *prose* languages, and the worry was that telegraphic German
+  > wants a different mixture, since its quad table is not counted but
+  > german's 80.1% support reweighted, with 843 grams clipped at `W_MAX`
+  > holding ~68% of the mass. Swept at 0.025 resolution over a geometric
+  > family `(1, r, r², r³)`, 500 paired trials per cell at L = 100 and 167:
+  > every cell from **r = 0.35 to 1.2 sits within ±10 breaks of 1000** — a
+  > 3.4× range — and the shipping row sits on that plateau rather than at a
+  > peak. **A pre-registered prediction that wehrmacht would want HIGHER
+  > low-order weights FAILED.**
+  >
+  > **And the mixture itself is worth little there.** Switching it off
+  > entirely — `(1,0,0,0)`, i.e. plain quad — costs 34 breaks of 6000 on a
+  > held-out seed (p = 0.105), and removing IC as well costs 36. So the whole
+  > `-a`+`-f` apparatus is ~**0.6pp of break50** on wehrmacht under the
+  > recommended recipe. That does **not** contradict the +1–2pp and
+  > +3.0…+4.4pp recorded here, which are **mean %-correct** — this file's own
+  > notes record the two moving independently — but it does mean the *break*
+  > gain under `-S k4f10` is small.
+  >
+  > **The mechanism is the `k4` pre-pass, which is mono+IC.** IC is already in
+  > the schedule, so adding it again at the target has little left to give:
+  > `-f` against `-a` measures **+6 breaks of 6000, p = 0.824** on a held-out
+  > seed. The same redundancy the `-K` entry documents, in a second place.
+  > `eval/weight_sweep.py`, `ENHANCEMENTS.md` item 21.
+
+  The linear
   (Jelinek-Mercer) form was tried and **lost** (the conditional reframing it
   forces is the cost); log-linear wins because it is *conjunctive* — a candidate
   must look plausible at every order at once. See `archived/PERFORMANCE.md` /
@@ -1775,7 +1807,67 @@ are read from a **data directory** (filenames built as
   `-q` moves −8.9547 → −1.5214). IC cannot be folded into
   the table the way `-a`'s four orders are -- they are additive over positions,
   IC is quadratic in the whole-message letter histogram -- so it is accumulated
-  in the same decode pass and added after normalisation. Measured **+3.0 to
+  in the same decode pass and added after normalisation.
+
+  > **On `wehrmacht` lambda is NOT 30 — it is `min(0.17·L, 30)`, and that is
+  > the one thing a deep sweep of these coefficients found.** A baked constant
+  > cannot be right at every length: IC's spread falls as ~`1/L` (a rate over
+  > `C(L,2)` pairs) while the per-symbol n-gram score's falls as ~`1/√L` (a
+  > mean of `L` terms) — the same argument the `-S k` entry makes for its own
+  > lambda scaling. Measured, 30 is right at operational length and much too
+  > high below ~75 letters (breaks per 1000, lambda ≈ 10 against 30):
+  >
+  > | L | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 140 |
+  > |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+  > | | +6.3 | +8.4 | +11.5 | +10.5 | +2.7 | −0.3 | +0.4 | −4.9 | −0.8 |
+  >
+  > **Held out on three seeds and 152 000 paired trials**: +586 breaks of
+  > 64 000 at L ≤ 70 (**z = +10.95**) against +3 of 88 000 at L ≥ 80
+  > (**z = +0.04**). In the short band that is 6.54% → 7.46% of messages
+  > broken, a **+14% relative** gain, for a different constant and nothing
+  > else. `eval/weight_sweep.py`; `ENHANCEMENTS.md` item 21.
+  >
+  > **The optimum is a PLATEAU, so 0.17 is a choice rather than a fit.**
+  > Pooled over L = 40…90, lambda = 4/6/8/10/13/16 score
+  > +219/+223/+238/+227/+207/+210 per 24 000 — a spread of 31 across a **4×
+  > range** — then fall to +123 at 20 and +79 at 25. An earlier `0.18·L` came
+  > from fitting a line to three per-length peaks, two of them weak; the
+  > ladder shows there was no line to fit. 0.17 beats 0.20 only because the
+  > plateau's upper shoulder falls away between 16 and 20, and because the cap
+  > then bites at L=176 rather than exactly at 167, leaving operational length
+  > off the kink.
+  >
+  > **The error is wildly asymmetric, so err LOW.** At L=100, lambda = 140
+  > costs **−178 breaks per 1000** — 14× the size of the win being chased —
+  > while lambda = 0 costs −22.
+  >
+  > **The cap above L=176 is untested**, and the L=167 grid put lambda = 40 at
+  > +2.8 per 1000 (z = +1.2, ns) — a faint hint it might keep rising. Capping
+  > at 30 is the conservative reading of unmeasured ground, not a measured
+  > optimum. **L=110 is the one point of friction**: −4.9 per 1000 (z = −1.57,
+  > ns), with L=100 at 32 000 trials and L=130/140 flat around it, so most
+  > likely scatter — but it is the cell to re-check if this ever misbehaves.
+  >
+  > **`ic_blend_init()` therefore runs AFTER `readciphertext()`**, and before
+  > `intscore_init()`, which bakes lambda into the `--int` integer
+  > coefficients — if the two disagreed the integer and double paths would
+  > score differently. Verified 20/20 fixtures identical under `--int` at
+  > L = 60 and 107. `$ENIGMA_IC_BLEND` still overrides the rule, which is what
+  > lets one binary reproduce the sweep, and `show_settings()` prints the
+  > effective weight with the length it came from: a rule-derived lambda
+  > varies per message, so a log omitting it cannot be compared against
+  > another run of the same command.
+  >
+  > **A suite check that reads a wehrmacht climb must pin lambda or lose its
+  > property.** Two checks — `--polish` improving on the converged best, and
+  > the `--ring-stride` refinement — are about `best.idx` RECONSTRUCTION and
+  > ran `-f -l wehrmacht` on a 74-letter fixture. Under the rule that fixture
+  > takes lambda 12.6, the climb converges where `--polish` cannot improve,
+  > and both assertions go vacuous. They now pin `ENIGMA_IC_BLEND=30`, and
+  > were re-verified to still fail under the historical `best.idx / 2`
+  > injection.
+
+  Measured **+3.0 to
   +4.4pp** mean %-correct over `-a` on english, german AND wehrmacht (n=1800
   each), the first scoring change in this codebase that is **not dependent on
   the writing style** -- expected, since IC is language-independent. Wall-time

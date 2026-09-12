@@ -473,6 +473,11 @@ void show_settings()
         fprintf(stderr, " lambda %g", fused_lambda_value());
       fprintf(stderr, " (overridden)\n");
     }
+  /* A rule-derived lambda VARIES WITH THE MESSAGE, so a log that does not
+     print it cannot be compared against another run of the same command. */
+  else if ((opt_scoring == SCORE_FUSED) && fused_lambda_from_rule())
+    fprintf(stderr, "            IC weight %g (from length %d)\n",
+            fused_lambda_value(), textlength);
 
   /* One clause per continuation line so the line stays within 79 columns even when
      several are active (the default random seed is a full 20-digit uint64). The seed

@@ -911,31 +911,53 @@ struct lang_coeffs
 {
   const char * language;   /* nullptr terminates the table AND is the default */
   double w[4];             /* quad, tri, bi, mono */
-  double ic_lambda;        /* -f's weight on the index of coincidence */
+  double ic_lambda;        /* -f's IC weight: the CAP, and the whole value
+                              when ic_lambda_per_l is 0 */
+  double ic_lambda_per_l;  /* 0 = a flat ic_lambda (every language but
+                              wehrmacht).  Otherwise the effective weight is
+                              min(ic_lambda_per_l * textlength, ic_lambda) --
+                              see the measurement note above the table. */
 };
 
 static const lang_coeffs coeffs_table[] =
   {
-    /* Measured rows go here.  Currently identical to the default. */
-    { "wehrmacht", { 1.0, 0.6, 0.3, 0.15 }, 30.0 },
-    /* The sentinel row is the default -- PR #106 / archived/PERFORMANCE.md 6.4. */
-    { nullptr,     { 1.0, 0.6, 0.3, 0.15 }, 30.0 },
+    /* MEASURED.  The order weights are unchanged -- they sit on a plateau
+       flat across a 4x range of the low orders, so there was nothing to move
+       (ENHANCEMENTS.md item 21).  The IC weight is the one thing the sweep
+       found, and it is not a constant: lambda = 30 is right at operational
+       length and much too high below ~75 letters, costing 14% of breaks
+       there.  min(0.17*L, 30) is the fitted rule; 0.17 rather than 0.18
+       because the plateau's upper shoulder falls away between lambda 16 and
+       20 and 0.17 keeps further from it, and because the cap then bites at
+       L=176 rather than exactly at 167, leaving operational length off the
+       kink.  Held out on three seeds and 152 000 paired trials: +586 breaks
+       of 64 000 at L <= 70 (z +10.95), +3 of 88 000 at L >= 80 (z +0.04). */
+    { "wehrmacht", { 1.0, 0.6, 0.3, 0.15 }, 30.0, 0.17 },
   };
+
+/* The default -- PR #106 / archived/PERFORMANCE.md 6.4.  Flat lambda, i.e.
+   every language without a row above is byte-identical to before.  Held
+   separately rather than as a sentinel row: a sentinel-terminated loop is
+   opaque to clang-analyzer, which reports an ArrayBound it cannot disprove
+   (the same finding set_effective_reflector's Greek offset drew). */
+static const lang_coeffs coeffs_default =
+  { nullptr, { 1.0, 0.6, 0.3, 0.15 }, 30.0, 0.0 };
 
 /* The row for opt_language, or the default.  Resolved on every call rather
    than cached: it is read once per table load and once at ic_blend_init(),
    never in a loop. */
 static const lang_coeffs & coeffs_for_language()
 {
-  int i = 0;
-  while (coeffs_table[i].language != nullptr)
+  const size_t n = sizeof(coeffs_table) / sizeof(coeffs_table[0]);
+  for (size_t i = 0; i < n; i++)
     {
       if ((opt_language != nullptr)
           && (strcmp(coeffs_table[i].language, opt_language) == 0))
-        return coeffs_table[i];
-      i++;
+        {
+          return coeffs_table[i];
+        }
     }
-  return coeffs_table[i];
+  return coeffs_default;
 }
 
 /* ENIGMA_IC_BLEND probe (archived/PERFORMANCE.md 6.4): fuse the index of coincidence into the
@@ -955,6 +977,9 @@ static const lang_coeffs & coeffs_for_language()
    6.4. */
 static const double fused_lambda_default = 30.0;
 static double g_fused_lambda = fused_lambda_default;
+static double g_lambda_cap = fused_lambda_default;
+static double g_lambda_per_l = 0.0;
+static bool g_lambda_is_rule = false;
 
 /* The order weights actually in force, and whether anything moved them off the
    language's row.  show_settings() echoes them when it did: a swept run whose
@@ -966,6 +991,7 @@ static bool g_coeffs_overridden = false;
 const double * all_weights() { return g_all_weights; }
 double fused_lambda_value() { return g_fused_lambda; }
 bool coeffs_overridden() { return g_coeffs_overridden; }
+bool fused_lambda_from_rule() { return g_lambda_is_rule; }
 
 /* Resolve the coefficients once, LAZILY, because the two readers run in the
    wrong order for an init call: load_table() is invoked from inside
@@ -986,6 +1012,10 @@ static void resolve_coeffs()
   const lang_coeffs & lc = coeffs_for_language();
   for (int j = 0; j < 4; j++)
     g_all_weights[j] = lc.w[j];
+  /* The cap stands in until ic_blend_init() knows the length.  A language
+     with a flat lambda is finished here. */
+  g_lambda_cap = lc.ic_lambda;
+  g_lambda_per_l = lc.ic_lambda_per_l;
   g_fused_lambda = lc.ic_lambda;
 
   /* Empty means unset, as for the other value-carrying overrides. */
@@ -1009,9 +1039,20 @@ static void resolve_coeffs()
     }
 }
 
+/* Called from main() AFTER readciphertext(), because the rule needs the
+   length.  Everything that reads g_fused_lambda runs later still: the score
+   site, intscore_init()'s integer coefficients, and the settings echo.  An
+   $ENIGMA_IC_BLEND override wins over the rule, which is what lets one binary
+   reproduce the sweep that produced the rule. */
 void ic_blend_init()
 {
   resolve_coeffs();
+  if ((g_lambda_per_l > 0.0) && ! g_coeffs_overridden)
+    {
+      const double by_len = g_lambda_per_l * textlength;
+      g_fused_lambda = (by_len < g_lambda_cap) ? by_len : g_lambda_cap;
+      g_lambda_is_rule = true;
+    }
 }
 
 void intscore_init()

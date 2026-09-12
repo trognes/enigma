@@ -2070,9 +2070,17 @@ wo_c10=$(run "$wo_pt" -u B -w 123 -r AAN -g AAW -s "AB CD EF GH IJ KL MN OP QR S
 TMP_WO=/tmp/enigma_wo.$$
 # Runs the sweep over the 676 keys around the true one and leaves stderr in
 # $TMP_WO; echoes the recovered plaintext.
+# ENIGMA_IC_BLEND pins -f's IC weight.  These checks are about best.idx
+# RECONSTRUCTION, not about scoring: wehrmacht's lambda is min(0.17*L, 30) and
+# this fixture is 74 letters, so the shipping default would give 12.6 and the
+# climb converges somewhere --polish cannot improve on -- which makes the
+# assertion vacuous without testing anything it was built for.  Pinning keeps
+# the property under test independent of the scoring defaults, so a future
+# retune cannot quietly disarm it.
 wo_run() {
   _c=$1; shift
-  printf '%s' "$_c" | "$ENIGMA" -c -f -l wehrmacht -S i4f10 -J -u B -w 123 \
+  printf '%s' "$_c" | ENIGMA_IC_BLEND=30 "$ENIGMA" -c -f -l wehrmacht \
+    -S i4f10 -J -u B -w 123 \
     -r "AA." -g "AA." -R 2 -T 4 "$@" 2>"$TMP_WO"
 }
 wo_score() { grep -E '^ *-?[0-9.]+ [A-Za-z]' "$TMP_WO" | tail -1 | awk '{ print $1 }'; }

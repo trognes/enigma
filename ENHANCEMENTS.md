@@ -2811,70 +2811,69 @@ against the register budget that occupancy already depends on, which is why
 it stays a gap rather than a task. It matters most for whoever runs the probe
 on a CUDA card, where that budget differs.
 
-**21. `-a`'s order weights are a PROSE fit applied everywhere — now
-language-specific, and being retuned on `wehrmacht`.** The four log-linear
-weights `(1, 0.6, 0.3, 0.15)` were tuned across four *prose* languages in
-PR #106 and have never been retuned for telegraphic German. `-f`'s
-`lambda = 30` is better off — its +3.0…+4.4pp gain was measured on english,
-german **and** wehrmacht — so the fused half is style-checked and the weighted
-half is not. Against this file's standing rule that scoring results do not
-transfer between the two writing styles, that is an assumption rather than a
-result, and it sits underneath the recommended recipe for real traffic.
+**21. `-a`/`-f` coefficients tuned on `wehrmacht` — DONE. The order weights
+did not move; `-f`'s lambda is now `min(0.17·L, 30)`.** The four log-linear
+weights were fitted across four *prose* languages in PR #106 and had never
+been retuned for telegraphic German, so the prose fit sat underneath the
+recommended recipe for real traffic as an assumption rather than a result.
+Swept end to end on authentic HG Nord decrypts, paired `break50`, plugboard
+tier, both arms from one binary via `$ENIGMA_AW` / `$ENIGMA_IC_BLEND`
+(`eval/weight_sweep.py`).
 
-**The mechanism suggests the fit should be per-language, not universal.**
-`archived/PERFORMANCE.md` §6.4 found `-a` won by *smoothing the climb surface*
-(+3.4pp) with selection contributing −0.0pp — i.e. it does not add information,
-it backs off a quad table that is partly noise. If that is what it does, the
-right mixture depends on **how bad that table is**, which differs by language:
+**The order weights are a PLATEAU and were left alone.** At 0.025 resolution
+over `(1, r, r², r³)`, every cell from **r = 0.35 to 1.2 lands within ±10
+breaks of 1000** — a 3.4× range — with the shipping row on the plateau rather
+than at a peak. Turning the mixture off entirely costs 34 breaks of 6000
+(p = 0.105) on a held-out seed. **The pre-registered prediction that
+wehrmacht would want higher low-order weights FAILED** — recorded because the
+hypothesis behind it (that `-a` compensates for a defective quad table) is
+otherwise well supported, and this was its sharpest test.
 
-| | quad cells seen | training counts |
+**`-f`'s lambda was the real find, and nobody had looked for it.** A baked
+constant cannot suit every length, since IC's spread falls as ~`1/L` while the
+per-symbol n-gram score's falls as ~`1/√L`. Held out on **three seeds and
+152 000 paired trials**:
+
+| band | effect | z |
 |---|---:|---:|
-| english | **85.2%** | 4.2e9 |
-| german | 80.1% | 8.9e8 |
-| **wehrmacht** | **80.1%** — *german's support, reweighted* | 1.3e10 |
+| L ≤ 70 | **+586 breaks of 64 000** | **+10.95** |
+| L ≥ 80 | +3 of 88 000 | +0.04 |
 
-`wehrmacht`'s quad table is not counted at all. It is german's 366 266 cells
-reweighted by `eval/build_telegraphic_ngrams.py`, whose own header records
-**843 quadgrams clipped at `W_MAX` holding ~68% of the table's probability
-mass**. That is a far weaker quad estimate than english's.
+6.54% → 7.46% of short messages broken, **+14% relative**, for a different
+constant and nothing else. Shipped as `lang_coeffs` in `src/scoring.cc`; every
+other language keeps a flat 30 and is byte-identical.
 
-> **PRE-REGISTERED PREDICTION, recorded before the sweep ran.** If `-a` is
-> compensating for table defects, `wehrmacht`'s optimum sits at **higher**
-> low-order weights than the prose default. If it lands at or below the
-> default, the table-defect reading loses its main prediction here and that
-> must be recorded rather than quietly dropped. A second prediction follows
-> from the same mechanism and is cheaper to check: the `-a`-over-`-q` gap
-> should be **larger** on wehrmacht than the +1–2pp measured on prose.
+**Four things worth carrying forward.**
 
-**Shipped so far: the mechanism, behaviour-neutral.** `src/scoring.cc` carries
-a `lang_coeffs` table keyed on language with the prose row as the default and
-`wehrmacht`'s currently equal to it, so nothing changes until a measurement
-fills it in. `$ENIGMA_AW` overrides the order weights and `$ENIGMA_IC_BLEND`
-the lambda, which is what lets one binary run both arms of a paired sweep;
-`show_settings()` echoes the coefficients **only when the environment moved
-them**, since a swept run differs from its neighbours in nothing else and a log
-that omits them cannot be attributed afterwards. Two details worth knowing
-before touching it: the resolution is **lazy**, because `load_table()` runs
-inside `parse_args()` while `ic_blend_init()` runs after it in `main()` — an
-init-order fix would have left the table built from the language row with
-`$ENIGMA_AW` silently ignored, i.e. a sweep every cell of which measures the
-baseline. And the four-number parser is now **one function** shared with
-`$ENIGMA_LOGLIN`, so the dropped-`sscanf`-return-value failure recorded there
-cannot recur in a second copy.
+- **The pooled column would have given the wrong answer**, reading a shallow
+  peak at lambda 15 (p = 0.059) because it averages +76 at L=60 against −100
+  at L=167. Per-length reporting is what found this; a pooled optimum smears a
+  length-dependent one away.
+- **The winner's curse ate two nominal optima**, exactly as pre-registered.
+  The stage-1 and stage-2 grid winners read +10 and +7 per 1000 and re-measured
+  at +2.5 and +1.8 on a fresh seed — a ~4× shrink from selecting a maximum
+  over 49 and 13 cells. Without the `confirm` stage both would have shipped.
+- **A fitted line was fitting a plateau.** An earlier `0.18·L` came from three
+  per-length peaks, two of them weak; the full ladder shows the short-band
+  optimum is flat from lambda 4 to 16, so the constant is a *choice* (err low —
+  at L=100 lambda 140 costs −178 per 1000, 14× the win being chased) and not a
+  measurement.
+- **`-f` over `-a` is now ~zero on wehrmacht**: +6 breaks of 6000, p = 0.824.
+  `CLAUDE.md`'s +3.0…+4.4pp predates `-S k4f10`, and **`k4` is mono+IC** — the
+  pre-pass already supplies IC, so adding it at the target has little left to
+  give. Not a contradiction (that figure is mean %-correct, a metric this repo
+  records as moving independently of break counts), but it does mean the break
+  gain from the fused target under the recommended schedule is small.
 
-**Scale invariance halves the search.** The log-linear score is a sum of
-weighted log-probabilities, so multiplying all four weights by a constant
-scales every candidate alike and cannot change an ordering: `-a` has **three**
-free parameters, not four, and `w[0]` is pinned at 1. It does *not* carry over
-to `-f`, where the overall scale sets the n-gram half against `lambda`, so all
-four matter there and `lambda` has to be re-swept around any new weight vector.
-
-**The sweep's own trap is the winner's curse**, which is `--confidence`'s
-best-of-K problem wearing different clothes: the cell that wins a grid is a
-*maximum* over many cells, so its measured gain is biased upward by selection
-and will re-measure lower. `eval/weight_sweep.py` therefore has a separate
-`confirm` stage that re-runs the finalists on a **fresh seed**, and only that
-number may be quoted as the effect. → `CLAUDE.md`, the `-a` and `-f` entries.
+**Still open.** The cap above L=176 is untested, and the L=167 grid put
+lambda = 40 at +2.8 per 1000 (z = +1.2, ns) — a faint hint lambda might keep
+rising past 30, where capping is merely the conservative reading. L=110 reads
+−4.9 per 1000 (z = −1.57, ns) with flat cells either side, most likely
+scatter. And every cell here measures the plugboard tier with the rotor key
+given, so none of it establishes the coefficients are right for a full
+unknown-key sweep — where `-a`'s gain being climb-surface rather than
+discrimination means they could differ. → `CLAUDE.md`, the `-a` and `-f`
+entries.
 
 ## Maintainability and packaging
 

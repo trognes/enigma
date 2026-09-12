@@ -112,7 +112,12 @@ int kick_rank_model();
 const double * all_weights();
 double fused_lambda_value();
 bool coeffs_overridden();
+/* True when -f's lambda came from the language's length rule rather than
+   from a flat constant, so the echo can say so -- it varies per message. */
+bool fused_lambda_from_rule();
 
+/* Resolve -f's IC weight.  MUST be called after readciphertext():
+   wehrmacht's lambda is min(0.17*L, 30) and needs the length. */
 void ic_blend_init();
 
 /* Load the table backing one model (IC needs none). */
