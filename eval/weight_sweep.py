@@ -168,8 +168,24 @@ def baseline(pool, seed, L, n, target, restarts):
     return CACHE[k]
 
 
+def zscore(a, b):
+    """Paired z on the discordants.  p alone hides magnitude once it saturates
+    at 0.000, and the per-length cells need something comparable across
+    different discordant counts."""
+    n = a + b
+    return 0.0 if n == 0 else (a - b) / (n ** 0.5)
+
+
 def score_cell(pool, args, w, lam, label):
-    """Total breaks and discordants against the baseline, pooled over lengths."""
+    """Breaks and discordants against the baseline, pooled AND per length.
+
+    Per length matters here and is not decoration.  IC's spread falls as ~1/L
+    (a rate over C(L,2) pairs) while the per-symbol n-gram score's falls as
+    ~1/sqrt(L) (a mean of L terms), so the lambda that balances them should
+    GROW with length -- which is exactly the argument the `-S k` entry makes
+    for its own lambda scaling as 0.1*L, against -f's baked constant 30.  A
+    pooled optimum would smear that away, so both are reported.
+    """
     tot = base_tot = only_c = only_b = 0
     per = []
     for L in args.lengths:
@@ -183,13 +199,13 @@ def score_cell(pool, args, w, lam, label):
         base_tot += sum(b)
         only_c += oc
         only_b += ob
-        per.append(sum(c))
+        per.append(f"{sum(c) - sum(b):+d}({oc}/{ob},z{zscore(oc, ob):+.1f})")
     wtxt = ",".join(f"{x:g}" for x in w) if w else "default"
     ltxt = f" lam {lam:g}" if lam is not None else ""
-    print(f"  {label:<10} {wtxt:<22}{ltxt:<10} "
-          f"{tot:>5} vs {base_tot:<5} ({tot - base_tot:+4})  "
-          f"{only_c:>4}/{only_b:<4} p={mcnemar(only_c, only_b):.3f}  "
-          f"{per}", flush=True)
+    print(f"  {label:<8} {wtxt:<20}{ltxt:<9} "
+          f"{tot:>6} ({tot - base_tot:+5})  {only_c:>4}/{only_b:<4} "
+          f"z{zscore(only_c, only_b):+5.2f} p={mcnemar(only_c, only_b):.3f}  "
+          f"| {'  '.join(per)}", flush=True)
     return tot, only_c, only_b
 
 
@@ -211,6 +227,9 @@ def main():
                     help="fixed lambda for -f cells (default: the baked 30)")
     ap.add_argument("--arms", nargs="+", default=[],
                     help="confirm: weight vectors, optionally w0,w1,w2,w3:lam")
+    ap.add_argument("--lams", type=float, nargs="+",
+                    default=[0, 5, 10, 15, 20, 25, 30, 40, 50,
+                             65, 80, 100, 140])
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--step", type=float, default=0.025,
                     help="decay: resolution in r")
@@ -240,8 +259,8 @@ def main():
                 r = round(i * args.step, 4)
                 score_cell(pool, args, geometric(r), args.lam, f"r={r:g}")
         elif args.stage == "lam":
-            for lam in [0, 5, 10, 15, 20, 25, 30, 40, 50, 65, 80, 100, 140]:
-                score_cell(pool, args, start, float(lam), f"lam{lam}")
+            for lam in args.lams:
+                score_cell(pool, args, start, float(lam), f"lam{lam:g}")
         elif args.stage == "refine":
             # Unconstrained coordinate descent on the three free weights.  w[0]
             # is pinned at 1 by scale invariance for -a; for -f the scale is
