@@ -1857,10 +1857,46 @@ are read from a **data directory** (filenames built as
   > costs **−178 breaks per 1000** — 14× the size of the win being chased —
   > while lambda = 0 costs −22.
   >
-  > **The cap above L=176 is untested**, and the L=167 grid put lambda = 40 at
-  > +2.8 per 1000 (z = +1.2, ns) — a faint hint it might keep rising. Capping
-  > at 30 is the conservative reading of unmeasured ground, not a measured
-  > optimum. **L=110 is the one point of friction**: −4.9 per 1000 (z = −1.57,
+  > ⚠️ **The cap above L=176 is now TESTED, and 30 is TOO LOW there — the
+  > shipped rule is known-wrong in that band and has not been changed.** At
+  > L=200 and the operating budget (`-R 8`, 6000 paired trials), lambda 45 and
+  > 65 beat the capped 30 by **+32 and +37 breaks of 6000** (z = 2.67 and
+  > 2.97), i.e. ~+0.6pp of break50 on a 92.75% base. So the L=167 grid's
+  > "faint hint" (lambda 40 at z = +1.2, ns) was real.
+  >
+  > **It is not shipped because ONE length cannot fix a rule.** Lining up the
+  > measured plateau midpoints — lambda ≈ 10 at L ≈ 65, ≈ 20 at L = 100, ≈ 55
+  > at L = 200 — implies an exponent near **1.5**, steeper than the shipped
+  > linear rule (`0.17·L` predicts 34 at L=200) *and* than the `sd`-ratio
+  > argument the `-S k` entry makes (`1.1·√L` predicts 33). Both candidate
+  > theories undershoot in the same direction, which is suggestive; three
+  > plateau midpoints, two of them soft, are not a rule — and the note above
+  > about a fitted line fitting a plateau is what happened the last time this
+  > evidence shape was trusted.
+  >
+  > **A single-trajectory climb OVERSHOOTS the optimum by 1.5–2×, so do not
+  > tune lambda at `-R 0`.** At L=200 the `-R 0` ladder peaks near lambda 90
+  > and is still climbing at 65; the real budget peaks at 45–65 and reads
+  > lambda 90 as **nothing** (+12, z = +0.82). Normalised by headroom the two
+  > agree at 45 and 65 (6.1%/9.2% of failures fixed against 7.4%/8.5%) and
+  > diverge at 90 (12.4% against 2.8%). `-R 0` is a fair proxy for *whether*
+  > IC helps and a biased one for *how much* — which matters because `-R 8`
+  > saturates above L≈250 (98.7% break at 250, 100% at 400) and cannot measure
+  > there at all.
+  >
+  > **The band worth closing is therefore L = 177–250**, and it needs two or
+  > three more lengths in it at `-R 8`, not more trials at L=200. Above ~300
+  > is out of scope anyway: operational procedure split long messages, so
+  > those lengths are off-distribution for real traffic *and* too easy to
+  > discriminate scoring variants.
+  >
+  > **Pure IC is survivable at L=300 and catastrophic at L=200**, which bears
+  > on where scoring work is worth doing: lambda = 10 000 (IC alone in
+  > practice) costs **−40.6pp at L=200 but only −10.9pp at L=300**. At three
+  > hundred letters the n-gram half of `-f` is contributing very little.
+  > `eval/results-weight-sweep.txt` §12.
+  >
+  > **L=110 is the one point of friction**: −4.9 per 1000 (z = −1.57,
   > ns), with L=100 at 32 000 trials and L=130/140 flat around it, so most
   > likely scatter — but it is the cell to re-check if this ever misbehaves.
   >

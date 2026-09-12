@@ -2873,12 +2873,27 @@ other language keeps a flat 30 and is byte-identical.
   made the wrong conclusion persuasive enough to write down twice: **beware a
   result that arrives with its own explanation attached.**
 
-**Still open.** The cap above L=176 is untested, and the L=167 grid put
-lambda = 40 at +2.8 per 1000 (z = +1.2, ns) — a faint hint lambda might keep
-rising past 30, where capping is merely the conservative reading. L=110 reads
-−4.9 per 1000 (z = −1.57, ns) with flat cells either side, most likely
-scatter. And every cell here measures the plugboard tier with the rotor key
-given, so none of it establishes the coefficients are right for a full
+**Still open — and the cap is now a KNOWN-WRONG shipped value, not an
+unmeasured one.** At L=200 and the operating budget (`-R 8`, 6000 paired
+trials) lambda 45 and 65 beat the capped 30 by +32 and +37 breaks of 6000
+(z = 2.67, 2.97) — ~+0.6pp of break50. The L=167 grid's faint hint
+(lambda 40 at z = +1.2, ns) was real. It is **not shipped** because one length
+cannot fix a rule: the measured plateau midpoints (≈10 at L≈65, ≈20 at L=100,
+≈55 at L=200) imply an exponent near 1.5, steeper than both the shipped
+`0.17·L` (predicts 34) and the `1.1·√L` sd-ratio argument (predicts 33), and
+three midpoints are the same evidence shape that produced the withdrawn
+`0.18·L` above.
+
+**What would close it:** two or three more lengths in **L = 177–250** at
+`-R 8`. Not more trials at L=200, and not `-R 0` — a single-trajectory climb
+overshoots the optimum by 1.5–2× (it peaks near lambda 90 at L=200, where the
+real budget reads 90 as nothing). `-R 8` saturates above L≈250 and >300 is out
+of scope, so that band is the whole remaining question.
+`eval/results-weight-sweep.txt` §12.
+
+L=110 reads −4.9 per 1000 (z = −1.57, ns) with flat cells either side, most
+likely scatter. And every cell here measures the plugboard tier with the rotor
+key given, so none of it establishes the coefficients are right for a full
 unknown-key sweep — where `-a`'s gain being climb-surface rather than
 discrimination means they could differ. → `CLAUDE.md`, the `-a` and `-f`
 entries.

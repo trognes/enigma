@@ -254,6 +254,82 @@ wehrmacht is REAL and is an OPERATIONAL-LENGTH effect, which is the opposite
 of the short-message story the pooled number told.
 
 
+=============== 12. ABOVE THE CAP: L = 200/300 (seeds 61, 67) ===============
+# A: -R 8, L=200, 6000 paired trials, seed 61   (the OPERATING budget)
+# B: -R 0, L=200 and 300, 2000 each, seed 67    (how far it rises)
+# baseline in both = the shipped rule, which is lambda 30 at every L >= 177
+
+  A, -R 8, L=200            breaks vs base    only-c/only-b
+  lam30                     5565 (   +0)       0/0     z+0.00   <- self-control
+  lam45                     5597 (  +32)      88/56    z+2.67
+  lam65                     5602 (  +37)      96/59    z+2.97
+  lam90                     5577 (  +12)     112/100   z+0.82
+
+  B, -R 0                  total      L=200            L=300
+  lam90                    +89     +53(z+3.9)       +36(z+4.1)
+  lam150                   +73     +29(z+2.0)       +44(z+4.9)
+  lam300                   -46     -79(z-4.5)       +33(z+3.4)
+  lam1000                 -531    -488(z-19.6)      -43(z-3.5)
+  lam10000               -1030    -812(z-27.3)     -218(z-12.6)
+
+THE CAP OF 30 IS TOO LOW AT L=200, AT THE OPERATING BUDGET.  lambda 45 and 65
+beat it by 32 and 37 breaks of 6000 (z 2.67 and 2.97) -- about +0.6pp of
+break50, on a base of 92.75%.  So the "faint hint" recorded at L=167
+(lambda 40 at z +1.2, ns) was real, and the cap is not merely unmeasured
+above L=176: it is wrong there.
+
+BUT -R 0 OVERSHOOTS THE OPTIMUM BY 1.5-2x, AND THAT IS THE METHODOLOGICAL
+FINDING.  At L=200 the cheap proxy peaks near lambda 90; the real budget peaks
+at 45-65 and reads lambda 90 as NOTHING (+12, z +0.82).  Normalised by
+headroom the two agree where they agree -- at lambda 45 and 65 the proxy fixes
+6.1% and 9.2% of its failures against the real budget's 7.4% and 8.5% -- and
+diverge hard at 90 (12.4% against 2.8%).  So a single-trajectory climb is a
+usable proxy for WHETHER IC helps and a biased one for HOW MUCH.
+
+A PRE-REGISTERED PREDICTION WAS RESOLVED AGAINST ITS OWN FIRST BRANCH.  Before
+run B the prediction recorded was: if -R 0 keeps rising through lambda 150 and
+300, its monotone climb is degenerate -- a lone trajectory simply buying the
+smoothest surface available -- and says nothing about lambda's optimum.  It
+does not keep rising.  L=200 peaks near 90 and is -79 by 300, so the proxy is
+biased rather than meaningless, which is the weaker and more useful of the two
+branches.
+
+THE PEAK MOVES WITH LENGTH, WHICH IS WHAT THE THEORY WANTS.  At -R 0, L=200
+peaks near 90 and collapses by 300; L=300 sits on a broad plateau from 90 to
+300 and is still positive at 300.  lambda scaling with L is the premise of the
+shipped rule, and this is the first direct evidence for it above the cap.
+
+PURE IC IS NOT A DISASTER AT L=300, AND THAT IS THE ODD ONE.  lambda 10000 is
+effectively IC alone; it costs -40.6pp at L=200 but only -10.9pp at L=300, and
+lambda 1000 costs -24.4pp against -2.2pp.  At three hundred letters the n-gram
+half of -f is contributing very little -- the climb very nearly succeeds on
+coincidence structure alone.  Not acted on; recorded because it bears on where
+scoring work is worth doing at all.
+
+THE ERROR STAYS WILDLY ASYMMETRIC, SO ERR LOW.  At L=200, overshooting to
+lambda 1000 costs -488 per 2000 while the whole win being chased is +37 per
+6000.  That asymmetry is the same one recorded for the short band and it is
+the reason the cap exists at all.
+
+NOT SHIPPED, AND THE REASON IS THE ONE THIS FILE KEEPS RE-LEARNING.  There is
+exactly ONE length measured at the operating budget above the cap.  Lining up
+the plateau midpoints gives lambda ~10 at L~65, ~20 at L=100 and ~55 at L=200,
+an implied exponent near 1.5 -- steeper than the shipped linear rule (0.17*L
+predicts 34 at L=200) AND than the sd-ratio argument (1.1*sqrt(L) predicts
+33).  Both candidate theories undershoot in the same direction, which is
+suggestive; three plateau midpoints, two of them soft, are not a rule.
+Reading 5 above records the last time a line was fitted to exactly this kind
+of evidence here, and it had to be withdrawn.
+
+SCOPE, AND IT IS NARROW.  Operational procedure split long messages, so
+lengths much above 300 are off-distribution for real traffic and are in any
+case too easy to discriminate scoring variants (at -R 8 the pilot reads 98.7%
+break at L=250 and 100% at L=400).  The cap binds from L=177.  So the band
+where this question both matters and can be measured at the operating budget
+is roughly L = 177-250, and closing it needs two or three more lengths in that
+band at -R 8 -- not more trials at L=200.
+
+
 THE READING
 =============================================================================
 
