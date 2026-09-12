@@ -1375,7 +1375,7 @@ which is Batch C and may not even be the same network.
 
 **4. Known-word and X-segmentation bonuses — MEASURED DOWN; do not add them to
 the score.** The idea: after each rotor setting's climb, score the candidate
-plaintext for whole known words and for the X word-separator rate, and add that
+plaintext for whole known words and for the X segmentation rate, and add that
 as a bonus. It is what a human reader does with a decrypt the quadgram model has
 undervalued, and it looked strong — on FTNBK, the message that prompted it, the
 combination lifts the true key from **z = 0.90 to 11.21**, across the 6.15 bar a
@@ -2797,6 +2797,19 @@ small multiple on a discrete CUDA card against a desktop CPU — arithmetic, wit
 §12's record as the warning. **The first step there is the probe, not the
 port**: the body is behind three macros so the same microkernel can run on a
 CUDA card and give the number before any port work is spent.
+
+**One named gap survives the close-out, and it is a gap in how the ladder
+searched rather than in what it found** (`metal/DESIGN.md` §17.9). Every arm
+attacked the problem with more parallel *units* — lane-per-restart,
+simdgroup-per-climb at K = 8/16/32, packed registers for occupancy — and not
+one gave a single lane more independent work to overlap. The GPU body is
+rolled, one character and its 3-deep chain per iteration, where the CPU
+scorers are unrolled 4× for a measured −18.7% / −13.7% on arm64. So **ILP
+inside a lane was never tested**, though it is the CPU's largest scorer win.
+It cannot flip the verdict — 2× on 0.28× is still 0.56× — and it is bounded
+against the register budget that occupancy already depends on, which is why
+it stays a gap rather than a task. It matters most for whoever runs the probe
+on a CUDA card, where that budget differs.
 
 ## Maintainability and packaging
 
