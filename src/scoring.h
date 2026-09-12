@@ -117,7 +117,7 @@ bool coeffs_overridden();
 bool fused_lambda_from_rule();
 
 /* Resolve -f's IC weight.  MUST be called after readciphertext():
-   wehrmacht's lambda is min(0.17*L, 30) and needs the length. */
+   wehrmacht's lambda is 0.25*L and needs the length. */
 void ic_blend_init();
 
 /* Load the table backing one model (IC needs none). */

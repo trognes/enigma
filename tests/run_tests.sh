@@ -3137,9 +3137,10 @@ check "\$ENIGMA_LOGLIN rejects a partial weight vector" \
   "$(printf 'AAAA' | env ENIGMA_LOGLIN=1,0.6 "$ENIGMA" -q -l english \
      >/dev/null 2>&1; echo $?)" "1"
 
-# wehrmacht's -f lambda is min(0.17*L, 30), not the flat 30 every other
-# language takes -- measured +586 breaks of 64000 at L <= 70 and +3 of 88000
-# at L >= 80 (eval/results-weight-sweep.txt).  A rule-derived weight VARIES
+# wehrmacht's -f lambda is 0.25*L, not the flat 30 every other language takes
+# -- measured +586 breaks of 64000 at L <= 70 for scaling at all, then +65 of
+# 32000 held out for this slope over the capped min(0.17*L, 30) it replaced
+# (eval/results-weight-sweep.txt sections 12-14).  A rule-derived weight VARIES
 # WITH THE MESSAGE, so all of this is about the echo as much as the value: two
 # runs of the same command on different ciphertexts score differently, and a
 # log that omits the weight cannot be compared against another.
@@ -3153,13 +3154,17 @@ lam_echo()
     | sed -n 's/.*IC weight \([0-9.]*\) (from length \([0-9]*\)).*/\1 \2/p'
 }
 check "wehrmacht -f derives lambda from the length" \
-  "$(lam_echo 100 -f -l wehrmacht)" "17 100"
-check "wehrmacht -f lambda is capped at 30" \
-  "$(lam_echo 200 -f -l wehrmacht)" "30 200"
-# 176 * 0.17 = 29.92, so the cap bites at 177 and not at operational length.
-check "wehrmacht -f lambda reaches the cap at L=177, not before" \
-  "$(lam_echo 176 -f -l wehrmacht) / $(lam_echo 177 -f -l wehrmacht)" \
-  "29.92 176 / 30 177"
+  "$(lam_echo 100 -f -l wehrmacht)" "25 100"
+# UNCAPPED, and this is the check that says so: the rule this replaced capped
+# at 30, which was measured too low across L = 177..240.  Any cap at or below
+# 100 fails here, which is the way a reinstated one would show up.
+check "wehrmacht -f lambda is uncapped past the old cap" \
+  "$(lam_echo 200 -f -l wehrmacht) / $(lam_echo 400 -f -l wehrmacht)" \
+  "50 200 / 100 400"
+# The short end is where scaling was worth most (+14% relative at L <= 70), so
+# it is pinned too: a steeper slope shipped without this could regress it.
+check "wehrmacht -f lambda stays low on a short message" \
+  "$(lam_echo 40 -f -l wehrmacht)" "10 40"
 # Every other language keeps the flat 30, so it prints no length clause at all.
 check "english -f takes a flat lambda, with no length clause" \
   "$(lam_echo 100 -f -l english)" ""

@@ -507,16 +507,19 @@ THE READING
    schedule and is still not directly comparable; what is now established is
    that the BREAK gain under -S k4f10 is ~1.9pp at L=167 and not zero.
 
-STILL OPEN.  The cap of 30 is now KNOWN WRONG above L=176 -- measured at one
-length (section 12), across the band (section 13) and against a candidate
-rule on a held-out seed (section 14, +65 of 32 000, z +2.35) -- and it is
-still what ships.  What is not known is the SHAPE of the replacement: no run
-yet compares a length-scaled lambda against a raised FLAT one, and the
-held-out per-length deltas show no length trend, so "0.25*L" and "any
-constant near 50" are not separated.  The one arm that separates them is a
-flat lambda ~50 paired against 0.25*L across L = 177-240 on a fresh seed.  A
-shipped rule would also need a cap or a measurement above L=240, since
-0.25*L is unbounded and the error is asymmetric.
+SHIPPED: 0.25*L, UNCAPPED, replacing min(0.17*L, 30).  The cap was measured
+wrong at one length (section 12), across the whole band it binds in (section
+13), and finally as a rule on a held-out seed (section 14, +65 of 32 000,
+z +2.35).  It ships without a cap because the cap is precisely what was
+measured wrong; re-imposing one at an unmeasured height would be a new guess.
+
+STILL OPEN.  The SHAPE of the replacement: no run compares a length-scaled
+lambda against a raised FLAT one, and the held-out per-length deltas show no
+length trend, so "0.25*L" and "any constant near 50" are not separated.  The
+one arm that separates them is a flat lambda ~50 paired against 0.25*L across
+L = 177-240 on a fresh seed -- so this ships as the better of two MEASURED
+options, not as a fitted law.  Nothing is measured at the operating budget
+above L=240, where the rule asks for 60 and keeps rising (100 at L=400).
 L=110 reads -4.9 per 1000 (z -1.57, ns) with flat cells either side, most
 likely scatter but the cell to re-check if this misbehaves.  And every cell
 here measures the plugboard tier with the rotor key GIVEN, so none of it

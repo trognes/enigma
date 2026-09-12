@@ -91,8 +91,8 @@ int main(int argc, char * * argv)
 
   hist_init();
   readciphertext();
-  /* AFTER readciphertext, because wehrmacht's -f lambda is min(0.17*L, 30)
-     and so needs the length.  Before intscore_init, which bakes that lambda
+  /* AFTER readciphertext, because wehrmacht's -f lambda is 0.25*L and so
+     needs the length.  Before intscore_init, which bakes that lambda
      into the --int integer coefficients -- if the two disagreed, the integer
      and double paths would score differently. */
   ic_blend_init();

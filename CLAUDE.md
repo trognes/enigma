@@ -1797,8 +1797,9 @@ are read from a **data directory** (filenames built as
   >
   > **The mechanism was independently TRUE, which is what made the wrong
   > conclusion persuasive.** `k4` really is mono+IC, and that really does
-  > explain the null cells at L=40 and 60 — where the rule sets λ to 6.8 and
-  > 10.2, so the baseline is near `-a` anyway. It does not reach the long
+  > explain the null cells at L=40 and 60 — where the rule then shipping set λ
+  > to 6.8 and 10.2 (10 and 15 under today's `0.25·L`), so the baseline is
+  > near `-a` anyway. It does not reach the long
   > cells. **Beware a result that arrives with its own explanation attached**
   > — the `--biased-random` entry records the same trap, on a z = −3.08 that
   > did not replicate. `eval/weight_sweep.py` §11, `ENHANCEMENTS.md` item 21.
@@ -1825,13 +1826,13 @@ are read from a **data directory** (filenames built as
   IC is quadratic in the whole-message letter histogram -- so it is accumulated
   in the same decode pass and added after normalisation.
 
-  > **On `wehrmacht` lambda is NOT 30 — it is `min(0.17·L, 30)`, and that is
+  > **On `wehrmacht` lambda is NOT 30 — it is `0.25·L`, uncapped, and that is
   > the one thing a deep sweep of these coefficients found.** A baked constant
   > cannot be right at every length: IC's spread falls as ~`1/L` (a rate over
   > `C(L,2)` pairs) while the per-symbol n-gram score's falls as ~`1/√L` (a
   > mean of `L` terms) — the same argument the `-S k` entry makes for its own
-  > lambda scaling. Measured, 30 is right at operational length and much too
-  > high below ~75 letters (breaks per 1000, lambda ≈ 10 against 30):
+  > lambda scaling. Measured, a flat 30 is much too high below ~75 letters
+  > (breaks per 1000, lambda ≈ 10 against 30):
   >
   > | L | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 140 |
   > |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -1843,55 +1844,67 @@ are read from a **data directory** (filenames built as
   > broken, a **+14% relative** gain, for a different constant and nothing
   > else. `eval/weight_sweep.py`; `ENHANCEMENTS.md` item 21.
   >
-  > **The optimum is a PLATEAU, so 0.17 is a choice rather than a fit.**
-  > Pooled over L = 40…90, lambda = 4/6/8/10/13/16 score
+  > **The short-band optimum is a PLATEAU, and the slope is not fitted to
+  > it.** Pooled over L = 40…90, lambda = 4/6/8/10/13/16 score
   > +219/+223/+238/+227/+207/+210 per 24 000 — a spread of 31 across a **4×
   > range** — then fall to +123 at 20 and +79 at 25. An earlier `0.18·L` came
   > from fitting a line to three per-length peaks, two of them weak; the
-  > ladder shows there was no line to fit. 0.17 beats 0.20 only because the
-  > plateau's upper shoulder falls away between 16 and 20, and because the cap
-  > then bites at L=176 rather than exactly at 167, leaving operational length
-  > off the kink.
+  > ladder shows there was no line to fit.
+  >
+  > **Do NOT read that ladder as condemning `0.25·L` at the short end — it
+  > cannot, and the reason is worth keeping.** Those cells hold lambda
+  > *constant* across L = 40…90, so the fall at 20 and 25 is mostly those
+  > values being wrong at **L=40**, where the rule asks for **10** — right on
+  > the measured optimum. Across that band the rule gives 10…22.5, inside or
+  > beside the plateau at every length, and everywhere far below the 30 the
+  > `L ≤ 70` result was measured against. A pooled constant-lambda ladder
+  > cannot price a length-scaled rule.
   >
   > **The error is wildly asymmetric, so err LOW.** At L=100, lambda = 140
   > costs **−178 breaks per 1000** — 14× the size of the win being chased —
   > while lambda = 0 costs −22.
   >
-  > ⚠️ **The cap above L=176 is now TESTED THREE TIMES, and 30 is TOO LOW
-  > there — the shipped rule is known-wrong in that band and has not been
-  > changed.** At L=200 and the operating budget (`-R 8`, 6000 paired trials),
-  > lambda 45 and 65 beat the capped 30 by **+32 and +37 breaks of 6000**
-  > (z = 2.67 and 2.97), i.e. ~+0.6pp of break50 on a 92.75% base. So the
-  > L=167 grid's "faint hint" (lambda 40 at z = +1.2, ns) was real. Across the
-  > whole band the cap binds in — L = 177/190/215/240, 8000 paired trials each
-  > — lambda 45 beats it by **+107 of 32 000** (z = +3.89) and lambda 65 by +79
-  > (z = +2.48). §13.
+  > **THE CAP IS GONE, AND THE SLOPE IS 0.25 — this replaced an earlier
+  > `min(0.17·L, 30)`, whose cap was measured too low at three scales.** At
+  > L=200 and the operating budget (`-R 8`, 6000 paired trials), lambda 45 and
+  > 65 beat the capped 30 by **+32 and +37 breaks of 6000** (z = 2.67 and
+  > 2.97), i.e. ~+0.6pp of break50 on a 92.75% base — so the L=167 grid's
+  > "faint hint" (lambda 40 at z = +1.2, ns) was real. Across the whole band
+  > the cap bound in — L = 177/190/215/240, 8000 paired trials each — lambda 45
+  > beat it by **+107 of 32 000** (z = +3.89) and lambda 65 by +79 (z = +2.48).
+  > §12, §13.
   >
-  > **A length-scaled replacement then WON HELD OUT**, which is the strongest
-  > form of this result: `0.25·L` applied as a rule beats the shipped
-  > `min(0.17·L, 30)` by **+65 breaks of 32 000** (z = +2.35, all four lengths
-  > positive) on a seed that had no hand in choosing 0.25 — but at **half** the
-  > size the selecting seed implied (+107 → +65, and ~2× at each end
-  > separately), which is the winner's curse this file records eating two
-  > earlier optima. §14.
+  > **The shipped rule then WON HELD OUT**, which is what it rests on:
+  > `0.25·L` applied as a rule beats `min(0.17·L, 30)` by **+65 breaks of
+  > 32 000** (z = +2.35, all four lengths positive) on a seed that had no hand
+  > in choosing 0.25 — at **half** the size the selecting seed implied
+  > (+107 → +65, and ~2× at each end separately), which is the winner's curse
+  > this file records eating two earlier optima. §14.
   >
-  > **It is STILL not shipped, and the reason has changed: the SHAPE is
-  > undetermined, not the direction.** No run compares a length-scaled lambda
-  > against a raised **flat** one, and the held-out per-length deltas (+27, +7,
-  > +14, +17) carry **no length trend** — equally consistent with "any lambda
-  > near 50 beats 30 in this band". §13's sign-flip discriminator (lambda 65
-  > minus 45 reading −24, −24, +10, +10 in length order) is suggestive and each
-  > of its cells is about one SE. The arm that separates them is a flat
-  > lambda ≈ 50 paired against `0.25·L` across the band on a fresh seed.
-  > Separately, `0.25·L` is **unbounded** where the shipped rule caps (100 at
-  > L=400, with nothing measured at the operating budget above L=240), and the
-  > error asymmetry says an unbounded rule is the wrong thing to guess at.
+  > ⚠️ **What is NOT established is the SHAPE: slope versus a raised flat
+  > cap.** No run compares a length-scaled lambda against a raised **flat**
+  > one, and the held-out per-length deltas (+27, +7, +14, +17) carry **no
+  > length trend** — equally consistent with "any lambda near 50 beats 30 in
+  > this band". §13's sign-flip discriminator (lambda 65 minus 45 reading −24,
+  > −24, +10, +10 in length order) is suggestive and each of its cells is about
+  > one SE. The arm that would separate them is a flat lambda ≈ 50 paired
+  > against `0.25·L` across the band on a fresh seed. **So this ships as the
+  > better of two measured options, not as a fitted law**, and if it ever
+  > misbehaves that is the run to do.
+  >
+  > **It is UNBOUNDED, deliberately**, since the cap is the thing that was
+  > measured wrong and any replacement height would be a fresh guess: 100 at
+  > L=400, with **nothing measured at the operating budget above L=240**. The
+  > `-R 0` proxy is the only evidence up there and has a broad plateau from 90
+  > to 300 at L=300, where the rule asks for 75. Operational procedure split
+  > long messages, so that band is off-distribution for real traffic — and
+  > `-R 8` breaks 98.7% at L=250 and 100% at L=400 regardless.
   >
   > Lining up the measured plateau midpoints — lambda ≈ 10 at L ≈ 65, ≈ 20 at
   > L = 100, ≈ 55 at L = 200 — implies an exponent near **1.5**, steeper than
-  > the shipped linear rule (`0.17·L` predicts 34 at L=200) *and* than the
-  > `sd`-ratio argument the `-S k` entry makes (`1.1·√L` predicts 33). Both
-  > candidate theories undershoot in the same direction, which is suggestive;
+  > the shipped linear rule (`0.25·L` predicts 50 at L=200) *and* than the
+  > `sd`-ratio argument the `-S k` entry makes (`1.1·√L` predicts 33). The
+  > linear rule now lands on the L=200 midpoint and undershoots further out;
   > three plateau midpoints, two of them soft, are not a rule — and the note
   > above about a fitted line fitting a plateau is what happened the last time
   > this evidence shape was trusted.
@@ -1906,8 +1919,9 @@ are read from a **data directory** (filenames built as
   > saturates above L≈250 (98.7% break at 250, 100% at 400) and cannot measure
   > there at all.
   >
-  > **That band — L = 177–250 — is now measured** (§13, §14); what remains is
-  > the flat-versus-scaled arm above. Above ~300 is out of scope anyway:
+  > **That band — L = 177–250 — is measured and is what the shipped slope
+  > rests on** (§13, §14); what remains is the flat-versus-scaled arm above.
+  > Above ~300 is out of scope anyway:
   > operational procedure split long messages, so those lengths are
   > off-distribution for real traffic *and* too easy to discriminate scoring
   > variants.
@@ -1918,9 +1932,12 @@ are read from a **data directory** (filenames built as
   > hundred letters the n-gram half of `-f` is contributing very little.
   > `eval/results-weight-sweep.txt` §12.
   >
-  > **L=110 is the one point of friction**: −4.9 per 1000 (z = −1.57,
-  > ns), with L=100 at 32 000 trials and L=130/140 flat around it, so most
-  > likely scatter — but it is the cell to re-check if this ever misbehaves.
+  > **L=110 is the one point of friction**, and the steeper slope has mostly
+  > walked away from it: the cell read −4.9 per 1000 for lambda ≈ 10 against
+  > 30 (z = −1.57, ns), where `0.25·L` now asks for **27.5** there rather than
+  > the old rule's 18.7. L=100 at 32 000 trials and L=130/140 are flat around
+  > it, so it was most likely scatter either way — but it is the cell to
+  > re-check if this ever misbehaves.
   >
   > **`ic_blend_init()` therefore runs AFTER `readciphertext()`**, and before
   > `intscore_init()`, which bakes lambda into the `--int` integer
@@ -1936,7 +1953,9 @@ are read from a **data directory** (filenames built as
   > property.** Two checks — `--polish` improving on the converged best, and
   > the `--ring-stride` refinement — are about `best.idx` RECONSTRUCTION and
   > ran `-f -l wehrmacht` on a 74-letter fixture. Under the rule that fixture
-  > takes lambda 12.6, the climb converges where `--polish` cannot improve,
+  > takes lambda 18.5 (12.6 under the rule that shipped before it — the pin is
+  > what makes that irrelevant), the climb converges where `--polish` cannot
+  > improve,
   > and both assertions go vacuous. They now pin `ENIGMA_IC_BLEND=30`, and
   > were re-verified to still fail under the historical `best.idx / 2`
   > injection.

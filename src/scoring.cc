@@ -911,12 +911,14 @@ struct lang_coeffs
 {
   const char * language;   /* nullptr terminates the table AND is the default */
   double w[4];             /* quad, tri, bi, mono */
-  double ic_lambda;        /* -f's IC weight: the CAP, and the whole value
-                              when ic_lambda_per_l is 0 */
+  double ic_lambda;        /* -f's IC weight when ic_lambda_per_l is 0.  Under
+                              a per-length rule it is only the stand-in used
+                              before the length is known. */
   double ic_lambda_per_l;  /* 0 = a flat ic_lambda (every language but
                               wehrmacht).  Otherwise the effective weight is
-                              min(ic_lambda_per_l * textlength, ic_lambda) --
-                              see the measurement note above the table. */
+                              ic_lambda_per_l * textlength, UNCAPPED -- the cap
+                              this rule used to carry was measured too low and
+                              removed; see the note above the table. */
 };
 
 static const lang_coeffs coeffs_table[] =
@@ -924,15 +926,32 @@ static const lang_coeffs coeffs_table[] =
     /* MEASURED.  The order weights are unchanged -- they sit on a plateau
        flat across a 4x range of the low orders, so there was nothing to move
        (ENHANCEMENTS.md item 21).  The IC weight is the one thing the sweep
-       found, and it is not a constant: lambda = 30 is right at operational
-       length and much too high below ~75 letters, costing 14% of breaks
-       there.  min(0.17*L, 30) is the fitted rule; 0.17 rather than 0.18
-       because the plateau's upper shoulder falls away between lambda 16 and
-       20 and 0.17 keeps further from it, and because the cap then bites at
-       L=176 rather than exactly at 167, leaving operational length off the
-       kink.  Held out on three seeds and 152 000 paired trials: +586 breaks
-       of 64 000 at L <= 70 (z +10.95), +3 of 88 000 at L >= 80 (z +0.04). */
-    { "wehrmacht", { 1.0, 0.6, 0.3, 0.15 }, 30.0, 0.17 },
+       found, and it is not a constant: a flat lambda = 30 is much too high
+       below ~75 letters, costing 14% of breaks there (+586 of 64 000 at
+       L <= 70, z +10.95, three seeds and 152 000 paired trials), and too LOW
+       above ~176, which is what the first rule's cap got wrong.
+
+       0.25*L, UNCAPPED.  The cap was measured wrong at three scales -- one
+       length (L=200, lambda 45 and 65 beating 30 by +32 and +37 of 6000),
+       the whole band it binds in (L = 177..240, +107 of 32 000 for lambda
+       45, z +3.89) and then the rule itself, HELD OUT on a seed that had no
+       hand in choosing 0.25: +65 breaks of 32 000 against min(0.17*L, 30),
+       z +2.35, all four lengths positive (eval/results-weight-sweep.txt
+       sections 12-14).
+
+       Note 0.25*L is NOT a regression at the short end, although the pooled
+       constant-lambda ladder looks like it should be: that ladder penalises
+       a constant 20 because 20 is wrong at L=40, where this rule asks for
+       10 -- right on the measured optimum.  Across L = 40..90 the rule gives
+       10..22.5, inside or beside the plateau at every length, and it stays
+       far below the 30 the L <= 70 result was measured against.
+
+       Above L=240 nothing is measured at the operating budget; the -R 0
+       proxy has a broad plateau from 90 to 300 at L=300, where the rule asks
+       for 75.  Operational procedure split long messages, so that band is
+       off-distribution for real traffic -- and at those lengths -R 8 breaks
+       essentially everything anyway. */
+    { "wehrmacht", { 1.0, 0.6, 0.3, 0.15 }, 30.0, 0.25 },
   };
 
 /* The default -- PR #106 / archived/PERFORMANCE.md 6.4.  Flat lambda, i.e.
@@ -977,7 +996,6 @@ static const lang_coeffs & coeffs_for_language()
    6.4. */
 static const double fused_lambda_default = 30.0;
 static double g_fused_lambda = fused_lambda_default;
-static double g_lambda_cap = fused_lambda_default;
 static double g_lambda_per_l = 0.0;
 static bool g_lambda_is_rule = false;
 
@@ -1012,9 +1030,8 @@ static void resolve_coeffs()
   const lang_coeffs & lc = coeffs_for_language();
   for (int j = 0; j < 4; j++)
     g_all_weights[j] = lc.w[j];
-  /* The cap stands in until ic_blend_init() knows the length.  A language
+  /* ic_lambda stands in until ic_blend_init() knows the length.  A language
      with a flat lambda is finished here. */
-  g_lambda_cap = lc.ic_lambda;
   g_lambda_per_l = lc.ic_lambda_per_l;
   g_fused_lambda = lc.ic_lambda;
 
@@ -1049,8 +1066,7 @@ void ic_blend_init()
   resolve_coeffs();
   if ((g_lambda_per_l > 0.0) && ! g_coeffs_overridden)
     {
-      const double by_len = g_lambda_per_l * textlength;
-      g_fused_lambda = (by_len < g_lambda_cap) ? by_len : g_lambda_cap;
+      g_fused_lambda = g_lambda_per_l * textlength;
       g_lambda_is_rule = true;
     }
 }
