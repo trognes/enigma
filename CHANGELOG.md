@@ -8,6 +8,31 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The `-a`/`-f` scoring coefficients are per language, and `wehrmacht`'s
+  `-f` IC weight now scales with the message: `min(0.17 × length, 30)`
+  instead of a flat 30.** Every other language keeps the previous constants
+  and is byte-identical. The coefficients had been fitted across four
+  *prose* languages and never retuned for telegraphic German, so the prose
+  fit sat underneath the recommended recipe for real traffic as an
+  assumption rather than a result.
+
+  A deep sweep found the **order weights are a plateau** — every cell from
+  `r = 0.35` to `1.2` in a geometric family lands within ±10 breaks of 1000,
+  a 3.4× range, with the shipping row on the plateau rather than at a peak —
+  so they did not move. The IC weight did: a baked constant cannot suit
+  every length, because IC's spread falls as ~`1/L` while the per-symbol
+  n-gram score's falls as ~`1/√L`. Measured, 30 is right at operational
+  length and much too high below ~75 letters. Held out on three seeds and
+  152 000 paired trials: **+586 breaks of 64 000 at L ≤ 70** (z = +10.95)
+  against +3 of 88 000 at L ≥ 80 (z = +0.04) — 6.54% → 7.46% of short
+  messages broken, **+14% relative**, for a different constant and nothing
+  else.
+
+  `show_settings()` prints the effective weight with the length it came
+  from, since a rule-derived weight varies per message and a log omitting it
+  cannot be compared against another run of the same command.
+  `$ENIGMA_IC_BLEND` still overrides the rule.
+
 - **The tool cross-compiles for Windows** (`make clean && make
   CXX=x86_64-w64-mingw32-g++-posix`). The only POSIX call MinGW-w64 lacks
   is `getrusage`, used once for the peak-memory figure on the last line;
