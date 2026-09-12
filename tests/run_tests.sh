@@ -3018,9 +3018,15 @@ check "--crib-file is no longer accepted" \
 # Every long option must appear in --help. --crib-dump was absent for four
 # releases because nothing checked, so this compares the getopt table in the
 # source against the help text rather than trusting a human to notice.
+#
+# The match MUST require the argument keyword. Without it the pattern is just
+# `{ "lowercase-string",` and any brace-initialised table in src/*.cc trips
+# it -- scoring.cc's per-language coefficient rows did, reporting "wehrmacht"
+# as a long option missing from --help.
 help_missing=$("$ENIGMA" -h 2>&1 > /tmp/enigma_help.$$ ; \
-  grep -ohE '\{ "[a-z-]+",' "$(dirname "$0")"/../src/*.cc \
-  | sed 's/{ "//;s/",//' | sort -u \
+  grep -ohE '\{ "[a-z-]+", *(no|required|optional)_argument,' \
+     "$(dirname "$0")"/../src/*.cc \
+  | sed 's/{ "//;s/",.*//' | sort -u \
   | while read -r o; do grep -q -- "--$o" /tmp/enigma_help.$$ || echo "$o"; done)
 rm -f /tmp/enigma_help.$$
 check "help lists every long option" "$help_missing" ""

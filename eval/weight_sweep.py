@@ -212,6 +212,10 @@ def main():
     ap.add_argument("--arms", nargs="+", default=[],
                     help="confirm: weight vectors, optionally w0,w1,w2,w3:lam")
     ap.add_argument("--rounds", type=int, default=3)
+    ap.add_argument("--step", type=float, default=0.025,
+                    help="decay: resolution in r")
+    ap.add_argument("--rmax", type=float, default=1.2,
+                    help="decay: largest r (1 = all four orders equal)")
     args = ap.parse_args()
     if not os.path.exists(ENIGMA):
         sys.exit("build the binary first (make)")
@@ -231,7 +235,9 @@ def main():
             # the answer -- the shipping row is not geometric (it halves after
             # the first step, r would have to be 0.6 then 0.5), so `refine`
             # relaxes all three afterwards.
-            for r in [round(0.05 * i, 2) for i in range(0, 25)]:
+            n = int(round(args.rmax / args.step)) + 1
+            for i in range(n):
+                r = round(i * args.step, 4)
                 score_cell(pool, args, geometric(r), args.lam, f"r={r:g}")
         elif args.stage == "lam":
             for lam in [0, 5, 10, 15, 20, 25, 30, 40, 50, 65, 80, 100, 140]:
