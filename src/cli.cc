@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "options.h"
+#include "scoring.h"
 #include "text.h"
 #include "wiring.h"
 
@@ -457,6 +458,21 @@ void show_settings()
        line rather than a trailing clause that would push the line past 80. */
     fprintf(stderr, " (language: %s)\n            n-gram files in %s\n",
             opt_language, opt_datadir);
+
+  /* Only when the environment moved them off the language's row.  A swept run
+     differs from its neighbours in nothing but these numbers, so a log that
+     omits them cannot be attributed to a cell afterwards; an ordinary run
+     prints nothing new. */
+  if (coeffs_overridden()
+      && ((opt_scoring == SCORE_ALL) || (opt_scoring == SCORE_FUSED)))
+    {
+      const double * w = all_weights();
+      fprintf(stderr, "            coefficients %g,%g,%g,%g", w[0], w[1],
+              w[2], w[3]);
+      if (opt_scoring == SCORE_FUSED)
+        fprintf(stderr, " lambda %g", fused_lambda_value());
+      fprintf(stderr, " (overridden)\n");
+    }
 
   /* One clause per continuation line so the line stays within 79 columns even when
      several are active (the default random seed is a full 20-digit uint64). The seed

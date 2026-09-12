@@ -883,6 +883,61 @@ double hist_probe(machine & m, const int * pos, const int * val, int cnt)
 }
 
 
+/* PER-LANGUAGE COEFFICIENTS for -a (the log-linear order weights) and -f (the
+   IC weight laid on top of them).
+
+   The default row is PR #106's, and its provenance is the thing to know before
+   touching it: the four weights were tuned across four PROSE languages
+   (english, german, danish, french) and the IC weight on english/german/
+   wehrmacht.  So -f's lambda has been checked against telegraphic traffic and
+   the four order weights have NOT -- they are a prose fit applied everywhere.
+   That asymmetry is why this table exists: a language whose tables are
+   estimated differently can want a different mixture, and `wehrmacht`'s are
+   not counted at all but SYNTHESISED by eval/build_telegraphic_ngrams.py from
+   published Appendix-C statistics, i.e. a reweighting of the prose tables.
+
+   Scale invariance means there are only THREE free order weights, not four:
+   the log-linear score is a sum of weighted log-probabilities, so multiplying
+   all four by a constant scales every candidate's score alike and cannot
+   change an ordering.  w[0] (quad) is therefore pinned at 1 and the sweep
+   moves the other three.  It does NOT carry over to -f, where the overall
+   scale sets the ngram half against `ic_lambda` and all four matter.
+
+   A row equal to the default is a no-op that records where a measured row will
+   land; `wehrmacht`'s is pending eval/weight_sweep.py.  $ENIGMA_AW overrides
+   the order weights and $ENIGMA_IC_BLEND the lambda, which is what lets one
+   binary run both arms of a sweep. */
+struct lang_coeffs
+{
+  const char * language;   /* nullptr terminates the table AND is the default */
+  double w[4];             /* quad, tri, bi, mono */
+  double ic_lambda;        /* -f's weight on the index of coincidence */
+};
+
+static const lang_coeffs coeffs_table[] =
+  {
+    /* Measured rows go here.  Currently identical to the default. */
+    { "wehrmacht", { 1.0, 0.6, 0.3, 0.15 }, 30.0 },
+    /* The sentinel row is the default -- PR #106 / archived/PERFORMANCE.md 6.4. */
+    { nullptr,     { 1.0, 0.6, 0.3, 0.15 }, 30.0 },
+  };
+
+/* The row for opt_language, or the default.  Resolved on every call rather
+   than cached: it is read once per table load and once at ic_blend_init(),
+   never in a loop. */
+static const lang_coeffs & coeffs_for_language()
+{
+  int i = 0;
+  while (coeffs_table[i].language != nullptr)
+    {
+      if ((opt_language != nullptr)
+          && (strcmp(coeffs_table[i].language, opt_language) == 0))
+        return coeffs_table[i];
+      i++;
+    }
+  return coeffs_table[i];
+}
+
 /* ENIGMA_IC_BLEND probe (archived/PERFORMANCE.md 6.4): fuse the index of coincidence into the
    target score as `per-symbol ngram + lambda*IC` instead of STAGING IC then quad. The
    premise is that the quad/weighted surface is nearly flat with only a plug or two set,
@@ -901,15 +956,62 @@ double hist_probe(machine & m, const int * pos, const int * val, int cnt)
 static const double fused_lambda_default = 30.0;
 static double g_fused_lambda = fused_lambda_default;
 
-void ic_blend_init()
+/* The order weights actually in force, and whether anything moved them off the
+   language's row.  show_settings() echoes them when it did: a swept run whose
+   log does not say which coefficients produced it cannot be attributed later,
+   and $ENIGMA_AW exists precisely so that many runs differ only there. */
+static double g_all_weights[4] = { 1.0, 0.6, 0.3, 0.15 };
+static bool g_coeffs_overridden = false;
+
+const double * all_weights() { return g_all_weights; }
+double fused_lambda_value() { return g_fused_lambda; }
+bool coeffs_overridden() { return g_coeffs_overridden; }
+
+/* Resolve the coefficients once, LAZILY, because the two readers run in the
+   wrong order for an init call: load_table() is invoked from inside
+   parse_args(), while ic_blend_init() runs after it in main().  Resolving at
+   ic_blend_init() alone would leave the -a/-f TABLE built from the language
+   row with $ENIGMA_AW silently ignored -- i.e. a sweep every cell of which
+   measures the baseline.  Both entry points call this instead; it is
+   idempotent and neither is in a loop. */
+static void resolve_coeffs()
 {
+  static bool done = false;
+  if (done)
+    return;
+  done = true;
+
+  /* The language's row first, then the environment on top of it -- so a sweep
+     measures a delta against the row that would otherwise ship. */
+  const lang_coeffs & lc = coeffs_for_language();
+  for (int j = 0; j < 4; j++)
+    g_all_weights[j] = lc.w[j];
+  g_fused_lambda = lc.ic_lambda;
+
   /* Empty means unset, as for the other value-carrying overrides. */
+  const char * aw = getenv("ENIGMA_AW");
+  if ((aw != nullptr) && (*aw != 0))
+    {
+      parse_weight_vector(aw, "$ENIGMA_AW", g_all_weights);
+      g_coeffs_overridden = true;
+    }
   const char * s = getenv("ENIGMA_IC_BLEND");
   if ((s != nullptr) && (*s != 0))
-    g_fused_lambda = parse_opt_double(s, "$ENIGMA_IC_BLEND");
+    {
+      g_fused_lambda = parse_opt_double(s, "$ENIGMA_IC_BLEND");
+      g_coeffs_overridden = true;
+    }
   const char * k = getenv("ENIGMA_MONOIC_BLEND");
   if ((k != nullptr) && (*k != 0))
-    g_monoic_lambda = parse_opt_double(k, "$ENIGMA_MONOIC_BLEND");
+    {
+      g_monoic_lambda = parse_opt_double(k, "$ENIGMA_MONOIC_BLEND");
+      g_coeffs_overridden = true;
+    }
+}
+
+void ic_blend_init()
+{
+  resolve_coeffs();
 }
 
 void intscore_init()
@@ -1278,6 +1380,7 @@ double score_report(machine & m)
 /* Load the n-gram table backing a scoring model (IC needs none). */
 void load_table(int model)
 {
+  resolve_coeffs();   /* $ENIGMA_AW must reach the -a/-f table build */
   switch (model)
     {
     case SCORE_MONO:
@@ -1302,12 +1405,12 @@ void load_table(int model)
     case SCORE_ALL:
     case SCORE_FUSED:   /* -f reuses all8; only the IC term differs at score time */
       {
-        /* the weighted all-order model: log-linear symmetric mixture of quad/tri/bi/mono,
-           weights tuned across four languages (PR #106): quad 1, tri .6, bi .3, mono .15. */
-        static const double AW[4] = { 1.0, 0.6, 0.3, 0.15 };
+        /* the weighted all-order model: log-linear symmetric mixture of
+           quad/tri/bi/mono, per language -- see lang_coeffs above. */
         ngrams_read(4, & all8[0][0][0][0], & ngram_bias[SCORE_ALL],
                     & ngram_scale[SCORE_ALL],
-                    opt_datadir, opt_language, "quadgrams", AW, true);
+                    opt_datadir, opt_language, "quadgrams",
+                    all_weights(), true);
         break;
       }
     default: break;   /* IC: no table */

@@ -2811,6 +2811,71 @@ against the register budget that occupancy already depends on, which is why
 it stays a gap rather than a task. It matters most for whoever runs the probe
 on a CUDA card, where that budget differs.
 
+**21. `-a`'s order weights are a PROSE fit applied everywhere — now
+language-specific, and being retuned on `wehrmacht`.** The four log-linear
+weights `(1, 0.6, 0.3, 0.15)` were tuned across four *prose* languages in
+PR #106 and have never been retuned for telegraphic German. `-f`'s
+`lambda = 30` is better off — its +3.0…+4.4pp gain was measured on english,
+german **and** wehrmacht — so the fused half is style-checked and the weighted
+half is not. Against this file's standing rule that scoring results do not
+transfer between the two writing styles, that is an assumption rather than a
+result, and it sits underneath the recommended recipe for real traffic.
+
+**The mechanism suggests the fit should be per-language, not universal.**
+`archived/PERFORMANCE.md` §6.4 found `-a` won by *smoothing the climb surface*
+(+3.4pp) with selection contributing −0.0pp — i.e. it does not add information,
+it backs off a quad table that is partly noise. If that is what it does, the
+right mixture depends on **how bad that table is**, which differs by language:
+
+| | quad cells seen | training counts |
+|---|---:|---:|
+| english | **85.2%** | 4.2e9 |
+| german | 80.1% | 8.9e8 |
+| **wehrmacht** | **80.1%** — *german's support, reweighted* | 1.3e10 |
+
+`wehrmacht`'s quad table is not counted at all. It is german's 366 266 cells
+reweighted by `eval/build_telegraphic_ngrams.py`, whose own header records
+**843 quadgrams clipped at `W_MAX` holding ~68% of the table's probability
+mass**. That is a far weaker quad estimate than english's.
+
+> **PRE-REGISTERED PREDICTION, recorded before the sweep ran.** If `-a` is
+> compensating for table defects, `wehrmacht`'s optimum sits at **higher**
+> low-order weights than the prose default. If it lands at or below the
+> default, the table-defect reading loses its main prediction here and that
+> must be recorded rather than quietly dropped. A second prediction follows
+> from the same mechanism and is cheaper to check: the `-a`-over-`-q` gap
+> should be **larger** on wehrmacht than the +1–2pp measured on prose.
+
+**Shipped so far: the mechanism, behaviour-neutral.** `src/scoring.cc` carries
+a `lang_coeffs` table keyed on language with the prose row as the default and
+`wehrmacht`'s currently equal to it, so nothing changes until a measurement
+fills it in. `$ENIGMA_AW` overrides the order weights and `$ENIGMA_IC_BLEND`
+the lambda, which is what lets one binary run both arms of a paired sweep;
+`show_settings()` echoes the coefficients **only when the environment moved
+them**, since a swept run differs from its neighbours in nothing else and a log
+that omits them cannot be attributed afterwards. Two details worth knowing
+before touching it: the resolution is **lazy**, because `load_table()` runs
+inside `parse_args()` while `ic_blend_init()` runs after it in `main()` — an
+init-order fix would have left the table built from the language row with
+`$ENIGMA_AW` silently ignored, i.e. a sweep every cell of which measures the
+baseline. And the four-number parser is now **one function** shared with
+`$ENIGMA_LOGLIN`, so the dropped-`sscanf`-return-value failure recorded there
+cannot recur in a second copy.
+
+**Scale invariance halves the search.** The log-linear score is a sum of
+weighted log-probabilities, so multiplying all four weights by a constant
+scales every candidate alike and cannot change an ordering: `-a` has **three**
+free parameters, not four, and `w[0]` is pinned at 1. It does *not* carry over
+to `-f`, where the overall scale sets the n-gram half against `lambda`, so all
+four matter there and `lambda` has to be re-swept around any new weight vector.
+
+**The sweep's own trap is the winner's curse**, which is `--confidence`'s
+best-of-K problem wearing different clothes: the cell that wins a grid is a
+*maximum* over many cells, so its measured gain is biased upward by selection
+and will re-measure lower. `eval/weight_sweep.py` therefore has a separate
+`confirm` stage that re-runs the finalists on a **fresh seed**, and only that
+number may be quoted as the effect. → `CLAUDE.md`, the `-a` and `-f` entries.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
