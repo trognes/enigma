@@ -2885,25 +2885,34 @@ length-scaled replacement **won held out**, `0.25·L` beating
 on a seed that had no hand in choosing 0.25 — at **half** the size that seed
 implied, the winner's curse again. §12, §13, §14.
 
-**Still open: the SHAPE — slope versus a raised flat cap.** No run compares a
-length-scaled lambda against a raised **flat** one, and the held-out
-per-length deltas (+27, +7, +14, +17) carry no length trend, so "`0.25·L`"
-and "any constant near 50" are not separated; §13's sign flip (lambda 65 − 45
-reading −24, −24, +10, +10 in length order) is suggestive with each cell about
-one SE. So this ships as the better of two *measured* options rather than as a
-fitted law. The measured plateau midpoints (≈10 at L≈65, ≈20 at L=100, ≈55 at
-L=200) imply an exponent near 1.5, steeper than the linear rule and than the
-`1.1·√L` sd-ratio argument (predicts 33 at L=200) — three midpoints being the
-same evidence shape that produced the withdrawn `0.18·L` above.
+**The SHAPE question was run and came back NULL — and the band cannot answer
+it.** A flat lambda 50 against the shipped `0.25·L`, third held-out seed,
+32 000 paired trials: **−2 breaks, z = −0.11**, CI ±37 breaks (±0.12pp). §15.
+The rule spans only 44.25…60 across L = 177…240 — a 1.36× range against a
+plateau several-fold wide — so a null is what the plateau *predicts*; the
+discordant count (350 pairs against 755 and 765 in the two runs above) says
+the arms mostly decide each trial alike. Below ~177 the old rule already
+scaled and above ~250 `-R 8` saturates, so the shape is **not resolvable at
+the operating budget**, which is weaker than "measured null".
 
-**What would close it:** one arm — **flat lambda ≈ 50 paired against `0.25·L`
-across L = 177–240 on a fresh seed**. The other loose end is that the rule is
-unbounded with nothing measured at the operating budget above L=240 (it asks
-for 100 at L=400); it ships that way because the cap is exactly what was
-measured wrong, and re-imposing one at an unmeasured height would be a fresh
-guess. Not `-R 0` — a single-trajectory climb overshoots the optimum by 1.5–2×
-(it peaks near lambda 90 at L=200, where the real budget reads 90 as nothing).
-`-R 8` saturates above L≈250 and >300 is out of scope.
+**Two things follow.** §14's +65 is attributable to **removing the cap**, not
+to length-scaling — if flat 50 ties the rule across the band, raising lambda
+into the ~50 region is what did the work, which is what §14's own flat
+per-length deltas were already hinting. And the rule stands on evidence from
+**outside** the band: a flat 50 cannot be right at L=40, where the optimum is
+near 10, so lambda must scale somewhere and 177…240 is too narrow a window to
+see it. The plateau midpoints (≈10 at L≈65, ≈20 at L=100, ≈55 at L=200) imply
+an exponent near 1.5, steeper than the linear rule and than the `1.1·√L`
+sd-ratio argument (predicts 33 at L=200) — three midpoints being the same
+evidence shape that produced the withdrawn `0.18·L` above, so not acted on.
+
+**Still open:** the rule is unbounded with nothing measured at the operating
+budget above L=240 (it asks for 100 at L=400); it ships that way because the
+cap is exactly what was measured wrong, and re-imposing one at an unmeasured
+height would be a fresh guess. Not `-R 0` — a single-trajectory climb
+overshoots the optimum by 1.5–2× (it peaks near lambda 90 at L=200, where the
+real budget reads 90 as nothing). `-R 8` saturates above L≈250 and >300 is out
+of scope, so closing it would need a different budget rather than more trials.
 `eval/results-weight-sweep.txt` §12–§14.
 
 L=110 reads −4.9 per 1000 (z = −1.57, ns) with flat cells either side, most

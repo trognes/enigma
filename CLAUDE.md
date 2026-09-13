@@ -1881,16 +1881,35 @@ are read from a **data directory** (filenames built as
   > (+107 → +65, and ~2× at each end separately), which is the winner's curse
   > this file records eating two earlier optima. §14.
   >
-  > ⚠️ **What is NOT established is the SHAPE: slope versus a raised flat
-  > cap.** No run compares a length-scaled lambda against a raised **flat**
-  > one, and the held-out per-length deltas (+27, +7, +14, +17) carry **no
-  > length trend** — equally consistent with "any lambda near 50 beats 30 in
-  > this band". §13's sign-flip discriminator (lambda 65 minus 45 reading −24,
-  > −24, +10, +10 in length order) is suggestive and each of its cells is about
-  > one SE. The arm that would separate them is a flat lambda ≈ 50 paired
-  > against `0.25·L` across the band on a fresh seed. **So this ships as the
-  > better of two measured options, not as a fitted law**, and if it ever
-  > misbehaves that is the run to do.
+  > ⚠️ **The SLOPE is NOT what the band measured — a flat lambda 50 is
+  > indistinguishable from `0.25·L` there.** Run as the discriminator on a
+  > third held-out seed, 32 000 paired trials: **−2 breaks of 32 000,
+  > z = −0.11**, per-length −8/+1/+7/−2, 95% CI ±37 breaks (±0.12pp). §15.
+  >
+  > **The test was structurally weak, and that is the finding rather than a
+  > caveat.** Across L = 177…240 the rule spans only 44.25 to 60 — a 1.36×
+  > range — against a lambda plateau measured several-fold wide, so a null is
+  > what the plateau *predicts* and no number of trials there would give
+  > anything else. The discordant count says it directly: **350 pairs disagree
+  > against 755 and 765** in the two runs above, i.e. the arms mostly decide
+  > the same trial the same way. The band is squeezed from both sides — below
+  > ~177 the old rule already scaled, above ~250 `-R 8` saturates — so the
+  > shape is **not resolvable at the operating budget**, which is weaker than
+  > "measured null".
+  >
+  > **What it does settle is where §14's +65 came from, and it is not the
+  > slope**: if flat 50 ties `0.25·L` across the band, that gain is
+  > attributable to **removing the cap** — raising lambda into the ~50 region —
+  > rather than to length-scaling. §14's own "no length trend in the per-length
+  > deltas" was pointing at this; this confirms it from the other side.
+  >
+  > **The rule still stands, on evidence from OUTSIDE the band.** A flat 50
+  > cannot be right at L=40, where the short-band result puts the optimum near
+  > 10 and where 30 was already much too high — so lambda must scale somewhere,
+  > and 177…240 is simply too narrow a window to see it. `0.25·L` is the
+  > simplest rule right at both ends of the measured range, and inside this
+  > band it is free to be wrong about the shape because every value there
+  > scores the same.
   >
   > **It is UNBOUNDED, deliberately**, since the cap is the thing that was
   > measured wrong and any replacement height would be a fresh guess: 100 at
@@ -1920,7 +1939,8 @@ are read from a **data directory** (filenames built as
   > there at all.
   >
   > **That band — L = 177–250 — is measured and is what the shipped slope
-  > rests on** (§13, §14); what remains is the flat-versus-scaled arm above.
+  > rests on** (§13, §14), and the flat-versus-scaled arm has since been run
+  > there and come back null (§15).
   > Above ~300 is out of scope anyway:
   > operational procedure split long messages, so those lengths are
   > off-distribution for real traffic *and* too easy to discriminate scoring

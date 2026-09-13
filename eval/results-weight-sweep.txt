@@ -424,6 +424,58 @@ measurement above the band, and the error asymmetry (reading 3, and section
 default to guess at.
 
 
+===== 15. SLOPE vs A RAISED FLAT CAP: THE DISCRIMINATOR (seed 1301) =====
+# -R 8, 8000 paired trials at each of L = 177, 190, 215, 240 (32 000 pairs)
+# arm      = a FLAT lambda 50
+# baseline = the SHIPPED 0.25*L, i.e. 44.25 / 47.5 / 53.75 / 60 at those
+# lengths.  Held out again: seed 1301 had no hand in either value.
+
+  L     rule's lam   flat50 - rule   only-c/only-b      z
+  177   44.25            -8            86/94          -0.6
+  190   47.5             +1            37/36          +0.1
+  215   53.75            +7            24/17          +1.1
+  240   60               -2            27/29          -0.3
+
+  pooled  29706 vs 29708  (-2 of 32 000)  174/176  z -0.11  p 0.957
+          92.83% vs 92.84% of messages broken
+
+THEY ARE THE SAME.  Not "slope wins", not "flat wins" -- indistinguishable,
+with a 95% interval of +-37 breaks of 32 000 (+-0.12pp), so anything above
+about forty breaks is excluded in either direction.
+
+THE TEST WAS STRUCTURALLY WEAK, AND THAT IS THE FINDING RATHER THAN A
+CAVEAT.  Across L = 177..240 the rule only spans 44.25 to 60 -- a 1.36x
+range -- while section 9's ladder measures the lambda surface as a PLATEAU
+several-fold wide.  A null is therefore what the plateau predicts, and no
+number of trials in this band would have produced anything else.  The
+discordant count says the same thing directly: 350 pairs disagree here
+against 755 in section 13 and 765 in section 14, i.e. the two arms mostly
+make the same decision on the same trial.
+
+SO THE SHAPE QUESTION IS NOT ANSWERABLE AT THE OPERATING BUDGET, and the
+band is squeezed from both sides: below ~177 the old rule already scaled
+(so there is no cap to test against), and above ~250 -R 8 saturates at
+98.7%.  Retiring it as "measured null" would overstate what was learned;
+it is closer to "the instrument cannot resolve it here".
+
+WHAT THIS DOES SETTLE IS WHERE SECTION 14's GAIN CAME FROM, and it is not
+the slope.  If flat 50 is indistinguishable from 0.25*L across this band,
+then the +65 breaks that 0.25*L won over min(0.17*L, 30) are attributable
+to RAISING lambda into the ~50 region -- that is, to removing the cap --
+and not to making it length-dependent there.  Section 14's own "no length
+trend in the per-length deltas" was pointing at this; this run confirms it
+from the other side.
+
+THE RULE STILL STANDS, for a reason that comes from OUTSIDE this band.  A
+flat 50 cannot be right at L=40, where the short-band result (+586 of
+64 000, z +10.95, sections 6-8) puts the optimum near 10 and where lambda
+30 was already measured much too high.  So lambda must scale somewhere;
+what this run shows is only that 177..240 is too narrow a window to see it.
+0.25*L is the simplest rule that is right at both ends of the measured
+range, and within this band it is free to be wrong about the shape because
+every value in it scores the same.
+
+
 THE READING
 =============================================================================
 
@@ -513,13 +565,16 @@ wrong at one length (section 12), across the whole band it binds in (section
 z +2.35).  It ships without a cap because the cap is precisely what was
 measured wrong; re-imposing one at an unmeasured height would be a new guess.
 
-STILL OPEN.  The SHAPE of the replacement: no run compares a length-scaled
-lambda against a raised FLAT one, and the held-out per-length deltas show no
-length trend, so "0.25*L" and "any constant near 50" are not separated.  The
-one arm that separates them is a flat lambda ~50 paired against 0.25*L across
-L = 177-240 on a fresh seed -- so this ships as the better of two MEASURED
-options, not as a fitted law.  Nothing is measured at the operating budget
-above L=240, where the rule asks for 60 and keeps rising (100 at L=400).
+THE SHAPE QUESTION WAS THEN RUN AND CAME BACK NULL (section 15): a flat
+lambda 50 is indistinguishable from 0.25*L across that band (-2 of 32 000,
+z -0.11), because the rule only spans 44..60 there against a plateau several
+times wider.  So the band cannot resolve slope from constant, section 14's
+gain is attributable to REMOVING THE CAP rather than to length-scaling, and
+the rule stands on the short-band evidence (where a flat 50 would be far too
+high) rather than on anything measured between 177 and 240.
+
+STILL OPEN.  Nothing is measured at the operating budget above L=240, where
+the rule asks for 60 and keeps rising (100 at L=400).
 L=110 reads -4.9 per 1000 (z -1.57, ns) with flat cells either side, most
 likely scatter but the cell to re-check if this misbehaves.  And every cell
 here measures the plugboard tier with the rotor key GIVEN, so none of it
