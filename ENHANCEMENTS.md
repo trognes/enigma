@@ -1004,6 +1004,39 @@ its own traffic, at a tenth the volume, beats Appendix C bent onto prose
 German by a wide margin — which is as much a statement about how far the
 `wehrmacht` tables sit from the real distribution as about the prior.
 
+**Leaving prose German out entirely was tried, and the prose table still
+earns its 0.1%.** The obvious next step — the corpus counts plus Appendix
+C's Fig 17 monograms and 400 Fig 18 trigrams, no prose table at all — was
+measured on the same seed-59 trials with the corpus-only table as its
+control (`eval/corpus_only_table_ab.py`,
+`eval/results-corpus-only-table.txt`), break50 of 400:
+
+| arm | breaks | vs w=1000 |
+|---|---:|---|
+| stock `wehrmacht` | 156 | 16 / 79 |
+| corpus only, floor one decade under a hapax | 147 | 13 / 85 |
+| corpus only, floor ~8 decades under | 194 | 21 / 46, z = −3.0 |
+| corpus + Appendix C, same floor | 198 | 32 / 53, z = −2.3 |
+| corpus + stock at w = 1000 | **219** | — |
+
+Three findings, in order of size. **The depth of the unseen penalty is the
+largest term**: the same counts read 194 with the floor eight decades down
+and 147 with it one decade down, no better than the stock table — a
+2 900-letter table names ~2 600 quadgrams of 456 976 and is usable only
+because everything else is priced as impossible, which the w = 1000
+mixing got for free from the stock table's total. (The loader floors an
+unseen gram at *one count*, so a raw small table cannot tell a hapax from
+nothing; the scale of the counts is the knob.) **The prose ordering of the
+unseen grams is worth +25 breaks**: with the floor matched, dropping the
+stock table costs 194 against 219, so a wrong decrypt made of plausible
+German quadgrams the fold never saw is still ranked above letter soup, and
+that decides 6% of trials. **Appendix C does not replace it**: 26 letter
+frequencies and 400 trigrams take the corpus table from 194 to 198 and
+cannot order the quadgram space, where the prose table does its remaining
+work. So w = 1000 stays the best table measured, and "prose-free" is a
+real table that beats the stock one by 42 breaks while losing 21 to the
+smoothed one.
+
 **This contradicts the reading two paragraphs up, and the resolution is
 worth stating.** The re-ranker showed the truth is rarely *reached* at
 `-R 100`, so a scoring change was expected to pay only where it is. But a

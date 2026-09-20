@@ -4605,8 +4605,13 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   is only smoothing and ~2 900 letters of training-fold traffic are the
   model, it reads **219 against 156** (55% against 39%), and 223 against
   164 with the garble-flagged messages left in. Leakage between folds was
-  checked (longest shared substring 22 letters, no copies). It is an
-  **in-network prior** — the folds hold out messages, not the network —
+  checked (longest shared substring 22 letters, no copies). **The prose
+  table still earns its 0.1% there**: the same corpus counts with no
+  prose table at all read 194 (z = −3.0 against 219), Appendix C's
+  monograms and 400 trigrams take that only to 198, and the largest term
+  of all is the unseen-gram floor — one decade under a hapax reads 147,
+  eight decades under reads 194 (`eval/results-corpus-only-table.txt`).
+  It is an **in-network prior** — the folds hold out messages, not the network —
   and it must **not** ship as the `wehrmacht` tables, since every eval here
   draws from the same 62 messages and a table counted from all of them
   would contaminate every later measurement. `ENHANCEMENTS.md` 2b.
