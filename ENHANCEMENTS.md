@@ -2501,6 +2501,31 @@ the analysis without re-climbing.
 `eval/results-doubling.txt`, `eval/results-doubling-climb.txt`; item 4 above;
 `archived/cribs.md` §4.2a.
 
+### 3c. Operator habits on the corpus — checked, recorded, NOT pursued
+
+Three of the classical operator-habit priors were checked against the 1941
+corpus in one afternoon (`eval/operator_habits.py`,
+`eval/results-operator-habits.txt`; read-only, seconds). Recorded so nobody
+re-derives them, and deliberately **left here**: every one of them needs a
+*day key* — a broken neighbour message or a known key sheet — and the work
+this file is about is breaking a message on its own. Length is the lever
+that matters, and the 80-letter regime is where the effort belongs.
+
+- **The Herivel tip holds.** The clear Grundstellung sits within ±1 of the
+  Ringstellung on all three wheels in **4 of 54** messages against 0.08
+  expected under uniform (13/54 on the left wheel alone against 6.2). As a
+  prior it restricts ring ∈ Grund±1 per wheel, a 27-cell ring space in place
+  of 17 576, i.e. a ~9.5 M-key sweep for a 7% chance the tip applies — but
+  only with the *indicator* in hand, which is the day-key dependence.
+- **Wheel orders do not repeat a slot on consecutive days**: 0 same-slot
+  repeats over 8 consecutive-day pairs against 4.8 expected, which is the
+  documented key-sheet rule. It cuts 60 wheel orders to 32 *if a neighbouring
+  day is broken*, and does nothing otherwise.
+- **The end-of-previous-message cilli is absent** (0 of 32 consecutive
+  same-day pairs start where the previous message ended, or within ±1), and
+  the plug sheets show no adjacent-letter or repeat-pair rule (20 adjacent of
+  360 against 27.7 expected; 2 repeated pairs against 2.5).
+
 ## Keyspace reductions
 
 The two-notch collapse that used to head this section has **shipped** and is
