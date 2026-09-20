@@ -4600,9 +4600,12 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   messages in the training folds, five folds by message
   (`eval/counted_table_ab.py`, `eval/results-counted-table.txt`): **+8pp of
   break50 at L=80 and `-R 100`** (156 → 185 and 150 → 184 of 400 on two
-  seeds, z = 3.6 and 4.4), positive at L = 60/100/167 at `-R 8` too
-  (+29 of 1200 pooled), flat across a 10× range of the mixing weight, and
-  halved when the garble-flagged messages are left in the pool. It is an
+  seeds, z = 3.6 and 4.4), positive at L = 60/100/167 at `-R 8` too, and
+  **the weight curve does not peak**: at w = 1000, where the stock table
+  is only smoothing and ~2 900 letters of training-fold traffic are the
+  model, it reads **219 against 156** (55% against 39%), and 223 against
+  164 with the garble-flagged messages left in. Leakage between folds was
+  checked (longest shared substring 22 letters, no copies). It is an
   **in-network prior** — the folds hold out messages, not the network —
   and it must **not** ship as the `wehrmacht` tables, since every eval here
   draws from the same 62 messages and a table counted from all of them

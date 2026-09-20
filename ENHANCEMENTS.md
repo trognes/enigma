@@ -975,10 +975,34 @@ table it contributed to (`eval/counted_table_ab.py`,
 **+8pp of break50 at L=80 (39% → 46–47%), replicated on a held-out seed,
 and positive at every other cell** — the three `-R 8` cells pool to +29 of
 1200 (z = 2.2), so it costs nothing at L=167 where a mistuned prior would
-first show. The weight barely matters across a 10× range (184/185/189 of
-400 at w = 0.05/0.2/0.5), so 0.2 is not a tuned optimum. With the
-garble-flagged messages in the pool the gain halves, as the floor probe
-predicted: a garble is a window no table can lift.
+first show. With the garble-flagged messages in the pool the gain halves at
+w = 0.2, as the floor probe predicted: a garble is a window no table can
+lift.
+
+**The weight curve does NOT peak — the corpus counts alone are the better
+model.** Swept on the seed-59 trial set, break50 of 400 against 156:
+
+| w | 0.01 | 0.05 | 0.2 | 0.5 | 1 | 2 | 5 | 10 | 20 | 50 | 200 | 1000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| breaks | 170 | 184 | 185 | 189 | 188 | 194 | 201 | 206 | 207 | 211 | 213 | **219** |
+
+Monotone over five orders of magnitude. At w = 1000 the stock table is
+only smoothing and the ~2 900 letters of training-fold traffic *are* the
+model, and that breaks **55% of messages against 39%** — sixteen points.
+Held out on seed 131, w = 5 and 10 read 200 and 198 against 150, the same
++50. At the other lengths (`-R 8`, seed 211) w = 1000 reads 39/125/286
+against 23/114/271 at L = 60/100/167 and w = 10 reads 26/136/279, so the
+two are within noise of each other and neither is ever behind the stock
+table; with the garbles left in the pool w = 1000 reads **223 against
+164**. **Leakage was checked before believing this**: the corpus notes
+record re-sends and duplicate copies, and a copy in another fold would put
+a held-out message in its own training table — but over the 34 clean
+messages the longest common substring between any two is 22 letters, one
+same-day pair, and most sharing pairs share a single 12-letter token. Those
+are the recurring phrases the prior exists to learn. So for this network
+its own traffic, at a tenth the volume, beats Appendix C bent onto prose
+German by a wide margin — which is as much a statement about how far the
+`wehrmacht` tables sit from the real distribution as about the prior.
 
 **This contradicts the reading two paragraphs up, and the resolution is
 worth stating.** The re-ranker showed the truth is rarely *reached* at

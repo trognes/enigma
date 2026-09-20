@@ -74,3 +74,75 @@ L=167 -R 8, 400 paired trials, seed 211, clean messages, 5-fold counted suppleme
 # from all of them would contaminate every measurement made after it.  If
 # it ships at all it is a separate language built from a stated message
 # set, with the evals staying on `wehrmacht`.
+
+# ---------------------------------------------------------------------------
+# THE WEIGHT CURVE, asked for after the above: it does not peak.
+#
+# eval/counted_table_ab.py 400 59  80 100 0.01,1,2,5,10
+# eval/counted_table_ab.py 400 59  80 100 20,50,200,1000
+# eval/counted_table_ab.py 400 131 80 100 5,10             (held-out seed)
+# eval/counted_table_ab.py 400 211 {60,100,167} 8 10,1000
+# eval/counted_table_ab.py 400 211 80 100 10,1000 --garble
+#
+# The script gained a scale-to-fit step before the w >= 20 runs: the loader
+# clamps a count at 2^32, and log10(count / total) is scale invariant, so the
+# whole table is scaled to keep its largest count under 4e9.  At w <= 10 no
+# count reached the clamp, so the earlier rows are unaffected.
+
+seed 59, L=80, -R 100, clean messages:
+  base    break50 156/400
+  w=20.0  break50 207/400   only-w 72  only-base 21
+  w=50.0  break50 211/400   only-w 74  only-base 19
+  w=200.0 break50 213/400   only-w 73  only-base 16
+  w=1000.0 break50 219/400   only-w 79  only-base 16
+
+L=80 -R 100, 400 paired trials, seed 131, clean messages, 5-fold counted supplement
+  base    break50 150/400
+  w=5.0   break50 200/400   only-w 73  only-base 23
+  w=10.0  break50 198/400   only-w 69  only-base 21
+
+L=60 -R 8, 400 paired trials, seed 211, clean messages, 5-fold counted supplement
+  base    break50 23/400
+  w=10.0  break50 26/400   only-w 17  only-base 14
+  w=1000.0 break50 39/400   only-w 27  only-base 11
+
+L=100 -R 8, 400 paired trials, seed 211, clean messages, 5-fold counted supplement
+  base    break50 114/400
+  w=10.0  break50 136/400   only-w 68  only-base 46
+  w=1000.0 break50 125/400   only-w 58  only-base 47
+
+L=167 -R 8, 400 paired trials, seed 211, clean messages, 5-fold counted supplement
+  base    break50 271/400
+  w=10.0  break50 279/400   only-w 50  only-base 42
+  w=1000.0 break50 286/400   only-w 58  only-base 43
+
+L=80 -R 100, 400 paired trials, seed 211, ALL messages incl. garbled, 5-fold counted supplement
+  base    break50 164/400
+  w=10.0  break50 207/400   only-w 64  only-base 21
+  w=1000.0 break50 223/400   only-w 73  only-base 14
+
+# READING.  On the seed-59 trial set, break50 of 400 against a base of 156:
+#
+#   w      0.01  0.05  0.2  0.5   1    2    5   10   20   50  200  1000
+#   breaks  170   184  185  189  188  194  201  206  207  211  213   219
+#
+# Monotone over five orders of magnitude, and at w = 1000 the stock table is
+# only smoothing -- the corpus counts ARE the model: 39% -> 55% of messages
+# broken.  Held out on seed 131, w = 5 and 10 read 200 and 198 against 150,
+# the same +50.  At the other lengths w = 1000 is ahead of w = 10 at L = 60
+# and 167 and behind it at L = 100 (125 against 136, on 58/47 against 68/46
+# discordants, i.e. within noise), and never behind the stock table anywhere.
+# With the garble-flagged messages in the pool w = 1000 reads 223 against
+# 164, +59.
+#
+# LEAKAGE WAS CHECKED BEFORE BELIEVING THIS.  The corpus notes record
+# re-sends and duplicate copies, and a copy in another fold would put the
+# held-out message in its own training table.  Over the 34 clean messages
+# the longest common substring between any two is 22 letters (one same-day
+# pair), and most sharing pairs share a single 12-letter token.  Those are
+# the recurring phrases the prior exists to learn, not copies.
+#
+# What that says: for this network, ~2 900 letters of its own traffic are a
+# better model than 20 000 letters of Appendix C bent onto prose German, by
+# 16 points of break50 at L=80.  The in-network caveat above applies with
+# full force -- at w = 1000 there is nothing else in the table.

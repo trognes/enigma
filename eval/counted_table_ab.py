@@ -92,10 +92,17 @@ def build(fold, w):
         d, btot = base[n]
         mixed = dict(d)
         for g, k in c.items():
-            mixed[g] = mixed.get(g, 0) + int(round(w * btot * k / ctot))
+            mixed[g] = mixed.get(g, 0) + w * btot * k / ctot
+        # The loader clamps a count at 2^32 (audibly), which a large w would
+        # hit on the top corpus grams.  log10(count / total) is scale
+        # invariant, so scale everything to fit; a count rounding to zero is
+        # dropped and takes the unseen-gram floor, as it would in any table.
+        s = min(1.0, 4.0e9 / max(mixed.values()))
         with open(os.path.join(out, f"wehrmacht_{name}.txt"), "w") as f:
             for g, k in sorted(mixed.items(), key=lambda kv: -kv[1]):
-                f.write(f"{g} {k}\n")
+                k = int(round(k * s))
+                if k > 0:
+                    f.write(f"{g} {k}\n")
     return out
 
 
