@@ -984,7 +984,7 @@ model.** Swept on the seed-59 trial set, break50 of 400 against 156:
 
 | w | 0.01 | 0.05 | 0.2 | 0.5 | 1 | 2 | 5 | 10 | 20 | 50 | 200 | 1000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| breaks | 170 | 184 | 185 | 189 | 188 | 194 | 201 | 206 | 207 | 211 | 213 | **219** |
+| n | 170 | 184 | 185 | 189 | 188 | 194 | 201 | 206 | 207 | 211 | 213 | 219 |
 
 Monotone over five orders of magnitude. At w = 1000 the stock table is
 only smoothing and the ~2 900 letters of training-fold traffic *are* the
