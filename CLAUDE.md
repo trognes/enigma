@@ -4590,8 +4590,10 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   and a **leave-one-out corpus-5-gram re-ranker** (7.6 matches on the truth
   against 0.1 on the impostor, never demotes a correct board, recovers 2 of
   the 10 it can reach) all lose to, or add nothing over, spending the same
-  compute on `-R`. The 5-gram signal is worth keeping for the finisher at
-  high `-R`, where the outranked bucket reaches 16%.
+  compute on `-R`. So do **`--biased-random` at `-R 100`** (29 against 27
+  of 70, nothing) and **anchoring the climb on `steck[X]`** across its 26
+  possibilities (27 against 27). The 5-gram signal is worth keeping for the
+  finisher at high `-R`, where the outranked bucket reaches 16%.
 
 ### The unknown-key break rate — measured, and the keyspace barely matters
 

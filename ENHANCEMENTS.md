@@ -945,6 +945,17 @@ the climb it would not help either: a board needs five consecutive correct
 letters before the bonus fires, and the seeds that go on to succeed start at
 29% of letters right.
 
+**Two more search levers, both null on the same 70 trials**
+(`eval/xanchor_ab.py`, `eval/results-xanchor.txt`). `--biased-random 1` at
+`-R 100` — shipped and measured +9% of breaks at `-R` 1–5, never above 10 —
+reads 29 against 27 of 70 on 5-against-3 discordants, i.e. nothing at this
+size and consistent with its decay. **Anchoring the climb on X** — the
+self-crib's 26 guesses on `steck[X]` without the doubling, run as 25 `-s`
+pins plus `--no-plug X` at `-R 4` each, best by score — is exactly level at
+27 of 70 with 5-and-5 discordants against 100 unanchored restarts, at the
+same climb count. One correct pair, right in one run of 26, is a third of
+what a truth-reaching seed already carries out of the `k4` pre-pass.
+
 **What is left for L=80 below `-R 100`.** The restart curve (15.1% at
 `-R 8`, 36.0% at 100, 52.6% at 1000) is the whole story at that budget, and
 every seeding, filtering and re-ranking variant tried here is dominated by

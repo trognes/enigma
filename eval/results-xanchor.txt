@@ -1,0 +1,23 @@
+# Two last search levers at L=80, -R 100 -- both NULL.
+#
+# eval/xanchor_ab.py 70 41   (same 70 trials as eval/results-vocab-seed.txt)
+#
+# Rotor key given, 10-pair board hidden, -c -f -S k4f10 -K --polish
+# -l wehrmacht, -T 1.  A board counts as recovered at >= 50%.  The xanchor
+# wall is 26 process startups per trial, not climbing: 104 climbs against
+# the baseline's 100.
+
+L=80, 70 paired trials, seed 41, k4f10 -K --polish, rotor key given
+  R100     break50  27/70   wall/trial 0.104s
+  biased   break50  29/70   wall/trial 0.097s
+  xanchor  break50  27/70   wall/trial 1.805s
+  biased vs R100: only-biased 5, only-R100 3, union 32/70
+  xanchor vs R100: only-xanchor 5, only-R100 5, union 32/70
+
+# READING.  --biased-random 1 at -R 100 reads +2 of 70 on 5-against-3
+# discordants, i.e. nothing at this size, consistent with its measured decay
+# (+9% at -R 1-5, +3% at 6-10, unmeasured above).  Anchoring on X is exactly
+# level with unanchored restarts at the same climb count: one pinned pair,
+# right in one run of 26, is a third of what a truth-reaching seed already
+# carries out of the k4 pre-pass (~29% of letters), and the 25 wrong pins
+# cost their runs nothing they were going to win anyway.
