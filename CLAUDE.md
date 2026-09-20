@@ -4595,6 +4595,19 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   possibilities (27 against 27). The 5-gram signal is worth keeping for the
   finisher at high `-R`, where the outranked bucket reaches 16%.
 
+  **The one lever that PAID there is a corpus-COUNTED table** — each
+  order's stock wehrmacht table mixed with the n-gram counts of the corpus
+  messages in the training folds, five folds by message
+  (`eval/counted_table_ab.py`, `eval/results-counted-table.txt`): **+8pp of
+  break50 at L=80 and `-R 100`** (156 → 185 and 150 → 184 of 400 on two
+  seeds, z = 3.6 and 4.4), positive at L = 60/100/167 at `-R 8` too
+  (+29 of 1200 pooled), flat across a 10× range of the mixing weight, and
+  halved when the garble-flagged messages are left in the pool. It is an
+  **in-network prior** — the folds hold out messages, not the network —
+  and it must **not** ship as the `wehrmacht` tables, since every eval here
+  draws from the same 62 messages and a table counted from all of them
+  would contaminate every later measurement. `ENHANCEMENTS.md` 2b.
+
 ### The unknown-key break rate — measured, and the keyspace barely matters
 
 Every other tuning result here measures the **plugboard-recovery sub-problem

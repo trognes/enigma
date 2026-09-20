@@ -956,14 +956,59 @@ pins plus `--no-plug X` at `-R 4` each, best by score — is exactly level at
 same climb count. One correct pair, right in one run of 26, is a third of
 what a truth-reaching seed already carries out of the `k4` pre-pass.
 
+**A corpus-COUNTED table is the one lever that PAID, and it paid at
+`-R 100`.** Mix each order's stock wehrmacht table with the n-gram counts
+of the corpus messages in the *training* folds, at weight `w` of the
+table's mass, five folds by message so no message ever scores against a
+table it contributed to (`eval/counted_table_ab.py`,
+`eval/results-counted-table.txt`, 400 paired trials per cell):
+
+| cell, w = 0.2 | base | counted | discordants | z |
+|---|---:|---:|---|---:|
+| L=80, `-R 100`, clean messages | 156 | 185 | 47 / 18 | 3.6 |
+| L=80, `-R 100`, held-out seed | 150 | 184 | 47 / 13 | 4.4 |
+| L=80, `-R 100`, garbles included | 164 | 185 | 49 / 28 | 2.4 |
+| L=60, `-R 8` | 23 | 32 | 18 / 9 | 1.7 |
+| L=100, `-R 8` | 114 | 123 | 44 / 35 | 1.0 |
+| L=167, `-R 8` | 271 | 282 | 40 / 29 | 1.3 |
+
+**+8pp of break50 at L=80 (39% → 46–47%), replicated on a held-out seed,
+and positive at every other cell** — the three `-R 8` cells pool to +29 of
+1200 (z = 2.2), so it costs nothing at L=167 where a mistuned prior would
+first show. The weight barely matters across a 10× range (184/185/189 of
+400 at w = 0.05/0.2/0.5), so 0.2 is not a tuned optimum. With the
+garble-flagged messages in the pool the gain halves, as the floor probe
+predicted: a garble is a window no table can lift.
+
+**This contradicts the reading two paragraphs up, and the resolution is
+worth stating.** The re-ranker showed the truth is rarely *reached* at
+`-R 100`, so a scoring change was expected to pay only where it is. But a
+table is not a re-ranker: it reshapes the climb surface at every board, and
+the discordant counts say the counted table reaches truths the stock one
+never did — the same way `-f` won as "a better climb, not better
+discrimination". The halving probe's doubt was about a *bonus firing on
+five correct letters*; a table moves the score of every partial board.
+
+**What it is, and is not.** The folds hold out *messages*, not the
+*network*: every message is HG Nord 1941, so what transfers between folds
+is that network's vocabulary and habits — `XSIGX`, `XLKWX`, the spelled
+numbers, the unit designations. It is an **in-network prior**, on the same
+standing as the crib library's 83% held-out coverage, and it says nothing
+about another network's traffic. It is built from 34 messages.
+
+**Do NOT ship it as the `wehrmacht` tables.** Every eval harness here
+draws its trials from the same 62 messages, so a table counted from all of
+them would contaminate every measurement made after it. If it ships, it is
+a separate language built from a *stated* message set, with the evals
+staying on `wehrmacht`. Still open: whether it transfers to a second
+collection (none is in the repo), and how it composes with the day-key
+levers of §3, which are the other in-network prior.
+
 **What is left for L=80 below `-R 100`.** The restart curve (15.1% at
-`-R 8`, 36.0% at 100, 52.6% at 1000) is the whole story at that budget, and
-every seeding, filtering and re-ranking variant tried here is dominated by
-spending the same compute on it. The scoring levers above are real but pay
-in the high-`-R` regime. The one thing not yet measured is whether a
-counted abbreviation table lifts the clean sub-floor truths *and* reshapes
-the climb enough to reach them — the re-ranker probe says the first half is
-true and the halving probe says the second is doubtful.
+`-R 8`, 36.0% at 100, 52.6% at 1000) is the whole story at that budget on
+the *stock* tables, and every seeding, filtering and re-ranking variant
+tried here is dominated by spending the same compute on it. The counted
+table is the one thing that moved it, and it did so from the scoring side.
 
 **3. Attack several messages from ONE DAY jointly.** Every measurement in
 this repo attacks a single message, but real traffic came in **day keys**: every
