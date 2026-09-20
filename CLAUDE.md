@@ -4572,6 +4572,27 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   converged-board population, so the **only reliable lever is raw compute** —
   more restarts via `-T`, which scales predictably.
 
+  **That holds at the REALISTIC operating point too — L≈80 at `-R ≤ 100`,
+  no second message — and three more levers were measured there in one
+  session** (`ENHANCEMENTS.md` 2b). What decides a trial is the truth's own
+  score against an **impostor floor** of about −9.26 per letter that barely
+  depends on the message: the best wrong board is gibberish with
+  language-like letter statistics, not letter soup, and it does **not**
+  overshoot on IC. About a third of the corpus's 80-letter windows score at
+  or under that floor, **8 of the lowest 21 being transcription garbles** —
+  drop the garble-flagged messages before measuring anything here. Below
+  `-R 100` the truth is not outscored, it is not reached: of 200 trials, 79
+  break and only 10 more hold a good board anywhere in the top 32. Hence
+  **successive halving over restarts** (stage-0 score predicts, but `k4` is
+  0.34 of a restart, so the gain is ~5%), **vocabulary-seeded climbs**
+  (`--crib-list` over fourteen generic X-fenced tokens — 27–30 of 70 against
+  `-R 300`'s 35 at matched wall, and only 14 of 70 plaintexts hold any token)
+  and a **leave-one-out corpus-5-gram re-ranker** (7.6 matches on the truth
+  against 0.1 on the impostor, never demotes a correct board, recovers 2 of
+  the 10 it can reach) all lose to, or add nothing over, spending the same
+  compute on `-R`. The 5-gram signal is worth keeping for the finisher at
+  high `-R`, where the outranked bucket reaches 16%.
+
 ### The unknown-key break rate — measured, and the keyspace barely matters
 
 Every other tuning result here measures the **plugboard-recovery sub-problem

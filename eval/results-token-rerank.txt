@@ -1,0 +1,8 @@
+L=80 -R 100, 200 trials, seed 73, top-32 converged boards, leave-one-message-out 5-gram table
+  baseline (top-1 by score) break50 79/200;  ceiling (any of top-32) 89/200
+  matched 5-grams per window: truth 7.6, impostor winners 0.1
+  w=0.5  break50  79/200   only-rerank  0  only-base  0
+  w=1    break50  79/200   only-rerank  0  only-base  0
+  w=2    break50  80/200   only-rerank  1  only-base  0
+  w=4    break50  80/200   only-rerank  1  only-base  0
+  w=8    break50  81/200   only-rerank  2  only-base  0

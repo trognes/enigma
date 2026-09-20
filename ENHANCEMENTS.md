@@ -842,6 +842,118 @@ question spans ~2pp. If better first plugs are the goal rather than a better
 first statistic, deduction has by far the larger measured effect, and these
 experiments are the smaller lever.
 
+### 2b. The L=80 residue at a REALISTIC budget — three levers measured
+
+Forty letters is unrealistically short and `-R 5000` is unrealistically
+expensive; the regime that matters is **about 80 letters at `-R 100` or
+less**, with no second message and no day key. Four cheap probes (each a
+few seconds to a minute, rotor key given, 10-pair board hidden, the
+recommended `k4f10 -K --polish` recipe on authentic telegraphic German) say
+what the residue there is made of and close two ideas.
+
+**What decides a trial is the truth's own score against an impostor floor
+that barely depends on the message.** The best converged board decrypting
+under half the letters — the impostor — lands at nearly the same per-letter
+score whatever the plaintext (`eval/impostor_floor_probe.py`,
+`eval/results-impostor-floor.txt`, 30 trials, `-R 300`):
+
+| L=80 | value |
+|---|---|
+| impostor floor, mean (range) | −9.26 (−8.64 … −9.65) per letter |
+| truth, mean over the same trials | −8.28 |
+| truth below its own trial's floor | 3 of 30 |
+| truth above the floor but not reached | 9 of 30 |
+| corpus windows below −9.4 / −9.0, of 77 | 21 / 34 |
+| of the 21, from garble-flagged messages | 8 |
+
+The impostors are **not** letter soup and do **not** overshoot on IC
+(0.0608 against their plaintexts' 0.0604 — so an IC penalty would do
+nothing). They are gibberish with language-like letter statistics, which a
+quadgram model cannot push much lower; the floor rises ~0.1 per letter
+between `-R 8` and `-R 5000` (the lead column in
+`eval/results-restart-ladder.txt` §4). The sub-floor truths split cleanly:
+**8 of 21 are transcription garbles**, which no method recovers and which
+inflate every "scoring failure" figure measured on this corpus, and the rest
+are clean telegraphese dense in X-fenced abbreviations and names
+(`XSFHXQVLQLFHXLFHXSIGXSIGXSGRWX`, `XLNKXLNKXISTXKUSOWXKUSOWX`) that a
+prose-derived table cannot know. **Drop the garble-flagged messages from
+the trial pool** before measuring any lever here, or the ceiling reads a
+third lower than it is.
+
+**Below `-R 100` the truth is not outscored, it is not reached.** The
+re-ranker probe below puts a number on it: of 200 trials at `-R 100`, 79
+break, a good board exists among the top 32 converged boards in only **10
+more**, and the remaining 111 have no good board anywhere. So the binding
+constraint at a realistic budget is search, and the three scoring ideas
+(a counted abbreviation table, a token re-ranker, cleaner accounting) each
+address a population that only grows with `-R`.
+
+**Successive halving over restarts — checked, does not pay.** The idea: run
+the cheap `k4` stage on many seeds and continue only the best to `f10`, the
+shape of `-F` applied to restarts. The stage-0 score does predict — the
+median truth-reaching restart sits at the 25th percentile of its trial's
+stage-0 scores, and keeping the top half keeps 126 of 175 such restarts and
+27 of 29 broken trials (`eval/restart_halving_check.py`,
+`eval/results-restart-halving.txt`, 60 trials). But the `k4` stage is **116
+µs of a 340 µs restart**, a 0.34 share, so keeping the top half lets a
+budget of 100 full restarts run 147 seeds of which 72% of the hits survive:
+100p → 106p, and the top third gives 105p. A ~5% gain, under what one A/B
+resolves. Only a much cheaper stage 0 changes the arithmetic, and the
+histogram path already made `k4` flat in length; what remains is the
+climb's per-move overhead. A truth-reaching seed already carries ~29% of
+the letters right out of the kick, which is what the stage-0 score picks up.
+
+**Vocabulary-seeded climbs — MEASURED DOWN.** Sweep fourteen generic
+X-fenced tokens (`XEINSX`, `XZWOX`, `XNULLX`, `XUHRX`, `XKMX`, `XDIVX`, …;
+`eval/vocab-generic.cribs`, none from the corpus) with `--crib-list
+--crib-seeds K -R 0`, the shape `--self-crib-seeds` wins with. Paired, 70
+trials (`eval/vocab_seed_ab.py`, `eval/results-vocab-seed.txt`):
+
+| arm | climbs | break50 | wall/trial |
+|---|---:|---:|---:|
+| `-R 100` | 100 | 27/70 | 0.125 s |
+| seeded, K=10 / 5 / 3 | 140 / 70 / 42 | 27 / 30 / 29 | ~0.20 s |
+| **`-R 300`** | 300 | **35/70** | 0.197 s |
+
+At matched wall time plain restarts win by 5–8 breaks; the seeding costs ~3×
+the compute of `-R 100` for the same result. Two facts kill it: **only 14 of
+70 plaintexts contain any of the tokens** — at 80 letters X-fenced numbers
+are far rarer than assumed — and on those 14 the seeding still does nothing
+(8 against 8). The self-crib result does not transfer because a doubling
+pins a dozen equality edges on a real occurrence, where a short crib swept
+over every alignment pins a few edges that are usually in the wrong place,
+and those pins survive `--polish`.
+
+**A corpus-5-gram bonus as a RE-RANKER — the signal is as strong as a
+signal gets, and there is almost nothing for it to act on.** A full 5-gram
+table is out (26⁵ cells is 12 MB of uint8 against the 0.45 MB quad table
+whose cache residency is a measured 20% win, and a 5-gram model derived from
+quadgrams is the quadgram model at 26× the size). The real content is the
+corpus's own 5-grams — 7 400 letters give 5 702 distinct, **948 in two or
+more messages**, and those are the X-fenced tokens and spelled numbers,
+five letters being the natural width for `XSIGX` and `XPKWX`. Applied
+leave-one-message-out as a bonus over the search's top 32 converged boards
+(`eval/token_rerank_probe.py`, `eval/results-token-rerank.txt`, 200 trials,
+`-R 100`): a true window matches **7.6** recurring 5-grams, the impostor that
+beat it **0.1**, and at every weight tried up to 8 log units per match the
+re-ranker demotes no correct board. But the ceiling is the 10 trials with a
+good board outranked, and it recovers 2. Worth keeping: the signal costs
+nothing, is safe at any weight tried, and belongs in the finisher for
+high-`-R` runs, where the outranked bucket reaches 16% of trials
+(`results-restart-ladder.txt` §2). Not worth building for `-R 100`. Inside
+the climb it would not help either: a board needs five consecutive correct
+letters before the bonus fires, and the seeds that go on to succeed start at
+29% of letters right.
+
+**What is left for L=80 below `-R 100`.** The restart curve (15.1% at
+`-R 8`, 36.0% at 100, 52.6% at 1000) is the whole story at that budget, and
+every seeding, filtering and re-ranking variant tried here is dominated by
+spending the same compute on it. The scoring levers above are real but pay
+in the high-`-R` regime. The one thing not yet measured is whether a
+counted abbreviation table lifts the clean sub-floor truths *and* reshapes
+the climb enough to reach them — the re-ranker probe says the first half is
+true and the halving probe says the second is doubtful.
+
 **3. Attack several messages from ONE DAY jointly.** Every measurement in
 this repo attacks a single message, but real traffic came in **day keys**: every
 message on a net that day shared reflector, wheel order, ring settings and
