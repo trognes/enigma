@@ -1037,6 +1037,31 @@ work. So w = 1000 stays the best table measured, and "prose-free" is a
 real table that beats the stock one by 42 breaks while losing 21 to the
 smoothed one.
 
+**The knobs around it were then swept on the same trials, and only one
+moved** (`eval/counted_table_knobs.py`,
+`eval/results-counted-table-knobs.txt`), every arm against w = 1000's 219:
+
+| question | arm | breaks | discordants | z |
+|---|---|---:|---|---:|
+| plateau's upper edge | w = 10⁴ / 10⁵ | 214 / 216 | 20/25, 30/33 | −0.7, −0.4 |
+| per-order weight | quad 10, rest 1000 | 209 | 21/31 | −1.4 |
+| | quad 1000, rest 10 | 223 | 26/22 | +0.6 |
+| `-a` order weights | r = 0.3 / 1.0 | 214 / 219 | 19/24, 23/23 | −0.8, 0.0 |
+| `-f` IC weight (rule: 20) | λ = 10 | **228** | 19/10 | **+1.7** |
+| | λ = 40 | 204 | 18/33 | −2.1 |
+
+The plateau runs to at least w = 10⁵, which the corpus-only result
+predicts: a prose-only gram keeps its *order* against the floor at every
+finite w, so the +25 breaks it is worth survive until the weight is
+literally infinite. The quad order's 2 573 counts carry the gain — the
+three dense orders can be weighted down 100× at no cost, the sparse one
+cannot — so one weight for all four loses nothing. The order weights are a
+plateau under this table as they were on the stock one. **The IC weight is
+the one knob that moved, and it moved down**: 228 / 219 / 204 at λ = 10 /
+20 / 40 is monotone and is the direction a sharper n-gram table predicts,
+but +9 on 400 trials with the better arm chosen from two is not a result
+until a held-out seed and a λ = 5 arm have been run.
+
 **This contradicts the reading two paragraphs up, and the resolution is
 worth stating.** The re-ranker showed the truth is rarely *reached* at
 `-R 100`, so a scoring change was expected to pay only where it is. But a

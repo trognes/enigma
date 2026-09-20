@@ -1,0 +1,88 @@
+# The knobs around the corpus-counted table, on one trial set --
+# ENHANCEMENTS.md 2b.  Follows eval/results-counted-table.txt (the weight
+# curve, a plateau from ~50 up) and eval/results-corpus-only-table.txt (the
+# w = infinity limit reads 194 against w = 1000's 219).
+#
+# eval/counted_table_knobs.py 400 59 80 100
+#
+# Rotor key given, 10-pair board hidden, -c -f -S k4f10 -K --polish
+# -l wehrmacht, -T 1, the seed-59 trial set of the runs above, so base and
+# w1000 reproduce them exactly.  Five folds by message, the message's own
+# fold held out.  The lambda rule gives 20 at L=80; the order-weight arms
+# pin ENIGMA_IC_BLEND=20 because any coefficient override switches the
+# rule off.
+
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 59, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  base    break50 156/400
+  w1000   break50 219/400
+  w1e4    break50 214/400
+  w1e5    break50 216/400
+  q10     break50 209/400
+  lo10    break50 223/400
+  aw0.3   break50 214/400
+  aw1.0   break50 219/400
+  lam10   break50 228/400
+  lam40   break50 204/400
+  w1000   vs base   only-w1000    79  only-base    16
+  w1e4    vs base   only-w1e4     76  only-base    18
+  w1e5    vs base   only-w1e5     82  only-base    22
+  q10     vs base   only-q10      73  only-base    20
+  lo10    vs base   only-lo10     84  only-base    17
+  aw0.3   vs base   only-aw0.3    82  only-base    24
+  aw1.0   vs base   only-aw1.0    84  only-base    21
+  lam10   vs base   only-lam10    86  only-base    14
+  lam40   vs base   only-lam40    72  only-base    24
+  base    vs w1000  only-base     16  only-w1000   79
+  w1e4    vs w1000  only-w1e4     20  only-w1000   25
+  w1e5    vs w1000  only-w1e5     30  only-w1000   33
+  q10     vs w1000  only-q10      21  only-w1000   31
+  lo10    vs w1000  only-lo10     26  only-w1000   22
+  aw0.3   vs w1000  only-aw0.3    19  only-w1000   24
+  aw1.0   vs w1000  only-aw1.0    23  only-w1000   23
+  lam10   vs w1000  only-lam10    19  only-w1000   10
+  lam40   vs w1000  only-lam40    18  only-w1000   33
+
+# READING, every arm against w1000 = 219:
+#
+#   question              arm     breaks  discordants    z
+#   plateau's upper edge  w1e4     214     20 / 25     -0.7
+#                         w1e5     216     30 / 33     -0.4
+#   per-order weight      q10      209     21 / 31     -1.4
+#                         lo10     223     26 / 22     +0.6
+#   -a order weights      aw0.3    214     19 / 24     -0.8
+#                         aw1.0    219     23 / 23      0.0
+#   -f IC weight (20)     lam10    228     19 / 10     +1.7
+#                         lam40    204     18 / 33     -2.1
+#
+# 1. THE PLATEAU RUNS TO AT LEAST w = 100 000.  Two more decades read 214
+#    and 216, indistinguishable from 219.  That is what the corpus-only
+#    result predicts: a prose-only gram keeps its ORDER against the floor at
+#    every finite w (both scale as 1/w), so the prose ordering that is worth
+#    +25 breaks survives until the weight is literally infinite -- or until
+#    the 256-level quantisation runs out of levels for it, which at 10^5 it
+#    has not.  There is no weight to tune here.
+#
+# 2. THE QUAD ORDER'S COUNTS CARRY THE GAIN.  Weighting the three dense
+#    orders down to 10 while the sparse quad order stays at 1000 reads 223
+#    (level); the reverse reads 209 (-10, z = -1.4, not established but the
+#    only per-order cell leaning down).  So the 2 573 quadgrams the fold
+#    names -- 0.6% of the space -- are doing the work, and one weight for
+#    all four orders loses nothing.
+#
+# 3. THE ORDER WEIGHTS ARE A PLATEAU UNDER THIS TABLE TOO, as they were on
+#    the stock table (eval/weight_sweep.py): r = 0.3 reads 214 and r = 1.0
+#    reads 219 against the shipped row's 219.  A sparse quad order did not
+#    make the lower orders want more weight.
+#
+# 4. THE IC WEIGHT IS THE ONE KNOB THAT MOVED, AND IT MOVED DOWN.  Halving
+#    lambda reads 228 (+9, 19/10 discordants, z = +1.7) and doubling it 204
+#    (-15, z = -2.1); the three points are monotone.  That is the direction
+#    a sharper n-gram table predicts -- the IC term's job is to hold the
+#    climb surface together where the n-gram half is weak, and this table
+#    is less weak -- but +9 on 400 trials with the better arm CHOSEN from
+#    two is not a result.  It needs a held-out seed and a lambda = 5 arm
+#    before it is one.
+#
+# So no knob beats w = 1000 as measured; the IC weight is the only one
+# worth a follow-up.  The shipping caveat in the two files above stands.
