@@ -952,6 +952,18 @@ static const lang_coeffs coeffs_table[] =
        off-distribution for real traffic -- and at those lengths -R 8 breaks
        essentially everything anyway. */
     { "wehrmacht", { 1.0, 0.6, 0.3, 0.15 }, 30.0, 0.25 },
+    /* hgnord is the wehrmacht tables plus the n-gram COUNTS of the authentic
+       HG Nord 1941 decrypts at weight 1000 (eval/build_hgnord_ngrams.py), so
+       it starts from wehrmacht's row.  Under that table the -f lambda's
+       plateau is the same shape with a lower top edge: doubling the rule
+       loses (z -3.0 at L=80), halving it won +23 of 1600 at L=80 and nothing
+       at L = 60/100/167 (40/41 discordants pooled), so 0.25*L is kept
+       rather than a lower slope fitted to one length
+       (eval/results-counted-table-knobs.txt).  A language without a row
+       here would fall to the flat 30, which is badly wrong below 75
+       letters, which is why the row exists even though it copies the one
+       above. */
+    { "hgnord",    { 1.0, 0.6, 0.3, 0.15 }, 30.0, 0.25 },
   };
 
 /* The default -- PR #106 / archived/PERFORMANCE.md 6.4.  Flat lambda, i.e.

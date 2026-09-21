@@ -1104,9 +1104,13 @@ about another network's traffic. It is built from 34 messages.
 
 **Do NOT ship it as the `wehrmacht` tables.** Every eval harness here
 draws its trials from the same 62 messages, so a table counted from all of
-them would contaminate every measurement made after it. If it ships, it is
-a separate language built from a *stated* message set, with the evals
-staying on `wehrmacht`. Still open: whether it transfers to a second
+them would contaminate every measurement made after it. **It ships as
+`-l hgnord`** — a separate language built by `eval/build_hgnord_ngrams.py`
+from a *stated* message set (all 48 clean decrypts, 5 132 letters, printed
+by name when it runs), the same w = 1000 mix, with a `lang_coeffs` row
+copying wehrmacht's `0.25·L` — and the evals stay on `wehrmacht`. Its use
+is HG Nord traffic that was never read, which is not in the corpus and so
+cannot leak. Still open: whether it transfers to a second
 collection (none is in the repo), and how it composes with the day-key
 levers of §3, which are the other in-network prior.
 

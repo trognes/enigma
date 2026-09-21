@@ -172,7 +172,8 @@ bool opt_crib_reorder = true;
 
 char * opt_plaintext; /* plaintext to compare to */
 const char * opt_language; /* english, german, danish, french, swedish, finnish,
-                                      icelandic, polish, spanish, wehrmacht; no default */
+                              icelandic, polish, spanish, wehrmacht, hgnord;
+                              no default */
 
 const char * opt_datadir;  /* directory holding the n-gram files (default "ngrams") */
 int opt_norenigma; /* use the 5 Norenigma (Norway Enigma) wheels */

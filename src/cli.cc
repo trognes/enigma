@@ -98,8 +98,11 @@ void help(FILE * out)
   fprintf(out, "  %-24s %s\n", "", "swedish/finnish/icelandic/polish/spanish, or");
   fprintf(out, "  %-24s %s\n", "", "wehrmacht (telegraphic military German -- X as");
   fprintf(out, "  %-24s %s\n", "", "word separator, Q for ch, spelled-out numbers;");
-  fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German);");
-  fprintf(out, "  %-24s %s\n", "", "required for -m/-b/-t/-q/-a/-f (no default); not -i");
+  fprintf(out, "  %-24s %s\n", "", "for real WWII traffic, NOT for prose German),");
+  fprintf(out, "  %-24s %s\n", "", "or hgnord (wehrmacht plus the counted n-grams of");
+  fprintf(out, "  %-24s %s\n", "", "the 1941 HG Nord decrypts; for that network's");
+  fprintf(out, "  %-24s %s\n", "", "traffic only); required for -m/-b/-t/-q/-a/-f");
+  fprintf(out, "  %-24s %s\n", "", "(no default); not -i");
   fprintf(out, "  %-24s %s\n", "-i, --ic",
           "Index of coincidence (IC); needs no -l [default]");
   fprintf(out, "  %-24s %s\n", "-m, --mono", "Monogram statistics for the plaintext score");

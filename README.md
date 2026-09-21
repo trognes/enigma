@@ -255,9 +255,11 @@ positions you already know.
 - **`-f`** — Weighted all-order score **plus the index of coincidence**
   (**recommended** when the language is known)
 - **`-l lang`** — Scoring language: `english`, `german`, `danish`, `french`,
-  `swedish`, `finnish`, `icelandic`, `polish`, `spanish`, or `wehrmacht`
-  (telegraphic military German — see below). **Required** for
-  `-m`/`-b`/`-t`/`-q`/`-a`/`-f`; ignored by `-i`
+  `swedish`, `finnish`, `icelandic`, `polish`, `spanish`, `wehrmacht`
+  (telegraphic military German — see below) or `hgnord` (`wehrmacht` plus
+  the counted n-grams of the 1941 HG Nord decrypts, for that network's
+  traffic only). **Required** for `-m`/`-b`/`-t`/`-q`/`-a`/`-f`; ignored by
+  `-i`
 
 The **default model is the index of coincidence** (`-i`) — the only one that
 needs no language, so the tool runs out of the box with no scoring options. When
@@ -586,6 +588,19 @@ prose German it is a domain **mis**match and measured **−10.2 pp**, so ordinar
 German text (and `make crackquality`) should stay on `-l german`. Regenerate the
 tables with `python3 eval/build_telegraphic_ngrams.py`; see
 `eval/MODERN_BREAKING_NOTES.md` §6.
+
+For traffic of **one particular network — Heeresgruppe Nord, 1941** — there
+is a sharper table still: **`-l hgnord`** is `wehrmacht` with the n-gram
+counts of the 48 clean authentic HG Nord decrypts in `eval/` mixed in at a
+weight that makes them the model and leaves the prose tables to order the
+grams they never saw. Held out by message it breaks **55% of 80-letter
+messages against 39%** at `-R 100` with the rotor key given (+63 of 400,
+z = 3.6), and is ahead at 60, 100 and 167 letters too. It is an
+*in-network* prior — that network's vocabulary, abbreviations and habits —
+so use it on HG Nord messages and `wehrmacht` on other telegraphic German;
+and because it has seen every message in `eval/`, every measurement made
+here stays on `wehrmacht`. Regenerate with `python3
+eval/build_hgnord_ngrams.py`, which prints the message set it counts.
 
 A known-word (**crib**) finisher, `--crib-rerank <f>`, re-ranks converged
 plugboards by `score + --crib-weight × (known words present in the decrypt)`,
@@ -959,6 +974,15 @@ German tables reweighted toward those statistics together with Figure 18, the
 and `eval/build_telegraphic_ngrams.py` regenerates the tables from them. These
 are *aggregate published statistics*, not the plaintext of any individual
 message, so the authentic-message sets in `eval/` remain held out.
+
+The eleventh, **`hgnord`**, is the `wehrmacht` tables plus the n-gram counts
+of the clean authentic HG Nord 1941 decrypts in `eval/`, mixed at a weight of
+1000 — the prose-derived table is then 0.1% of the mass and serves only to
+order the grams the ~5 100 letters of traffic never saw, which is measurably
+worth keeping (`eval/results-corpus-only-table.txt`).
+`eval/build_hgnord_ngrams.py` regenerates it and names every message it
+counts. Unlike `wehrmacht` it *has* seen the `eval/` messages, so it is not
+used for any measurement here.
 Language-specific letters outside plain A-Z are folded to a base A-Z letter when
 a table loads (diacritics stripped: `Ä`/`Å`/`Ö` → `A`/`A`/`O`, `Ñ` → `N`, `Ł` →
 `L`, Icelandic `Þ` → `T` pairing with `Ð` → `D`, etc.) — see `fold_codepoint()`
