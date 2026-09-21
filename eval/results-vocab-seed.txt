@@ -1,0 +1,43 @@
+# Vocabulary-seeded climbs against plain restarts at L=80 -- MEASURED DOWN.
+#
+# eval/vocab_seed_ab.py 70 41            (the six arms, captured in two runs
+#                                          of arm subsets on the same 70 trials;
+#                                          the pairing is by seed and identical)
+# eval/vocab_seed_ab.py 70 41 --present  (the token-presence split)
+#
+# Rotor key given, 10-pair board hidden, -c -f -S k4f10 -K --polish
+# -l wehrmacht, -T 1.  The seeded arms sweep eval/vocab-generic.cribs
+# (14 X-fenced tokens: spelled numbers, XUHRX, XKMX, XDIVX, XROEMX) with
+# --crib-list --crib-seeds K -R 0.  A board counts as recovered at >= 50%.
+# Wall time includes ~0.1 s of process startup in every arm alike.
+
+L=80, 70 paired trials, seed 41, k4f10 -K --polish, rotor key given
+  R100     break50  27/70   wall/trial 0.125s
+  R300     break50  35/70   wall/trial 0.197s
+  R400     break50  35/70   wall/trial 0.233s
+  vocK10   break50  27/70   wall/trial 0.210s     (14 cribs x 10 = 140 climbs)
+  vocK5    break50  30/70   wall/trial 0.196s     (70 climbs)
+  vocK3    break50  29/70   wall/trial 0.192s     (42 climbs)
+  R300 vs R100:   only-R300 9,   only-R100 1, union 36/70
+  R400 vs R100:   only-R400 9,   only-R100 1, union 36/70
+  vocK10 vs R100: only-vocK10 6, only-R100 6, union 33/70
+  vocK5 vs R100:  only-vocK5 7,  only-R100 4, union 34/70
+  vocK3 vs R100:  only-vocK3 8,  only-R100 6, union 35/70
+
+  token PRESENT (14 trials): vocK10 8, R100 8
+  token ABSENT (56 trials):  vocK10 19, R100 19
+  trials with a token present: 14/70
+  per token, of 70: XEINSX 5, XZWOX 3, XDREIX 0, XVIERX 0, XFUENFX 1,
+    XSEQSX 1, XSIEBENX 2, XAQTX 1, XNEUNX 4, XNULLX 0, XUHRX 0, XKMX 3,
+    XDIVX 3, XROEMX 1
+
+# READING.  At matched wall time (~0.2 s) plain restarts break 35 of 70 where
+# the seeded arms break 27-30: the seeding costs about 3x the compute of
+# -R 100 for the same result.  Two facts kill it rather than one.  Only 14 of
+# the 70 plaintexts contain ANY of the tokens, so at 80 letters X-fenced
+# numbers are far rarer than assumed; and on those 14 the seeding still does
+# nothing (8 against 8).  The 6-and-6 discordants against R100 are restart
+# diversity, not the crib.  The --self-crib-seeds result does not transfer:
+# a doubling pins a dozen equality edges on a real occurrence, a short crib
+# swept over every alignment pins a few edges that are usually at the wrong
+# place, and those pins survive --polish.

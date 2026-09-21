@@ -84,6 +84,38 @@ static int fold_gram(const char * s, int * index_out)
   return letters;
 }
 
+/* Parse "a,b,c,d" into w[4].  ONE parser, shared by $ENIGMA_LOGLIN /
+   $ENIGMA_INTERP and by $ENIGMA_AW, so a second copy cannot drift from this
+   one.  All four weights or none, each through parse_opt_double: this was a
+   single sscanf WHOSE RETURN VALUE WAS DROPPED, so a malformed vector left the
+   unparsed weights at 0 -- and an all-zero log-linear vector is silently
+   replaced by (1,0,0,0), i.e. plain quad.  A probe that quietly measures the
+   baseline instead of the variant it was set up to test is worse than one that
+   stops. */
+void parse_weight_vector(const char * src, const char * what, double * w)
+{
+  char wbuf[128];
+  if (strlen(src) >= sizeof(wbuf))
+    fatal("Illegal weight vector: too long "
+          "(want four numbers, e.g. 1,0.6,0.3,0.15)");
+  snprintf(wbuf, sizeof(wbuf), "%s", src);
+
+  char * save = wbuf;
+  for (int j = 0; j < 4; j++)
+    {
+      if (save == nullptr)
+        fatal("Illegal weight vector: want four numbers separated by "
+              "commas, e.g. 1,0.6,0.3,0.15");
+      char * comma = strchr(save, ',');
+      if (comma != nullptr)
+        *comma = 0;
+      w[j] = parse_opt_double(save, what);
+      save = (comma != nullptr) ? comma + 1 : nullptr;
+    }
+  if (save != nullptr)
+    fatal("Illegal weight vector: more than four numbers");
+}
+
 /* Read an n-gram statistics table from "<language>_<suffix>.txt" into 'itable', the
    flat backing store of the corresponding uint8 array (mono8 / bi8 / tri8 / quad8),
    contiguous and row-major so the n letters of a record map to the single index
@@ -382,27 +414,7 @@ void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
              baseline instead of the variant it was set up to test is worse
              than one that stops. */
           const char * wname = interp ? "$ENIGMA_INTERP" : "$ENIGMA_LOGLIN";
-          const char * wsrc = interp ? ip : lp;
-          char wbuf[128];
-          if (strlen(wsrc) >= sizeof(wbuf))
-            fatal("Illegal weight vector: too long "
-                  "(want four numbers, e.g. 1,0.6,0.3,0.15)");
-          snprintf(wbuf, sizeof(wbuf), "%s", wsrc);
-
-          char * save = wbuf;
-          for (int j = 0; j < 4; j++)
-            {
-              if (save == nullptr)
-                fatal("Illegal weight vector: want four numbers separated by "
-                      "commas, e.g. 1,0.6,0.3,0.15");
-              char * comma = strchr(save, ',');
-              if (comma != nullptr)
-                *comma = 0;
-              w[j] = parse_opt_double(save, wname);
-              save = (comma != nullptr) ? comma + 1 : nullptr;
-            }
-          if (save != nullptr)
-            fatal("Illegal weight vector: more than four numbers");
+          parse_weight_vector(interp ? ip : lp, wname, w);
         }
       double s = w[0] + w[1] + w[2] + w[3];
       if (interp)                          /* JM linear: normalise to sum 1 */

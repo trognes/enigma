@@ -1,0 +1,234 @@
+# The knobs around the corpus-counted table, on one trial set --
+# ENHANCEMENTS.md 2b.  Follows eval/results-counted-table.txt (the weight
+# curve, a plateau from ~50 up) and eval/results-corpus-only-table.txt (the
+# w = infinity limit reads 194 against w = 1000's 219).
+#
+# eval/counted_table_knobs.py 400 59 80 100
+#
+# Rotor key given, 10-pair board hidden, -c -f -S k4f10 -K --polish
+# -l wehrmacht, -T 1, the seed-59 trial set of the runs above, so base and
+# w1000 reproduce them exactly.  Five folds by message, the message's own
+# fold held out.  The lambda rule gives 20 at L=80; the order-weight arms
+# pin ENIGMA_IC_BLEND=20 because any coefficient override switches the
+# rule off.
+
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 59, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  base    break50 156/400
+  w1000   break50 219/400
+  w1e4    break50 214/400
+  w1e5    break50 216/400
+  q10     break50 209/400
+  lo10    break50 223/400
+  aw0.3   break50 214/400
+  aw1.0   break50 219/400
+  lam10   break50 228/400
+  lam40   break50 204/400
+  w1000   vs base   only-w1000    79  only-base    16
+  w1e4    vs base   only-w1e4     76  only-base    18
+  w1e5    vs base   only-w1e5     82  only-base    22
+  q10     vs base   only-q10      73  only-base    20
+  lo10    vs base   only-lo10     84  only-base    17
+  aw0.3   vs base   only-aw0.3    82  only-base    24
+  aw1.0   vs base   only-aw1.0    84  only-base    21
+  lam10   vs base   only-lam10    86  only-base    14
+  lam40   vs base   only-lam40    72  only-base    24
+  base    vs w1000  only-base     16  only-w1000   79
+  w1e4    vs w1000  only-w1e4     20  only-w1000   25
+  w1e5    vs w1000  only-w1e5     30  only-w1000   33
+  q10     vs w1000  only-q10      21  only-w1000   31
+  lo10    vs w1000  only-lo10     26  only-w1000   22
+  aw0.3   vs w1000  only-aw0.3    19  only-w1000   24
+  aw1.0   vs w1000  only-aw1.0    23  only-w1000   23
+  lam10   vs w1000  only-lam10    19  only-w1000   10
+  lam40   vs w1000  only-lam40    18  only-w1000   33
+
+# READING, every arm against w1000 = 219:
+#
+#   question              arm     breaks  discordants    z
+#   plateau's upper edge  w1e4     214     20 / 25     -0.7
+#                         w1e5     216     30 / 33     -0.4
+#   per-order weight      q10      209     21 / 31     -1.4
+#                         lo10     223     26 / 22     +0.6
+#   -a order weights      aw0.3    214     19 / 24     -0.8
+#                         aw1.0    219     23 / 23      0.0
+#   -f IC weight (20)     lam10    228     19 / 10     +1.7
+#                         lam40    204     18 / 33     -2.1
+#
+# 1. THE PLATEAU RUNS TO AT LEAST w = 100 000.  Two more decades read 214
+#    and 216, indistinguishable from 219.  That is what the corpus-only
+#    result predicts: a prose-only gram keeps its ORDER against the floor at
+#    every finite w (both scale as 1/w), so the prose ordering that is worth
+#    +25 breaks survives until the weight is literally infinite -- or until
+#    the 256-level quantisation runs out of levels for it, which at 10^5 it
+#    has not.  There is no weight to tune here.
+#
+# 2. THE QUAD ORDER'S COUNTS CARRY THE GAIN.  Weighting the three dense
+#    orders down to 10 while the sparse quad order stays at 1000 reads 223
+#    (level); the reverse reads 209 (-10, z = -1.4, not established but the
+#    only per-order cell leaning down).  So the 2 573 quadgrams the fold
+#    names -- 0.6% of the space -- are doing the work, and one weight for
+#    all four orders loses nothing.
+#
+# 3. THE ORDER WEIGHTS ARE A PLATEAU UNDER THIS TABLE TOO, as they were on
+#    the stock table (eval/weight_sweep.py): r = 0.3 reads 214 and r = 1.0
+#    reads 219 against the shipped row's 219.  A sparse quad order did not
+#    make the lower orders want more weight.
+#
+# 4. THE IC WEIGHT IS THE ONE KNOB THAT MOVED, AND IT MOVED DOWN.  Halving
+#    lambda reads 228 (+9, 19/10 discordants, z = +1.7) and doubling it 204
+#    (-15, z = -2.1); the three points are monotone.  That is the direction
+#    a sharper n-gram table predicts -- the IC term's job is to hold the
+#    climb surface together where the n-gram half is weak, and this table
+#    is less weak -- but +9 on 400 trials with the better arm CHOSEN from
+#    two is not a result.  It needs a held-out seed and a lambda = 5 arm
+#    before it is one.
+#
+# So no knob beats w = 1000 as measured; the IC weight is the only one
+# worth a follow-up.  The shipping caveat in the two files above stands.
+
+# ---------------------------------------------------------------------------
+# THE IC-WEIGHT FOLLOW-UP, held out: a fresh seed and a lambda = 5 arm.
+#
+# eval/counted_table_knobs.py 400 173 80 100 --arms=w1000,lam5,lam10,lam40
+
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  w1000   break50 238/400
+  lam5    break50 243/400
+  lam10   break50 242/400
+  lam40   break50 222/400
+  lam5    vs w1000  only-lam5     23  only-w1000   18
+  lam10   vs w1000  only-lam10    23  only-w1000   19
+  lam40   vs w1000  only-lam40    19  only-w1000   35
+
+# READING.  Against the rule's lambda = 20 (w1000), both seeds:
+#
+#   lambda   seed 59            seed 173           pooled discordants    z
+#   5        --                 +5  (23 / 18)      23 / 18             +0.8
+#   10       +9  (19 / 10)      +4  (23 / 19)      42 / 29             +1.5
+#   40       -15 (18 / 33)      -18 (19 / 35)      37 / 68             -3.0
+#
+# The halving did NOT hold up: +9 became +4 on the fresh seed, and pooled it
+# is z = +1.5 -- the winner's-curse shrink this repo records for every
+# selected cell.  Lambda = 5 reads the same as 10.  So below the rule's 20
+# the surface is FLAT (5 / 10 / 20 are within noise of each other), and
+# above it the surface falls: doubling costs -15 and -18 on two seeds,
+# z = -3.0 pooled, which IS established.
+#
+# What that says: under the counted table the rule's lambda sits at the top
+# edge of a plateau rather than in its middle.  Nothing to change -- a
+# lower lambda is not measurably better -- but a HIGHER one is measurably
+# worse, so the table did make the IC term less valuable, as a sharper
+# n-gram half predicts; it just did not make it worth removing.  The
+# 0.25*L rule stands for this table as it does for the stock one.
+
+# ---------------------------------------------------------------------------
+# LAMBDA = 10 ON TWO MORE SEEDS, asked for after the above.
+#
+# eval/counted_table_knobs.py 400 227 80 100 --arms=w1000,lam10
+# eval/counted_table_knobs.py 400 281 80 100 --arms=w1000,lam10
+
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 227, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  w1000   break50 236/400
+  lam10   break50 242/400
+  lam10   vs w1000  only-lam10    16  only-w1000   10
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 281, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  w1000   break50 205/400
+  lam10   break50 209/400
+  lam10   vs w1000  only-lam10    18  only-w1000   14
+
+# READING.  lambda = 10 against the rule's 20, all four seeds:
+#
+#   seed    lambda 20   lambda 10   delta   discordants
+#   59        219         228        +9      19 / 10     (the selecting seed)
+#   173       238         242        +4      23 / 19
+#   227       236         242        +6      16 / 10
+#   281       205         209        +4      18 / 14
+#   pooled    898         921       +23      76 / 53     z = +2.0
+#   held-out only (173, 227, 281)   +14      57 / 43     z = +1.4
+#
+# Four of four seeds positive, +4 to +9 each, pooled +23 of 1600 trials --
+# 56.1% -> 57.6% of messages, +1.4pp of break50, z = +2.0 (p = 0.04) with
+# the selecting seed in and z = +1.4 on the three held-out seeds alone.  So
+# the surface below the rule is not quite flat after all: halving lambda is
+# a small, consistent gain under the counted table, about a quarter the size
+# the selecting seed suggested and at the edge of what 1600 paired trials
+# resolve.  It is the sign a sharper n-gram half predicts, and it is small.
+#
+# Nothing changes.  The rule is tuned for the stock table (152 000 held-out
+# trials behind it), the counted table does not ship, and a +1.4pp lambda
+# preference on a table that is itself an open decision is a note for
+# whoever builds that table, not a code change: if a counted table is ever
+# shipped as its own language, its lang_coeffs row should start from
+# lambda = 0.125*L rather than 0.25*L, and be measured there.
+
+# ---------------------------------------------------------------------------
+# LAMBDA = 10 AT OTHER LENGTHS, asked for after the four-seed result.  "10"
+# was half the rule at L=80, so there are two readings of it elsewhere:
+# lam10 = 0.125*L (half the rule at every length) and fix10 = the literal
+# value 10.  Both against the rule, -R 8 (the budget the weight curve used
+# at these lengths, eval/results-counted-table.txt), seed 173.
+#
+# eval/counted_table_knobs.py 400 173 60 8 --arms=w1000,lam10,fix10
+# eval/counted_table_knobs.py 400 173 100 8 --arms=w1000,lam10,fix10
+# eval/counted_table_knobs.py 400 173 167 8 --arms=w1000,lam10,fix10
+
+40 clean messages >= 60, 5 folds
+tables built in 1s under /tmp/counted_knobs_wqzexzch
+L=60 -R 8, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 15.0 at this length
+  w1000   break50 28/400
+  lam10   break50 30/400
+  fix10   break50 29/400
+  lam10   vs w1000  only-lam10     6  only-w1000    4
+  fix10   vs w1000  only-fix10     5  only-w1000    4
+27 clean messages >= 100, 5 folds
+tables built in 1s under /tmp/counted_knobs_0emlsa01
+L=100 -R 8, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 25.0 at this length
+  w1000   break50 168/400
+  lam10   break50 164/400
+  fix10   break50 168/400
+  lam10   vs w1000  only-lam10    19  only-w1000   23
+  fix10   vs w1000  only-fix10    23  only-w1000   23
+7 clean messages >= 167, 5 folds
+tables built in 1s under /tmp/counted_knobs_r8_wbvri
+L=167 -R 8, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 41.75 at this length
+  w1000   break50 278/400
+  lam10   break50 279/400
+  fix10   break50 272/400
+  lam10   vs w1000  only-lam10    15  only-w1000   14
+  fix10   vs w1000  only-fix10    19  only-w1000   25
+
+# READING.  Against the rule (w1000), one seed, 400 paired trials per cell:
+#
+#   L     rule    half the rule (0.125*L)      literal 10
+#          lambda  breaks  discordants    z     breaks  discordants    z
+#   60     15.0   30 vs 28    6 / 4    +0.6    29 vs 28    5 / 4    +0.3
+#   100    25.0  164 vs 168  19 / 23   -0.6   168 vs 168  23 / 23    0.0
+#   167    41.75 279 vs 278  15 / 14   +0.2   272 vs 278  19 / 25   -0.9
+#   pooled                   40 / 41   -0.1                47 / 52   -0.5
+#
+# THE L=80 GAIN DOES NOT EXTEND.  Half the rule is level with it at every
+# other length -- 40 against 41 discordants pooled over 1200 trials -- and
+# the literal 10 is level at 60 and 100 and leans down at 167 (where it is
+# a quarter of the rule's 41.75, i.e. further from the rule than any arm
+# above), none of it resolving.  L=60 is a floor cell, 7% of trials
+# breaking, and says nothing either way.  So the surface below the rule is
+# a PLATEAU at 60, 100 and 167 as it was at 80 on the first held-out seed,
+# and the four-seed +1.4pp is an L=80 result that no other length repeats.
+#
+# One confound, recorded rather than resolved: the L=80 cells ran at -R 100
+# and these at -R 8, and this repo records the pre-pass ordering as
+# restart-budget dependent (CLAUDE.md, -S k entry), so a lambda preference
+# could in principle be too.  Running -R 100 at the three lengths costs
+# ~12x this run (~70 minutes) and was not done.
+#
+# What changes: the note above ("start its row from lambda = 0.125*L") was
+# written on the four L=80 seeds and is now too strong.  Under the counted
+# table the rule's lambda sits on a plateau whose lower half is free at
+# every length measured and whose upper edge is not (lambda = 40 at L=80
+# loses at z = -3.0); a counted table shipped as its own language should
+# start from the rule, 0.25*L, and treat 0.125*L as an equally good
+# setting rather than a better one.  Nothing shipped changes.

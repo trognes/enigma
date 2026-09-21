@@ -842,6 +842,280 @@ question spans ~2pp. If better first plugs are the goal rather than a better
 first statistic, deduction has by far the larger measured effect, and these
 experiments are the smaller lever.
 
+### 2b. The L=80 residue at a REALISTIC budget — three levers measured
+
+Forty letters is unrealistically short and `-R 5000` is unrealistically
+expensive; the regime that matters is **about 80 letters at `-R 100` or
+less**, with no second message and no day key. Four cheap probes (each a
+few seconds to a minute, rotor key given, 10-pair board hidden, the
+recommended `k4f10 -K --polish` recipe on authentic telegraphic German) say
+what the residue there is made of and close two ideas.
+
+**What decides a trial is the truth's own score against an impostor floor
+that barely depends on the message.** The best converged board decrypting
+under half the letters — the impostor — lands at nearly the same per-letter
+score whatever the plaintext (`eval/impostor_floor_probe.py`,
+`eval/results-impostor-floor.txt`, 30 trials, `-R 300`):
+
+| L=80 | value |
+|---|---|
+| impostor floor, mean (range) | −9.26 (−8.64 … −9.65) per letter |
+| truth, mean over the same trials | −8.28 |
+| truth below its own trial's floor | 3 of 30 |
+| truth above the floor but not reached | 9 of 30 |
+| corpus windows below −9.4 / −9.0, of 77 | 21 / 34 |
+| of the 21, from garble-flagged messages | 8 |
+
+The impostors are **not** letter soup and do **not** overshoot on IC
+(0.0608 against their plaintexts' 0.0604 — so an IC penalty would do
+nothing). They are gibberish with language-like letter statistics, which a
+quadgram model cannot push much lower; the floor rises ~0.1 per letter
+between `-R 8` and `-R 5000` (the lead column in
+`eval/results-restart-ladder.txt` §4). The sub-floor truths split cleanly:
+**8 of 21 are transcription garbles**, which no method recovers and which
+inflate every "scoring failure" figure measured on this corpus, and the rest
+are clean telegraphese dense in X-fenced abbreviations and names
+(`XSFHXQVLQLFHXLFHXSIGXSIGXSGRWX`, `XLNKXLNKXISTXKUSOWXKUSOWX`) that a
+prose-derived table cannot know. **Drop the garble-flagged messages from
+the trial pool** before measuring any lever here, or the ceiling reads a
+third lower than it is.
+
+**Below `-R 100` the truth is not outscored, it is not reached.** The
+re-ranker probe below puts a number on it: of 200 trials at `-R 100`, 79
+break, a good board exists among the top 32 converged boards in only **10
+more**, and the remaining 111 have no good board anywhere. So the binding
+constraint at a realistic budget is search, and the three scoring ideas
+(a counted abbreviation table, a token re-ranker, cleaner accounting) each
+address a population that only grows with `-R`.
+
+**Successive halving over restarts — checked, does not pay.** The idea: run
+the cheap `k4` stage on many seeds and continue only the best to `f10`, the
+shape of `-F` applied to restarts. The stage-0 score does predict — the
+median truth-reaching restart sits at the 25th percentile of its trial's
+stage-0 scores, and keeping the top half keeps 126 of 175 such restarts and
+27 of 29 broken trials (`eval/restart_halving_check.py`,
+`eval/results-restart-halving.txt`, 60 trials). But the `k4` stage is **116
+µs of a 340 µs restart**, a 0.34 share, so keeping the top half lets a
+budget of 100 full restarts run 147 seeds of which 72% of the hits survive:
+100p → 106p, and the top third gives 105p. A ~5% gain, under what one A/B
+resolves. Only a much cheaper stage 0 changes the arithmetic, and the
+histogram path already made `k4` flat in length; what remains is the
+climb's per-move overhead. A truth-reaching seed already carries ~29% of
+the letters right out of the kick, which is what the stage-0 score picks up.
+
+**Vocabulary-seeded climbs — MEASURED DOWN.** Sweep fourteen generic
+X-fenced tokens (`XEINSX`, `XZWOX`, `XNULLX`, `XUHRX`, `XKMX`, `XDIVX`, …;
+`eval/vocab-generic.cribs`, none from the corpus) with `--crib-list
+--crib-seeds K -R 0`, the shape `--self-crib-seeds` wins with. Paired, 70
+trials (`eval/vocab_seed_ab.py`, `eval/results-vocab-seed.txt`):
+
+| arm | climbs | break50 | wall/trial |
+|---|---:|---:|---:|
+| `-R 100` | 100 | 27/70 | 0.125 s |
+| seeded, K=10 / 5 / 3 | 140 / 70 / 42 | 27 / 30 / 29 | ~0.20 s |
+| **`-R 300`** | 300 | **35/70** | 0.197 s |
+
+At matched wall time plain restarts win by 5–8 breaks; the seeding costs ~3×
+the compute of `-R 100` for the same result. Two facts kill it: **only 14 of
+70 plaintexts contain any of the tokens** — at 80 letters X-fenced numbers
+are far rarer than assumed — and on those 14 the seeding still does nothing
+(8 against 8). The self-crib result does not transfer because a doubling
+pins a dozen equality edges on a real occurrence, where a short crib swept
+over every alignment pins a few edges that are usually in the wrong place,
+and those pins survive `--polish`.
+
+**A corpus-5-gram bonus as a RE-RANKER — the signal is as strong as a
+signal gets, and there is almost nothing for it to act on.** A full 5-gram
+table is out (26⁵ cells is 12 MB of uint8 against the 0.45 MB quad table
+whose cache residency is a measured 20% win, and a 5-gram model derived from
+quadgrams is the quadgram model at 26× the size). The real content is the
+corpus's own 5-grams — 7 400 letters give 5 702 distinct, **948 in two or
+more messages**, and those are the X-fenced tokens and spelled numbers,
+five letters being the natural width for `XSIGX` and `XPKWX`. Applied
+leave-one-message-out as a bonus over the search's top 32 converged boards
+(`eval/token_rerank_probe.py`, `eval/results-token-rerank.txt`, 200 trials,
+`-R 100`): a true window matches **7.6** recurring 5-grams, the impostor that
+beat it **0.1**, and at every weight tried up to 8 log units per match the
+re-ranker demotes no correct board. But the ceiling is the 10 trials with a
+good board outranked, and it recovers 2. Worth keeping: the signal costs
+nothing, is safe at any weight tried, and belongs in the finisher for
+high-`-R` runs, where the outranked bucket reaches 16% of trials
+(`results-restart-ladder.txt` §2). Not worth building for `-R 100`. Inside
+the climb it would not help either: a board needs five consecutive correct
+letters before the bonus fires, and the seeds that go on to succeed start at
+29% of letters right.
+
+**Two more search levers, both null on the same 70 trials**
+(`eval/xanchor_ab.py`, `eval/results-xanchor.txt`). `--biased-random 1` at
+`-R 100` — shipped and measured +9% of breaks at `-R` 1–5, never above 10 —
+reads 29 against 27 of 70 on 5-against-3 discordants, i.e. nothing at this
+size and consistent with its decay. **Anchoring the climb on X** — the
+self-crib's 26 guesses on `steck[X]` without the doubling, run as 25 `-s`
+pins plus `--no-plug X` at `-R 4` each, best by score — is exactly level at
+27 of 70 with 5-and-5 discordants against 100 unanchored restarts, at the
+same climb count. One correct pair, right in one run of 26, is a third of
+what a truth-reaching seed already carries out of the `k4` pre-pass.
+
+**A corpus-COUNTED table is the one lever that PAID, and it paid at
+`-R 100`.** Mix each order's stock wehrmacht table with the n-gram counts
+of the corpus messages in the *training* folds, at weight `w` of the
+table's mass, five folds by message so no message ever scores against a
+table it contributed to (`eval/counted_table_ab.py`,
+`eval/results-counted-table.txt`, 400 paired trials per cell):
+
+| cell, w = 0.2 | base | counted | discordants | z |
+|---|---:|---:|---|---:|
+| L=80, `-R 100`, clean messages | 156 | 185 | 47 / 18 | 3.6 |
+| L=80, `-R 100`, held-out seed | 150 | 184 | 47 / 13 | 4.4 |
+| L=80, `-R 100`, garbles included | 164 | 185 | 49 / 28 | 2.4 |
+| L=60, `-R 8` | 23 | 32 | 18 / 9 | 1.7 |
+| L=100, `-R 8` | 114 | 123 | 44 / 35 | 1.0 |
+| L=167, `-R 8` | 271 | 282 | 40 / 29 | 1.3 |
+
+**+8pp of break50 at L=80 (39% → 46–47%), replicated on a held-out seed,
+and positive at every other cell** — the three `-R 8` cells pool to +29 of
+1200 (z = 2.2), so it costs nothing at L=167 where a mistuned prior would
+first show. With the garble-flagged messages in the pool the gain halves at
+w = 0.2, as the floor probe predicted: a garble is a window no table can
+lift.
+
+**The weight curve does NOT peak — the corpus counts alone are the better
+model.** Swept on the seed-59 trial set, break50 of 400 against 156:
+
+| w | 0.01 | 0.05 | 0.2 | 0.5 | 1 | 2 | 5 | 10 | 20 | 50 | 200 | 1000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| n | 170 | 184 | 185 | 189 | 188 | 194 | 201 | 206 | 207 | 211 | 213 | 219 |
+
+Monotone over five orders of magnitude. At w = 1000 the stock table is
+only smoothing and the ~2 900 letters of training-fold traffic *are* the
+model, and that breaks **55% of messages against 39%** — sixteen points.
+Held out on seed 131, w = 5 and 10 read 200 and 198 against 150, the same
++50. At the other lengths (`-R 8`, seed 211) w = 1000 reads 39/125/286
+against 23/114/271 at L = 60/100/167 and w = 10 reads 26/136/279, so the
+two are within noise of each other and neither is ever behind the stock
+table; with the garbles left in the pool w = 1000 reads **223 against
+164**. **Leakage was checked before believing this**: the corpus notes
+record re-sends and duplicate copies, and a copy in another fold would put
+a held-out message in its own training table — but over the 34 clean
+messages the longest common substring between any two is 22 letters, one
+same-day pair, and most sharing pairs share a single 12-letter token. Those
+are the recurring phrases the prior exists to learn. So for this network
+its own traffic, at a tenth the volume, beats Appendix C bent onto prose
+German by a wide margin — which is as much a statement about how far the
+`wehrmacht` tables sit from the real distribution as about the prior.
+
+**Leaving prose German out entirely was tried, and the prose table still
+earns its 0.1%.** The obvious next step — the corpus counts plus Appendix
+C's Fig 17 monograms and 400 Fig 18 trigrams, no prose table at all — was
+measured on the same seed-59 trials with the corpus-only table as its
+control (`eval/corpus_only_table_ab.py`,
+`eval/results-corpus-only-table.txt`), break50 of 400:
+
+| arm | breaks | vs w=1000 |
+|---|---:|---|
+| stock `wehrmacht` | 156 | 16 / 79 |
+| corpus only, floor one decade under a hapax | 147 | 13 / 85 |
+| corpus only, floor ~8 decades under | 194 | 21 / 46, z = −3.0 |
+| corpus + Appendix C, same floor | 198 | 32 / 53, z = −2.3 |
+| corpus + stock at w = 1000 | **219** | — |
+
+Three findings, in order of size. **The depth of the unseen penalty is the
+largest term**: the same counts read 194 with the floor eight decades down
+and 147 with it one decade down, no better than the stock table — a
+2 900-letter table names ~2 600 quadgrams of 456 976 and is usable only
+because everything else is priced as impossible, which the w = 1000
+mixing got for free from the stock table's total. (The loader floors an
+unseen gram at *one count*, so a raw small table cannot tell a hapax from
+nothing; the scale of the counts is the knob.) **The prose ordering of the
+unseen grams is worth +25 breaks**: with the floor matched, dropping the
+stock table costs 194 against 219, so a wrong decrypt made of plausible
+German quadgrams the fold never saw is still ranked above letter soup, and
+that decides 6% of trials. **Appendix C does not replace it**: 26 letter
+frequencies and 400 trigrams take the corpus table from 194 to 198 and
+cannot order the quadgram space, where the prose table does its remaining
+work. So w = 1000 stays the best table measured, and "prose-free" is a
+real table that beats the stock one by 42 breaks while losing 21 to the
+smoothed one.
+
+**The knobs around it were then swept on the same trials, and only one
+moved** (`eval/counted_table_knobs.py`,
+`eval/results-counted-table-knobs.txt`), every arm against w = 1000's 219:
+
+| question | arm | breaks | discordants | z |
+|---|---|---:|---|---:|
+| plateau's upper edge | w = 10⁴ / 10⁵ | 214 / 216 | 20/25, 30/33 | −0.7, −0.4 |
+| per-order weight | quad 10, rest 1000 | 209 | 21/31 | −1.4 |
+| | quad 1000, rest 10 | 223 | 26/22 | +0.6 |
+| `-a` order weights | r = 0.3 / 1.0 | 214 / 219 | 19/24, 23/23 | −0.8, 0.0 |
+| `-f` IC weight (rule: 20) | λ = 10 | **228** | 19/10 | **+1.7** |
+| | λ = 40 | 204 | 18/33 | −2.1 |
+
+The plateau runs to at least w = 10⁵, which the corpus-only result
+predicts: a prose-only gram keeps its *order* against the floor at every
+finite w, so the +25 breaks it is worth survive until the weight is
+literally infinite. The quad order's 2 573 counts carry the gain — the
+three dense orders can be weighted down 100× at no cost, the sparse one
+cannot — so one weight for all four loses nothing. The order weights are a
+plateau under this table as they were on the stock one. **The IC weight is
+the one knob that moved, and it moved down**: 228 / 219 / 204 at λ = 10 /
+20 / 40 is monotone and is the direction a sharper n-gram table predicts.
+**Held out on a fresh seed with a λ = 5 arm, the halving did not hold up
+and the doubling did**: seed 173 reads 243 / 242 / 238 / 222 at λ = 5 /
+10 / 20 / 40, so λ = 10 against 20 is +4 there after +9 on the selecting
+seed (pooled 42/29 discordants, z = +1.5, the usual winner's-curse shrink)
+and λ = 5 is level with 10, while λ = 40 loses 15 and 18 on the two seeds
+(pooled 37/68, **z = −3.0**). **Two more seeds on λ = 10 then made the
+lower side a small, consistent gain**: +6 and +4 on seeds 227 and 281, so
+all four seeds are positive (+9 / +4 / +6 / +4), pooled **+23 of 1600**
+(76/53 discordants, z = +2.0; z = +1.4 on the three held-out seeds alone)
+— +1.4pp of break50, about a quarter of what the selecting seed suggested.
+**And it does not extend to other lengths.** Half the rule (`0.125·L`)
+against the rule at L = 60 / 100 / 167, `-R 8`, 400 paired trials each,
+reads 30 / 164 / 279 against 28 / 168 / 278 — discordants 6/4, 19/23,
+15/14, **pooled 40/41, z = −0.1** — and the literal value 10 reads
+29 / 168 / 272 (47/52 pooled, z = −0.5, leaning down only at L=167 where
+it is a quarter of the rule). L=60 is a floor cell (7% break) and says
+nothing. So under the counted table the surface below the rule is a
+plateau at every length measured, the +1.4pp is an L=80 result no other
+length repeats, and the upper edge is the only established one (λ = 40 at
+L=80, z = −3.0). One confound is recorded rather than resolved: the L=80
+cells ran at `-R 100` and the others at `-R 8`, and this repo records
+pre-pass preferences as budget dependent. Nothing changes: the rule is
+tuned for the stock table on 152 000 held-out trials, the counted table
+does not ship, and whoever builds one as its own language should start
+from the rule, treating `0.125·L` as an equally good setting rather than a
+better one.
+
+**This contradicts the reading two paragraphs up, and the resolution is
+worth stating.** The re-ranker showed the truth is rarely *reached* at
+`-R 100`, so a scoring change was expected to pay only where it is. But a
+table is not a re-ranker: it reshapes the climb surface at every board, and
+the discordant counts say the counted table reaches truths the stock one
+never did — the same way `-f` won as "a better climb, not better
+discrimination". The halving probe's doubt was about a *bonus firing on
+five correct letters*; a table moves the score of every partial board.
+
+**What it is, and is not.** The folds hold out *messages*, not the
+*network*: every message is HG Nord 1941, so what transfers between folds
+is that network's vocabulary and habits — `XSIGX`, `XLKWX`, the spelled
+numbers, the unit designations. It is an **in-network prior**, on the same
+standing as the crib library's 83% held-out coverage, and it says nothing
+about another network's traffic. It is built from 34 messages.
+
+**Do NOT ship it as the `wehrmacht` tables.** Every eval harness here
+draws its trials from the same 62 messages, so a table counted from all of
+them would contaminate every measurement made after it. If it ships, it is
+a separate language built from a *stated* message set, with the evals
+staying on `wehrmacht`. Still open: whether it transfers to a second
+collection (none is in the repo), and how it composes with the day-key
+levers of §3, which are the other in-network prior.
+
+**What is left for L=80 below `-R 100`.** The restart curve (15.1% at
+`-R 8`, 36.0% at 100, 52.6% at 1000) is the whole story at that budget on
+the *stock* tables, and every seeding, filtering and re-ranking variant
+tried here is dominated by spending the same compute on it. The counted
+table is the one thing that moved it, and it did so from the scoring side.
+
 **3. Attack several messages from ONE DAY jointly.** Every measurement in
 this repo attacks a single message, but real traffic came in **day keys**: every
 message on a net that day shared reflector, wheel order, ring settings and
@@ -2501,6 +2775,31 @@ the analysis without re-climbing.
 `eval/results-doubling.txt`, `eval/results-doubling-climb.txt`; item 4 above;
 `archived/cribs.md` §4.2a.
 
+### 3c. Operator habits on the corpus — checked, recorded, NOT pursued
+
+Three of the classical operator-habit priors were checked against the 1941
+corpus in one afternoon (`eval/operator_habits.py`,
+`eval/results-operator-habits.txt`; read-only, seconds). Recorded so nobody
+re-derives them, and deliberately **left here**: every one of them needs a
+*day key* — a broken neighbour message or a known key sheet — and the work
+this file is about is breaking a message on its own. Length is the lever
+that matters, and the 80-letter regime is where the effort belongs.
+
+- **The Herivel tip holds.** The clear Grundstellung sits within ±1 of the
+  Ringstellung on all three wheels in **4 of 54** messages against 0.08
+  expected under uniform (13/54 on the left wheel alone against 6.2). As a
+  prior it restricts ring ∈ Grund±1 per wheel, a 27-cell ring space in place
+  of 17 576, i.e. a ~9.5 M-key sweep for a 7% chance the tip applies — but
+  only with the *indicator* in hand, which is the day-key dependence.
+- **Wheel orders do not repeat a slot on consecutive days**: 0 same-slot
+  repeats over 8 consecutive-day pairs against 4.8 expected, which is the
+  documented key-sheet rule. It cuts 60 wheel orders to 32 *if a neighbouring
+  day is broken*, and does nothing otherwise.
+- **The end-of-previous-message cilli is absent** (0 of 32 consecutive
+  same-day pairs start where the previous message ended, or within ±1), and
+  the plug sheets show no adjacent-letter or repeat-pair rule (20 adjacent of
+  360 against 27.7 expected; 2 repeated pairs against 2.5).
+
 ## Keyspace reductions
 
 The two-notch collapse that used to head this section has **shipped** and is
@@ -2810,6 +3109,117 @@ It cannot flip the verdict — 2× on 0.28× is still 0.56× — and it is bound
 against the register budget that occupancy already depends on, which is why
 it stays a gap rather than a task. It matters most for whoever runs the probe
 on a CUDA card, where that budget differs.
+
+**21. `-a`/`-f` coefficients tuned on `wehrmacht` — DONE. The order weights
+did not move; `-f`'s lambda is now `0.25·L`, uncapped.** The four log-linear
+weights were fitted across four *prose* languages in PR #106 and had never
+been retuned for telegraphic German, so the prose fit sat underneath the
+recommended recipe for real traffic as an assumption rather than a result.
+Swept end to end on authentic HG Nord decrypts, paired `break50`, plugboard
+tier, both arms from one binary via `$ENIGMA_AW` / `$ENIGMA_IC_BLEND`
+(`eval/weight_sweep.py`).
+
+**The order weights are a PLATEAU and were left alone.** At 0.025 resolution
+over `(1, r, r², r³)`, every cell from **r = 0.35 to 1.2 lands within ±10
+breaks of 1000** — a 3.4× range — with the shipping row on the plateau rather
+than at a peak. Turning the mixture off entirely costs 34 breaks of 6000
+(p = 0.105) on a held-out seed. **The pre-registered prediction that
+wehrmacht would want higher low-order weights FAILED** — recorded because the
+hypothesis behind it (that `-a` compensates for a defective quad table) is
+otherwise well supported, and this was its sharpest test.
+
+**`-f`'s lambda was the real find, and nobody had looked for it.** A baked
+constant cannot suit every length, since IC's spread falls as ~`1/L` while the
+per-symbol n-gram score's falls as ~`1/√L`. Held out on **three seeds and
+152 000 paired trials**:
+
+| band | effect | z |
+|---|---:|---:|
+| L ≤ 70 | **+586 breaks of 64 000** | **+10.95** |
+| L ≥ 80 | +3 of 88 000 | +0.04 |
+
+6.54% → 7.46% of short messages broken, **+14% relative**, for a different
+constant and nothing else. Shipped as `lang_coeffs` in `src/scoring.cc`; every
+other language keeps a flat 30 and is byte-identical.
+
+**Four things worth carrying forward.**
+
+- **The pooled column would have given the wrong answer**, reading a shallow
+  peak at lambda 15 (p = 0.059) because it averages +76 at L=60 against −100
+  at L=167. Per-length reporting is what found this; a pooled optimum smears a
+  length-dependent one away.
+- **The winner's curse ate two nominal optima**, exactly as pre-registered.
+  The stage-1 and stage-2 grid winners read +10 and +7 per 1000 and re-measured
+  at +2.5 and +1.8 on a fresh seed — a ~4× shrink from selecting a maximum
+  over 49 and 13 cells. Without the `confirm` stage both would have shipped.
+- **A fitted line was fitting a plateau.** An earlier `0.18·L` came from three
+  per-length peaks, two of them weak; the full ladder shows the short-band
+  optimum is flat from lambda 4 to 16, so the constant is a *choice* (err low —
+  at L=100 lambda 140 costs −178 per 1000, 14× the win being chased) and not a
+  measurement.
+- **`-f` over `-a` is REAL on wehrmacht, and this list said the opposite
+  first.** Against the shipped λ rule on a fresh seed, `-a` loses **292 breaks
+  of 32 000** (z = −6.68), concentrated entirely at operational length: −134
+  at L=100 and −152 at L=167, against −2 and −4 at L=40 and 60 (z = −0.2
+  each). The retracted claim was "+6 breaks of 6000, p = 0.824", and it
+  compounded two failures this repo already documents — a **mistuned
+  baseline** (the flat λ=30 the rule then replaced, so `-a` was measured
+  against a handicapped `-f` at two of its three lengths) and **pooling over
+  lengths that disagree**, the same failure the bullet above records for the λ
+  grid. Its mechanism — `k4` is mono+IC, so the pre-pass already supplies IC —
+  is independently true and still explains the short cells, where the rule
+  sets λ to 6.8 and 10.2 and the baseline is near `-a` anyway. That is what
+  made the wrong conclusion persuasive enough to write down twice: **beware a
+  result that arrives with its own explanation attached.**
+
+**The cap was measured wrong and has been REMOVED — the shipped rule is now
+`0.25·L`, uncapped.** At L=200 and the operating budget (`-R 8`, 6000 paired
+trials) lambda 45 and 65 beat the capped 30 by +32 and +37 breaks of 6000
+(z = 2.67, 2.97) — ~+0.6pp of break50. The L=167 grid's faint hint
+(lambda 40 at z = +1.2, ns) was real. **Across the whole band the cap bound
+in** — L = 177/190/215/240, 8000 paired trials each — lambda 45 beat it by
+**+107 of 32 000** (z = +3.89) and 65 by +79 (z = +2.48); and the
+length-scaled replacement **won held out**, `0.25·L` beating
+`min(0.17·L, 30)` by **+65 of 32 000** (z = +2.35, all four lengths positive)
+on a seed that had no hand in choosing 0.25 — at **half** the size that seed
+implied, the winner's curse again. §12, §13, §14.
+
+**The SHAPE question was run and came back NULL — and the band cannot answer
+it.** A flat lambda 50 against the shipped `0.25·L`, third held-out seed,
+32 000 paired trials: **−2 breaks, z = −0.11**, CI ±37 breaks (±0.12pp). §15.
+The rule spans only 44.25…60 across L = 177…240 — a 1.36× range against a
+plateau several-fold wide — so a null is what the plateau *predicts*; the
+discordant count (350 pairs against 755 and 765 in the two runs above) says
+the arms mostly decide each trial alike. Below ~177 the old rule already
+scaled and above ~250 `-R 8` saturates, so the shape is **not resolvable at
+the operating budget**, which is weaker than "measured null".
+
+**Two things follow.** §14's +65 is attributable to **removing the cap**, not
+to length-scaling — if flat 50 ties the rule across the band, raising lambda
+into the ~50 region is what did the work, which is what §14's own flat
+per-length deltas were already hinting. And the rule stands on evidence from
+**outside** the band: a flat 50 cannot be right at L=40, where the optimum is
+near 10, so lambda must scale somewhere and 177…240 is too narrow a window to
+see it. The plateau midpoints (≈10 at L≈65, ≈20 at L=100, ≈55 at L=200) imply
+an exponent near 1.5, steeper than the linear rule and than the `1.1·√L`
+sd-ratio argument (predicts 33 at L=200) — three midpoints being the same
+evidence shape that produced the withdrawn `0.18·L` above, so not acted on.
+
+**Still open:** the rule is unbounded with nothing measured at the operating
+budget above L=240 (it asks for 100 at L=400); it ships that way because the
+cap is exactly what was measured wrong, and re-imposing one at an unmeasured
+height would be a fresh guess. Not `-R 0` — a single-trajectory climb
+overshoots the optimum by 1.5–2× (it peaks near lambda 90 at L=200, where the
+real budget reads 90 as nothing). `-R 8` saturates above L≈250 and >300 is out
+of scope, so closing it would need a different budget rather than more trials.
+`eval/results-weight-sweep.txt` §12–§14.
+
+L=110 reads −4.9 per 1000 (z = −1.57, ns) with flat cells either side, most
+likely scatter. And every cell here measures the plugboard tier with the rotor
+key given, so none of it establishes the coefficients are right for a full
+unknown-key sweep — where `-a`'s gain being climb-surface rather than
+discrimination means they could differ. → `CLAUDE.md`, the `-a` and `-f`
+entries.
 
 ## Maintainability and packaging
 

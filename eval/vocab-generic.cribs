@@ -1,0 +1,17 @@
+# Generic X-fenced telegraphic tokens for eval/vocab_seed_ab.py: spelled
+# numbers and the commonest abbreviations, chosen from convention and NOT taken
+# from any corpus message.  One crib per line; '#' starts a comment.
+XEINSX
+XZWOX
+XDREIX
+XVIERX
+XFUENFX
+XSEQSX
+XSIEBENX
+XAQTX
+XNEUNX
+XNULLX
+XUHRX
+XKMX
+XDIVX
+XROEMX

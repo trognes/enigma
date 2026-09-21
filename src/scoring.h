@@ -104,6 +104,20 @@ int kick_rank_model();
 
 /* Read the ENIGMA_IC_BLEND override for -f's IC weight. Called once from
    main(), before the search. */
+/* The -a / -f coefficients actually in force: the language's row from
+   scoring.cc's lang_coeffs table, with $ENIGMA_AW / $ENIGMA_IC_BLEND applied
+   on top.  coeffs_overridden() says whether the environment moved them, which
+   is what show_settings() echoes -- a swept run must name its coefficients or
+   its log cannot be attributed afterwards. */
+const double * all_weights();
+double fused_lambda_value();
+bool coeffs_overridden();
+/* True when -f's lambda came from the language's length rule rather than
+   from a flat constant, so the echo can say so -- it varies per message. */
+bool fused_lambda_from_rule();
+
+/* Resolve -f's IC weight.  MUST be called after readciphertext():
+   wehrmacht's lambda is 0.25*L and needs the length. */
 void ic_blend_init();
 
 /* Load the table backing one model (IC needs none). */

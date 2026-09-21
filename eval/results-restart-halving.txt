@@ -1,0 +1,12 @@
+L=80 -R 100, 60 trials: 29 broke; 175 truth-reaching restarts
+seed identity check (stage-0 dups == --seed-dedup skips): 3/5
+percentile rank (0 = best stage-0 score) of the truth-reaching restarts:
+   10th pct: 0.05
+   25th pct: 0.10
+   50th pct: 0.25
+   75th pct: 0.54
+   90th pct: 0.79
+  keep top 0.33: restarts kept 106/175, trials still broken 24/29
+  keep top 0.50: restarts kept 126/175, trials still broken 27/29
+  keep top 0.67: restarts kept 145/175, trials still broken 28/29
+stage-0 boards of truth-reaching restarts: mean %correct 29.3

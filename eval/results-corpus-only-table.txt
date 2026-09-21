@@ -1,0 +1,74 @@
+# Tables with NO prose German in them, against the corpus-counted w=1000
+# tables -- ENHANCEMENTS.md 2b.  Does the stock table's ordering of the
+# grams the corpus never saw earn anything, and can Appendix C replace it?
+#
+# eval/corpus_only_table_ab.py 400 59 80 100
+#
+# Rotor key given, 10-pair board hidden, -c -f -S k4f10 -K --polish
+# -l wehrmacht, -T 1; the same seed-59 trial set as the weight curve in
+# eval/results-counted-table.txt, so base and w1000 reproduce it exactly.
+# Five folds by message, the message's own fold held out.  Arms:
+#
+#   base     stock wehrmacht (prose German bent to Appendix C marginals)
+#   w1000    stock + 1000x the training fold's counts (the reference)
+#   corpus   the fold's counts alone, all four orders, scaled so the
+#            unseen floor sits ~7.4-8.3 decades below a once-seen gram
+#            (w1000's is ~6.5-9.7; the loader's 2^32 count cap trimmed
+#            the match by about a decade on the tri and quad orders)
+#   shallow  the same counts x10 only: the floor one decade under a hapax
+#   appc     corpus counts plus Appendix C at its natural size (Fig 17
+#            into mono, the 400 Fig 18 trigrams into tri), matched floor
+
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 59, clean messages, 5-fold tables
+  base     break50 156/400
+  w1000    break50 219/400
+  corpus   break50 194/400
+  shallow  break50 147/400
+  appc     break50 198/400
+  w1000    vs base   only-w1000  79  only-base  16
+  corpus   vs base   only-corpus  70  only-base  32
+  shallow  vs base   only-shallow  44  only-base  53
+  appc     vs base   only-appc  75  only-base  33
+  base     vs w1000  only-base  16  only-w1000  79
+  corpus   vs w1000  only-corpus  21  only-w1000  46
+  shallow  vs w1000  only-shallow  13  only-w1000  85
+  appc     vs w1000  only-appc  32  only-w1000  53
+
+# READING.
+#
+#   pair                  breaks      discordants     z
+#   corpus  vs w1000    194 vs 219     21 / 46      -3.0
+#   appc    vs w1000    198 vs 219     32 / 53      -2.3
+#   corpus  vs base     194 vs 156     70 / 32      +3.8
+#   shallow vs base     147 vs 156     44 / 53      -0.9
+#
+# Three things, in order of size:
+#
+# 1. THE DEPTH OF THE UNSEEN PENALTY IS THE LARGEST TERM.  The same corpus
+#    counts read 194 with the floor eight decades down and 147 with it one
+#    decade down -- 47 breaks, and the shallow table is no better than the
+#    stock one.  A 2 900-letter table can name ~2 600 quadgrams of 456 976;
+#    what makes it usable is that everything else is priced as impossible,
+#    not merely rare.  The w = 1000 mixing got this for free, because the
+#    stock table's total sets the floor.
+#
+# 2. THE PROSE ORDERING OF UNSEEN GRAMS IS WORTH +25 BREAKS (6pp).  With
+#    the floor matched, dropping the stock table costs 194 against 219
+#    (z = -3.0).  So at w = 1000 the 0.1% of mass the prose table keeps is
+#    not inert: a wrong decrypt made of plausible German quadgrams the
+#    fold never saw is still ranked above letter soup, and that ordering
+#    decides 25 trials in 400.
+#
+# 3. APPENDIX C DOES NOT REPLACE IT.  Fig 17 and Fig 18 at their natural
+#    weight take the corpus-only table from 194 to 198 -- nothing -- and
+#    leave it 21 behind w1000 (z = -2.3).  Twenty-six letter frequencies
+#    and 400 trigrams cannot order the quadgram space, which is where the
+#    prose table does its remaining work; the log-linear mixture's tri
+#    term already carries what Fig 18 knows.
+#
+# So the answer to "corpus plus Appendix C, prose left out" is: it works,
+# it beats the stock table by 42 breaks, and it is measurably worse than
+# the same corpus counts smoothed by the prose table.  w = 1000 stays the
+# best table measured.  Nothing here changes the shipping question: the
+# corpus half is still the evaluation messages.

@@ -1746,7 +1746,10 @@ are read from a **data directory** (filenames built as
 - `-a` **weighted all-order scoring** (**recommended** when the language is
   known; needs `-l`; a schedule token too — `-S m4a10`). Scores each quadgram
   window as a **log-linear mixture** of all four orders — `a·log p(ABCD) + b·log
-  p(BCD) + c·log p(CD) + d·log p(D)` with baked weights `(1, 0.6, 0.3, 0.15)`
+  p(BCD) + c·log p(CD) + d·log p(D)` with weights `(1, 0.6, 0.3, 0.15)` **per
+  language** (`lang_coeffs` in `src/scoring.cc`; every language currently
+  takes that row, and a deep sweep on `wehrmacht` found nothing to move --
+  see the plateau note below)
   and the **symmetric folding** (every sub-gram a window contains, divided by
   its window-multiplicity 2/3/4, so leading edge grams are included). It is a
   **geometric (Product-of-Experts) mixture** that stays in joint log-prob space
@@ -1755,7 +1758,53 @@ are read from a **data directory** (filenames built as
   are unchanged** (they treat `all8` exactly like `quad8`). Measured the **first
   short-message scoring win** in the tuning history: +~1–2pp mean %-correct at
   L40–100 across all four languages (2000-trial German confirms +1.3pp avg, all
-  lengths positive), neutral by L≥190 where quad already saturates. The linear
+  lengths positive), neutral by L≥190 where quad already saturates.
+
+  > **THE WEIGHTS ARE ON A PLATEAU AND WERE NOT WORTH RETUNING — measured on
+  > `wehrmacht`, the language whose quad table is worst.** They were fitted
+  > across four *prose* languages, and the worry was that telegraphic German
+  > wants a different mixture, since its quad table is not counted but
+  > german's 80.1% support reweighted, with 843 grams clipped at `W_MAX`
+  > holding ~68% of the mass. Swept at 0.025 resolution over a geometric
+  > family `(1, r, r², r³)`, 500 paired trials per cell at L = 100 and 167:
+  > every cell from **r = 0.35 to 1.2 sits within ±10 breaks of 1000** — a
+  > 3.4× range — and the shipping row sits on that plateau rather than at a
+  > peak. **A pre-registered prediction that wehrmacht would want HIGHER
+  > low-order weights FAILED.**
+  >
+  > **And the mixture itself is worth little there.** Switching it off
+  > entirely — `(1,0,0,0)`, i.e. plain quad — costs 34 breaks of 6000 on a
+  > held-out seed (p = 0.105). So the ORDER-MIXING half of `-a` is ~0.6pp of
+  > break50 on wehrmacht under the recommended recipe, which does not
+  > contradict the +1–2pp above (that is **mean %-correct**, which this file's
+  > own notes record as moving independently of break counts).
+  >
+  > ⚠️ **The IC half is a different matter, and an earlier version of this
+  > entry had it backwards.** It said `-f` over `-a` was ~zero on wehrmacht
+  > (**+6 breaks of 6000, p = 0.824**) because the `k4` pre-pass is mono+IC
+  > and already supplies IC. Measured against the **shipped λ rule** on a
+  > fresh seed, `-a` instead loses **292 breaks of 32 000** (z = −6.68), and
+  > the deficit is **entirely at operational length**: −134 at L=100 and −152
+  > at L=167, against −2 and −4 at L=40 and 60 (z = −0.2 each). IC at the
+  > target is carrying ~**1.9pp of break50 at L=167**.
+  >
+  > **It failed in two ways that compound, both of them ones this file warns
+  > about elsewhere.** Its baseline was the flat λ=30 that the length rule
+  > then replaced, so it measured `-a` against a *mistuned* `-f` — and two of
+  > its three lengths are where that mistuning bites, which flatters `-a`. And
+  > it was **pooled** over lengths that disagree, the same failure recorded
+  > for the λ grid in the `-f` entry below.
+  >
+  > **The mechanism was independently TRUE, which is what made the wrong
+  > conclusion persuasive.** `k4` really is mono+IC, and that really does
+  > explain the null cells at L=40 and 60 — where the rule then shipping set λ
+  > to 6.8 and 10.2 (10 and 15 under today's `0.25·L`), so the baseline is
+  > near `-a` anyway. It does not reach the long
+  > cells. **Beware a result that arrives with its own explanation attached**
+  > — the `--biased-random` entry records the same trap, on a z = −3.08 that
+  > did not replicate. `eval/weight_sweep.py` §11, `ENHANCEMENTS.md` item 21.
+
+  The linear
   (Jelinek-Mercer) form was tried and **lost** (the conditional reframing it
   forces is the cost); log-linear wins because it is *conjunctive* — a candidate
   must look plausible at every order at once. See `archived/PERFORMANCE.md` /
@@ -1775,10 +1824,172 @@ are read from a **data directory** (filenames built as
   `-q` moves −8.9547 → −1.5214). IC cannot be folded into
   the table the way `-a`'s four orders are -- they are additive over positions,
   IC is quadratic in the whole-message letter histogram -- so it is accumulated
-  in the same decode pass and added after normalisation. Measured **+3.0 to
+  in the same decode pass and added after normalisation.
+
+  > **On `wehrmacht` lambda is NOT 30 — it is `0.25·L`, uncapped, and that is
+  > the one thing a deep sweep of these coefficients found.** A baked constant
+  > cannot be right at every length: IC's spread falls as ~`1/L` (a rate over
+  > `C(L,2)` pairs) while the per-symbol n-gram score's falls as ~`1/√L` (a
+  > mean of `L` terms) — the same argument the `-S k` entry makes for its own
+  > lambda scaling. Measured, a flat 30 is much too high below ~75 letters
+  > (breaks per 1000, lambda ≈ 10 against 30):
+  >
+  > | L | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 140 |
+  > |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+  > | | +6.3 | +8.4 | +11.5 | +10.5 | +2.7 | −0.3 | +0.4 | −4.9 | −0.8 |
+  >
+  > **Held out on three seeds and 152 000 paired trials**: +586 breaks of
+  > 64 000 at L ≤ 70 (**z = +10.95**) against +3 of 88 000 at L ≥ 80
+  > (**z = +0.04**). In the short band that is 6.54% → 7.46% of messages
+  > broken, a **+14% relative** gain, for a different constant and nothing
+  > else. `eval/weight_sweep.py`; `ENHANCEMENTS.md` item 21.
+  >
+  > **The short-band optimum is a PLATEAU, and the slope is not fitted to
+  > it.** Pooled over L = 40…90, lambda = 4/6/8/10/13/16 score
+  > +219/+223/+238/+227/+207/+210 per 24 000 — a spread of 31 across a **4×
+  > range** — then fall to +123 at 20 and +79 at 25. An earlier `0.18·L` came
+  > from fitting a line to three per-length peaks, two of them weak; the
+  > ladder shows there was no line to fit.
+  >
+  > **Do NOT read that ladder as condemning `0.25·L` at the short end — it
+  > cannot, and the reason is worth keeping.** Those cells hold lambda
+  > *constant* across L = 40…90, so the fall at 20 and 25 is mostly those
+  > values being wrong at **L=40**, where the rule asks for **10** — right on
+  > the measured optimum. Across that band the rule gives 10…22.5, inside or
+  > beside the plateau at every length, and everywhere far below the 30 the
+  > `L ≤ 70` result was measured against. A pooled constant-lambda ladder
+  > cannot price a length-scaled rule.
+  >
+  > **The error is wildly asymmetric, so err LOW.** At L=100, lambda = 140
+  > costs **−178 breaks per 1000** — 14× the size of the win being chased —
+  > while lambda = 0 costs −22.
+  >
+  > **THE CAP IS GONE, AND THE SLOPE IS 0.25 — this replaced an earlier
+  > `min(0.17·L, 30)`, whose cap was measured too low at three scales.** At
+  > L=200 and the operating budget (`-R 8`, 6000 paired trials), lambda 45 and
+  > 65 beat the capped 30 by **+32 and +37 breaks of 6000** (z = 2.67 and
+  > 2.97), i.e. ~+0.6pp of break50 on a 92.75% base — so the L=167 grid's
+  > "faint hint" (lambda 40 at z = +1.2, ns) was real. Across the whole band
+  > the cap bound in — L = 177/190/215/240, 8000 paired trials each — lambda 45
+  > beat it by **+107 of 32 000** (z = +3.89) and lambda 65 by +79 (z = +2.48).
+  > §12, §13.
+  >
+  > **The shipped rule then WON HELD OUT**, which is what it rests on:
+  > `0.25·L` applied as a rule beats `min(0.17·L, 30)` by **+65 breaks of
+  > 32 000** (z = +2.35, all four lengths positive) on a seed that had no hand
+  > in choosing 0.25 — at **half** the size the selecting seed implied
+  > (+107 → +65, and ~2× at each end separately), which is the winner's curse
+  > this file records eating two earlier optima. §14.
+  >
+  > ⚠️ **The SLOPE is NOT what the band measured — a flat lambda 50 is
+  > indistinguishable from `0.25·L` there.** Run as the discriminator on a
+  > third held-out seed, 32 000 paired trials: **−2 breaks of 32 000,
+  > z = −0.11**, per-length −8/+1/+7/−2, 95% CI ±37 breaks (±0.12pp). §15.
+  >
+  > **The test was structurally weak, and that is the finding rather than a
+  > caveat.** Across L = 177…240 the rule spans only 44.25 to 60 — a 1.36×
+  > range — against a lambda plateau measured several-fold wide, so a null is
+  > what the plateau *predicts* and no number of trials there would give
+  > anything else. The discordant count says it directly: **350 pairs disagree
+  > against 755 and 765** in the two runs above, i.e. the arms mostly decide
+  > the same trial the same way. The band is squeezed from both sides — below
+  > ~177 the old rule already scaled, above ~250 `-R 8` saturates — so the
+  > shape is **not resolvable at the operating budget**, which is weaker than
+  > "measured null".
+  >
+  > **What it does settle is where §14's +65 came from, and it is not the
+  > slope**: if flat 50 ties `0.25·L` across the band, that gain is
+  > attributable to **removing the cap** — raising lambda into the ~50 region —
+  > rather than to length-scaling. §14's own "no length trend in the per-length
+  > deltas" was pointing at this; this confirms it from the other side.
+  >
+  > **The rule still stands, on evidence from OUTSIDE the band.** A flat 50
+  > cannot be right at L=40, where the short-band result puts the optimum near
+  > 10 and where 30 was already much too high — so lambda must scale somewhere,
+  > and 177…240 is simply too narrow a window to see it. `0.25·L` is the
+  > simplest rule right at both ends of the measured range, and inside this
+  > band it is free to be wrong about the shape because every value there
+  > scores the same.
+  >
+  > **It is UNBOUNDED, deliberately**, since the cap is the thing that was
+  > measured wrong and any replacement height would be a fresh guess: 100 at
+  > L=400, with **nothing measured at the operating budget above L=240**. The
+  > `-R 0` proxy is the only evidence up there and has a broad plateau from 90
+  > to 300 at L=300, where the rule asks for 75. Operational procedure split
+  > long messages, so that band is off-distribution for real traffic — and
+  > `-R 8` breaks 98.7% at L=250 and 100% at L=400 regardless.
+  >
+  > Lining up the measured plateau midpoints — lambda ≈ 10 at L ≈ 65, ≈ 20 at
+  > L = 100, ≈ 55 at L = 200 — implies an exponent near **1.5**, steeper than
+  > the shipped linear rule (`0.25·L` predicts 50 at L=200) *and* than the
+  > `sd`-ratio argument the `-S k` entry makes (`1.1·√L` predicts 33). The
+  > linear rule now lands on the L=200 midpoint and undershoots further out;
+  > three plateau midpoints, two of them soft, are not a rule — and the note
+  > above about a fitted line fitting a plateau is what happened the last time
+  > this evidence shape was trusted.
+  >
+  > **A single-trajectory climb OVERSHOOTS the optimum by 1.5–2×, so do not
+  > tune lambda at `-R 0`.** At L=200 the `-R 0` ladder peaks near lambda 90
+  > and is still climbing at 65; the real budget peaks at 45–65 and reads
+  > lambda 90 as **nothing** (+12, z = +0.82). Normalised by headroom the two
+  > agree at 45 and 65 (6.1%/9.2% of failures fixed against 7.4%/8.5%) and
+  > diverge at 90 (12.4% against 2.8%). `-R 0` is a fair proxy for *whether*
+  > IC helps and a biased one for *how much* — which matters because `-R 8`
+  > saturates above L≈250 (98.7% break at 250, 100% at 400) and cannot measure
+  > there at all.
+  >
+  > **That band — L = 177–250 — is measured and is what the shipped slope
+  > rests on** (§13, §14), and the flat-versus-scaled arm has since been run
+  > there and come back null (§15).
+  > Above ~300 is out of scope anyway:
+  > operational procedure split long messages, so those lengths are
+  > off-distribution for real traffic *and* too easy to discriminate scoring
+  > variants.
+  >
+  > **Pure IC is survivable at L=300 and catastrophic at L=200**, which bears
+  > on where scoring work is worth doing: lambda = 10 000 (IC alone in
+  > practice) costs **−40.6pp at L=200 but only −10.9pp at L=300**. At three
+  > hundred letters the n-gram half of `-f` is contributing very little.
+  > `eval/results-weight-sweep.txt` §12.
+  >
+  > **L=110 is the one point of friction**, and the steeper slope has mostly
+  > walked away from it: the cell read −4.9 per 1000 for lambda ≈ 10 against
+  > 30 (z = −1.57, ns), where `0.25·L` now asks for **27.5** there rather than
+  > the old rule's 18.7. L=100 at 32 000 trials and L=130/140 are flat around
+  > it, so it was most likely scatter either way — but it is the cell to
+  > re-check if this ever misbehaves.
+  >
+  > **`ic_blend_init()` therefore runs AFTER `readciphertext()`**, and before
+  > `intscore_init()`, which bakes lambda into the `--int` integer
+  > coefficients — if the two disagreed the integer and double paths would
+  > score differently. Verified 20/20 fixtures identical under `--int` at
+  > L = 60 and 107. `$ENIGMA_IC_BLEND` still overrides the rule, which is what
+  > lets one binary reproduce the sweep, and `show_settings()` prints the
+  > effective weight with the length it came from: a rule-derived lambda
+  > varies per message, so a log omitting it cannot be compared against
+  > another run of the same command.
+  >
+  > **A suite check that reads a wehrmacht climb must pin lambda or lose its
+  > property.** Two checks — `--polish` improving on the converged best, and
+  > the `--ring-stride` refinement — are about `best.idx` RECONSTRUCTION and
+  > ran `-f -l wehrmacht` on a 74-letter fixture. Under the rule that fixture
+  > takes lambda 18.5 (12.6 under the rule that shipped before it — the pin is
+  > what makes that irrelevant), the climb converges where `--polish` cannot
+  > improve,
+  > and both assertions go vacuous. They now pin `ENIGMA_IC_BLEND=30`, and
+  > were re-verified to still fail under the historical `best.idx / 2`
+  > injection.
+
+  Measured **+3.0 to
   +4.4pp** mean %-correct over `-a` on english, german AND wehrmacht (n=1800
   each), the first scoring change in this codebase that is **not dependent on
-  the writing style** -- expected, since IC is language-independent. Wall-time
+  the writing style** -- expected, since IC is language-independent. On
+  wehrmacht it also holds on **break50** under the recommended `k4f10`
+  schedule and the shipped λ rule — `-a` loses **292 breaks of 32 000**
+  (z = −6.68) — but only at operational length: the deficit is −134 at L=100
+  and −152 at L=167 against nothing at L=40 and 60, where the rule's λ is
+  small enough that `-f` is near `-a` anyway. See the `-a` entry, which
+  carries the retraction of an earlier "~zero" reading of this. Wall-time
   neutral (the histogram is cheap beside the gather-bound decode). **It is a
   better CLIMB, not better discrimination**: a decomposition
   (`archived/PERFORMANCE.md` 6.4) puts the whole gain in surface reshaping
@@ -4360,6 +4571,63 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   correct** (the frequent plugs are decoys). No such signal exists in the
   converged-board population, so the **only reliable lever is raw compute** —
   more restarts via `-T`, which scales predictably.
+
+  **That holds at the REALISTIC operating point too — L≈80 at `-R ≤ 100`,
+  no second message — and three more levers were measured there in one
+  session** (`ENHANCEMENTS.md` 2b). What decides a trial is the truth's own
+  score against an **impostor floor** of about −9.26 per letter that barely
+  depends on the message: the best wrong board is gibberish with
+  language-like letter statistics, not letter soup, and it does **not**
+  overshoot on IC. About a third of the corpus's 80-letter windows score at
+  or under that floor, **8 of the lowest 21 being transcription garbles** —
+  drop the garble-flagged messages before measuring anything here. Below
+  `-R 100` the truth is not outscored, it is not reached: of 200 trials, 79
+  break and only 10 more hold a good board anywhere in the top 32. Hence
+  **successive halving over restarts** (stage-0 score predicts, but `k4` is
+  0.34 of a restart, so the gain is ~5%), **vocabulary-seeded climbs**
+  (`--crib-list` over fourteen generic X-fenced tokens — 27–30 of 70 against
+  `-R 300`'s 35 at matched wall, and only 14 of 70 plaintexts hold any token)
+  and a **leave-one-out corpus-5-gram re-ranker** (7.6 matches on the truth
+  against 0.1 on the impostor, never demotes a correct board, recovers 2 of
+  the 10 it can reach) all lose to, or add nothing over, spending the same
+  compute on `-R`. So do **`--biased-random` at `-R 100`** (29 against 27
+  of 70, nothing) and **anchoring the climb on `steck[X]`** across its 26
+  possibilities (27 against 27). The 5-gram signal is worth keeping for the
+  finisher at high `-R`, where the outranked bucket reaches 16%.
+
+  **The one lever that PAID there is a corpus-COUNTED table** — each
+  order's stock wehrmacht table mixed with the n-gram counts of the corpus
+  messages in the training folds, five folds by message
+  (`eval/counted_table_ab.py`, `eval/results-counted-table.txt`): **+8pp of
+  break50 at L=80 and `-R 100`** (156 → 185 and 150 → 184 of 400 on two
+  seeds, z = 3.6 and 4.4), positive at L = 60/100/167 at `-R 8` too, and
+  **the weight curve does not peak**: at w = 1000, where the stock table
+  is only smoothing and ~2 900 letters of training-fold traffic are the
+  model, it reads **219 against 156** (55% against 39%), and 223 against
+  164 with the garble-flagged messages left in. Leakage between folds was
+  checked (longest shared substring 22 letters, no copies). **The prose
+  table still earns its 0.1% there**: the same corpus counts with no
+  prose table at all read 194 (z = −3.0 against 219), Appendix C's
+  monograms and 400 trigrams take that only to 198, and the largest term
+  of all is the unseen-gram floor — one decade under a hapax reads 147,
+  eight decades under reads 194 (`eval/results-corpus-only-table.txt`).
+  The plateau runs to at least w = 10⁵, the per-order and `-a` weights
+  are flat, and the one knob that moved is the `-f` IC weight, **down**
+  (228 / 219 / 204 at λ = 10 / 20 / 40). Over four seeds λ = 10 is a
+  small, consistent gain — +9 / +4 / +6 / +4, pooled +23 of 1600, z = +2.0
+  (+1.4pp), while λ = 40 loses (pooled z = −3.0). **That gain is an L=80
+  result and no other length repeats it**: half the rule at L = 60 / 100 /
+  167 (`-R 8`, 400 paired trials each) pools to 40/41 discordants,
+  z = −0.1, and the literal 10 to 47/52. So under this table the lower
+  half of the λ plateau is free and its upper edge is not; the rule is
+  tuned for the stock table and stands, and a counted table shipped as
+  its own language should start from it, with `0.125·L` an equally good
+  setting rather than a better one
+  (`eval/results-counted-table-knobs.txt`).
+  It is an **in-network prior** — the folds hold out messages, not the network —
+  and it must **not** ship as the `wehrmacht` tables, since every eval here
+  draws from the same 62 messages and a table counted from all of them
+  would contaminate every later measurement. `ENHANCEMENTS.md` 2b.
 
 ### The unknown-key break rate — measured, and the keyspace barely matters
 

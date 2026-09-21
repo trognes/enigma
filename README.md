@@ -276,9 +276,22 @@ position — so it is computed alongside the n-gram sum and added to the
 per-symbol score. What it buys is a better **climb**, not better discrimination:
 IC is language-independent and, being blind to which letter is which, it is the
 one signal the plugboard cannot fake, so it supplies gradient where the n-gram
-surface is flat. Its weight is baked in (the optimum is a broad plateau, so
-there is nothing to tune). Plain quadgrams (`-q`) remain the simple single-order
+surface is flat. Plain quadgrams (`-q`) remain the simple single-order
 alternative.
+
+Its weight needs no tuning — the optimum is a broad plateau — but it is **not
+the same number at every length**. IC is a rate over all letter pairs, so its
+spread falls roughly as `1/L` where the per-symbol n-gram score's falls as
+`1/√L`, and the weight that balances them therefore grows with the message.
+For most languages a flat weight is what ships; for `wehrmacht` it is
+`0.25 × length`, which is the only place a deep sweep of these coefficients
+found anything to change. A flat 30 is much too high below ~75 letters — where
+scaling is worth **+14% relative** on the share of short messages broken — and
+too low above ~175, where a raised weight is worth about +0.6 points of the
+same measure. A length-derived weight
+differs from message to message, so a run that uses one echoes the value
+alongside the length it came from — without that, two runs of the same command
+could not be compared. A flat weight is a constant and is not echoed.
 
 Each selector is an alias for a single-stage `--score <model>` (`-f` is also a
 schedule token, e.g. `--score m4f10`), so setting the model to **conflicting**

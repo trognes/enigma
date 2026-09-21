@@ -21,6 +21,11 @@ int fold_codepoint(unsigned cp);
    store of the caller's uint8 array -- and report the per-table quantisation
    bias and scale. `force_ll` (with `force_sym`) selects the log-linear
    all-order mixture that -a / -f use; the default reads a single order. */
+/* Parse "a,b,c,d" into w[4] (exactly four, each via parse_opt_double, fatal
+   otherwise).  Shared by the $ENIGMA_LOGLIN / $ENIGMA_INTERP overrides here
+   and by $ENIGMA_AW in scoring.cc. */
+void parse_weight_vector(const char * src, const char * what, double * w);
+
 void ngrams_read(int n, uint8_t * itable, double * bias_out, double * scale_out,
                  const char * datadir, const char * language,
                  const char * suffix,
