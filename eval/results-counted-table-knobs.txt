@@ -122,3 +122,45 @@ L=80 -R 100, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda 
 # worse, so the table did make the IC term less valuable, as a sharper
 # n-gram half predicts; it just did not make it worth removing.  The
 # 0.25*L rule stands for this table as it does for the stock one.
+
+# ---------------------------------------------------------------------------
+# LAMBDA = 10 ON TWO MORE SEEDS, asked for after the above.
+#
+# eval/counted_table_knobs.py 400 227 80 100 --arms=w1000,lam10
+# eval/counted_table_knobs.py 400 281 80 100 --arms=w1000,lam10
+
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 227, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  w1000   break50 236/400
+  lam10   break50 242/400
+  lam10   vs w1000  only-lam10    16  only-w1000   10
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 281, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  w1000   break50 205/400
+  lam10   break50 209/400
+  lam10   vs w1000  only-lam10    18  only-w1000   14
+
+# READING.  lambda = 10 against the rule's 20, all four seeds:
+#
+#   seed    lambda 20   lambda 10   delta   discordants
+#   59        219         228        +9      19 / 10     (the selecting seed)
+#   173       238         242        +4      23 / 19
+#   227       236         242        +6      16 / 10
+#   281       205         209        +4      18 / 14
+#   pooled    898         921       +23      76 / 53     z = +2.0
+#   held-out only (173, 227, 281)   +14      57 / 43     z = +1.4
+#
+# Four of four seeds positive, +4 to +9 each, pooled +23 of 1600 trials --
+# 56.1% -> 57.6% of messages, +1.4pp of break50, z = +2.0 (p = 0.04) with
+# the selecting seed in and z = +1.4 on the three held-out seeds alone.  So
+# the surface below the rule is not quite flat after all: halving lambda is
+# a small, consistent gain under the counted table, about a quarter the size
+# the selecting seed suggested and at the edge of what 1600 paired trials
+# resolve.  It is the sign a sharper n-gram half predicts, and it is small.
+#
+# Nothing changes.  The rule is tuned for the stock table (152 000 held-out
+# trials behind it), the counted table does not ship, and a +1.4pp lambda
+# preference on a table that is itself an open decision is a note for
+# whoever builds that table, not a code change: if a counted table is ever
+# shipped as its own language, its lang_coeffs row should start from
+# lambda = 0.125*L rather than 0.25*L, and be measured there.

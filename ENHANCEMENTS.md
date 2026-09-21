@@ -1064,10 +1064,17 @@ and the doubling did**: seed 173 reads 243 / 242 / 238 / 222 at λ = 5 /
 10 / 20 / 40, so λ = 10 against 20 is +4 there after +9 on the selecting
 seed (pooled 42/29 discordants, z = +1.5, the usual winner's-curse shrink)
 and λ = 5 is level with 10, while λ = 40 loses 15 and 18 on the two seeds
-(pooled 37/68, **z = −3.0**). Under the counted table the rule's λ sits at
-the top edge of a plateau rather than in its middle: nothing lower is
-measurably better, anything higher is measurably worse, and `0.25·L`
-stands for this table as it does for the stock one.
+(pooled 37/68, **z = −3.0**). **Two more seeds on λ = 10 then made the
+lower side a small, consistent gain**: +6 and +4 on seeds 227 and 281, so
+all four seeds are positive (+9 / +4 / +6 / +4), pooled **+23 of 1600**
+(76/53 discordants, z = +2.0; z = +1.4 on the three held-out seeds alone)
+— +1.4pp of break50, about a quarter of what the selecting seed suggested.
+So under the counted table the IC term is worth less than under the stock
+one, in the direction a sharper n-gram half predicts, and by a margin at
+the edge of what 1 600 paired trials resolve. Nothing changes: the rule is
+tuned for the stock table on 152 000 held-out trials, the counted table
+does not ship, and the note is for whoever builds one as its own language
+— start its row from `λ = 0.125·L` and measure there.
 
 **This contradicts the reading two paragraphs up, and the resolution is
 worth stating.** The re-ranker showed the truth is rarely *reached* at
