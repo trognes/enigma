@@ -1080,10 +1080,11 @@ double bruteforce(char * result, bool allow_empty)
 
   /* The filter is sized on the keys THIS sweep will visit and the restarts it
      will run, both known only now. Under --ring-stride that is the COARSE key
-     count, which is what total_keys already holds -- the refinement runs with
-     the filter off, since it is hundreds of keys against the coarse pass's
-     millions and has no duplication worth catching. */
-  if (! seed_dedup_init(total_keys, restarts_par))
+     space -- the refinement runs with the filter off, since it is hundreds of
+     keys against the coarse pass's millions and has no duplication worth
+     catching -- and within it the keys the collapses skip get no region at
+     all (the slot map in dedup.cc). */
+  if (! seed_dedup_init(ks, restarts_par))
     fatal("--seed-dedup could not be configured");
   if (seed_dedup_on())
     {

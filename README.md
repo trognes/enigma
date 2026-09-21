@@ -570,8 +570,10 @@ thread count for a given seed.
   determines the climb exactly, so a repeat is byte-identical work — and
   repeats are common at high restart counts (17% of seeds at `-R 100`, 73% at
   `-R 10000`). Needs `-c` and a staged schedule. `--seed-dedup-bits N` sets the
-  Bloom filter's bits per item `[8]` (memory is keys × restarts × N bits) and
-  `--seed-dedup-max BYTES` caps it, refusing rather than thinning the filter.
+  Bloom filter's bits per item `[8]` (memory is keys × restarts × N bits, over
+  the keys the sweep actually visits — the ones the ring × start collapses
+  skip get no region) and `--seed-dedup-max BYTES` caps it, refusing rather
+  than thinning the filter.
   A false positive skips a seed that was *not* a duplicate, so this is a
   coverage trade; the run reports what it skipped. Off by default `[off]`.
 - **`-p file`** — Compare the recovered plaintext against a known plaintext file

@@ -808,6 +808,17 @@ are read from a **data directory** (filenames built as
     measure time saved rather than spending it on more restarts, and the
     end-to-end comparison that would have tested that was retired before it ran
     (`SEED_DEDUP.md` §8), so the distinct-seed figures there stay arithmetic.
+  - **Regions are numbered over the keys the sweep VISITS, through a slot
+    map.** The flat index space includes every key the middle-wheel and
+    two-notch collapses skip, and the first build sized the filter on it:
+    **23.9 GiB for the 167-letter BYQMZ sweep where 7.7 was needed**, three
+    quarters of it regions nothing touched — and interleaved with live ones at
+    2.7 KB granularity, so resident anyway. The map is built from the same
+    per-task facts the sweep skips on (`task_mid_row`, `task_r2_halved` in
+    `keyspace`), its slot count is checked against `scored_keys` before the
+    allocation, the echo prints that count beside the bytes, and a slot past
+    the end aborts. `--ring-stride` was already right, since its coarse pass
+    sets the index space itself.
   - **Per-key Bloom filter, 8-byte blocks.** A lookup is one `uint64` load, one
     AND and one compare. 8 divides 64, so an aligned word never straddles a
     cache line — the single-read property comes for free rather than being

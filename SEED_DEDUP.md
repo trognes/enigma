@@ -131,6 +131,26 @@ blocks_per_key = max(1, ceil(R * bits_per_item / 64))
 total          = K * 8 * blocks_per_key
 ```
 
+**`K` is the number of keys the sweep VISITS, not the flat index space.** The
+index enumerates every ring × start the caller asked for, and the
+middle-wheel collapse (§7.12) and the two-notch right-wheel collapse skip
+most of them during iteration without renumbering — on a 167-letter message
+`-u B -r A.. --ring-stride 3` holds 247 M index keys and scores 80 M. The
+first build sized the filter on the index and asked for **23.9 GiB where
+7.7 was needed**, three quarters of it regions no key would ever touch (and,
+being interleaved with visited ones at 2.7 KB granularity, resident all the
+same). The filter is now reached through a slot map: within a task a key's
+region is its rank among the visited keys — ring-major as the index is, with
+the dropped ring2 half squeezed out and a per-rotor-pair prefix table over the
+visited `(start1, start2)` pairs — and a prefix sum over tasks gives the base.
+The map is built from the same two per-task facts the sweep skips on
+(`task_mid_row`, `task_r2_halved`) and its slot count is checked against
+`build_key_space()`'s independently computed `scored_keys` before the
+allocation; the settings echo prints that count so it can be multiplied out
+against the `Analysed N rotor combinations` line. A slot past the end aborts
+rather than corrupting memory. `--ring-stride` needed no change here — its
+coarse pass already sets the index space, and its refinement runs suspended.
+
 **The filter holds only DISTINCT seeds, so sizing on `R` is conservative.** A
 duplicate is detected and skipped, not re-inserted, so the load is
 `R × (1 − duplicate_rate)`: 83 items at `-R 100`, not 100. Together with the

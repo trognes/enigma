@@ -26,7 +26,17 @@
    pass at a time (search.cc) and a key appears exactly once per pass. Within a
    pass no two threads touch one key's region; across passes the run_parallel
    join separates them. That is also what keeps the skip decision -- and so the
-   whole run -- independent of -T. */
+   whole run -- independent of -T.
+
+   REGIONS ARE NUMBERED BY THE KEYS THE SWEEP VISITS, NOT BY THE INDEX SPACE.
+   The flat key index covers every ring x start the caller asked for, but the
+   middle-wheel collapse (§7.12) and the two-notch right-wheel collapse skip
+   most of them without renumbering -- on a 167-letter message 3.1x more index
+   keys than scored ones, which sized the filter at 23.9 GiB where 7.7 was
+   needed. The map from index to region is a rank over the visited keys, built
+   once per run from the same two per-task facts the sweep skips on
+   (task_mid_row, task_r2_halved) so it cannot disagree with them, and checked
+   against build_key_space()'s scored-key count before anything is allocated. */
 
 #ifndef ENIGMA_DEDUP_H
 #define ENIGMA_DEDUP_H
@@ -34,16 +44,21 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Allocate the filter for `nkeys` keys x `restarts` seeds each. Call once,
-   after the key space is resolved and before the sweep. Returns false with a
-   message on stderr if the budget cannot be met or the allocation fails; the
-   caller then has a fatal error, not a silent downgrade. Inert (returns true,
-   allocates nothing) when the option is off. */
-bool seed_dedup_init(size_t nkeys, size_t restarts);
+struct key_space;
+
+/* Allocate the filter: one region per key the sweep will visit, sized for
+   `restarts` seeds each. Call once, after the key space is resolved and before
+   the sweep. Returns false with a message on stderr if the budget cannot be
+   met, the allocation fails, or the slot map does not add up to the key
+   space's own scored-key count; the caller then has a fatal error, not a
+   silent downgrade. Inert (returns true, allocates nothing) when the option is
+   off. */
+bool seed_dedup_init(const key_space & ks, size_t restarts);
 
 /* Query-and-insert. True means "this seed has been seen for this key" and the
    caller should skip the target climb; the board is inserted when it is new.
-   `key` indexes the per-key region, `board` is the 26-byte involution.
+   `key` is the flat key index (work_key of the item); the region is found
+   through the slot map above. `board` is the 26-byte involution.
    Off => always false, so the caller needs no second test. */
 bool seed_dedup_seen(size_t key, const unsigned char * board);
 

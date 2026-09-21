@@ -130,6 +130,17 @@ extern bool g_r2_halve;
    member"; search_worker() tests it per key. */
 extern const uint32_t * g_mid_rep_mask;
 
+/* The two per-task facts the sweep SKIPS keys on: whether this task's right
+   wheel takes the two-notch collapse (ring2 >= 13 is dropped), and the §7.12
+   mask row for its middle/right rotor pair (null when that collapse is inert).
+   build_key_space() counts scored keys from exactly these, and the seed-dedup
+   slot map has to agree with that count to the key, so both read them from
+   here rather than re-deriving them. wheel_task carries RAW rotor numbers and
+   notch_halfperiod[] is indexed by TRANSLATED ones; the translation lives in
+   task_r2_halved() so no caller has to remember it. */
+bool task_r2_halved(const wheel_task & t);
+const uint32_t * task_mid_row(const wheel_task & t);
+
 /* One 457 KB rotor-stack table per wheel order, allocated together. */
 subst_table allocate_subst_tables(size_t nwo);
 
