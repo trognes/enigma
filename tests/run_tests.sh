@@ -918,6 +918,18 @@ check "crack: start position, wehrmacht -a" \
   "$(run "$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g QXP)" -a -u B -w 123 -r AAA -g "$crack_scan_g" -l wehrmacht)" \
   "$pt_wehrmacht"
 
+# The 'hgnord' language is the wehrmacht tables plus the counted n-grams of
+# the authentic HG Nord 1941 decrypts (eval/build_hgnord_ngrams.py).  Its
+# four tables must load cleanly (checked with the lighter languages below)
+# and it must recover the same telegraphic fixture under -f, the model it is
+# meant for; the lambda rule it inherits is checked with wehrmacht's.
+check "crack: hill-climb plugboard, hgnord -f" \
+  "$(run "$w_ct" -f -c --score f2 -u B -w 123 -r AAA -g AAA -l hgnord)" \
+  "$pt_wehrmacht"
+check "crack: start position, hgnord -f" \
+  "$(run "$(run "$pt_wehrmacht" -i -u B -w 123 -r AAA -g QXP)" -f -u B -w 123 -r AAA -g "$crack_scan_g" -l hgnord)" \
+  "$pt_wehrmacht"
+
 # --int: the climb compares exact integer keys instead of doubles (the GPU
 # reference, metal/DESIGN.md 3a). Same board, same reported double, echoed
 # in the settings, -T independent, and refused without -c or with -A.
@@ -951,7 +963,7 @@ check "--int with -A rejected" "$?" "1"
 # must be recoverable under its own table. Not folded into the full crack_langs matrix
 # above: these languages don't have a curated long public-domain passage yet, so this is
 # a lighter smoke test, not the full start-position + hill-climb x 7-model matrix.
-for lang in swedish finnish icelandic polish spanish; do
+for lang in swedish finnish icelandic polish spanish hgnord; do
   for suffix in monograms bigrams trigrams quadgrams; do
     case $suffix in
       monograms) mode=-m ;; bigrams) mode=-b ;; trigrams) mode=-t ;; quadgrams) mode=-q ;;
@@ -3165,6 +3177,11 @@ check "wehrmacht -f lambda is uncapped past the old cap" \
 # it is pinned too: a steeper slope shipped without this could regress it.
 check "wehrmacht -f lambda stays low on a short message" \
   "$(lam_echo 40 -f -l wehrmacht)" "10 40"
+# hgnord copies wehrmacht's row.  Without one it would fall to the flat 30,
+# which is the wrong weight below 75 letters, silently.
+check "hgnord -f derives lambda from the length" \
+  "$(lam_echo 100 -f -l hgnord) / $(lam_echo 40 -f -l hgnord)" \
+  "25 100 / 10 40"
 # Every other language keeps the flat 30, so it prints no length clause at all.
 check "english -f takes a flat lambda, with no length clause" \
   "$(lam_echo 100 -f -l english)" ""

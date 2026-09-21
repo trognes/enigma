@@ -6,6 +6,24 @@ existing command lines can behave differently or stop working.
 
 ## Unreleased
 
+### Added
+
+- **A scoring language for one network: `-l hgnord`.** The `wehrmacht`
+  tables plus the n-gram counts of the 48 clean authentic HG Nord 1941
+  decrypts in `eval/`, mixed at a weight of 1000 so the traffic is the model
+  and the prose-derived table only orders the grams it never saw. Measured
+  held out by message, five folds so no message scored against a table it
+  contributed to: **55% of 80-letter messages broken against 39%** at
+  `-R 100` with the rotor key given (219 against 156 of 400, z = 3.6;
+  reproduced on a second seed), and ahead at 60, 100 and 167 letters. The
+  weight curve is monotone to 1000 and flat beyond; dropping the prose table
+  entirely costs 25 breaks of 400, and no other knob moves. It takes
+  `wehrmacht`'s `-f` weight rule (`0.25 × length`). It is an in-network
+  prior — use it on HG Nord traffic and `wehrmacht` elsewhere — and since it
+  has seen every message in `eval/`, every measurement here stays on
+  `wehrmacht`. `eval/build_hgnord_ngrams.py` regenerates it and prints the
+  message set it counts.
+
 ### Changed
 
 - **The `-a`/`-f` scoring coefficients are per language, and `wehrmacht`'s
