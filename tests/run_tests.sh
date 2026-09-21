@@ -2198,6 +2198,47 @@ check "--seed-dedup result is -T-independent" \
        -R 4 --random 0 --seed-dedup -T 1)"
 
 # Off is off: no line, and the flag absent must leave the run alone.
+# REGIONS FOLLOW THE COLLAPSES.  The filter is indexed through a slot map over
+# the keys the sweep VISITS, not the flat index space: on a 167-letter message
+# the middle-wheel collapse skips 3.1x more index keys than are scored, and
+# sizing on the index put a 23.9 GiB filter where 7.7 GiB was needed.  Three
+# fixtures, one per collapse and one with both: the echoed key count must equal
+# the "Analysed N rotor combinations" diagnostic (the same count, computed by
+# different code), the skip fraction must stay the exact 1 of 2 that --random 0
+# gives at -R 2 (a map that aliased two keys' regions or ran past the filter
+# would not), and the count must not depend on -T.
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+sdc_err() { printf '%s' "$sd_ct" | "$ENIGMA" -c -q -l english -u B \
+              -S i4q10 --seed-dedup -R 2 --random 0 "$@" 2>&1 >/dev/null; }
+sdc_keys() { sdc_err "$@" \
+               | sed -n 's/^Seed dedup: .* for \([0-9]*\) keys, .*/\1/p'; }
+sdc_anal() { sdc_err "$@" \
+               | sed -n 's/^Analysed \([0-9]*\) rotor combination.*/\1/p'; }
+sdc_pct() { sdc_err "$@" | sed -n 's/^Skipped .*(\([0-9.]*\)%)$/\1/p'; }
+sdc_cnt() { sdc_err "$@" | sed -n 's/^Skipped \([0-9]*\) .*/\1/p'; }
+# middle-wheel collapse: ring1 and start1 wildcarded, everything else pinned
+sdc_mid="-w 231 -r A.A -g A.A"
+# two-notch right wheel: ring2 and start2 wildcarded on wheel VI
+sdc_r2="-w 126 -r AA. -g AA."
+# shellcheck disable=SC2086  # deliberate word splitting of the fixture options
+check "--seed-dedup sizes the filter on the keys the middle collapse leaves" \
+  "$(sdc_keys $sdc_mid)" "$(sdc_anal $sdc_mid)"
+# shellcheck disable=SC2086
+check "--seed-dedup skip fraction is exact under the middle-wheel collapse" \
+  "$(sdc_pct $sdc_mid)" "50.0"
+# shellcheck disable=SC2086
+check "--seed-dedup sizes the filter on the keys the two-notch collapse keeps" \
+  "$(sdc_keys $sdc_r2)" "$(sdc_anal $sdc_r2)"
+# shellcheck disable=SC2086
+check "--seed-dedup skip fraction is exact under the two-notch collapse" \
+  "$(sdc_pct $sdc_r2)" "50.0"
+# shellcheck disable=SC2086
+check "--seed-dedup filter is smaller than the index space under a collapse" \
+  "$(sdc_keys $sdc_mid) $(sdc_keys $sdc_r2)" "156 338"
+# shellcheck disable=SC2086
+check "--seed-dedup skip count under a collapse is -T-independent" \
+  "$(sdc_cnt $sdc_mid -T 4)" "$(sdc_cnt $sdc_mid -T 1)"
+
 check "no --seed-dedup, no report line" \
   "$(sd_err -R 4 --random 0 | grep -c '^Skipped')" "0"
 

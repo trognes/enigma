@@ -26,6 +26,17 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **`--seed-dedup` no longer reserves filter memory for keys the sweep
+  skips.** The filter was sized on the flat key index, which includes every
+  key the middle-wheel and two-notch collapses drop without renumbering; on a
+  167-letter message with `-r A.. --ring-stride 3 -R 100` that asked for
+  23.9 GiB where 7.7 GiB was needed, and the unused regions were interleaved
+  finely enough with live ones to be resident anyway. Regions are now
+  reached through a slot map over the keys actually visited, built from the
+  same per-task facts the sweep skips on and checked against the key space's
+  own scored-key count before anything is allocated. The settings echo prints
+  that key count beside the size. Skip counts and results are unchanged.
+
 - **The `-a`/`-f` scoring coefficients are per language, and `wehrmacht`'s
   `-f` IC weight now scales with the message: `0.25 × length`, uncapped,
   instead of a flat 30.** Every other language keeps the previous constants

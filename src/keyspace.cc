@@ -446,14 +446,9 @@ key_space build_key_space()
       for (const wheel_task & t : ks.tasks)
         {
           /* ring2 survivors for THIS wheel order: half of them when its right
-             wheel has a period-13 notch set. notch_halfperiod[] is indexed by
-             the TRANSLATED rotor number (as notch[] is), while wheel_task
-             carries raw ones -- the distinction that once made the
-             --ring-stride refinement search the wrong rotors under -n, and
-             invisible in every other mode. */
-          const int w2t = opt_norenigma ? norway_rotor_base + t.w[2] : t.w[2];
+             wheel has a period-13 notch set (task_r2_halved). */
           size_t r2_surv = static_cast<size_t>(ks.rc[2]);
-          if (g_r2_halve && notch_halfperiod[w2t])
+          if (task_r2_halved(t))
             {
               r2_surv = asize / 2;
               ks.r2_halved = true;
@@ -461,13 +456,12 @@ key_space build_key_space()
           const size_t rsurv =
             static_cast<size_t>(ks.rc[0]) * ks.rc[1] * r2_surv;
 
-          if (g_mid_rep_mask == nullptr)
+          const uint32_t * row = task_mid_row(t);
+          if (row == nullptr)
             {
               ks.scored_keys += rsurv * ks.gsize;
               continue;
             }
-          const uint32_t * row = g_mid_rep_mask
-            + (static_cast<size_t>(t.w[1]) * rotor_count + t.w[2]) * asize;
           size_t reps = 0;
           for (int s2 = ks.range.g_min[2]; s2 <= ks.range.g_max[2]; s2++)
             reps += static_cast<size_t>(__builtin_popcount(row[s2]));
@@ -481,6 +475,24 @@ key_space build_key_space()
     }
   return ks;
 }
+bool task_r2_halved(const wheel_task & t)
+{
+  /* notch_halfperiod[] is indexed by the TRANSLATED rotor number (as notch[]
+     is), while wheel_task carries raw ones -- the distinction that once made
+     the --ring-stride refinement search the wrong rotors under -n, and
+     invisible in every other mode. */
+  const int w2t = opt_norenigma ? norway_rotor_base + t.w[2] : t.w[2];
+  return g_r2_halve && (notch_halfperiod[w2t] != 0);
+}
+
+const uint32_t * task_mid_row(const wheel_task & t)
+{
+  if (g_mid_rep_mask == nullptr)
+    return nullptr;
+  return g_mid_rep_mask
+         + (static_cast<size_t>(t.w[1]) * rotor_count + t.w[2]) * asize;
+}
+
 /* Allocate the shared read-only rotor-table block: one [asize]^4 (457 KB) table per
    task, all resident. A clean fatal() beats a std::terminate if the allocator refuses
    the block. (Under Linux overcommit a too-large request may instead succeed here and
