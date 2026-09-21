@@ -86,3 +86,39 @@ L=80 -R 100, 400 paired trials, seed 59, clean messages, 5-fold tables, lambda r
 #
 # So no knob beats w = 1000 as measured; the IC weight is the only one
 # worth a follow-up.  The shipping caveat in the two files above stands.
+
+# ---------------------------------------------------------------------------
+# THE IC-WEIGHT FOLLOW-UP, held out: a fresh seed and a lambda = 5 arm.
+#
+# eval/counted_table_knobs.py 400 173 80 100 --arms=w1000,lam5,lam10,lam40
+
+34 clean messages >= 80, 5 folds
+L=80 -R 100, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 20.0 at this length
+  w1000   break50 238/400
+  lam5    break50 243/400
+  lam10   break50 242/400
+  lam40   break50 222/400
+  lam5    vs w1000  only-lam5     23  only-w1000   18
+  lam10   vs w1000  only-lam10    23  only-w1000   19
+  lam40   vs w1000  only-lam40    19  only-w1000   35
+
+# READING.  Against the rule's lambda = 20 (w1000), both seeds:
+#
+#   lambda   seed 59            seed 173           pooled discordants    z
+#   5        --                 +5  (23 / 18)      23 / 18             +0.8
+#   10       +9  (19 / 10)      +4  (23 / 19)      42 / 29             +1.5
+#   40       -15 (18 / 33)      -18 (19 / 35)      37 / 68             -3.0
+#
+# The halving did NOT hold up: +9 became +4 on the fresh seed, and pooled it
+# is z = +1.5 -- the winner's-curse shrink this repo records for every
+# selected cell.  Lambda = 5 reads the same as 10.  So below the rule's 20
+# the surface is FLAT (5 / 10 / 20 are within noise of each other), and
+# above it the surface falls: doubling costs -15 and -18 on two seeds,
+# z = -3.0 pooled, which IS established.
+#
+# What that says: under the counted table the rule's lambda sits at the top
+# edge of a plateau rather than in its middle.  Nothing to change -- a
+# lower lambda is not measurably better -- but a HIGHER one is measurably
+# worse, so the table did make the IC term less valuable, as a sharper
+# n-gram half predicts; it just did not make it worth removing.  The
+# 0.25*L rule stands for this table as it does for the stock one.

@@ -4613,8 +4613,11 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   eight decades under reads 194 (`eval/results-corpus-only-table.txt`).
   The plateau runs to at least w = 10⁵, the per-order and `-a` weights
   are flat, and the one knob that moved is the `-f` IC weight, **down**
-  (228 / 219 / 204 at λ = 10 / 20 / 40, z = +1.7 for the halving — not
-  yet held out; `eval/results-counted-table-knobs.txt`).
+  (228 / 219 / 204 at λ = 10 / 20 / 40). Held out on a fresh seed with a
+  λ = 5 arm, the halving shrank to +4 (pooled z = +1.5, λ = 5 level with
+  10) while the doubling lost again (pooled z = −3.0) — the rule's λ sits
+  at the top edge of a plateau, and `0.25·L` stands
+  (`eval/results-counted-table-knobs.txt`).
   It is an **in-network prior** — the folds hold out messages, not the network —
   and it must **not** ship as the `wehrmacht` tables, since every eval here
   draws from the same 62 messages and a table counted from all of them

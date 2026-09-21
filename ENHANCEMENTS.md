@@ -1058,9 +1058,16 @@ three dense orders can be weighted down 100× at no cost, the sparse one
 cannot — so one weight for all four loses nothing. The order weights are a
 plateau under this table as they were on the stock one. **The IC weight is
 the one knob that moved, and it moved down**: 228 / 219 / 204 at λ = 10 /
-20 / 40 is monotone and is the direction a sharper n-gram table predicts,
-but +9 on 400 trials with the better arm chosen from two is not a result
-until a held-out seed and a λ = 5 arm have been run.
+20 / 40 is monotone and is the direction a sharper n-gram table predicts.
+**Held out on a fresh seed with a λ = 5 arm, the halving did not hold up
+and the doubling did**: seed 173 reads 243 / 242 / 238 / 222 at λ = 5 /
+10 / 20 / 40, so λ = 10 against 20 is +4 there after +9 on the selecting
+seed (pooled 42/29 discordants, z = +1.5, the usual winner's-curse shrink)
+and λ = 5 is level with 10, while λ = 40 loses 15 and 18 on the two seeds
+(pooled 37/68, **z = −3.0**). Under the counted table the rule's λ sits at
+the top edge of a plateau rather than in its middle: nothing lower is
+measurably better, anything higher is measurably worse, and `0.25·L`
+stands for this table as it does for the stock one.
 
 **This contradicts the reading two paragraphs up, and the resolution is
 worth stating.** The re-ranker showed the truth is rarely *reached* at

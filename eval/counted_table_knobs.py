@@ -23,9 +23,10 @@ the language's flat lambda), and the point is to move one knob at a time.
 Rotor key given, 10-pair board hidden, -c -f -S k4f10 -K --polish, the
 message's own fold held out as in counted_table_ab.py.  break50.
 
-    python3 eval/counted_table_knobs.py TRIALS SEED [L] [R]
+    python3 eval/counted_table_knobs.py TRIALS SEED [L] [R] [--arms=a,b,c]
 
-About 0.2 s per trial per arm.
+About 0.2 s per trial per arm.  The lambda follow-up on a held-out seed is
+--arms=w1000,lam5,lam10,lam40 (lam5 is otherwise left out).
 """
 import os
 import random
@@ -59,9 +60,18 @@ ARMS = {
                                   "ENIGMA_IC_BLEND": LAMBDA}),
     "aw1.0":  ((1000.0, 1000.0), {"ENIGMA_AW": "1,1,1,1",
                                   "ENIGMA_IC_BLEND": LAMBDA}),
+    "lam5":   ((1000.0, 1000.0), {"ENIGMA_IC_BLEND": str(0.0625 * L)}),
     "lam10":  ((1000.0, 1000.0), {"ENIGMA_IC_BLEND": str(0.125 * L)}),
     "lam40":  ((1000.0, 1000.0), {"ENIGMA_IC_BLEND": str(0.5 * L)}),
 }
+# --arms a,b,c restricts the run to those arms (the lambda follow-up on a
+# held-out seed needs four of them, not ten); the default is every arm but
+# lam5, which was added for that follow-up.
+_sel = [a[7:] for a in sys.argv if a.startswith("--arms=")]
+if _sel:
+    ARMS = {a: ARMS[a] for a in _sel[0].split(",")}
+else:
+    ARMS = {a: v for a, v in ARMS.items() if a != "lam5"}
 TMP = tempfile.mkdtemp(prefix="counted_knobs_")
 
 
@@ -168,6 +178,8 @@ print(f"L={L} -R {R}, {N} paired trials, seed {SEED}, clean messages, "
 for a in ARMS:
     print(f"  {a:7s} break50 {sum(res[a])}/{N}")
 for ref in ("base", "w1000"):
+    if ref not in res:
+        continue
     b = res[ref]
     for a in ARMS:
         if a == ref:
