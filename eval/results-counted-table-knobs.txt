@@ -164,3 +164,71 @@ L=80 -R 100, 400 paired trials, seed 281, clean messages, 5-fold tables, lambda 
 # whoever builds that table, not a code change: if a counted table is ever
 # shipped as its own language, its lang_coeffs row should start from
 # lambda = 0.125*L rather than 0.25*L, and be measured there.
+
+# ---------------------------------------------------------------------------
+# LAMBDA = 10 AT OTHER LENGTHS, asked for after the four-seed result.  "10"
+# was half the rule at L=80, so there are two readings of it elsewhere:
+# lam10 = 0.125*L (half the rule at every length) and fix10 = the literal
+# value 10.  Both against the rule, -R 8 (the budget the weight curve used
+# at these lengths, eval/results-counted-table.txt), seed 173.
+#
+# eval/counted_table_knobs.py 400 173 60 8 --arms=w1000,lam10,fix10
+# eval/counted_table_knobs.py 400 173 100 8 --arms=w1000,lam10,fix10
+# eval/counted_table_knobs.py 400 173 167 8 --arms=w1000,lam10,fix10
+
+40 clean messages >= 60, 5 folds
+tables built in 1s under /tmp/counted_knobs_wqzexzch
+L=60 -R 8, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 15.0 at this length
+  w1000   break50 28/400
+  lam10   break50 30/400
+  fix10   break50 29/400
+  lam10   vs w1000  only-lam10     6  only-w1000    4
+  fix10   vs w1000  only-fix10     5  only-w1000    4
+27 clean messages >= 100, 5 folds
+tables built in 1s under /tmp/counted_knobs_0emlsa01
+L=100 -R 8, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 25.0 at this length
+  w1000   break50 168/400
+  lam10   break50 164/400
+  fix10   break50 168/400
+  lam10   vs w1000  only-lam10    19  only-w1000   23
+  fix10   vs w1000  only-fix10    23  only-w1000   23
+7 clean messages >= 167, 5 folds
+tables built in 1s under /tmp/counted_knobs_r8_wbvri
+L=167 -R 8, 400 paired trials, seed 173, clean messages, 5-fold tables, lambda rule 41.75 at this length
+  w1000   break50 278/400
+  lam10   break50 279/400
+  fix10   break50 272/400
+  lam10   vs w1000  only-lam10    15  only-w1000   14
+  fix10   vs w1000  only-fix10    19  only-w1000   25
+
+# READING.  Against the rule (w1000), one seed, 400 paired trials per cell:
+#
+#   L     rule    half the rule (0.125*L)      literal 10
+#          lambda  breaks  discordants    z     breaks  discordants    z
+#   60     15.0   30 vs 28    6 / 4    +0.6    29 vs 28    5 / 4    +0.3
+#   100    25.0  164 vs 168  19 / 23   -0.6   168 vs 168  23 / 23    0.0
+#   167    41.75 279 vs 278  15 / 14   +0.2   272 vs 278  19 / 25   -0.9
+#   pooled                   40 / 41   -0.1                47 / 52   -0.5
+#
+# THE L=80 GAIN DOES NOT EXTEND.  Half the rule is level with it at every
+# other length -- 40 against 41 discordants pooled over 1200 trials -- and
+# the literal 10 is level at 60 and 100 and leans down at 167 (where it is
+# a quarter of the rule's 41.75, i.e. further from the rule than any arm
+# above), none of it resolving.  L=60 is a floor cell, 7% of trials
+# breaking, and says nothing either way.  So the surface below the rule is
+# a PLATEAU at 60, 100 and 167 as it was at 80 on the first held-out seed,
+# and the four-seed +1.4pp is an L=80 result that no other length repeats.
+#
+# One confound, recorded rather than resolved: the L=80 cells ran at -R 100
+# and these at -R 8, and this repo records the pre-pass ordering as
+# restart-budget dependent (CLAUDE.md, -S k entry), so a lambda preference
+# could in principle be too.  Running -R 100 at the three lengths costs
+# ~12x this run (~70 minutes) and was not done.
+#
+# What changes: the note above ("start its row from lambda = 0.125*L") was
+# written on the four L=80 seeds and is now too strong.  Under the counted
+# table the rule's lambda sits on a plateau whose lower half is free at
+# every length measured and whose upper edge is not (lambda = 40 at L=80
+# loses at z = -3.0); a counted table shipped as its own language should
+# start from the rule, 0.25*L, and treat 0.125*L as an equally good
+# setting rather than a better one.  Nothing shipped changes.

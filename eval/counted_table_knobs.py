@@ -16,17 +16,22 @@ w = 1000's 219.  Ten arms on the same trials:
   lam10      w1000 with the -f IC weight at 10 (the rule gives 20 at L=80)
   lam40      w1000 with it at 40
 
-The order-weight arms pin ENIGMA_IC_BLEND=20 because any coefficient
-override switches the lambda rule off (scoring.cc: an overridden run keeps
-the language's flat lambda), and the point is to move one knob at a time.
+The lambda arms are fractions of the rule (lam10 = 0.125*L, half of it),
+so they mean the same thing at every length; fix10 is the literal value 10,
+for the other-length follow-up, and is left out of the default set with
+lam5.  The order-weight arms pin ENIGMA_IC_BLEND=20 because any
+coefficient override switches the lambda rule off (scoring.cc: an
+overridden run keeps the language's flat lambda), and the point is to move
+one knob at a time.
 
 Rotor key given, 10-pair board hidden, -c -f -S k4f10 -K --polish, the
 message's own fold held out as in counted_table_ab.py.  break50.
 
     python3 eval/counted_table_knobs.py TRIALS SEED [L] [R] [--arms=a,b,c]
 
-About 0.2 s per trial per arm.  The lambda follow-up on a held-out seed is
---arms=w1000,lam5,lam10,lam40 (lam5 is otherwise left out).
+About 0.2 s per trial per arm at L=80.  The lambda follow-up on a held-out
+seed is --arms=w1000,lam5,lam10,lam40; the other-length one is
+--arms=w1000,lam10,fix10 at L=60/100/167 with -R 8.
 """
 import os
 import random
@@ -61,17 +66,20 @@ ARMS = {
     "aw1.0":  ((1000.0, 1000.0), {"ENIGMA_AW": "1,1,1,1",
                                   "ENIGMA_IC_BLEND": LAMBDA}),
     "lam5":   ((1000.0, 1000.0), {"ENIGMA_IC_BLEND": str(0.0625 * L)}),
+    # lam10 is HALF THE RULE (0.125*L, i.e. 10 at L=80); fix10 is the
+    # literal value 10 at any length, for the other-length follow-up.
     "lam10":  ((1000.0, 1000.0), {"ENIGMA_IC_BLEND": str(0.125 * L)}),
+    "fix10":  ((1000.0, 1000.0), {"ENIGMA_IC_BLEND": "10"}),
     "lam40":  ((1000.0, 1000.0), {"ENIGMA_IC_BLEND": str(0.5 * L)}),
 }
 # --arms a,b,c restricts the run to those arms (the lambda follow-up on a
 # held-out seed needs four of them, not ten); the default is every arm but
-# lam5, which was added for that follow-up.
+# lam5 and fix10, which were added for the follow-ups.
 _sel = [a[7:] for a in sys.argv if a.startswith("--arms=")]
 if _sel:
     ARMS = {a: ARMS[a] for a in _sel[0].split(",")}
 else:
-    ARMS = {a: v for a, v in ARMS.items() if a != "lam5"}
+    ARMS = {a: v for a, v in ARMS.items() if a not in ("lam5", "fix10")}
 TMP = tempfile.mkdtemp(prefix="counted_knobs_")
 
 

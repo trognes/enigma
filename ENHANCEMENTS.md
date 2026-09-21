@@ -1069,12 +1069,22 @@ lower side a small, consistent gain**: +6 and +4 on seeds 227 and 281, so
 all four seeds are positive (+9 / +4 / +6 / +4), pooled **+23 of 1600**
 (76/53 discordants, z = +2.0; z = +1.4 on the three held-out seeds alone)
 — +1.4pp of break50, about a quarter of what the selecting seed suggested.
-So under the counted table the IC term is worth less than under the stock
-one, in the direction a sharper n-gram half predicts, and by a margin at
-the edge of what 1 600 paired trials resolve. Nothing changes: the rule is
+**And it does not extend to other lengths.** Half the rule (`0.125·L`)
+against the rule at L = 60 / 100 / 167, `-R 8`, 400 paired trials each,
+reads 30 / 164 / 279 against 28 / 168 / 278 — discordants 6/4, 19/23,
+15/14, **pooled 40/41, z = −0.1** — and the literal value 10 reads
+29 / 168 / 272 (47/52 pooled, z = −0.5, leaning down only at L=167 where
+it is a quarter of the rule). L=60 is a floor cell (7% break) and says
+nothing. So under the counted table the surface below the rule is a
+plateau at every length measured, the +1.4pp is an L=80 result no other
+length repeats, and the upper edge is the only established one (λ = 40 at
+L=80, z = −3.0). One confound is recorded rather than resolved: the L=80
+cells ran at `-R 100` and the others at `-R 8`, and this repo records
+pre-pass preferences as budget dependent. Nothing changes: the rule is
 tuned for the stock table on 152 000 held-out trials, the counted table
-does not ship, and the note is for whoever builds one as its own language
-— start its row from `λ = 0.125·L` and measure there.
+does not ship, and whoever builds one as its own language should start
+from the rule, treating `0.125·L` as an equally good setting rather than a
+better one.
 
 **This contradicts the reading two paragraphs up, and the resolution is
 worth stating.** The re-ranker showed the truth is rarely *reached* at

@@ -4615,10 +4615,14 @@ to *smarter* methods (`archived/PERFORMANCE.md` §6.15):
   are flat, and the one knob that moved is the `-f` IC weight, **down**
   (228 / 219 / 204 at λ = 10 / 20 / 40). Over four seeds λ = 10 is a
   small, consistent gain — +9 / +4 / +6 / +4, pooled +23 of 1600, z = +2.0
-  (+1.4pp), while λ = 40 loses (pooled z = −3.0) — so the IC term is worth
-  a little less under this table, as a sharper n-gram half predicts. The
-  rule is tuned for the stock table and stands; a counted table shipped
-  as its own language should start from `λ = 0.125·L`
+  (+1.4pp), while λ = 40 loses (pooled z = −3.0). **That gain is an L=80
+  result and no other length repeats it**: half the rule at L = 60 / 100 /
+  167 (`-R 8`, 400 paired trials each) pools to 40/41 discordants,
+  z = −0.1, and the literal 10 to 47/52. So under this table the lower
+  half of the λ plateau is free and its upper edge is not; the rule is
+  tuned for the stock table and stands, and a counted table shipped as
+  its own language should start from it, with `0.125·L` an equally good
+  setting rather than a better one
   (`eval/results-counted-table-knobs.txt`).
   It is an **in-network prior** — the folds hold out messages, not the network —
   and it must **not** ship as the `wehrmacht` tables, since every eval here
