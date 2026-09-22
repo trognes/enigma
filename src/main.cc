@@ -114,6 +114,9 @@ int main(int argc, char * * argv)
 
   for(int i=0; i< textlength; i++)
     num_ciphertext[i] = char2num(ciphertext[i]);
+  /* The climb's cached decrypt indexes positions by ciphertext letter, so it
+     needs num_ciphertext -- which is filled HERE, not by readciphertext(). */
+  qcache_init();
 
   init();
 
