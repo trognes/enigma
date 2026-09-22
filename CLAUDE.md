@@ -3968,6 +3968,20 @@ win and was removed too; the scalar fused loop is the current form.
 > `eval/results-scoreloop-insns.txt` has all six levers and the three
 > mechanisms proposed for the SIMD failures, of which one is a minority, one
 > is refuted and one survives.
+>
+> **The climb's probes skip the inner half of `decode_at` now — and on x86
+> that is worth nothing.** A toggle rewires 2–4 letters, so `q_i =
+> rows[i][steck[ct[i]]]` moves only where `ct_i` is one of them; the climb
+> keeps `q` and a probe patches those positions and scores `steck'[q_i]`
+> (`qcache_probe`, `-q`/`-a`/`-f` targets only, byte-identical,
+> `ENIGMA_QCACHE=0` to compare, `=2` to check every probe). Isolated, the
+> loop over `q` is **~20% cheaper**, so the load-chain premise holds; but the
+> scattered patch and restore give most of it back, and end to end on x86 it
+> is flat (`eval/proto_qcache_mb.cc`, `ENHANCEMENTS.md` item 22). **Its
+> `qcache_init()` must follow the `num_ciphertext` fill in `main()`**, which
+> happens after `show_settings()` rather than in `readciphertext()`: built
+> earlier, the position lists are all zeros, every probe misscores, and the
+> steepest loop never converges.
 
 The tables the scorers read are **uint8 fixed-point**
 (`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),

@@ -6,6 +6,7 @@
 #include "options.h"
 #include "text.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -1444,6 +1445,262 @@ double score_iter(machine & m)
 double score_report(machine & m)
 {
   return score_double(m);
+}
+
+/* --- the cached pre-exit decrypt: q-form probes for the quad targets -----
+
+   decode_at is steck[rows[i][steck[ct[i]]]], a four-deep dependent load
+   chain, and eval/results-scoreloop-insns.txt found the loop bound by LOADS
+   rather than by instructions. The histogram path above already names the
+   inner half: q_i = rows[i][steck[ct[i]]], the decrypt BEFORE the exit board.
+   A toggle changes steck at 2-4 letters (toggle_plan), and q_i moves only
+   where ct_i is one of THOSE letters -- ~15% of positions at four. So a
+   climb keeps q for the board it sits on, and a probe patches the affected
+   positions, scores with steck'[q_i], and patches them back. The per-letter
+   chain drops from ct -> steck -> rows -> row -> steck to q -> steck.
+
+   BYTE-IDENTICAL, by the argument the histogram path makes: the decoded
+   letters are the same letters, the n-gram and coincidence sums are the same
+   integers, and the double is assembled by the same expression score_double
+   uses. ENIGMA_QCACHE=0 sends the climb back through score_iter so the two
+   can be compared, the way ENIGMA_HIST does.
+
+   Only the quad-shaped targets (-q, -a, -f): the low-order models have the
+   histogram form, which is cheaper still, and bigram/trigram targets are not
+   recommended anywhere.
+
+   WHETHER IT PAYS IS PER-CPU, AND ON x86 IT DOES NOT. Isolated at L=167
+   (eval/proto_qcache_mb.cc, ns per 4-letter probe), the loop over q is ~20%
+   cheaper than decoding -- 335 -> 263 under g++, 283 -> 227 under clang --
+   which confirms the load-chain premise. But the patch and its restore touch
+   ~2 x 4/26 of the positions with a scattered write each, ~50 ns, and that
+   leaves 315 and 280 on the first run: -5% and nothing (a second run read
+   -8% and -12%, clang scattering by ~10%). End to end on the same x86 box
+   it reads within +-5% either way. The patch cost scales with L as the saving
+   does, so length does not help. The arm64 Bench cells are what resolve
+   scorer work here (CLAUDE.md), and they are the open question.
+
+   A letter-sorted layout that makes the patch a contiguous copy was tried
+   and is worse: the loop then reads q through an index array, and that load
+   costs what the copy saves (331 / 274 ns). */
+
+/* Positions of each ciphertext letter, counting-sorted: g_qpos[g_qstart[c]
+   .. g_qstart[c+1]) are the i with num_ciphertext[i] == c. Depends only on
+   the ciphertext, so it is built once. uint16_t holds any i < maxlen. */
+static uint16_t g_qpos[maxlen];
+static int g_qstart[asize + 1];
+static bool g_q_ready = false;   /* qcache_init ran: nothing else builds it */
+static bool g_q_enabled = true;
+static bool g_q_check = false;   /* ENIGMA_QCACHE=2: check every probe */
+
+/* q for the board the climb sits on. thread_local for the reason
+   hist_scratch is: a 1 KB machine member would move the hot tables. */
+static thread_local unsigned char q_scratch[maxlen];
+/* Every climb path copies its rows into the contiguous mapping[] (setup_mapping
+   with copy_rows), which lets a patch index mapping[i][v] and skip loading the
+   rows[i] pointer. qcache_build checks that rather than assuming it, and the
+   patch falls back to rows[] if some future caller climbs on the scan's rows. */
+static thread_local bool q_contig = false;
+
+void qcache_init()
+{
+  const char * v = getenv("ENIGMA_QCACHE");
+  if ((v != nullptr) && (*v != 0))
+    {
+      const int k = parse_opt_int(v, "$ENIGMA_QCACHE");
+      g_q_enabled = (k != 0);
+      g_q_check = (k == 2);   /* 2 = fast path plus the per-probe check */
+    }
+
+  int cnt[asize + 1];
+  for (int c = 0; c <= asize; c++)
+    cnt[c] = 0;
+  for (int i = 0; i < textlength; i++)
+    cnt[num_ciphertext[i] + 1]++;
+  g_qstart[0] = 0;
+  for (int c = 0; c < asize; c++)
+    g_qstart[c + 1] = g_qstart[c] + cnt[c + 1];
+  int fill[asize];
+  for (int c = 0; c < asize; c++)
+    fill[c] = g_qstart[c];
+  for (int i = 0; i < textlength; i++)
+    g_qpos[fill[num_ciphertext[i]]++] = static_cast<uint16_t>(i);
+  g_q_ready = true;
+}
+
+bool qcache_model(int scoring)
+{
+  return g_q_ready && g_q_enabled && (textlength >= 4)
+         && ((scoring == SCORE_QUAD) || (scoring == SCORE_ALL)
+             || (scoring == SCORE_FUSED));
+}
+
+void qcache_build(machine & m)
+{
+  const unsigned char * __restrict ct = num_ciphertext;
+  const unsigned char * __restrict steck = m.steckerbrett;
+  const unsigned char * const * __restrict rows = m.rows;
+  unsigned char * __restrict q = q_scratch;
+  bool contig = true;
+  for (int i = 0; i < textlength; i++)
+    {
+      q[i] = rows[i][steck[ct[i]]];
+      contig = contig && (rows[i] == m.mapping[i]);
+    }
+  q_contig = contig;
+}
+
+/* Re-point q at the letters in pos[0..cnt) for the partners steck gives them.
+   Used both to apply a probe's board and to restore the machine's. */
+static inline void qcache_patch(const machine & m,
+                                const unsigned char * steck,
+                                const int * pos, int cnt)
+{
+  unsigned char * __restrict q = q_scratch;
+  if (q_contig)
+    for (int k = 0; k < cnt; k++)
+      {
+        const int l = pos[k];
+        const int v = steck[l];
+        for (int j = g_qstart[l]; j < g_qstart[l + 1]; j++)
+          {
+            const int i = g_qpos[j];
+            q[i] = m.mapping[i][v];
+          }
+      }
+  else
+    for (int k = 0; k < cnt; k++)
+      {
+        const int l = pos[k];
+        const int v = steck[l];
+        for (int j = g_qstart[l]; j < g_qstart[l + 1]; j++)
+          {
+            const int i = g_qpos[j];
+            q[i] = m.rows[i][v];
+          }
+      }
+}
+
+void qcache_commit(machine & m, const int * pos, int cnt)
+{
+  qcache_patch(m, m.steckerbrett, pos, cnt);
+}
+
+/* Score the board steck against q, which must already describe that board.
+   Same integers as the decoders, same assembly as score_double/score_key. */
+static double qcache_score(const machine & m,
+                           const unsigned char * __restrict steck)
+{
+  const unsigned char * __restrict q = q_scratch;
+  const int L = textlength;
+  long isum = 0;
+  int coin = 0;
+
+  if (m.scoring == SCORE_FUSED)
+    {
+      /* ngram_ic_decode's shape: four histograms, one per unrolled copy, so
+         the increments cannot collide (see the comment there). */
+      int f0[asize], f1[asize], f2[asize], f3[asize];
+      for (int j = 0; j < asize; j++)
+        { f0[j] = 0; f1[j] = 0; f2[j] = 0; f3[j] = 0; }
+      int a = steck[q[0]];
+      int b = steck[q[1]];
+      int c = steck[q[2]];
+      f0[a]++; f1[b]++; f2[c]++;
+      int i = 3;
+      for (; i + 3 < L; i += 4)
+        {
+          const int d0 = steck[q[i]];
+          const int d1 = steck[q[i + 1]];
+          const int d2 = steck[q[i + 2]];
+          const int d3 = steck[q[i + 3]];
+          f0[d0]++;
+          f1[d1]++;
+          f2[d2]++;
+          f3[d3]++;
+          isum += all8[a][b][c][d0];
+          isum += all8[b][c][d0][d1];
+          isum += all8[c][d0][d1][d2];
+          isum += all8[d0][d1][d2][d3];
+          a = d1;
+          b = d2;
+          c = d3;
+        }
+      for (; i < L; i++)
+        {
+          const int d = steck[q[i]];
+          f0[d]++;
+          isum += all8[a][b][c][d];
+          a = b;
+          b = c;
+          c = d;
+        }
+      for (int j = 0; j < asize; j++)
+        {
+          const int n = f0[j] + f1[j] + f2[j] + f3[j];
+          coin += n * (n - 1);
+        }
+    }
+  else
+    {
+      const uint8_t (* const table)[asize][asize][asize]
+        = (m.scoring == SCORE_QUAD) ? quad8 : all8;
+      int a = steck[q[0]];
+      int b = steck[q[1]];
+      int c = steck[q[2]];
+      SCORE_UNROLL
+      for (int i = 3; i < L; i++)
+        {
+          const int d = steck[q[i]];
+          isum += table[a][b][c][d];
+          a = b;
+          b = c;
+          c = d;
+        }
+    }
+
+  if (opt_intscore)
+    return int_key(m.scoring, isum, coin);
+
+  const int model = (m.scoring == SCORE_QUAD) ? SCORE_QUAD : SCORE_ALL;
+  double score = static_cast<double>(isum) / ngram_scale[model]
+                 + (L - 3) * ngram_bias[model];
+  score /= (L - 3);   /* nterms; qcache_model guarantees L >= 4 */
+  if (m.scoring != SCORE_FUSED)
+    return score;
+  const double ic = static_cast<double>(coin)
+                    / (static_cast<double>(L) * (L - 1));
+  return score + g_fused_lambda * ic;
+}
+
+double qcache_probe(machine & m, const int * pos, const int * val, int cnt)
+{
+  m.plugboards_scored++;   /* a drop-in for score_iter: counted the same */
+  unsigned char s2[asize];
+  memcpy(s2, m.steckerbrett, asize);
+  for (int k = 0; k < cnt; k++)
+    s2[pos[k]] = static_cast<unsigned char>(val[k]);
+  if (g_q_check)
+    for (int i = 0; i < textlength; i++)
+      if (q_scratch[i] != m.rows[i][m.steckerbrett[num_ciphertext[i]]])
+        fatal("ENIGMA_QCACHE=2: the cached decrypt drifted from the board");
+  qcache_patch(m, s2, pos, cnt);
+  const double s = qcache_score(m, s2);
+  qcache_patch(m, m.steckerbrett, pos, cnt);
+  if (g_q_check)
+    {
+      unsigned char s1[asize];
+      memcpy(s1, m.steckerbrett, asize);
+      memcpy(m.steckerbrett, s2, asize);
+      const double ref = opt_intscore ? score_key(m) : score_double(m);
+      memcpy(m.steckerbrett, s1, asize);
+      if (ref != s)
+        {
+          fprintf(stderr, "qcache %.17g against %.17g\n", s, ref);
+          fatal("ENIGMA_QCACHE=2: a probe scored differently from score_iter");
+        }
+    }
+  return s;
 }
 
 /* Load the n-gram table backing a scoring model (IC needs none). */

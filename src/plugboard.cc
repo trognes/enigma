@@ -230,6 +230,11 @@ static bool try_repair(machine & m, double cur_score)
      pass's 325, so it is worth the same fast path. The caller built the
      table. */
   const bool hist_on = hist_model(m.scoring);
+  /* The quad targets' cached decrypt, likewise: 2 x 45 probes here against
+     one build, and the build makes it independent of how the caller left q. */
+  const bool q_on = ! hist_on && qcache_model(m.scoring);
+  if (q_on)
+    qcache_build(m);
 
   for (int i = 0; i < np; i++)
     for (int j = i + 1; j < np; j++)
@@ -247,6 +252,11 @@ static bool try_repair(machine & m, double cur_score)
           {
             s1 = hist_probe(m, p1, v1, 4);
             s2 = hist_probe(m, p2, v2, 4);
+          }
+        else if (q_on)
+          {
+            s1 = qcache_probe(m, p1, v1, 4);
+            s2 = qcache_probe(m, p2, v2, 4);
           }
         else
           {
@@ -655,6 +665,11 @@ static void firstimprove_sweep(machine & m, int max_pairs)
   const bool hist_on = hist_model(m.scoring);
   if (hist_on)
     hist_resync(m);
+  /* The quad targets keep the decrypt before the exit board instead (see
+     qcache_probe in scoring.cc): built here, patched on acceptance. */
+  const bool q_on = ! hist_on && qcache_model(m.scoring);
+  if (q_on)
+    qcache_build(m);
 
   double cur = score_iter(m);
 
@@ -685,6 +700,12 @@ static void firstimprove_sweep(machine & m, int max_pairs)
         int pos[4], val[4];
         const int cnt = toggle_plan(steck, a, b, pos, val);
         return hist_probe(m, pos, val, cnt);
+      }
+    if (q_on)
+      {
+        int pos[4], val[4];
+        const int cnt = toggle_plan(steck, a, b, pos, val);
+        return qcache_probe(m, pos, val, cnt);
       }
     double s;
     if (steck[a] == b)                             /* REMOVE a-b */
@@ -890,6 +911,21 @@ static void firstimprove_sweep(machine & m, int max_pairs)
               improved = true;
             }
         }
+      else if (q_on)
+        {
+          /* The same shape, on the cached decrypt: the board moves only if
+             the probe wins, and q follows it for the letters that moved. */
+          int pos[4], val[4];
+          const int cnt = toggle_plan(steck, a, b, pos, val);
+          const double s = qcache_probe(m, pos, val, cnt);
+          if (s > cur)
+            {
+              commit_toggle(m, pos, val, cnt, false);
+              qcache_commit(m, pos, cnt);
+              cur = s;
+              improved = true;
+            }
+        }
       else if (steck[a] == b)                        /* REMOVE a-b */
         {
           steck[a] = static_cast<unsigned char>(a);
@@ -959,6 +995,7 @@ double hillclimb(machine & m, int max_pairs)
   if (hist_on)
     cooc_build(m);   /* per CALL, not per key -- a stale table hangs the
                         climb rather than merely misscoring it */
+  const bool q_on = ! hist_on && qcache_model(m.scoring);
 
   bool progress;
   do
@@ -989,6 +1026,10 @@ double hillclimb(machine & m, int max_pairs)
             {
               best_score = score_iter(m);
               last_best = best_score;
+              /* one O(L) build per pass of 325 probes; the pass commits at
+                 most one move, at the end, so q stays valid throughout */
+              if (q_on)
+                qcache_build(m);
 
               /* current plug-pair count: at the cap, moves that would add a brand-new
                  pair (both endpoints currently unplugged) are skipped below */
@@ -1045,6 +1086,13 @@ double hillclimb(machine & m, int max_pairs)
                         const int cnt = toggle_plan(m.steckerbrett, a, b,
                                                     pos, val);
                         score = hist_probe(m, pos, val, cnt);
+                      }
+                    else if (q_on)
+                      {
+                        int pos[4], val[4];
+                        const int cnt = toggle_plan(m.steckerbrett, a, b,
+                                                    pos, val);
+                        score = qcache_probe(m, pos, val, cnt);
                       }
                     else
                       {

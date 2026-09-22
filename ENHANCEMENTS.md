@@ -3225,6 +3225,36 @@ unknown-key sweep — where `-a`'s gain being climb-surface rather than
 discrimination means they could differ. → `CLAUDE.md`, the `-a` and `-f`
 entries.
 
+**22. The climb's cached pre-exit decrypt — BUILT, byte-identical, and flat
+on x86; arm64 is the open cell.** Under a quad-shaped target (`-q`, `-a`,
+`-f`) every probe of the plugboard climb re-decodes the whole message as
+`steck[rows[i][steck[ct[i]]]]`, a four-deep dependent load chain, and
+`eval/results-scoreloop-insns.txt` found that loop bound by loads rather than
+instructions. The inner half, `q_i = rows[i][steck[ct[i]]]`, moves only where
+`ct_i` is one of the 2–4 letters a toggle rewires, so the climb now keeps `q`
+for its board and a probe patches those positions, scores with
+`steck'[q_i]`, and patches them back (`qcache_probe`, `src/scoring.cc`).
+
+- **Correctness is settled.** The climb is byte-identical to `score_iter`:
+  the `--dump-all` boards and the plugboards-scored counter agree across
+  13 checks in `tests/run_tests.sh` covering all three move loops, `-q`/`-a`/
+  `-f`, `--int`, `-M`, `-s`, `--no-plug`, Norway and M4. Two injected bugs
+  (a missing commit in the first-improvement loop, a missing per-pass
+  rebuild in steepest ascent) fail 10 and 2 of those. `ENIGMA_QCACHE=0`
+  turns it off, and `ENIGMA_QCACHE=2` checks every probe.
+- **On x86 it does not pay.** Isolated (`eval/proto_qcache_mb.cc`), the loop
+  over `q` is ~20% cheaper than decoding, which confirms the premise, but the
+  patch and restore write ~2 × 4/26 of the positions scattered and give most
+  of it back: g++ lands at −5…−8%, clang at 0…−12%. End to end in the climb
+  on the same box it reads within ±5% either way. The patch scales with `L`
+  exactly as the saving does, so length does not rescue it.
+- **A letter-sorted layout is worse**: it makes the patch a contiguous copy
+  but reads `q` through an index array, and that load costs what the copy
+  saves.
+- **Still open: the arm64 Bench cells**, which `CLAUDE.md` names as the
+  instrument for scorer work — the 4× unroll was −18.7% there and nothing on
+  g++ x86_64. The `hillclimb` (`-q`) and `fused` (`-f`) tiers both run it.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.

@@ -26,6 +26,15 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **The plugboard climb caches the decrypt before the exit plugboard under
+  `-q`, `-a` and `-f`.** A candidate move rewires two to four letters, so
+  only the positions carrying those ciphertext letters need re-decoding; the
+  rest of the message is scored from the cache with one lookup per letter
+  instead of four. The result is byte-identical — the same boards, the same
+  plaintext and the same plugboards-scored count — and `ENIGMA_QCACHE=0`
+  turns it off for comparison. Whether it is faster depends on the CPU: on
+  x86 it measures flat.
+
 - **`--seed-dedup` no longer reserves filter memory for keys the sweep
   skips.** The filter was sized on the flat key index, which includes every
   key the middle-wheel and two-notch collapses drop without renumbering; on a

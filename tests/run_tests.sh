@@ -3559,6 +3559,78 @@ hist_ct=$hist_m4_ct
 hist_same "histogram climb: M4 is byte-identical" \
   -4 -u b -w B317 -r AAAA -g B"$rgd" -S k4f10 -J
 
+echo "== Cached pre-exit decrypt for the quad-target climb (-q/-a/-f) =="
+
+# The quad-shaped targets keep q_i = rows[i][steck[ct[i]]] for the board the
+# climb sits on, and a probe patches only the positions whose ciphertext letter
+# the toggle moves.  Like the histogram path above it is claimed BYTE-
+# IDENTICAL, so what is checked is exactly that: ENIGMA_QCACHE=0 sends the
+# same climb back through score_iter, and every converged board and the
+# plugboards-scored counter must agree.  26 keys, -R 3: agreement needs no
+# breadth.
+#
+# VERIFIED BY INJECTION.  Dropping the qcache_commit() after an accepted
+# first-improvement move fails 10 of these 13 checks; dropping the per-pass
+# qcache_build() in the steepest-ascent scan fails the two steepest ones (-f
+# steepest, -S i4q6 -M), which is why both move loops are listed below.
+qc_both() {
+  _q=$1; _ct=$2; shift 2
+  printf '%s' "$_ct" | ENIGMA_SEED=0 ENIGMA_QCACHE="$_q" "$ENIGMA" \
+    -c -l wehrmacht -R 3 --dump-all "$@" 2>&1 \
+    | grep -E 'dumpall|Analysed' | sort
+}
+qc_same() {
+  _name=$1; _ct=$2; shift 2
+  check "$_name" "$(qc_both 1 "$_ct" "$@" | md5sum)" \
+    "$(qc_both 0 "$_ct" "$@" | md5sum)"
+}
+qc_ct=$(run "$hist_pt" -i -u B -w 231 -r AAA -g QMW \
+         -s "AH BR CM DE FJ NZ PX QU ST VW")
+qc_std="-u B -w 231 -r AAA -g $rgd"
+
+# Non-empty, or a typo would make both arms print nothing and pass.
+# shellcheck disable=SC2086  # $qc_std is a word list on purpose
+check "qcache identity fixture produces boards to compare" \
+  "$(qc_both 1 "$qc_ct" $qc_std -S k4f10 -K | grep -c dumpall)" "78"
+
+# The recommended recipe, both first-improvement orders and steepest ascent
+# (three move loops, each carrying the fast path), the three quad-shaped
+# models, the integer comparison, -M's merge/remove descent, and the two ways
+# of pinning letters.  try_repair takes the path too, at every convergence.
+# shellcheck disable=SC2086
+{
+qc_same "qcache climb: -S k4f10 -K --polish is byte-identical" "$qc_ct" \
+  $qc_std -S k4f10 -K --polish
+qc_same "qcache climb: -f -J is byte-identical" "$qc_ct" $qc_std -f -J
+qc_same "qcache climb: -f steepest is byte-identical" "$qc_ct" $qc_std -f
+qc_same "qcache climb: -q is byte-identical" "$qc_ct" $qc_std -q -J
+qc_same "qcache climb: -a is byte-identical" "$qc_ct" $qc_std -S m4a10 -J
+qc_same "qcache climb: --int is byte-identical" "$qc_ct" $qc_std -f --int -J
+qc_same "qcache climb: -S i4q6 -M is byte-identical" "$qc_ct" \
+  $qc_std -S i4q6 -M
+qc_same "qcache climb: -s pins are byte-identical" "$qc_ct" \
+  $qc_std -S k4f10 -K -s "AH BR"
+qc_same "qcache climb: --no-plug is byte-identical" "$qc_ct" \
+  $qc_std -f -J --no-plug XY
+}
+
+# ENIGMA_QCACHE=2 checks every probe against score_iter on the probe's board
+# and the cache against the board before each probe, and exits naming the
+# drift.  Verified able to fail: it caught the first version building its
+# position lists before num_ciphertext was filled, which as a plain run did not
+# fail -- it never converged.
+check "qcache climb: no drift under the ENIGMA_QCACHE=2 self-check" \
+  "$(printf '%s' "$qc_ct" | ENIGMA_SEED=0 ENIGMA_QCACHE=2 "$ENIGMA" \
+       -c -l wehrmacht -R 3 -u B -w 231 -r AAA -g "$rgd" -S k4f10 -K \
+       --polish >/dev/null 2>&1; echo $?)" "0"
+
+# Norway and M4 reach the rotor stack through an index translation and a
+# folded Greek wheel; the cache reads the same rows, but prove it.
+qc_same "qcache climb: Norway is byte-identical" "$hist_n_ct" \
+  -n -u N -w 123 -r AAA -g "$rgd" -f -J
+qc_same "qcache climb: M4 is byte-identical" "$hist_m4_ct" \
+  -4 -u b -w B317 -r AAAA -g B"$rgd" -f -J
+
 # THE SUMMARY AND THE GATE MUST BE THE LAST THING IN THIS FILE.  They were once
 # in the middle, with 166 lines of checks after them, and the cost was not the
 # undercounted tally -- it was that `[ "$fail" -eq 0 ]` was no longer the last

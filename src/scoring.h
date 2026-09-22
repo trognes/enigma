@@ -102,6 +102,25 @@ void cooc_plug_scores(machine & m, int model, double * out);
 void kick_rank_init();
 int kick_rank_model();
 
+/* --- the cached pre-exit decrypt, for the quad-shaped climb targets -----
+   q_i = rows[i][steck[ct[i]]] for the board the climb sits on; a probe
+   patches only the positions whose ciphertext letter the toggle moves and
+   scores with the probe's board. BYTE-IDENTICAL to score_iter on that board,
+   and counted the same. See the derivation above qcache_init() in scoring.cc.
+
+   Usage: qcache_build() on the board being sat on, qcache_probe() per
+   candidate (the pos/val plan toggle_plan builds, as for hist_probe), and
+   after a move is KEPT either qcache_commit() with its letters or a fresh
+   qcache_build(). qcache_init() must run once num_ciphertext is filled --
+   main() fills it after show_settings(), NOT in readciphertext() -- and until
+   it has, qcache_model() is false and nothing changes. ENIGMA_QCACHE=0 turns
+   the path off, 2 checks every probe against score_iter. */
+void qcache_init();
+bool qcache_model(int scoring);
+void qcache_build(machine & m);
+double qcache_probe(machine & m, const int * pos, const int * val, int cnt);
+void qcache_commit(machine & m, const int * pos, int cnt);
+
 /* Read the ENIGMA_IC_BLEND override for -f's IC weight. Called once from
    main(), before the search. */
 /* The -a / -f coefficients actually in force: the language's row from
