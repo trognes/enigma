@@ -3501,6 +3501,21 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
     past 2.7 on a seed that played no part in choosing anything. At the same
     `-R 16` it reads −1.07 / −3.88 / −2.65, against the ungated cap's
     −4.5 to −5.6 across the earlier seeds.
+  - **Tuned: 200 and the 90th percentile stay**
+    (`eval/results-gated-cap-tune.txt`; wrong-key costs seed 137, 3000
+    paired trials per length seed 139, every setting at its cost-matched
+    `-R`). Against the shipped setting on the same trials, pooled over
+    L = 80 / 107 / 167: cap 150 ties it (93 against 77 discordants,
+    z = +1.23), cap 250 and 300 lose (z = −4.40, −7.74) — a larger cap
+    costs 0.87–0.98 of a restart and buys too few extra restarts. The
+    gate percentile does not resolve: 80% and 95% read z = −4.97 and
+    −3.87, but their wrong-key costs (0.83–0.87 and 0.79–0.84) sit inside
+    the ±0.03 timing scatter of the 90% setting's, so each landed a
+    restart or two short at some lengths and the pooled loss is mostly
+    that. Where the restart counts happen to match (L = 80, all at
+    `-R 19`) they read +2.18 and −1.67. The shipped setting also beat no
+    cap on this third seed at every length: +34 / +77 / +53 breaks of
+    3000, z = +3.08 / +5.76 / +5.38.
 
 ## Maintainability and packaging
 
