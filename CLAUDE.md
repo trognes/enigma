@@ -3968,6 +3968,30 @@ win and was removed too; the scalar fused loop is the current form.
 > `eval/results-scoreloop-insns.txt` has all six levers and the three
 > mechanisms proposed for the SIMD failures, of which one is a minority, one
 > is refuted and one survives.
+>
+> **Caching the decrypt before the exit board was BUILT AND MEASURED DOWN —
+> its sign flips with the CPU, and on Apple silicon it is a clear loss.** A
+> toggle rewires 2–4 letters, so `q_i = rows[i][steck[ct[i]]]` moves only
+> where `ct_i` is one of them; a climb can keep `q` and score a probe as
+> `steck'[q_i]` after patching those positions. It was byte-identical, and
+> isolated the loop over `q` is **~20% cheaper** — the load-chain premise
+> holds. But the scattered patch and restore cost about as much, and end to
+> end (`make bench LONG=1`, long tier, `hillclimb` is `-q` and `fused` `-f`):
+>
+> | | `hillclimb` | `fused` |
+> |---|---:|---:|
+> | x86 (dev container) | ≈0 | ≈0 |
+> | Linux arm64, g++ | −7.8% | −7.5% |
+> | Linux arm64, clang | +5.1% | −10.9% |
+> | **Apple silicon, clang** | **+17.7%** | **+12.7%** |
+>
+> The Apple run had its three non-climbing tiers within ±0.4% and the climb
+> tiers worse at both sizes, so it is a per-iteration cost. **The Linux arm64
+> CI cells are NOT a proxy for Apple silicon here** — they read the opposite
+> sign on `fused` — and Apple silicon is where the long real sweeps run.
+> Removed rather than left off by default; PR #297 has the code and its 13
+> identity checks (`ENIGMA_QCACHE`), `eval/proto_qcache_mb.cc` the
+> microbenchmark, `ENHANCEMENTS.md` item 22 the write-up.
 
 The tables the scorers read are **uint8 fixed-point**
 (`mono8`/`bi8`/`tri8`/`quad8`/`all8`, per-table `bias` *and* per-table `scale`),
