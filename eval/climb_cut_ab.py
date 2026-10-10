@@ -66,6 +66,13 @@ REPLICATED at L=167 (eval/results-climb-cut-replicate.txt, seed 41, 3000
 trials, 24 calibration fixtures): cap200 at the calibrated -R 21 breaks 2761
 against 2729, z = +2.97; pooled with the first seed z = +3.74, ~+1.1pp.
 L = 80 / 107 and wrong-key cost ratios are still unmeasured at that care.
+
+THEN MEASURED (eval/results-dontlook.txt, seed 59, 3000 trials per length,
+24-fixture calibration), with don't-look bits (ENIGMA_DONTLOOK=1) beside the
+cap.  Matched-time z at L = 80 / 107 / 167: cap200 +0.30 / +2.61 / +3.40,
+dontlook +0.86 / +2.70 / +1.71.  The cap's earlier L=80 loss was its
+8-fixture calibration (0.89 against 0.80 here).  Wrong-key cost ratios match
+the true-key ones (eval/results-climb-cut-wrongkey.txt).
 """
 import argparse
 import json

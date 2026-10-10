@@ -3390,7 +3390,44 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
     wrong keys, whose stale runs may be longer or shorter; the ratio has to be
     re-measured there before the cap can be priced for a sweep.
 - **So the certificate is worth slightly LESS than it costs at L = 167**, by
-  ~1pp of break50 at matched compute, and the rest is open.
+  ~1pp of break50 at matched compute.
+- **(c) Don't-look bits, and both open questions answered**
+  (`eval/results-dontlook.txt`, seed 59, 3000 paired trials per length,
+  24-fixture calibration). The exact form of "only re-probe what the last
+  move could have changed" prunes almost nothing: a toggle rewires 2–4
+  letters, which touch ~28% of positions directly and, through the
+  quadgram windows, ~90% of the score — and `-f`'s IC term couples every
+  move to every other. The approximate form is the travelling-salesman
+  heuristic: a flag per letter, set on the letters an accepted move
+  rewired (both ends and both old partners), cleared once all 25 of a
+  letter's moves have failed since; probe only moves with a flagged
+  letter, stop when none is. `ENIGMA_DONTLOOK=1` in the same patch.
+  Matched-time McNemar z against the baseline's 823 / 1613 / 2711 breaks:
+
+  | arm | cost, true key | cost, wrong keys | L = 80 / 107 / 167 |
+  |---|---:|---:|---|
+  | cap 200 | 0.77–0.80 | 0.75–0.82 | +0.30 / **+2.61** / **+3.40** |
+  | don't-look | 0.86 | 0.80–0.90 | +0.86 / **+2.70** / +1.71 |
+
+  - **The cap's short-end loss was the calibration.** At 24 fixtures its
+    cost reads 0.80 at L = 80 rather than 0.89, so it gets `-R 20` rather
+    than 18, and the −2.02 becomes +0.30. Nothing at L = 80, a gain from
+    107 up: +39 breaks of 3000 at L = 107 and +36 at 167, ~+1.2pp.
+  - **At L = 167 the cap is now three seeds deep**: 169 against 88
+    discordants pooled, **z = +5.05**.
+  - **Don't-look bits do not beat the cap.** They lose less per restart
+    (z −2.8 to −4.3 against the cap's −4.5 to −4.7) but save less, and at
+    matched time tie it at 80 and 107 and trail it at 167. The targeted
+    rule buys nothing over the blunt one.
+  - **The saving carries to wrong keys** (`eval/results-climb-cut-
+    wrongkey.txt`, 676-key sweeps under a wrong wheel order): the cap costs
+    0.75–0.82 of a restart there, as at the true key, so the matched-time
+    gains should hold in a sweep. That last step is arithmetic, not a
+    measured break rate.
+- **So a stale cap of ~200 is a small real win from ~100 letters up**: about
+  20% off every restart, worth ~+1.2pp of break50 at matched compute. Not
+  yet built as an option; 200 was the only value tried at this care, and
+  cap 100 lost per restart by more.
 
 ## Maintainability and packaging
 
