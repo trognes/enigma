@@ -113,11 +113,11 @@ def fixture(corpus, L, seed):
     return pt, key, pb
 
 
-def calibrate(binary, corpus, L, n, lo, hi, seed):
+def calibrate(binary, corpus, L, n, lo, hi, seed, arms):
     """Seconds per restart for each arm, startup subtracted, min of 2 reps,
     arm order rotated per fixture so drift is shared."""
-    per = {a: 0.0 for a in ARMS}
-    names = list(ARMS)
+    names = ["base"] + list(arms)
+    per = {a: 0.0 for a in names}
     for f in range(n):
         pt, key, pb = fixture(corpus, L, seed + f)
         ct = run(binary, {}, key + ["-s", pb], pt)
@@ -134,7 +134,7 @@ def calibrate(binary, corpus, L, n, lo, hi, seed):
                 d = (ts[1] - ts[0]) / (hi - lo)
                 best = d if best is None else min(best, d)
             per[a] += best
-    return {a: per[a] / per["base"] for a in ARMS}
+    return {a: per[a] / per["base"] for a in names}
 
 
 def trial(job):
@@ -170,6 +170,12 @@ def main():
     ap.add_argument("--calib-hi", type=int, default=1024)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--seed", type=int, default=23)
+    ap.add_argument("--arms", nargs="+", default=[a for a in ARMS
+                                                  if a != "base"],
+                    help="arms to run besides the baseline")
+    ap.add_argument("--fixed", nargs="*", default=[],
+                    help="extra ARM@R entries at a pinned restart count,"
+                         " e.g. cap200@22 to replay an earlier cell")
     ap.add_argument("--out", default=os.path.join(
         HERE, "results-climb-cut.jsonl"))
     args = ap.parse_args()
@@ -184,13 +190,14 @@ def main():
         for L in args.lengths:
             ratio = calibrate(args.binary, corpus, L, args.calib_fixtures,
                               args.calib_lo, args.calib_hi,
-                              args.seed * 7919 + L)
+                              args.seed * 7919 + L, args.arms)
             plan = {"base": ("base", R)}
-            for a in ARMS:
-                if a == "base":
-                    continue
+            for a in args.arms:
                 plan[a + "@R"] = (a, R)
                 plan[a + "@time"] = (a, max(1, round(R / ratio[a])))
+            for f in args.fixed:
+                a, rr = f.split("@")
+                plan[f] = (a, int(rr))
             fh.write(json.dumps({"L": L, "calibration": ratio,
                                  "plan": plan}) + "\n")
             jobs = [(args.binary, L, args.seed * 100003 + L * 1009 + t, plan)
@@ -208,7 +215,7 @@ def main():
         base = sum(r["base"]["break"] for r in rs)
         print(f"L={L}  n={n}  base breaks {base} ({100 * base / n:.1f}%)")
         print("  wall time per restart vs base: "
-              + ", ".join(f"{a} {ratio[a]:.3f}" for a in ARMS if a != "base"))
+              + ", ".join(f"{a} {ratio[a]:.3f}" for a in args.arms))
         print(f"  {'arm':<14}{'R':>5}{'breaks':>8}{'only-arm':>10}"
               f"{'only-base':>11}{'z':>7}{'exact':>7}{'mean%':>7}")
         for label, (arm, Rl) in plan.items():
