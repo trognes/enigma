@@ -1,0 +1,49 @@
+The IC-rank cut (ENIGMA_RANK_CUT=250) and the score-gated cap
+(ENIGMA_STALE_CAP=200 + ENIGMA_CAP_GATE=T, which also skips try_repair
+below T) against the baseline.  3000 paired trials per length, seed 67,
+24-fixture true-key calibration.  Gates at the 90% point of wrong-key
+scores (eval/results-stop-rules.txt).  The ARM@N rows are pinned at the
+restart count the arm's WRONG-key cost buys
+(eval/results-stop-gate-wrongkey.txt), which is the sweep-relevant match;
+the @time rows use the true-key calibration.
+
+  for spec in "80 21" "107 23" "167 24"; do set -- $spec
+    python3 eval/climb_cut_ab.py --binary /tmp/enigma-cut --lengths $1 \
+      --trials 3000 --arms rank250 gated --fixed rank250@17 gated@$2 \
+      --gate 80=-9.774 107=-9.982 167=-9.999 --calib-fixtures 24 \
+      --seed 67 --out stopgate-$1.jsonl
+  done
+
+L=80  n=3000  base breaks 852 (28.4%)
+  wall time per restart vs base: rank250 0.936, gated 0.733
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16     852         0          0  +0.00    689   34.5
+  rank250@R        16     833         8         27  -3.21    676   34.1
+  rank250@time     17     850        29         31  -0.26    692   34.6
+  gated@R          16     800        18         70  -5.54    649   33.1
+  gated@time       22     875        95         72  +1.78    718   35.4
+  rank250@17       17     850        29         31  -0.26    692   34.6
+  gated@21         21     867        87         72  +1.19    709   35.1
+
+L=107  n=3000  base breaks 1612 (53.7%)
+  wall time per restart vs base: rank250 0.878, gated 0.721
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    1612         0          0  +0.00   1463   57.6
+  rank250@R        16    1602        20         30  -1.41   1455   57.4
+  rank250@time     18    1646        73         39  +3.21   1495   58.7
+  gated@R          16    1522        18        108  -8.02   1377   54.9
+  gated@time       22    1636       116         92  +1.66   1480   58.4
+  rank250@17       17    1625        49         36  +1.41   1479   58.1
+  gated@23         23    1654       130         88  +2.84   1497   58.9
+
+L=167  n=3000  base breaks 2705 (90.2%)
+  wall time per restart vs base: rank250 0.867, gated 0.819
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    2705         0          0  +0.00   2643   90.9
+  rank250@R        16    2706         9          8  +0.24   2643   90.9
+  rank250@time     18    2724        33         14  +2.77   2661   91.4
+  gated@R          16    2663         8         50  -5.51   2600   89.6
+  gated@time       20    2711        43         37  +0.67   2648   91.0
+  rank250@17       17    2712        20         13  +1.22   2649   91.1
+  gated@24         24    2748        72         29  +4.28   2684   92.1
+

@@ -3428,6 +3428,33 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
   20% off every restart, worth ~+1.2pp of break50 at matched compute. Not
   yet built as an option; 200 was the only value tried at this care, and
   cap 100 lost per restart by more.
+- **(d) Three more stop rules, screened from a trace and then A/B'd**
+  (`ENIGMA_TRACE` in the patch; `eval/stop_rules_probe.py`,
+  `eval/results-stop-rules.txt`; then `eval/results-stop-gate.txt`, seed 67,
+  3000 paired trials per length).
+  - **Stopping on small gains is out on the trace alone.** Small gains come
+    throughout a climb, not at its end: stopping after two in a row under the
+    10th-percentile gain saves only ~6% of probes, the 25th saves ~29% but
+    forfeits ~0.5 points of score in a third of sweeps, and it saves the same
+    share on the true key as on wrong keys, so it does not discriminate.
+  - **An IC-rank cut is a wash.** Visiting only the top 250 of `-K`'s order
+    loses little per restart (z −3.21 / −1.41 / +0.24 at the same `-R 16`)
+    but saves only 3–6% on wrong keys (`eval/results-stop-gate-
+    wrongkey.txt`), less than the trace's rank shares suggested. At the
+    `-R 17` that saving buys: −0.26 / +1.41 / +1.22.
+  - **Gating the cap on score did not do what the trace predicted.** The
+    trace said a gate at the 90% point of wrong-key scores would leave ~95%
+    of the true key's winning climbs uncapped. But the gate also skipped
+    `try_repair` below it, which the trace did not model, and the same-`R`
+    loss came out **worse** than the plain cap's — z −5.54 / −8.02 / −5.51
+    against −4.70 / −4.54 / −4.56. The repair is what rescues a true-key
+    climb sitting low at convergence. It is cheaper on wrong keys (0.67–0.77
+    against the cap's 0.80–0.84), and at the restart count that buys —
+    `-R` 21 / 23 / 24 — it reads **+1.19 / +2.84 / +4.28**, against the
+    plain cap's +0.30 / +2.61 / +3.40 on another seed. Not a paired
+    comparison, so not shown better than the plain cap.
+  - **Untested: gating the cap alone and keeping the repair**, which is
+    what the trace actually priced.
 
 ## Maintainability and packaging
 
