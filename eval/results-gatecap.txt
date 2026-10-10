@@ -1,0 +1,44 @@
+The plain 200-probe stale cap against the cap-only gate (the same cap,
+applied only while the climb scores below a per-length gate at the 90%
+point of wrong-key scores; try_repair kept everywhere).  3000 paired trials
+per length, seed 101.  Both arms at the baseline's -R 16 and at the -R
+their wrong-key cost buys (eval/results-gatecap-wrongkey.txt), which is
+the same count for both.
+
+  for spec in "80 19" "107 19" "167 21"; do set -- $spec
+    python3 eval/climb_cut_ab.py --binary /tmp/enigma-cut --lengths $1 \
+      --trials 3000 --arms cap200 gatecap --fixed cap200@$2 gatecap@$2 \
+      --gate 80=-9.774 107=-9.982 167=-9.999 --calib-fixtures 0 \
+      --seed 101 --out gatecap-$1.jsonl
+  done
+
+L=80  n=3000  base breaks 837 (27.9%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16     837         0          0  +0.00    682   34.0
+  cap200@R         16     778        29         88  -5.45    635   32.3
+  gatecap@R        16     803        17         51  -4.12    657   33.1
+  cap200@19        19     836        79         80  -0.08    675   33.9
+  gatecap@19       19     858        72         51  +1.89    696   34.6
+
+L=107  n=3000  base breaks 1559 (52.0%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    1559         0          0  +0.00   1406   55.9
+  cap200@R         16    1491        39        107  -5.63   1341   54.0
+  gatecap@R        16    1532        24         51  -3.12   1385   55.1
+  cap200@19        19    1552        95        102  -0.50   1398   55.8
+  gatecap@19       19    1593        82         48  +2.98   1441   57.0
+
+L=167  n=3000  base breaks 2678 (89.3%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    2678         0          0  +0.00   2630   90.1
+  cap200@R         16    2637        17         58  -4.73   2587   88.9
+  gatecap@R        16    2662         9         25  -2.74   2614   89.6
+  cap200@21        21    2694        65         49  +1.50   2639   90.6
+  gatecap@21       21    2720        62         20  +4.64   2668   91.4
+
+Head to head, the gate against the plain cap on the same trials
+(only-gate / only-cap breaks, McNemar z):
+
+  L=80   same -R 16: 39 / 14, z = +3.43   at -R 19: 41 / 19, z = +2.84
+  L=107  same -R 16: 59 / 18, z = +4.67   at -R 19: 62 / 21, z = +4.50
+  L=167  same -R 16: 37 / 12, z = +3.57   at -R 21: 38 / 12, z = +3.68

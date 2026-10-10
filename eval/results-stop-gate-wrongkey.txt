@@ -1,0 +1,11 @@
+Wrong-key cost per restart for the IC-rank cut and the score-gated cap
+(gates at the 90% point of wrong-key scores, eval/results-stop-rules.txt).
+
+  python3 eval/climb_cut_wrongkey.py --binary /tmp/enigma-cut \
+      --arms cap200 rank250 gated --gate 80=-9.774 107=-9.982 167=-9.999
+
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; 676 wrong keys per sweep; per-restart time from -R 5 minus -R 1
+
+L=80  base 0.324 ms per key-restart;  vs base: cap200 0.835, rank250 0.969, gated 0.768
+L=107  base 0.374 ms per key-restart;  vs base: cap200 0.805, rank250 0.937, gated 0.695
+L=167  base 0.451 ms per key-restart;  vs base: cap200 0.802, rank250 0.947, gated 0.669

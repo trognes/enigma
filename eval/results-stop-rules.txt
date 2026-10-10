@@ -1,0 +1,98 @@
+Trace-based go/no-go for three early-stop rules (eval/stop_rules_probe.py; 
+ENIGMA_TRACE in eval/climb_cut.patch).  Offline estimates: exact up to each 
+stop, silent about what later moves would have become.
+
+  python3 eval/stop_rules_probe.py --binary /tmp/enigma-cut
+
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; 6 fixtures per length; true key -R 100, wrong keys 676 x -R 2
+
+=== L=80: 664 true-key climbs, 8160 wrong-key climbs
+  true: 795 sweeps, 5525 accepted, 468774 probes, 863 accepted after the first cycle
+    IC rank >= 100: first cycle  16.9%, later  28.2%  (share of the order 69.2%)
+    IC rank >= 150: first cycle   8.7%, later  15.8%  (share of the order 53.8%)
+    IC rank >= 200: first cycle   4.4%, later   8.6%  (share of the order 38.5%)
+    IC rank >= 250: first cycle   1.9%, later   5.0%  (share of the order 23.1%)
+    IC rank >= 300: first cycle   0.5%, later   0.9%  (share of the order  7.7%)
+  wrong: 9634 sweeps, 74501 accepted, 5892162 probes, 11841 accepted after the first cycle
+    IC rank >= 100: first cycle  17.3%, later  30.6%  (share of the order 69.2%)
+    IC rank >= 150: first cycle   9.5%, later  16.8%  (share of the order 53.8%)
+    IC rank >= 200: first cycle   4.7%, later   8.3%  (share of the order 38.5%)
+    IC rank >= 250: first cycle   1.9%, later   3.3%  (share of the order 23.1%)
+    IC rank >= 300: first cycle   0.4%, later   0.6%  (share of the order  7.7%)
+  gain rule: stop after k accepted moves in a row gaining < eps
+    eps=q0.10 (0.0171) k=1: true saves 45.9% of probes, fires in 343 sweeps, forfeits 226.322; wrong saves 48.9% of probes, fires in 4719 sweeps, forfeits 2961.280
+    eps=q0.10 (0.0171) k=2: true saves  5.9% of probes, fires in 50 sweeps, forfeits 19.700; wrong saves  6.5% of probes, fires in 624 sweeps, forfeits 298.570
+    eps=q0.10 (0.0171) k=3: true saves  0.4% of probes, fires in 3 sweeps, forfeits 2.206; wrong saves  0.8% of probes, fires in 86 sweeps, forfeits 40.427
+    eps=q0.25 (0.0448) k=1: true saves 71.1% of probes, fires in 538 sweeps, forfeits 376.692; wrong saves 75.4% of probes, fires in 7174 sweeps, forfeits 5190.652
+    eps=q0.25 (0.0448) k=2: true saves 28.9% of probes, fires in 225 sweeps, forfeits 117.778; wrong saves 28.7% of probes, fires in 2759 sweeps, forfeits 1460.887
+    eps=q0.25 (0.0448) k=3: true saves  7.0% of probes, fires in 58 sweeps, forfeits 26.656; wrong saves  8.4% of probes, fires in 800 sweeps, forfeits 355.032
+    eps=q0.50 (0.1121) k=1: true saves 84.9% of probes, fires in 641 sweeps, forfeits 536.447; wrong saves 89.5% of probes, fires in 8444 sweeps, forfeits 7230.888
+    eps=q0.50 (0.1121) k=2: true saves 61.6% of probes, fires in 464 sweeps, forfeits 289.660; wrong saves 65.2% of probes, fires in 6237 sweeps, forfeits 3928.009
+    eps=q0.50 (0.1121) k=3: true saves 34.6% of probes, fires in 267 sweeps, forfeits 153.082; wrong saves 39.2% of probes, fires in 3825 sweeps, forfeits 1966.269
+  gate: cap at 200 only below T, T a quantile of wrong-key scores at the cap point
+    true key: 34 of 664 climbs finish above every wrong-key climb on their message
+    T = wrong q0.5 (-10.2511): wrong climbs gated  50.0%, winning true climbs capped 1 of 34
+    T = wrong q0.9 (-9.7740): wrong climbs gated  90.0%, winning true climbs capped 2 of 34
+    T = wrong q0.99 (-9.2443): wrong climbs gated  99.0%, winning true climbs capped 3 of 34
+    T = wrong q0.999 (-8.8083): wrong climbs gated  99.8%, winning true climbs capped 6 of 34
+
+=== L=107: 648 true-key climbs, 8176 wrong-key climbs
+  true: 750 sweeps, 5555 accepted, 448719 probes, 877 accepted after the first cycle
+    IC rank >= 100: first cycle  16.6%, later  29.8%  (share of the order 69.2%)
+    IC rank >= 150: first cycle   8.5%, later  17.4%  (share of the order 53.8%)
+    IC rank >= 200: first cycle   3.9%, later   8.8%  (share of the order 38.5%)
+    IC rank >= 250: first cycle   1.5%, later   3.9%  (share of the order 23.1%)
+    IC rank >= 300: first cycle   0.3%, later   0.6%  (share of the order  7.7%)
+  wrong: 9728 sweeps, 72139 accepted, 5864989 probes, 11425 accepted after the first cycle
+    IC rank >= 100: first cycle  16.5%, later  30.0%  (share of the order 69.2%)
+    IC rank >= 150: first cycle   8.8%, later  16.6%  (share of the order 53.8%)
+    IC rank >= 200: first cycle   4.3%, later   8.5%  (share of the order 38.5%)
+    IC rank >= 250: first cycle   1.7%, later   3.4%  (share of the order 23.1%)
+    IC rank >= 300: first cycle   0.3%, later   0.7%  (share of the order  7.7%)
+  gain rule: stop after k accepted moves in a row gaining < eps
+    eps=q0.10 (0.0150) k=1: true saves 48.9% of probes, fires in 344 sweeps, forfeits 241.625; wrong saves 48.1% of probes, fires in 4602 sweeps, forfeits 2447.320
+    eps=q0.10 (0.0150) k=2: true saves  6.3% of probes, fires in 44 sweeps, forfeits 28.186; wrong saves  5.9% of probes, fires in 592 sweeps, forfeits 236.399
+    eps=q0.10 (0.0150) k=3: true saves  0.7% of probes, fires in 5 sweeps, forfeits 5.997; wrong saves  0.6% of probes, fires in 65 sweeps, forfeits 20.023
+    eps=q0.25 (0.0429) k=1: true saves 74.0% of probes, fires in 530 sweeps, forfeits 405.118; wrong saves 75.5% of probes, fires in 7158 sweeps, forfeits 4451.119
+    eps=q0.25 (0.0429) k=2: true saves 27.0% of probes, fires in 189 sweeps, forfeits 115.481; wrong saves 30.4% of probes, fires in 2969 sweeps, forfeits 1317.744
+    eps=q0.25 (0.0429) k=3: true saves  9.6% of probes, fires in 65 sweeps, forfeits 31.925; wrong saves  9.0% of probes, fires in 899 sweeps, forfeits 335.497
+    eps=q0.50 (0.1042) k=1: true saves 86.9% of probes, fires in 615 sweeps, forfeits 537.616; wrong saves 89.1% of probes, fires in 8422 sweeps, forfeits 6149.739
+    eps=q0.50 (0.1042) k=2: true saves 64.8% of probes, fires in 459 sweeps, forfeits 325.215; wrong saves 65.7% of probes, fires in 6276 sweeps, forfeits 3347.697
+    eps=q0.50 (0.1042) k=3: true saves 38.9% of probes, fires in 278 sweeps, forfeits 150.263; wrong saves 40.4% of probes, fires in 3903 sweeps, forfeits 1715.568
+  gate: cap at 200 only below T, T a quantile of wrong-key scores at the cap point
+    true key: 97 of 648 climbs finish above every wrong-key climb on their message
+    T = wrong q0.5 (-10.3943): wrong climbs gated  50.0%, winning true climbs capped 2 of 97
+    T = wrong q0.9 (-9.9824): wrong climbs gated  90.0%, winning true climbs capped 4 of 97
+    T = wrong q0.99 (-9.4862): wrong climbs gated  99.0%, winning true climbs capped 8 of 97
+    T = wrong q0.999 (-9.1345): wrong climbs gated  99.9%, winning true climbs capped 12 of 97
+
+=== L=167: 648 true-key climbs, 8160 wrong-key climbs
+  true: 771 sweeps, 5664 accepted, 470944 probes, 1081 accepted after the first cycle
+    IC rank >= 100: first cycle  14.9%, later  30.1%  (share of the order 69.2%)
+    IC rank >= 150: first cycle   6.9%, later  14.4%  (share of the order 53.8%)
+    IC rank >= 200: first cycle   3.4%, later   7.5%  (share of the order 38.5%)
+    IC rank >= 250: first cycle   1.5%, later   3.2%  (share of the order 23.1%)
+    IC rank >= 300: first cycle   0.2%, later   0.4%  (share of the order  7.7%)
+  wrong: 9814 sweeps, 71298 accepted, 5838736 probes, 11372 accepted after the first cycle
+    IC rank >= 100: first cycle  15.3%, later  28.9%  (share of the order 69.2%)
+    IC rank >= 150: first cycle   8.1%, later  16.0%  (share of the order 53.8%)
+    IC rank >= 200: first cycle   4.1%, later   8.1%  (share of the order 38.5%)
+    IC rank >= 250: first cycle   1.7%, later   3.6%  (share of the order 23.1%)
+    IC rank >= 300: first cycle   0.4%, later   0.8%  (share of the order  7.7%)
+  gain rule: stop after k accepted moves in a row gaining < eps
+    eps=q0.10 (0.0135) k=1: true saves 45.3% of probes, fires in 326 sweeps, forfeits 227.472; wrong saves 50.4% of probes, fires in 4832 sweeps, forfeits 2089.016
+    eps=q0.10 (0.0135) k=2: true saves  6.3% of probes, fires in 49 sweeps, forfeits 17.190; wrong saves  7.4% of probes, fires in 718 sweeps, forfeits 239.236
+    eps=q0.10 (0.0135) k=3: true saves  1.1% of probes, fires in 9 sweeps, forfeits 1.864; wrong saves  1.0% of probes, fires in 93 sweeps, forfeits 25.798
+    eps=q0.25 (0.0365) k=1: true saves 67.9% of probes, fires in 490 sweeps, forfeits 372.689; wrong saves 75.9% of probes, fires in 7272 sweeps, forfeits 3585.008
+    eps=q0.25 (0.0365) k=2: true saves 29.5% of probes, fires in 227 sweeps, forfeits 110.212; wrong saves 31.6% of probes, fires in 3081 sweeps, forfeits 1102.410
+    eps=q0.25 (0.0365) k=3: true saves  9.8% of probes, fires in 80 sweeps, forfeits 28.708; wrong saves 10.4% of probes, fires in 1005 sweeps, forfeits 303.469
+    eps=q0.50 (0.0897) k=1: true saves 84.5% of probes, fires in 612 sweeps, forfeits 514.386; wrong saves 89.8% of probes, fires in 8583 sweeps, forfeits 4923.568
+    eps=q0.50 (0.0897) k=2: true saves 61.7% of probes, fires in 451 sweeps, forfeits 301.733; wrong saves 67.5% of probes, fires in 6467 sweeps, forfeits 2803.571
+    eps=q0.50 (0.0897) k=3: true saves 37.9% of probes, fires in 275 sweeps, forfeits 152.201; wrong saves 43.1% of probes, fires in 4193 sweeps, forfeits 1478.679
+  gate: cap at 200 only below T, T a quantile of wrong-key scores at the cap point
+    true key: 180 of 648 climbs finish above every wrong-key climb on their message
+    T = wrong q0.5 (-10.3463): wrong climbs gated  50.0%, winning true climbs capped 2 of 180
+    T = wrong q0.9 (-9.9987): wrong climbs gated  90.0%, winning true climbs capped 5 of 180
+    T = wrong q0.99 (-9.6027): wrong climbs gated  99.0%, winning true climbs capped 25 of 180
+    T = wrong q0.999 (-9.3492): wrong climbs gated  99.9%, winning true climbs capped 52 of 180
+

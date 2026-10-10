@@ -1,0 +1,16 @@
+Per-restart wall-time cost of each climb-cut arm on WRONG keys, against the
+true-key calibration climb_cut_ab.py uses.  Six fixtures per length, each a
+676-key sweep under a wrong wheel order, -R 5 minus -R 1, min of 2 reps.
+
+  python3 eval/climb_cut_wrongkey.py --binary /tmp/enigma-cut
+
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; 676 wrong keys per sweep; per-restart time from -R 5 minus -R 1
+
+L=80  base 0.345 ms per key-restart;  vs base: cap200 0.815, dontlook 0.904
+L=107  base 0.386 ms per key-restart;  vs base: cap200 0.809, dontlook 0.803
+L=167  base 0.492 ms per key-restart;  vs base: cap200 0.753, dontlook 0.807
+
+True-key calibration of the same arms (results-dontlook.txt, 24 fixtures):
+  L=80   cap200 0.801, dontlook 0.865
+  L=107  cap200 0.802, dontlook 0.864
+  L=167  cap200 0.770, dontlook 0.863

@@ -3312,15 +3312,15 @@ climbed deeper also raise the best wrong key's score. Breaks of 60:
   signal either, which matches item 2b's finding that below `-R 100` the
   truth is not outscored but not reached.
 
-**24. Where a restart's probes go — COUNTED; nearly half the expensive ones
-only certify that the climb has converged.** A probe is one scoring of one
-candidate plugboard move. In the target stage (`f10` of `-S k4f10`) each is a
-full decode of the message; in the `k4` pre-pass it is an O(26) histogram
-update, roughly ten times cheaper. So the target stage is where a restart's
-time goes. Counted with an instrumented build (`eval/probe_count.patch`,
-`eval/probe_count.py`, `eval/results-probe-count.txt`; 4 fixtures per length,
-676 wrong keys at `-R 2` plus the true key at `-R 100`), target stage under the
-recommended `-K`:
+**24. Where a restart's probes go — COUNTED; nearly half the expensive ones only
+certify that the climb has converged, and cutting them does not pay.** A probe
+is one scoring of one candidate plugboard move. In the target stage (`f10` of
+`-S k4f10`) each is a full decode of the message; in the `k4` pre-pass it is an
+O(26) histogram update, roughly ten times cheaper. So the target stage is where
+a restart's time goes. Counted with an instrumented build
+(`eval/probe_count.patch`, `eval/probe_count.py`,
+`eval/results-probe-count.txt`; 4 fixtures per length, 676 wrong keys at `-R 2`
+plus the true key at `-R 100`), target stage under the recommended `-K`:
 
 | per sweep | L = 80 | L = 107 | L = 167 | share |
 |---|---:|---:|---:|---:|
@@ -3351,8 +3351,137 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
   walks circularly; re-ranking costs ~325 O(26) updates per acceptance and
   targets the live probes (~42%) rather than the tail, keeping the exact
   certificate. Untested.
-- **Neither is built.** The count bounds them: (a) can save at most about a
-  third of a restart's decoding, (b) at most a share of the live ~42%.
+- **Both were then MEASURED, and neither pays** (`eval/climb_cut.patch`,
+  `eval/climb_cut_ab.py`, `eval/results-climb-cut.txt`: 1000 paired trials
+  per length, rotor key given, baseline `-R 16`, each arm also run at the
+  restart count its measured cost buys). McNemar z against the baseline's
+  275 / 535 / 915 breaks of 1000 at L = 80 / 107 / 167:
+
+  | arm | cost/restart | same R, L = 80 / 107 / 167 | matched time |
+  |---|---:|---|---|
+  | cap 100 | 0.64–0.71 | −2.96 / −3.71 / −0.82 | −0.79 / +0.69 / +1.81 |
+  | cap 200 | 0.74–0.89 | −3.12 / −3.39 / −0.94 | −2.02 / +0.24 / +2.41 |
+  | re-rank | 1.54–1.99 | +0.09 / +0.53 / −1.21 | −5.13 / −4.30 / −6.18 |
+
+- **Re-ranking is measured down.** Each restart is as good as before and
+  costs 1.5–2× as much: re-scoring 325 moves after each of the ~7 accepted
+  moves costs about what the decodes it could save do.
+- **The cap is a wash.** It costs quality per restart at the short lengths,
+  and the ~30% cheaper restart buys about that back. The sign follows length
+  (behind at 80, level at 107, ahead at 167), and the one matched-time cell
+  past z = 2 — cap 200 at L = 167, +13 of 1000 on a 91.5% base — is one of
+  six on one seed.
+- **That cell REPLICATED on a held-out seed** (`eval/results-climb-cut-
+  replicate.txt`: 3000 paired trials, seed 41, cost calibrated on 24
+  fixtures instead of 8). The cap costs a restart quality (−35 breaks at the
+  same `-R 16`, z = −4.28) and pays it back with interest at matched time:
+  calibrated at **0.766**, `-R 21` breaks **2761 against 2729, z = +2.97**,
+  and the earlier cell's `-R 22` replayed as-is reads +41, z = +3.67. Pooled
+  with the first seed the matched-time cell is 95 against 50 discordants,
+  **z = +3.74, about +1.1pp on a 91% base**.
+- **What that does NOT yet establish, before anything is built:**
+  - **The short end.** L = 80 read −2.02 at matched time, but its
+    calibration said 0.891 and gave the cap only `-R 18`; if the cost ratio
+    there is really ~0.77, as at L = 167 on two calibrations, that cell was
+    run two or three restarts short. L = 80 and 107 need re-running with the
+    24-fixture calibration before the sign there can be read.
+  - **Wrong keys.** Every cost ratio here was timed at the TRUE key, which is
+    the plugboard tier's regime. A real sweep spends nearly all its climbs on
+    wrong keys, whose stale runs may be longer or shorter; the ratio has to be
+    re-measured there before the cap can be priced for a sweep.
+- **So the certificate is worth slightly LESS than it costs at L = 167**, by
+  ~1pp of break50 at matched compute.
+- **(c) Don't-look bits, and both open questions answered**
+  (`eval/results-dontlook.txt`, seed 59, 3000 paired trials per length,
+  24-fixture calibration). The exact form of "only re-probe what the last
+  move could have changed" prunes almost nothing: a toggle rewires 2–4
+  letters, which touch ~28% of positions directly and, through the
+  quadgram windows, ~90% of the score — and `-f`'s IC term couples every
+  move to every other. The approximate form is the travelling-salesman
+  heuristic: a flag per letter, set on the letters an accepted move
+  rewired (both ends and both old partners), cleared once all 25 of a
+  letter's moves have failed since; probe only moves with a flagged
+  letter, stop when none is. `ENIGMA_DONTLOOK=1` in the same patch.
+  Matched-time McNemar z against the baseline's 823 / 1613 / 2711 breaks:
+
+  | arm | cost, true key | cost, wrong keys | L = 80 / 107 / 167 |
+  |---|---:|---:|---|
+  | cap 200 | 0.77–0.80 | 0.75–0.82 | +0.30 / **+2.61** / **+3.40** |
+  | don't-look | 0.86 | 0.80–0.90 | +0.86 / **+2.70** / +1.71 |
+
+  - **The cap's short-end loss was the calibration.** At 24 fixtures its
+    cost reads 0.80 at L = 80 rather than 0.89, so it gets `-R 20` rather
+    than 18, and the −2.02 becomes +0.30. Nothing at L = 80, a gain from
+    107 up: +39 breaks of 3000 at L = 107 and +36 at 167, ~+1.2pp.
+  - **At L = 167 the cap is now three seeds deep**: 169 against 88
+    discordants pooled, **z = +5.05**.
+  - **Don't-look bits do not beat the cap.** They lose less per restart
+    (z −2.8 to −4.3 against the cap's −4.5 to −4.7) but save less, and at
+    matched time tie it at 80 and 107 and trail it at 167. The targeted
+    rule buys nothing over the blunt one.
+  - **The saving carries to wrong keys** (`eval/results-climb-cut-
+    wrongkey.txt`, 676-key sweeps under a wrong wheel order): the cap costs
+    0.75–0.82 of a restart there, as at the true key, so the matched-time
+    gains should hold in a sweep. That last step is arithmetic, not a
+    measured break rate.
+- **So a stale cap of ~200 is a small real win from ~100 letters up**: about
+  20% off every restart, worth ~+1.2pp of break50 at matched compute. Not
+  yet built as an option; 200 was the only value tried at this care, and
+  cap 100 lost per restart by more.
+- **(d) Three more stop rules, screened from a trace and then A/B'd**
+  (`ENIGMA_TRACE` in the patch; `eval/stop_rules_probe.py`,
+  `eval/results-stop-rules.txt`; then `eval/results-stop-gate.txt`, seed 67,
+  3000 paired trials per length).
+  - **Stopping on small gains is out on the trace alone.** Small gains come
+    throughout a climb, not at its end: stopping after two in a row under the
+    10th-percentile gain saves only ~6% of probes, the 25th saves ~29% but
+    forfeits ~0.5 points of score in a third of sweeps, and it saves the same
+    share on the true key as on wrong keys, so it does not discriminate.
+  - **An IC-rank cut is a wash.** Visiting only the top 250 of `-K`'s order
+    loses little per restart (z −3.21 / −1.41 / +0.24 at the same `-R 16`)
+    but saves only 3–6% on wrong keys (`eval/results-stop-gate-
+    wrongkey.txt`), less than the trace's rank shares suggested. At the
+    `-R 17` that saving buys: −0.26 / +1.41 / +1.22.
+  - **Gating the cap on score did not do what the trace predicted.** The
+    trace said a gate at the 90% point of wrong-key scores would leave ~95%
+    of the true key's winning climbs uncapped. But the gate also skipped
+    `try_repair` below it, which the trace did not model, and the same-`R`
+    loss came out **worse** than the plain cap's — z −5.54 / −8.02 / −5.51
+    against −4.70 / −4.54 / −4.56. The repair is what rescues a true-key
+    climb sitting low at convergence. It is cheaper on wrong keys (0.67–0.77
+    against the cap's 0.80–0.84), and at the restart count that buys —
+    `-R` 21 / 23 / 24 — it reads **+1.19 / +2.84 / +4.28**, against the
+    plain cap's +0.30 / +2.61 / +3.40 on another seed. Not a paired
+    comparison, so not shown better than the plain cap.
+  - **Gating the cap ALONE, keeping the repair, is the first stop rule that
+    beats the plain cap head to head** (`ENIGMA_GATE_KEEP_REPAIR=1`;
+    `eval/results-gatecap.txt`, seed 101, 3000 paired trials per length).
+    It costs 0.77–0.86 of a restart on wrong keys against the plain cap's
+    0.75–0.83 (`eval/results-gatecap-wrongkey.txt`), so both get the same
+    sweep-matched `-R` 19 / 19 / 21, and on the same trials:
+
+    | L | gate vs baseline | plain cap vs baseline | gate vs plain cap |
+    |---:|---:|---:|---:|
+    | 80 | +21, z = +1.89 | −1, z = −0.08 | 41 / 19, **z = +2.84** |
+    | 107 | +34, z = +2.98 | −7, z = −0.50 | 62 / 21, **z = +4.50** |
+    | 167 | +42, z = +4.64 | +16, z = +1.50 | 38 / 12, **z = +3.68** |
+
+    Breaks of 3000; ~+0.7 / +1.1 / +1.4pp over the baseline. The gate
+    keeps the full convergence check for the climbs that could win and
+    halves the cap's loss per restart (z −2.7 to −4.1 at the same `-R 16`
+    against −4.7 to −5.6), at nearly the same wrong-key saving.
+  - **The plain cap read weaker here than in (c)** — −0.08 / −0.50 / +1.50
+    against +0.30 / +2.61 / +3.40 — because its wrong-key cost measured
+    0.825 / 0.834 this time and so bought `-R 19` rather than 20 at the two
+    short lengths. Its result is sensitive to a restart or two of matching;
+    the gate's lead over it is not, since it holds at the same `-R` too.
+  - **What a build would still need: a rule for the gate.** The values
+    here (−9.774 / −9.982 / −9.999 per letter) were read off a trace on
+    other messages for `-f -l wehrmacht` with the shipped λ; they depend on
+    the model, the language and the length. Setting it from the run itself
+    — e.g. the 90% point of the first restart pass's scores at the cap,
+    after the pass barrier so it stays `-T`-independent — is the obvious
+    shape and is untested.
 
 ## Maintainability and packaging
 
