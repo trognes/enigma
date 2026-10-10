@@ -21,7 +21,7 @@ import random
 import subprocess
 import time
 
-from climb_cut_ab import ARMS, RECIPE, LET, decrypts, fixture, run
+from climb_cut_ab import GATES, RECIPE, LET, arm_env, decrypts, fixture, run
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -41,7 +41,12 @@ def main():
     ap.add_argument("--lo", type=int, default=1)
     ap.add_argument("--hi", type=int, default=5)
     ap.add_argument("--seed", type=int, default=71)
+    ap.add_argument("--gate", nargs="*", default=[],
+                    help="L=T score gates for the gated arm")
     args = ap.parse_args()
+    for g in args.gate:
+        L, T = g.split("=")
+        GATES[int(L)] = T
     # run() discards the binary's stderr, so a missing table reads as a
     # fast sweep rather than an error; pin the data directory.
     os.environ.setdefault("ENIGMA_DATA",
@@ -69,8 +74,9 @@ def main():
             for a in order:
                 best = None
                 for _ in range(2):
-                    d = (sweep_time(args.binary, ARMS[a], wrong, args.hi, ct)
-                         - sweep_time(args.binary, ARMS[a], wrong, args.lo,
+                    env = arm_env(a, L)
+                    d = (sweep_time(args.binary, env, wrong, args.hi, ct)
+                         - sweep_time(args.binary, env, wrong, args.lo,
                                       ct)) / (args.hi - args.lo)
                     best = d if best is None else min(best, d)
                 per[a] += best

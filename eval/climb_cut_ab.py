@@ -93,7 +93,16 @@ ARMS = {"base": {},
         "cap100": {"ENIGMA_STALE_CAP": "100"},
         "cap200": {"ENIGMA_STALE_CAP": "200"},
         "rerank": {"ENIGMA_RERANK": "1"},
-        "dontlook": {"ENIGMA_DONTLOOK": "1"}}
+        "dontlook": {"ENIGMA_DONTLOOK": "1"},
+        "rank250": {"ENIGMA_RANK_CUT": "250"},
+        "gated": {"ENIGMA_STALE_CAP": "200", "ENIGMA_CAP_GATE": "{gate}"}}
+GATES = {}   # length -> score gate for the "gated" arm, from --gate
+
+
+def arm_env(arm, L):
+    """An arm's environment, with a per-length gate filled in."""
+    return {k: (v.format(gate=GATES[L]) if "{gate}" in v else v)
+            for k, v in ARMS[arm].items()}
 
 
 def decrypts(path):
@@ -141,7 +150,7 @@ def calibrate(binary, corpus, L, n, lo, hi, seed, arms):
                 ts = []
                 for R in (lo, hi):
                     t0 = time.perf_counter()
-                    run(binary, ARMS[a], key + RECIPE
+                    run(binary, arm_env(a, L), key + RECIPE
                         + ["-e", "1", "-R", str(R)], ct)
                     ts.append(time.perf_counter() - t0)
                 d = (ts[1] - ts[0]) / (hi - lo)
@@ -156,7 +165,7 @@ def trial(job):
     ct = run(binary, {}, key + ["-s", pb], pt)
     out = {"L": L, "seed": seed}
     for label, (arm, R) in plan.items():
-        got = run(binary, ARMS[arm], key + RECIPE
+        got = run(binary, arm_env(arm, L), key + RECIPE
                   + ["-e", str(seed), "-R", str(R)], ct)
         pct = sum(a == b for a, b in zip(got, pt)) / L
         out[label] = {"R": R, "pct": pct, "break": pct >= 0.5,
@@ -164,8 +173,9 @@ def trial(job):
     return out
 
 
-def init(corpus):
+def init(corpus, gates):
     trial.corpus = corpus
+    GATES.update(gates)
 
 
 def mcnemar(a, b):
@@ -191,7 +201,12 @@ def main():
                          " e.g. cap200@22 to replay an earlier cell")
     ap.add_argument("--out", default=os.path.join(
         HERE, "results-climb-cut.jsonl"))
+    ap.add_argument("--gate", nargs="*", default=[],
+                    help="L=T score gates for the gated arm, e.g. 107=-9.98")
     args = ap.parse_args()
+    for g in args.gate:
+        L, T = g.split("=")
+        GATES[int(L)] = T
     corpus = "".join(decrypts(os.path.join(HERE, "enigma-messages.txt"))
                      + decrypts(os.path.join(
                          HERE, "enigma-army-messages-1941.txt")))
@@ -199,7 +214,7 @@ def main():
     report = []
     with open(args.out, "w", encoding="utf-8") as fh, \
             mp.Pool(args.workers, initializer=init,
-                    initargs=(corpus,)) as pool:
+                    initargs=(corpus, GATES)) as pool:
         for L in args.lengths:
             ratio = calibrate(args.binary, corpus, L, args.calib_fixtures,
                               args.calib_lo, args.calib_hi,
