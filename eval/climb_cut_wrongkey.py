@@ -42,6 +42,10 @@ def main():
     ap.add_argument("--hi", type=int, default=5)
     ap.add_argument("--seed", type=int, default=71)
     args = ap.parse_args()
+    # run() discards the binary's stderr, so a missing table reads as a
+    # fast sweep rather than an error; pin the data directory.
+    os.environ.setdefault("ENIGMA_DATA",
+                          os.path.join(os.path.dirname(HERE), "ngrams"))
     corpus = "".join(decrypts(os.path.join(HERE, "enigma-messages.txt"))
                      + decrypts(os.path.join(
                          HERE, "enigma-army-messages-1941.txt")))
