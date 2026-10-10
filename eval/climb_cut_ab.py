@@ -95,7 +95,9 @@ ARMS = {"base": {},
         "rerank": {"ENIGMA_RERANK": "1"},
         "dontlook": {"ENIGMA_DONTLOOK": "1"},
         "rank250": {"ENIGMA_RANK_CUT": "250"},
-        "gated": {"ENIGMA_STALE_CAP": "200", "ENIGMA_CAP_GATE": "{gate}"}}
+        "gated": {"ENIGMA_STALE_CAP": "200", "ENIGMA_CAP_GATE": "{gate}"},
+        "gatecap": {"ENIGMA_STALE_CAP": "200", "ENIGMA_CAP_GATE": "{gate}",
+                    "ENIGMA_GATE_KEEP_REPAIR": "1"}}
 GATES = {}   # length -> score gate for the "gated" arm, from --gate
 
 

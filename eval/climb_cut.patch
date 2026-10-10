@@ -20,7 +20,7 @@ index 412fbb3..fbe2dd0 100644
    /* AFTER readciphertext, because wehrmacht's -f lambda is 0.25*L and so
       needs the length.  Before intscore_init, which bakes that lambda
 diff --git a/src/plugboard.cc b/src/plugboard.cc
-index 52e5d0f..92a7e29 100644
+index 52e5d0f..00a3666 100644
 --- a/src/plugboard.cc
 +++ b/src/plugboard.cc
 @@ -1,3 +1,4 @@
@@ -28,7 +28,7 @@ index 52e5d0f..92a7e29 100644
  #include "plugboard.h"
  
  #include "common.h"
-@@ -622,6 +623,41 @@ static pairtab make_pairtab()
+@@ -622,6 +623,45 @@ static pairtab make_pairtab()
    return t;
  }
  
@@ -40,7 +40,8 @@ index 52e5d0f..92a7e29 100644
 +static bool g_trace = false;
 +static int g_rank_cut = 0;          /* ENIGMA_RANK_CUT */
 +static bool g_gate_on = false;      /* ENIGMA_CAP_GATE */
-+static double g_gate = 0.0;   /* ENIGMA_TRACE: per-move climb trace, -T 1 */
++static double g_gate = 0.0;
++static bool g_gate_repair = false;  /* ENIGMA_GATE_KEEP_REPAIR */   /* ENIGMA_TRACE: per-move climb trace, -T 1 */
 +void climb_knobs_init();
 +void climb_knobs_init()
 +{
@@ -65,12 +66,15 @@ index 52e5d0f..92a7e29 100644
 +      g_gate_on = true;
 +      g_gate = parse_opt_double(v, "$ENIGMA_CAP_GATE");
 +    }
++  v = getenv("ENIGMA_GATE_KEEP_REPAIR");
++  if ((v != nullptr) && (*v != 0))
++    g_gate_repair = (parse_opt_int(v, "$ENIGMA_GATE_KEEP_REPAIR") != 0);
 +}
 +
  /* --- Circular first-improvement climb (-J) ------------------------------------
  
     Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
-@@ -794,15 +830,11 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+@@ -794,15 +834,11 @@ static void firstimprove_sweep(machine & m, int max_pairs)
       recommendation, not a change of default behaviour. */
    const bool ic_order = dyn_order && ! hist_on && (opt_ic_order != 0);
    int visit[nmoves];
@@ -91,7 +95,7 @@ index 52e5d0f..92a7e29 100644
            int n[asize];
            for (int y = 0; y < asize; y++)
              n[y] = 0;
-@@ -839,6 +871,21 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+@@ -839,6 +875,21 @@ static void firstimprove_sweep(machine & m, int max_pairs)
                   per move. Higher is better, as for the target-model score. */
                sc[mv] = static_cast<double>(coin);
              }
@@ -113,7 +117,7 @@ index 52e5d0f..92a7e29 100644
          }
        else
          for (int mv = 0; mv < nmoves; mv++)
-@@ -850,28 +897,77 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+@@ -850,28 +901,77 @@ static void firstimprove_sweep(machine & m, int max_pairs)
              sc[mv] = s;
              visit[mv] = mv;
            }
@@ -199,7 +203,7 @@ index 52e5d0f..92a7e29 100644
  
        bool improved = false;
  
-@@ -926,15 +1022,33 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+@@ -926,15 +1026,33 @@ static void firstimprove_sweep(machine & m, int max_pairs)
        if (improved)
          {
            stale = 0;
@@ -234,7 +238,7 @@ index 52e5d0f..92a7e29 100644
  }
  
  /* Climb the steckerbrett for the current scoring model until no move improves it,
-@@ -1126,7 +1240,12 @@ double hillclimb(machine & m, int max_pairs)
+@@ -1126,7 +1244,13 @@ double hillclimb(machine & m, int max_pairs)
  
        /* Cheap moves converged: one last-resort re-pair barrier cross. If it
           improves, loop back and let the cheap climb resume from the new board. */
@@ -242,13 +246,14 @@ index 52e5d0f..92a7e29 100644
 +      if (g_trace && ! hist_on && firstimp)
 +        fprintf(stderr, "RQ %.6f\n", cur);
 +      /* ENIGMA_CAP_GATE also skips the re-pair for a climb below the gate */
-+      const bool gated_out = g_gate_on && ! hist_on && firstimp
++      const bool gated_out = g_gate_on && ! g_gate_repair && ! hist_on
++                             && firstimp
 +                             && (g_stale_cap > 0) && (cur < g_gate);
 +      if ((! opt_no_repair && ! gated_out && try_repair<EX>(m, cur))
            || (opt_cascade && gain_cascade<EX>(m, cur))
            || (opt_cascade3 && gain_cascade_3ply<EX>(m, cur, max_pairs)))
          progress = true;
-@@ -1135,6 +1254,8 @@ double hillclimb(machine & m, int max_pairs)
+@@ -1135,6 +1259,8 @@ double hillclimb(machine & m, int max_pairs)
  
    decode(m);
  
