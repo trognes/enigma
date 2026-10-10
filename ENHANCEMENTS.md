@@ -3453,8 +3453,35 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
     `-R` 21 / 23 / 24 — it reads **+1.19 / +2.84 / +4.28**, against the
     plain cap's +0.30 / +2.61 / +3.40 on another seed. Not a paired
     comparison, so not shown better than the plain cap.
-  - **Untested: gating the cap alone and keeping the repair**, which is
-    what the trace actually priced.
+  - **Gating the cap ALONE, keeping the repair, is the first stop rule that
+    beats the plain cap head to head** (`ENIGMA_GATE_KEEP_REPAIR=1`;
+    `eval/results-gatecap.txt`, seed 101, 3000 paired trials per length).
+    It costs 0.77–0.86 of a restart on wrong keys against the plain cap's
+    0.75–0.83 (`eval/results-gatecap-wrongkey.txt`), so both get the same
+    sweep-matched `-R` 19 / 19 / 21, and on the same trials:
+
+    | L | gate vs baseline | plain cap vs baseline | gate vs plain cap |
+    |---:|---:|---:|---:|
+    | 80 | +21, z = +1.89 | −1, z = −0.08 | 41 / 19, **z = +2.84** |
+    | 107 | +34, z = +2.98 | −7, z = −0.50 | 62 / 21, **z = +4.50** |
+    | 167 | +42, z = +4.64 | +16, z = +1.50 | 38 / 12, **z = +3.68** |
+
+    Breaks of 3000; ~+0.7 / +1.1 / +1.4pp over the baseline. The gate
+    keeps the full convergence check for the climbs that could win and
+    halves the cap's loss per restart (z −2.7 to −4.1 at the same `-R 16`
+    against −4.7 to −5.6), at nearly the same wrong-key saving.
+  - **The plain cap read weaker here than in (c)** — −0.08 / −0.50 / +1.50
+    against +0.30 / +2.61 / +3.40 — because its wrong-key cost measured
+    0.825 / 0.834 this time and so bought `-R 19` rather than 20 at the two
+    short lengths. Its result is sensitive to a restart or two of matching;
+    the gate's lead over it is not, since it holds at the same `-R` too.
+  - **What a build would still need: a rule for the gate.** The values
+    here (−9.774 / −9.982 / −9.999 per letter) were read off a trace on
+    other messages for `-f -l wehrmacht` with the shipped λ; they depend on
+    the model, the language and the length. Setting it from the run itself
+    — e.g. the 90% point of the first restart pass's scores at the cap,
+    after the pass barrier so it stays `-T`-independent — is the obvious
+    shape and is untested.
 
 ## Maintainability and packaging
 
