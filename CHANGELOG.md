@@ -30,11 +30,12 @@ existing command lines can behave differently or stop working.
   climbs. A wrong key's climb only has to finish well enough to show it is
   losing; the true key's climbs that are heading for a break sit above the
   gate and keep the full convergence check. At `N = 200` a restart costs
-  0.77–0.86 of a plain one on wrong keys, and at the restart count that buys
-  it breaks +0.7 / +1.1 / +1.4pp more messages at 80 / 107 / 167 letters —
-  ahead of an ungated cap of the same size on the same trials at every
-  length (z = +2.84 / +4.50 / +3.68). Measured with the rotor key given and
-  fixed gates; `ENHANCEMENTS.md` item 24. Off by default.
+  0.77–0.85 of a plain one on wrong keys, and at the restart count that buys
+  it breaks +1.0 / +1.4 / +0.8pp more messages at 80 / 107 / 167 letters
+  (z = +2.80 / +3.25 / +2.75, 3000 paired trials each, rotor key given). It
+  also beats an ungated cap of the same size head to head on the same trials
+  at every length (z = +2.84 / +4.50 / +3.68). `ENHANCEMENTS.md` item 24.
+  Off by default.
 
 ### Changed
 

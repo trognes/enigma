@@ -897,6 +897,13 @@ are read from a **data directory** (filenames built as
     below the fixed gates (medians −9.80 / −10.01 / −10.03 against −9.77 /
     −9.98 / −10.00), the conservative side. `$ENIGMA_CAP_GATE` pins it,
     `$ENIGMA_GATE_Q` / `$ENIGMA_GATE_SAMPLES` move it.
+  - **The calibrated gate is CONFIRMED end to end** on a plain build
+    (`eval/results-gated-cap-confirm.txt`, seed 127, 3000 paired trials per
+    length): a restart costs 0.83 / 0.85 / 0.77 of a plain one on wrong keys,
+    and at the `-R` 19 / 19 / 21 that buys, `--gated-cap 200` breaks **+31 /
+    +43 / +24** messages of 3000 more than no cap — **z = +2.80 / +3.25 /
+    +2.75**, ~+1.0 / +1.4 / +0.8pp. At the same `-R 16` it loses −1.07 /
+    −3.88 / −2.65, about half the ungated cap's per-restart loss.
   - **`try_repair` is deliberately NOT gated.** A variant that also skipped
     the re-pair below the gate lost more per restart than the plain cap: the
     re-pair is what rescues a true-key climb sitting low at convergence

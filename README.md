@@ -581,13 +581,13 @@ thread count for a given seed.
   256 sampled wrong-key climbs (the 90th percentile of their scores at that
   point). Wrong keys get a cheaper climb; the true key's climbs that are
   heading for a break sit above the gate and keep the full convergence check.
-  With `N = 200`, a restart costs 0.77–0.86 of a plain one on wrong keys, and
-  at the restart count that saving buys it breaks **+0.7 / +1.1 / +1.4pp**
-  more messages at 80 / 107 / 167 letters, beating an ungated cap of the same
-  size on the same trials (measured with the rotor key given and fixed
-  gates; telegraphic German). Needs `-c` and `-K` or `-J`; does nothing when
-  the target stage is IC, mono or mono+IC. Try `200`. Off by default
-  `[0 = off]`.
+  With `N = 200`, a restart costs 0.77–0.85 of a plain one on wrong keys, and
+  at the restart count that saving buys it breaks **+1.0 / +1.4 / +0.8pp**
+  more messages at 80 / 107 / 167 letters (z = +2.80 / +3.25 / +2.75; rotor
+  key given, telegraphic German). It also beats an ungated cap of the same
+  size head to head on the same trials. Needs `-c` and `-K` or `-J`; does
+  nothing when the target stage is IC, mono or mono+IC. Try `200`. Off by
+  default `[0 = off]`.
 - **`-p file`** — Compare the recovered plaintext against a known plaintext file
 - **`-v` / `-h`** — Version / help
 
