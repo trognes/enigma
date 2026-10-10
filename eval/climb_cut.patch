@@ -1,0 +1,131 @@
+diff --git a/src/main.cc b/src/main.cc
+index 412fbb3..fbe2dd0 100644
+--- a/src/main.cc
++++ b/src/main.cc
+@@ -65,6 +65,8 @@
+ #include "text.h"
+ #include "wiring.h"
+ 
++void climb_knobs_init();
++
+ /* The run, once args.cc has resolved the command line: read the ciphertext,
+    build what depends on it, sweep, and report. */
+ int main(int argc, char * * argv)
+@@ -90,6 +92,7 @@ int main(int argc, char * * argv)
+   parse_args(argc, argv);
+ 
+   hist_init();
++  climb_knobs_init();
+   readciphertext();
+   /* AFTER readciphertext, because wehrmacht's -f lambda is 0.25*L and so
+      needs the length.  Before intscore_init, which bakes that lambda
+diff --git a/src/plugboard.cc b/src/plugboard.cc
+index 52e5d0f..ddb7fae 100644
+--- a/src/plugboard.cc
++++ b/src/plugboard.cc
+@@ -622,6 +622,21 @@ static pairtab make_pairtab()
+   return t;
+ }
+ 
++/* MEASUREMENT KNOBS -- eval/climb_cut.patch, NOT FOR MERGING. Both off by
++   default, read once from main() before any thread starts. */
++static int g_stale_cap = 0;
++static bool g_rerank = false;
++void climb_knobs_init();
++void climb_knobs_init()
++{
++  const char * v = getenv("ENIGMA_STALE_CAP");
++  if ((v != nullptr) && (*v != 0))
++    g_stale_cap = parse_opt_int(v, "$ENIGMA_STALE_CAP");
++  v = getenv("ENIGMA_RERANK");
++  if ((v != nullptr) && (*v != 0))
++    g_rerank = (parse_opt_int(v, "$ENIGMA_RERANK") != 0);
++}
++
+ /* --- Circular first-improvement climb (-J) ------------------------------------
+ 
+    Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
+@@ -794,15 +809,11 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+      recommendation, not a change of default behaviour. */
+   const bool ic_order = dyn_order && ! hist_on && (opt_ic_order != 0);
+   int visit[nmoves];
+-  if (dyn_order)
+-    {
+-      double sc[nmoves];
+-      if (ic_order)
+-        {
+-          /* T depends on (rows, ciphertext) and not on the board, so one
+-             build serves all 325 probes. Not built for this model otherwise
+-             -- hillclimb() only calls cooc_build when hist_on. */
+-          cooc_build(m);
++  double sc[nmoves];
++  /* IC ranking of all moves against the CURRENT board; ENIGMA_RERANK
++     reruns it after each accepted move (eval/climb_cut.patch). */
++  auto ic_rank = [&]()
++  {
+           int n[asize];
+           for (int y = 0; y < asize; y++)
+             n[y] = 0;
+@@ -839,6 +850,21 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+                  per move. Higher is better, as for the target-model score. */
+               sc[mv] = static_cast<double>(coin);
+             }
++  };
++  auto sort_visit = [&]()
++  {
++    std::sort(visit, visit + nmoves, [&](int i, int j)
++    {
++      if (sc[i] != sc[j]) return sc[i] > sc[j];
++      return i < j;
++    });
++  };
++  if (dyn_order)
++    {
++      if (ic_order)
++        {
++          cooc_build(m);
++          ic_rank();
+         }
+       else
+         for (int mv = 0; mv < nmoves; mv++)
+@@ -850,19 +876,19 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+             sc[mv] = s;
+             visit[mv] = mv;
+           }
+-      std::sort(visit, visit + nmoves, [&](int i, int j)
+-      {
+-        if (sc[i] != sc[j]) return sc[i] > sc[j];   /* best score first */
+-        return i < j;                               /* deterministic tie-break */
+-      });
++      sort_visit();
+     }
+   else
+     for (int i = 0; i < nmoves; i++)
+       visit[i] = i;
+ 
++  /* ENIGMA_STALE_CAP (eval/climb_cut.patch): end a TARGET-stage sweep after
++     that many consecutive non-improving moves instead of a full cycle. */
++  const int stale_limit = (g_stale_cap > 0 && ! hist_on && g_stale_cap < nmoves)
++                          ? g_stale_cap : nmoves;
+   int cursor = 0;
+   int stale = 0;
+-  while (stale < nmoves)
++  while (stale < stale_limit)
+     {
+       int mv = visit[cursor];
+       cursor++;
+@@ -931,6 +957,14 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+           for (int j = 0; j < asize; j++)
+             if (steck[j] > j)
+               pairs++;
++          if (ic_order && g_rerank)
++            {
++              for (int i = 0; i < nmoves; i++)
++                visit[i] = i;
++              ic_rank();
++              sort_visit();
++              cursor = 0;
++            }
+         }
+       else
+         stale++;

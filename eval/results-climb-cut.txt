@@ -1,0 +1,35 @@
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; baseline -R 16; break50 counts
+
+L=80  n=1000  base breaks 275 (27.5%)
+  wall time per restart vs base: cap100 0.697, cap200 0.891, rerank 1.992
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16     275         0          0  +0.00    219   33.7
+  cap100@R         16     248        28         55  -2.96    189   30.7
+  cap100@time      23     267        47         55  -0.79    206   32.6
+  cap200@R         16     256         9         28  -3.12    207   32.0
+  cap200@time      18     261        17         31  -2.02    212   32.7
+  rerank@R         16     276        57         56  +0.09    214   34.0
+  rerank@time       8     213        42        104  -5.13    166   28.3
+
+L=107  n=1000  base breaks 535 (53.5%)
+  wall time per restart vs base: cap100 0.708, cap200 0.820, rerank 1.796
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16     535         0          0  +0.00    485   57.3
+  cap100@R         16     502        23         56  -3.71    454   54.4
+  cap100@time      23     542        55         48  +0.69    488   57.9
+  cap200@R         16     511        13         37  -3.39    464   55.1
+  cap200@time      20     537        36         34  +0.24    489   57.6
+  rerank@R         16     541        67         61  +0.53    483   57.9
+  rerank@time       9     481        52        106  -4.30    431   52.3
+
+L=167  n=1000  base breaks 915 (91.5%)
+  wall time per restart vs base: cap100 0.636, cap200 0.738, rerank 1.540
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16     915         0          0  +0.00    898   92.0
+  cap100@R         16     911        10         14  -0.82    894   91.7
+  cap100@time      25     926        24         13  +1.81    909   93.2
+  cap200@R         16     911         7         11  -0.94    894   91.7
+  cap200@time      22     928        21          8  +2.41    912   93.4
+  rerank@R         16     907        18         26  -1.21    891   91.6
+  rerank@time      10     856        16         75  -6.18    841   87.1
+

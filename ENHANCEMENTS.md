@@ -3312,15 +3312,15 @@ climbed deeper also raise the best wrong key's score. Breaks of 60:
   signal either, which matches item 2b's finding that below `-R 100` the
   truth is not outscored but not reached.
 
-**24. Where a restart's probes go — COUNTED; nearly half the expensive ones
-only certify that the climb has converged.** A probe is one scoring of one
-candidate plugboard move. In the target stage (`f10` of `-S k4f10`) each is a
-full decode of the message; in the `k4` pre-pass it is an O(26) histogram
-update, roughly ten times cheaper. So the target stage is where a restart's
-time goes. Counted with an instrumented build (`eval/probe_count.patch`,
-`eval/probe_count.py`, `eval/results-probe-count.txt`; 4 fixtures per length,
-676 wrong keys at `-R 2` plus the true key at `-R 100`), target stage under the
-recommended `-K`:
+**24. Where a restart's probes go — COUNTED; nearly half the expensive ones only
+certify that the climb has converged, and cutting them does not pay.** A probe
+is one scoring of one candidate plugboard move. In the target stage (`f10` of
+`-S k4f10`) each is a full decode of the message; in the `k4` pre-pass it is an
+O(26) histogram update, roughly ten times cheaper. So the target stage is where
+a restart's time goes. Counted with an instrumented build
+(`eval/probe_count.patch`, `eval/probe_count.py`,
+`eval/results-probe-count.txt`; 4 fixtures per length, 676 wrong keys at `-R 2`
+plus the true key at `-R 100`), target stage under the recommended `-K`:
 
 | per sweep | L = 80 | L = 107 | L = 167 | share |
 |---|---:|---:|---:|---:|
@@ -3351,8 +3351,32 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
   walks circularly; re-ranking costs ~325 O(26) updates per acceptance and
   targets the live probes (~42%) rather than the tail, keeping the exact
   certificate. Untested.
-- **Neither is built.** The count bounds them: (a) can save at most about a
-  third of a restart's decoding, (b) at most a share of the live ~42%.
+- **Both were then MEASURED, and neither pays** (`eval/climb_cut.patch`,
+  `eval/climb_cut_ab.py`, `eval/results-climb-cut.txt`: 1000 paired trials
+  per length, rotor key given, baseline `-R 16`, each arm also run at the
+  restart count its measured cost buys). McNemar z against the baseline's
+  275 / 535 / 915 breaks of 1000 at L = 80 / 107 / 167:
+
+  | arm | cost/restart | same R, L = 80 / 107 / 167 | matched time |
+  |---|---:|---|---|
+  | cap 100 | 0.64–0.71 | −2.96 / −3.71 / −0.82 | −0.79 / +0.69 / +1.81 |
+  | cap 200 | 0.74–0.89 | −3.12 / −3.39 / −0.94 | −2.02 / +0.24 / +2.41 |
+  | re-rank | 1.54–1.99 | +0.09 / +0.53 / −1.21 | −5.13 / −4.30 / −6.18 |
+
+- **Re-ranking is measured down.** Each restart is as good as before and
+  costs 1.5–2× as much: re-scoring 325 moves after each of the ~7 accepted
+  moves costs about what the decodes it could save do.
+- **The cap is a wash.** It costs quality per restart at the short lengths,
+  and the ~30% cheaper restart buys about that back. The sign follows length
+  (behind at 80, level at 107, ahead at 167), and the one matched-time cell
+  past z = 2 — cap 200 at L = 167, +13 of 1000 on a 91.5% base — is one of
+  six on one seed. This file records single-seed cells past |z| = 3 that did
+  not replicate, so it is not built; a held-out seed at L = 167 is what
+  would settle it, and the most it could buy is ~1pp where the baseline
+  already breaks 91%.
+- **So the certificate stays.** There is no cheap restart hiding in the
+  climb's probe budget: the probes a restart spends confirming convergence
+  are, at matched compute, worth about what they cost.
 
 ## Maintainability and packaging
 
