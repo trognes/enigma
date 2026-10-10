@@ -97,7 +97,9 @@ ARMS = {"base": {},
         "rank250": {"ENIGMA_RANK_CUT": "250"},
         "gated": {"ENIGMA_STALE_CAP": "200", "ENIGMA_CAP_GATE": "{gate}"},
         "gatecap": {"ENIGMA_STALE_CAP": "200", "ENIGMA_CAP_GATE": "{gate}",
-                    "ENIGMA_GATE_KEEP_REPAIR": "1"}}
+                    "ENIGMA_GATE_KEEP_REPAIR": "1"},
+        # The shipped option, its gate calibrated per run (no patch needed).
+        "gatedcap": {"_ARGS": "--gated-cap 200"}}
 GATES = {}   # length -> score gate for the "gated" arm, from --gate
 
 
@@ -119,6 +121,10 @@ def decrypts(path):
 def run(binary, env_extra, args, text):
     env = dict(os.environ, **env_extra)
     env.pop("ENIGMA_SEED", None)
+    # An arm may carry command-line options too, under the pseudo-variable
+    # _ARGS, so a shipped option can be A/B'd beside the patch's switches.
+    extra = env.pop("_ARGS", "").split()
+    args = args + extra
     p = subprocess.run([binary] + args, input=text, capture_output=True,
                        text=True, check=False, env=env)
     return p.stdout.strip()
