@@ -3312,6 +3312,48 @@ climbed deeper also raise the best wrong key's score. Breaks of 60:
   signal either, which matches item 2b's finding that below `-R 100` the
   truth is not outscored but not reached.
 
+**24. Where a restart's probes go — COUNTED; nearly half the expensive ones
+only certify that the climb has converged.** A probe is one scoring of one
+candidate plugboard move. In the target stage (`f10` of `-S k4f10`) each is a
+full decode of the message; in the `k4` pre-pass it is an O(26) histogram
+update, roughly ten times cheaper. So the target stage is where a restart's
+time goes. Counted with an instrumented build (`eval/probe_count.patch`,
+`eval/probe_count.py`, `eval/results-probe-count.txt`; 4 fixtures per length,
+676 wrong keys at `-R 2` plus the true key at `-R 100`), target stage under the
+recommended `-K`:
+
+| per sweep | L = 80 | L = 107 | L = 167 | share |
+|---|---:|---:|---:|---:|
+| live: up to the last accepted move | 300 | 287 | 275 | 41–43% |
+| **tail: after it, certifying** | 315 | 316 | 315 | **45–47%** |
+| `try_repair` at convergence | 83 | 82 | 82 | 12% |
+| IC ordering, O(26), no decode | 323 | 323 | 323 | — |
+
+About 1.2 sweeps per restart (one, plus one more after each successful
+re-pair), so ~840 decoding probes per restart, with 7–8 moves accepted per
+sweep. Wrong keys and the true key give the same split, at every length.
+Under `-J` the ordering scan is itself ~324 decodes per sweep and the target
+stage does 1.29× as many decoding probes as under `-K` (5.78M against 4.49M
+at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
+
+- **The tail is the convergence certificate, and nothing found removes it
+  exactly.** Proving that no single move improves takes one full pass over
+  the 325 moves on the final board. Only approximations remain, and both
+  change the climb's path, so both need a `break50` A/B at matched wall time:
+- **(a) Cap the failed-probe run at `k`.** What a cap would forfeit is
+  measured: of the moves accepted in the target stage, **12.3% arrived after
+  100 or more consecutive failures and ~6% after 200 or more** (the same at
+  all three lengths). Out of ~685 decoding probes per sweep, a cap at 100
+  would save up to ~215 (~31%) and a cap at 200 ~115 (~17%), before counting
+  the later moves it also prevents.
+- **(b) Re-rank the remaining moves after each accepted one.** Under `-K` the
+  IC order is computed once at the start of the climb and the cursor then
+  walks circularly; re-ranking costs ~325 O(26) updates per acceptance and
+  targets the live probes (~42%) rather than the tail, keeping the exact
+  certificate. Untested.
+- **Neither is built.** The count bounds them: (a) can save at most about a
+  third of a restart's decoding, (b) at most a share of the live ~42%.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
