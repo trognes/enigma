@@ -1,0 +1,177 @@
+diff --git a/src/main.cc b/src/main.cc
+index 412fbb3..26da8a4 100644
+--- a/src/main.cc
++++ b/src/main.cc
+@@ -65,6 +65,8 @@
+ #include "text.h"
+ #include "wiring.h"
+ 
++void probe_count_report();
++
+ /* The run, once args.cc has resolved the command line: read the ciphertext,
+    build what depends on it, sweep, and report. */
+ int main(int argc, char * * argv)
+@@ -195,6 +197,7 @@ int main(int argc, char * * argv)
+ #endif
+     }
+ #endif
++  probe_count_report();
+   fprintf(stderr,
+           "Analysed %zu rotor combination%s, scored %llu plugboard%s\n",
+           g_keys_analysed, (g_keys_analysed == 1) ? "" : "s",
+diff --git a/src/plugboard.cc b/src/plugboard.cc
+index 52e5d0f..7285c3b 100644
+--- a/src/plugboard.cc
++++ b/src/plugboard.cc
+@@ -1,5 +1,7 @@
+ #include "plugboard.h"
+ 
++#include <stdio.h>
++
+ #include "common.h"
+ #include "machine.h"
+ #include "options.h"
+@@ -204,6 +206,42 @@ static inline void commit_toggle(machine & m, const int * pos, const int * val,
+    moves cannot. It is run only once the cheap swap/remove moves have converged -- a
+    handful of times per climb, not every pass -- so its O(plugs^2) cost is small.
+    Applies and returns true iff the single best re-pair strictly beats cur_score. */
++/* PROBE COUNT INSTRUMENTATION (eval/probe_count.patch, not for merging).
++   [stage][cat]: stage 0 = histogram pre-pass, 1 = target model.
++   cat 0 = -J ordering scan, 1 = sweep probes up to the last accepted move,
++   2 = sweep probes after it (the confirming tail), 3 = try_repair,
++   4 = steepest passes that improved, 5 = steepest final pass,
++   6 = -K IC-ordering moves (O(26), not a decode). */
++long g_pc[2][7];
++long g_pc_sweeps[2];
++long g_pc_accept[2];
++long g_pc_repair_hit[2];
++/* stale run (consecutive non-improving moves) at the moment of acceptance */
++static const int pc_gap_edge[] = { 10, 25, 50, 100, 150, 200, 250, 300, 326 };
++long g_pc_gap[2][9];
++void probe_count_report();
++void probe_count_report()
++{
++  static const char * const nm[7] = { "order scan", "sweep live", "sweep tail",
++                                      "try_repair", "steep live", "steep tail",
++                                      "IC order" };
++  for (int st = 0; st < 2; st++)
++    {
++      long tot = 0;
++      for (int c = 0; c < 6; c++)
++        tot += g_pc[st][c];
++      fprintf(stderr, "PROBES stage=%s sweeps=%ld accepted=%ld "
++              "repair_hits=%ld total=%ld\n", st ? "target" : "prepass",
++              g_pc_sweeps[st], g_pc_accept[st], g_pc_repair_hit[st], tot);
++      for (int c = 0; c < 7; c++)
++        fprintf(stderr, "PROBES   %-11s %10ld  %5.1f%%\n", nm[c], g_pc[st][c],
++                (c < 6 && tot) ? 100.0 * g_pc[st][c] / tot : 0.0);
++      for (int k = 0; k < 9; k++)
++        fprintf(stderr, "GAP stage=%s below=%d %ld\n", st ? "target" : "prepass",
++                pc_gap_edge[k], g_pc_gap[st][k]);
++    }
++}
++
+ template<bool EX>
+ static bool try_repair(machine & m, double cur_score)
+ {
+@@ -264,6 +302,7 @@ static bool try_repair(machine & m, double cur_score)
+             m.steckerbrett[a] = x; m.steckerbrett[x] = a;
+             m.steckerbrett[b] = y; m.steckerbrett[y] = b;
+           }
++        g_pc[hist_on ? 0 : 1][3] += 2;
+ 
+         if (s1 > best)
+           {
+@@ -281,6 +320,7 @@ static bool try_repair(machine & m, double cur_score)
+ 
+   if (found)
+     {
++      g_pc_repair_hit[hist_on ? 0 : 1]++;
+       for (int k = 0; k < 4; k++)
+         m.steckerbrett[rp_pos[k]] = static_cast<unsigned char>(rp_val[k]);
+       report_climb_progress(m, echo_score(m, best));
+@@ -657,6 +697,9 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+     hist_resync(m);
+ 
+   double cur = score_iter(m);
++  const int pc_st = hist_on ? 0 : 1;
++  long pc_n = 0, pc_last = 0;
++  g_pc_sweeps[pc_st]++;
+ 
+   int pairs = 0;
+   for (int j = 0; j < asize; j++)
+@@ -838,6 +881,7 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+                  raw coincidence count orders identically and avoids a divide
+                  per move. Higher is better, as for the target-model score. */
+               sc[mv] = static_cast<double>(coin);
++              g_pc[pc_st][6]++;
+             }
+         }
+       else
+@@ -846,7 +890,10 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+             int a = P.a[mv], b = P.b[mv];
+             double s = -1e300;   /* invalid moves sort last */
+             if (! (pf[a] || pf[b]) && ! cap_blocks(a, b))
+-              s = probe_toggle(a, b);
++              {
++                s = probe_toggle(a, b);
++                g_pc[pc_st][0]++;
++              }
+             sc[mv] = s;
+             visit[mv] = mv;
+           }
+@@ -923,8 +970,17 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+             }
+         }
+ 
++      pc_n++;
+       if (improved)
+         {
++          pc_last = pc_n;
++          g_pc_accept[pc_st]++;
++          {
++            int k = 0;
++            while (stale >= pc_gap_edge[k])
++              k++;
++            g_pc_gap[pc_st][k]++;
++          }
+           stale = 0;
+           report_climb_progress(m, echo_score(m, cur));
+           pairs = 0;   /* recompute the plug count (only on acceptance, ~cheap) */
+@@ -935,6 +991,8 @@ static void firstimprove_sweep(machine & m, int max_pairs)
+       else
+         stale++;
+     }
++  g_pc[pc_st][1] += pc_last;
++  g_pc[pc_st][2] += pc_n - pc_last;
+ }
+ 
+ /* Climb the steckerbrett for the current scoring model until no move improves it,
+@@ -998,6 +1056,7 @@ double hillclimb(machine & m, int max_pairs)
+                   pairs++;
+ 
+               double move_score = best_score;
++              long pc_pass = 0;
+               int move_kind = 0;        /* 0 = switch, 1 = remove */
+               int move_a = 0;
+               int move_b = 0;
+@@ -1086,6 +1145,7 @@ double hillclimb(machine & m, int max_pairs)
+                           }
+                       }
+ 
++                    pc_pass++;
+                     /* steepest ascent; on an equal score a switch (add/move/merge) wins the tie
+                        over a removal, so a converged board keeps the plugs the score justifies. */
+                     if ((score > move_score) ||
+@@ -1099,8 +1159,11 @@ double hillclimb(machine & m, int max_pairs)
+                       }
+                   }
+ 
++              g_pc[hist_on ? 0 : 1][(move_score - best_score > 0) ? 4 : 5]
++                += pc_pass;
+               if (move_score - best_score > 0)
+                 {
++                  g_pc_accept[hist_on ? 0 : 1]++;
+                   int a = move_a;
+                   int b = move_b;
+ 
