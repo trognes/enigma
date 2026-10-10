@@ -85,7 +85,8 @@ RECIPE = ["-c", "-S", "k4f10", "-K", "--polish", "-l", "wehrmacht",
 ARMS = {"base": {},
         "cap100": {"ENIGMA_STALE_CAP": "100"},
         "cap200": {"ENIGMA_STALE_CAP": "200"},
-        "rerank": {"ENIGMA_RERANK": "1"}}
+        "rerank": {"ENIGMA_RERANK": "1"},
+        "dontlook": {"ENIGMA_DONTLOOK": "1"}}
 
 
 def decrypts(path):
