@@ -59,6 +59,7 @@ extern int opt_intscore;
 extern int opt_restarts;
 extern int opt_perturb;
 extern double opt_biased_random;
+extern int opt_gated_cap;
 extern bool opt_random_set;
 extern int opt_exhaust;
 extern int opt_anneal;

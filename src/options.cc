@@ -383,6 +383,11 @@ int opt_perturb;    /* --random K: random plug pairs injected per restart, 0..13
    than the middle -- see eval/results-weighted-kick.txt. */
 double opt_biased_random;
 
+/* --gated-cap N: end a target-stage first-improvement sweep after N failed
+   probes in a row, but only while the climb scores below a gate set from
+   sampled wrong-key climbs (0 = off). See g_gated_cap in plugboard.cc. */
+int opt_gated_cap;
+
 bool opt_random_set;             /* was --random passed explicitly? (errors without -c) */
 int opt_exhaust;    /* --exhaust E: partial plugboard exhaustion -- force E extra plug
                               pairs among the free letters (on top of any -s pairs), trying

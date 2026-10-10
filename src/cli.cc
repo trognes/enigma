@@ -291,6 +291,15 @@ fprintf(out, "  %-24s %s\n", "--crib-rerank F",
           "to ~+3% at -R 6..10. At -R 1 prefer -R 0 (no kick");
   fprintf(out, "  %-24s %s\n", "",
           "at all) -- it breaks more. Try T=1. [0 = off]");
+  fprintf(out, "  %-24s %s\n", "--gated-cap N",
+          "End a climb's sweep after N failed probes in a");
+  fprintf(out, "  %-24s %s\n", "",
+          "row while it scores below a gate set from sampled");
+  fprintf(out, "  %-24s %s\n", "",
+          "wrong-key climbs. Cheaper restarts that lose little");
+  fprintf(out, "  %-24s %s\n", "",
+          "on the true key; try 200 (needs -c and -K or -J)");
+  fprintf(out, "  %-24s %s\n", "", "[0 = off]");
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");
@@ -509,6 +518,11 @@ void show_settings()
       fprintf(stderr, "            partial exhaustion: %d forced pair(s) on top of %d "
               "-s pair(s) (%.0f combinations)\n", opt_exhaust, fixed_pairs, combos);
     }
+  /* The gate itself is printed once it is calibrated, just before the
+     sweep: it is measured on this ciphertext, so it is not known here. */
+  if (opt_hillclimb && (opt_gated_cap > 0))
+    fprintf(stderr, "            gated cap: %d failed probes, below a "
+            "sampled gate\n", opt_gated_cap);
   if (opt_hillclimb && opt_capmerge)
     fprintf(stderr, "            cap as strict descent target (merge/remove only at cap)\n");
   if (opt_hillclimb && opt_no_repair)

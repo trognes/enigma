@@ -622,6 +622,50 @@ static pairtab make_pairtab()
   return t;
 }
 
+/* --- --gated-cap N --------------------------------------------------------------
+
+   End a TARGET-stage first-improvement sweep after N consecutive failed probes,
+   but only while the climb scores below g_cap_gate; a climb at or above it keeps
+   the full convergence check. Both are set once, before the workers start, and
+   read-only afterwards: g_gated_cap from the option, g_cap_gate by
+   calibrate_cap_gate() in search.cc from sampled wrong-key climbs.
+
+   WHY GATED. The convergence check after a sweep's last accepted move is ~46% of
+   the target stage's decoding probes (eval/results-probe-count.txt), and a plain
+   cap saves ~20% of a restart -- on every climb, including the true key's, where
+   the moves it forfeits are the ones that finish a break. A wrong key's climb
+   only has to finish well enough to show it is losing. The gate tells the two
+   apart: at the 90th percentile of wrong-key scores at the cap, ~95% of the
+   true key's winning climbs sit above it and keep the full check
+   (eval/results-stop-rules.txt). Measured head to head against the plain cap on
+   the same trials and the same sweep-matched -R: z = +2.84 / +4.50 / +3.68 at
+   L = 80 / 107 / 167 (eval/results-gatecap.txt).
+
+   try_repair is NOT gated, and that is load-bearing: a gate that also skipped it
+   below the threshold lost MORE per restart than the plain cap, because the
+   re-pair is what rescues a true-key climb sitting low at convergence
+   (eval/results-stop-gate.txt).
+
+   The recording hooks are for the calibration only, which runs single-threaded
+   before the sweep, so they need no synchronisation. */
+int g_gated_cap = 0;
+double g_cap_gate = HUGE_VAL;     /* +inf: the cap applies to every climb */
+static bool g_cap_recording = false;
+static bool g_cap_have = false;
+static double g_cap_point = 0.0;
+
+void cap_record_begin()
+{
+  g_cap_recording = true;
+  g_cap_have = false;
+}
+bool cap_record_end(double & score)
+{
+  g_cap_recording = false;
+  score = g_cap_point;
+  return g_cap_have;
+}
+
 /* --- Circular first-improvement climb (-J) ------------------------------------
 
    Steepest ascent full-scans all 325 toggle moves per accepted move and applies the single
@@ -860,9 +904,16 @@ static void firstimprove_sweep(machine & m, int max_pairs)
     for (int i = 0; i < nmoves; i++)
       visit[i] = i;
 
+  /* --gated-cap: the stale limit while below the gate. Off, it is nmoves and
+     the loop is the plain full-cycle convergence test. Hoisted, so the
+     per-probe test reads locals rather than reloading globals the score
+     calls could in principle have touched. */
+  const int stale_cap = ((g_gated_cap > 0) && ! hist_on
+                         && (g_gated_cap < nmoves)) ? g_gated_cap : nmoves;
+  const double gate = g_cap_gate;
   int cursor = 0;
   int stale = 0;
-  while (stale < nmoves)
+  while (stale < ((cur < gate) ? stale_cap : nmoves))
     {
       int mv = visit[cursor];
       cursor++;
@@ -934,6 +985,12 @@ static void firstimprove_sweep(machine & m, int max_pairs)
         }
       else
         stale++;
+    }
+  /* The calibration records the score where the cap first ENDED a sweep. */
+  if (g_cap_recording && ! g_cap_have && (stale < nmoves))
+    {
+      g_cap_have = true;
+      g_cap_point = cur;
     }
 }
 

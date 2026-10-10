@@ -3482,6 +3482,18 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
     — e.g. the 90% point of the first restart pass's scores at the cap,
     after the pass barrier so it stays `-T`-independent — is the obvious
     shape and is untested.
+  - **BUILT as `--gated-cap N`, with the gate calibrated per run** — but
+    not from the first restart pass, which fails exactly where the plugboard
+    tier lives: with the rotor key given the pass holds only true-key climbs,
+    and a gate at their 90th percentile would cap most of them. Instead 256
+    plain climbs on WRONG keys are sampled before the sweep, from the
+    resolved wheel orders at uniform rings and starts (the precomputed table
+    serves every offset, so this costs no extra table), each capped
+    unconditionally, and the 90th percentile of the score where the cap first
+    ends a sweep becomes the gate. On the corpus it lands ~0.03 below the
+    trace's gates — medians −9.80 / −10.01 / −10.03 over six messages per
+    length — on the conservative side. **The shipped, calibrated gate has not
+    itself been A/B'd**; the measurements above used the fixed gates.
 
 ## Maintainability and packaging
 

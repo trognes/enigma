@@ -190,7 +190,10 @@ static double staged_with_dedup(machine & m, size_t key_index, bool & skipped)
     }
   return s;
 }
-static double hillclimb_one(machine & m, size_t key_index, int restart)
+/* The board a plain climb starts from -- -s pairs, --soft-plug, then the
+   restart's kick -- and the RNG stream the climb continues with. Shared by the
+   sweep's climb and --gated-cap's calibration, so the two start alike. */
+static uint64_t seed_board(machine & m, size_t key_index, int restart)
 {
   init_steckerbrett(m, opt_steckerbrett);
   apply_soft_plug(m);            /* before the kick -- see the opt_soft_plug note */
@@ -211,6 +214,11 @@ static double hillclimb_one(machine & m, size_t key_index, int restart)
           perturb_steckerbrett(m, & rng, opt_perturb);
         }
     }
+  return rng;
+}
+static double hillclimb_one(machine & m, size_t key_index, int restart)
+{
+  uint64_t rng = seed_board(m, key_index, restart);
   double score;
   if (seed_dedup_on())
     {
@@ -267,6 +275,118 @@ double climb_unit(machine & m, size_t key_index, int restart)
   if (opt_self_crib_seeds > 0)
     return unit_report(m, self_crib_unit(m, key_index, restart));
   return hillclimb_one(m, key_index, restart);
+}
+/* --gated-cap: set the gate from sampled wrong-key climbs, once per process.
+
+   The gate is a score: a target-stage sweep that has failed --gated-cap probes
+   in a row ends there only if the climb scores below it. It is placed at the
+   90th percentile of what WRONG keys score at that moment, measured here on
+   this ciphertext, model and length rather than baked in -- the values read off
+   a trace for -f -l wehrmacht were -9.77 / -9.98 / -10.00 at L = 80 / 107 /
+   167, and any other model or language would move them.
+
+   WRONG KEYS FROM THE RESOLVED WHEEL ORDERS, ANY RING AND START. The resolved
+   key space can be a single key -- the plugboard tier, rotor key given -- and a
+   gate calibrated on the true key's own climbs would cap most of them. The
+   precomputed table for a wheel order serves every ring and start (it is
+   indexed by their offsets), so drawing rings and starts uniformly gives wrong
+   keys in every mode without building another table; the one-in-17576 chance
+   of drawing the true key does not move a percentile.
+
+   Each sample is one plain climb from its own kicked board with the cap applied
+   unconditionally (gate +inf), recording the score at which the cap first ends
+   a sweep. Single-threaded and seeded from opt_seed, so -T-independent; at
+   ~0.5 ms a wrong-key climb, the default 256 samples cost ~0.1 s.
+
+   $ENIGMA_CAP_GATE pins the gate instead (the A/Bs in eval/ ran fixed gates);
+   $ENIGMA_GATE_Q and $ENIGMA_GATE_SAMPLES move the percentile and the sample
+   count. Measurement switches, empty meaning unset. */
+static void calibrate_cap_gate(machine & m,
+                               const std::vector<wheel_task> & tasks,
+                               subst_table all)
+{
+  static bool done = false;
+  if (done || (opt_gated_cap <= 0))
+    return;
+  done = true;
+  g_gated_cap = opt_gated_cap;
+
+  const char * v = getenv("ENIGMA_CAP_GATE");
+  if ((v != nullptr) && (*v != 0))
+    {
+      g_cap_gate = parse_opt_double(v, "$ENIGMA_CAP_GATE");
+      fprintf(stderr, "Gated cap: %d failed probes end a sweep scoring below "
+              "%.4f (pinned by $ENIGMA_CAP_GATE)\n", g_gated_cap, g_cap_gate);
+      return;
+    }
+  double q = 0.9;
+  v = getenv("ENIGMA_GATE_Q");
+  if ((v != nullptr) && (*v != 0))
+    q = parse_opt_double(v, "$ENIGMA_GATE_Q");
+  if ((q <= 0.0) || (q >= 1.0))
+    fatal("$ENIGMA_GATE_Q must lie strictly between 0 and 1");
+  int want = 256;
+  v = getenv("ENIGMA_GATE_SAMPLES");
+  if ((v != nullptr) && (*v != 0))
+    want = parse_opt_int(v, "$ENIGMA_GATE_SAMPLES");
+  if (want < 16)
+    fatal("$ENIGMA_GATE_SAMPLES must be at least 16");
+
+  const bool save_report = m.report;
+  const uint64_t save_scored = m.plugboards_scored;
+  m.report = false;              /* the calibration must not echo progress */
+  g_cap_gate = HUGE_VAL;         /* cap every sample, to record where it fires */
+
+  uint64_t rng = 0xd1b54a32d192ed03ULL ^ static_cast<uint64_t>(opt_seed);
+  std::vector<double> xs;
+  xs.reserve(static_cast<size_t>(want));
+  for (int i = 0; i < want; i++)
+    {
+      rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+      const size_t wo = static_cast<size_t>((rng >> 11) % tasks.size());
+      const wheel_task & t = tasks[wo];
+      m.subst_array = all + wo * asize;
+      init_walzen(m, t.u, t.w[0], t.w[1], t.w[2]);
+      m.greek = t.greek;
+      m.greek_offset = t.greek_off;
+      int rg[6];
+      for (int k = 0; k < 6; k++)
+        {
+          rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+          rg[k] = static_cast<int>((rng >> 33) % asize);
+        }
+      init_ring_grund(m, rg[0], rg[1], rg[2], rg[3], rg[4], rg[5]);
+      init_steckerbrett(m, opt_steckerbrett);
+      setup_mapping(m, true);
+      init_ring_grund(m, rg[0], rg[1], rg[2], rg[3], rg[4], rg[5]);
+      uint64_t climb_rng = seed_board(m, static_cast<size_t>(i), 0);
+      cap_record_begin();
+      optimize_once(m, & climb_rng);
+      double at_cap;
+      if (cap_record_end(at_cap))
+        xs.push_back(at_cap);
+    }
+  m.report = save_report;
+  m.plugboards_scored = save_scored;   /* keep the diagnostic comparable */
+
+  /* No sample recorded a cap: the target stage never runs a sweep that can be
+     capped, which is the case for a histogram model (-S ...i/m/k), whose
+     probes are O(26) and are never capped. Say so rather than silently doing
+     nothing. */
+  if (xs.size() < 16)
+    {
+      g_gated_cap = 0;
+      g_cap_gate = HUGE_VAL;
+      fprintf(stderr, "Gated cap: the climb's target stage has no sweep to cap "
+              "(an IC, mono or\n            mono+IC target), so --gated-cap "
+              "does nothing here\n");
+      return;
+    }
+  std::sort(xs.begin(), xs.end());
+  g_cap_gate = xs[static_cast<size_t>(q * static_cast<double>(xs.size() - 1))];
+  fprintf(stderr, "Gated cap: %d failed probes end a sweep scoring below "
+          "%.4f, the %g%% point\n            of %zu sampled wrong-key "
+          "climbs\n", g_gated_cap, g_cap_gate, q * 100.0, xs.size());
 }
 /* Run all the climbs for one key sequentially, keeping the best (used where the search
    parallelises over keys rather than restarts -- the -F tier-2 climb). --restarts 0 is a
@@ -1120,6 +1240,10 @@ double bruteforce(char * result, bool allow_empty)
      inside the error that matters (sigma/sqrt(N) ~ 0.13 sigma on mu, against
      margins measured in whole sigma). It is single-threaded, so its share grows
      with -T even as the search shrinks. */
+  /* --gated-cap: before --confidence's sampling, whose climbs then run under
+     the same gate the sweep does -- and before any null exists, so the
+     doubling report (which needs one) cannot fire on a calibration climb. */
+  calibrate_cap_gate(*machines[0], tasks, all);
   if (opt_confidence > 0)
     calibrate_null(*machines[0], scored_keys, tasks, range, rc, gc, all,
                    rsize * gsize, gsize,

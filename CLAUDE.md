@@ -873,6 +873,43 @@ are read from a **data directory** (filenames built as
     removed `--restart-tt` measured down). `--seed-dedup-max` **refuses**,
     naming what would fit, rather than thinning the filter into the range where
     it costs more coverage than it saves.
+- `--gated-cap N` **end a target-stage sweep after `N` failed probes in a
+  row, but only while the climb scores below a gate** (needs `-c` and `-K` or
+  `-J`; `0` = off, the default; try 200). The convergence check after a
+  sweep's last accepted move is ~46% of the target stage's decoding probes,
+  and a wrong key's climb only has to finish well enough to show it is losing.
+  - **The gate is what makes it pay.** An ungated cap forfeits the late moves
+    that finish a break, and its matched-compute result swung with a restart
+    or two of matching (`ENHANCEMENTS.md` item 24 (c)). At the 90th
+    percentile of wrong-key scores at the cap, ~95% of the true key's winning
+    climbs sit above the gate and keep the full check. Head to head on the
+    same trials and the same sweep-matched `-R`: **z = +2.84 / +4.50 /
+    +3.68** over the ungated cap at L = 80 / 107 / 167, and +0.7 / +1.1 /
+    +1.4pp of break50 over no cap (`eval/results-gatecap.txt`). Those runs
+    used gates FIXED per length from a trace.
+  - **The shipped gate is calibrated per run** by `calibrate_cap_gate()` in
+    `search.cc`: 256 plain climbs on wrong keys drawn from the resolved wheel
+    orders at uniform rings and starts — the table serves every offset, so
+    this works when the resolved space is the true key alone, where sampling
+    it would have calibrated on the truth — each capped unconditionally, the
+    score where the cap first ends a sweep recorded, the 90th percentile
+    taken. Single-threaded, seeded from `opt_seed`, ~0.1 s. It lands ~0.03
+    below the fixed gates (medians −9.80 / −10.01 / −10.03 against −9.77 /
+    −9.98 / −10.00), the conservative side. `$ENIGMA_CAP_GATE` pins it,
+    `$ENIGMA_GATE_Q` / `$ENIGMA_GATE_SAMPLES` move it.
+  - **`try_repair` is deliberately NOT gated.** A variant that also skipped
+    the re-pair below the gate lost more per restart than the plain cap: the
+    re-pair is what rescues a true-key climb sitting low at convergence
+    (`eval/results-stop-gate.txt`).
+  - **Runs before `--confidence`'s sampling**, so the null's climbs are capped
+    the way the sweep's are and no doubling report (which needs a null) can
+    fire on a calibration climb.
+  - Refused with `--int` (the gate is in score units), `-A` (no sweep), and
+    `--crib`/`--crib-list`/`--self-crib-seeds`/`--exhaust` (seeded units,
+    while the gate is calibrated on plain climbs — the rule `--confidence`
+    learned). Says so, and does nothing, when the target stage is IC, mono or
+    mono+IC, whose O(26) probes are never capped. `-T`-deterministic; off is
+    byte-identical.
 - `-s AB...` fixed plugboard pairs — **held fixed during `-c`/`-A`**: the
   climb/SA never remove or rewire them (their letters are marked in
   `plug_fixed[]`, set once from `opt_steckerbrett` before the threaded search,

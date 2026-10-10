@@ -576,6 +576,18 @@ thread count for a given seed.
   than thinning the filter.
   A false positive skips a seed that was *not* a duplicate, so this is a
   coverage trade; the run reports what it skipped. Off by default `[off]`.
+- **`--gated-cap N`** — End a climb's sweep after `N` failed probes in a row,
+  but only while the climb scores below a **gate** set before the sweep from
+  256 sampled wrong-key climbs (the 90th percentile of their scores at that
+  point). Wrong keys get a cheaper climb; the true key's climbs that are
+  heading for a break sit above the gate and keep the full convergence check.
+  With `N = 200`, a restart costs 0.77–0.86 of a plain one on wrong keys, and
+  at the restart count that saving buys it breaks **+0.7 / +1.1 / +1.4pp**
+  more messages at 80 / 107 / 167 letters, beating an ungated cap of the same
+  size on the same trials (measured with the rotor key given and fixed
+  gates; telegraphic German). Needs `-c` and `-K` or `-J`; does nothing when
+  the target stage is IC, mono or mono+IC. Try `200`. Off by default
+  `[0 = off]`.
 - **`-p file`** — Compare the recovered plaintext against a known plaintext file
 - **`-v` / `-h`** — Version / help
 
