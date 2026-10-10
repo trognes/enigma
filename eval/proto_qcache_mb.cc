@@ -1,5 +1,6 @@
-/* Microbenchmark: the climb's probe loop with and without the cached
-   pre-exit decrypt (ENIGMA_QCACHE, src/scoring.cc qcache_probe).
+/* Microbenchmark: the climb's probe loop with and without a cached
+   pre-exit decrypt -- the design PR #297 built (qcache_probe, ENIGMA_QCACHE)
+   and then removed as MEASURED DOWN. ENHANCEMENTS.md item 22 has the record.
 
    Four ways to score one plugboard probe at L = 167 under -f's loop shape
    (four private histograms, all8-sized gather), on random tables:
@@ -7,7 +8,7 @@
      decode        steck[rows[i][steck[ct[i]]]]  -- what score_iter does
      q+patch       steck'[q[i]], q patched for the ~4/26 of positions whose
                    ciphertext letter the toggle moves, then patched back --
-                   what qcache_probe does
+                   what PR #297's qcache_probe did
      q only        the q loop alone, no patching: the ceiling of the idea
      sorted+copy   q kept letter-sorted so a patch is a contiguous memcpy,
                    read through an index array -- the layout tried and
@@ -27,8 +28,11 @@
    The q loop is ~20% cheaper; the patch and restore give most of it back,
    leaving g++ ~-8% and clang anywhere from -12% to nothing. End to end in
    the real climb on the same box it reads within +-5% either way.
-   The number this does not have is arm64, where the scorer loops have
-   repeatedly behaved differently (CLAUDE.md, the 4x unroll). */
+
+   End to end on the other CPUs (make bench LONG=1, long tier, -q / -f):
+   Linux arm64 CI g++ -7.8% / -7.5%, clang +5.1% / -10.9%, and Apple
+   silicon clang +17.7% / +12.7%. The sign follows the CPU, and the one
+   that runs the long sweeps is the one where it loses most. */
 
 #include <chrono>
 #include <cstdint>
