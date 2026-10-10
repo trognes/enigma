@@ -61,6 +61,11 @@ cells past |z| = 3 that did not replicate; this is not evidence to build on.
 The calibration also scatters (cap200's cost ratio reads 0.89 at L=80 and
 0.74 at L=167 on similar work), which moves the matched-time R by a restart
 or two.
+
+REPLICATED at L=167 (eval/results-climb-cut-replicate.txt, seed 41, 3000
+trials, 24 calibration fixtures): cap200 at the calibrated -R 21 breaks 2761
+against 2729, z = +2.97; pooled with the first seed z = +3.74, ~+1.1pp.
+L = 80 / 107 and wrong-key cost ratios are still unmeasured at that care.
 """
 import argparse
 import json

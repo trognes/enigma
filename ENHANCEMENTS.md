@@ -3370,13 +3370,27 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
   and the ~30% cheaper restart buys about that back. The sign follows length
   (behind at 80, level at 107, ahead at 167), and the one matched-time cell
   past z = 2 — cap 200 at L = 167, +13 of 1000 on a 91.5% base — is one of
-  six on one seed. This file records single-seed cells past |z| = 3 that did
-  not replicate, so it is not built; a held-out seed at L = 167 is what
-  would settle it, and the most it could buy is ~1pp where the baseline
-  already breaks 91%.
-- **So the certificate stays.** There is no cheap restart hiding in the
-  climb's probe budget: the probes a restart spends confirming convergence
-  are, at matched compute, worth about what they cost.
+  six on one seed.
+- **That cell REPLICATED on a held-out seed** (`eval/results-climb-cut-
+  replicate.txt`: 3000 paired trials, seed 41, cost calibrated on 24
+  fixtures instead of 8). The cap costs a restart quality (−35 breaks at the
+  same `-R 16`, z = −4.28) and pays it back with interest at matched time:
+  calibrated at **0.766**, `-R 21` breaks **2761 against 2729, z = +2.97**,
+  and the earlier cell's `-R 22` replayed as-is reads +41, z = +3.67. Pooled
+  with the first seed the matched-time cell is 95 against 50 discordants,
+  **z = +3.74, about +1.1pp on a 91% base**.
+- **What that does NOT yet establish, before anything is built:**
+  - **The short end.** L = 80 read −2.02 at matched time, but its
+    calibration said 0.891 and gave the cap only `-R 18`; if the cost ratio
+    there is really ~0.77, as at L = 167 on two calibrations, that cell was
+    run two or three restarts short. L = 80 and 107 need re-running with the
+    24-fixture calibration before the sign there can be read.
+  - **Wrong keys.** Every cost ratio here was timed at the TRUE key, which is
+    the plugboard tier's regime. A real sweep spends nearly all its climbs on
+    wrong keys, whose stale runs may be longer or shorter; the ratio has to be
+    re-measured there before the cap can be priced for a sweep.
+- **So the certificate is worth slightly LESS than it costs at L = 167**, by
+  ~1pp of break50 at matched compute, and the rest is open.
 
 ## Maintainability and packaging
 

@@ -1,0 +1,19 @@
+Replication of the one positive matched-time cell in results-climb-cut.txt:
+ENIGMA_STALE_CAP=200 at L=167, on a fresh seed, 3x the trials, and a
+calibration from 24 fixtures instead of 8.  cap200@22 replays the earlier
+cell's restart count as-is; cap200@time is this run's own calibration.
+
+  python3 eval/climb_cut_ab.py --binary /tmp/enigma-cut --lengths 167 \
+      --trials 3000 --arms cap200 --fixed cap200@22 --calib-fixtures 24 \
+      --seed 41 --out eval/results-climb-cut-replicate.jsonl
+
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; baseline -R 16; break50 counts
+
+L=167  n=3000  base breaks 2729 (91.0%)
+  wall time per restart vs base: cap200 0.766
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    2729         0          0  +0.00   2673   91.6
+  cap200@R         16    2694        16         51  -4.28   2641   90.6
+  cap200@time      21    2761        74         42  +2.97   2704   92.6
+  cap200@22        22    2770        83         42  +3.67   2713   92.9
+
