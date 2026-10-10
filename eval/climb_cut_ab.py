@@ -218,13 +218,18 @@ def main():
             mp.Pool(args.workers, initializer=init,
                     initargs=(corpus, GATES)) as pool:
         for L in args.lengths:
-            ratio = calibrate(args.binary, corpus, L, args.calib_fixtures,
-                              args.calib_lo, args.calib_hi,
-                              args.seed * 7919 + L, args.arms)
+            # --calib-fixtures 0 skips the true-key calibration and its
+            # @time arms, for runs matched by --fixed (e.g. on wrong-key cost)
+            ratio = ({a: 1.0 for a in ["base"] + args.arms}
+                     if args.calib_fixtures == 0 else
+                     calibrate(args.binary, corpus, L, args.calib_fixtures,
+                               args.calib_lo, args.calib_hi,
+                               args.seed * 7919 + L, args.arms))
             plan = {"base": ("base", R)}
             for a in args.arms:
                 plan[a + "@R"] = (a, R)
-                plan[a + "@time"] = (a, max(1, round(R / ratio[a])))
+                if args.calib_fixtures:
+                    plan[a + "@time"] = (a, max(1, round(R / ratio[a])))
             for f in args.fixed:
                 a, rr = f.split("@")
                 plan[f] = (a, int(rr))

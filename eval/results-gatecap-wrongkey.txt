@@ -1,0 +1,12 @@
+Wrong-key cost per restart: the plain 200-probe cap against the cap-only
+gate (ENIGMA_GATE_KEEP_REPAIR=1), seed 97.
+
+  python3 eval/climb_cut_wrongkey.py --binary /tmp/enigma-cut \
+      --arms cap200 gatecap --gate 80=-9.774 107=-9.982 167=-9.999 \
+      --seed 97
+
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; 676 wrong keys per sweep; per-restart time from -R 5 minus -R 1
+
+L=80  base 0.328 ms per key-restart;  vs base: cap200 0.825, gatecap 0.861
+L=107  base 0.375 ms per key-restart;  vs base: cap200 0.834, gatecap 0.845
+L=167  base 0.472 ms per key-restart;  vs base: cap200 0.752, gatecap 0.773
