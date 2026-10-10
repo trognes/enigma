@@ -3275,6 +3275,43 @@ where `ct_i` is one of the 2–4 letters a toggle rewires, so a climb can keep
   a hot-path change aimed at speed needs a run on Apple silicon before it
   ships.
 
+**23. Pruning keys after the first passes — MEASURED DOWN, not built.** The
+sweep is restart-major, so after P passes every key has a best score. The idea
+was to keep only the top fraction f of keys there and spend the rest of the
+same budget on them, each survivor getting `P + (B − P)/f` restarts instead of
+`B`. It rested on the true key needing only to beat a fraction `1 − f` of
+wrong keys to survive — ~2.3 sd at f = 1% against the ~6 sd a find needs — so
+that a climb which had recovered part of the board would survive where it
+could not yet win. `-F` was the earlier version, with a cheap capped IC climb
+as its first tier; this used the full recipe.
+
+Measured without a sweep (`eval/key_prune_probe.py`,
+`eval/results-key-prune.txt`): 60 synthetic trials per length on authentic
+HG Nord plaintext, 10-pair board hidden, `-S k4f10 -K -l wehrmacht`, `B = 16`,
+`K = 2.47M`. Each arm is judged against its own find bar, since survivors
+climbed deeper also raise the best wrong key's score. Breaks of 60:
+
+| L | even | best cut (P = 8) | worst cut (P = 1, f = 1%) |
+|---:|---:|---:|---:|
+| 80 | 12 | 14, z = +0.82 | 3, z = −2.71 |
+| 107 | 30 | 29, z = −0.33 | 11, z = −3.96 |
+| 167 | 51 | 55, z = +1.63 | 20, z = −5.40 |
+
+- **Pruning never wins.** 17 of the 18 cells cutting after 1 or 2 passes lose
+  at |z| > 2. After 4 passes it still loses or ties. Only after 8 — half the
+  budget already spent evenly — does it reach a tie, and no cell resolves in
+  its favour.
+- **The premise failed.** The true key survives a cut about as often as its
+  climb has already recovered the board. At L = 80 after one pass it survives
+  12 of 60 at f = 10%, against the 6 chance alone keeps. A failed climb at the
+  true key does not leave a half-right board scoring above most wrong keys; it
+  scores like one of them. So a cut keeps the messages that were solved anyway
+  and discards the slow ones that more restarts would rescue.
+- **This also closes the reading that `-F` failed only because of its cheap
+  first tier.** The recommended climb's partial results carry no rankable
+  signal either, which matches item 2b's finding that below `-R 100` the
+  truth is not outscored but not reached.
+
 ## Maintainability and packaging
 
 All 🟢, none urgent. → `archived/IMPROVEMENTS.md` §2.
