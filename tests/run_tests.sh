@@ -3377,6 +3377,78 @@ check "--biased-random still recovers the plaintext" \
        -S k4f10 -u B -w 231 -r AAA -g QMW -R 8 --biased-random 1 2>/dev/null)" \
   "$br_pt2"
 
+echo "== Score-gated stale cap: --gated-cap =="
+
+# End a target-stage first-improvement sweep after N failed probes in a row,
+# but only while the climb scores below a gate set from sampled wrong-key
+# climbs.  Measured against the plain cap head to head on the same trials:
+# z = +2.84 / +4.50 / +3.68 at L = 80 / 107 / 167 (eval/results-gatecap.txt).
+gc_err=$(br_bad -c -K -q -l english --gated-cap 400)
+check "--gated-cap rejects an out-of-range cap" \
+  "$(printf '%s' "$gc_err" | grep -c 'Illegal --gated-cap')" "1"
+gc_err=$(br_bad -K -q -l english --gated-cap 200)
+check "--gated-cap needs -c" \
+  "$(printf '%s' "$gc_err" | grep -c 'gated-cap needs -c')" "1"
+gc_err=$(br_bad -c -q -l english --gated-cap 200)
+check "--gated-cap needs a first-improvement climb" \
+  "$(printf '%s' "$gc_err" | grep -c 'gated-cap needs -K or -J')" "1"
+gc_err=$(br_bad -c -K -q -l english --int --gated-cap 200)
+check "--gated-cap rejects --int" \
+  "$(printf '%s' "$gc_err" | grep -c 'not supported with --int')" "1"
+gc_err=$(br_bad -c -K -q -l english --crib AAAA --gated-cap 200)
+check "--gated-cap rejects --crib" \
+  "$(printf '%s' "$gc_err" | grep -c 'not supported with --crib')" "1"
+
+# One key, so the calibration's wrong keys come from the same wheel order at
+# random rings and starts -- the case a resolved-space sampler would get wrong.
+# The first argument is one environment assignment ("X=" when there is none).
+# shellcheck disable=SC2069  # deliberate: keep stderr, discard stdout
+gc_run() { _gce=$1; shift
+           printf '%s' "$br_ct" | env ENIGMA_SEED=0 "$_gce" "$ENIGMA" -c -K -q \
+             -l english -u B -w 231 -r AAA -g QMW -R 4 "$@" 2>&1 >/dev/null; }
+gc_scored() { gc_run "$@" | sed -n 's/.*scored \([0-9]*\) plugboards.*/\1/p'; }
+
+gc_out=$(gc_run X= --gated-cap 200)
+check "--gated-cap is echoed in the settings" \
+  "$(printf '%s' "$gc_out" | grep -c 'gated cap: 200 failed probes')" "1"
+check "--gated-cap reports the calibrated gate" \
+  "$(printf '%s' "$gc_out" \
+     | grep -c '^Gated cap: 200 failed probes end a sweep')" "1"
+# The rule every stderr line follows: nothing may look like a progress line
+# to the margin extractor.  The gate is a negative number, so a wrap that put
+# it at the start of a line would be read back as a run's margin.
+check "--gated-cap's echo has no line that starts with a signed number" \
+  "$(printf '%s' "$gc_out" | sed -n '/^Gated cap/,/Score/p' \
+     | grep -c '^ *[+-][0-9]')" "0"
+
+# THE CHECKS THAT CAN FAIL.  With the gate pinned below every score the cap
+# never applies, which must be the plain climb exactly; pinned above every
+# score it always applies, which must score fewer plugboards.  A cap wired the
+# wrong way round, or not at all, fails one of the two.
+gc_off=$(gc_scored X=)
+check "--gated-cap with the gate below every score is the plain climb" \
+  "$(gc_scored ENIGMA_CAP_GATE=-1e9 --gated-cap 200)" "$gc_off"
+gc_all=$(gc_scored ENIGMA_CAP_GATE=1e9 --gated-cap 200)
+check "--gated-cap with the gate above every score caps every climb" \
+  "$([ -n "$gc_all" ] && [ "$gc_all" -lt "$gc_off" ] && echo fewer)" "fewer"
+
+# -T independence: the gate is sampled single-threaded from opt_seed before
+# the workers start, and read-only afterwards.
+gc_t1=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -K -q -l english \
+          -u B -w 231 -r AAA -g QM. -R 4 --gated-cap 200 -T 1 2>&1 \
+        | grep -E '^Gated|^[A-Z]+$')
+gc_t4=$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -K -q -l english \
+          -u B -w 231 -r AAA -g QM. -R 4 --gated-cap 200 -T 4 2>&1 \
+        | grep -E '^Gated|^[A-Z]+$')
+check "--gated-cap is -T independent (gate and plaintext)" "$gc_t1" "$gc_t4"
+
+# A histogram target (-S ...i/m/k) has no decoding sweep to cap; the run says
+# so instead of silently doing nothing.
+check "--gated-cap says so when the target stage cannot be capped" \
+  "$(printf '%s' "$br_ct" | ENIGMA_SEED=0 "$ENIGMA" -c -K -S m4i10 \
+       -l english -u B -w 231 -r AAA -g QMW -R 4 --gated-cap 200 2>&1 \
+       >/dev/null | grep -c 'does nothing here')" "1"
+
 echo "== IC-ordered first-improvement climb: -K =="
 
 # -J builds its move-visit order by scoring all 325 toggles once per restart.

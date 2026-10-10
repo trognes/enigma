@@ -82,6 +82,7 @@ void parse_args(int argc, char * * argv)
   opt_restarts = 0;   /* new default: one deterministic seed climb, no kick (REDESIGN B) */
   opt_perturb = default_perturb;   /* --random kick size (default 10); K=0 is a legal control */
   opt_biased_random = 0.0;         /* --biased-random T (0 = uniform kick) */
+  opt_gated_cap = 0;               /* --gated-cap N (0 = off) */
   opt_random_set = false;
   opt_exhaust = 0;    /* --exhaust E forced pairs, 0 = off */
   opt_staged = 0;   /* --score schedule string, or 0 for the single-model climb */
@@ -116,7 +117,8 @@ void parse_args(int argc, char * * argv)
          OPT_BIASEDRANDOM,
          OPT_DOUBLINGREPORT, OPT_DOUBLINGZ,
          OPT_DOUBLINGMM, OPT_NOPREFLIGHT, OPT_CRIBSEEDS, OPT_SCTANDEM,
-         OPT_SEEDDEDUP, OPT_SEEDDEDUPBITS, OPT_SEEDDEDUPMAX };
+         OPT_SEEDDEDUP, OPT_SEEDDEDUPBITS, OPT_SEEDDEDUPMAX,
+         OPT_GATEDCAP };
 
   /* Long-option aliases for the short flags (Part A of archived/REDESIGN.md), plus the two
      long-only options above (Part B). Each aliased long name maps onto its short value,
@@ -156,6 +158,7 @@ void parse_args(int argc, char * * argv)
       { "help",           no_argument,       nullptr, 'h' },
       { "random",         required_argument, nullptr, OPT_RANDOM  },
       { "biased-random",  required_argument, nullptr, OPT_BIASEDRANDOM },
+      { "gated-cap",      required_argument, nullptr, OPT_GATEDCAP },
       { "exhaust",        required_argument, nullptr, OPT_EXHAUST },
       { "true-key",       required_argument, nullptr, OPT_TRUEKEY },
       { "dump-all",       no_argument,       nullptr, OPT_DUMPALL },
@@ -294,6 +297,9 @@ void parse_args(int argc, char * * argv)
           break;
         case OPT_BIASEDRANDOM:
           opt_biased_random = parse_opt_double(optarg, "--biased-random");
+          break;
+        case OPT_GATEDCAP:
+          opt_gated_cap = parse_opt_int(optarg, "--gated-cap");
           break;
         case OPT_EXHAUST:
           opt_exhaust = parse_opt_int(optarg, "--exhaust");
@@ -845,6 +851,38 @@ void parse_args(int argc, char * * argv)
   /* --random K is the kick size (plug pairs injected per restart); K=0 is a legal control. */
   if ((opt_perturb < 0) || (opt_perturb > pairs_uncapped))
     fatal("Illegal kick size (--random must be 0 to 13 plug pairs)");
+
+  /* --gated-cap N: the cap lives in the first-improvement sweep, so it needs a
+     climb that runs one; the gate is calibrated from plain climbs, so it is
+     refused wherever the unit is not a plain climb (the same rule
+     --confidence's null follows); and it is in score units, which --int's
+     integer keys are not. */
+  if (opt_gated_cap != 0)
+    {
+      if ((opt_gated_cap < 1) || (opt_gated_cap > 324))
+        fatal("Illegal --gated-cap (must be 1 to 324 failed probes, or 0 for "
+              "off)");
+      if (! opt_hillclimb)
+        fatal("--gated-cap needs -c (it caps the plugboard climb)");
+      if (! opt_firstimprove)
+        fatal("--gated-cap needs -K or -J (it caps the first-improvement "
+              "sweep; steepest ascent has no stale run to cap)");
+      if (opt_anneal > 0)
+        fatal("--gated-cap is not supported with -A (simulated annealing has "
+              "no first-improvement sweep)");
+      if (opt_intscore)
+        fatal("--gated-cap is not supported with --int (its gate is in score "
+              "units)");
+      if (opt_crib_text || opt_crib_list)
+        fatal("--gated-cap is not supported with --crib/--crib-list (its gate "
+              "is calibrated on plain climbs, not crib-seeded ones)");
+      if (opt_self_crib_seeds > 0)
+        fatal("--gated-cap is not supported with --self-crib-seeds (its gate "
+              "is calibrated on plain climbs, not seeded ones)");
+      if (opt_exhaust > 0)
+        fatal("--gated-cap is not supported with --exhaust (its gate is "
+              "calibrated on plain climbs, not pinned ones)");
+    }
 
   /* --biased-random T: the kick, drawn from exp(z / T) over the single-plug IC
      scores instead of uniformly. Rejected wherever the kick is not the thing

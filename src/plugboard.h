@@ -78,6 +78,14 @@ const unsigned char * known_plug_partner();
    precondition for parallelising them. */
 uint64_t restart_seed(size_t key_index, int restart);
 
+/* --gated-cap: the stale-probe cap and the score below which it applies, both
+   set before the workers start. The record pair lets the calibration read the
+   score at which the cap first ended a sweep, one climb at a time. */
+extern int g_gated_cap;
+extern double g_cap_gate;
+void cap_record_begin();
+bool cap_record_end(double & score);
+
 /* Install extra pins for an EX=true climb. --exhaust, the crib hybrid and the
    self-crib seeder call reset() then pin() per deduced letter; they must go
    through these rather than name the storage, which is a static thread_local

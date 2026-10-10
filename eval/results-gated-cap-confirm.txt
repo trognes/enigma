@@ -1,0 +1,35 @@
+Confirmation of the SHIPPED --gated-cap 200, whose gate is calibrated per
+run (earlier A/Bs used gates fixed per length).  Step 1 prices a restart on
+wrong keys; step 2 runs the option against no cap at the baseline's -R 16
+and at the restart count that saving buys.  3000 paired trials per length,
+rotor key given, 10-pair board hidden, recipe -c -S k4f10 -K --polish
+-l wehrmacht, seed 127.  Plain build -- no patch.
+
+  python3 eval/climb_cut_wrongkey.py --binary ./enigma --arms gatedcap \
+      --seed 113
+  python3 eval/climb_cut_ab.py --binary ./enigma --lengths L --trials 3000 \
+      --arms gatedcap --fixed gatedcap@R --calib-fixtures 0 --seed 127
+
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; 676 wrong keys per sweep; per-restart time from -R 5 minus -R 1
+
+L=80  base 0.347 ms per key-restart;  vs base: gatedcap 0.826
+L=107  base 0.384 ms per key-restart;  vs base: gatedcap 0.849
+
+L=80  n=3000  base breaks 825 (27.5%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16     825         0          0  +0.00    652   33.5
+  gatedcap@R       16     816        31         40  -1.07    640   33.2
+  gatedcap@19      19     856        77         46  +2.80    674   34.4
+
+L=107  n=3000  base breaks 1642 (54.7%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    1642         0          0  +0.00   1488   58.3
+  gatedcap@R       16    1604        29         67  -3.88   1454   57.2
+  gatedcap@19      19    1685       109         66  +3.25   1525   59.6
+
+L=167  n=3000  base breaks 2713 (90.4%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    2713         0          0  +0.00   2662   91.1
+  gatedcap@R       16    2696        12         29  -2.65   2645   90.6
+  gatedcap@21      21    2737        50         26  +2.75   2686   91.8
+

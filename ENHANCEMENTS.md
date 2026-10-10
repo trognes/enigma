@@ -3482,6 +3482,25 @@ at L = 107) — consistent with `-K`'s measured 4–16% wall-time saving.
     — e.g. the 90% point of the first restart pass's scores at the cap,
     after the pass barrier so it stays `-T`-independent — is the obvious
     shape and is untested.
+  - **BUILT as `--gated-cap N`, with the gate calibrated per run** — but
+    not from the first restart pass, which fails exactly where the plugboard
+    tier lives: with the rotor key given the pass holds only true-key climbs,
+    and a gate at their 90th percentile would cap most of them. Instead 256
+    plain climbs on WRONG keys are sampled before the sweep, from the
+    resolved wheel orders at uniform rings and starts (the precomputed table
+    serves every offset, so this costs no extra table), each capped
+    unconditionally, and the 90th percentile of the score where the cap first
+    ends a sweep becomes the gate. On the corpus it lands ~0.03 below the
+    trace's gates — medians −9.80 / −10.01 / −10.03 over six messages per
+    length — on the conservative side.
+  - **The calibrated gate is confirmed** (`eval/results-gated-cap-confirm.
+    txt`, seed 127, 3000 paired trials per length, plain build). On wrong
+    keys a restart costs 0.826 / 0.849 / 0.774 of a plain one; at the `-R`
+    19 / 19 / 21 that buys, the option breaks 856 / 1685 / 2737 against no
+    cap's 825 / 1642 / 2713 — **z = +2.80 / +3.25 / +2.75**, every length
+    past 2.7 on a seed that played no part in choosing anything. At the same
+    `-R 16` it reads −1.07 / −3.88 / −2.65, against the ungated cap's
+    −4.5 to −5.6 across the earlier seeds.
 
 ## Maintainability and packaging
 
