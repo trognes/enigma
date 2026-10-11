@@ -298,8 +298,11 @@ fprintf(out, "  %-24s %s\n", "--crib-rerank F",
   fprintf(out, "  %-24s %s\n", "",
           "wrong-key climbs. Cheaper restarts that lose little");
   fprintf(out, "  %-24s %s\n", "",
-          "on the true key; try 200 (needs -c and -K or -J)");
-  fprintf(out, "  %-24s %s\n", "", "[0 = off]");
+          "on the true key. Recommended at 200 for rotor-key");
+  fprintf(out, "  %-24s %s\n", "",
+          "sweeps on telegraphic traffic; not for a known-key");
+  fprintf(out, "  %-24s %s\n", "",
+          "plugboard run (needs -c and -K or -J) [0 = off]");
   fprintf(out, "  %-24s %s\n", "--full-text",
           "Print the whole decrypted message with each");
   fprintf(out, "  %-24s %s\n", "", "progress line, not just the first 19 letters [off]");

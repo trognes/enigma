@@ -626,10 +626,13 @@ are read from a **data directory** (filenames built as
 > displaced `i4f10` there), **`-K`** (first-improvement with the move order
 > ranked by IC — it **replaces `-J`**, which it is never measurably worse than
 > and is 4–16% faster than; `-J` remains correct and is the fallback where
-> `-K`'s evidence does not reach, see below), `-M` (with a tight cap), and the
+> `-K`'s evidence does not reach, see below), `-M` (with a tight cap), the
 > best-board
 > finisher `--polish` (the recommended finisher: one fixed-cost pass after all
-> restarts, so it is negligible at a high `-R`). Several opt-in flags are **not
+> restarts, so it is negligible at a high `-R`), and **`--gated-cap 200` in a
+> rotor-key sweep on telegraphic traffic** (~+1pp of break50 at matched
+> compute on three seeds; not for a known-key plugboard run, and unmeasured on
+> `hgnord` and on prose — see its entry). Several opt-in flags are **not
 > recommended** — they are dominated, ablation/measurement tools, or only
 > conditionally useful, and have not been proven to strictly dominate on the
 > plain short-message sweep: `-F`, `--no-repair`, `--cascade` (superseded by
@@ -681,7 +684,9 @@ are read from a **data directory** (filenames built as
 > <cores>` — swapping `m4f10` for **`k4f10` on telegraphic traffic, at every
 > length** (+5.0pp over `i4f10` at L=167, pooled over five seeds, and never
 > behind at any length measured; see the `-S k` entry). `i4f10` is the
-> runner-up there and still beats `m4f10` at L≥107.
+> runner-up there and still beats `m4f10` at L≥107. **In a rotor-key sweep
+> on telegraphic traffic add `--gated-cap 200`**, which makes wrong-key
+> restarts cheaper and spends the saving on more of them.
 
 - `-u X` reflector A/B/C or `.` wildcard (`N` forced by `-n`)
 - `-w XYZ` wheels (digits, or `.` per position to brute-force)
@@ -875,7 +880,14 @@ are read from a **data directory** (filenames built as
     it costs more coverage than it saves.
 - `--gated-cap N` **end a target-stage sweep after `N` failed probes in a
   row, but only while the climb scores below a gate** (needs `-c` and `-K` or
-  `-J`; `0` = off, the default; try 200). The convergence check after a
+  `-J`; `0` = off, the default). **Recommended at 200 for rotor-key sweeps on
+  telegraphic traffic** (`-l wehrmacht`); **not** for a known-key plugboard
+  run, where every climb is on the true key and the saving the gain comes
+  from is mostly absent — at the same `-R` it reads −1.07 / −3.88 / −2.65
+  there. Expected to carry over to `-l hgnord`, whose gate is calibrated from
+  that table's own wrong-key climbs, but unmeasured — and it cannot be
+  measured on the corpus messages, which `hgnord` has seen; prose is
+  unmeasured too. The convergence check after a
   sweep's last accepted move is ~46% of the target stage's decoding probes,
   and a wrong key's climb only has to finish well enough to show it is losing.
   - **The gate is what makes it pay.** An ungated cap forfeits the late moves
