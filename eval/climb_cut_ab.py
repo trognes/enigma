@@ -99,7 +99,14 @@ ARMS = {"base": {},
         "gatecap": {"ENIGMA_STALE_CAP": "200", "ENIGMA_CAP_GATE": "{gate}",
                     "ENIGMA_GATE_KEEP_REPAIR": "1"},
         # The shipped option, its gate calibrated per run (no patch needed).
-        "gatedcap": {"_ARGS": "--gated-cap 200"}}
+        "gatedcap": {"_ARGS": "--gated-cap 200"},
+        # Tuning the shipped option: the stale cap N (gate at its default
+        # 90th percentile) and the gate percentile (N at 200).
+        "gc150": {"_ARGS": "--gated-cap 150"},
+        "gc250": {"_ARGS": "--gated-cap 250"},
+        "gc300": {"_ARGS": "--gated-cap 300"},
+        "gcq80": {"_ARGS": "--gated-cap 200", "ENIGMA_GATE_Q": "0.8"},
+        "gcq95": {"_ARGS": "--gated-cap 200", "ENIGMA_GATE_Q": "0.95"}}
 GATES = {}   # length -> score gate for the "gated" arm, from --gate
 
 
@@ -209,6 +216,9 @@ def main():
                          " e.g. cap200@22 to replay an earlier cell")
     ap.add_argument("--out", default=os.path.join(
         HERE, "results-climb-cut.jsonl"))
+    ap.add_argument("--no-same-r", action="store_true",
+                    help="skip each arm's run at the baseline's -R and run"
+                         " only the --fixed (cost-matched) entries")
     ap.add_argument("--gate", nargs="*", default=[],
                     help="L=T score gates for the gated arm, e.g. 107=-9.98")
     args = ap.parse_args()
@@ -233,7 +243,8 @@ def main():
                                args.seed * 7919 + L, args.arms))
             plan = {"base": ("base", R)}
             for a in args.arms:
-                plan[a + "@R"] = (a, R)
+                if not args.no_same_r:
+                    plan[a + "@R"] = (a, R)
                 if args.calib_fixtures:
                     plan[a + "@time"] = (a, max(1, round(R / ratio[a])))
             for f in args.fixed:

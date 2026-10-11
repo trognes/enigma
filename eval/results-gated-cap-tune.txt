@@ -1,0 +1,61 @@
+Tuning --gated-cap: the stale cap N (gate at the default 90th percentile)
+and the gate percentile (N = 200).  Step 1 prices a restart on wrong keys
+(seed 137); step 2 runs every setting against no cap on the same 3000
+trials per length (seed 139), each at the -R its wrong-key cost buys.
+Rotor key given, 10-pair board hidden, -c -S k4f10 -K --polish
+-l wehrmacht, plain build.
+
+  python3 eval/climb_cut_wrongkey.py --binary ./enigma \
+      --arms gatedcap gc150 gc250 gc300 gcq80 gcq95 --seed 137
+  python3 eval/climb_cut_ab.py --binary ./enigma --lengths L --trials 3000 \
+      --arms <six> --fixed <arm@R from step 1> --no-same-r \
+      --calib-fixtures 0 --seed 139
+
+Arms: gatedcap = --gated-cap 200 (the shipped setting); gc150/250/300 =
+--gated-cap 150/250/300; gcq80/gcq95 = --gated-cap 200 with
+ENIGMA_GATE_Q=0.8/0.95.
+
+recipe -c -S k4f10 -K --polish -l wehrmacht -T 1; 676 wrong keys per sweep; per-restart time from -R 5 minus -R 1
+
+L=80  base 0.335 ms per key-restart;  vs base: gatedcap 0.826, gc150 0.769, gc250 0.902, gc300 0.949, gcq80 0.856, gcq95 0.838
+L=107  base 0.367 ms per key-restart;  vs base: gatedcap 0.805, gc150 0.777, gc250 0.896, gc300 0.975, gcq80 0.867, gcq95 0.787
+
+L=80  n=3000  base breaks 846 (28.2%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16     846         0          0  +0.00    686   34.2
+  gatedcap@19      19     880        78         44  +3.08    712   35.3
+  gc150@21         21     894       105         57  +3.77    717   35.7
+  gc250@18         18     873        54         27  +3.00    708   35.0
+  gc300@17         17     870        31          7  +3.89    702   35.0
+  gcq80@19         19     889        75         32  +4.16    720   35.5
+  gcq95@19         19     875        79         50  +2.55    711   35.2
+
+L=107  n=3000  base breaks 1593 (53.1%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    1593         0          0  +0.00   1441   56.9
+  gatedcap@20      20    1670       128         51  +5.76   1501   59.1
+  gc150@21         21    1671       149         71  +5.26   1510   59.2
+  gc250@18         18    1635        73         31  +4.12   1472   58.1
+  gc300@16         16    1590         6          9  -0.77   1437   56.9
+  gcq80@18         18    1618        69         44  +2.35   1457   57.6
+  gcq95@20         20    1665       129         57  +5.28   1498   59.0
+
+L=167  n=3000  base breaks 2682 (89.4%)
+  arm               R  breaks  only-arm  only-base      z  exact  mean%
+  base             16    2682         0          0  +0.00   2617   90.0
+  gatedcap@20      20    2735        75         22  +5.38   2668   91.7
+  gc150@21         21    2736        79         25  +5.30   2669   91.7
+  gc250@18         18    2713        50         19  +3.73   2646   91.0
+  gc300@16         16    2678         2          6  -1.41   2613   89.9
+  gcq80@19         19    2720        58         20  +4.30   2652   91.2
+  gcq95@19         19    2715        64         31  +3.39   2647   91.0
+
+Each setting against the shipped one on the same trials (only-arm /
+only-200 breaks, McNemar z):
+
+  arm     L=80               L=107              L=167              pooled
+  gc150   41/27  +1.70      41/40  +0.11       11/10  +0.22      93/77   +1.23
+  gc250   24/31  -0.94      36/71  -3.38       14/36  -3.11      74/138  -4.40
+  gc300   40/50  -1.05      47/127 -6.06       20/77  -5.79     107/254  -7.74
+  gcq80   13/4   +2.18      19/71  -5.48        7/22  -2.79      39/97   -4.97
+  gcq95    2/7   -1.67       7/12  -1.15        6/26  -3.54      15/45   -3.87

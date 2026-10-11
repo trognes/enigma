@@ -904,6 +904,13 @@ are read from a **data directory** (filenames built as
     +43 / +24** messages of 3000 more than no cap — **z = +2.80 / +3.25 /
     +2.75**, ~+1.0 / +1.4 / +0.8pp. At the same `-R 16` it loses −1.07 /
     −3.88 / −2.65, about half the ungated cap's per-restart loss.
+  - **Tuned, and the defaults stay** (`eval/results-gated-cap-tune.txt`):
+    pooled over three lengths, cap 150 ties 200 (z = +1.23) and 250/300
+    lose (z = −4.40/−7.74, too few restarts bought). The gate percentile
+    could not be resolved: 80% and 95% differ from 90% by less in cost
+    than the ±0.03 timing scatter, so their cost-matched `-R` is set by
+    noise. On that seed `--gated-cap 200` beat no cap at z = +3.08 / +5.76
+    / +5.38 — the third seed to show it.
   - **`try_repair` is deliberately NOT gated.** A variant that also skipped
     the re-pair below the gate lost more per restart than the plain cap: the
     re-pair is what rescues a true-key climb sitting low at convergence
