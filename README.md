@@ -586,8 +586,14 @@ thread count for a given seed.
   more messages at 80 / 107 / 167 letters (z = +2.80 / +3.25 / +2.75; rotor
   key given, telegraphic German). It also beats an ungated cap of the same
   size head to head on the same trials. Needs `-c` and `-K` or `-J`; does
-  nothing when the target stage is IC, mono or mono+IC. Try `200`. Off by
-  default `[0 = off]`.
+  nothing when the target stage is IC, mono or mono+IC. Off by default
+  `[0 = off]`. **Recommended at `200` for rotor-key sweeps on telegraphic
+  traffic** (`-l wehrmacht`), where nearly every climb is on a wrong key —
+  measured on three seeds. With the rotor key already known it is not
+  advised: the saving comes from wrong keys, and at the same `-R` it loses a
+  little per restart on the true key. On `-l hgnord` it is expected to carry
+  over, since the gate is calibrated on whatever table is in use, but that
+  is unmeasured; on prose it is unmeasured too.
 - **`-p file`** — Compare the recovered plaintext against a known plaintext file
 - **`-v` / `-h`** — Version / help
 
@@ -924,6 +930,18 @@ unknown.
 > *last* `--score` stage's plug cap and seeds itself with a built-in IC
 > pre-pass, so it cannot use greedy's mono pre-pass, which is worth ~3–4 pp over
 > IC. See `eval/eval_sa_vs_greedy.py` and `archived/PERFORMANCE.md` §3.11.
+
+> **On telegraphic traffic use `--score k4f10`, and add `--gated-cap 200`
+> when the rotor key is being searched.** The pre-pass `k4f10` beats `m4f10`
+> there at every length measured. `--gated-cap 200` makes each restart on a
+> wrong key cheaper, and at the restart count that buys it breaks about 1pp
+> more messages at 80–167 letters; leave it off when the rotor key is given,
+> as in the examples above:
+>
+> ```sh
+> ./enigma -c -K --score k4f10 --polish --gated-cap 200 -R 16 -f \
+>          -l wehrmacht -T 4 -u B -w ... -r AA. -g ... < cipher.txt
+> ```
 
 ## Input, output and diagnostics
 

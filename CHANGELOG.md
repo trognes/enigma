@@ -39,6 +39,12 @@ existing command lines can behave differently or stop working.
 
 ### Changed
 
+- **`--gated-cap 200` is recommended for rotor-key sweeps on telegraphic
+  traffic** (`-l wehrmacht`), after beating no cap on three seeds at
+  80 / 107 / 167 letters and a tuning run that kept 200 and the 90% gate. It
+  is not advised when the rotor key is already known, and is unmeasured on
+  `-l hgnord` and on prose.
+
 - **`--seed-dedup` no longer reserves filter memory for keys the sweep
   skips.** The filter was sized on the flat key index, which includes every
   key the middle-wheel and two-notch collapses drop without renumbering; on a
